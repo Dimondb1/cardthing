@@ -77,24 +77,26 @@
   /* Colour --------------------------------------------------------------- */
   --color-ink: #1f2430;          /* text */
   --color-ink-muted: #545b68;
-  --color-ink-subtle: #7a8190;
+  --color-ink-subtle: #667085;   /* 4.9:1 on white */
   --color-paper: #ffffff;        /* page background */
   --color-shelf: #f6f6f8;        /* image wells and quiet backgrounds */
   --color-line: #e6e8ec;
   --color-line-soft: #eef0f3;    /* dividers inside cards */
   --color-placeholder: #c9cdd4;  /* outline drawings when there is no image */
 
-  --color-brand: #ff5a1f;        /* logo, buy buttons, links */
+  --color-brand: #ff5a1f;        /* logo and large headings only */
   --color-brand-ink: #ffffff;
-  --color-brand-hover: #e84d14;
+  --color-brand-action: #e5470e; /* buttons: 4:1 with white text */
+  --color-brand-text: #cc4410;   /* orange words at small sizes: 4.8:1 on white */
+  --color-brand-hover: #cc4410;
   --color-brand-soft: #fff1ea;   /* card borders and tints */
   --color-brand-line: #ffd6c4;
 
-  --color-price: #159a3c;        /* cheapest price */
+  --color-price: #107a32;        /* cheapest price, 5.4:1 on white */
   --color-price-soft: #e7f7ec;   /* green badges */
-  --color-more: #d92d20;         /* dearer prices, red arrow */
+  --color-more: #c9271b;         /* dearer prices, red arrow */
 
-  --color-in-stock: #159a3c;
+  --color-in-stock: #107a32;
   --color-preorder: #b25e00;
   --color-out: #7a8190;
 

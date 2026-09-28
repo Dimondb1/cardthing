@@ -23,6 +23,44 @@ For a design review without real retailers, `python manage.py seed_demo`
 loads fictional retailers on `.example` domains with generated prices. It only
 runs with `DJANGO_DEBUG` on, and `--flush` replaces what is there.
 
+## Running it on your own computer
+
+You need Python 3.11 or newer (python.org, or `brew install python` on a
+Mac). Then, in a terminal, inside the project folder:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py seed_catalogue
+python manage.py createsuperuser
+python manage.py runserver
+```
+
+Open http://127.0.0.1:8000/ in a browser, and http://127.0.0.1:8000/admin/
+for admin. To see it on your phone, run
+`python manage.py runserver 0.0.0.0:8000`, add your computer's local IP
+address (for example `192.168.1.20`) to `DJANGO_ALLOWED_HOSTS`, and open
+`http://192.168.1.20:8000/` on the phone while both are on the same wifi.
+
+Prices only update while the importer runs, so on a local machine run
+`python manage.py import_prices` by hand, or leave a terminal running:
+
+```sh
+while true; do python manage.py import_prices; sleep 3600; done
+```
+
+## Checking a shop before adding it
+
+```sh
+python manage.py check_shop https://www.example-cards.co.uk/
+```
+
+reports whether the shop publishes Shopify product data, how many products
+carry barcodes, and how many look like sealed TCG. If it is not Shopify, ask
+the retailer or your affiliate network for a CSV feed instead.
+
 ## Getting real prices in
 
 1. **Products.** `seed_catalogue` loads the current sets and products. Check

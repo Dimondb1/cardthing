@@ -100,3 +100,31 @@ class FeedTests(TestCase):
         ]
         apply_offers(retailer, offers)
         self.assertEqual(Listing.objects.get(product=product, retailer=retailer).price, Decimal("45"))
+
+
+class CheckShopTests(TestCase):
+    def test_reports_a_shopify_shop(self):
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        page = shopify_page([{"handle": "a", "title": "Prismatic Evolutions Booster Bundle", "tags": [],
+                              "variants": [{"price": "44.99", "available": True, "barcode": "0820650851230"}]}])
+        out = StringIO()
+        with mock.patch("catalogue.management.commands.check_shop.fetch", return_value=page):
+            call_command("check_shop", "https://shop.example/", stdout=out)
+        self.assertIn("Shopify shop", out.getvalue())
+        self.assertIn("Variants with a barcode: 1 of 1", out.getvalue())
+        self.assertIn("sealed TCG: 1", out.getvalue())
+
+    def test_reports_a_non_shopify_shop(self):
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        with mock.patch("catalogue.management.commands.check_shop.fetch", return_value=b"<html>"):
+            call_command("check_shop", "shop.example", stdout=out)
+        self.assertIn("not a Shopify shop", out.getvalue())

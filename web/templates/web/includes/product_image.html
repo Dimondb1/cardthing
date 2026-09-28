@@ -1,0 +1,1 @@
+<span class="product-image product-image--{{ size }}">{% if product.image %}<img src="{{ product.image.url }}" alt="" loading="lazy" decoding="async">{% else %}{% include "web/includes/placeholder.svg" with type=product.product_type %}{% endif %}</span>

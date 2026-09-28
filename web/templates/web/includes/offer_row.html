@@ -1,0 +1,24 @@
+{% load sitecopy cardscout %}
+<li class="offer{% if cheapest_row %} offer--cheapest{% endif %}{% if muted %} offer--muted{% endif %}">
+  <div class="offer__retailer">
+    <span class="offer__name">{{ listing.retailer.name }}</span>
+    {% if cheapest_row %}<span class="offer__flag">{% copy "product.compare.cheapest" %}</span>{% endif %}
+  </div>
+  <div class="offer__stock">
+    {% if listing.is_stale %}<span class="stock-inline stock-inline--stale">{% copy "product.compare.stale" date=listing.last_checked|short_date %}</span>{% else %}<span class="stock-inline stock-inline--{{ listing.availability }}">{{ listing.get_availability_display }}</span>{% endif %}
+  </div>
+  <div class="offer__price num"><span class="visually-hidden">{% copy "product.compare.col.price" %}: </span>{{ listing.price|gbp }}</div>
+  <div class="offer__delivery num"><span class="visually-hidden">{% copy "product.compare.col.delivery" %}: </span>{% if listing.delivery_cost %}{{ listing.delivery_cost|gbp }}{% else %}{% copy "product.compare.free_delivery" %}{% endif %}</div>
+  <div class="offer__total num"><span class="visually-hidden">{% copy "product.compare.col.total" %}: </span>{{ listing.delivered_price|gbp }}</div>
+  <div class="offer__checked">{% if not listing.is_stale %}<span class="visually-hidden">{% copy "product.compare.col.checked" %}: </span>{{ listing.last_checked|ago }}{% endif %}</div>
+  <p class="offer__meta">
+    {% if listing.delivery_cost %}{% copy "product.breakdown.delivery" price=listing.price|gbp delivery=listing.delivery_cost|gbp %}{% else %}{% copy "product.breakdown.free" price=listing.price|gbp %}{% endif %}{% if not listing.is_stale %}<span aria-hidden="true"> · </span><span class="visually-hidden">. </span>{% copy "product.compare.checked_ago" time=listing.last_checked|ago %}{% endif %}
+  </p>
+  <div class="offer__action">
+    {% if muted %}
+    <a class="offer__link" href="{{ listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.view" %}<span class="visually-hidden"> {{ listing.retailer.name }} (opens in a new tab)</span></a>
+    {% else %}
+    <a class="button button--small{% if not cheapest_row %} button--quiet{% endif %}" href="{{ listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% if listing.availability == "preorder" %}{% copy "product.compare.preorder" %}{% else %}{% copy "product.compare.buy" %}{% endif %}<span class="visually-hidden"> at {{ listing.retailer.name }} (opens in a new tab)</span></a>
+    {% endif %}
+  </div>
+</li>

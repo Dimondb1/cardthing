@@ -1,0 +1,10 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+
+{% block content %}
+<div class="prose-page not-found">
+  <h1 class="page-title">{% copy "errors.404.title" %}</h1>
+  <div class="prose">{% copy "errors.404.body" %}</div>
+  {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" field_id="notfound-q" %}
+</div>
+{% endblock %}

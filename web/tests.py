@@ -1,0 +1,206 @@
+import re
+from datetime import timedelta
+
+from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
+
+from catalogue.models import DailyLowestPrice, Listing, OutboundClick, Product
+from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+
+
+class PageTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.game = make_game()
+        cls.pre = make_set(cls.game)
+        cls.etb = make_product(cls.pre)
+        cls.harbour = make_retailer("Harbour Games")
+        cls.north = make_retailer("Northgate Cards")
+        cls.cheap = make_listing(cls.etb, cls.harbour, price="52.00", delivery="2.99")
+        make_listing(cls.etb, cls.north, price="58.00")
+        cls.sold_out = make_product(
+            cls.pre, name="Prismatic Evolutions Super-Premium Collection",
+            product_type=Product.Type.COLLECTION_BOX,
+        )
+        make_listing(cls.sold_out, cls.harbour, price="140.00",
+                     availability=Listing.Availability.OUT_OF_STOCK)
+        DailyLowestPrice.objects.create(
+            product=cls.sold_out, date=timezone.localdate() - timedelta(days=10), price="139.00"
+        )
+        cls.unpriced = make_product(
+            cls.pre, name="Prismatic Evolutions Booster Bundle", product_type=Product.Type.BUNDLE
+        )
+        for days_ago, price in ((9, "60.00"), (5, "57.00"), (0, "54.99")):
+            DailyLowestPrice.objects.create(
+                product=cls.etb, date=timezone.localdate() - timedelta(days=days_ago), price=price
+            )
+        # A click so the home page shows every section.
+        OutboundClick.objects.create(listing=cls.cheap, product=cls.etb, retailer=cls.harbour)
+
+    def public_urls(self):
+        return [
+            reverse("web:home"),
+            reverse("web:search"),
+            reverse("web:search") + "?q=etb",
+            reverse("web:search") + "?q=nothing+matches+this",
+            reverse("web:search") + "?q=etb&type=tin",
+            reverse("web:games"),
+            self.game.get_absolute_url(),
+            self.pre.get_absolute_url(),
+            self.etb.get_absolute_url(),
+            self.sold_out.get_absolute_url(),
+            self.unpriced.get_absolute_url(),
+            reverse("web:about"),
+        ]
+
+
+class PageTests(PageTestCase):
+    def test_public_pages_load(self):
+        for url in self.public_urls():
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_home_shows_every_section(self):
+        response = self.client.get(reverse("web:home"))
+        for heading in ("Price drops this week", "Popular this week", "Recent sets"):
+            self.assertContains(response, heading)
+
+    def test_product_page_leads_with_the_cheapest_delivered_price(self):
+        response = self.client.get(self.etb.get_absolute_url())
+        self.assertContains(response, "Cheapest delivered price")
+        self.assertContains(response, "at Harbour Games")
+        self.assertContains(response, "£52.00 plus £2.99 delivery")
+        self.assertContains(response, "Buy for £54.99")
+        self.assertContains(response, "2 retailers have this in stock.")
+        self.assertContains(response, "Last checked 1 hour ago.")
+        self.assertContains(response, self.cheap.get_outbound_url())
+
+    def test_out_of_stock_product(self):
+        response = self.client.get(self.sold_out.get_absolute_url())
+        self.assertContains(response, "Out of stock at every retailer we check")
+        self.assertContains(response, "Cheapest price when last available: £139.00")
+        self.assertNotContains(response, "Buy for")
+
+    def test_product_without_prices(self):
+        response = self.client.get(self.unpriced.get_absolute_url())
+        self.assertContains(response, "We don&#x27;t have prices for this product yet.")
+        self.assertNotContains(response, "Price history")
+
+    def test_hidden_product_is_not_found(self):
+        Product.objects.filter(pk=self.etb.pk).update(is_active=False)
+        self.assertEqual(self.client.get(self.etb.get_absolute_url()).status_code, 404)
+
+    def test_custom_not_found_page(self):
+        response = self.client.get("/no-such-page/")
+        self.assertEqual(response.status_code, 404)
+        self.assertContains(response, "Page not found", status_code=404)
+
+    def test_search_filters(self):
+        url = reverse("web:search")
+        self.assertContains(self.client.get(url, {"q": "etb"}), self.etb.name)
+        in_stock = self.client.get(url, {"in_stock": "on"})
+        self.assertContains(in_stock, self.etb.name)
+        self.assertNotContains(in_stock, self.sold_out.name)
+        by_type = self.client.get(url, {"type": "bundle"})
+        self.assertContains(by_type, self.unpriced.name)
+        self.assertNotContains(by_type, self.etb.name)
+
+    def test_search_with_no_matches_offers_games(self):
+        response = self.client.get(reverse("web:search"), {"q": "charizard"})
+        self.assertContains(response, "No products match ‘charizard’")
+        self.assertContains(response, self.game.get_absolute_url())
+
+    def test_home_shows_price_drops(self):
+        make_listing(self.unpriced, self.harbour, price="30.00")
+        DailyLowestPrice.objects.create(
+            product=self.unpriced, date=timezone.localdate() - timedelta(days=7), price="36.00"
+        )
+        response = self.client.get(reverse("web:home"))
+        self.assertContains(response, "Price drops this week")
+        self.assertContains(response, "was £36.00")
+
+    def test_robots_txt(self):
+        response = self.client.get("/robots.txt")
+        self.assertContains(response, "Disallow: /go/")
+
+
+class OutboundTests(PageTestCase):
+    def test_redirects_and_counts_the_click(self):
+        before = OutboundClick.objects.filter(product=self.etb).count()
+        response = self.client.get(
+            self.cheap.get_outbound_url(), HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], self.cheap.url)
+        self.assertEqual(OutboundClick.objects.filter(product=self.etb).count(), before + 1)
+
+    def test_uses_the_affiliate_link(self):
+        self.harbour.affiliate_url_template = "https://network.example/c?u={url}"
+        self.harbour.save()
+        response = self.client.get(self.cheap.get_outbound_url())
+        self.assertTrue(response["Location"].startswith("https://network.example/c?u=https%3A"))
+
+    def test_bots_are_not_counted(self):
+        before = OutboundClick.objects.count()
+        self.client.get(self.cheap.get_outbound_url(), HTTP_USER_AGENT="Googlebot/2.1")
+        self.assertEqual(OutboundClick.objects.count(), before)
+
+    def test_hidden_listing_is_not_found(self):
+        Listing.objects.filter(pk=self.cheap.pk).update(is_active=False)
+        self.assertEqual(self.client.get(self.cheap.get_outbound_url()).status_code, 404)
+
+    def test_outbound_links_are_marked_sponsored(self):
+        html = self.client.get(self.etb.get_absolute_url()).content.decode()
+        for tag in re.findall(r'<a[^>]+href="/go/[^>]+>', html):
+            self.assertIn('rel="sponsored nofollow noopener"', tag)
+
+
+class CopyStyleTests(PageTestCase):
+    """Guards for the house style on every public page."""
+
+    BANNED = [
+        "—", "&mdash;", "&#8212;",
+        "lorem ipsum", "welcome to cardscout", "learn more", "get started",
+        "unlock", "supercharge", "seamless", "next-generation", "game-changing",
+        "your ultimate", "all in one place", "elevate", "empowering", "revolutionise",
+        "effortless", "powered by ai",
+    ]
+
+    def test_no_banned_words_or_em_dashes(self):
+        urls = self.public_urls() + ["/no-such-page/"]
+        for url in urls:
+            html = self.client.get(url).content.decode().lower()
+            for phrase in self.BANNED:
+                with self.subTest(url=url, phrase=phrase):
+                    self.assertNotIn(phrase, html)
+
+    def test_no_exclamation_marks(self):
+        for url in self.public_urls():
+            html = self.client.get(url).content.decode()
+            visible_text = re.sub(r"<[^>]*>", " ", html)
+            with self.subTest(url=url):
+                self.assertNotIn("!", visible_text)
+
+
+class ServerErrorPageTests(TestCase):
+    def test_500_page_renders_without_a_database_or_context(self):
+        from django.template.loader import get_template
+
+        html = get_template("500.html").render({})
+        self.assertIn("Something went wrong", html)
+        self.assertNotIn("—", html)
+
+
+class SortTests(PageTestCase):
+    def test_best_match_only_offered_with_a_query(self):
+        browse = self.client.get(self.game.get_absolute_url()).content.decode()
+        search = self.client.get(reverse("web:search"), {"q": "etb"}).content.decode()
+        self.assertNotIn("Best match", browse)
+        self.assertIn("Newest first", browse)
+        self.assertIn("Best match", search)
+
+    def test_sort_by_price(self):
+        response = self.client.get(reverse("web:search"), {"sort": "price"})
+        names = [p.name for p in response.context["page"].object_list]
+        self.assertLess(names.index(self.etb.name), names.index(self.sold_out.name))

@@ -1,0 +1,15 @@
+{% load sitecopy cardscout %}
+<li class="result">
+  {% product_image product "row" %}
+  <div class="result__body">
+    <p class="eyebrow">{{ product.get_product_type_display }}</p>
+    <{{ heading_tag|default:"h2" }} class="result__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></{{ heading_tag|default:"h2" }}>
+    <p class="result__meta">{{ product.game.display_short }}{% if product.product_set %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ product.product_set.name }}{% endif %}</p>
+  </div>
+  <div class="result__offer">
+    {% if product.lowest_price is not None %}
+      <p class="result__price">{% price product.lowest_price size="md" %} <span class="result__price-label">{% copy "browse.price.label" %}</span></p>
+    {% endif %}
+    {% include "web/includes/availability.html" %}
+  </div>
+</li>

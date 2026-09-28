@@ -1,0 +1,13 @@
+{% load sitecopy %}
+<header class="masthead{% if hide_header_search %} masthead--no-search{% endif %}">
+  <div class="masthead__inner">
+    <a class="wordmark" href="{% url 'web:home' %}">{% include "web/includes/wordmark.html" %}<span class="visually-hidden">, home</span></a>
+    {% if not hide_header_search %}
+      {% include "web/includes/search_form.html" with variant="header" button_key="site.search.button" field_id="header-q" %}
+    {% endif %}
+    <nav class="masthead__nav" aria-label="Main">
+      <a href="{% url 'web:games' %}"{% if request.resolver_match.url_name == "games" %} aria-current="page"{% endif %}>{% copy "site.nav.games" %}</a>
+      <a href="{% url 'web:about' %}"{% if request.resolver_match.url_name == "about" %} aria-current="page"{% endif %}>{% copy "site.nav.about" %}</a>
+    </nav>
+  </div>
+</header>

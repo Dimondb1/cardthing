@@ -1,0 +1,97 @@
+/*
+  CardScout design tokens.
+
+  Every colour, size and spacing value used by site.css comes from here.
+  To change the look of the whole site, change a value in this file:
+
+    Smaller corners          --radius, --radius-tag
+    Denser or roomier pages  --density (1 is the default, 0.875 is denser)
+    Accent colour            --color-accent and --color-accent-soft
+    Product title size       --text-product-title
+    Page width               --page-width
+*/
+
+@font-face {
+  font-family: "Archivo";
+  src: url("../fonts/archivo-variable-latin.woff2") format("woff2-variations"),
+       url("../fonts/archivo-variable-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Layout -------------------------------------------------------------- */
+  --page-width: 72rem;
+  --gutter: 1rem;            /* space at the sides on phones */
+  --gutter-wide: 2rem;       /* space at the sides from tablet width up */
+  --density: 1;              /* scales every spacing value below */
+
+  /* Spacing scale -------------------------------------------------------- */
+  --space-1: calc(0.25rem * var(--density));
+  --space-2: calc(0.5rem * var(--density));
+  --space-3: calc(0.75rem * var(--density));
+  --space-4: calc(1rem * var(--density));
+  --space-5: calc(1.5rem * var(--density));
+  --space-6: calc(2rem * var(--density));
+  --space-7: calc(3rem * var(--density));
+  --space-8: calc(4.5rem * var(--density));
+
+  /* Corners -------------------------------------------------------------- */
+  --radius: 4px;             /* buttons, inputs, images */
+  --radius-tag: 3px;         /* price tag and wordmark */
+
+  /* Typefaces ------------------------------------------------------------ */
+  --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --stretch-display: 84%;    /* width of headings; 100% is normal */
+  --stretch-price: 78%;      /* width of prices */
+
+  /* Type sizes ----------------------------------------------------------- */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-section: clamp(1.375rem, 1.2rem + 0.6vw, 1.625rem);   /* section headings */
+  --text-page-title: clamp(1.875rem, 1.4rem + 1.8vw, 2.75rem);  /* page headings */
+  --text-hero: clamp(2.25rem, 1.4rem + 3.6vw, 4rem);            /* home heading */
+  --text-product-title: clamp(1.75rem, 1.35rem + 1.7vw, 2.75rem);
+  --text-price-lg: clamp(2.75rem, 2.2rem + 2vw, 3.75rem);       /* cheapest price */
+  --text-price-md: 1.25rem;                                     /* prices in lists */
+
+  --weight-body: 400;
+  --weight-strong: 600;
+  --weight-heading: 750;
+  --weight-price: 800;
+
+  --leading-tight: 1.08;
+  --leading-snug: 1.3;
+  --leading-body: 1.55;
+
+  /* Colour --------------------------------------------------------------- */
+  --color-ink: #16181b;          /* text, buy buttons */
+  --color-ink-muted: #4f565d;    /* secondary text */
+  --color-ink-subtle: #6b737b;   /* labels, captions */
+  --color-paper: #ffffff;        /* page background */
+  --color-shelf: #f0f2f1;        /* image wells, quiet backgrounds */
+  --color-line: #dde1e0;         /* dividers */
+  --color-line-strong: #16181b;  /* the rule above lists */
+
+  --color-accent: #ffd23f;       /* the price tag: cheapest and reduced prices */
+  --color-accent-ink: #16181b;
+  --color-accent-soft: #fff5cc;  /* cheapest row in the price list */
+
+  --color-action: #16181b;
+  --color-action-ink: #ffffff;
+  --color-action-hover: #363b40;
+
+  --color-in-stock: #0f6e45;
+  --color-preorder: #8a4f00;
+  --color-out: #6b737b;
+
+  --color-focus: #16181b;
+
+  /* Shadows (used sparingly) -------------------------------------------- */
+  --shadow-raised: 0 1px 2px rgb(22 24 27 / 0.08);
+}

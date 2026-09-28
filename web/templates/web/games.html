@@ -1,0 +1,24 @@
+{% extends "web/base.html" %}
+{% load sitecopy cardscout %}
+
+{% block content %}
+<h1 class="page-title">{{ heading }}</h1>
+<div class="game-index">
+  {% for game in games %}
+  <section class="game-index__game" aria-labelledby="game-{{ game.slug }}">
+    <div class="game-index__head">
+      <h2 id="game-{{ game.slug }}"><a href="{{ game.get_absolute_url }}">{{ game.name }}</a></h2>
+      <p class="muted">{% copy_count "browse.count" game.product_count %}</p>
+    </div>
+    <ul class="game-index__sets">
+      {% for product_set in game.sets.all %}
+      <li>
+        <a href="{{ product_set.get_absolute_url }}">{{ product_set.name }}</a>
+        <span class="game-index__set-meta">{% if product_set.code %}{{ product_set.code }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% copy_count "browse.count" product_set.product_count %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

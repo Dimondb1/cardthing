@@ -1,0 +1,23 @@
+{% load static %}<!doctype html>
+{# Deliberately static: this page must work when the database does not. #}
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Something went wrong | CardScout</title>
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+</head>
+<body>
+  <header class="masthead masthead--no-search">
+    <div class="masthead__inner"><a class="wordmark" href="/"><span class="wordmark__text">CardScout</span></a></div>
+  </header>
+  <main class="page">
+    <div class="prose-page">
+      <h1 class="page-title">Something went wrong</h1>
+      <div class="prose"><p>The page could not be loaded. Try again in a few minutes.</p></div>
+      <p><a class="button" href="/">Go to the home page</a></p>
+    </div>
+  </main>
+</body>
+</html>

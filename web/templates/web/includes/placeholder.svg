@@ -1,0 +1,37 @@
+{# Outline of the product type, shown when a product has no image. #}<svg class="placeholder" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+<g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke">
+{% if type == "booster_box" %}
+  <path d="M16 44 L30 33 H86 L72 44 Z" class="placeholder__top"/>
+  <path d="M72 44 L86 33 V65 L72 76 Z" class="placeholder__side"/>
+  <rect x="16" y="44" width="56" height="32" class="placeholder__face"/>
+  <path d="M16 52 H72 L86 41"/>
+{% elif type == "elite_trainer_box" %}
+  <path d="M28 32 L38 24 H78 L68 32 Z" class="placeholder__top"/>
+  <path d="M68 32 L78 24 V70 L68 78 Z" class="placeholder__side"/>
+  <rect x="28" y="32" width="40" height="46" class="placeholder__face"/>
+  <path d="M28 43 H68 L78 35"/>
+{% elif type == "collection_box" or type == "gift_set" %}
+  <path d="M12 40 L22 32 H90 L80 40 Z" class="placeholder__top"/>
+  <path d="M80 40 L90 32 V68 L80 76 Z" class="placeholder__side"/>
+  <rect x="12" y="40" width="68" height="36" class="placeholder__face"/>
+  {% if type == "gift_set" %}<path d="M46 40 V76"/>{% else %}<rect x="19" y="47" width="24" height="22" rx="1.5"/>{% endif %}
+{% elif type == "deck" %}
+  <path d="M38 26 L44 21 H68 L62 26 Z" class="placeholder__top"/>
+  <path d="M62 26 L68 21 V71 L62 76 Z" class="placeholder__side"/>
+  <rect x="38" y="26" width="24" height="50" class="placeholder__face"/>
+  <path d="M38 34 H62"/><path d="M45 26 A5 5 0 0 0 55 26"/>
+{% elif type == "tin" %}
+  <rect x="22" y="36" width="56" height="40" rx="6" class="placeholder__face"/>
+  <rect x="20" y="31" width="60" height="12" rx="5" class="placeholder__top"/>
+{% elif type == "booster_pack" %}
+  <rect x="34" y="18" width="32" height="64" rx="1" class="placeholder__face"/>
+  <path d="M34 25 H66 M34 75 H66"/>
+  <path d="M38 18 V25 M42 18 V25 M46 18 V25 M50 18 V25 M54 18 V25 M58 18 V25 M62 18 V25"/>
+  <path d="M38 75 V82 M42 75 V82 M46 75 V82 M50 75 V82 M54 75 V82 M58 75 V82 M62 75 V82"/>
+{% else %}
+  <path d="M28 44 L40 34 H76 L64 44 Z" class="placeholder__top"/>
+  <path d="M64 44 L76 34 V66 L64 76 Z" class="placeholder__side"/>
+  <rect x="28" y="44" width="36" height="32" class="placeholder__face"/>
+{% endif %}
+</g>
+</svg>

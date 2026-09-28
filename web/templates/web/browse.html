@@ -1,0 +1,86 @@
+{% extends "web/base.html" %}
+{% load sitecopy cardscout %}
+
+{% block content %}
+{% if no_matches %}
+{# A plain search found nothing: lead with that and offer a way forward. #}
+<div class="browse-head browse-head--empty">
+  <h1 class="browse-head__title">{% copy "browse.no_results.title" query=query %}</h1>
+  <div class="prose">{% copy "browse.no_results.body" %}</div>
+  {% if games %}
+  <p class="game-links">
+    <span class="game-links__label">{% copy "home.games.label" %}</span>
+    {% for item in games %}<a href="{{ item.get_absolute_url }}">{{ item.display_short }}</a>{% endfor %}
+  </p>
+  {% endif %}
+</div>
+{% else %}
+<div class="browse-head">
+  {% if game %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="{% url 'web:games' %}">{% copy "site.nav.games" %}</a></li>
+      {% if product_set %}<li><a href="{{ game.get_absolute_url }}">{{ game.name }}</a></li>{% endif %}
+    </ol>
+  </nav>
+  {% endif %}
+  <h1 class="browse-head__title">{{ heading }}</h1>
+  {% if product_set %}
+    <p class="browse-head__meta">{% if product_set.code %}{{ product_set.code }}{% if product_set.release_date %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% endif %}{% if product_set.release_date %}{% copy "browse.set.released" date=product_set.release_date|short_date %}{% endif %}</p>
+  {% endif %}
+  <p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>
+</div>
+
+{% if sets %}
+<nav class="set-nav" aria-label="{% copy 'browse.game.sets_title' %}">
+  <h2 class="set-nav__title">{% copy "browse.game.sets_title" %}</h2>
+  <ul>
+    <li><a href="{{ game.get_absolute_url }}"{% if not product_set %} aria-current="page"{% endif %}>{% copy "browse.game.all_sets" game=game.display_short %}</a></li>
+    {% for item in sets %}
+    <li><a href="{{ item.get_absolute_url }}"{% if item.pk == product_set.pk %} aria-current="page"{% endif %}>{{ item.name }}</a></li>
+    {% endfor %}
+  </ul>
+</nav>
+{% endif %}
+
+<form class="filters" method="get" action="" data-autosubmit>
+  {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+  {% if form.game %}
+  <div class="filters__field">
+    <label for="{{ form.game.id_for_label }}">{{ form.game.label }}</label>
+    {{ form.game }}
+  </div>
+  {% endif %}
+  <div class="filters__field">
+    <label for="{{ form.type.id_for_label }}">{{ form.type.label }}</label>
+    {{ form.type }}
+  </div>
+  <div class="filters__field">
+    <label for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
+    {{ form.sort }}
+  </div>
+  <div class="filters__check">
+    {{ form.in_stock }}
+    <label for="{{ form.in_stock.id_for_label }}">{{ form.in_stock.label }}</label>
+  </div>
+  <div class="filters__actions">
+    <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
+    {% if filters_active %}<a class="filters__clear" href="?{% if query %}q={{ query|urlencode }}{% endif %}">{% copy "browse.filters.clear" %}</a>{% endif %}
+  </div>
+</form>
+
+{% if page.object_list %}
+  <ul class="results">
+    {% for product in page.object_list %}
+      {% include "web/includes/product_row.html" %}
+    {% endfor %}
+  </ul>
+  {% include "web/includes/pagination.html" %}
+{% else %}
+  <div class="empty">
+    <h2 class="empty__title">{% copy "browse.no_filtered_results" %}</h2>
+    <p><a href="?{% if query %}q={{ query|urlencode }}{% endif %}">{% copy "browse.filters.clear" %}</a></p>
+  </div>
+{% endif %}
+{% endif %}
+{% endblock %}

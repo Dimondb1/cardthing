@@ -1,0 +1,6 @@
+{% load sitecopy %}{% copy "site.search.placeholder" as search_hint %}
+<form class="search search--{{ variant }}" action="{% url 'web:search' %}" method="get" role="search">
+  <label class="visually-hidden" for="{{ field_id }}">{{ search_hint }}</label>
+  <input id="{{ field_id }}" name="q" type="search" value="{{ query|default:'' }}" placeholder="{{ search_hint }}" autocomplete="off" enterkeyhint="search" maxlength="100">
+  <button class="search__button" type="submit">{% copy button_key %}</button>
+</form>

@@ -1,0 +1,136 @@
+{% extends "web/base.html" %}
+{% load sitecopy cardscout %}
+
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="{{ product.game.get_absolute_url }}">{{ product.game.name }}</a></li>
+    {% if product.product_set %}<li><a href="{{ product.product_set.get_absolute_url }}">{{ product.product_set.name }}</a></li>{% endif %}
+  </ol>
+</nav>
+
+<div class="product-head">
+  <div class="product-head__image">{% product_image product "large" %}</div>
+
+  <div class="product-head__title">
+    <p class="eyebrow">{{ product.get_product_type_display }}</p>
+    <h1 class="product-title">{{ product.name }}</h1>
+  </div>
+
+  <section class="buybox" aria-label="{% copy 'product.cheapest.label' %}">
+    {% if cheapest %}
+      <p class="buybox__label">{% copy "product.cheapest.label" %}</p>
+      <p class="buybox__price">
+        {% price cheapest.delivered_price tag=True size="lg" %}
+        <span class="buybox__retailer">{% copy "product.cheapest.retailer" retailer=cheapest.retailer.name %}</span>
+      </p>
+      <p class="buybox__breakdown">
+        <span class="stock-inline stock-inline--{{ cheapest.availability }}">{{ cheapest.get_availability_display }}</span>
+        <span aria-hidden="true" class="buybox__sep">·</span>
+        {% if cheapest.delivery_cost %}{% copy "product.breakdown.delivery" price=cheapest.price|gbp delivery=cheapest.delivery_cost|gbp %}{% else %}{% copy "product.breakdown.free" price=cheapest.price|gbp %}{% endif %}
+      </p>
+      <a class="button button--buy" href="{{ cheapest.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">
+        <span>{% if cheapest.availability == "preorder" %}{% copy "product.preorder.button" price=cheapest.delivered_price|gbp retailer=cheapest.retailer.name %}{% else %}{% copy "product.buy.button" price=cheapest.delivered_price|gbp retailer=cheapest.retailer.name %}{% endif %}</span>
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 3h8v8M13 3 3.5 12.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="visually-hidden">(opens in a new tab)</span>
+      </a>
+      <p class="buybox__summary">
+        {% if in_stock_count %}{% copy_count "product.availability.in_stock" in_stock_count %}{% elif preorder_count %}{% copy_count "product.availability.preorder" preorder_count %}{% endif %}
+        {% if last_checked %}{% copy "product.last_checked" time=last_checked|ago %}{% endif %}
+      </p>
+    {% elif has_listings %}
+      <p class="buybox__none">{% copy "product.out_of_stock.message" %}</p>
+      <p class="buybox__summary">
+        {% if last_known %}{% copy "product.out_of_stock.last_price" price=last_known.price|gbp date=last_known.date|short_date %}{% endif %}
+        {% if last_checked %}{% copy "product.last_checked" time=last_checked|ago %}{% endif %}
+      </p>
+    {% else %}
+      <p class="buybox__none">{% copy "product.no_listings" %}</p>
+    {% endif %}
+  </section>
+</div>
+
+{% if has_listings %}
+<section class="block offers-section" aria-labelledby="offers-title">
+  <h2 id="offers-title" class="section-title">{% copy "product.compare.title" %}</h2>
+  {% if current %}
+  <ul class="offers">
+    {% include "web/includes/offers_head.html" %}
+    {% for listing in current %}
+      {% include "web/includes/offer_row.html" with cheapest_row=forloop.first muted=False %}
+    {% endfor %}
+  </ul>
+    {% if unavailable %}
+    <details class="offers-more">
+      <summary>{% copy_count "product.compare.unavailable" unavailable|length %}</summary>
+      <ul class="offers">
+        {% for listing in unavailable %}
+          {% include "web/includes/offer_row.html" with cheapest_row=False muted=True %}
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  {% else %}
+  <ul class="offers">
+    {% include "web/includes/offers_head.html" %}
+    {% for listing in unavailable %}
+      {% include "web/includes/offer_row.html" with cheapest_row=False muted=True %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <div class="small-print">
+    <p>{% copy "product.affiliate_note" %}</p>
+    {% copy "product.price_disclaimer" %}
+  </div>
+</section>
+{% endif %}
+
+<div class="block product-lower">
+  {% if chart or has_listings %}
+  <section class="history" aria-labelledby="history-title">
+    <h2 id="history-title" class="section-title">{% copy "product.history.title" %}</h2>
+    <p class="section-note">{% copy "product.history.caption" days=history_days %}</p>
+    {% if chart %}
+    <figure class="chart">
+      <div class="chart__plot">
+        <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <line class="chart__guide" x1="0" x2="{{ chart.width }}" y1="{{ chart.high_y }}" y2="{{ chart.high_y }}"/>
+          <line class="chart__guide" x1="0" x2="{{ chart.width }}" y1="{{ chart.low_y }}" y2="{{ chart.low_y }}"/>
+          <path class="chart__line" d="{{ chart.path }}"/>
+        </svg>
+        <span class="chart__label chart__label--high" style="--y: {{ chart.high_top_pct }}%" aria-hidden="true">{{ chart.high|gbp }}</span>
+        <span class="chart__label chart__label--low" style="--y: {{ chart.low_top_pct }}%" aria-hidden="true">{{ chart.low|gbp }}</span>
+        <span class="chart__marker" style="--x: {{ chart.low_left_pct }}%; --y: {{ chart.low_top_pct }}%" aria-hidden="true"></span>
+      </div>
+      <div class="chart__axis" aria-hidden="true"><span>{{ chart.start|short_date }}</span><span>{{ chart.end|short_date }}</span></div>
+      <figcaption class="chart__summary">{% copy "product.history.summary" low=chart.low|gbp low_date=chart.low_date|short_date high=chart.high|gbp high_date=chart.high_date|short_date %}</figcaption>
+    </figure>
+    {% else %}
+    <p class="history__empty">{% copy "product.history.empty" %}</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="details" aria-labelledby="details-title">
+    <h2 id="details-title" class="section-title">{% copy "product.details.title" %}</h2>
+    <dl class="details__list">
+      <div><dt>{% copy "product.details.game" %}</dt><dd><a href="{{ product.game.get_absolute_url }}">{{ product.game.name }}</a></dd></div>
+      {% if product.product_set %}<div><dt>{% copy "product.details.set" %}</dt><dd><a href="{{ product.product_set.get_absolute_url }}">{{ product.product_set.name }}</a>{% if product.product_set.code %} <span class="muted">({{ product.product_set.code }})</span>{% endif %}</dd></div>{% endif %}
+      <div><dt>{% copy "product.details.type" %}</dt><dd>{{ product.get_product_type_display }}</dd></div>
+      {% if product.effective_release_date %}<div><dt>{% copy "product.details.release_date" %}</dt><dd>{{ product.effective_release_date|short_date }}</dd></div>{% endif %}
+      {% if product.ean %}<div><dt>{% copy "product.details.barcode" %}</dt><dd class="num">{{ product.ean }}</dd></div>{% endif %}
+    </dl>
+  </section>
+</div>
+
+{% if related %}
+<section class="block related" aria-labelledby="related-title">
+  <h2 id="related-title" class="section-title">{% copy "product.related.title" set=product.product_set.name %}</h2>
+  <ul class="results results--compact">
+    {% for product in related %}
+      {% include "web/includes/product_row.html" with heading_tag="h3" %}
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

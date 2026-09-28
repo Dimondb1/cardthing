@@ -1,0 +1,43 @@
+{% extends "web/base.html" %}
+{% load sitecopy cardscout %}
+
+{% block content %}
+<div class="prose-page">
+  <h1 class="page-title">{% copy "about.title" %}</h1>
+  <div class="prose prose--lead">{% copy "about.introduction" %}</div>
+
+  <section aria-labelledby="prices-title">
+    <h2 id="prices-title">{% copy "about.prices.title" %}</h2>
+    <div class="prose">{% copy "about.prices.body" hours=stale_hours %}</div>
+  </section>
+
+  <section aria-labelledby="money-title">
+    <h2 id="money-title">{% copy "about.money.title" %}</h2>
+    <div class="prose">{% copy "about.money.body" %}</div>
+  </section>
+
+  {% if retailers %}
+  <section aria-labelledby="retailers-title">
+    <h2 id="retailers-title">{% copy "about.retailers.title" %}</h2>
+    {% copy "about.retailers.intro" as retailers_intro %}{% if retailers_intro %}<p>{{ retailers_intro }}</p>{% endif %}
+    <ul class="retailer-list">
+      {% for retailer in retailers %}
+      <li>
+        <span class="retailer-list__name">{{ retailer.name }}</span>
+        <span class="retailer-list__domain">{{ retailer.domain }}</span>
+        {% if retailer.delivery_note %}<span class="retailer-list__note">{{ retailer.delivery_note }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if contact_email %}
+  <section aria-labelledby="contact-title">
+    <h2 id="contact-title">{% copy "about.contact.title" %}</h2>
+    {% copy "about.contact.body" email=contact_email as contact_text %}
+    <p>{{ contact_text|link_email:contact_email }}</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

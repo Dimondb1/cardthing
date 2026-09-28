@@ -1,0 +1,25 @@
+{% load static sitecopy %}<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% if meta_full_title %}{{ meta_full_title }}{% elif meta_title %}{{ meta_title }} | {{ site_name }}{% else %}{{ site_name }}{% endif %}{% endblock %}</title>
+  <meta name="description" content="{% if meta_description %}{{ meta_description }}{% else %}{% copy "meta.default.description" %}{% endif %}">
+  {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+  {% if noindex %}<meta name="robots" content="noindex, follow">{% endif %}
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
+  <link rel="preload" href="{% static 'fonts/archivo-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+  <script src="{% static 'js/site.js' %}" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  {% include "web/includes/header.html" %}
+  <main id="main" class="page {% block page_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+  {% include "web/includes/footer.html" %}
+</body>
+</html>

@@ -1,0 +1,45 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+
+{% block page_class %}page--deck{% endblock %}
+{% block scripts %}{% load static %}<script src="{% static 'js/deck.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="deck-page" data-deck="{% url 'web:deck_api' %}"
+     data-save="{% copy 'deck.save' %}" data-skip="{% copy 'deck.skip' %}"
+     data-finished="{% copy 'deck.finished' %}" data-loading="{% copy 'deck.loading' %}"
+     data-best-week="{% copy 'product.badge.best_week' %}" data-lowest-today="{% copy 'product.badge.lowest_today' %}"
+     data-buy="{% copy 'product.buy.button' %}" data-at="{% copy 'product.rank.at' retailer='{retailer}' %}"
+     data-save-amount="{% copy 'home.savings.save' amount='{amount}' %}" data-percent="{% copy 'home.savings.percent' percent='{percent}' %}"
+     data-empty="{% copy 'deck.saved.empty' %}" data-restart-label="{% copy 'deck.restart' %}">
+  <div class="deck-head">
+    <h1 class="deck-title">{% copy "deck.title" %}</h1>
+    <form class="deck-filter" method="get" action="{% url 'web:deck' %}" data-deck-filter>
+      <label class="visually-hidden" for="deck-game">{% copy "site.nav.games" %}</label>
+      <select id="deck-game" name="game" class="pill__select">
+        <option value="">{% copy "deck.all_games" %}</option>
+        {% for game in games %}<option value="{{ game.slug }}"{% if request.GET.game == game.slug %} selected{% endif %}>{{ game.name }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+  <p class="deck-hint" data-deck-hint>{% copy "deck.hint" %}</p>
+
+  {% for type, label in product_types %}<template data-placeholder="{{ type }}">{% include "web/includes/placeholder.svg" with type=type %}</template>{% endfor %}
+  <div class="deck" data-deck-stack aria-live="polite">
+    <noscript><p class="deck__nojs"><a href="{% url 'web:search' %}">{% copy "browse.all.title" %}</a></p></noscript>
+  </div>
+
+  <div class="deck-actions">
+    <button type="button" class="deck-btn deck-btn--skip" data-deck-skip><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><span>{% copy "deck.skip" %}</span></button>
+    <button type="button" class="deck-btn deck-btn--save" data-deck-save><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z" fill="currentColor"/></svg><span>{% copy "deck.save" %}</span></button>
+  </div>
+
+  <section class="saved" aria-labelledby="saved-title">
+    <div class="section-head">
+      <h2 id="saved-title" class="section-head__title">{% copy "deck.saved.title" %} <span class="saved__count" data-saved-count></span></h2>
+      <button type="button" class="section-head__all" data-saved-clear hidden>{% copy "deck.saved.clear" %}</button>
+    </div>
+    <p class="saved__empty" data-saved-empty>{% copy "deck.saved.empty" %}</p>
+    <ul class="savings" data-saved-list></ul>
+  </section>
+</div>
+{% endblock %}

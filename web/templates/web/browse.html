@@ -45,24 +45,26 @@
 
 <form class="filters" method="get" action="" data-autosubmit>
   {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+  <div class="pill pill--sort">
+    <svg class="pill__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 3h10v4a5 5 0 0 1-10 0zM5 5h2v3H5zM17 5h2v3h-2zM10 12h4v5h-4zM8 17h8v3H8z" fill="currentColor"/></svg>
+    <label class="visually-hidden" for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
+    {{ form.sort }}
+  </div>
   {% if form.game %}
-  <div class="filters__field">
-    <label for="{{ form.game.id_for_label }}">{{ form.game.label }}</label>
+  <div class="pill">
+    <label class="visually-hidden" for="{{ form.game.id_for_label }}">{{ form.game.label }}</label>
     {{ form.game }}
   </div>
   {% endif %}
-  <div class="filters__field">
-    <label for="{{ form.type.id_for_label }}">{{ form.type.label }}</label>
+  <div class="pill">
+    <svg class="pill__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    <label class="visually-hidden" for="{{ form.type.id_for_label }}">{{ form.type.label }}</label>
     {{ form.type }}
   </div>
-  <div class="filters__field">
-    <label for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
-    {{ form.sort }}
-  </div>
-  <div class="filters__check">
-    {{ form.in_stock }}
-    <label for="{{ form.in_stock.id_for_label }}">{{ form.in_stock.label }}</label>
-  </div>
+  <label class="pill pill--check">
+    <svg class="pill__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 20V10M12 20V4M19 20v-8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    {{ form.in_stock }}<span>{{ form.in_stock.label }}</span>
+  </label>
   <div class="filters__actions">
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
     {% if filters_active %}<a class="filters__clear" href="?{% if query %}q={{ query|urlencode }}{% endif %}">{% copy "browse.filters.clear" %}</a>{% endif %}
@@ -70,9 +72,9 @@
 </form>
 
 {% if page.object_list %}
-  <ul class="results">
-    {% for product in page.object_list %}
-      {% include "web/includes/product_row.html" %}
+  <ul class="cards">
+    {% for product, summary in cards %}
+      {% include "web/includes/product_card.html" %}
     {% endfor %}
   </ul>
   {% include "web/includes/pagination.html" %}

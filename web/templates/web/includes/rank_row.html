@@ -1,0 +1,5 @@
+{% load sitecopy cardscout %}{# Two cheapest retailers, ranked. #}
+<ol class="rank">
+  <li class="rank__item"><span class="rank__pos rank__pos--1">#1</span><span class="rank__name">{{ summary.best.retailer.name }}</span><span class="rank__price">{{ summary.best.delivered_price|gbp }}</span></li>
+  {% if summary.second %}<li class="rank__item"><span class="rank__pos rank__pos--2">#2</span><span class="rank__name">{{ summary.second.retailer.name }}</span><span class="rank__price rank__price--more">{{ summary.second.delivered_price|gbp }}{% if summary.saving %} <span class="rank__up" aria-hidden="true">↑</span>{% endif %}</span></li>{% endif %}
+</ol>

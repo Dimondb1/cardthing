@@ -51,6 +51,13 @@ Retailer products the site no longer lists are marked out of stock at that
 retailer after an import. Nothing on the public site is invented: a product
 with no listings says so.
 
+## Swipe page
+
+`/swipe/` shows one product at a time with its cheapest price, retailer and
+runner-up. Swipe right (or press the right arrow) to save it to a list kept
+in the browser, left to skip, tap to open the product. Cards come from
+`/api/deck/` twelve at a time and the next batch loads before it is needed.
+
 ## Search as you type
 
 The search box shows results while the visitor types, with the cheapest

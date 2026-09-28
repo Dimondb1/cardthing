@@ -38,6 +38,7 @@ class Kind:
 
 SECTIONS = [
     ("site", "Header and search box"),
+    ("deck", "Swipe page"),
     ("home", "Home page"),
     ("browse", "Search results and browsing"),
     ("product", "Product page"),
@@ -105,6 +106,22 @@ ENTRIES = [
         "Button next to the search box in the header.",
     ),
     Entry(
+        "site.tagline", T, "Tagline under the logo",
+        "Scouting the best card prices so you don't have to",
+        "Under the logo on the home page. Leave empty to hide it.",
+        optional=True,
+    ),
+    Entry(
+        "site.nav.swipe", B, "Swipe link",
+        "Swipe",
+        "Header link to the swipe page on phones.",
+    ),
+    Entry(
+        "site.see_all", B, "See all link",
+        "See all",
+        "Link at the end of each home page section.",
+    ),
+    Entry(
         "site.nav.games", B, "Games link",
         "Games",
         "Header link to the list of games and sets.",
@@ -155,6 +172,28 @@ ENTRIES = [
         "home.games.label", T, "Game shortcuts label",
         "Browse by game",
         "Small label before the list of game links under the home page search box.",
+    ),
+    Entry(
+        "home.trending.title", H, "Trending heading",
+        "Trending now",
+        "Heading for the row of most viewed products.",
+    ),
+    Entry(
+        "home.savings.title", H, "Biggest savings heading",
+        "Biggest savings",
+        "Heading for products where the cheapest retailer beats the next one by the most.",
+    ),
+    Entry(
+        "home.savings.save", T, "Saving amount",
+        "Save {amount}",
+        "Green label on savings rows and product cards.",
+        placeholders=("amount",),
+    ),
+    Entry(
+        "home.savings.percent", T, "Saving percentage",
+        "{percent}% cheaper",
+        "Under the saving amount.",
+        placeholders=("percent",),
     ),
     Entry(
         "home.price_drops.title", H, "Price drops heading",
@@ -320,6 +359,42 @@ ENTRIES = [
         placeholders=("game",),
     ),
 
+    # Swipe page --------------------------------------------------------------
+    Entry(
+        "deck.title", H, "Swipe page heading",
+        "Swipe through today's prices",
+        "Heading and page title for the swipe page.",
+    ),
+    Entry(
+        "deck.hint", T, "Swipe hint",
+        "Swipe right to save a product, left to skip. Tap a card for every price.",
+        "Shown above the first card, then hidden.",
+    ),
+    Entry(
+        "deck.save", B, "Save button", "Save", "Button under the deck, same as swiping right."),
+    Entry(
+        "deck.skip", B, "Skip button", "Skip", "Button under the deck, same as swiping left."),
+    Entry(
+        "deck.saved.title", H, "Saved heading", "Saved", "Heading above the products you swiped right on."),
+    Entry(
+        "deck.saved.empty", T, "Saved list empty",
+        "Nothing saved yet.",
+        "Shown under the saved heading before anything is saved.",
+    ),
+    Entry(
+        "deck.saved.clear", B, "Clear saved", "Clear saved", "Removes every saved product."),
+    Entry(
+        "deck.finished", T, "End of deck",
+        "That's every product with a price today.",
+        "Shown when there are no more cards.",
+    ),
+    Entry(
+        "deck.restart", B, "Start again", "Start again", "Button shown at the end of the deck."),
+    Entry(
+        "deck.loading", T, "Loading", "Checking lowest prices", "Shown while cards load."),
+    Entry(
+        "deck.all_games", B, "All games filter", "All games", "First option in the game filter on the swipe page."),
+
     # Product page ----------------------------------------------------------
     Entry(
         "product.cheapest.label", T, "Cheapest price label",
@@ -345,14 +420,35 @@ ENTRIES = [
         placeholders=("price",),
     ),
     Entry(
+        "product.badge.best_week", T, "Badge: best in 7 days",
+        "Best in 7 days",
+        "Green badge when the cheapest price is the lowest recorded in the last 7 days.",
+    ),
+    Entry(
+        "product.badge.lowest_today", T, "Badge: lowest today",
+        "Lowest today",
+        "Green badge when the price is the lowest available today but was lower this week.",
+    ),
+    Entry(
+        "product.rank.at", T, "Price at retailer",
+        "at {retailer}",
+        "Under the big price on product cards.",
+        placeholders=("retailer",),
+    ),
+    Entry(
+        "product.check_prices", B, "Check prices link",
+        "Check prices",
+        "Small link on search result cards, opening the full comparison.",
+    ),
+    Entry(
         "product.buy.button", B, "Main buy button",
-        "Buy for {price}",
+        "Buy now",
         "Main button on a product page, linking to the cheapest retailer.",
         placeholders=("price", "retailer"),
     ),
     Entry(
         "product.preorder.button", B, "Main pre-order button",
-        "Pre-order for {price}",
+        "Pre-order",
         "Main button when the cheapest option is a pre-order.",
         placeholders=("price", "retailer"),
     ),

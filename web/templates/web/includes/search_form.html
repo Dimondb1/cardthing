@@ -1,6 +1,7 @@
 {% load sitecopy %}{% copy "site.search.placeholder" as search_hint %}
 <form class="search search--{{ variant }}" action="{% url 'web:search' %}" method="get" role="search"{% if live %} data-live-search="{% url 'web:search_api' %}" data-checking="{% copy 'home.search.checking' %}" data-none="{% copy 'browse.no_results.title' query='{query}' %}" data-all="{% copy 'home.search.all_results' query='{query}' %}"{% endif %}>
   <label class="visually-hidden" for="{{ field_id }}">{{ search_hint }}</label>
+  <svg class="search__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
   <input id="{{ field_id }}" name="q" type="search" value="{{ query|default:'' }}" placeholder="{{ search_hint }}" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="100">
   <button class="search__button" type="submit">{% copy button_key %}</button>
 </form>{% if live %}

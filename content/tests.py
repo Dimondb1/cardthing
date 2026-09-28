@@ -104,8 +104,8 @@ class LookupTests(TestCase):
         self.assertEqual(service.get("home.hero.subtitle"), "")
 
     def test_placeholders_are_filled(self):
-        text = service.get("product.buy.button", price="£44.99")
-        self.assertEqual(text, "Buy for £44.99")
+        text = service.get("home.savings.save", amount="£4.99")
+        self.assertEqual(text, "Save £4.99")
 
     def test_tag_escapes_values(self):
         html = render('{% copy "browse.results.title" query=q %}', q="<script>")

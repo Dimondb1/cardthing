@@ -133,3 +133,13 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
     if (list.children.length) panel.hidden = false;
   });
 });
+
+// Back arrow: go back in history when we came from another CardScout page.
+document.querySelectorAll("[data-back]").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    if (document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1) {
+      event.preventDefault();
+      history.back();
+    }
+  });
+});

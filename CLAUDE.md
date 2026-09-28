@@ -44,12 +44,20 @@ last checked, buy link. Everything else supports that.
   `web/static/css/tokens.css`. No new hard-coded values in `site.css`.
 - Mobile first. Check every change at 375px, 768px and 1280px before calling
   it done. No horizontal scrolling at any width.
-- One accent colour (the yellow tag), used only for the cheapest price and
-  price drops. Everything else is black, white and grey.
-- No cards for the sake of cards, no decorative shapes, no icons without a
-  job, no animation beyond a short transition.
-- Buttons say what they do: "Buy for £44.99", "Search products", never
+- Brand: orange (`--color-brand`) for the logo, buy buttons and links; green
+  (`--color-price`) for every cheapest price and saving; red only for dearer
+  prices. Nothing else is coloured.
+- Rounded cards with the soft orange border are the unit of layout for
+  products. Lists of plain rows are fine for everything else.
+- Icons only where they carry meaning (bag on buy, arrow on a dearer price,
+  the section marks). No decorative shapes.
+- Motion is for touch: the swipe deck, button presses and card lifts. Keep
+  transitions under 400ms, use the easing tokens, and honour
+  prefers-reduced-motion.
+- Buttons say what they do. "Buy now" and "Search products" are fine; never
   "Get started" or "Learn more".
+- The swipe page (`/swipe/`) must feel instant: cards are prefetched, only
+  transforms change during a drag, no layout work on pointermove.
 
 ## Copy
 

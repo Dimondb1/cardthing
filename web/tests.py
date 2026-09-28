@@ -63,7 +63,7 @@ class PageTests(PageTestCase):
 
     def test_home_shows_every_section(self):
         response = self.client.get(reverse("web:home"))
-        for heading in ("Price drops this week", "Popular this week", "Recent sets"):
+        for heading in ("Trending now", "Biggest savings", "Save £3.01", "Price drops this week", "Recent sets"):
             self.assertContains(response, heading)
 
     def test_product_page_leads_with_the_cheapest_delivered_price(self):
@@ -71,7 +71,9 @@ class PageTests(PageTestCase):
         self.assertContains(response, "Cheapest delivered price")
         self.assertContains(response, "at Harbour Games")
         self.assertContains(response, "£52.00 plus £2.99 delivery")
-        self.assertContains(response, "Buy for £54.99")
+        self.assertContains(response, "Buy now")
+        self.assertContains(response, "Best in 7 days")
+        self.assertContains(response, 'rank__pos--2">#2</span><span class="rank__name">Northgate Cards')
         self.assertContains(response, "2 retailers have this in stock.")
         self.assertContains(response, "Last checked 1 hour ago.")
         self.assertContains(response, self.cheap.get_outbound_url())
@@ -221,3 +223,28 @@ class SearchApiTests(PageTestCase):
 
     def test_home_shows_when_prices_were_last_checked(self):
         self.assertContains(self.client.get(reverse("web:home")), "Prices last checked 1 hour ago.")
+
+
+class DeckTests(PageTestCase):
+    def test_deck_page_and_api(self):
+        self.assertContains(self.client.get(reverse("web:deck")), "Swipe through")
+        data = self.client.get(reverse("web:deck_api")).json()
+        card = data["cards"][0]
+        self.assertEqual(card["name"], self.etb.name)
+        self.assertEqual(card["price"], "£54.99")
+        self.assertEqual(card["retailer"], "Harbour Games")
+        self.assertEqual(card["second"], {"retailer": "Northgate Cards", "price": "£58.00"})
+        self.assertEqual(card["saving"], "£3.01")
+        self.assertEqual(card["badge"], "best_week")
+        self.assertIsNone(data["next"])
+
+    def test_deck_only_includes_priced_products(self):
+        names = [c["name"] for c in self.client.get(reverse("web:deck_api")).json()["cards"]]
+        self.assertNotIn(self.unpriced.name, names)
+        self.assertNotIn(self.sold_out.name, names)
+
+    def test_search_cards_show_rank_and_badge(self):
+        response = self.client.get(reverse("web:search"), {"q": "etb"})
+        self.assertContains(response, "Best in 7 days")
+        self.assertContains(response, "Check prices")
+        self.assertContains(response, "#2")

@@ -4,79 +4,91 @@
 {% block content %}
 <section class="intro" aria-labelledby="intro-title">
   <h1 id="intro-title" class="intro__title">{% copy "home.hero.title" %}</h1>
-  {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="intro__text">{{ subtitle }}</p>{% endif %}
+  {% copy "site.tagline" as tagline %}{% if tagline %}<p class="intro__tagline">{{ tagline }}</p>{% endif %}
   {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" field_id="home-q" live=True %}
   {% if last_checked %}<p class="intro__checked">{% copy "home.search.checked" time=last_checked|ago %}</p>{% endif %}
   {% if games %}
-    <p class="intro__games game-links">
-      <span class="game-links__label">{% copy "home.games.label" %}</span>
+    <p class="game-links">
       {% for game in games %}<a href="{{ game.get_absolute_url }}">{{ game.display_short }}</a>{% endfor %}
     </p>
   {% endif %}
 </section>
 
-{% if drops or popular %}
-<div class="home-columns">
-  {% if drops %}
-  <section class="home-section" aria-labelledby="drops-title">
-    <div class="section-head">
-      <h2 id="drops-title">{% copy "home.price_drops.title" %}</h2>
-      {% copy "home.price_drops.intro" days=trending_days as drops_intro %}{% if drops_intro %}<p>{{ drops_intro }}</p>{% endif %}
-    </div>
-    <ul class="drops">
-      {% for product in drops %}
-      <li class="drop">
-        {% product_image product "thumb" %}
-        <div class="drop__body">
-          <h3 class="drop__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></h3>
-          <p class="drop__meta">{{ product.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ product.get_product_type_display }}</p>
-        </div>
-        <p class="drop__prices">
-          <s class="drop__was">{% copy "home.price_drops.was" price=product.previous_price|gbp %}</s>
-          {% price product.lowest_price tag=True size="md" %}
-        </p>
-      </li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% endif %}
+{% if trending %}
+<section class="home-section" aria-labelledby="trending-title">
+  <div class="section-head">
+    <h2 id="trending-title" class="section-head__title"><svg class="section-head__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2c1 4 5 6 5 11a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-4-1-6 1-10z" fill="currentColor"/></svg>{% copy "home.trending.title" %}</h2>
+    <a class="section-head__all" href="{% url 'web:search' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  </div>
+  <ul class="trending" data-scroll>
+    {% for product in trending %}
+    <li class="trending__item">
+      <a class="trending__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "trend" %}
+        <span class="trending__name">{{ product.name }}</span>
+        <span class="trending__chev" aria-hidden="true">›</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
-  {% if popular %}
-  <section class="home-section" aria-labelledby="popular-title">
-    <div class="section-head">
-      <h2 id="popular-title">{% copy "home.popular.title" %}</h2>
-      {% copy "home.popular.intro" days=trending_days as popular_intro %}{% if popular_intro %}<p>{{ popular_intro }}</p>{% endif %}
-    </div>
-    <ol class="ranked">
-      {% for product in popular %}
-      <li class="ranked__item">
-        <div class="ranked__body">
-          <h3 class="ranked__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></h3>
-          <p class="ranked__meta">{{ product.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ product.get_product_type_display }}</p>
-        </div>
-        <p class="ranked__price">{% if product.lowest_price is not None %}{% price product.lowest_price %}{% else %}<span class="ranked__none">{% copy "browse.availability.none" %}</span>{% endif %}</p>
-      </li>
-      {% endfor %}
-    </ol>
-  </section>
-  {% endif %}
-</div>
+{% if savings %}
+<section class="home-section" aria-labelledby="savings-title">
+  <div class="section-head">
+    <h2 id="savings-title" class="section-head__title"><svg class="section-head__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 12l9-9h9v9l-9 9z" fill="currentColor"/><circle cx="16.5" cy="7.5" r="1.6" fill="#fff"/></svg>{% copy "home.savings.title" %}</h2>
+    <a class="section-head__all" href="{% url 'web:search' %}?sort=price">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  </div>
+  <ol class="savings">
+    {% for product, summary in savings %}
+    <li class="saving">
+      <a class="saving__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "thumb" %}
+        <span class="saving__body">
+          <span class="saving__name">{{ product.name }}</span>
+          <span class="saving__prices">
+            <span class="saving__offer"><span class="saving__retailer">{{ summary.best.retailer.name }}</span><span class="saving__best">{{ summary.best.delivered_price|gbp }}</span></span>
+            <span class="saving__offer saving__offer--second"><span class="saving__retailer">{{ summary.second.retailer.name }}</span><span class="saving__second">{{ summary.second.delivered_price|gbp }}</span></span>
+          </span>
+        </span>
+        <span class="saving__pill"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v10m0 0-4-4m4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>{% copy "home.savings.save" amount=summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=summary.percent %}</small></span></span>
+        <span class="saving__chev" aria-hidden="true">›</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+{% if drops %}
+<section class="home-section" aria-labelledby="drops-title">
+  <div class="section-head">
+    <h2 id="drops-title" class="section-head__title">{% copy "home.price_drops.title" %}</h2>
+    {% copy "home.price_drops.intro" days=trending_days as drops_intro %}{% if drops_intro %}<p class="section-head__note">{{ drops_intro }}</p>{% endif %}
+  </div>
+  <ul class="drops">
+    {% for product in drops %}
+    <li class="drop">
+      <a class="drop__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "thumb" %}
+        <span class="drop__body"><span class="drop__name">{{ product.name }}</span><span class="drop__meta">{{ product.game.display_short }} · {{ product.get_product_type_display }}</span></span>
+        <span class="drop__prices"><s class="drop__was">{% copy "home.price_drops.was" price=product.previous_price|gbp %}</s>{% price product.lowest_price size="md" %}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
 {% endif %}
 
 {% if games %}
-<section class="home-section home-sets" aria-labelledby="sets-title">
-  <div class="section-head">
-    <h2 id="sets-title">{% copy "home.games.title" %}</h2>
-  </div>
+<section class="home-section" aria-labelledby="sets-title">
+  <div class="section-head"><h2 id="sets-title" class="section-head__title">{% copy "home.games.title" %}</h2></div>
   <div class="set-directory">
     {% for game in games %}
     <div class="set-directory__game">
       <h3><a href="{{ game.get_absolute_url }}">{{ game.name }}</a></h3>
-      <ul>
-        {% for product_set in game.listed_sets|slice:":4" %}
-        <li><a href="{{ product_set.get_absolute_url }}">{{ product_set.name }}</a></li>
-        {% endfor %}
-      </ul>
+      <ul>{% for product_set in game.listed_sets|slice:":4" %}<li><a href="{{ product_set.get_absolute_url }}">{{ product_set.name }}</a></li>{% endfor %}</ul>
     </div>
     {% endfor %}
   </div>

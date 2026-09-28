@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from catalogue import pricing
+from catalogue import offers, pricing
 from catalogue.models import Game, Listing, OutboundClick, Product, ProductSet, Retailer
 from catalogue.search import apply_search
 from content import service as copy
@@ -106,8 +106,10 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
             ordering.insert(0, "name_rank")
     products = products.annotate(has_price=has_price).order_by(*ordering)
 
-    paginator = Paginator(products, settings.CARDSCOUT_PAGE_SIZE)
+    paginator = Paginator(products.prefetch_related(offers.buyable_prefetch()), settings.CARDSCOUT_PAGE_SIZE)
     page = paginator.get_page(request.GET.get("page"))
+    week_lows = offers.week_low_map([p.pk for p in page.object_list])
+    cards = [(product, offers.summarise(product, week_lows)) for product in page.object_list]
 
     filters_active = bool(
         game or product_type or form.value("in_stock") or sort != form.default_sort
@@ -116,6 +118,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
         "form": form,
         "query": query,
         "page": page,
+        "cards": cards,
         "total": paginator.count,
         "filters_active": filters_active,
         "no_matches": bool(query) and not filters_active and paginator.count == 0,
@@ -140,14 +143,18 @@ def home(request):
         )
     )
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
+    priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
+    savings = offers.biggest_savings(priced, limit=6)
+    trending = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
     return render(
         request,
         "web/home.html",
         {
             "games": games,
             "last_checked": last_checked,
+            "savings": savings,
+            "trending": trending,
             "drops": list(pricing.price_drops(limit=6)),
-            "popular": pricing.popular(limit=8),
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.CARDSCOUT_SITE_NAME
@@ -260,6 +267,8 @@ def product_detail(request, slug):
     )
     unavailable = [listing for listing in listings if not listing.is_buyable]
     cheapest = current[0] if current else None
+    product.offers = current
+    summary = offers.summarise(product, offers.week_low_map([product.pk]))
 
     in_stock_count = sum(1 for l in current if l.availability == Listing.Availability.IN_STOCK)
     preorder_count = sum(1 for l in current if l.availability == Listing.Availability.PREORDER)
@@ -287,6 +296,7 @@ def product_detail(request, slug):
             "current": current,
             "unavailable": unavailable,
             "cheapest": cheapest,
+            "summary": summary,
             "in_stock_count": in_stock_count,
             "preorder_count": preorder_count,
             "last_checked": last_checked,
@@ -375,6 +385,71 @@ def search_api(request):
     return response
 
 
+DECK_PAGE = 12
+
+
+def card_data(request, product, summary):
+    """One product as the swipe deck and search cards need it."""
+    from .templatetags.cardscout import ago, gbp
+
+    best = summary.best
+    data = {
+        "id": product.pk,
+        "name": product.name,
+        "url": product.get_absolute_url(),
+        "meta": f"{product.game.display_short} · {product.get_product_type_display()}",
+        "type": product.product_type,
+        "image": product.image.url if product.image else "",
+        "price": gbp(best.delivered_price) if best else "",
+        "retailer": best.retailer.name if best else "",
+        "buy": best.get_outbound_url() if best else "",
+        "checked": ago(best.last_checked) if best else "",
+        "badge": summary.badge or "",
+        "second": {"retailer": summary.second.retailer.name, "price": gbp(summary.second.delivered_price)} if summary.second else None,
+        "saving": gbp(summary.saving) if summary.saving else "",
+        "percent": summary.percent or 0,
+    }
+    return data
+
+
+@require_GET
+def deck_api(request):
+    """Cards for the swipe deck, cheapest-first within newest sets."""
+    try:
+        offset = max(int(request.GET.get("offset", 0)), 0)
+    except ValueError:
+        offset = 0
+    products = Product.objects.for_lists().filter(lowest_price__isnull=False)
+    game = request.GET.get("game")
+    if game:
+        products = products.filter(game__slug=game)
+    products = products.order_by(F("release").desc(nulls_last=True), "name")
+    batch = list(products.prefetch_related(offers.buyable_prefetch())[offset : offset + DECK_PAGE + 1])
+    more = len(batch) > DECK_PAGE
+    batch = batch[:DECK_PAGE]
+    week_lows = offers.week_low_map([p.pk for p in batch])
+    cards = [card_data(request, p, offers.summarise(p, week_lows)) for p in batch]
+    response = JsonResponse({"cards": cards, "next": offset + DECK_PAGE if more else None})
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_GET
+def deck(request):
+    products = Product.objects.for_lists().filter(lowest_price__isnull=False)
+    return render(
+        request,
+        "web/deck.html",
+        {
+            "games": Game.objects.filter(is_active=True),
+            "product_types": Product.Type.choices,
+            "total": products.count(),
+            "meta_title": text(request, "deck.title"),
+            "noindex": True,
+        },
+    )
+
+
 @require_GET
 def robots_txt(request):
     lines = [
@@ -383,5 +458,6 @@ def robots_txt(request):
         "Disallow: /go/",
         "Disallow: /search/",
         "Disallow: /api/",
+        "Disallow: /swipe/",
     ]
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")

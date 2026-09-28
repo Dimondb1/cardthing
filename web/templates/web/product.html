@@ -10,30 +10,33 @@
 </nav>
 
 <div class="product-head">
-  <div class="product-head__image">{% product_image product "large" %}</div>
-
-  <div class="product-head__title">
+  <div class="hero-card">
+    <div class="hero-card__image">{% product_image product "large" %}</div>
     <p class="eyebrow">{{ product.get_product_type_display }}</p>
     <h1 class="product-title">{{ product.name }}</h1>
   </div>
 
   <section class="buybox" aria-label="{% copy 'product.cheapest.label' %}">
     {% if cheapest %}
-      <p class="buybox__label">{% copy "product.cheapest.label" %}</p>
-      <p class="buybox__price">
-        {% price cheapest.delivered_price tag=True size="lg" %}
-        <span class="buybox__retailer">{% copy "product.cheapest.retailer" retailer=cheapest.retailer.name %}</span>
-      </p>
+      <div class="buybox__main">
+        <div class="buybox__offer">
+          {% include "web/includes/badge.html" %}
+          <p class="buybox__label">{% copy "product.cheapest.label" %}</p>
+          <p class="buybox__price">{% price cheapest.delivered_price size="lg" %}</p>
+          <p class="buybox__retailer">{% copy "product.cheapest.retailer" retailer=cheapest.retailer.name %}</p>
+        </div>
+        <a class="button button--buy button--big" href="{{ cheapest.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">
+          {% include "web/includes/bag.svg" %}
+          <span>{% if cheapest.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}</span>
+          <span class="visually-hidden">{{ cheapest.delivered_price|gbp }} at {{ cheapest.retailer.name }} (opens in a new tab)</span>
+        </a>
+      </div>
+      <div class="buybox__rank">{% include "web/includes/rank_row.html" %}</div>
       <p class="buybox__breakdown">
         <span class="stock-inline stock-inline--{{ cheapest.availability }}">{{ cheapest.get_availability_display }}</span>
         <span aria-hidden="true" class="buybox__sep">·</span>
         {% if cheapest.delivery_cost %}{% copy "product.breakdown.delivery" price=cheapest.price|gbp delivery=cheapest.delivery_cost|gbp %}{% else %}{% copy "product.breakdown.free" price=cheapest.price|gbp %}{% endif %}
       </p>
-      <a class="button button--buy" href="{{ cheapest.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">
-        <span>{% if cheapest.availability == "preorder" %}{% copy "product.preorder.button" price=cheapest.delivered_price|gbp retailer=cheapest.retailer.name %}{% else %}{% copy "product.buy.button" price=cheapest.delivered_price|gbp retailer=cheapest.retailer.name %}{% endif %}</span>
-        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 3h8v8M13 3 3.5 12.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span class="visually-hidden">(opens in a new tab)</span>
-      </a>
       <p class="buybox__summary">
         {% if in_stock_count %}{% copy_count "product.availability.in_stock" in_stock_count %}{% elif preorder_count %}{% copy_count "product.availability.preorder" preorder_count %}{% endif %}
         {% if last_checked %}{% copy "product.last_checked" time=last_checked|ago %}{% endif %}

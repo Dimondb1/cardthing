@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from .importers import apply_offers, feed_offers, run_import, shopify_offers
-from .models import ImportRun, Listing, Retailer
+from .models import ImportRun, Listing, Product, Retailer
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
 
@@ -194,3 +194,39 @@ class FeedLayoutTests(TestCase):
         self.assertIsNone(money("44.99 EUR"))
         self.assertEqual(money("£1,249.00"), Decimal("1249.00"))
         self.assertEqual(money("44.99 GBP"), Decimal("44.99"))
+
+
+class ImportProductsTests(TestCase):
+    def test_import_products_from_csv(self):
+        import tempfile
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        make_game()
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as f:
+            f.write("name,game,type,set,set_code,ean,release_date\n"
+                    "Prismatic Evolutions Elite Trainer Box,Pokémon,ETB,Prismatic Evolutions,PRE,0820650851230,2025-01-17\n"
+                    "Nothing,No Such Game,bundle,,,,\n"
+                    "Bad Date,Pokémon,bundle,,,,soon\n")
+        out = StringIO()
+        call_command("import_products", f.name, stdout=out)
+        product = Product.objects.get(slug="prismatic-evolutions-elite-trainer-box")
+        self.assertEqual(product.product_type, Product.Type.ELITE_TRAINER_BOX)
+        self.assertEqual(product.product_set.code, "PRE")
+        self.assertEqual(product.ean, "0820650851230")
+        self.assertIn("1 products added, 0 updated.", out.getvalue())
+        self.assertIn("no game called", out.getvalue())
+        self.assertIn("release_date must be", out.getvalue())
+        call_command("import_products", f.name, stdout=out)
+        self.assertIn("0 products added, 1 updated.", out.getvalue())
+
+    def test_non_web_links_are_not_stored(self):
+        from .importers import Offer
+
+        retailer = make_retailer("Northgate Cards")
+        make_product(make_set(make_game()), ean="0820650851230")
+        _found, updated, unmatched = apply_offers(retailer, [Offer(title="ETB", url="javascript:alert(1)", price=Decimal("5"), ean="0820650851230")])
+        self.assertEqual(updated, 0)
+        self.assertEqual(Listing.objects.count(), 0)
+        self.assertIn("not a web address", unmatched[0])

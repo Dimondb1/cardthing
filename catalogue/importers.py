@@ -206,6 +206,9 @@ def apply_offers(retailer, offers, checked_at=None):
             if product_pk is None:
                 unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}]")
                 continue
+            if not offer.url.lower().startswith(("http://", "https://")):
+                unmatched.append(f"{offer.title} [link is not a web address]")
+                continue
             listing, _created = Listing.objects.get_or_create(
                 product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
             )

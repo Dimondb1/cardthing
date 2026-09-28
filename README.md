@@ -51,6 +51,22 @@ Prices only update while the importer runs, so on a local machine run
 while true; do python manage.py import_prices; sleep 3600; done
 ```
 
+## Adding products in bulk
+
+```sh
+python manage.py import_products products.csv
+```
+
+takes columns `name`, `game`, `type` (booster_box, elite_trainer_box, bundle,
+collection_box, deck, tin, booster_pack, gift_set, other, or ETB) and
+optionally `set`, `set_code`, `ean`, `release_date` (YYYY-MM-DD) and
+`image_url`. Loading the same file again updates the details.
+
+`scripts/browser_sweep.py` drives every public page in a real browser and
+reports script errors, horizontal overflow, unlabelled controls and tap
+targets under 24px. It needs `pip install playwright` and a running dev
+server.
+
 ## Checking a shop before adding it
 
 ```sh

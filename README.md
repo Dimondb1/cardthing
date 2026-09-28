@@ -82,7 +82,13 @@ the retailer or your affiliate network for a CSV feed instead.
    for a local file. Run it from cron, hourly is sensible. Each run is
    recorded in Admin > Price imports with the retailer products that could
    not be matched, so you can add the missing barcodes.
-4. **History.** `python manage.py snapshot_daily_prices` once a day keeps the
+4. **Images.** Price imports keep the retailer's product image for any
+   product without one (`CARDSCOUT_USE_FEED_IMAGES`, on by default). An
+   uploaded image always wins. Admin > Products can be filtered by image and
+   by barcode, and barcodes can be edited in the list or loaded in bulk with
+   `python manage.py import_barcodes barcodes.csv` (columns `ean` and `slug`
+   or `name`).
+5. **History.** `python manage.py snapshot_daily_prices` once a day keeps the
    price history complete.
 
 Retailer products the site no longer lists are marked out of stock at that

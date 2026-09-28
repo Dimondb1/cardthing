@@ -428,7 +428,7 @@ def card_data(request, product, summary):
         "url": product.get_absolute_url(),
         "meta": f"{product.game.display_short} · {product.get_product_type_display()}",
         "type": product.product_type,
-        "image": product.image.url if product.image else "",
+        "image": product.image_src,
         "price": gbp(best.delivered_price) if best else "",
         "retailer": best.retailer.name if best else "",
         "buy": best.get_outbound_url() if best else "",

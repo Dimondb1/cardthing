@@ -145,6 +145,13 @@ class Product(models.Model):
         help_text="Square or portrait image on a plain background works best. "
         "Without one, an outline of the product type is shown.",
     )
+    image_url = models.URLField(
+        "image from a retailer feed",
+        max_length=1000,
+        blank=True,
+        help_text="Filled in by price imports when no image has been uploaded. An uploaded "
+        "image always takes priority.",
+    )
     ean = models.CharField("barcode", max_length=20, blank=True, db_index=True)
     release_date = models.DateField(
         null=True, blank=True, help_text="Leave empty to use the set's release date."
@@ -177,6 +184,13 @@ class Product(models.Model):
 
     def get_absolute_url(self):
         return reverse("web:product", args=[self.slug])
+
+    @property
+    def image_src(self):
+        """Address of the best image we have, or an empty string."""
+        if self.image:
+            return self.image.url
+        return self.image_url
 
     @property
     def effective_release_date(self):

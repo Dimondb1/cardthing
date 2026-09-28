@@ -128,3 +128,43 @@ class CheckShopTests(TestCase):
         with mock.patch("catalogue.management.commands.check_shop.fetch", return_value=b"<html>"):
             call_command("check_shop", "shop.example", stdout=out)
         self.assertIn("not a Shopify shop", out.getvalue())
+
+
+class ImageAndBarcodeTests(TestCase):
+    def setUp(self):
+        self.retailer = make_retailer("Harbour Games", source_type=Retailer.Source.SHOPIFY, source_url="https://harbour.example/")
+        self.product = make_product(make_set(make_game()), ean="0820650851230")
+
+    def test_feed_image_is_kept_when_product_has_none(self):
+        page = shopify_page([{"handle": "etb", "title": "ETB", "tags": [], "images": [{"src": "https://cdn.example/etb.jpg"}],
+                              "variants": [{"price": "44.99", "available": True, "barcode": "820650851230"}]}])
+        run_import(self.retailer, fetch=lambda url: page if "page=1" in url else shopify_page([]))
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.image_url, "https://cdn.example/etb.jpg")
+        self.assertEqual(self.product.image_src, "https://cdn.example/etb.jpg")
+
+    def test_feed_image_does_not_replace_an_existing_one(self):
+        self.product.image_url = "https://cdn.example/mine.jpg"
+        self.product.save()
+        page = shopify_page([{"handle": "etb", "title": "ETB", "tags": [], "images": [{"src": "https://cdn.example/other.jpg"}],
+                              "variants": [{"price": "44.99", "available": True, "barcode": "820650851230"}]}])
+        run_import(self.retailer, fetch=lambda url: page if "page=1" in url else shopify_page([]))
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.image_url, "https://cdn.example/mine.jpg")
+
+    def test_import_barcodes_from_csv(self):
+        import tempfile
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        other = make_product(self.product.product_set, name="Prismatic Evolutions Booster Bundle")
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as f:
+            f.write("name,ean\nprismatic evolutions booster bundle,0820650851247\nMissing Product,0820650851254\nBad,12\n")
+        out = StringIO()
+        call_command("import_barcodes", f.name, stdout=out)
+        other.refresh_from_db()
+        self.assertEqual(other.ean, "0820650851247")
+        self.assertIn("Barcodes set on 1 products.", out.getvalue())
+        self.assertIn("Missing Product: product not found", out.getvalue())
+        self.assertIn("Bad: no valid barcode", out.getvalue())

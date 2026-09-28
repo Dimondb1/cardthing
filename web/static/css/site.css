@@ -394,7 +394,7 @@ ul, ol { margin: 0; padding: 0; }
 /* Set directory */
 .set-directory { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--space-5) var(--space-6); }
 .set-directory h3 { font-size: var(--text-base); }
-.set-directory h3 a { display: inline-block; padding-block: 2px; text-decoration: none; }
+.set-directory h3 a { display: inline-block; padding-block: 4px; text-decoration: none; }
 .set-directory ul { list-style: none; margin-top: var(--space-2); }
 .set-directory li { padding: 0; }
 .set-directory li a { display: inline-block; padding-block: var(--space-1); }

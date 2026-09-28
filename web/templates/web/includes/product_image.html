@@ -1,1 +1,1 @@
-<span class="product-image product-image--{{ size }}">{% if product.image %}<img src="{{ product.image.url }}" alt="" loading="lazy" decoding="async">{% else %}{% include "web/includes/placeholder.svg" with type=product.product_type %}{% endif %}</span>
+<span class="product-image product-image--{{ size }}">{% if product.image_src %}<img src="{{ product.image_src }}" alt="" loading="lazy" decoding="async" width="400" height="400">{% else %}{% include "web/includes/placeholder.svg" with type=product.product_type %}{% endif %}</span>

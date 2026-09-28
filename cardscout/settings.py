@@ -140,3 +140,7 @@ CARDSCOUT_TRENDING_DAYS = 7
 CARDSCOUT_HISTORY_DAYS = 90
 
 CARDSCOUT_PAGE_SIZE = 24
+
+# Price imports may record a retailer's product image for products that have
+# no uploaded image. Turn off if you would rather upload every image yourself.
+CARDSCOUT_USE_FEED_IMAGES = env_bool("CARDSCOUT_USE_FEED_IMAGES", default=True)

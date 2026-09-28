@@ -30,6 +30,38 @@ class ProductSetAdmin(admin.ModelAdmin):
     date_hierarchy = "release_date"
 
 
+class BarcodeFilter(admin.SimpleListFilter):
+    title = "barcode"
+    parameter_name = "barcode"
+
+    def lookups(self, request, model_admin):
+        return [("missing", "Missing"), ("set", "Set")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "missing":
+            return queryset.filter(ean="")
+        if self.value() == "set":
+            return queryset.exclude(ean="")
+        return queryset
+
+
+class ImageFilter(admin.SimpleListFilter):
+    title = "image"
+    parameter_name = "image"
+
+    def lookups(self, request, model_admin):
+        return [("none", "None"), ("feed", "From a feed"), ("uploaded", "Uploaded")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "none":
+            return queryset.filter(image="", image_url="")
+        if self.value() == "feed":
+            return queryset.filter(image="").exclude(image_url="")
+        if self.value() == "uploaded":
+            return queryset.exclude(image="")
+        return queryset
+
+
 class ListingInline(admin.TabularInline):
     model = Listing
     extra = 0
@@ -39,15 +71,16 @@ class ListingInline(admin.TabularInline):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ("name", "game", "product_set", "product_type", "cheapest", "listing_count", "is_active")
-    list_filter = ("game", "product_type", "is_active")
+    list_display = ("name", "game", "product_set", "product_type", "ean", "has_image", "cheapest", "listing_count", "is_active")
+    list_filter = ("game", "product_type", "is_active", BarcodeFilter, ImageFilter)
+    list_editable = ("ean",)
     search_fields = ("name", "ean", "product_set__name", "product_set__code")
     autocomplete_fields = ("product_set",)
     prepopulated_fields = {"slug": ("name",)}
     readonly_fields = ("image_preview", "created_at", "updated_at")
     fieldsets = (
         (None, {"fields": ("name", "slug", "game", "product_set", "product_type", "is_active")}),
-        ("Details", {"fields": ("image", "image_preview", "ean", "release_date")}),
+        ("Details", {"fields": ("image", "image_url", "image_preview", "ean", "release_date")}),
         ("Record", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
     inlines = [ListingInline]
@@ -63,11 +96,16 @@ class ProductAdmin(admin.ModelAdmin):
     def listing_count(self, obj):
         return obj.listing_count
 
+    @admin.display(description="Image", boolean=True)
+    def has_image(self, obj):
+        return bool(obj.image_src)
+
     @admin.display(description="Current image")
     def image_preview(self, obj):
-        if not obj.image:
-            return "No image uploaded."
-        return format_html('<img src="{}" alt="" style="max-height: 160px;">', obj.image.url)
+        if not obj.image_src:
+            return "No image yet. Upload one, or a price import may bring one from a retailer feed."
+        source = "uploaded" if obj.image else "from a retailer feed"
+        return format_html('<img src="{}" alt="" style="max-height: 160px;"><br>{}', obj.image_src, source)
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)

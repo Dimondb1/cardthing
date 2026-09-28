@@ -27,6 +27,7 @@ import urllib.request
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -48,6 +49,7 @@ class Offer:
     ean: str = ""
     availability: str = Listing.Availability.IN_STOCK
     delivery: Decimal | None = None
+    image: str = ""
 
 
 class ImportError_(Exception):
@@ -98,10 +100,13 @@ def shopify_offers(retailer, fetch=fetch):
             preorder = bool(PREORDER_WORDS.search(product.get("title", ""))) or any(
                 PREORDER_WORDS.search(tag) for tag in product.get("tags", [])
             )
+            images = product.get("images") or []
+            product_image = images[0].get("src", "") if images else ""
             for variant in product.get("variants", []):
                 price = money(variant.get("price"))
                 if price is None:
                     continue
+                variant_image = (variant.get("featured_image") or {}).get("src", "")
                 if not variant.get("available", False):
                     availability = Listing.Availability.OUT_OF_STOCK
                 elif preorder:
@@ -117,6 +122,7 @@ def shopify_offers(retailer, fetch=fetch):
                     price=price,
                     ean=clean_ean(variant.get("barcode")),
                     availability=availability,
+                    image=variant_image or product_image,
                 )
         page += 1
 
@@ -161,6 +167,7 @@ def feed_offers(text):
             ean=clean_ean(col(row, "ean", "gtin", "barcode")),
             availability=availability,
             delivery=money(col(row, "delivery", "shipping", "delivery_cost")),
+            image=col(row, "image_link", "image_url", "aw_image_url", "merchant_image_url", "image"),
         )
 
 
@@ -176,6 +183,7 @@ def apply_offers(retailer, offers, checked_at=None):
     found = updated = 0
     unmatched = []
     seen_products = set()
+    images_by_product = {}
 
     with transaction.atomic():
         for offer in offers:
@@ -194,6 +202,8 @@ def apply_offers(retailer, offers, checked_at=None):
             seen_products.add(product_pk)
             listing.url = offer.url
             listing.save(update_fields=["url"])
+            if offer.image and getattr(settings, "CARDSCOUT_USE_FEED_IMAGES", True):
+                images_by_product.setdefault(product_pk, offer.image)
             delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)
             pricing.record_check(
                 listing,
@@ -203,6 +213,12 @@ def apply_offers(retailer, offers, checked_at=None):
                 checked_at=checked_at,
             )
             updated += 1
+
+        # Fill in images for products that have none.
+        if images_by_product:
+            for product in Product.objects.filter(pk__in=images_by_product, image="", image_url=""):
+                product.image_url = images_by_product[product.pk][:1000]
+                product.save(update_fields=["image_url"])
 
         # Anything the retailer no longer lists is out of stock there.
         Listing.objects.filter(retailer=retailer).exclude(product_id__in=seen_products).exclude(

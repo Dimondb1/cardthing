@@ -1,3 +1,5 @@
+import json
+
 from django import forms
 from django.conf import settings
 from django.core.paginator import Paginator
@@ -128,6 +130,21 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
     return render(request, "web/browse.html", context)
 
 
+def home_lists():
+    """Biggest savings and trending, cached because they read every priced product."""
+    from django.core.cache import cache
+
+    from catalogue.signals import HOME_CACHE_KEY as key
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
+    savings = offers.biggest_savings(priced, limit=6)
+    trending = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
+    cache.set(key, (savings, trending), settings.CARDSCOUT_HOME_CACHE_SECONDS)
+    return savings, trending
+
+
 @require_GET
 def home(request):
     games = list(
@@ -143,9 +160,7 @@ def home(request):
         )
     )
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
-    priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
-    savings = offers.biggest_savings(priced, limit=6)
-    trending = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
+    savings, trending = home_lists()
     return render(
         request,
         "web/home.html",
@@ -288,11 +303,33 @@ def product_detail(request, slug):
             .order_by("name")[:6]
         )
 
+    structured = {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": product.name,
+        "url": request.build_absolute_uri(product.get_absolute_url()),
+        "category": product.get_product_type_display(),
+        "brand": {"@type": "Brand", "name": product.game.name},
+    }
+    if product.image_src:
+        structured["image"] = request.build_absolute_uri(product.image_src)
+    if product.ean:
+        structured["gtin13"] = product.ean
+    if current:
+        structured["offers"] = {
+            "@type": "AggregateOffer",
+            "priceCurrency": "GBP",
+            "lowPrice": str(current[0].delivered_price),
+            "highPrice": str(current[-1].delivered_price),
+            "offerCount": len(current),
+            "availability": "https://schema.org/InStock" if in_stock_count else "https://schema.org/PreOrder",
+        }
     return render(
         request,
         "web/product.html",
         {
             "product": product,
+            "structured_json": json.dumps(structured),
             "current": current,
             "unavailable": unavailable,
             "cheapest": cheapest,
@@ -488,5 +525,6 @@ def robots_txt(request):
         "Disallow: /search/",
         "Disallow: /api/",
         "Disallow: /swipe/",
+        "Sitemap: " + request.build_absolute_uri("/sitemap.xml"),
     ]
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")

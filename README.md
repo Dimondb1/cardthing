@@ -212,6 +212,26 @@ Replace that file to change the logo everywhere. The favicon is
   go through `/go/<listing id>/`, which counts the click (no personal data is
   stored) and redirects.
 
+## Putting it on a server
+
+The `deploy/` folder has everything for a small Linux server (a £4 to £6 a
+month VPS is enough):
+
+1. Clone the repository to `/srv/cardscout` and run `sudo deploy/setup.sh`.
+   It creates a virtualenv, installs requirements, applies migrations,
+   collects static files, loads the catalogue, installs a systemd service
+   for the app and a crontab for the hourly price check.
+2. Edit `/srv/cardscout/.env` (start from `.env.example`): a long random
+   `DJANGO_SECRET_KEY`, your domain in `DJANGO_ALLOWED_HOSTS` and
+   `DJANGO_CSRF_TRUSTED_ORIGINS`, then `sudo systemctl restart cardscout`.
+3. Install Caddy, put `deploy/caddy.Caddyfile` at `/etc/caddy/Caddyfile`
+   with your domain, and reload it. Caddy fetches the HTTPS certificate.
+4. Create an admin user: `sudo -u cardscout .venv/bin/python manage.py createsuperuser`.
+
+Static files are served by the app itself (WhiteNoise) with hashed names
+and long cache headers, so no separate static hosting is needed. Uploaded
+product images live in `media/`; back that folder and the database up.
+
 ## Settings
 
 | Environment variable           | Default | Notes |
@@ -223,6 +243,8 @@ Replace that file to change the logo everywhere. The favicon is
 | `DJANGO_SQLITE_PATH`           | `db.sqlite3` | |
 | `CARDSCOUT_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page. |
 | `CARDSCOUT_STALE_AFTER_HOURS`  | 72      | |
+| `CARDSCOUT_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
+| `CARDSCOUT_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
 
 ## Tests
 

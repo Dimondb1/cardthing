@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sitemaps",
     "content",
     "catalogue",
     "web",
@@ -51,6 +52,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -108,6 +110,14 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+if not DEBUG:
+    # Hashed file names so browsers can cache static files for a month.
+    STORAGES["staticfiles"] = {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}
+WHITENOISE_MAX_AGE = 60 * 60 * 24 * 30
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -140,6 +150,10 @@ CARDSCOUT_TRENDING_DAYS = 7
 CARDSCOUT_HISTORY_DAYS = 90
 
 CARDSCOUT_PAGE_SIZE = 24
+
+# Trending and biggest savings are worked out from every priced product, so
+# the result is kept for this many seconds.
+CARDSCOUT_HOME_CACHE_SECONDS = int(os.environ.get("CARDSCOUT_HOME_CACHE_SECONDS", "300"))
 
 # Price imports may record a retailer's product image for products that have
 # no uploaded image. Turn off if you would rather upload every image yourself.

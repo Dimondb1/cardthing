@@ -273,3 +273,60 @@ class TermsAndRefreshTests(PageTestCase):
         response = self.client.get(self.etb.get_absolute_url())
         self.assertContains(response, 'data-refresh="')
         self.assertContains(response, f'data-listing="{self.cheap.pk}"')
+
+
+class SeoAndEdgeCaseTests(PageTestCase):
+    def test_sitemap_lists_products_games_and_pages(self):
+        response = self.client.get("/sitemap.xml")
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn(self.etb.get_absolute_url(), body)
+        self.assertIn(self.game.get_absolute_url(), body)
+        self.assertIn(reverse("web:terms"), body)
+        self.assertNotIn("/swipe/", body)
+
+    def test_robots_points_at_sitemap(self):
+        self.assertContains(self.client.get("/robots.txt"), "Sitemap: http://testserver/sitemap.xml")
+
+    def test_product_structured_data(self):
+        import json
+
+        html = self.client.get(self.etb.get_absolute_url()).content.decode()
+        start = html.index('<script type="application/ld+json">') + len('<script type="application/ld+json">')
+        data = json.loads(html[start:html.index("</script>", start)])
+        self.assertEqual(data["@type"], "Product")
+        self.assertEqual(data["offers"]["lowPrice"], "54.99")
+        self.assertEqual(data["offers"]["offerCount"], 2)
+
+    def test_home_lists_are_cached_and_cleared_by_imports(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.client.get(reverse("web:home"))
+        self.assertIsNotNone(cache.get("web:home-lists:v1"))
+        from catalogue.importers import run_import
+        from catalogue.models import Retailer
+
+        self.harbour.source_type = Retailer.Source.SHOPIFY
+        self.harbour.source_url = "https://h.example/"
+        self.harbour.save()
+        run_import(self.harbour, fetch=lambda url: b'{"products": []}')
+        self.assertIsNone(cache.get("web:home-lists:v1"))
+
+    def test_long_names_unicode_search_and_bad_pages(self):
+        long_name = "Pokémon TCG: Scarlet & Violet " + "Ultra Premium Collection " * 5
+        product = make_product(self.pre, name=long_name.strip(), product_type=Product.Type.COLLECTION_BOX)
+        self.assertEqual(self.client.get(product.get_absolute_url()).status_code, 200)
+        self.assertEqual(self.client.get(reverse("web:search"), {"q": "pokémon ultra"}).status_code, 200)
+        self.assertEqual(self.client.get(reverse("web:search"), {"q": "'; DROP TABLE--"}).status_code, 200)
+        self.assertEqual(self.client.get(reverse("web:search"), {"page": "999"}).status_code, 200)
+        self.assertEqual(self.client.get(reverse("web:search"), {"page": "x", "game": "nope", "sort": "bad"}).status_code, 200)
+        self.assertEqual(self.client.get(reverse("web:deck_api"), {"offset": "-5"}).status_code, 200)
+
+    def test_only_stale_listings_means_no_cheapest_price(self):
+        from datetime import timedelta
+
+        Listing.objects.filter(product=self.etb).update(last_checked=timezone.now() - timedelta(days=10))
+        response = self.client.get(self.etb.get_absolute_url())
+        self.assertContains(response, "Out of stock at every retailer we check")
+        self.assertContains(response, "Not checked since")

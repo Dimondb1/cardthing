@@ -1,7 +1,8 @@
 {% extends "web/base.html" %}
 {% load sitecopy cardscout %}
 
-{% block scripts %}{% load static %}<script src="{% static 'js/product.js' %}" defer></script>{% endblock %}
+{% block scripts %}{% load static %}<script src="{% static 'js/product.js' %}" defer></script>
+<script type="application/ld+json">{{ structured_json|safe }}</script>{% endblock %}
 {% block content %}
 <nav class="breadcrumbs" aria-label="Breadcrumb">
   <ol>

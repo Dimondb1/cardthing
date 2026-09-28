@@ -1,8 +1,17 @@
-from django.db.models.signals import post_save
+from django.core.cache import cache
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import Game, Product, ProductSet
+from .models import Game, Listing, Product, ProductSet
 from .search import build_search_text
+
+HOME_CACHE_KEY = "web:home-lists:v1"
+
+
+@receiver([post_save, post_delete], sender=Product)
+@receiver([post_save, post_delete], sender=Listing)
+def clear_home_lists(sender, **kwargs):
+    cache.delete(HOME_CACHE_KEY)
 
 
 def _refresh(products):

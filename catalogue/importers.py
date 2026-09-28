@@ -254,4 +254,9 @@ def run_import(retailer, feed_path=None, fetch=fetch):
         logger.error("Import for %s failed: %s", retailer, exc)
     run.finished_at = timezone.now()
     run.save()
+    from django.core.cache import cache
+
+    from .signals import HOME_CACHE_KEY
+
+    cache.delete(HOME_CACHE_KEY)
     return run

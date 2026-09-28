@@ -306,7 +306,7 @@ ul, ol { margin: 0; padding: 0; }
 .reveal { opacity: 0; transform: translateY(6px); transition: opacity var(--motion-slow) var(--ease-out), transform var(--motion-slow) var(--ease-out); }
 .reveal.is-visible, .no-js .reveal { opacity: 1; transform: none; }
 .intro__title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-.intro__tagline { margin: 0 auto; color: var(--color-ink-muted); font-size: var(--text-sm); line-height: 1.4; max-width: 29ch; }
+.intro__tagline { margin: 0 auto; color: var(--color-ink-muted); font-size: var(--text-sm); line-height: 1.4; max-width: 24ch; }
 .intro .search { margin: var(--space-4) auto 0; max-width: 44rem; text-align: left; }
 .intro .live { text-align: left; max-width: 44rem; margin-inline: auto; }
 .intro__checked { display: inline-flex; align-items: center; gap: 0.35em; margin-top: var(--space-2); font-size: var(--text-xs); color: var(--color-ink-subtle); }

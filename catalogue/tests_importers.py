@@ -168,3 +168,29 @@ class ImageAndBarcodeTests(TestCase):
         self.assertIn("Barcodes set on 1 products.", out.getvalue())
         self.assertIn("Missing Product: product not found", out.getvalue())
         self.assertIn("Bad: no valid barcode", out.getvalue())
+
+
+class FeedLayoutTests(TestCase):
+    def test_awin_layout(self):
+        text = ("aw_deep_link,product_name,search_price,store_price,in_stock,ean,aw_image_url,delivery_cost\n"
+                "https://x.example/etb,ETB,44.99,49.99,1,0820650851230,https://img.example/etb.jpg,3.99\n"
+                "https://x.example/box,Box,120.00,120.00,0,0820650851247,,\n")
+        offers = list(feed_offers(text))
+        self.assertEqual(offers[0].price, Decimal("44.99"))
+        self.assertEqual(offers[0].availability, Listing.Availability.IN_STOCK)
+        self.assertEqual(offers[0].image, "https://img.example/etb.jpg")
+        self.assertEqual(offers[0].delivery, Decimal("3.99"))
+        self.assertEqual(offers[1].availability, Listing.Availability.OUT_OF_STOCK)
+
+    def test_google_merchant_layout(self):
+        text = "id,title,link,price,sale_price,availability,gtin,image_link\n1,ETB,https://x.example/etb,49.99 GBP,44.99 GBP,in_stock,0820650851230,https://img.example/etb.jpg\n"
+        offer = list(feed_offers(text))[0]
+        self.assertEqual(offer.price, Decimal("44.99"))
+        self.assertEqual(offer.ean, "0820650851230")
+
+    def test_other_currencies_are_ignored(self):
+        from .importers import money
+
+        self.assertIsNone(money("44.99 EUR"))
+        self.assertEqual(money("£1,249.00"), Decimal("1249.00"))
+        self.assertEqual(money("44.99 GBP"), Decimal("44.99"))

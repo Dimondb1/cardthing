@@ -75,10 +75,20 @@ def ean_key(value):
     return clean_ean(value).lstrip("0")
 
 
+MONEY_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
 def money(value):
+    """'44.99', '£44.99', '44.99 GBP' and '1,249.00' all become Decimal('44.99') style values."""
+    text = str(value or "").replace(",", "")
+    if "GBP" not in text and "£" not in text and re.search(r"[A-Z]{3}", text):
+        return None  # another currency
+    match = MONEY_RE.search(text)
+    if not match:
+        return None
     try:
-        return Decimal(str(value).replace("£", "").replace(",", "").strip()).quantize(Decimal("0.01"))
-    except (InvalidOperation, ValueError, AttributeError):
+        return Decimal(match.group()).quantize(Decimal("0.01"))
+    except InvalidOperation:
         return None
 
 
@@ -153,20 +163,24 @@ def feed_offers(text):
         return ""
 
     for row in reader:
-        price = money(col(row, "price", "sale_price"))
-        url = col(row, "url", "link", "aw_deep_link", "product_url")
+        # Awin: search_price / store_price; Google Merchant: price "44.99 GBP".
+        price = money(col(row, "sale_price", "price", "search_price", "store_price", "display_price"))
+        url = col(row, "url", "link", "aw_deep_link", "merchant_deep_link", "product_url")
         if price is None or not url:
             continue
-        availability = AVAILABILITY_WORDS.get(
-            col(row, "availability", "stock_status").lower(), Listing.Availability.IN_STOCK
-        )
+        stock_word = col(row, "availability", "stock_status", "in_stock").lower()
+        if stock_word in ("1", "true", "yes", "y"):
+            stock_word = "in_stock"
+        elif stock_word in ("0", "false", "no", "n"):
+            stock_word = "out_of_stock"
+        availability = AVAILABILITY_WORDS.get(stock_word, Listing.Availability.IN_STOCK)
         yield Offer(
             title=col(row, "title", "product_name", "name"),
             url=url,
             price=price,
-            ean=clean_ean(col(row, "ean", "gtin", "barcode")),
+            ean=clean_ean(col(row, "ean", "gtin", "barcode", "upc")),
             availability=availability,
-            delivery=money(col(row, "delivery", "shipping", "delivery_cost")),
+            delivery=money(col(row, "delivery", "shipping", "delivery_cost", "delivery_cost_gbp")),
             image=col(row, "image_link", "image_url", "aw_image_url", "merchant_image_url", "image"),
         )
 

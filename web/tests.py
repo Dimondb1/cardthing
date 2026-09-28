@@ -330,3 +330,27 @@ class SeoAndEdgeCaseTests(PageTestCase):
         response = self.client.get(self.etb.get_absolute_url())
         self.assertContains(response, "Out of stock at every retailer we check")
         self.assertContains(response, "Not checked since")
+
+
+class AdminAddProductTests(TestCase):
+    def test_product_can_be_added_through_admin_with_a_listing(self):
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.create_superuser("admin", "a@example.com", "pw")
+        self.client.force_login(user)
+        game = make_game()
+        retailer = make_retailer("Test Shop")
+        data = {
+            "name": "Browser Test Booster Box", "slug": "browser-test-booster-box", "game": game.pk, "product_set": "",
+            "product_type": "booster_box", "is_active": "on", "ean": "0820650859999", "image_url": "", "release_date": "",
+            "listings-TOTAL_FORMS": "1", "listings-INITIAL_FORMS": "0", "listings-MIN_NUM_FORMS": "0", "listings-MAX_NUM_FORMS": "1000",
+            "listings-0-retailer": retailer.pk, "listings-0-url": "https://testshop.example/products/x",
+            "listings-0-price": "99.99", "listings-0-delivery_cost": "0", "listings-0-availability": "in_stock",
+            "listings-0-last_checked_0": "2026-09-28", "listings-0-last_checked_1": "12:00:00", "listings-0-is_active": "on",
+            "_save": "Save",
+        }
+        response = self.client.post(reverse("admin:catalogue_product_add"), data)
+        self.assertEqual(response.status_code, 302, getattr(response, "context_data", {}).get("errors") or response.content[:2000])
+        product = Product.objects.get(slug="browser-test-booster-box")
+        self.assertEqual(product.listings.count(), 1)
+        self.assertContains(self.client.get(product.get_absolute_url()), "£99.99")

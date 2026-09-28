@@ -52,7 +52,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -115,7 +114,9 @@ STORAGES = {
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 if not DEBUG:
-    # Hashed file names so browsers can cache static files for a month.
+    # WhiteNoise serves the collected static files with hashed names, so
+    # browsers can cache them for a month. In development Django serves them.
+    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
     STORAGES["staticfiles"] = {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}
 WHITENOISE_MAX_AGE = 60 * 60 * 24 * 30
 MEDIA_URL = "media/"

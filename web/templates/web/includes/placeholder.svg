@@ -1,5 +1,5 @@
 {# Outline of the product type, shown when a product has no image. #}<svg class="placeholder" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-<g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke">
+<g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke">
 {% if type == "booster_box" %}
   <path d="M16 44 L30 33 H86 L72 44 Z" class="placeholder__top"/>
   <path d="M72 44 L86 33 V65 L72 76 Z" class="placeholder__side"/>

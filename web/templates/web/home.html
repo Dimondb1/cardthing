@@ -6,11 +6,13 @@
   <h1 id="intro-title" class="intro__title">{% copy "home.hero.title" %}</h1>
   {% copy "site.tagline" as tagline %}{% if tagline %}<p class="intro__tagline">{{ tagline }}</p>{% endif %}
   {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" field_id="home-q" live=True %}
-  {% if last_checked %}<p class="intro__checked">{% copy "home.search.checked" time=last_checked|ago %}</p>{% endif %}
+  {% if last_checked %}<p class="intro__checked"><svg class="intro__checked-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>{% copy "home.search.checked" time=last_checked|ago %}</p>{% endif %}
   {% if games %}
-    <p class="game-links">
-      {% for game in games %}<a href="{{ game.get_absolute_url }}">{{ game.display_short }}</a>{% endfor %}
-    </p>
+    <nav class="chips" aria-label="{% copy 'site.nav.games' %}">
+      <ul class="chips__list">
+        {% for game in games %}<li><a class="chip" href="{{ game.get_absolute_url }}">{{ game.display_short }}</a></li>{% endfor %}
+      </ul>
+    </nav>
   {% endif %}
 </section>
 
@@ -26,7 +28,7 @@
       <a class="trending__link" href="{{ product.get_absolute_url }}">
         {% product_image product "trend" %}
         <span class="trending__name">{{ product.name }}</span>
-        <span class="trending__chev" aria-hidden="true">›</span>
+        {% if product.lowest_price is not None %}<span class="trending__price">{{ product.lowest_price|gbp }}</span>{% endif %}
       </a>
     </li>
     {% endfor %}
@@ -47,13 +49,9 @@
         {% product_image product "thumb" %}
         <span class="saving__body">
           <span class="saving__name">{{ product.name }}</span>
-          <span class="saving__prices">
-            <span class="saving__offer"><span class="saving__retailer">{{ summary.best.retailer.name }}</span><span class="saving__best">{{ summary.best.delivered_price|gbp }}</span></span>
-            <span class="saving__offer saving__offer--second"><span class="saving__retailer">{{ summary.second.retailer.name }}</span><span class="saving__second">{{ summary.second.delivered_price|gbp }}</span></span>
-          </span>
+          <span class="saving__line"><span class="saving__best">{{ summary.best.delivered_price|gbp }}</span> <span class="saving__retailer">{{ summary.best.retailer.name }}</span><span class="saving__sep" aria-hidden="true">·</span><s class="saving__second">{{ summary.second.delivered_price|gbp }}</s> <span class="saving__retailer">{{ summary.second.retailer.name }}</span></span>
         </span>
-        <span class="saving__pill"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v10m0 0-4-4m4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>{% copy "home.savings.save" amount=summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=summary.percent %}</small></span></span>
-        <span class="saving__chev" aria-hidden="true">›</span>
+        <span class="saving__pill"><strong>{% copy "home.savings.save" amount=summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=summary.percent %}</small></span>
       </a>
     </li>
     {% endfor %}

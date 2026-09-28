@@ -40,8 +40,9 @@
   --space-8: calc(4.5rem * var(--density));
 
   /* Corners -------------------------------------------------------------- */
+  --radius-sm: 8px;          /* thumbnails, small controls */
   --radius: 12px;            /* buttons, inputs, images */
-  --radius-card: 20px;       /* product cards and panels */
+  --radius-card: 16px;       /* product cards and panels */
   --radius-pill: 999px;      /* filters, badges, search box */
 
   /* Typefaces ------------------------------------------------------------ */
@@ -64,6 +65,7 @@
   --text-price-md: 1.25rem;
 
   --weight-body: 400;
+  --weight-medium: 500;
   --weight-strong: 600;
   --weight-heading: 750;
   --weight-price: 800;
@@ -79,6 +81,8 @@
   --color-paper: #ffffff;        /* page background */
   --color-shelf: #f6f6f8;        /* image wells and quiet backgrounds */
   --color-line: #e6e8ec;
+  --color-line-soft: #eef0f3;    /* dividers inside cards */
+  --color-placeholder: #c9cdd4;  /* outline drawings when there is no image */
 
   --color-brand: #ff5a1f;        /* logo, buy buttons, links */
   --color-brand-ink: #ffffff;
@@ -97,7 +101,8 @@
   --color-focus: #1f2430;
 
   /* Shadows -------------------------------------------------------------- */
-  --shadow-card: 0 1px 2px rgb(31 36 48 / 0.04), 0 4px 14px rgb(31 36 48 / 0.05);
+  --shadow-card: 0 1px 2px rgb(31 36 48 / 0.04), 0 2px 8px rgb(31 36 48 / 0.04);
+  --shadow-input: 0 1px 2px rgb(31 36 48 / 0.05);
   --shadow-hover: 0 2px 4px rgb(31 36 48 / 0.05), 0 10px 24px rgb(31 36 48 / 0.09);
   --shadow-lift: 0 12px 32px rgb(31 36 48 / 0.14), 0 2px 6px rgb(31 36 48 / 0.06);
   --shadow-button: 0 1px 2px rgb(232 77 20 / 0.25);

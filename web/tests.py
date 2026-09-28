@@ -248,3 +248,28 @@ class DeckTests(PageTestCase):
         self.assertContains(response, "Best in 7 days")
         self.assertContains(response, "Check prices")
         self.assertContains(response, "#2")
+
+
+class TermsAndRefreshTests(PageTestCase):
+    def test_terms_page_holds_the_disclosures(self):
+        response = self.client.get(reverse("web:terms"))
+        self.assertContains(response, "commission")
+        self.assertContains(response, "independent")
+        self.assertContains(response, "stored in your browser")
+
+    def test_footer_is_one_line_with_a_terms_link(self):
+        html = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn("Prices include UK delivery.", html)
+        self.assertIn(reverse("web:terms"), html)
+        self.assertNotIn("Product names and trademarks", html)
+
+    def test_prices_api(self):
+        data = self.client.get(reverse("web:product_prices_api", args=[self.etb.slug])).json()
+        row = next(r for r in data["listings"] if r["id"] == self.cheap.pk)
+        self.assertEqual(row["total"], "£54.99")
+        self.assertTrue(row["buyable"])
+
+    def test_product_page_has_refresh_control(self):
+        response = self.client.get(self.etb.get_absolute_url())
+        self.assertContains(response, 'data-refresh="')
+        self.assertContains(response, f'data-listing="{self.cheap.pk}"')

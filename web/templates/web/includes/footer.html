@@ -1,13 +1,11 @@
 {% load sitecopy %}
 <footer class="site-footer">
   <div class="site-footer__inner">
-    <div class="site-footer__legal">
-      <p>{% copy "footer.affiliate_disclosure" %}</p>
-      <p>{% copy "footer.independence_disclaimer" %}</p>
-    </div>
+    <p class="site-footer__line">{% copy "footer.line" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
     <nav class="site-footer__nav" aria-label="Footer">
       <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a>
       <a href="{% url 'web:games' %}">{% copy "site.nav.games" %}</a>
+      <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a>
       <span>&copy; {% now "Y" %} {{ site_name }}</span>
     </nav>
   </div>

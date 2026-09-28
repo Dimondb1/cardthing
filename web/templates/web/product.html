@@ -1,6 +1,7 @@
 {% extends "web/base.html" %}
 {% load sitecopy cardscout %}
 
+{% block scripts %}{% load static %}<script src="{% static 'js/product.js' %}" defer></script>{% endblock %}
 {% block content %}
 <nav class="breadcrumbs" aria-label="Breadcrumb">
   <ol>
@@ -22,11 +23,11 @@
         <div class="buybox__offer">
           {% include "web/includes/badge.html" %}
           <p class="buybox__label">{% copy "product.cheapest.label" %}</p>
-          <p class="buybox__price">{% price cheapest.delivered_price size="lg" %}</p>
+          <p class="buybox__price"><span class="money" data-total-for="{{ cheapest.pk }}">{% price cheapest.delivered_price size="lg" %}</span></p>
           <p class="buybox__retailer">{% copy "product.cheapest.retailer" retailer=cheapest.retailer.name %}</p>
         </div>
         <a class="button button--buy button--big" href="{{ cheapest.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">
-          {% include "web/includes/bag.svg" %}
+          {% include "web/includes/bag.html" %}
           <span>{% if cheapest.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}</span>
           <span class="visually-hidden">{{ cheapest.delivered_price|gbp }} at {{ cheapest.retailer.name }} (opens in a new tab)</span>
         </a>
@@ -55,7 +56,13 @@
 
 {% if has_listings %}
 <section class="block offers-section" aria-labelledby="offers-title">
-  <h2 id="offers-title" class="section-title">{% copy "product.compare.title" %}</h2>
+  <div class="section-head section-head--tight">
+    <h2 id="offers-title" class="section-title">{% copy "product.compare.title" %}</h2>
+    <button type="button" class="refresh" data-refresh="{% url 'web:product_prices_api' product.slug %}" data-done="{% copy 'product.refresh.done' %}" data-failed="{% copy 'product.refresh.failed' %}">
+      <span class="icon icon--refresh" aria-hidden="true"></span><span class="refresh__label">{% copy "product.check_prices" %}</span>
+    </button>
+  </div>
+  <p class="refresh__status" role="status" aria-live="polite" data-refresh-status></p>
   {% if current %}
   <ul class="offers">
     {% include "web/includes/offers_head.html" %}
@@ -81,10 +88,7 @@
     {% endfor %}
   </ul>
   {% endif %}
-  <div class="small-print">
-    <p>{% copy "product.affiliate_note" %}</p>
-    {% copy "product.price_disclaimer" %}
-  </div>
+  <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
 </section>
 {% endif %}
 

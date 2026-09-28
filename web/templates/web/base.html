@@ -8,14 +8,14 @@
   {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
   {% if noindex %}<meta name="robots" content="noindex, follow">{% endif %}
   <meta name="theme-color" content="#ffffff">
-  <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
+  <link rel="icon" href="{% static 'img/favicon.png' %}" type="image/png">
   <link rel="preload" href="{% static 'fonts/archivo-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
   <link rel="stylesheet" href="{% static 'css/site.css' %}">
   <script src="{% static 'js/site.js' %}" defer></script>
   {% block scripts %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <a class="skip-link" href="#main">Skip to main content</a>
   {% include "web/includes/header.html" %}
   <main id="main" class="page {% block page_class %}{% endblock %}">

@@ -20,8 +20,9 @@ last checked, buy link. Everything else supports that.
   structure, or fetching data from a retailer that has not been added by the
   owner.
 - Keep the site legal: outbound retailer links use `rel="sponsored nofollow"`,
-  the commission and independence statements stay on every page, and prices
-  always carry when they were last checked.
+  every page's footer carries the one-line commission note with a link to
+  the Terms page (which holds the full disclosures), and prices always carry
+  when they were last checked.
 
 ## Engineering
 
@@ -51,9 +52,13 @@ last checked, buy link. Everything else supports that.
   products. Lists of plain rows are fine for everything else.
 - Icons only where they carry meaning (bag on buy, arrow on a dearer price,
   the section marks). No decorative shapes.
-- Motion is for touch: the swipe deck, button presses and card lifts. Keep
-  transitions under 400ms, use the easing tokens, and honour
-  prefers-reduced-motion.
+- Motion has a reason: hierarchy, feedback, continuity or state. Use the
+  motion tokens (`--motion-fast/normal/slow`, `--ease-out/--ease-standard`),
+  animate only transform and opacity, nothing over 400ms, and honour
+  prefers-reduced-motion. If removing an animation makes the page clearer,
+  remove it.
+- The logo is `web/static/img/logo.png`; the search and bag icons are the
+  supplied artwork in `web/static/img/`, recoloured through CSS masks.
 - Buttons say what they do. "Buy now" and "Search products" are fine; never
   "Get started" or "Learn more".
 - The swipe page (`/swipe/`) must feel instant: cards are prefetched, only

@@ -51,6 +51,12 @@ Retailer products the site no longer lists are marked out of stock at that
 retailer after an import. Nothing on the public site is invented: a product
 with no listings says so.
 
+## Terms and disclosures
+
+The full commission, independence, price and data statements live on
+`/terms/`. Every page's footer carries one short line and a link to it. All
+of that wording is under Admin > Site wording > Legal and disclosure text.
+
 ## Swipe page
 
 `/swipe/` shows one product at a time with its cheapest price, retailer and

@@ -44,6 +44,7 @@ SECTIONS = [
     ("product", "Product page"),
     ("about", "How it works page"),
     ("footer", "Footer"),
+    ("terms", "Terms page"),
     ("errors", "Error pages"),
     ("meta", "Page titles and search engine descriptions"),
 ]
@@ -120,6 +121,11 @@ ENTRIES = [
         "site.see_all", B, "See all link",
         "See all",
         "Link at the end of each home page section.",
+    ),
+    Entry(
+        "site.nav.terms", B, "Terms link",
+        "Terms",
+        "Footer link to the terms page.",
     ),
     Entry(
         "site.nav.games", B, "Games link",
@@ -562,17 +568,33 @@ ENTRIES = [
         placeholders=("count",),
     ),
     Entry(
+        "product.small_print", T, "Small print under the price list",
+        "Affiliate links. Prices can change before you pay.",
+        "One line under the price list, followed by the Terms link.",
+        legal=True,
+    ),
+    Entry(
+        "product.refresh.done", T, "Prices checked message",
+        "Prices are current.",
+        "Shown for a moment after Check prices finishes.",
+    ),
+    Entry(
+        "product.refresh.failed", T, "Prices check failed",
+        "Couldn't check prices. Try again in a moment.",
+        "Shown if Check prices fails.",
+    ),
+    Entry(
         "product.affiliate_note", T, "Commission note",
         "CardScout may earn a commission if you buy through these links. It does not "
         "change the price you pay or the order of this list.",
-        "Under the price list on every product page.",
+        "Terms page.",
         legal=True,
     ),
     Entry(
         "product.price_disclaimer", P, "Price disclaimer",
         "Prices and stock can change after you leave CardScout. Check the total on "
         "the retailer's site before you pay.",
-        "Under the price list on every product page.",
+        "Terms page.",
         legal=True,
     ),
     Entry(
@@ -689,17 +711,48 @@ ENTRIES = [
 
     # Footer ---------------------------------------------------------------
     Entry(
+        "footer.line", T, "Footer line",
+        "Prices include UK delivery. CardScout may earn a commission when you buy.",
+        "The one line in the footer of every page, followed by the Terms link.",
+        legal=True,
+    ),
+    Entry(
         "footer.affiliate_disclosure", T, "Affiliate disclosure",
         "CardScout may earn a commission if you buy through links on this site. "
         "This does not change the price you pay.",
-        "Footer of every page.",
+        "Terms page.",
         legal=True,
     ),
     Entry(
         "footer.independence_disclaimer", T, "Independence statement",
         "CardScout is independent and is not endorsed by any retailer or game "
         "publisher. Product names and trademarks belong to their owners.",
-        "Footer of every page.",
+        "Terms page.",
+        legal=True,
+    ),
+
+    # Terms page ------------------------------------------------------------
+    Entry(
+        "terms.title", H, "Terms heading",
+        "Terms",
+        "Heading and page title of the terms page.",
+    ),
+    Entry(
+        "terms.introduction", P, "Terms introduction",
+        "CardScout is a price comparison service. We do not sell anything. When you "
+        "buy, you buy from the retailer under their terms.",
+        "First paragraph on the terms page.",
+        legal=True,
+    ),
+    Entry("terms.prices.title", H, "Prices heading", "Prices", "Heading on the terms page."),
+    Entry("terms.independence.title", H, "Independence heading", "Independence", "Heading on the terms page."),
+    Entry("terms.data.title", H, "Data heading", "Your data", "Heading on the terms page."),
+    Entry(
+        "terms.data.body", P, "Data explanation",
+        "CardScout does not ask you to create an account. Products you save on the "
+        "swipe page are stored in your browser only. We count clicks to retailers "
+        "without recording who clicked.",
+        "Data section of the terms page.",
         legal=True,
     ),
 

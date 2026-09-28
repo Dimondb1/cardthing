@@ -1,0 +1,30 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+
+{% block content %}
+<div class="prose-page">
+  <h1 class="page-title">{% copy "terms.title" %}</h1>
+  <div class="prose prose--lead">{% copy "terms.introduction" %}</div>
+
+  <section aria-labelledby="terms-prices">
+    <h2 id="terms-prices">{% copy "terms.prices.title" %}</h2>
+    <div class="prose">{% copy "product.price_disclaimer" %}</div>
+  </section>
+
+  <section aria-labelledby="terms-money">
+    <h2 id="terms-money">{% copy "about.money.title" %}</h2>
+    <div class="prose">{% copy "about.money.body" %}</div>
+    <p class="prose">{% copy "footer.affiliate_disclosure" %}</p>
+  </section>
+
+  <section aria-labelledby="terms-independence">
+    <h2 id="terms-independence">{% copy "terms.independence.title" %}</h2>
+    <p class="prose">{% copy "footer.independence_disclaimer" %}</p>
+  </section>
+
+  <section aria-labelledby="terms-data">
+    <h2 id="terms-data">{% copy "terms.data.title" %}</h2>
+    <div class="prose">{% copy "terms.data.body" %}</div>
+  </section>
+</div>
+{% endblock %}

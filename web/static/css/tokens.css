@@ -97,12 +97,17 @@
   --color-focus: #1f2430;
 
   /* Shadows -------------------------------------------------------------- */
-  --shadow-card: 0 1px 2px rgb(31 36 48 / 0.05), 0 6px 20px rgb(255 90 31 / 0.08);
-  --shadow-lift: 0 14px 40px rgb(31 36 48 / 0.18);
+  --shadow-card: 0 1px 2px rgb(31 36 48 / 0.04), 0 4px 14px rgb(31 36 48 / 0.05);
+  --shadow-hover: 0 2px 4px rgb(31 36 48 / 0.05), 0 10px 24px rgb(31 36 48 / 0.09);
+  --shadow-lift: 0 12px 32px rgb(31 36 48 / 0.14), 0 2px 6px rgb(31 36 48 / 0.06);
+  --shadow-button: 0 1px 2px rgb(232 77 20 / 0.25);
+  --shadow-button-hover: 0 4px 12px rgb(232 77 20 / 0.28);
 
   /* Motion --------------------------------------------------------------- */
-  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --duration-fast: 160ms;
-  --duration-swipe: 360ms;
+  --motion-fast: 140ms;      /* presses, hovers, focus */
+  --motion-normal: 220ms;    /* panels, reveals, price changes */
+  --motion-slow: 340ms;      /* cards leaving the deck, entrances */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);      /* entrances and movement */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);     /* buttons and small state changes */
+  --lift: -2px;              /* hover lift for cards and rows */
 }

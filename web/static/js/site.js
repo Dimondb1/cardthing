@@ -31,17 +31,38 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
 
   const fill = (text, query) => text.replace("{query}", query);
 
+  let selected = -1;
+  const items = () => Array.from(list.querySelectorAll(".live__item, .live__all"));
+  const select = (index) => {
+    const all = items();
+    selected = all.length ? Math.max(-1, Math.min(index, all.length - 1)) : -1;
+    all.forEach((li, i) => {
+      li.setAttribute("aria-selected", i === selected ? "true" : "false");
+      li.classList.toggle("live__all--selected", i === selected && li.classList.contains("live__all"));
+    });
+    input.setAttribute("aria-activedescendant", selected >= 0 ? all[selected].id : "");
+  };
+  const open = (isOpen) => {
+    panel.hidden = !isOpen;
+    input.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    if (!isOpen) select(-1);
+  };
+
   const show = (query, results) => {
     list.textContent = "";
+    select(-1);
     if (!results.length) {
       status.textContent = fill(wording.none, query);
-      panel.hidden = false;
+      open(true);
       return;
     }
     status.textContent = "";
-    results.forEach((r) => {
+    results.forEach((r, i) => {
       const li = document.createElement("li");
       li.className = "live__item";
+      li.id = `${input.id}-option-${i}`;
+      li.setAttribute("role", "option");
+      li.style.setProperty("--i", i);
       const a = document.createElement("a");
       a.href = new URL(r.url, new URL(endpoint, location.href)).href;
       a.className = "live__link";
@@ -72,12 +93,14 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
     });
     const more = document.createElement("li");
     more.className = "live__all";
+    more.id = `${input.id}-option-all`;
+    more.setAttribute("role", "option");
     const link = document.createElement("a");
     link.href = `${form.action}?q=${encodeURIComponent(query)}`;
     link.textContent = fill(wording.all, query);
     more.append(link);
     list.append(more);
-    panel.hidden = false;
+    open(true);
   };
 
   const filterLocally = (query) => {
@@ -88,7 +111,7 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
   const run = async (query) => {
     const id = ++latest;
     if (!query) {
-      panel.hidden = true;
+      open(false);
       list.textContent = "";
       status.textContent = "";
       return;
@@ -98,7 +121,7 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
       return;
     }
     status.textContent = wording.checking;
-    panel.hidden = false;
+    open(true);
     try {
       const sep = endpoint.includes("?") ? "&" : "?";
       const response = await fetch(`${endpoint}${sep}q=${encodeURIComponent(query)}`, { headers: { Accept: "application/json" } });
@@ -111,7 +134,7 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
       }
       show(query, data.results);
     } catch (err) {
-      if (id === latest) panel.hidden = true;
+      if (id === latest) open(false);
     }
   };
 
@@ -121,16 +144,23 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
   });
   input.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
-      panel.hidden = true;
+      open(false);
+      return;
+    }
+    if (panel.hidden) return;
+    if (event.key === "ArrowDown") { event.preventDefault(); select(selected + 1); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); select(selected - 1); }
+    else if (event.key === "Enter" && selected >= 0) {
+      event.preventDefault();
+      const link = items()[selected].querySelector("a");
+      if (link) location.href = link.href;
     }
   });
   document.addEventListener("click", (event) => {
-    if (!form.contains(event.target) && !panel.contains(event.target)) {
-      panel.hidden = true;
-    }
+    if (!form.contains(event.target) && !panel.contains(event.target)) open(false);
   });
   input.addEventListener("focus", () => {
-    if (list.children.length) panel.hidden = false;
+    if (list.children.length) open(true);
   });
 });
 
@@ -142,4 +172,29 @@ document.querySelectorAll("[data-back]").forEach((link) => {
       history.back();
     }
   });
+});
+
+// One-time reveals for lists below the fold. Nothing replays on scroll.
+if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  const targets = document.querySelectorAll(".saving, .card, .drop, .trending__item");
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-visible");
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { rootMargin: "0px 0px -8% 0px" });
+  targets.forEach((el, i) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight) return; // already on screen: no delay for the first view
+    el.classList.add("reveal");
+    observer.observe(el);
+  });
+}
+
+// Product images settle in once loaded rather than popping.
+document.querySelectorAll(".product-image img").forEach((img) => {
+  if (img.complete) img.classList.add("is-loaded");
+  else img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true });
 });

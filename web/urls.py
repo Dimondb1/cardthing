@@ -16,5 +16,7 @@ urlpatterns = [
     path("products/<slug:slug>/", views.product_detail, name="product"),
     path("go/<int:listing_id>/", views.go, name="go"),
     path("about/", views.about, name="about"),
+    path("terms/", views.terms, name="terms"),
+    path("api/products/<slug:slug>/prices/", views.product_prices_api, name="product_prices_api"),
     path("robots.txt", views.robots_txt, name="robots"),
 ]

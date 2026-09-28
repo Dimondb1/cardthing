@@ -7,7 +7,7 @@
       <div class="masthead__search">{% include "web/includes/search_form.html" with variant="header" button_key="site.search.button" field_id="header-q" live=True %}</div>
     {% endif %}
     <nav class="masthead__nav" aria-label="Main">
-      <a href="{% url 'web:deck' %}"{% if request.resolver_match.url_name == "deck" %} aria-current="page"{% endif %}>{% copy "site.nav.swipe" %}</a>
+      <a class="masthead__swipe" href="{% url 'web:deck' %}"{% if request.resolver_match.url_name == "deck" %} aria-current="page"{% endif %}><svg class="masthead__swipe-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9.5" y="2.5" width="11" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3.5" y="6.5" width="11" height="15" rx="2.5" fill="currentColor"/></svg><span>{% copy "site.nav.swipe" %}</span></a>
       <a href="{% url 'web:games' %}"{% if request.resolver_match.url_name == "games" %} aria-current="page"{% endif %}>{% copy "site.nav.games" %}</a>
       <a href="{% url 'web:about' %}"{% if request.resolver_match.url_name == "about" %} aria-current="page"{% endif %}>{% copy "site.nav.about" %}</a>
     </nav>

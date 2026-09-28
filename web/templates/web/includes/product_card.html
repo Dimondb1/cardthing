@@ -8,7 +8,7 @@
       {% include "web/includes/badge.html" %}
       <p class="card__price">{% price summary.best.delivered_price size="card" %}</p>
       <p class="card__at">{% copy "product.rank.at" retailer=summary.best.retailer.name %}</p>
-      <a class="button button--buy button--card" href="{{ summary.best.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/bag.svg" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>
+      <a class="button button--buy button--card" href="{{ summary.best.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/bag.html" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>
     {% else %}
       {% include "web/includes/availability.html" %}
     {% endif %}

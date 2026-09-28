@@ -331,6 +331,35 @@ def go(request, listing_id):
 
 
 @require_GET
+def terms(request):
+    return render(
+        request,
+        "web/terms.html",
+        {"meta_title": text(request, "terms.title"), "canonical_url": request.build_absolute_uri(request.path)},
+    )
+
+
+@require_GET
+def product_prices_api(request, slug):
+    """Current prices for the product page's refresh control."""
+    from .templatetags.cardscout import ago, gbp
+
+    product = get_object_or_404(Product.objects.active(), slug=slug)
+    rows = []
+    for listing in Listing.objects.filter(product=product).live().select_related("retailer"):
+        rows.append({
+            "id": listing.pk,
+            "total": gbp(listing.delivered_price),
+            "price": gbp(listing.price),
+            "checked": ago(listing.last_checked),
+            "buyable": listing.is_buyable,
+        })
+    response = JsonResponse({"listings": rows})
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_GET
 def about(request):
     return render(
         request,

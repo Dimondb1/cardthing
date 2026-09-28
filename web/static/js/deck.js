@@ -6,6 +6,11 @@
   if (!root) return;
 
   const stack = root.querySelector("[data-deck-stack]");
+  // Tell CSS how tall the header really is so the deck can fill the rest.
+  const masthead = document.querySelector(".masthead");
+  const measure = () => root.style.setProperty("--masthead-height", `${masthead ? masthead.offsetHeight : 0}px`);
+  measure();
+  addEventListener("resize", measure, { passive: true });
   const hint = root.querySelector("[data-deck-hint]");
   const words = root.dataset;
   const STORE = "cardscout.saved";
@@ -65,7 +70,7 @@
     card.dataset.id = c.id;
     const top = el("div", "swipe__top");
     const image = el("div", "swipe__image");
-    if (c.image) { const img = new Image(); img.src = c.image; img.alt = ""; img.draggable = false; image.append(img); }
+    if (c.image) { const img = new Image(); img.src = c.image; img.alt = ""; img.draggable = false; img.decoding = "async"; img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true }); image.append(img); }
     else image.innerHTML = placeholders[c.type] || placeholders.other || "";
     const name = el("h2", "swipe__name", c.name);
     const meta = el("p", "swipe__meta", c.meta);
@@ -101,10 +106,14 @@
   }
 
   function layout() {
-    const cards = stack.querySelectorAll(".swipe");
+    const cards = Array.from(stack.querySelectorAll(".swipe")).filter((c) => !c.classList.contains("swipe--leaving"));
     cards.forEach((card, i) => {
-      if (card.classList.contains("swipe--leaving")) return;
       const depth = i;
+      if (depth === 0 && !card.dataset.shown) {
+        card.dataset.shown = "1";
+        card.classList.add("swipe--enter");
+        card.addEventListener("animationend", () => card.classList.remove("swipe--enter"), { once: true });
+      }
       card.style.zIndex = String(10 - depth);
       card.classList.toggle("swipe--behind", depth > 0);
       if (depth > 0) {
@@ -150,7 +159,7 @@
     const width = () => card.offsetWidth || 320;
 
     const paint = () => {
-      const rot = (dx / width()) * 14;
+      const rot = (dx / width()) * 10;
       card.style.transform = `translate3d(${dx}px, ${dy * 0.35}px, 0) rotate(${rot}deg)`;
       const p = Math.min(Math.abs(dx) / (width() * THRESHOLD), 1);
       card.querySelector(".swipe__stamp--save").style.opacity = dx > 0 ? p : 0;
@@ -210,8 +219,8 @@
     card.classList.add("swipe--leaving", "swipe--fly");
     card.style.zIndex = "20";
     card.querySelector(dir > 0 ? ".swipe__stamp--save" : ".swipe__stamp--skip").style.opacity = 1;
-    const x = dir * (window.innerWidth + card.offsetWidth);
-    card.style.transform = `translate3d(${x}px, ${-40}px, 0) rotate(${dir * 30}deg)`;
+    const x = dir * (window.innerWidth * 0.9 + card.offsetWidth);
+    card.style.transform = `translate3d(${x}px, ${-24}px, 0) rotate(${dir * 18}deg)`;
     card.style.opacity = "0";
     card.addEventListener("transitionend", () => card.remove(), { once: true });
     setTimeout(() => card.isConnected && card.remove(), 500);

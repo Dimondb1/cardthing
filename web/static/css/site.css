@@ -340,7 +340,7 @@ ul, ol { margin: 0; padding: 0; }
   text-decoration: none;
 }
 
-.masthead .search { grid-area: search; }
+.masthead__search { grid-area: search; position: relative; }
 
 .masthead__nav {
   grid-area: nav;
@@ -464,10 +464,12 @@ ul, ol { margin: 0; padding: 0; }
     grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
     grid-template-areas:
       "title text"
-      "search games";
+      "search games"
+      "checked games";
     column-gap: var(--space-7);
     row-gap: var(--space-6);
   }
+  .intro__checked { grid-area: checked; margin-top: calc(-1 * var(--space-4)); }
   .intro__title { grid-area: title; align-self: end; }
   .intro__text { grid-area: text; align-self: end; margin: 0; }
   .intro .search { grid-area: search; margin: 0; max-width: none; }
@@ -1105,4 +1107,69 @@ ul, ol { margin: 0; padding: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* Results as you type ------------------------------------------------------ */
+
+.live {
+  position: relative;
+  margin-top: var(--space-2);
+  border: 1.5px solid var(--color-ink);
+  border-radius: var(--radius);
+  background: var(--color-paper);
+  box-shadow: var(--shadow-raised);
+}
+.masthead .live {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: var(--space-1);
+}
+.live__status {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+}
+.live__status:empty { display: none; }
+.live__results { list-style: none; }
+.live__item + .live__item { border-top: 1px solid var(--color-line); }
+.live__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  text-decoration: none;
+}
+.live__link:hover, .live__link:focus-visible { background: var(--color-shelf); outline-offset: -2px; }
+.live__body { min-width: 0; display: grid; }
+.live__name { font-weight: var(--weight-strong); line-height: var(--leading-snug); }
+.live__meta { font-size: var(--text-xs); color: var(--color-ink-subtle); }
+.live__offer { flex: none; display: grid; justify-items: end; gap: 2px; }
+.live__price { font-size: var(--text-base); }
+.live__offer .stock { font-size: var(--text-xs); }
+.live__all { border-top: 2px solid var(--color-line-strong); }
+.live__all a {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+
+.intro__checked {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-ink-subtle);
+}
+@media (min-width: 60rem) {
+}
+
+/* Phones: the home page is the search box. */
+@media (max-width: 40rem) {
+  .intro { padding: var(--space-5) 0 var(--space-6); }
+  .intro__title { font-size: var(--text-page-title); max-width: none; }
+  .intro__text { font-size: var(--text-base); margin-top: var(--space-2); }
+  .intro .search { margin-top: var(--space-4); }
 }

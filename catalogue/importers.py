@@ -1,0 +1,241 @@
+"""
+Bring real prices in from retailers.
+
+Two sources are supported:
+
+* Shopify stores expose every product at ``/products.json``. Most UK card
+  shops run on Shopify. Offers are matched to CardScout products by barcode
+  (EAN), so fill in the barcode on each product first.
+* A CSV product feed (from an affiliate network, Google Merchant Center or
+  the retailer) with columns ``ean``, ``url``, ``price`` and optionally
+  ``availability`` (in_stock, preorder, out_of_stock), ``delivery`` and
+  ``title``.
+
+Run ``python manage.py import_prices`` from cron. Each run is recorded as an
+ImportRun, with the retailer products that could not be matched, so the
+missing barcodes can be added in admin.
+"""
+
+import csv
+import io
+import json
+import logging
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+
+from django.db import transaction
+from django.utils import timezone
+
+from . import pricing
+from .models import ImportRun, Listing, Product, Retailer
+
+logger = logging.getLogger(__name__)
+
+USER_AGENT = "CardScout price check (+https://cardscout.example)"
+TIMEOUT = 30
+PREORDER_WORDS = re.compile(r"pre[\s-]?order", re.I)
+
+
+@dataclass
+class Offer:
+    title: str
+    url: str
+    price: Decimal
+    ean: str = ""
+    availability: str = Listing.Availability.IN_STOCK
+    delivery: Decimal | None = None
+
+
+class ImportError_(Exception):
+    pass
+
+
+def fetch(url):
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            return response.read()
+    except urllib.error.URLError as exc:
+        raise ImportError_(f"Could not fetch {url}: {exc}") from exc
+
+
+def clean_ean(value):
+    digits = re.sub(r"\D", "", str(value or ""))
+    return digits if 8 <= len(digits) <= 14 else ""
+
+
+def ean_key(value):
+    """Barcodes compare without leading zeros: a UPC is an EAN-13 with one dropped."""
+    return clean_ean(value).lstrip("0")
+
+
+def money(value):
+    try:
+        return Decimal(str(value).replace("£", "").replace(",", "").strip()).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError, AttributeError):
+        return None
+
+
+# Shopify --------------------------------------------------------------------
+
+def shopify_offers(retailer, fetch=fetch):
+    base = retailer.source_url.rstrip("/")
+    page = 1
+    while True:
+        raw = fetch(f"{base}/products.json?limit=250&page={page}")
+        try:
+            products = json.loads(raw).get("products", [])
+        except json.JSONDecodeError as exc:
+            raise ImportError_(f"{base} did not return Shopify JSON") from exc
+        if not products:
+            return
+        for product in products:
+            url = f"{base}/products/{product.get('handle', '')}"
+            preorder = bool(PREORDER_WORDS.search(product.get("title", ""))) or any(
+                PREORDER_WORDS.search(tag) for tag in product.get("tags", [])
+            )
+            for variant in product.get("variants", []):
+                price = money(variant.get("price"))
+                if price is None:
+                    continue
+                if not variant.get("available", False):
+                    availability = Listing.Availability.OUT_OF_STOCK
+                elif preorder:
+                    availability = Listing.Availability.PREORDER
+                else:
+                    availability = Listing.Availability.IN_STOCK
+                title = product.get("title", "")
+                if variant.get("title") and variant["title"] != "Default Title":
+                    title = f"{title} ({variant['title']})"
+                yield Offer(
+                    title=title,
+                    url=url,
+                    price=price,
+                    ean=clean_ean(variant.get("barcode")),
+                    availability=availability,
+                )
+        page += 1
+
+
+# CSV feed -------------------------------------------------------------------
+
+AVAILABILITY_WORDS = {
+    "in_stock": Listing.Availability.IN_STOCK,
+    "in stock": Listing.Availability.IN_STOCK,
+    "instock": Listing.Availability.IN_STOCK,
+    "preorder": Listing.Availability.PREORDER,
+    "pre-order": Listing.Availability.PREORDER,
+    "pre_order": Listing.Availability.PREORDER,
+    "out_of_stock": Listing.Availability.OUT_OF_STOCK,
+    "out of stock": Listing.Availability.OUT_OF_STOCK,
+    "outofstock": Listing.Availability.OUT_OF_STOCK,
+}
+
+
+def feed_offers(text):
+    reader = csv.DictReader(io.StringIO(text))
+    fields = {name.strip().lower(): name for name in reader.fieldnames or []}
+
+    def col(row, *names):
+        for name in names:
+            if name in fields:
+                return (row.get(fields[name]) or "").strip()
+        return ""
+
+    for row in reader:
+        price = money(col(row, "price", "sale_price"))
+        url = col(row, "url", "link", "aw_deep_link", "product_url")
+        if price is None or not url:
+            continue
+        availability = AVAILABILITY_WORDS.get(
+            col(row, "availability", "stock_status").lower(), Listing.Availability.IN_STOCK
+        )
+        yield Offer(
+            title=col(row, "title", "product_name", "name"),
+            url=url,
+            price=price,
+            ean=clean_ean(col(row, "ean", "gtin", "barcode")),
+            availability=availability,
+            delivery=money(col(row, "delivery", "shipping", "delivery_cost")),
+        )
+
+
+# Applying offers ------------------------------------------------------------
+
+def apply_offers(retailer, offers, checked_at=None):
+    """Update listings from ``offers``. Returns (found, updated, unmatched titles)."""
+    checked_at = checked_at or timezone.now()
+    products_by_ean = {}
+    for pk, ean in Product.objects.exclude(ean="").values_list("pk", "ean"):
+        if ean_key(ean):
+            products_by_ean[ean_key(ean)] = pk
+    found = updated = 0
+    unmatched = []
+    seen_products = set()
+
+    with transaction.atomic():
+        for offer in offers:
+            found += 1
+            product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
+            if product_pk is None:
+                unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}]")
+                continue
+            listing, _created = Listing.objects.get_or_create(
+                product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
+            )
+            if product_pk in seen_products and listing.availability != Listing.Availability.OUT_OF_STOCK:
+                # Several variants of one product: keep the cheapest one that is in stock.
+                if offer.availability == Listing.Availability.OUT_OF_STOCK or offer.price >= listing.price:
+                    continue
+            seen_products.add(product_pk)
+            listing.url = offer.url
+            listing.save(update_fields=["url"])
+            delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)
+            pricing.record_check(
+                listing,
+                price=offer.price,
+                delivery_cost=delivery,
+                availability=offer.availability,
+                checked_at=checked_at,
+            )
+            updated += 1
+
+        # Anything the retailer no longer lists is out of stock there.
+        Listing.objects.filter(retailer=retailer).exclude(product_id__in=seen_products).exclude(
+            availability=Listing.Availability.OUT_OF_STOCK
+        ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at)
+
+    return found, updated, unmatched
+
+
+def run_import(retailer, feed_path=None, fetch=fetch):
+    run = ImportRun.objects.create(retailer=retailer)
+    try:
+        if retailer.source_type == Retailer.Source.SHOPIFY:
+            if not retailer.source_url:
+                raise ImportError_("Set the shop address on the retailer first.")
+            offers = shopify_offers(retailer, fetch=fetch)
+        elif retailer.source_type == Retailer.Source.FEED:
+            if feed_path:
+                text = open(feed_path, encoding="utf-8-sig").read()
+            elif retailer.source_url:
+                text = fetch(retailer.source_url).decode("utf-8-sig")
+            else:
+                raise ImportError_("Set the feed address on the retailer or pass a file.")
+            offers = feed_offers(text)
+        else:
+            raise ImportError_("This retailer's prices are entered by hand.")
+        found, updated, unmatched = apply_offers(retailer, offers)
+        run.offers_found = found
+        run.listings_updated = updated
+        run.unmatched = "\n".join(unmatched)
+    except (ImportError_, OSError) as exc:
+        run.error = str(exc)
+        logger.error("Import for %s failed: %s", retailer, exc)
+    run.finished_at = timezone.now()
+    run.save()
+    return run

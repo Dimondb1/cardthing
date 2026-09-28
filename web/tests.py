@@ -204,3 +204,20 @@ class SortTests(PageTestCase):
         response = self.client.get(reverse("web:search"), {"sort": "price"})
         names = [p.name for p in response.context["page"].object_list]
         self.assertLess(names.index(self.etb.name), names.index(self.sold_out.name))
+
+
+class SearchApiTests(PageTestCase):
+    def test_returns_matching_products_with_price_and_stock(self):
+        response = self.client.get(reverse("web:search_api"), {"q": "prism etb"})
+        data = response.json()
+        self.assertEqual(data["query"], "prism etb")
+        self.assertEqual(data["results"][0]["name"], self.etb.name)
+        self.assertEqual(data["results"][0]["price"], "£54.99")
+        self.assertEqual(data["results"][0]["state"], "in")
+        self.assertEqual(response["Cache-Control"], "no-store")
+
+    def test_empty_query_returns_nothing(self):
+        self.assertEqual(self.client.get(reverse("web:search_api")).json()["results"], [])
+
+    def test_home_shows_when_prices_were_last_checked(self):
+        self.assertContains(self.client.get(reverse("web:home")), "Prices last checked 1 hour ago.")

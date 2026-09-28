@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 from urllib.parse import quote, urlparse
 
 from django.conf import settings
@@ -201,6 +202,36 @@ class Retailer(models.Model):
         blank=True,
         help_text="Shown on the how it works page, for example “Free delivery over £50”.",
     )
+    delivery_cost = models.DecimalField(
+        "standard delivery",
+        max_digits=6,
+        decimal_places=2,
+        default=0,
+        help_text="Charge to deliver one item to a UK address. Used for imported prices.",
+    )
+    free_delivery_over = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Orders of this value or more are delivered free. Leave empty if never.",
+    )
+
+    class Source(models.TextChoices):
+        MANUAL = "manual", "Entered by hand"
+        SHOPIFY = "shopify", "Shopify store"
+        FEED = "feed", "Product feed (CSV)"
+
+    source_type = models.CharField(
+        "price source", max_length=20, choices=Source.choices, default=Source.MANUAL
+    )
+    source_url = models.URLField(
+        "source address",
+        max_length=500,
+        blank=True,
+        help_text="Shopify: the shop address, for example https://shop.example/. "
+        "Feed: the CSV address. Leave empty for a local file passed to import_prices.",
+    )
     is_active = models.BooleanField("show on site", default=True)
 
     class Meta:
@@ -208,6 +239,12 @@ class Retailer(models.Model):
 
     def __str__(self):
         return self.name
+
+    def delivery_for(self, price):
+        """Delivery charge for one item at ``price`` under this retailer's rules."""
+        if self.free_delivery_over is not None and price >= self.free_delivery_over:
+            return Decimal("0.00")
+        return self.delivery_cost
 
     @property
     def domain(self):
@@ -292,6 +329,32 @@ class Listing(models.Model):
 
     def get_outbound_url(self):
         return reverse("web:go", args=[self.pk])
+
+
+class ImportRun(models.Model):
+    """One run of import_prices for one retailer."""
+
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="import_runs")
+    started_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    offers_found = models.PositiveIntegerField(default=0)
+    listings_updated = models.PositiveIntegerField(default=0)
+    unmatched = models.TextField(
+        blank=True,
+        help_text="Retailer products that no CardScout product has a matching barcode for.",
+    )
+    error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        verbose_name = "price import"
+
+    def __str__(self):
+        return f"{self.retailer} at {self.started_at:%d %b %H:%M}"
+
+    @property
+    def ok(self):
+        return self.finished_at is not None and not self.error
 
 
 class DailyLowestPrice(models.Model):

@@ -5,7 +5,8 @@
 <section class="intro" aria-labelledby="intro-title">
   <h1 id="intro-title" class="intro__title">{% copy "home.hero.title" %}</h1>
   {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="intro__text">{{ subtitle }}</p>{% endif %}
-  {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" field_id="home-q" %}
+  {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" field_id="home-q" live=True %}
+  {% if last_checked %}<p class="intro__checked">{% copy "home.search.checked" time=last_checked|ago %}</p>{% endif %}
   {% if games %}
     <p class="intro__games game-links">
       <span class="game-links__label">{% copy "home.games.label" %}</span>

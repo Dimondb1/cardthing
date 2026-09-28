@@ -7,6 +7,7 @@ app_name = "web"
 urlpatterns = [
     path("", views.home, name="home"),
     path("search/", views.search, name="search"),
+    path("api/search/", views.search_api, name="search_api"),
     path("games/", views.games, name="games"),
     path("games/<slug:game_slug>/", views.game_detail, name="game"),
     path("games/<slug:game_slug>/<slug:set_slug>/", views.set_detail, name="set"),

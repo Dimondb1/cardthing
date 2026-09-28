@@ -134,6 +134,24 @@ ENTRIES = [
         "Button next to the large search box on the home page.",
     ),
     Entry(
+        "home.search.checked", T, "Prices last checked",
+        "Prices last checked {time}.",
+        "Under the home page search box. Uses the most recent check across every retailer. "
+        "Hidden until a price has been checked.",
+        placeholders=("time",),
+    ),
+    Entry(
+        "home.search.checking", T, "Searching message",
+        "Checking lowest prices",
+        "Shown for a moment while search results load as you type.",
+    ),
+    Entry(
+        "home.search.all_results", B, "All results link",
+        "All results for ‘{query}’",
+        "Link under the quick results as you type, leading to the full results page.",
+        placeholders=("query",),
+    ),
+    Entry(
         "home.games.label", T, "Game shortcuts label",
         "Browse by game",
         "Small label before the list of game links under the home page search box.",

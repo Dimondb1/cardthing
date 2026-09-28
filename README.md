@@ -10,16 +10,54 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate          # also creates all default site wording
-python manage.py seed_demo        # optional: fictional retailers, products and 90 days of prices
+python manage.py seed_catalogue   # real games, sets and products, no prices yet
 python manage.py createsuperuser
 python manage.py runserver
 ```
 
 Site: http://127.0.0.1:8000/ Admin: http://127.0.0.1:8000/admin/
 
-`seed_demo` only runs with `DJANGO_DEBUG` on. Its retailers are made up and use
-the reserved `.example` domain, and its prices are generated. Run
-`seed_demo --flush` to replace existing demo data.
+Project rules for anyone (or any AI) working on the code are in `CLAUDE.md`.
+
+For a design review without real retailers, `python manage.py seed_demo`
+loads fictional retailers on `.example` domains with generated prices. It only
+runs with `DJANGO_DEBUG` on, and `--flush` replaces what is there.
+
+## Getting real prices in
+
+1. **Products.** `seed_catalogue` loads the current sets and products. Check
+   the release dates and add each product's **barcode** (EAN) in
+   Admin > Products. Barcodes are how imported prices are matched. Upload a
+   product image on the same page.
+2. **Retailers.** Add each retailer in Admin > Retailers with its standard
+   delivery charge and free delivery threshold, then choose a price source:
+   - **Shopify store**: enter the shop address. Most UK card shops run on
+     Shopify and publish their products at `/products.json`. Check the shop's
+     terms allow automated price checks before using this.
+   - **Product feed (CSV)**: enter the feed address from your affiliate
+     network or the retailer. Columns `ean`, `url`, `price` are needed;
+     `title`, `availability` and `delivery` are used if present. Common
+     column names from Awin and Google Merchant feeds are recognised.
+   - **Entered by hand**: add listings yourself under the product.
+3. **Import.** `python manage.py import_prices` fetches every retailer with a
+   source, or `import_prices <retailer-slug>` for one, or `--feed file.csv`
+   for a local file. Run it from cron, hourly is sensible. Each run is
+   recorded in Admin > Price imports with the retailer products that could
+   not be matched, so you can add the missing barcodes.
+4. **History.** `python manage.py snapshot_daily_prices` once a day keeps the
+   price history complete.
+
+Retailer products the site no longer lists are marked out of stock at that
+retailer after an import. Nothing on the public site is invented: a product
+with no listings says so.
+
+## Search as you type
+
+The search box shows results while the visitor types, with the cheapest
+delivered price and stock for each, from `/api/search/`. The form still
+submits to the full results page, so search works with JavaScript off. The
+"Checking lowest prices" message and the "All results" link are editable in
+admin.
 
 ## Project layout
 
@@ -106,9 +144,10 @@ Replace that file to change the logo everywhere. The favicon is
   pre-order and were checked within `CARDSCOUT_STALE_AFTER_HOURS` (72 by
   default). Older listings still appear on the product page, marked as not
   checked recently.
-- Price importers should call `catalogue.pricing.record_check(listing, price=...,
-  delivery_cost=..., availability=...)` after checking a retailer. It updates
-  the listing and today's lowest price.
+- Custom importers should call `catalogue.pricing.record_check(listing,
+  price=..., delivery_cost=..., availability=...)` after checking a retailer.
+  It updates the listing and today's lowest price. The built-in Shopify and
+  CSV importers are in `catalogue/importers.py`.
 - Run `python manage.py snapshot_daily_prices` once a day (for example from
   cron) so price history and "Price drops this week" have no gaps.
 - Retailer affiliate links: set **Affiliate link format** on the retailer, for

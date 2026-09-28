@@ -3,7 +3,7 @@ from django.db.models import Count
 from django.utils.html import format_html
 
 from . import pricing
-from .models import DailyLowestPrice, Game, Listing, OutboundClick, Product, ProductSet, Retailer
+from .models import DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Retailer
 
 
 @admin.register(Game)
@@ -76,10 +76,18 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(Retailer)
 class RetailerAdmin(admin.ModelAdmin):
-    list_display = ("name", "website", "delivery_note", "has_affiliate_link", "is_active")
-    list_filter = ("is_active",)
+    list_display = ("name", "website", "source_type", "delivery_cost", "free_delivery_over", "has_affiliate_link", "is_active")
+    list_filter = ("is_active", "source_type")
     search_fields = ("name", "website")
     prepopulated_fields = {"slug": ("name",)}
+    fieldsets = (
+        (None, {"fields": ("name", "slug", "website", "is_active")}),
+        ("Delivery", {"fields": ("delivery_cost", "free_delivery_over", "delivery_note")}),
+        ("Prices", {"fields": ("source_type", "source_url"),
+                    "description": "Run <code>python manage.py import_prices</code> to fetch prices "
+                                   "from this source. Products are matched by barcode."}),
+        ("Links", {"fields": ("affiliate_url_template",)}),
+    )
 
     @admin.display(description="Affiliate link", boolean=True)
     def has_affiliate_link(self, obj):
@@ -98,6 +106,27 @@ class ListingAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         pricing.update_daily_lowest(obj.product)
+
+
+@admin.register(ImportRun)
+class ImportRunAdmin(admin.ModelAdmin):
+    list_display = ("retailer", "started_at", "status", "offers_found", "listings_updated", "unmatched_count")
+    list_filter = ("retailer",)
+    readonly_fields = ("retailer", "started_at", "finished_at", "offers_found", "listings_updated", "unmatched", "error")
+    date_hierarchy = "started_at"
+
+    @admin.display(description="Result")
+    def status(self, obj):
+        if obj.error:
+            return "Failed"
+        return "Done" if obj.finished_at else "Running"
+
+    @admin.display(description="Unmatched")
+    def unmatched_count(self, obj):
+        return obj.unmatched.count("\n") + 1 if obj.unmatched else 0
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(DailyLowestPrice)

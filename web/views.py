@@ -1,8 +1,8 @@
 from django import forms
 from django.conf import settings
 from django.core.paginator import Paginator
-from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When
-from django.http import HttpResponse, HttpResponseRedirect
+from django.db.models import Case, Count, F, IntegerField, Max, Prefetch, Q, Value, When
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -139,11 +139,13 @@ def home(request):
             )
         )
     )
+    last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
     return render(
         request,
         "web/home.html",
         {
             "games": games,
+            "last_checked": last_checked,
             "drops": list(pricing.price_drops(limit=6)),
             "popular": pricing.popular(limit=8),
             "hide_header_search": True,
@@ -333,6 +335,46 @@ def about(request):
     )
 
 
+QUICK_RESULTS = 6
+
+
+@require_GET
+def search_api(request):
+    """Results for the search box as you type. Plain data, no HTML."""
+    from .templatetags.cardscout import gbp
+
+    query = request.GET.get("q", "").strip()[:100]
+    results = []
+    if query:
+        products, terms = apply_search(Product.objects.for_lists(), query)
+        if terms:
+            products = products.order_by("name_rank", F("lowest_price").asc(nulls_last=True), "name")
+        store = copy.for_request(request)
+        for product in products[:QUICK_RESULTS]:
+            if product.in_stock_count:
+                stock = copy.get("browse.availability.in_stock." + ("one" if product.in_stock_count == 1 else "other"), store, count=product.in_stock_count)
+                state = "in"
+            elif product.preorder_count:
+                stock = copy.get("browse.availability.preorder." + ("one" if product.preorder_count == 1 else "other"), store, count=product.preorder_count)
+                state = "preorder"
+            elif product.listing_count:
+                stock, state = copy.get("browse.availability.none", store), "out"
+            else:
+                stock, state = copy.get("browse.no_prices", store), "none"
+            results.append({
+                "name": product.name,
+                "url": product.get_absolute_url(),
+                "meta": f"{product.game.display_short} · {product.get_product_type_display()}",
+                "price": gbp(product.lowest_price) if product.lowest_price is not None else "",
+                "stock": stock,
+                "state": state,
+                "type": product.product_type,
+            })
+    response = JsonResponse({"query": query, "results": results})
+    response["Cache-Control"] = "no-store"
+    return response
+
+
 @require_GET
 def robots_txt(request):
     lines = [
@@ -340,5 +382,6 @@ def robots_txt(request):
         "Disallow: /admin/",
         "Disallow: /go/",
         "Disallow: /search/",
+        "Disallow: /api/",
     ]
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")

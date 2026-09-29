@@ -431,6 +431,28 @@ class SitemapRankingTests(TestCase):
         self.assertEqual(offer.tags, ("pokemon kyurem v collection box",))
         self.assertEqual(classify(offer.title, tags=offer.tags, price=offer.price).game, "pokemon")
 
+    def test_every_sitemap_file_is_read_before_the_page_limit_applies(self):
+        from .importers import sitemap_urls
+
+        def fetch(url):
+            if url.endswith("/sitemap.xml"):
+                return b"<sitemapindex><sitemap><loc>https://shop.example/s1.xml</loc></sitemap><sitemap><loc>https://shop.example/s2.xml</loc></sitemap></sitemapindex>"
+            if url.endswith("s1.xml"):
+                return b"<urlset>" + b"".join(b"<url><loc>https://shop.example/funko-pop-%d</loc></url>" % i for i in range(5)) + b"</urlset>"
+            if url.endswith("s2.xml"):
+                return b"<urlset><url><loc>https://shop.example/pokemon-surging-sparks-booster-box</loc></url></urlset>"
+            raise ImportError_("missing")
+
+        urls = sitemap_urls("https://shop.example", fetch=fetch, limit=3)
+        self.assertEqual(urls[0], "https://shop.example/pokemon-surging-sparks-booster-box")
+        self.assertEqual(len(urls), 3)
+
+    def test_page_titles_have_html_entities_decoded(self):
+        from .importers import page_offer
+
+        html = '<script type="application/ld+json">{"@type": "Product", "name": "St. Elmo&#039;s Pay", "offers": {"price": "9.99", "priceCurrency": "GBP"}}</script>'
+        self.assertEqual(page_offer("https://shop.example/x", html).title, "St. Elmo's Pay")
+
     def test_sitemap_lists_sealed_looking_pages_first_and_drops_singles(self):
         from .importers import sitemap_urls
 

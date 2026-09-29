@@ -52,6 +52,8 @@ class ClassifyLeakTests(TestCase):
             "Pokemon Booster Pack x 10",
             "Power Pack Commander: Marvel Super Heroes (Near Mint)",
             "Caged Sun | Mystery Booster",
+            "Snow-Covered Forest | Mystery Booster 2",
+            "Ultra Pro MTG M15 Jace Standard Deck Protector 80",
             "Astral Radiance Gapejaw Bog (Prize Pack League Promo Non-Holo)",
             "Vivien's Jaguar (Planeswalker Deck Card) | Core Set 2019",
             "Blue, Loyal Raptor (Borderless Art) | Jurassic World Collection",

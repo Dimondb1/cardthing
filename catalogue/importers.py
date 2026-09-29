@@ -18,6 +18,7 @@ missing barcodes can be added in admin.
 
 import csv
 import dataclasses
+import html as html_
 import io
 import json
 import logging
@@ -26,6 +27,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
@@ -181,6 +183,8 @@ META = re.compile(r"<meta[^>]+(?:property|name)=[\"']([^\"']+)[\"'][^>]+content=
 TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 PRODUCT_PATH_WORDS = ("/product", "/products/", "/p/", "/item", "/shop/", "-p-")
 MAX_PAGES = 3000
+MAX_SITEMAPS = 500
+SITEMAP_WORKERS = 4
 
 
 def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
@@ -191,21 +195,31 @@ def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
         queue = [line.split(":", 1)[1].strip() for line in robots.splitlines() if line.lower().startswith("sitemap:")] + queue
     except ImportError_:
         pass
-    while queue and len(found) < limit:
-        url = queue.pop(0)
-        if url in seen:
-            continue
-        seen.add(url)
+    # Read every sitemap file (up to MAX_SITEMAPS of them) before ranking, so
+    # a shop that lists its accessories first still gets its sealed products
+    # fetched. The page limit is applied after ranking. Sitemap files are
+    # static and large, so a few are read at once.
+    def read(url):
         try:
-            text = fetch(url).decode("utf-8", "replace")
+            return fetch(url).decode("utf-8", "replace")
         except ImportError_:
-            continue
-        for loc in SITEMAP_LOC.findall(text):
-            loc = loc.replace("&amp;", "&")
-            if loc.endswith(".xml") or "sitemap" in loc.lower():
-                queue.append(loc)
-            else:
-                found.append(loc)
+            return ""
+
+    with ThreadPoolExecutor(max_workers=SITEMAP_WORKERS) as pool:
+        while queue and len(seen) < MAX_SITEMAPS:
+            batch = []
+            while queue and len(batch) < SITEMAP_WORKERS and len(seen) < MAX_SITEMAPS:
+                url = queue.pop(0)
+                if url not in seen:
+                    seen.add(url)
+                    batch.append(url)
+            for text in pool.map(read, batch):
+                for loc in SITEMAP_LOC.findall(text):
+                    loc = loc.replace("&amp;", "&")
+                    if loc.endswith(".xml") or "sitemap" in loc.lower():
+                        queue.append(loc)
+                    else:
+                        found.append(loc)
     found = [u for u in found if not u.lower().endswith((".jpg", ".png", ".webp", ".pdf"))]
     ranked = [(rank, i, u) for i, u in enumerate(found) if (rank := page_rank(u)) is not None]
     ranked.sort()
@@ -284,7 +298,7 @@ def page_offer(url, html):
                 upc = re.search(r'"(?:upc|gtin|ean|barcode)"\s*:\s*"(\d{8,14})"', html)
                 ean = clean_ean(upc.group(1)) if upc else ""
             return Offer(
-                title=str(node.get("name", "")).strip(),
+                title=html_.unescape(str(node.get("name", ""))).strip(),
                 url=offers.get("url") or url,
                 price=price,
                 ean=ean,

@@ -75,6 +75,17 @@ reports script errors, horizontal overflow, unlabelled controls and tap
 targets under 24px. It needs `pip install playwright` and a running dev
 server.
 
+## Adding several shops at once
+
+```sh
+python manage.py discover_shops https://shop-one.co.uk https://shop-two.com
+```
+
+works out how each shop can be read, adds it as a retailer, imports its
+prices and matches products by barcode or name. Then set each retailer's
+delivery charge in admin and sort the uncertain matches under Shop products
+to review.
+
 ## Checking a shop before adding it
 
 ```sh
@@ -96,6 +107,10 @@ the retailer or your affiliate network for a CSV feed instead.
    - **Shopify store**: enter the shop address. Most UK card shops run on
      Shopify and publish their products at `/products.json`. Check the shop's
      terms allow automated price checks before using this.
+   - **Website**: for shops that are not on Shopify. Enter the shop address;
+     the importer reads the shop's sitemap and each product page's schema.org
+     data (price, stock, barcode, image), which most Magento, WooCommerce and
+     custom shops publish. It pauses half a second between pages.
    - **Product feed (CSV)**: enter the feed address from your affiliate
      network or the retailer. Columns `ean`, `url`, `price` are needed;
      `title`, `availability` and `delivery` are used if present. Common

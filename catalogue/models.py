@@ -235,6 +235,7 @@ class Retailer(models.Model):
         MANUAL = "manual", "Entered by hand"
         SHOPIFY = "shopify", "Shopify store"
         FEED = "feed", "Product feed (CSV)"
+        WEBSITE = "website", "Website (sitemap and product pages)"
 
     source_type = models.CharField(
         "price source", max_length=20, choices=Source.choices, default=Source.MANUAL
@@ -244,7 +245,9 @@ class Retailer(models.Model):
         max_length=500,
         blank=True,
         help_text="Shopify: the shop address, for example https://shop.example/. "
-        "Feed: the CSV address. Leave empty for a local file passed to import_prices.",
+        "Feed: the CSV address. Website: the shop address; product pages are found through "
+        "its sitemap and read for schema.org product data. Leave empty for a local file "
+        "passed to import_prices.",
     )
     is_active = models.BooleanField("show on site", default=True)
 

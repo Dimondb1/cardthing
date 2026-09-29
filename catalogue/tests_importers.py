@@ -312,3 +312,48 @@ class NameMatchingTests(TestCase):
         page = shopify_page([{"handle": "ss-box", "title": "SS Box", "tags": [], "variants": [{"price": "129.99", "available": True, "barcode": ""}]}])
         run_import(self.retailer, fetch=lambda url: page if "page=1" in url else shopify_page([]))
         self.assertEqual(Listing.objects.get(product=self.box, retailer=self.retailer).price, Decimal("129.99"))
+
+
+class WebsiteScraperTests(TestCase):
+    PAGE = """<html><head><title>Shop | ETB</title>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"Shop"},
+    {"@type":"Product","name":"Prismatic Evolutions Elite Trainer Box","gtin13":"0820650851230","image":["https://img.example/etb.jpg"],
+     "offers":{"@type":"Offer","price":"84.99","priceCurrency":"GBP","availability":"https://schema.org/PreOrder","url":"https://shop.example/p/etb"}}]}</script>
+    </head><body></body></html>"""
+    OG = """<html><head><meta property="og:title" content="Surging Sparks Booster Box"><meta property="product:price:amount" content="139.99">
+    <meta property="product:price:currency" content="GBP"><meta property="og:image" content="https://img.example/ss.jpg"></head></html>"""
+
+    def fake_fetch(self, url):
+        if url.endswith("/sitemap.xml"):
+            return b"<sitemapindex><sitemap><loc>https://shop.example/sitemap-products.xml</loc></sitemap></sitemapindex>"
+        if url.endswith("sitemap-products.xml"):
+            return b"<urlset><url><loc>https://shop.example/about</loc></url><url><loc>https://shop.example/p/etb</loc></url><url><loc>https://shop.example/product/ss-box</loc></url></urlset>"
+        if url.endswith("/p/etb"):
+            return self.PAGE.encode()
+        if url.endswith("/product/ss-box"):
+            return self.OG.encode()
+        if url.endswith("/about"):
+            return b"<html><body>About us</body></html>"
+        from .importers import ImportError_
+        raise ImportError_("no " + url)
+
+    def test_sitemap_and_page_data_become_offers(self):
+        from .importers import website_offers
+
+        retailer = make_retailer("Shop", source_type=Retailer.Source.WEBSITE, source_url="https://shop.example/")
+        offers = list(website_offers(retailer, fetch=self.fake_fetch, pause=0))
+        titles = {o.title: o for o in offers}
+        self.assertEqual(set(titles), {"Prismatic Evolutions Elite Trainer Box", "Surging Sparks Booster Box"})
+        etb = titles["Prismatic Evolutions Elite Trainer Box"]
+        self.assertEqual((etb.price, etb.ean, etb.availability, etb.image), (Decimal("84.99"), "0820650851230", Listing.Availability.PREORDER, "https://img.example/etb.jpg"))
+        self.assertEqual(titles["Surging Sparks Booster Box"].price, Decimal("139.99"))
+
+    def test_run_import_for_a_website_retailer(self):
+        retailer = make_retailer("Shop", source_type=Retailer.Source.WEBSITE, source_url="https://shop.example/")
+        product = make_product(make_set(make_game()), ean="0820650851230")
+        from unittest import mock
+
+        with mock.patch("catalogue.importers.time.sleep", lambda s: None):
+            run = run_import(retailer, fetch=self.fake_fetch)
+        self.assertTrue(run.ok, run.error)
+        self.assertEqual(Listing.objects.get(product=product, retailer=retailer).price, Decimal("84.99"))

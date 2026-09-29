@@ -21,6 +21,7 @@ import io
 import json
 import logging
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -136,6 +137,120 @@ def shopify_offers(retailer, fetch=fetch):
                     image=variant_image or product_image,
                 )
         page += 1
+
+
+# Any website: sitemap + schema.org product data -----------------------------
+
+SITEMAP_LOC = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>", re.I)
+JSON_LD = re.compile(r"<script[^>]+type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>", re.I | re.S)
+META = re.compile(r"<meta[^>]+(?:property|name)=[\"']([^\"']+)[\"'][^>]+content=[\"']([^\"']*)[\"']", re.I)
+TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+PRODUCT_PATH_WORDS = ("/product", "/products/", "/p/", "/item", "/shop/", "-p-")
+MAX_PAGES = 3000
+
+
+def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
+    """Every page address listed in the site's sitemap(s), product-looking ones first."""
+    found, seen, queue = [], set(), [f"{base}/sitemap.xml", f"{base}/sitemap_index.xml"]
+    while queue and len(found) < limit:
+        url = queue.pop(0)
+        if url in seen:
+            continue
+        seen.add(url)
+        try:
+            text = fetch(url).decode("utf-8", "replace")
+        except ImportError_:
+            continue
+        for loc in SITEMAP_LOC.findall(text):
+            if loc.endswith(".xml") or "sitemap" in loc.lower():
+                queue.append(loc)
+            else:
+                found.append(loc)
+    found = [u for u in found if not u.lower().endswith((".jpg", ".png", ".webp", ".pdf"))]
+    found.sort(key=lambda u: 0 if any(w in u.lower() for w in PRODUCT_PATH_WORDS) else 1)
+    return found[:limit]
+
+
+def _walk(node):
+    if isinstance(node, list):
+        for item in node:
+            yield from _walk(item)
+    elif isinstance(node, dict):
+        yield node
+        for key in ("@graph", "itemListElement", "item", "mainEntity"):
+            if key in node:
+                yield from _walk(node[key])
+
+
+def _availability(text):
+    text = (text or "").lower()
+    if "preorder" in text or "pre-order" in text:
+        return Listing.Availability.PREORDER
+    if "outofstock" in text or "out_of_stock" in text or "soldout" in text or "discontinued" in text:
+        return Listing.Availability.OUT_OF_STOCK
+    return Listing.Availability.IN_STOCK
+
+
+def page_offer(url, html):
+    """An Offer from a product page's schema.org data or Open Graph tags, or None."""
+    for block in JSON_LD.findall(html):
+        try:
+            data = json.loads(block.strip())
+        except json.JSONDecodeError:
+            continue
+        for node in _walk(data):
+            kind = node.get("@type", "")
+            kinds = kind if isinstance(kind, list) else [kind]
+            if "Product" not in kinds:
+                continue
+            offers = node.get("offers") or {}
+            if isinstance(offers, list):
+                offers = offers[0] if offers else {}
+            price = money(offers.get("price") or offers.get("lowPrice"))
+            currency = (offers.get("priceCurrency") or "GBP").upper()
+            if price is None or currency != "GBP":
+                continue
+            image = node.get("image") or ""
+            if isinstance(image, list):
+                image = image[0] if image else ""
+            if isinstance(image, dict):
+                image = image.get("url", "")
+            ean = clean_ean(node.get("gtin13") or node.get("gtin") or node.get("gtin14") or node.get("gtin12") or "")
+            return Offer(
+                title=str(node.get("name", "")).strip(),
+                url=offers.get("url") or url,
+                price=price,
+                ean=ean,
+                availability=_availability(str(offers.get("availability", ""))),
+                image=image,
+            )
+    meta = {key.lower(): value for key, value in META.findall(html)}
+    if "product:price:amount" in meta and meta.get("product:price:currency", "GBP").upper() == "GBP":
+        price = money(meta["product:price:amount"])
+        if price is not None:
+            title = meta.get("og:title") or (TITLE.search(html).group(1).strip() if TITLE.search(html) else "")
+            return Offer(
+                title=title, url=url, price=price,
+                ean=clean_ean(meta.get("product:gtin13") or meta.get("product:ean") or meta.get("product:gtin") or ""),
+                availability=_availability(meta.get("product:availability", "")),
+                image=meta.get("og:image", ""),
+            )
+    return None
+
+
+def website_offers(retailer, fetch=fetch, pause=0.5, limit=MAX_PAGES):
+    """Offers from every product page the site's sitemap lists."""
+    base = retailer.source_url.rstrip("/")
+    for url in sitemap_urls(base, fetch=fetch, limit=limit):
+        try:
+            html = fetch(url).decode("utf-8", "replace")
+        except ImportError_:
+            continue
+        offer = page_offer(url, html)
+        if offer and offer.title:
+            yield offer
+        if pause:
+            time.sleep(pause)
 
 
 # CSV feed -------------------------------------------------------------------
@@ -297,6 +412,10 @@ def run_import(retailer, feed_path=None, fetch=fetch):
             if not retailer.source_url:
                 raise ImportError_("Set the shop address on the retailer first.")
             offers = shopify_offers(retailer, fetch=fetch)
+        elif retailer.source_type == Retailer.Source.WEBSITE:
+            if not retailer.source_url:
+                raise ImportError_("Set the shop address on the retailer first.")
+            offers = website_offers(retailer, fetch=fetch)
         elif retailer.source_type == Retailer.Source.FEED:
             if feed_path:
                 text = open(feed_path, encoding="utf-8-sig").read()

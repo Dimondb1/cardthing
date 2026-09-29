@@ -162,3 +162,6 @@ CARDSCOUT_HOME_CACHE_SECONDS = int(os.environ.get("CARDSCOUT_HOME_CACHE_SECONDS"
 # Price imports may record a retailer's product image for products that have
 # no uploaded image. Turn off if you would rather upload every image yourself.
 CARDSCOUT_USE_FEED_IMAGES = env_bool("CARDSCOUT_USE_FEED_IMAGES", default=True)
+
+# Price imports may add sealed products they find in shops to the catalogue.
+CARDSCOUT_AUTO_CATALOGUE = env_bool("CARDSCOUT_AUTO_CATALOGUE", default=True)

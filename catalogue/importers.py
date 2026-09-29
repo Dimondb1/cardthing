@@ -33,8 +33,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import pricing
-from .matching import AUTO_LINK, SUGGEST, best_match
-from .models import ImportRun, Listing, Product, Retailer, ShopProduct
+from .classify import GAMES, classify
+from .matching import AUTO_LINK, SUGGEST, best_match, score
+from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,9 @@ class Offer:
     availability: str = Listing.Availability.IN_STOCK
     delivery: Decimal | None = None
     image: str = ""
+    shop_type: str = ""   # the shop's own category, for example "Booster Box"
+    vendor: str = ""
+    tags: tuple = ()
 
 
 class ImportError_(Exception):
@@ -135,6 +139,9 @@ def shopify_offers(retailer, fetch=fetch):
                     ean=clean_ean(variant.get("barcode")),
                     availability=availability,
                     image=variant_image or product_image,
+                    shop_type=product.get("product_type", "") or "",
+                    vendor=product.get("vendor", "") or "",
+                    tags=tuple(product.get("tags", []) or []),
                 )
         page += 1
 
@@ -151,7 +158,12 @@ MAX_PAGES = 3000
 
 def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
     """Every page address listed in the site's sitemap(s), product-looking ones first."""
-    found, seen, queue = [], set(), [f"{base}/sitemap.xml", f"{base}/sitemap_index.xml"]
+    found, seen, queue = [], set(), [f"{base}/sitemap.xml", f"{base}/sitemap_index.xml", f"{base}/xmlsitemap.php"]
+    try:
+        robots = fetch(f"{base}/robots.txt").decode("utf-8", "replace")
+        queue = [line.split(":", 1)[1].strip() for line in robots.splitlines() if line.lower().startswith("sitemap:")] + queue
+    except ImportError_:
+        pass
     while queue and len(found) < limit:
         url = queue.pop(0)
         if url in seen:
@@ -162,6 +174,7 @@ def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
         except ImportError_:
             continue
         for loc in SITEMAP_LOC.findall(text):
+            loc = loc.replace("&amp;", "&")
             if loc.endswith(".xml") or "sitemap" in loc.lower():
                 queue.append(loc)
             else:
@@ -216,6 +229,9 @@ def page_offer(url, html):
             if isinstance(image, dict):
                 image = image.get("url", "")
             ean = clean_ean(node.get("gtin13") or node.get("gtin") or node.get("gtin14") or node.get("gtin12") or "")
+            if not ean:
+                upc = re.search(r'"(?:upc|gtin|ean|barcode)"\s*:\s*"(\d{8,14})"', html)
+                ean = clean_ean(upc.group(1)) if upc else ""
             return Offer(
                 title=str(node.get("name", "")).strip(),
                 url=offers.get("url") or url,
@@ -225,14 +241,15 @@ def page_offer(url, html):
                 image=image,
             )
     meta = {key.lower(): value for key, value in META.findall(html)}
+    upc = re.search(r'"(?:upc|gtin|ean|barcode)"\s*:\s*"(\d{8,14})"', html)
     if "product:price:amount" in meta and meta.get("product:price:currency", "GBP").upper() == "GBP":
         price = money(meta["product:price:amount"])
         if price is not None:
             title = meta.get("og:title") or (TITLE.search(html).group(1).strip() if TITLE.search(html) else "")
             return Offer(
                 title=title, url=url, price=price,
-                ean=clean_ean(meta.get("product:gtin13") or meta.get("product:ean") or meta.get("product:gtin") or ""),
-                availability=_availability(meta.get("product:availability", "")),
+                ean=clean_ean(meta.get("product:gtin13") or meta.get("product:ean") or meta.get("product:gtin") or (upc.group(1) if upc else "")),
+                availability=_availability(meta.get("product:availability", "") or ("outofstock" if re.search(r"out of stock|sold out", html, re.I) and not re.search(r"add to (?:cart|basket)", html, re.I) else "")),
                 image=meta.get("og:image", ""),
             )
     return None
@@ -347,7 +364,14 @@ def apply_offers(retailer, offers, checked_at=None):
             if product_pk is None and offer.url not in ignored:
                 # No barcode and no hand-made link: guess from the name.
                 match, value = best_match(offer.title, catalogue)
-                if match and value >= AUTO_LINK and match[0] not in seen_products:
+                if (match is None or value < AUTO_LINK) and getattr(settings, "CARDSCOUT_AUTO_CATALOGUE", True):
+                    created_pk = create_from_offer(offer, catalogue)
+                    if created_pk is not None:
+                        product_pk = created_pk
+                        products_by_ean.update({})
+                if product_pk is not None:
+                    pass
+                elif match and value >= AUTO_LINK and match[0] not in seen_products:
                     product_pk = match[0]
                     ShopProduct.objects.update_or_create(
                         retailer=retailer, url=offer.url,
@@ -403,6 +427,40 @@ def apply_offers(retailer, offers, checked_at=None):
         ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at)
 
     return found, updated, unmatched
+
+
+def create_from_offer(offer, catalogue):
+    """Make a product for a sealed item no catalogue product matches. Returns its pk or None.
+
+    ``catalogue`` is the live list of (pk, name) and is extended in place so
+    later offers in the same run match the new product.
+    """
+    sealed = classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price)
+    if sealed is None:
+        return None
+    # The clean name may already exist under a slightly different shop title.
+    for pk, name in catalogue:
+        if score(name, sealed.name) >= AUTO_LINK and score(sealed.name, name) >= AUTO_LINK:
+            return pk
+    game = Game.objects.filter(slug=sealed.game).first()
+    if game is None:
+        for slug, name, short, words in GAMES:
+            if slug == sealed.game:
+                game = Game.objects.create(name=name, short_name=short, slug=slug, search_aliases=", ".join(words),
+                                           sort_order=Game.objects.count() + 1)
+    from django.utils.text import slugify
+
+    slug = slugify(sealed.name)[:220]
+    existing = Product.objects.filter(slug=slug).first()
+    if existing is not None:
+        catalogue.append((existing.pk, existing.name))
+        return existing.pk
+    product = Product.objects.create(
+        game=game, name=sealed.name, slug=slug, product_type=sealed.product_type,
+        ean=offer.ean or "", image_url=offer.image[:1000] if offer.image else "",
+    )
+    catalogue.append((product.pk, product.name))
+    return product.pk
 
 
 def run_import(retailer, feed_path=None, fetch=fetch):

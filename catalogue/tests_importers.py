@@ -357,3 +357,28 @@ class WebsiteScraperTests(TestCase):
             run = run_import(retailer, fetch=self.fake_fetch)
         self.assertTrue(run.ok, run.error)
         self.assertEqual(Listing.objects.get(product=product, retailer=retailer).price, Decimal("84.99"))
+
+
+class AutoCatalogueTests(TestCase):
+    def test_new_sealed_products_are_created_and_shared_across_shops(self):
+        shop_a = make_retailer("Shop A", source_type=Retailer.Source.SHOPIFY, source_url="https://a.example/")
+        shop_b = make_retailer("Shop B", source_type=Retailer.Source.SHOPIFY, source_url="https://b.example/")
+        page_a = shopify_page([
+            {"handle": "ss-box", "title": "Pokemon - Surging Sparks - Booster Box (36 Packs)", "product_type": "Booster Box", "vendor": "Pokemon", "tags": [],
+             "images": [{"src": "https://a.example/ss.jpg"}], "variants": [{"price": "139.99", "available": True, "barcode": ""}]},
+            {"handle": "single", "title": "Pikachu ex 057/131", "product_type": "Single Card", "vendor": "Pokemon", "tags": [],
+             "variants": [{"price": "5", "available": True, "barcode": ""}]},
+        ])
+        page_b = shopify_page([
+            {"handle": "surging", "title": "Pokémon TCG: Surging Sparks Booster Box", "product_type": "Trading Cards", "vendor": "Pokemon", "tags": [],
+             "variants": [{"price": "134.95", "available": True, "barcode": ""}]},
+        ])
+        run_import(shop_a, fetch=lambda url: page_a if "page=1" in url else shopify_page([]))
+        run_import(shop_b, fetch=lambda url: page_b if "page=1" in url else shopify_page([]))
+        self.assertEqual(Product.objects.count(), 1)
+        product = Product.objects.get()
+        self.assertEqual(product.name, "Surging Sparks Booster Box")
+        self.assertEqual(product.game.slug, "pokemon")
+        self.assertEqual(product.image_url, "https://a.example/ss.jpg")
+        self.assertEqual(product.listings.count(), 2)
+        self.assertEqual(Listing.objects.filter(product=product).order_by("delivered_price").first().retailer, shop_b)

@@ -1,9 +1,9 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db.models import Count
 from django.utils.html import format_html
 
 from . import pricing
-from .models import DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Retailer
+from .models import DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Retailer, ShopProduct
 
 
 @admin.register(Game)
@@ -168,6 +168,54 @@ class ImportRunAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(ShopProduct)
+class ShopProductAdmin(admin.ModelAdmin):
+    list_display = ("title", "retailer", "price", "suggested", "confidence", "status", "last_seen")
+    list_filter = ("status", "retailer")
+    search_fields = ("title", "suggested__name")
+    autocomplete_fields = ("suggested",)
+    list_select_related = ("retailer", "suggested")
+    readonly_fields = ("retailer", "title", "url", "price", "image_url", "confidence", "first_seen", "last_seen")
+    actions = ["link_to_suggested", "mark_ignored", "mark_review"]
+    list_per_page = 50
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description="Link to our product", ordering="suggested__name")
+    def suggested_name(self, obj):
+        return obj.suggested
+
+    @admin.action(description="Link to our product (creates the listing)")
+    def link_to_suggested(self, request, queryset):
+        made = 0
+        for row in queryset.select_related("retailer", "suggested"):
+            if row.suggested is None:
+                continue
+            listing, _created = Listing.objects.get_or_create(
+                product=row.suggested, retailer=row.retailer,
+                defaults={"url": row.url, "price": row.price or 0, "availability": Listing.Availability.IN_STOCK},
+            )
+            if listing.url != row.url:
+                listing.url = row.url
+                listing.save(update_fields=["url"])
+            if row.image_url and not row.suggested.image_src:
+                row.suggested.image_url = row.image_url
+                row.suggested.save(update_fields=["image_url"])
+            row.status = ShopProduct.Status.LINKED
+            row.save(update_fields=["status"])
+            made += 1
+        self.message_user(request, f"Linked {made}. The next price import fills in the prices.", messages.SUCCESS)
+
+    @admin.action(description="Not one of ours (hide from now on)")
+    def mark_ignored(self, request, queryset):
+        queryset.update(status=ShopProduct.Status.IGNORED)
+
+    @admin.action(description="Put back for review")
+    def mark_review(self, request, queryset):
+        queryset.update(status=ShopProduct.Status.REVIEW)
 
 
 @admin.register(DailyLowestPrice)

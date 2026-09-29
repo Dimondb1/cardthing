@@ -101,11 +101,14 @@ the retailer or your affiliate network for a CSV feed instead.
      `title`, `availability` and `delivery` are used if present. Common
      column names from Awin and Google Merchant feeds are recognised.
    - **Entered by hand**: add listings yourself under the product.
-   Shops that publish no barcodes (some Shopify shops leave them blank) can
-   still be imported: open our product in admin, add a listing for that
-   retailer with the shop's product page link and any price, and the import
-   matches by link from then on. Each price import lists the shop products it
-   could not match, with their links, so you can add them one by one.
+   Shops that publish no barcodes are matched by name. The importer links
+   a shop product automatically when every word of our product's name is in
+   the shop's title and nothing suggests a different item (a case, a pack, a
+   playmat). Anything less certain goes to Admin > Shop products to review
+   with a suggested match: correct it if needed, tick the rows, and choose
+   "Link to our product". Mark anything that is not a sealed product as "Not
+   one of ours" and it stays hidden. Linked products are matched by link on
+   every later import.
 3. **Import.** `python manage.py import_prices` fetches every retailer with a
    source, or `import_prices <retailer-slug>` for one, or `--feed file.csv`
    for a local file. Run it from cron, hourly is sensible. Each run is

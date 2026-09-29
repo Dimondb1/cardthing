@@ -32,7 +32,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import pricing
-from .models import ImportRun, Listing, Product, Retailer
+from .matching import AUTO_LINK, SUGGEST, best_match
+from .models import ImportRun, Listing, Product, Retailer, ShopProduct
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,10 @@ def apply_offers(retailer, offers, checked_at=None):
     unmatched = []
     seen_products = set()
     images_by_product = {}
+    catalogue = list(Product.objects.filter(is_active=True).values_list("pk", "name"))
+    ignored = set(
+        ShopProduct.objects.filter(retailer=retailer, status=ShopProduct.Status.IGNORED).values_list("url", flat=True)
+    )
 
     with transaction.atomic():
         for offer in offers:
@@ -224,6 +229,25 @@ def apply_offers(retailer, offers, checked_at=None):
             product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
             if product_pk is None:
                 product_pk = products_by_link.get(link_key(offer.url))
+            if product_pk is None and offer.url not in ignored:
+                # No barcode and no hand-made link: guess from the name.
+                match, value = best_match(offer.title, catalogue)
+                if match and value >= AUTO_LINK and match[0] not in seen_products:
+                    product_pk = match[0]
+                    ShopProduct.objects.update_or_create(
+                        retailer=retailer, url=offer.url,
+                        defaults={"title": offer.title, "price": offer.price, "image_url": offer.image,
+                                  "suggested_id": product_pk, "confidence": value,
+                                  "status": ShopProduct.Status.LINKED, "last_seen": checked_at},
+                    )
+                elif match and value >= SUGGEST:
+                    ShopProduct.objects.update_or_create(
+                        retailer=retailer, url=offer.url,
+                        defaults={"title": offer.title, "price": offer.price, "image_url": offer.image,
+                                  "suggested_id": match[0], "confidence": value, "last_seen": checked_at},
+                    )
+                    unmatched.append(f"{offer.title} -> maybe {match[1]} ({value}%)")
+                    continue
             if product_pk is None:
                 unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url}")
                 continue

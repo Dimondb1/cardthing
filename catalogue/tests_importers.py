@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from .importers import apply_offers, feed_offers, run_import, shopify_offers
-from .models import ImportRun, Listing, Product, Retailer
+from .models import ImportRun, Listing, Product, Retailer, ShopProduct
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
 
@@ -253,3 +253,62 @@ class LinkMatchingTests(TestCase):
         retailer = make_retailer("Poke Collect")
         _f, _u, unmatched = apply_offers(retailer, [Offer(title="Mystery", url="https://x.example/products/mystery", price=Decimal("5"))])
         self.assertEqual(unmatched, ["Mystery [no barcode] https://x.example/products/mystery"])
+
+
+class NameMatchingTests(TestCase):
+    def setUp(self):
+        game = make_game()
+        pre = make_set(game)
+        self.etb = make_product(pre, name="Prismatic Evolutions Elite Trainer Box")
+        self.bundle = make_product(pre, name="Prismatic Evolutions Booster Bundle", product_type="bundle")
+        self.box = make_product(make_set(game, name="Surging Sparks", slug="surging-sparks", code="SSP"),
+                                name="Surging Sparks Booster Box", product_type="booster_box")
+        self.retailer = make_retailer("Poke Collect", source_type=Retailer.Source.SHOPIFY, source_url="https://pc.example/")
+
+    def test_scores(self):
+        from .matching import score
+
+        self.assertEqual(score(self.etb.name, "Pokemon TCG: Prismatic Evolutions Elite Trainer Box (EN)"), 100)
+        self.assertEqual(score(self.etb.name, "Pokémon Prismatic Evolutions ETB"), 100)
+        self.assertLess(score(self.box.name, "Surging Sparks Booster Box CASE (6 boxes)"), 60)
+        self.assertLess(score(self.box.name, "Surging Sparks Booster Pack"), 100)
+        self.assertLess(score(self.etb.name, "Prismatic Evolutions Booster Bundle"), 100)
+
+    def test_import_links_confident_matches_and_queues_the_rest(self):
+        page = shopify_page([
+            {"handle": "pe-etb", "title": "Pokemon TCG Prismatic Evolutions Elite Trainer Box", "tags": [], "images": [{"src": "https://cdn.example/etb.jpg"}],
+             "variants": [{"price": "79.95", "available": True, "barcode": ""}]},
+            {"handle": "ss-case", "title": "Surging Sparks Booster Box Case", "tags": [],
+             "variants": [{"price": "800", "available": True, "barcode": ""}]},
+            {"handle": "ss-pack", "title": "Surging Sparks Booster Pack", "tags": [],
+             "variants": [{"price": "4.50", "available": True, "barcode": ""}]},
+            {"handle": "mat", "title": "Pikachu Playmat", "tags": [], "variants": [{"price": "20", "available": True, "barcode": ""}]},
+        ])
+        run = run_import(self.retailer, fetch=lambda url: page if "page=1" in url else shopify_page([]))
+        self.assertEqual(run.listings_updated, 1)
+        listing = Listing.objects.get(product=self.etb, retailer=self.retailer)
+        self.assertEqual(listing.price, Decimal("79.95"))
+        self.etb.refresh_from_db()
+        self.assertEqual(self.etb.image_url, "https://cdn.example/etb.jpg")
+        rows = {r.url: r for r in ShopProduct.objects.all()}
+        self.assertEqual(rows["https://pc.example/products/pe-etb"].status, ShopProduct.Status.LINKED)
+        self.assertEqual(rows["https://pc.example/products/ss-pack"].status, ShopProduct.Status.REVIEW)
+        self.assertEqual(rows["https://pc.example/products/ss-pack"].suggested, self.box)
+        self.assertNotIn("https://pc.example/products/mat", rows)
+        self.assertIn("maybe Surging Sparks Booster Box", run.unmatched)
+
+    def test_link_action_creates_listing_and_next_import_prices_it(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        row = ShopProduct.objects.create(retailer=self.retailer, title="SS Box", url="https://pc.example/products/ss-box",
+                                         price=Decimal("120"), suggested=self.box, confidence=70)
+        self.client.force_login(get_user_model().objects.create_superuser("admin", "a@example.com", "pw"))
+        self.client.post(reverse("admin:catalogue_shopproduct_changelist"),
+                         {"action": "link_to_suggested", "_selected_action": [row.pk]})
+        self.assertTrue(Listing.objects.filter(product=self.box, retailer=self.retailer, url=row.url).exists())
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.LINKED)
+        page = shopify_page([{"handle": "ss-box", "title": "SS Box", "tags": [], "variants": [{"price": "129.99", "available": True, "barcode": ""}]}])
+        run_import(self.retailer, fetch=lambda url: page if "page=1" in url else shopify_page([]))
+        self.assertEqual(Listing.objects.get(product=self.box, retailer=self.retailer).price, Decimal("129.99"))

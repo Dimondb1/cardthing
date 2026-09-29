@@ -372,6 +372,43 @@ class ImportRun(models.Model):
         return self.finished_at is not None and not self.error
 
 
+class ShopProduct(models.Model):
+    """A product a retailer sells that price imports could not match by barcode or link.
+
+    The importer suggests one of our products from the name. Confident matches
+    are linked automatically; the rest wait here for a person to confirm.
+    """
+
+    class Status(models.TextChoices):
+        REVIEW = "review", "Needs a decision"
+        LINKED = "linked", "Linked"
+        IGNORED = "ignored", "Not one of ours"
+
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="shop_products")
+    title = models.CharField(max_length=300)
+    url = models.URLField(max_length=1000)
+    price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    image_url = models.URLField(max_length=1000, blank=True)
+    suggested = models.ForeignKey(
+        Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        verbose_name="our product",
+        help_text="The importer's best guess. Change it if it is wrong, then use the Link action.",
+    )
+    confidence = models.PositiveSmallIntegerField(default=0, help_text="0 to 100.")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.REVIEW, db_index=True)
+    first_seen = models.DateTimeField(default=timezone.now)
+    last_seen = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-confidence", "title"]
+        unique_together = [("retailer", "url")]
+        verbose_name = "shop product to review"
+        verbose_name_plural = "shop products to review"
+
+    def __str__(self):
+        return f"{self.title} ({self.retailer})"
+
+
 class DailyLowestPrice(models.Model):
     """The cheapest delivered price seen for a product on one day."""
 

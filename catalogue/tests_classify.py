@@ -41,3 +41,19 @@ class ClassifyTests(TestCase):
         sealed = classify("Surging Sparks Booster Box", vendor="Pokemon", price=100)
         self.assertEqual(sealed.game, "pokemon")
         self.assertEqual(clean_name("Pokemon - Surging Sparks - Elite Trainer Box (EN)"), "Surging Sparks Elite Trainer Box")
+
+
+class ClassifyLeakTests(TestCase):
+    def test_singles_and_multipacks_are_rejected(self):
+        for title in [
+            "Basic Metal Energy SM1S Collection Sun (Near Mint)",
+            "Goliath Daydreamer (PPECL 143) Promo Pack: Lorwyn Eclipsed (Near Mint)",
+            "Yu-Gi-Oh! The Crimson King Structure Deck x 3",
+            "Pokemon Booster Pack x 10",
+            "Power Pack Commander: Marvel Super Heroes (Near Mint)",
+        ]:
+            self.assertIsNone(classify(title, vendor="Pokemon", price=10), title)
+
+    def test_flesh_and_blood_prefix(self):
+        sealed = classify("Flesh & Blood Armory Deck Malice", price=10)
+        self.assertEqual((sealed.game, sealed.name), ("flesh-and-blood", "Armory Deck Malice"))

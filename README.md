@@ -96,6 +96,27 @@ reports whether the shop publishes Shopify product data, how many products
 carry barcodes, and how many look like sealed TCG. If it is not Shopify, ask
 the retailer or your affiliate network for a CSV feed instead.
 
+## Real prices from UK shops
+
+`start.bat` / `start.command` run `setup_shops`, which adds Total Cards,
+Gathering Games, Poke-Collect and Magic Madhouse with the delivery rules read
+from their delivery pages, and `remove_demo`, which deletes the fictional
+demo retailers. Then `update_prices` (double-click) or
+`python manage.py import_prices` pulls every product from each shop.
+
+Shops publish tens of thousands of items, almost all single cards. The
+importer classifies each one (`catalogue/classify.py`): sealed products
+(booster boxes, Elite Trainer Boxes, bundles, collections, decks, tins,
+packs, gift sets) for the ten games it knows become CardScout products
+automatically, with the shop's photo; singles, accessories, events, cases
+and multipacks are skipped. The same product from two shops lands on one
+page by name. `tidy_catalogue` removes products that a later, stricter
+version of the rules would not have created.
+
+The first import takes 20 to 40 minutes because of the number of items;
+later ones are similar, so run it hourly on a server rather than on a
+laptop.
+
 ## Getting real prices in
 
 1. **Products.** `seed_catalogue` loads the current sets and products. Check

@@ -47,7 +47,10 @@ NOT_SEALED = re.compile(
     r"\b\d{1,3}\s*/\s*\d{1,3}\b|\bsingle\b|holofoil|holo rare|reverse holo|\bfoil\b(?!.*booster)|\bplaymat\b|\bsleeves?\b|\bbinder\b|"
     r"\bdeck box\b|\bportfolio\b|\btoploader|\bevent\b|\bpre-?release event\b|\bticket\b|\bcase\b(?! of)|\bcarton\b|"
     r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\bcounter\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b|\bkeyring\b|\bposter\b(?! box)|"
-    r"\bcode card\b|\bgraded\b|\bpsa\b|\bcgc\b|\bproxy\b|\bbulk\b|\blot of\b|\bjapanese single|\bpromo card\b",
+    r"\bcode card\b|\bgraded\b|\bpsa\b|\bcgc\b|\bproxy\b|\bbulk\b|\blot of\b|\bjapanese single|\bpromo card\b|"
+    r"\(near mint\)|\bnear mint\b|\blightly played\b|\bmoderately played\b|\(nm\)|\bpromo pack\b|\bpromotion pack\b|\bpower pack\b|"
+    r"\(borderless\)|\(extended art\)|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"
+    r"\b(?:x|×)\s?\d+\b|\b\d+\s?(?:x|×)\b|\bpack of \d+\b|\bbundle of \d+\b",
     re.I,
 )
 NOT_SEALED_TYPES = {"single card", "singles", "pokemon single", "playmat", "deck box", "card sleeves", "sleeves", "binder",
@@ -57,7 +60,7 @@ NOT_SEALED_TYPES = {"single card", "singles", "pokemon single", "playmat", "deck
 # Words removed from the start or end of a title when building the clean name.
 PREFIXES = re.compile(
     r"^(?:pok[eé]mon(?: tcg| trading card game)?|magic(?: the gathering|: the gathering)?|mtg|one piece(?: card game| tcg)?|"
-    r"disney lorcana(?: tcg)?|lorcana(?: tcg)?|yu-gi-oh!?|yugioh|star wars(?::)? unlimited|flesh and blood(?: tcg)?|"
+    r"disney lorcana(?: tcg)?|lorcana(?: tcg)?|yu-gi-oh!?|yugioh|star wars(?::)? unlimited|flesh (?:and|&) blood(?: tcg)?|"
     r"digimon(?: card game| tcg)?|dragon ball super(?: card game| tcg)?|riftbound(?::)?(?: league of legends tcg)?)\s*[:\-–|]*\s*",
     re.I,
 )
@@ -123,8 +126,6 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
     kind = find_type(title, shop_type)
     if kind is None:
         return None
-    if kind == "booster_pack" and re.search(r"\b(?:x|×)\s?\d+\b|\b\d+\s?(?:x|×)\b", title):
-        return None  # multipacks of loose packs are not a product
     name = clean_name(title)
     if len(name) < 6:
         return None

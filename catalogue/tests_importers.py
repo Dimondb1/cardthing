@@ -398,3 +398,40 @@ class SetupShopsTests(TestCase):
         self.assertEqual(Retailer.objects.count(), 4)
         self.assertEqual(Retailer.objects.get(website="https://totalcards.net/").name, "Total Cards")
         self.assertEqual(Retailer.objects.get(name="Gathering Games").delivery_cost, Decimal("3.99"))
+
+
+class SitemapRankingTests(TestCase):
+    def test_pages_are_ranked_by_what_their_address_says(self):
+        from .importers import page_rank
+
+        self.assertEqual(page_rank("https://shop.example/pokemon-prismatic-evolutions-elite-trainer-box"), 0)
+        self.assertEqual(page_rank("https://shop.example/products/12345"), 1)
+        self.assertEqual(page_rank("https://shop.example/about-us"), 2)
+        # Names a game but reads as a single card or accessory: not fetched at all.
+        self.assertIsNone(page_rank("https://shop.example/magic-the-gathering-caged-sun-mystery-booster"))
+        self.assertIsNone(page_rank("https://shop.example/pokemon-astral-radiance-142-189-gapejaw-bog-prize-pack-league-promo-non-holo"))
+        self.assertIsNone(page_rank("https://shop.example/ultra-pro-pokemon-pikachu-playmat"))
+
+    def test_sitemap_lists_sealed_looking_pages_first_and_drops_singles(self):
+        from .importers import ImportError_, sitemap_urls
+
+        def fetch(url):
+            if url.endswith("/sitemap.xml"):
+                return (
+                    b"<urlset>"
+                    b"<url><loc>https://shop.example/magic-the-gathering-caged-sun-mystery-booster</loc></url>"
+                    b"<url><loc>https://shop.example/products/9</loc></url>"
+                    b"<url><loc>https://shop.example/pokemon-surging-sparks-booster-box</loc></url>"
+                    b"<url><loc>https://shop.example/delivery</loc></url>"
+                    b"</urlset>"
+                )
+            raise ImportError_("missing")
+
+        self.assertEqual(
+            sitemap_urls("https://shop.example", fetch=fetch),
+            [
+                "https://shop.example/pokemon-surging-sparks-booster-box",
+                "https://shop.example/products/9",
+                "https://shop.example/delivery",
+            ],
+        )

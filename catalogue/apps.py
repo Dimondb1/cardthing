@@ -1,3 +1,5 @@
+from importlib import import_module
+
 from django.apps import AppConfig
 
 
@@ -7,4 +9,4 @@ class CatalogueConfig(AppConfig):
     verbose_name = "Products and prices"
 
     def ready(self):
-        from . import signals  # noqa: F401
+        import_module(".signals", self.name)

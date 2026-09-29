@@ -51,8 +51,17 @@ class ClassifyLeakTests(TestCase):
             "Yu-Gi-Oh! The Crimson King Structure Deck x 3",
             "Pokemon Booster Pack x 10",
             "Power Pack Commander: Marvel Super Heroes (Near Mint)",
+            "Caged Sun | Mystery Booster",
+            "Astral Radiance Gapejaw Bog (Prize Pack League Promo Non-Holo)",
+            "Vivien's Jaguar (Planeswalker Deck Card) | Core Set 2019",
+            "Blue, Loyal Raptor (Borderless Art) | Jurassic World Collection",
+            "Generations Radiant Collection RC30 Gardevoir EX Full Art",
         ]:
             self.assertIsNone(classify(title, vendor="Pokemon", price=10), title)
+
+    def test_mystery_booster_packs_and_boxes_are_still_sealed(self):
+        for title in ["Magic The Gathering Mystery Booster 2 Booster Box", "Magic The Gathering Mystery Booster Pack"]:
+            self.assertIsNotNone(classify(title, price=10), title)
 
     def test_flesh_and_blood_prefix(self):
         sealed = classify("Flesh & Blood Armory Deck Malice", price=10)

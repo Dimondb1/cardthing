@@ -32,7 +32,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from . import pricing
-from .classify import GAMES, classify
+from .classify import GAMES, classify, find_game
 from .matching import AUTO_LINK, SUGGEST, best_match, score
 from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
 
@@ -206,8 +206,32 @@ def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
             else:
                 found.append(loc)
     found = [u for u in found if not u.lower().endswith((".jpg", ".png", ".webp", ".pdf"))]
-    found.sort(key=lambda u: 0 if any(w in u.lower() for w in PRODUCT_PATH_WORDS) else 1)
-    return found[:limit]
+    ranked = [(rank, i, u) for i, u in enumerate(found) if (rank := page_rank(u)) is not None]
+    ranked.sort()
+    return [u for _rank, _i, u in ranked[:limit]]
+
+
+def slug_words(url):
+    """The last path segment of a page address as words: 'pokemon-151-etb' -> 'pokemon 151 etb'."""
+    path = urllib.parse.urlsplit(url).path.rstrip("/")
+    return re.sub(r"[-_+]+", " ", path.rsplit("/", 1)[-1]).strip()
+
+
+def page_rank(url):
+    """Order sitemap pages so the ones worth fetching come first.
+
+    Big shops list every single card and accessory, far more pages than we can
+    fetch each hour. The address usually carries the product title, so: pages
+    whose address reads as a sealed product go first, then addresses that say
+    nothing about a game, and a page whose address names a game but reads as a
+    single card or accessory is skipped (None).
+    """
+    words = slug_words(url)
+    if classify(words):
+        return 0
+    if find_game(words):
+        return None
+    return 1 if any(w in url.lower() for w in PRODUCT_PATH_WORDS) else 2
 
 
 def _walk(node):

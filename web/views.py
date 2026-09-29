@@ -108,7 +108,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
             ordering.insert(0, "name_rank")
     products = products.annotate(has_price=has_price).order_by(*ordering)
 
-    paginator = Paginator(products.prefetch_related(offers.buyable_prefetch()), settings.CARDSCOUT_PAGE_SIZE)
+    paginator = Paginator(products.prefetch_related(offers.buyable_prefetch()), settings.RIPRAPTOR_PAGE_SIZE)
     page = paginator.get_page(request.GET.get("page"))
     week_lows = offers.week_low_map([p.pk for p in page.object_list])
     cards = [(product, offers.summarise(product, week_lows)) for product in page.object_list]
@@ -141,7 +141,7 @@ def home_lists():
     priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
     savings = offers.biggest_savings(priced, limit=6)
     trending = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
-    cache.set(key, (savings, trending), settings.CARDSCOUT_HOME_CACHE_SECONDS)
+    cache.set(key, (savings, trending), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
     return savings, trending
 
 
@@ -172,7 +172,7 @@ def home(request):
             "drops": list(pricing.price_drops(limit=6)),
             "hide_header_search": True,
             "meta_full_title": text(
-                request, "meta.home.title", site_name=settings.CARDSCOUT_SITE_NAME
+                request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
             ),
             "canonical_url": request.build_absolute_uri("/"),
         },
@@ -290,7 +290,7 @@ def product_detail(request, slug):
     last_checked = max((l.last_checked for l in listings), default=None)
 
     today = timezone.localdate()
-    days = settings.CARDSCOUT_HISTORY_DAYS
+    days = settings.RIPRAPTOR_HISTORY_DAYS
     chart = price_chart(pricing.history(product, days=days, today=today), days, today)
     last_known = None if cheapest else pricing.last_known_price(product)
 
@@ -379,7 +379,7 @@ def terms(request):
 @require_GET
 def product_prices_api(request, slug):
     """Current prices for the product page's refresh control."""
-    from .templatetags.cardscout import ago, gbp
+    from .templatetags.ripraptor import ago, gbp
 
     product = get_object_or_404(Product.objects.active(), slug=slug)
     rows = []
@@ -403,8 +403,8 @@ def about(request):
         "web/about.html",
         {
             "retailers": Retailer.objects.filter(is_active=True),
-            "contact_email": settings.CARDSCOUT_CONTACT_EMAIL,
-            "stale_hours": settings.CARDSCOUT_STALE_AFTER_HOURS,
+            "contact_email": settings.RIPRAPTOR_CONTACT_EMAIL,
+            "stale_hours": settings.RIPRAPTOR_STALE_AFTER_HOURS,
             "meta_title": text(request, "about.title"),
             "canonical_url": request.build_absolute_uri(request.path),
         },
@@ -417,7 +417,7 @@ QUICK_RESULTS = 6
 @require_GET
 def search_api(request):
     """Results for the search box as you type. Plain data, no HTML."""
-    from .templatetags.cardscout import gbp
+    from .templatetags.ripraptor import gbp
 
     query = request.GET.get("q", "").strip()[:100]
     results = []
@@ -456,7 +456,7 @@ DECK_PAGE = 12
 
 def card_data(request, product, summary):
     """One product as the swipe deck and search cards need it."""
-    from .templatetags.cardscout import ago, gbp
+    from .templatetags.ripraptor import ago, gbp
 
     best = summary.best
     data = {

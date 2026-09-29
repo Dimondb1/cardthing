@@ -1,5 +1,5 @@
 @echo off
-REM Windows: double-click this file to start CardScout on your computer.
+REM Windows: double-click this file to start RipRaptor on your computer.
 cd /d "%~dp0"
 where python >nul 2>nul
 if errorlevel 1 (
@@ -20,7 +20,7 @@ if errorlevel 1 (
   python manage.py createsuperuser
 )
 echo.
-echo CardScout is running. Open http://127.0.0.1:8000/ in your browser.
+echo RipRaptor is running. Open http://127.0.0.1:8000/ in your browser.
 echo Admin is at http://127.0.0.1:8000/admin/. Close this window to stop.
 start "" http://127.0.0.1:8000/
 python manage.py runserver 0.0.0.0:8000

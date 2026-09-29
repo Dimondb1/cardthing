@@ -164,7 +164,7 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
   });
 });
 
-// Back arrow: go back in history when we came from another CardScout page.
+// Back arrow: go back in history when we came from another RipRaptor page.
 document.querySelectorAll("[data-back]").forEach((link) => {
   link.addEventListener("click", (event) => {
     if (document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1) {

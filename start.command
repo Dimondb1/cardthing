@@ -1,5 +1,5 @@
 #!/bin/bash
-# Mac: double-click this file to start CardScout on your computer.
+# Mac: double-click this file to start RipRaptor on your computer.
 cd "$(dirname "$0")"
 if ! command -v python3 >/dev/null 2>&1; then
   echo "Python is not installed. Get it from https://www.python.org/downloads/ then run this again."
@@ -17,7 +17,7 @@ if ! python manage.py shell -c "from django.contrib.auth import get_user_model a
   python manage.py createsuperuser
 fi
 echo
-echo "CardScout is running. Open http://127.0.0.1:8000/ in your browser."
+echo "RipRaptor is running. Open http://127.0.0.1:8000/ in your browser."
 echo "Admin is at http://127.0.0.1:8000/admin/. Close this window to stop."
 (sleep 2; open http://127.0.0.1:8000/) &
 python manage.py runserver 0.0.0.0:8000

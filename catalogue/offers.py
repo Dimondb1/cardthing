@@ -60,7 +60,7 @@ def summarise(product, week_lows=None):
 
 def week_low_map(product_ids, days=None, today=None):
     """Lowest recorded daily price per product over the last ``days`` days."""
-    days = days or settings.CARDSCOUT_TRENDING_DAYS
+    days = days or settings.RIPRAPTOR_TRENDING_DAYS
     today = today or timezone.localdate()
     lows = {}
     rows = DailyLowestPrice.objects.filter(

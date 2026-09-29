@@ -4,7 +4,7 @@ Bring real prices in from retailers.
 Two sources are supported:
 
 * Shopify stores expose every product at ``/products.json``. Most UK card
-  shops run on Shopify. Offers are matched to CardScout products by barcode
+  shops run on Shopify. Offers are matched to RipRaptor products by barcode
   (EAN), so fill in the barcode on each product first.
 * A CSV product feed (from an affiliate network, Google Merchant Center or
   the retailer) with columns ``ean``, ``url``, ``price`` and optionally
@@ -38,7 +38,7 @@ from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "CardScout price check (+https://cardscout.example)"
+USER_AGENT = "RipRaptor price check (+https://ripraptor.example)"
 MAX_SHOPIFY_PAGES = 400
 TIMEOUT = 30
 PREORDER_WORDS = re.compile(r"pre[\s-]?order", re.I)
@@ -392,7 +392,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None):
             if product_pk is None and offer.url not in ignored:
                 # No barcode and no hand-made link: guess from the name.
                 match, value = catalogue.best_match(offer.title)
-                if (match is None or value < AUTO_LINK) and getattr(settings, "CARDSCOUT_AUTO_CATALOGUE", True):
+                if (match is None or value < AUTO_LINK) and getattr(settings, "RIPRAPTOR_AUTO_CATALOGUE", True):
                     created_pk = create_from_offer(offer, catalogue)
                     if created_pk is not None:
                         product_pk = created_pk
@@ -431,7 +431,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None):
             seen_products.add(product_pk)
             listing.url = offer.url
             listing.save(update_fields=["url"])
-            if offer.image and getattr(settings, "CARDSCOUT_USE_FEED_IMAGES", True):
+            if offer.image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
                 images_by_product.setdefault(product_pk, offer.image)
             delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)
             pricing.record_check(

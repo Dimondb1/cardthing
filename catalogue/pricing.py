@@ -59,7 +59,7 @@ def snapshot_all(date=None):
 
 def price_drops(limit=6, days=None, today=None):
     """Products whose cheapest delivered price is lower than ``days`` ago."""
-    days = days or settings.CARDSCOUT_TRENDING_DAYS
+    days = days or settings.RIPRAPTOR_TRENDING_DAYS
     today = today or timezone.localdate()
     target = today - timedelta(days=days)
     previous = (
@@ -89,7 +89,7 @@ def price_drops(limit=6, days=None, today=None):
 
 def popular(limit=8, days=None):
     """Products with the most clicks through to a retailer recently."""
-    days = days or settings.CARDSCOUT_TRENDING_DAYS
+    days = days or settings.RIPRAPTOR_TRENDING_DAYS
     since = timezone.now() - timedelta(days=days)
     top = (
         OutboundClick.objects.filter(created_at__gte=since)
@@ -105,7 +105,7 @@ def popular(limit=8, days=None):
 
 def history(product, days=None, today=None):
     """[(date, price), ...] for the last ``days`` days, oldest first."""
-    days = days or settings.CARDSCOUT_HISTORY_DAYS
+    days = days or settings.RIPRAPTOR_HISTORY_DAYS
     today = today or timezone.localdate()
     start = today - timedelta(days=days - 1)
     return list(

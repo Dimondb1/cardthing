@@ -1,9 +1,9 @@
-# CardScout project rules
+# RipRaptor project rules
 
 These rules apply to every change, whoever makes it. The owner can override
 any of them, but should say so in the request.
 
-## What CardScout is
+## What RipRaptor is
 
 A UK price comparison site for sealed trading card game products. The product
 page is the money page: cheapest delivered price, stock, retailer, comparison,
@@ -30,7 +30,7 @@ last checked, buy link. Everything else supports that.
   with JavaScript off. JavaScript only speeds things up.
 - Keep dependencies few. Add one only when it removes real work.
 - Every change comes with tests. `python manage.py test` must pass before a
-  commit. Run `python -m pyflakes cardscout catalogue content web` too.
+  commit. Run `python -m pyflakes ripraptor catalogue content web` too.
 - One query per list. Use `select_related`, `prefetch_related` and the
   `for_lists()` queryset. Check query counts in tests for new pages.
 - Migrations are generated, never hand edited. Do not rewrite a migration that

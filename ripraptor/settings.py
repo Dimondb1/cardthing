@@ -1,5 +1,5 @@
 """
-Django settings for CardScout.
+Django settings for RipRaptor.
 
 Values that differ between environments are read from environment variables.
 The defaults are for local development only.
@@ -63,7 +63,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "cardscout.urls"
+ROOT_URLCONF = "ripraptor.urls"
 
 TEMPLATES = [
     {
@@ -82,7 +82,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "cardscout.wsgi.application"
+WSGI_APPLICATION = "ripraptor.wsgi.application"
 
 DATABASES = {
     "default": {
@@ -94,7 +94,7 @@ DATABASES = {
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "cardscout",
+        "LOCATION": "ripraptor",
     }
 }
 
@@ -134,34 +134,34 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
-# CardScout settings ---------------------------------------------------------
+# RipRaptor settings ---------------------------------------------------------
 
 # Brand name used in page titles and the wordmark.
-CARDSCOUT_SITE_NAME = "CardScout"
+RIPRAPTOR_SITE_NAME = "RipRaptor"
 
 # Shown on the "How it works" page. Leave blank to hide the contact section.
-CARDSCOUT_CONTACT_EMAIL = os.environ.get("CARDSCOUT_CONTACT_EMAIL", "")
+RIPRAPTOR_CONTACT_EMAIL = os.environ.get("RIPRAPTOR_CONTACT_EMAIL", "")
 
 # A listing that has not been checked for this many hours is treated as out of
 # date. It still appears on the product page but is never used as the
 # cheapest price.
-CARDSCOUT_STALE_AFTER_HOURS = int(os.environ.get("CARDSCOUT_STALE_AFTER_HOURS", "72"))
+RIPRAPTOR_STALE_AFTER_HOURS = int(os.environ.get("RIPRAPTOR_STALE_AFTER_HOURS", "72"))
 
 # Window used for "Price drops this week" and "Popular this week".
-CARDSCOUT_TRENDING_DAYS = 7
+RIPRAPTOR_TRENDING_DAYS = 7
 
 # Length of the price history chart on product pages.
-CARDSCOUT_HISTORY_DAYS = 90
+RIPRAPTOR_HISTORY_DAYS = 90
 
-CARDSCOUT_PAGE_SIZE = 24
+RIPRAPTOR_PAGE_SIZE = 24
 
 # Trending and biggest savings are worked out from every priced product, so
 # the result is kept for this many seconds.
-CARDSCOUT_HOME_CACHE_SECONDS = int(os.environ.get("CARDSCOUT_HOME_CACHE_SECONDS", "300"))
+RIPRAPTOR_HOME_CACHE_SECONDS = int(os.environ.get("RIPRAPTOR_HOME_CACHE_SECONDS", "300"))
 
 # Price imports may record a retailer's product image for products that have
 # no uploaded image. Turn off if you would rather upload every image yourself.
-CARDSCOUT_USE_FEED_IMAGES = env_bool("CARDSCOUT_USE_FEED_IMAGES", default=True)
+RIPRAPTOR_USE_FEED_IMAGES = env_bool("RIPRAPTOR_USE_FEED_IMAGES", default=True)
 
 # Price imports may add sealed products they find in shops to the catalogue.
-CARDSCOUT_AUTO_CATALOGUE = env_bool("CARDSCOUT_AUTO_CATALOGUE", default=True)
+RIPRAPTOR_AUTO_CATALOGUE = env_bool("RIPRAPTOR_AUTO_CATALOGUE", default=True)

@@ -1,4 +1,4 @@
-# CardScout
+# RipRaptor
 
 Compare UK prices for sealed trading card game products. Django 5.2, SQLite by
 default, no JavaScript framework.
@@ -107,7 +107,7 @@ demo retailers. Then `update_prices` (double-click) or
 Shops publish tens of thousands of items, almost all single cards. The
 importer classifies each one (`catalogue/classify.py`): sealed products
 (booster boxes, Elite Trainer Boxes, bundles, collections, decks, tins,
-packs, gift sets) for the ten games it knows become CardScout products
+packs, gift sets) for the ten games it knows become RipRaptor products
 automatically, with the shop's photo; singles, accessories, events, cases
 and multipacks are skipped. The same product from two shops lands on one
 page by name. `tidy_catalogue` removes products that a later, stricter
@@ -151,7 +151,7 @@ laptop.
    recorded in Admin > Price imports with the retailer products that could
    not be matched, so you can add the missing barcodes.
 4. **Images.** Price imports keep the retailer's product image for any
-   product without one (`CARDSCOUT_USE_FEED_IMAGES`, on by default). An
+   product without one (`RIPRAPTOR_USE_FEED_IMAGES`, on by default). An
    uploaded image always wins. Admin > Products can be filtered by image and
    by barcode, and barcodes can be edited in the list or loaded in bulk with
    `python manage.py import_barcodes barcodes.csv` (columns `ean` and `slug`
@@ -222,7 +222,7 @@ Edits show on the next page load. There is no cache to clear.
 Short functional labels tied to data stay in code: stock statuses (In stock,
 Pre-order, Out of stock) and product types in `catalogue/models.py`, filter and
 sort labels in `web/views.py`, relative times ("18 minutes ago") in
-`web/templatetags/cardscout.py`, screen reader hints such as "(opens in a new
+`web/templatetags/ripraptor.py`, screen reader hints such as "(opens in a new
 tab)", and the static `500.html` page, which must work when the database does
 not.
 
@@ -266,7 +266,7 @@ Replace that file to change the logo everywhere. The favicon is
   charge for one item to a UK address, stock status and when it was last
   checked. The delivered price is worked out by the database.
 - The **cheapest delivered price** only uses listings that are in stock or on
-  pre-order and were checked within `CARDSCOUT_STALE_AFTER_HOURS` (72 by
+  pre-order and were checked within `RIPRAPTOR_STALE_AFTER_HOURS` (72 by
   default). Older listings still appear on the product page, marked as not
   checked recently.
 - Custom importers should call `catalogue.pricing.record_check(listing,
@@ -285,16 +285,16 @@ Replace that file to change the logo everywhere. The favicon is
 The `deploy/` folder has everything for a small Linux server (a £4 to £6 a
 month VPS is enough):
 
-1. Clone the repository to `/srv/cardscout` and run `sudo deploy/setup.sh`.
+1. Clone the repository to `/srv/ripraptor` and run `sudo deploy/setup.sh`.
    It creates a virtualenv, installs requirements, applies migrations,
    collects static files, loads the catalogue, installs a systemd service
    for the app and a crontab for the hourly price check.
-2. Edit `/srv/cardscout/.env` (start from `.env.example`): a long random
+2. Edit `/srv/ripraptor/.env` (start from `.env.example`): a long random
    `DJANGO_SECRET_KEY`, your domain in `DJANGO_ALLOWED_HOSTS` and
-   `DJANGO_CSRF_TRUSTED_ORIGINS`, then `sudo systemctl restart cardscout`.
+   `DJANGO_CSRF_TRUSTED_ORIGINS`, then `sudo systemctl restart ripraptor`.
 3. Install Caddy, put `deploy/caddy.Caddyfile` at `/etc/caddy/Caddyfile`
    with your domain, and reload it. Caddy fetches the HTTPS certificate.
-4. Create an admin user: `sudo -u cardscout .venv/bin/python manage.py createsuperuser`.
+4. Create an admin user: `sudo -u ripraptor .venv/bin/python manage.py createsuperuser`.
 
 Static files are served by the app itself (WhiteNoise) with hashed names
 and long cache headers, so no separate static hosting is needed. Uploaded
@@ -309,10 +309,10 @@ product images live in `media/`; back that folder and the database up.
 | `DJANGO_ALLOWED_HOSTS`         | `localhost,127.0.0.1` | Comma separated. |
 | `DJANGO_CSRF_TRUSTED_ORIGINS`  |         | Comma separated, with scheme. |
 | `DJANGO_SQLITE_PATH`           | `db.sqlite3` | |
-| `CARDSCOUT_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page. |
-| `CARDSCOUT_STALE_AFTER_HOURS`  | 72      | |
-| `CARDSCOUT_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
-| `CARDSCOUT_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
+| `RIPRAPTOR_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page. |
+| `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
+| `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
+| `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
 
 ## Tests
 

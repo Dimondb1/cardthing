@@ -1,5 +1,5 @@
 """
-Create the UK shops CardScout reads prices from, with their delivery rules.
+Create the UK shops RipRaptor reads prices from, with their delivery rules.
 
 Safe to run again: existing shops keep any changes made in admin. Delivery
 figures come from each shop's own delivery page and the date they were read
@@ -27,7 +27,7 @@ SHOPS = [
 
 
 class Command(BaseCommand):
-    help = "Add the shops CardScout reads prices from. Run import_prices afterwards."
+    help = "Add the shops RipRaptor reads prices from. Run import_prices afterwards."
 
     def handle(self, *args, **options):
         for slug, name, website, source, cost, free, note in SHOPS:

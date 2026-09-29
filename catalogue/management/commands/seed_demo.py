@@ -248,15 +248,15 @@ class Command(BaseCommand):
                 availability=availability,
                 last_checked=checked,
             )
-            fresh = checked >= now - timedelta(hours=settings.CARDSCOUT_STALE_AFTER_HOURS)
+            fresh = checked >= now - timedelta(hours=settings.RIPRAPTOR_STALE_AFTER_HOURS)
             if availability != Listing.Availability.OUT_OF_STOCK and fresh:
                 total = price + delivery
                 lowest = total if lowest is None else min(lowest, total)
         return lowest
 
     def _history(self, rng, product, typical, lowest, today):
-        days = settings.CARDSCOUT_HISTORY_DAYS
-        trending = settings.CARDSCOUT_TRENDING_DAYS
+        days = settings.RIPRAPTOR_HISTORY_DAYS
+        trending = settings.RIPRAPTOR_TRENDING_DAYS
         end_price = lowest if lowest is not None else Decimal(str(typical))
 
         drop = FEATURED_DROPS.get(product.name)

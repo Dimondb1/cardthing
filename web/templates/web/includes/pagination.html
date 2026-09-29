@@ -1,4 +1,4 @@
-{% load sitecopy cardscout %}{% if page.has_other_pages %}
+{% load sitecopy ripraptor %}{% if page.has_other_pages %}
 <nav class="pagination" aria-label="Pages">
   {% if page.has_previous %}<a class="button button--quiet" href="{% query_string page=page.previous_page_number %}" rel="prev">{% copy "browse.pagination.previous" %}</a>{% else %}<span></span>{% endif %}
   <p class="pagination__status">{% copy "browse.pagination.status" page=page.number pages=page.paginator.num_pages %}</p>

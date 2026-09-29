@@ -1,5 +1,5 @@
 {% extends "web/base.html" %}
-{% load sitecopy cardscout %}
+{% load sitecopy ripraptor %}
 
 {% block scripts %}{% load static %}<script src="{% static 'js/product.js' %}" defer></script>
 <script type="application/ld+json">{{ structured_json|safe }}</script>{% endblock %}

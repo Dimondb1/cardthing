@@ -13,8 +13,8 @@
   addEventListener("resize", measure, { passive: true });
   const hint = root.querySelector("[data-deck-hint]");
   const words = root.dataset;
-  const STORE = "cardscout.saved";
-  const SEEN = "cardscout.seen";
+  const STORE = "ripraptor.saved";
+  const SEEN = "ripraptor.seen";
   const VISIBLE = 3;           // cards rendered in the stack
   const THRESHOLD = 0.32;      // fraction of card width that counts as a swipe
   const FLING = 0.55;          // px per ms

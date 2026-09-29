@@ -1,13 +1,13 @@
-# systemd unit for the web app. Copy to /etc/systemd/system/cardscout.service
+# systemd unit for the web app. Copy to /etc/systemd/system/ripraptor.service
 [Unit]
-Description=CardScout web app
+Description=RipRaptor web app
 After=network.target
 
 [Service]
-User=cardscout
-WorkingDirectory=/srv/cardscout
-EnvironmentFile=/srv/cardscout/.env
-ExecStart=/srv/cardscout/.venv/bin/gunicorn cardscout.wsgi:application --bind 127.0.0.1:8000 --workers 2
+User=ripraptor
+WorkingDirectory=/srv/ripraptor
+EnvironmentFile=/srv/ripraptor/.env
+ExecStart=/srv/ripraptor/.venv/bin/gunicorn ripraptor.wsgi:application --bind 127.0.0.1:8000 --workers 2
 Restart=always
 
 [Install]

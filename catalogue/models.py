@@ -16,7 +16,7 @@ from .search import build_search_text
 
 def stale_cutoff(now=None):
     """Listings checked before this moment are out of date."""
-    hours = settings.CARDSCOUT_STALE_AFTER_HOURS
+    hours = settings.RIPRAPTOR_STALE_AFTER_HOURS
     return (now or timezone.now()) - timedelta(hours=hours)
 
 
@@ -429,7 +429,7 @@ class DailyLowestPrice(models.Model):
 
 
 class OutboundClick(models.Model):
-    """A visit to a retailer from CardScout. No personal data is stored."""
+    """A visit to a retailer from RipRaptor. No personal data is stored."""
 
     listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="outbound_clicks")

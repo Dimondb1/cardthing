@@ -171,7 +171,7 @@ class LegalTextAdmin(SiteContentAdmin):
 
     def render_change_form(self, request, context, *args, **kwargs):
         context["subtitle"] = (
-            "This wording tells visitors how CardScout earns money or who it is "
+            "This wording tells visitors how RipRaptor earns money or who it is "
             "connected to. Check any change is still accurate before saving."
         )
         return super().render_change_form(request, context, *args, **kwargs)

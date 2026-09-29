@@ -163,7 +163,7 @@ class CopyStyleTests(PageTestCase):
 
     BANNED = [
         "—", "&mdash;", "&#8212;",
-        "lorem ipsum", "welcome to cardscout", "learn more", "get started",
+        "lorem ipsum", "welcome to ripraptor", "learn more", "get started",
         "unlock", "supercharge", "seamless", "next-generation", "game-changing",
         "your ultimate", "all in one place", "elevate", "empowering", "revolutionise",
         "effortless", "powered by ai",

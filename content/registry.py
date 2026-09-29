@@ -70,7 +70,7 @@ PLACEHOLDER_HELP = {
     "query": "what the visitor typed into search",
     "retailer": "a retailer name",
     "set": "a set name",
-    "site_name": "the site name, CardScout",
+    "site_name": "the site name, RipRaptor",
     "time": "how long ago, for example 18 minutes ago",
 }
 
@@ -108,7 +108,7 @@ ENTRIES = [
     ),
     Entry(
         "site.tagline", T, "Tagline under the logo",
-        "Scouting the best card prices so you don't have to",
+        "Hunting down the best card prices so you don't have to",
         "Under the logo on the home page. Leave empty to hide it.",
         optional=True,
     ),
@@ -585,14 +585,14 @@ ENTRIES = [
     ),
     Entry(
         "product.affiliate_note", T, "Commission note",
-        "CardScout may earn a commission if you buy through these links. It does not "
+        "RipRaptor may earn a commission if you buy through these links. It does not "
         "change the price you pay or the order of this list.",
         "Terms page.",
         legal=True,
     ),
     Entry(
         "product.price_disclaimer", P, "Price disclaimer",
-        "Prices and stock can change after you leave CardScout. Check the total on "
+        "Prices and stock can change after you leave RipRaptor. Check the total on "
         "the retailer's site before you pay.",
         "Terms page.",
         legal=True,
@@ -642,12 +642,12 @@ ENTRIES = [
     # How it works page -----------------------------------------------------
     Entry(
         "about.title", H, "Page heading",
-        "How CardScout works",
+        "How RipRaptor works",
         "Main heading on the how it works page. Also used as the page title.",
     ),
     Entry(
         "about.introduction", P, "Introduction",
-        "CardScout compares UK prices for sealed trading card game products: booster "
+        "RipRaptor compares UK prices for sealed trading card game products: booster "
         "boxes, Elite Trainer Boxes, bundles, collection boxes and decks.\n\n"
         "For each product we record the price, delivery charge and stock at each "
         "retailer we check, and when we last checked it.",
@@ -672,13 +672,13 @@ ENTRIES = [
     ),
     Entry(
         "about.money.title", H, "Commission heading",
-        "How CardScout makes money",
+        "How RipRaptor makes money",
         "Heading on the how it works page.",
     ),
     Entry(
         "about.money.body", P, "Commission explanation",
         "Some links to retailers are affiliate links. If you buy something after "
-        "following one, the retailer may pay CardScout a commission. You pay the same "
+        "following one, the retailer may pay RipRaptor a commission. You pay the same "
         "price either way.\n\n"
         "Retailers cannot pay to be listed higher. Prices are always sorted by delivered "
         "price, cheapest first.",
@@ -693,39 +693,39 @@ ENTRIES = [
     ),
     Entry(
         "about.retailers.intro", T, "Retailers note",
-        "Being listed here does not mean a retailer endorses CardScout.",
+        "Being listed here does not mean a retailer endorses RipRaptor.",
         "Line under the retailers heading. Leave empty to hide it.",
         optional=True,
     ),
     Entry(
         "about.contact.title", H, "Contact heading",
         "Report a problem",
-        "Only shown when a contact email is set in CARDSCOUT_CONTACT_EMAIL.",
+        "Only shown when a contact email is set in RIPRAPTOR_CONTACT_EMAIL.",
     ),
     Entry(
         "about.contact.body", T, "Contact text",
         "Seen a wrong price or a missing product? Email {email}.",
-        "Only shown when a contact email is set in CARDSCOUT_CONTACT_EMAIL.",
+        "Only shown when a contact email is set in RIPRAPTOR_CONTACT_EMAIL.",
         placeholders=("email",),
     ),
 
     # Footer ---------------------------------------------------------------
     Entry(
         "footer.line", T, "Footer line",
-        "Prices include UK delivery. CardScout may earn a commission when you buy.",
+        "Prices include UK delivery. RipRaptor may earn a commission when you buy.",
         "The one line in the footer of every page, followed by the Terms link.",
         legal=True,
     ),
     Entry(
         "footer.affiliate_disclosure", T, "Affiliate disclosure",
-        "CardScout may earn a commission if you buy through links on this site. "
+        "RipRaptor may earn a commission if you buy through links on this site. "
         "This does not change the price you pay.",
         "Terms page.",
         legal=True,
     ),
     Entry(
         "footer.independence_disclaimer", T, "Independence statement",
-        "CardScout is independent and is not endorsed by any retailer or game "
+        "RipRaptor is independent and is not endorsed by any retailer or game "
         "publisher. Product names and trademarks belong to their owners.",
         "Terms page.",
         legal=True,
@@ -739,7 +739,7 @@ ENTRIES = [
     ),
     Entry(
         "terms.introduction", P, "Terms introduction",
-        "CardScout is a price comparison service. We do not sell anything. When you "
+        "RipRaptor is a price comparison service. We do not sell anything. When you "
         "buy, you buy from the retailer under their terms.",
         "First paragraph on the terms page.",
         legal=True,
@@ -749,7 +749,7 @@ ENTRIES = [
     Entry("terms.data.title", H, "Data heading", "Your data", "Heading on the terms page."),
     Entry(
         "terms.data.body", P, "Data explanation",
-        "CardScout does not ask you to create an account. Products you save on the "
+        "RipRaptor does not ask you to create an account. Products you save on the "
         "swipe page are stored in your browser only. We count clicks to retailers "
         "without recording who clicked.",
         "Data section of the terms page.",

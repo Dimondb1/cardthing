@@ -78,7 +78,7 @@ class Migration(migrations.Migration):
                     "unmatched",
                     models.TextField(
                         blank=True,
-                        help_text="Retailer products that no CardScout product has a matching barcode for.",
+                        help_text="Retailer products that no RipRaptor product has a matching barcode for.",
                     ),
                 ),
                 ("error", models.TextField(blank=True)),

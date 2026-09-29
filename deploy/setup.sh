@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# One-time setup on a fresh Ubuntu server. Run as root from the repo checkout at /srv/cardscout.
+# One-time setup on a fresh Ubuntu server. Run as root from the repo checkout at /srv/ripraptor.
 set -euo pipefail
-cd /srv/cardscout
-id -u cardscout >/dev/null 2>&1 || useradd --system --home /srv/cardscout cardscout
+cd /srv/ripraptor
+id -u ripraptor >/dev/null 2>&1 || useradd --system --home /srv/ripraptor ripraptor
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-test -f .env || { cp .env.example .env; echo "Edit /srv/cardscout/.env before starting."; }
-mkdir -p /var/lib/cardscout && chown cardscout /var/lib/cardscout
+test -f .env || { cp .env.example .env; echo "Edit /srv/ripraptor/.env before starting."; }
+mkdir -p /var/lib/ripraptor && chown ripraptor /var/lib/ripraptor
 set -a; . ./.env; set +a
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py collectstatic --noinput
 .venv/bin/python manage.py seed_catalogue
-chown -R cardscout /srv/cardscout
-cp deploy/cardscout.service /etc/systemd/system/cardscout.service
-systemctl daemon-reload && systemctl enable --now cardscout
-crontab -u cardscout deploy/crontab
-echo "Done. Create an admin user with: sudo -u cardscout .venv/bin/python manage.py createsuperuser"
+chown -R ripraptor /srv/ripraptor
+cp deploy/ripraptor.service /etc/systemd/system/ripraptor.service
+systemctl daemon-reload && systemctl enable --now ripraptor
+crontab -u ripraptor deploy/crontab
+echo "Done. Create an admin user with: sudo -u ripraptor .venv/bin/python manage.py createsuperuser"

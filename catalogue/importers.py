@@ -62,13 +62,27 @@ class ImportError_(Exception):
     pass
 
 
-def fetch(url):
+def fetch(url, retries=2):
+    import http.client
+
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-            return response.read()
-    except urllib.error.URLError as exc:
-        raise ImportError_(f"Could not fetch {url}: {exc}") from exc
+    last = None
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                return response.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code in (429, 500, 502, 503, 504) and attempt < retries:
+                time.sleep(2 * (attempt + 1))
+                last = exc
+                continue
+            raise ImportError_(f"Could not fetch {url}: {exc}") from exc
+        except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
+            last = exc
+            if attempt < retries:
+                time.sleep(2 * (attempt + 1))
+                continue
+    raise ImportError_(f"Could not fetch {url}: {last}")
 
 
 def clean_ean(value):
@@ -393,7 +407,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None):
                                   "suggested_id": product_pk, "confidence": value,
                                   "status": ShopProduct.Status.LINKED, "last_seen": checked_at},
                     )
-                elif match and value >= SUGGEST:
+                elif match and value >= SUGGEST and classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price):
                     ShopProduct.objects.update_or_create(
                         retailer=retailer, url=offer.url,
                         defaults={"title": offer.title, "price": offer.price, "image_url": offer.image,

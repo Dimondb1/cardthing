@@ -292,10 +292,11 @@ class NameMatchingTests(TestCase):
         self.assertEqual(self.etb.image_url, "https://cdn.example/etb.jpg")
         rows = {r.url: r for r in ShopProduct.objects.all()}
         self.assertEqual(rows["https://pc.example/products/pe-etb"].status, ShopProduct.Status.LINKED)
-        self.assertEqual(rows["https://pc.example/products/ss-pack"].status, ShopProduct.Status.REVIEW)
-        self.assertEqual(rows["https://pc.example/products/ss-pack"].suggested, self.box)
+        # A booster pack is a sealed product in its own right, so it joins the catalogue.
+        self.assertTrue(Product.objects.filter(name="Surging Sparks Booster Pack", product_type="booster_pack").exists())
+        # A case is not something we list, and a playmat is not a TCG product.
+        self.assertFalse(Product.objects.filter(name__icontains="case").exists())
         self.assertNotIn("https://pc.example/products/mat", rows)
-        self.assertIn("maybe Surging Sparks Booster Box", run.unmatched)
 
     def test_link_action_creates_listing_and_next_import_prices_it(self):
         from django.contrib.auth import get_user_model

@@ -230,3 +230,26 @@ class ImportProductsTests(TestCase):
         self.assertEqual(updated, 0)
         self.assertEqual(Listing.objects.count(), 0)
         self.assertIn("not a web address", unmatched[0])
+
+
+class LinkMatchingTests(TestCase):
+    def test_offer_matches_a_hand_added_listing_by_link(self):
+        from .importers import Offer, link_key
+
+        retailer = make_retailer("Poke Collect", source_type=Retailer.Source.SHOPIFY, source_url="https://poke-collect.example/en-gb")
+        product = make_product(make_set(make_game()))  # no barcode
+        make_listing(product, retailer, price="1.00", url="https://www.poke-collect.example/en-gb/products/prismatic-etb?variant=1")
+        self.assertEqual(link_key("https://poke-collect.example/products/prismatic-etb/"), link_key("http://www.poke-collect.example/en-gb/products/prismatic-etb?x=1"))
+        offers = [Offer(title="Prismatic ETB", url="https://poke-collect.example/products/prismatic-etb", price=Decimal("79.95"), ean="")]
+        found, updated, unmatched = apply_offers(retailer, offers)
+        self.assertEqual((found, updated, unmatched), (1, 1, []))
+        listing = Listing.objects.get(product=product, retailer=retailer)
+        self.assertEqual(listing.price, Decimal("79.95"))
+        self.assertEqual(listing.url, "https://poke-collect.example/products/prismatic-etb")
+
+    def test_unmatched_report_includes_the_link(self):
+        from .importers import Offer
+
+        retailer = make_retailer("Poke Collect")
+        _f, _u, unmatched = apply_offers(retailer, [Offer(title="Mystery", url="https://x.example/products/mystery", price=Decimal("5"))])
+        self.assertEqual(unmatched, ["Mystery [no barcode] https://x.example/products/mystery"])

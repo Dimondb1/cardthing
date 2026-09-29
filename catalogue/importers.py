@@ -187,9 +187,28 @@ def feed_offers(text):
 
 # Applying offers ------------------------------------------------------------
 
+def link_key(url):
+    """Product links compare without scheme, www, query string or trailing slash."""
+    parsed = urllib.parse.urlsplit(url.strip().lower())
+    host = parsed.netloc.removeprefix("www.")
+    path = parsed.path.rstrip("/")
+    # Shopify serves the same product at /products/x and /en-gb/products/x.
+    if "/products/" in path:
+        path = "/products/" + path.split("/products/", 1)[1]
+    return host + path
+
+
 def apply_offers(retailer, offers, checked_at=None):
-    """Update listings from ``offers``. Returns (found, updated, unmatched titles)."""
+    """Update listings from ``offers``.
+
+    Offers match a product by barcode, or by the link of a listing that was
+    added by hand for this retailer. Returns (found, updated, unmatched titles).
+    """
     checked_at = checked_at or timezone.now()
+    products_by_link = {
+        link_key(url): pk
+        for pk, url in Listing.objects.filter(retailer=retailer).values_list("product_id", "url")
+    }
     products_by_ean = {}
     for pk, ean in Product.objects.exclude(ean="").values_list("pk", "ean"):
         if ean_key(ean):
@@ -204,7 +223,9 @@ def apply_offers(retailer, offers, checked_at=None):
             found += 1
             product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
             if product_pk is None:
-                unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}]")
+                product_pk = products_by_link.get(link_key(offer.url))
+            if product_pk is None:
+                unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url}")
                 continue
             if not offer.url.lower().startswith(("http://", "https://")):
                 unmatched.append(f"{offer.title} [link is not a web address]")

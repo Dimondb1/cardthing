@@ -123,7 +123,10 @@ class RetailerAdmin(admin.ModelAdmin):
         ("Delivery", {"fields": ("delivery_cost", "free_delivery_over", "delivery_note")}),
         ("Prices", {"fields": ("source_type", "source_url"),
                     "description": "Run <code>python manage.py import_prices</code> to fetch prices "
-                                   "from this source. Products are matched by barcode."}),
+                                   "from this source. A shop product is matched to ours by barcode, or by "
+                                   "the link of a listing you add by hand under the product (any price; "
+                                   "the import corrects it). Unmatched shop products are listed on each "
+                                   "price import with their links."}),
         ("Links", {"fields": ("affiliate_url_template",)}),
     )
 

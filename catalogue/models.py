@@ -355,7 +355,8 @@ class ImportRun(models.Model):
     listings_updated = models.PositiveIntegerField(default=0)
     unmatched = models.TextField(
         blank=True,
-        help_text="Retailer products that no CardScout product has a matching barcode for.",
+        help_text="Shop products that matched nothing. To include one, open our product in admin, "
+        "add a listing for this retailer and paste the link shown here.",
     )
     error = models.TextField(blank=True)
 

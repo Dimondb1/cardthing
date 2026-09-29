@@ -31,12 +31,12 @@ def make_retailer(name="Harbour Games", **kwargs):
     return Retailer.objects.create(name=name, slug=slug, **kwargs)
 
 
-def make_listing(product, retailer, price="50.00", delivery="0.00", hours_ago=1, **kwargs):
+def make_listing(product, retailer, price="50.00", delivery="0.00", hours_ago=1, url=None, **kwargs):
     kwargs.setdefault("availability", Listing.Availability.IN_STOCK)
     return Listing.objects.create(
         product=product,
         retailer=retailer,
-        url=f"{retailer.website}p/{product.slug}",
+        url=url or f"{retailer.website}p/{product.slug}",
         price=Decimal(price),
         delivery_cost=Decimal(delivery),
         last_checked=timezone.now() - timedelta(hours=hours_ago),

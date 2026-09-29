@@ -282,6 +282,22 @@ Replace that file to change the logo everywhere. The favicon is
 
 ## Putting it on a server
 
+Quickest: a fresh Ubuntu 24.04 server, the domain's A records pointing at
+it, then as root:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Dimondb1/cardthing/claude/compassionate-edison-aot3li/deploy/install.sh | sudo bash -s ripraptor.com
+```
+
+`deploy/install.sh` installs Python and Caddy, clones the code to
+`/srv/ripraptor`, writes `.env` with a generated secret key, migrates,
+collects static files, sets up the shops, starts the app as a service,
+configures HTTPS for the domain, schedules hourly imports and starts the
+first import. Run the same command again to update. The repository must be
+public (or the server needs a token) for the clone to work.
+
+The manual steps:
+
 The `deploy/` folder has everything for a small Linux server (a £4 to £6 a
 month VPS is enough):
 

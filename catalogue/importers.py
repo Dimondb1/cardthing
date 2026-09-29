@@ -29,7 +29,6 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
-from django.db import transaction
 from django.utils import timezone
 
 from . import pricing
@@ -40,6 +39,7 @@ from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
 logger = logging.getLogger(__name__)
 
 USER_AGENT = "CardScout price check (+https://cardscout.example)"
+MAX_SHOPIFY_PAGES = 400
 TIMEOUT = 30
 PREORDER_WORDS = re.compile(r"pre[\s-]?order", re.I)
 
@@ -103,14 +103,26 @@ def money(value):
 def shopify_offers(retailer, fetch=fetch):
     base = retailer.source_url.rstrip("/")
     page = 1
-    while True:
-        raw = fetch(f"{base}/products.json?limit=250&page={page}")
+    first_handle = None
+    while page <= MAX_SHOPIFY_PAGES:
         try:
+            raw = fetch(f"{base}/products.json?limit=250&page={page}")
             products = json.loads(raw).get("products", [])
+        except ImportError_:
+            if page == 1:
+                raise
+            return  # past the last page
         except json.JSONDecodeError as exc:
-            raise ImportError_(f"{base} did not return Shopify JSON") from exc
+            if page == 1:
+                raise ImportError_(f"{base} did not return Shopify JSON") from exc
+            return
         if not products:
             return
+        handle = products[0].get("handle")
+        if page == 1:
+            first_handle = handle
+        elif handle == first_handle:
+            return  # the shop repeats its first page instead of ending
         for product in products:
             url = f"{base}/products/{product.get('handle', '')}"
             preorder = bool(PREORDER_WORDS.search(product.get("title", ""))) or any(
@@ -331,7 +343,7 @@ def link_key(url):
     return host + path
 
 
-def apply_offers(retailer, offers, checked_at=None):
+def apply_offers(retailer, offers, checked_at=None, run=None):
     """Update listings from ``offers``.
 
     Offers match a product by barcode, or by the link of a listing that was
@@ -350,20 +362,22 @@ def apply_offers(retailer, offers, checked_at=None):
     unmatched = []
     seen_products = set()
     images_by_product = {}
-    catalogue = list(Product.objects.filter(is_active=True).values_list("pk", "name"))
+    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name"))
     ignored = set(
         ShopProduct.objects.filter(retailer=retailer, status=ShopProduct.Status.IGNORED).values_list("url", flat=True)
     )
 
-    with transaction.atomic():
+    if True:
         for offer in offers:
             found += 1
+            if run is not None and found % 250 == 0:
+                ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
             if product_pk is None:
                 product_pk = products_by_link.get(link_key(offer.url))
             if product_pk is None and offer.url not in ignored:
                 # No barcode and no hand-made link: guess from the name.
-                match, value = best_match(offer.title, catalogue)
+                match, value = catalogue.best_match(offer.title)
                 if (match is None or value < AUTO_LINK) and getattr(settings, "CARDSCOUT_AUTO_CATALOGUE", True):
                     created_pk = create_from_offer(offer, catalogue)
                     if created_pk is not None:
@@ -429,6 +443,40 @@ def apply_offers(retailer, offers, checked_at=None):
     return found, updated, unmatched
 
 
+class Catalogue:
+    """Our products, indexed by word so an offer is only scored against likely matches."""
+
+    def __init__(self, rows):
+        from .matching import words
+
+        self.names = {}
+        self.index = {}
+        self._words = words
+        for pk, name in rows:
+            self.add(pk, name)
+
+    def add(self, pk, name):
+        self.names[pk] = name
+        for word in set(self._words(name)):
+            self.index.setdefault(word, set()).add(pk)
+
+    def append(self, row):
+        self.add(*row)
+
+    def __iter__(self):
+        return iter(self.names.items())
+
+    def best_match(self, title):
+        title_words = set(self._words(title))
+        counts = {}
+        for word in title_words:
+            for pk in self.index.get(word, ()):
+                counts[pk] = counts.get(pk, 0) + 1
+        # Only products sharing at least two words (or all of a short name) are worth scoring.
+        candidates = [(pk, self.names[pk]) for pk, n in counts.items() if n >= 2 or n >= len(set(self._words(self.names[pk])))]
+        return best_match(title, candidates)
+
+
 def create_from_offer(offer, catalogue):
     """Make a product for a sealed item no catalogue product matches. Returns its pk or None.
 
@@ -484,7 +532,7 @@ def run_import(retailer, feed_path=None, fetch=fetch):
             offers = feed_offers(text)
         else:
             raise ImportError_("This retailer's prices are entered by hand.")
-        found, updated, unmatched = apply_offers(retailer, offers)
+        found, updated, unmatched = apply_offers(retailer, offers, run=run)
         run.offers_found = found
         run.listings_updated = updated
         run.unmatched = "\n".join(unmatched)

@@ -17,6 +17,7 @@ missing barcodes can be added in admin.
 """
 
 import csv
+import dataclasses
 import io
 import json
 import logging
@@ -315,6 +316,11 @@ def website_offers(retailer, fetch=fetch, pause=0.5, limit=MAX_PAGES):
             continue
         offer = page_offer(url, html)
         if offer and offer.title:
+            # Some shops leave the game out of the title ("Kyurem V Collection
+            # Box") but put it in the address, so the address words go along
+            # as a tag for the classifier to read.
+            if not offer.tags:
+                offer = dataclasses.replace(offer, tags=(slug_words(url),))
             yield offer
         if pause:
             time.sleep(pause)

@@ -4,7 +4,8 @@ from decimal import Decimal
 from django.test import TestCase
 from django.utils import timezone
 
-from .importers import apply_offers, feed_offers, run_import, shopify_offers
+from .classify import classify
+from .importers import ImportError_, apply_offers, feed_offers, run_import, shopify_offers
 from .models import ImportRun, Listing, Product, Retailer, ShopProduct
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
@@ -412,8 +413,26 @@ class SitemapRankingTests(TestCase):
         self.assertIsNone(page_rank("https://shop.example/pokemon-astral-radiance-142-189-gapejaw-bog-prize-pack-league-promo-non-holo"))
         self.assertIsNone(page_rank("https://shop.example/ultra-pro-pokemon-pikachu-playmat"))
 
+    def test_page_address_words_travel_with_the_offer_as_a_tag(self):
+        from .importers import website_offers
+
+        def fetch(url):
+            if url.endswith("/sitemap.xml"):
+                return b"<urlset><url><loc>https://shop.example/pokemon-kyurem-v-collection-box</loc></url></urlset>"
+            if url.endswith("kyurem-v-collection-box"):
+                return (
+                    b'<script type="application/ld+json">{"@type": "Product", "name": "Kyurem V Collection Box",'
+                    b' "offers": {"price": "79.95", "priceCurrency": "GBP"}}</script>'
+                )
+            raise ImportError_("missing")
+
+        retailer = make_retailer("Shop", source_type=Retailer.Source.WEBSITE, source_url="https://shop.example/")
+        [offer] = website_offers(retailer, fetch=fetch, pause=0)
+        self.assertEqual(offer.tags, ("pokemon kyurem v collection box",))
+        self.assertEqual(classify(offer.title, tags=offer.tags, price=offer.price).game, "pokemon")
+
     def test_sitemap_lists_sealed_looking_pages_first_and_drops_singles(self):
-        from .importers import ImportError_, sitemap_urls
+        from .importers import sitemap_urls
 
         def fetch(url):
             if url.endswith("/sitemap.xml"):

@@ -292,8 +292,9 @@ class NameMatchingTests(TestCase):
         self.assertEqual(self.etb.image_url, "https://cdn.example/etb.jpg")
         rows = {r.url: r for r in ShopProduct.objects.all()}
         self.assertEqual(rows["https://pc.example/products/pe-etb"].status, ShopProduct.Status.LINKED)
-        # A booster pack is a sealed product in its own right, so it joins the catalogue.
-        self.assertTrue(Product.objects.filter(name="Surging Sparks Booster Pack", product_type="booster_pack").exists())
+        # "Surging Sparks Booster Pack" names no game, so it is neither created nor queued.
+        self.assertFalse(Product.objects.filter(name__icontains="Booster Pack").exists())
+        self.assertNotIn("https://pc.example/products/ss-pack", rows)
         # A case is not something we list, and a playmat is not a TCG product.
         self.assertFalse(Product.objects.filter(name__icontains="case").exists())
         self.assertNotIn("https://pc.example/products/mat", rows)
@@ -383,3 +384,17 @@ class AutoCatalogueTests(TestCase):
         self.assertEqual(product.image_url, "https://a.example/ss.jpg")
         self.assertEqual(product.listings.count(), 2)
         self.assertEqual(Listing.objects.filter(product=product).order_by("delivered_price").first().retailer, shop_b)
+
+
+class SetupShopsTests(TestCase):
+    def test_setup_shops_is_idempotent_and_renames(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        Retailer.objects.create(slug="totalcardsnet", name="Totalcards", website="https://totalcards.net/")
+        call_command("setup_shops", stdout=StringIO())
+        call_command("setup_shops", stdout=StringIO())
+        self.assertEqual(Retailer.objects.count(), 4)
+        self.assertEqual(Retailer.objects.get(website="https://totalcards.net/").name, "Total Cards")
+        self.assertEqual(Retailer.objects.get(name="Gathering Games").delivery_cost, Decimal("3.99"))

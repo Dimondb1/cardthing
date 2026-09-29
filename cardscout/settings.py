@@ -31,6 +31,9 @@ ALLOWED_HOSTS = [
     for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
     if host.strip()
 ]
+if DEBUG:
+    # Lets a phone on the same wifi open the site at http://<your computer's IP>:8000/
+    ALLOWED_HOSTS.append("*")
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")

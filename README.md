@@ -25,6 +25,14 @@ runs with `DJANGO_DEBUG` on, and `--flush` replaces what is there.
 
 ## Running it on your own computer
 
+The quick way: double-click `start.command` (Mac) or `start.bat` (Windows).
+It installs what it needs, loads the catalogue, asks you to create an admin
+login the first time, and opens the site. `check_shop.command` /
+`check_shop.bat` asks for a shop address and reports whether it can be
+imported.
+
+The manual way:
+
 You need Python 3.11 or newer (python.org, or `brew install python` on a
 Mac). Then, in a terminal, inside the project folder:
 

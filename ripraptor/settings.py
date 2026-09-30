@@ -159,6 +159,10 @@ RIPRAPTOR_PAGE_SIZE = 24
 # the result is kept for this many seconds.
 RIPRAPTOR_HOME_CACHE_SECONDS = int(os.environ.get("RIPRAPTOR_HOME_CACHE_SECONDS", "300"))
 
+# Google AdSense publisher id (ca-pub-...). Empty means no adverts and no
+# Google script on any page. Set it once AdSense has approved the site.
+RIPRAPTOR_ADSENSE_CLIENT = os.environ.get("RIPRAPTOR_ADSENSE_CLIENT", "").strip()
+
 # Price imports may record a retailer's product image for products that have
 # no uploaded image. Turn off if you would rather upload every image yourself.
 RIPRAPTOR_USE_FEED_IMAGES = env_bool("RIPRAPTOR_USE_FEED_IMAGES", default=True)

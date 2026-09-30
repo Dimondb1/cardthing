@@ -1,5 +1,6 @@
 """
 Create the UK shops RipRaptor reads prices from, with their delivery rules.
+Run check_delivery --apply afterwards to refresh the delivery figures.
 
 Safe to run again: existing shops keep any changes made in admin. Delivery
 figures come from each shop's own delivery page and the date they were read
@@ -15,15 +16,26 @@ from catalogue.models import Retailer
 S = Retailer.Source
 SHOPS = [
     # slug, name, website, source type, delivery, free over, note
-    ("total-cards", "Total Cards", "https://totalcards.net/", S.SHOPIFY, "3.75", "20",
-     "Free delivery on most orders over £20 (read 29 Sep 2026)"),
+    ("total-cards", "Total Cards", "https://totalcards.net/", S.SHOPIFY, "2.95", "20",
+     "Standard £2.95 (basket check), free over £20 on selected orders (delivery page), read 30 Sep 2026"),
     ("gathering-games", "Gathering Games", "https://gatheringgames.co.uk/", S.SHOPIFY, "3.99", "100",
-     "Royal Mail Tracked 48 £3.99, free over £100 (read 29 Sep 2026)"),
-    ("poke-collect", "Poke-Collect", "https://poke-collect.com/", S.SHOPIFY, "0", None,
-     "Delivery charge not yet confirmed"),
+     "Standard £3.99 (basket check), free over £100 (delivery page), read 30 Sep 2026"),
     ("magic-madhouse", "Magic Madhouse", "https://magicmadhouse.co.uk/", S.WEBSITE, "0", "40",
-     "Free UK delivery from £40; standard charge not yet confirmed (read 29 Sep 2026)"),
+     "Free over £40 (delivery page); standard charge not published as text, read 30 Sep 2026"),
+    ("the-card-vault", "The Card Vault", "https://thecardvault.co.uk/", S.SHOPIFY, "3.95", "50",
+     "Standard £3.95 (basket check), free over £50 (delivery page, confirmed by basket), read 30 Sep 2026"),
+    ("lvl-up-gaming", "Lvl Up Gaming", "https://lvlupgaming.co.uk/", S.SHOPIFY, "3.00", None,
+     "Standard £3.00 (basket check), read 30 Sep 2026"),
+    ("zatu-games", "Zatu Games", "https://zatu.com/", S.SHOPIFY, "2.49", None,
+     "Standard £2.49 (basket check), read 30 Sep 2026"),
+    ("goblin-gaming", "Goblin Gaming", "https://www.goblingaming.co.uk/", S.SHOPIFY, "3.99", "75",
+     "Standard £3.99 (basket check), free over £75 (delivery page, confirmed by basket), read 30 Sep 2026"),
+    ("travelling-man", "Travelling Man", "https://travellingman.com/", S.SHOPIFY, "2.99", "40",
+     "Standard £2.99 (basket check), free over £40 (delivery page), read 30 Sep 2026"),
 ]
+
+# Shops that were set up before and must not be shown: prices in another currency.
+HIDDEN = ["poke-collect"]
 
 
 class Command(BaseCommand):
@@ -43,3 +55,10 @@ class Command(BaseCommand):
                 delivery_cost=Decimal(cost), free_delivery_over=Decimal(free) if free else None, delivery_note=note,
             )
             self.stdout.write(f"{name}: added")
+        for slug in HIDDEN:
+            hidden = Retailer.objects.filter(slug=slug, is_active=True).first()
+            if hidden:
+                hidden.listings.all().delete()
+                hidden.is_active = False
+                hidden.save(update_fields=["is_active"])
+                self.stdout.write(f"{hidden.name}: hidden (prices are not in pounds)")

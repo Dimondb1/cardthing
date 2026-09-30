@@ -30,6 +30,8 @@ class ShopifyTests(TestCase):
 
         def fetch(url):
             calls.append(url)
+            if url.endswith("/meta.json"):
+                return b'{"currency": "GBP"}'
             page = int(url.rsplit("page=", 1)[1])
             return shopify_page(pages[page - 1] if page <= len(pages) else [])
 
@@ -78,7 +80,7 @@ class ShopifyTests(TestCase):
     def test_pages_are_followed(self):
         fetch = self.fake_fetch([[{"handle": "a", "title": "A", "tags": [], "variants": [{"price": "1", "available": True, "barcode": ""}]}], []])
         list(shopify_offers(self.retailer, fetch=fetch))
-        self.assertEqual(len(fetch.calls), 2)
+        self.assertEqual(len([c for c in fetch.calls if "page=" in c]), 2)
 
 
 class FeedTests(TestCase):
@@ -393,12 +395,19 @@ class SetupShopsTests(TestCase):
 
         from django.core.management import call_command
 
+        from .management.commands.setup_shops import SHOPS
+
         Retailer.objects.create(slug="totalcardsnet", name="Totalcards", website="https://totalcards.net/")
+        dollars = Retailer.objects.create(slug="poke-collect", name="Poke-Collect", website="https://poke-collect.com/")
+        make_listing(make_product(make_set(make_game())), dollars)
         call_command("setup_shops", stdout=StringIO())
         call_command("setup_shops", stdout=StringIO())
-        self.assertEqual(Retailer.objects.count(), 4)
+        self.assertEqual(Retailer.objects.count(), len(SHOPS) + 1)
         self.assertEqual(Retailer.objects.get(website="https://totalcards.net/").name, "Total Cards")
         self.assertEqual(Retailer.objects.get(name="Gathering Games").delivery_cost, Decimal("3.99"))
+        dollars.refresh_from_db()
+        self.assertFalse(dollars.is_active)
+        self.assertEqual(dollars.listings.count(), 0)
 
 
 class SitemapRankingTests(TestCase):
@@ -476,3 +485,30 @@ class SitemapRankingTests(TestCase):
                 "https://shop.example/delivery",
             ],
         )
+
+
+class CurrencyGuardTests(TestCase):
+    def test_a_shop_pricing_in_dollars_is_refused(self):
+        retailer = make_retailer("US Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://us.example/")
+
+        def fetch(url):
+            if url.endswith("/meta.json"):
+                return b'{"name": "US Shop", "currency": "USD", "country": "US"}'
+            return b'{"products": [{"title": "Pokemon Surging Sparks Booster Box", "handle": "x", "variants": [{"price": "99.00", "available": true}]}]}'
+
+        run = run_import(retailer, fetch=fetch)
+        self.assertIn("USD", run.error)
+        self.assertEqual(Listing.objects.filter(retailer=retailer).count(), 0)
+
+    def test_a_shop_without_meta_json_is_still_imported(self):
+        retailer = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+
+        def fetch(url):
+            if url.endswith("/meta.json"):
+                raise ImportError_("404")
+            if "page=1" in url:
+                return b'{"products": [{"title": "Pokemon Surging Sparks Booster Box", "handle": "x", "variants": [{"price": "99.00", "available": true}]}]}'
+            return b'{"products": []}'
+
+        run = run_import(retailer, fetch=fetch)
+        self.assertTrue(run.ok, run.error)

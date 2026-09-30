@@ -82,9 +82,26 @@ python manage.py discover_shops https://shop-one.co.uk https://shop-two.com
 ```
 
 works out how each shop can be read, adds it as a retailer, imports its
-prices and matches products by barcode or name. Then set each retailer's
-delivery charge in admin and sort the uncertain matches under Shop products
-to review.
+prices and matches products by barcode or name. Then run `check_delivery`
+(below) and sort the uncertain matches under Shop products to review.
+
+## Delivery charges
+
+```sh
+python manage.py check_delivery            # report what each shop says
+python manage.py check_delivery --apply    # and save it
+```
+
+reads each shop's UK delivery charges from the shop itself, two ways. Its
+delivery page (found through the "Delivery" or "Shipping" link on the home
+page, or the usual addresses) gives the free-delivery threshold and, when
+written out, the standard charge. For a Shopify shop the command also puts
+one cheap product in a basket, asks the shop for its UK delivery options,
+takes the cheapest posted one and empties the basket; when the page gave a
+threshold, a basket just over it is priced too, to confirm it is free.
+Every figure saved carries its source and the date in the retailer's
+delivery note, so it can be checked. A shop that gives nothing readable is
+listed with its address for checking by hand. The server runs this weekly.
 
 ## Checking a shop before adding it
 
@@ -99,9 +116,12 @@ the retailer or your affiliate network for a CSV feed instead.
 ## Real prices from UK shops
 
 `start.bat` / `start.command` run `setup_shops`, which adds Total Cards,
-Gathering Games, Poke-Collect and Magic Madhouse with the delivery rules read
-from their delivery pages, and `remove_demo`, which deletes the fictional
-demo retailers. Then `update_prices` (double-click) or
+Gathering Games, Magic Madhouse, The Card Vault, Lvl Up Gaming, Zatu Games,
+Goblin Gaming and Travelling Man with the delivery rules read from their
+delivery pages and baskets, and `remove_demo`, which deletes the fictional
+demo retailers. A Shopify shop that prices in another currency is refused
+(Poke-Collect turned out to be a US shop pricing in dollars, so it is
+hidden). Then `update_prices` (double-click) or
 `python manage.py import_prices` pulls every product from each shop.
 
 Shops publish tens of thousands of items, almost all single cards. The
@@ -337,6 +357,7 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
+| `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
 ## Tests
 

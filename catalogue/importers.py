@@ -117,8 +117,19 @@ def money(value):
 
 # Shopify --------------------------------------------------------------------
 
+def shop_currency(base, fetch=fetch):
+    """The currency a Shopify shop prices in, from its /meta.json, or "" if unknown."""
+    try:
+        return str(json.loads(fetch(f"{base}/meta.json")).get("currency") or "").upper()
+    except (ImportError_, json.JSONDecodeError, AttributeError):
+        return ""
+
+
 def shopify_offers(retailer, fetch=fetch):
     base = retailer.source_url.rstrip("/")
+    currency = shop_currency(base, fetch=fetch)
+    if currency and currency != "GBP":
+        raise ImportError_(f"{base} prices in {currency}, not pounds. Prices were not imported.")
     page = 1
     first_handle = None
     while page <= MAX_SHOPIFY_PAGES:

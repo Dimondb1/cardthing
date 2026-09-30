@@ -12,7 +12,7 @@ import json
 
 from django.core.management.base import BaseCommand
 
-from catalogue.importers import ImportError_, clean_ean, fetch
+from catalogue.importers import ImportError_, clean_ean, fetch, shop_currency
 
 
 class Command(BaseCommand):
@@ -38,6 +38,10 @@ class Command(BaseCommand):
             self.stdout.write("It may still offer a CSV feed through an affiliate network.")
             return
 
+        currency = shop_currency(base)
+        if currency and currency != "GBP":
+            self.stdout.write(f"This shop prices in {currency}, not pounds. It cannot be shown on a UK comparison.")
+            return
         variants = [v for p in products for v in p.get("variants", [])]
         with_barcode = sum(1 for v in variants if clean_ean(v.get("barcode")))
         tcg_words = ("booster", "elite trainer", "bundle", "pokemon", "pokémon", "magic", "lorcana", "one piece")

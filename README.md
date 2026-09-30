@@ -117,9 +117,10 @@ the retailer or your affiliate network for a CSV feed instead.
 
 `start.bat` / `start.command` run `setup_shops`, which adds Total Cards,
 Gathering Games, Magic Madhouse, The Card Vault, Lvl Up Gaming, Zatu Games,
-Goblin Gaming and Travelling Man with the delivery rules read from their
-delivery pages and baskets, and `remove_demo`, which deletes the fictional
-demo retailers. A Shopify shop that prices in another currency is refused
+Goblin Gaming, Travelling Man, JET Cards, Titan Cards, Buy Any Cards, The
+TCG Shop and Double Sleeved with the delivery rules read from their delivery
+pages and baskets, and `remove_demo`, which deletes the fictional demo
+retailers. A Shopify shop that prices in another currency is refused
 (Poke-Collect turned out to be a US shop pricing in dollars, so it is
 hidden). Then `update_prices` (double-click) or
 `python manage.py import_prices` pulls every product from each shop.
@@ -135,6 +136,28 @@ re-checks products the importer created: it removes any that a later,
 stricter version of the rules would not have created, tidies names (HTML
 entities, a set name repeated after the product) and merges the duplicates
 that shows up. Run it with `--dry-run` first to see what it would do.
+
+Only Total Cards publishes barcodes, so most offers are matched by name.
+An offer links to an existing product automatically only when it is a
+sealed product of the same game and its title and our name agree both
+ways (every meaningful word of ours in the title, and most of the title's
+own words in ours), or when both boil down to the same matching key (the
+identifying words plus the kind of thing: box, pack, bundle, deck).
+Anything less certain goes to Shop products to review. Shops mark
+pre-orders in a pre-order collection, which the importer reads, so a
+pre-order never shows as in stock.
+
+Three cleanup commands keep the catalogue honest after the rules improve:
+`tidy_catalogue` (products that no longer pass), `merge_duplicates` (one
+product under two names) and `tidy_listings` (a shop item linked to the
+wrong product, judged by the words in its shop address). Each takes
+`--dry-run`. The home page never shows a "saving" above 70%, because a gap
+that large is a wrong link, not a bargain.
+
+Price history starts the day a product first gets a price and is kept for
+ever; the product page charts the last 90 days and, after 30 days, says
+what the cheapest price was a month ago. `snapshot_daily_prices` runs
+nightly on the server to record each day's cheapest price.
 
 The first import takes 20 to 40 minutes for a Shopify shop and about an
 hour for a large website shop; later ones are similar, so run it hourly on

@@ -72,12 +72,16 @@ def week_low_map(product_ids, days=None, today=None):
     return lows
 
 
+MAX_REAL_PERCENT = 70
+
+
 def biggest_savings(products, limit=6):
     """Products whose cheapest offer beats the runner-up by the most, as (product, summary)."""
     rows = []
     for product in products:
         summary = summarise(product)
-        if summary.saving:
+        # A saving above this share is a wrong product link, not a bargain.
+        if summary.saving and summary.percent <= MAX_REAL_PERCENT:
             rows.append((product, summary))
     rows.sort(key=lambda row: (-row[1].percent, -row[1].saving, row[0].name))
     return rows[:limit]

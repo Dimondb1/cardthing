@@ -107,12 +107,6 @@ ENTRIES = [
         "Button next to the search box in the header.",
     ),
     Entry(
-        "site.tagline", T, "Tagline under the logo",
-        "Hunting down the best card prices so you don't have to",
-        "Under the logo on the home page. Leave empty to hide it.",
-        optional=True,
-    ),
-    Entry(
         "site.nav.swipe", B, "Swipe link",
         "Swipe",
         "Header link to the swipe page on phones.",
@@ -140,25 +134,29 @@ ENTRIES = [
 
     # Home page ------------------------------------------------------------
     Entry(
-        "home.hero.title", H, "Main heading",
-        "Compare UK prices for sealed TCG products",
-        "Largest heading at the top of the home page, above the search box.",
+        "home.hero.title", H, "Home page headline",
+        "Better prices. More packs.",
+        "The one strong line at the top of the home page, above the search box.",
     ),
     Entry(
-        "home.hero.subtitle", T, "Text under the main heading",
-        "Booster boxes, Elite Trainer Boxes, bundles and decks from UK retailers. "
-        "Prices include delivery, so you can compare like for like.",
-        "One or two sentences under the main heading. Leave empty to hide it.",
+        "home.hero.subtitle", T, "Line under the headline",
+        "Compare sealed TCG products across UK retailers and buy at the best price.",
+        "One sentence under the headline, above the search box. Leave empty to hide it.",
         optional=True,
     ),
     Entry(
         "home.search.button", B, "Home search button",
-        "Search products",
+        "Find best price",
         "Button next to the large search box on the home page.",
     ),
     Entry(
+        "home.search.placeholder", T, "Home search box hint",
+        "Search “Prismatic Evolutions ETB”",
+        "Grey hint text inside the large search box on the home page.",
+    ),
+    Entry(
         "home.search.checked", T, "Prices last checked",
-        "Prices last checked {time}.",
+        "Prices checked {time}",
         "Under the home page search box. Uses the most recent check across every retailer. "
         "Hidden until a price has been checked.",
         placeholders=("time",),
@@ -178,6 +176,72 @@ ENTRIES = [
         "home.games.label", T, "Game shortcuts label",
         "Browse by game",
         "Small label before the list of game links under the home page search box.",
+    ),
+    Entry(
+        "home.search.retailers", T, "Retailer count",
+        "Live prices from {count} UK shops",
+        "Next to the last-checked time under the home page search box. "
+        "The count is the number of shops with a current price.",
+        placeholders=("count",),
+    ),
+    Entry(
+        "home.games.more", B, "More games link",
+        "More games",
+        "Link at the end of the game shortcuts, leading to the full list of games.",
+    ),
+    Entry(
+        "home.focal.drop.title", H, "Biggest price drop heading",
+        "Biggest price drop today",
+        "Heading on the large highlight under the search box when a price has fallen this week.",
+    ),
+    Entry(
+        "home.focal.saving.title", H, "Biggest saving heading",
+        "Biggest saving right now",
+        "Heading on the large highlight under the search box when no price has fallen this week. "
+        "It shows the product where the cheapest shop beats the next one by the most.",
+    ),
+    Entry(
+        "home.focal.was", T, "Highlight old price label",
+        "was {price}",
+        "Old price on the highlight, shown crossed out.",
+        placeholders=("price",),
+    ),
+    Entry(
+        "home.focal.next", T, "Highlight next best price",
+        "Next best {price} at {retailer}",
+        "Runner-up shop on the highlight.",
+        placeholders=("price", "retailer"),
+    ),
+    Entry(
+        "home.trending.down", T, "Price fell this week",
+        "{amount} this week",
+        "Under a trending product whose cheapest price is lower than a week ago. "
+        "Shown in green with a down arrow.",
+        placeholders=("amount",),
+    ),
+    Entry(
+        "home.trending.up", T, "Price rose this week",
+        "{amount} this week",
+        "Under a trending product whose cheapest price is higher than a week ago. "
+        "Shown in red with an up arrow.",
+        placeholders=("amount",),
+    ),
+    Entry(
+        "home.savings.next", T, "Runner-up price on savings rows",
+        "{price} at {retailer}",
+        "The next cheapest shop on each savings row, shown crossed out.",
+        placeholders=("price", "retailer"),
+    ),
+    Entry(
+        "home.recent.title", H, "Recently released heading",
+        "Recently released",
+        "Heading for the row of the newest sets.",
+    ),
+    Entry(
+        "home.recent.count", T, "Products in a set",
+        "{count} products",
+        "Under each set on the recently released row.",
+        placeholders=("count",),
     ),
     Entry(
         "home.trending.title", H, "Trending heading",
@@ -234,8 +298,8 @@ ENTRIES = [
         optional=True,
     ),
     Entry(
-        "home.games.title", H, "Recent sets heading",
-        "Recent sets",
+        "home.games.title", H, "All games heading",
+        "Browse by game",
         "Heading for the list of games and their newest sets at the bottom of the home page.",
     ),
 
@@ -607,6 +671,12 @@ ENTRIES = [
         "Cheapest delivered price each day for the last {days} days.",
         "Line under the price history heading.",
         placeholders=("days",),
+    ),
+    Entry(
+        "product.history.month_ago", T, "Price a month ago",
+        "A month ago the cheapest price was {price}.",
+        "Shown under the price history chart once a product has been tracked for 30 days.",
+        placeholders=("price",),
     ),
     Entry(
         "product.history.summary", T, "Price history summary",

@@ -63,7 +63,7 @@ class PageTests(PageTestCase):
 
     def test_home_shows_every_section(self):
         response = self.client.get(reverse("web:home"))
-        for heading in ("Trending now", "Biggest savings", "Save £3.01", "Price drops this week", "Recent sets"):
+        for heading in ("Trending now", "Biggest savings", "Save £3.01", "Biggest price drop today", "Recently released", "Browse by game"):
             self.assertContains(response, heading)
 
     def test_product_page_leads_with_the_cheapest_delivered_price(self):
@@ -222,7 +222,7 @@ class SearchApiTests(PageTestCase):
         self.assertEqual(self.client.get(reverse("web:search_api")).json()["results"], [])
 
     def test_home_shows_when_prices_were_last_checked(self):
-        self.assertContains(self.client.get(reverse("web:home")), "Prices last checked 1 hour ago.")
+        self.assertContains(self.client.get(reverse("web:home")), "Prices checked 1 hour ago")
 
 
 class DeckTests(PageTestCase):
@@ -303,7 +303,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
 
         cache.clear()
         self.client.get(reverse("web:home"))
-        self.assertIsNotNone(cache.get("web:home-lists:v1"))
+        self.assertIsNotNone(cache.get("web:home-lists:v2"))
         from catalogue.importers import run_import
         from catalogue.models import Retailer
 
@@ -311,7 +311,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
         self.harbour.source_url = "https://h.example/"
         self.harbour.save()
         run_import(self.harbour, fetch=lambda url: b'{"products": []}')
-        self.assertIsNone(cache.get("web:home-lists:v1"))
+        self.assertIsNone(cache.get("web:home-lists:v2"))
 
     def test_long_names_unicode_search_and_bad_pages(self):
         long_name = "Pokémon TCG: Scarlet & Violet " + "Ultra Premium Collection " * 5

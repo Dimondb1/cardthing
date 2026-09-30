@@ -24,7 +24,7 @@
 
 :root {
   /* Layout -------------------------------------------------------------- */
-  --page-width: 72rem;
+  --page-width: 70rem;           /* 1120px: wide enough for six cards, narrow enough to feel dense */
   --gutter: 1rem;
   --gutter-wide: 2rem;
   --density: 1;
@@ -38,6 +38,12 @@
   --space-6: calc(2rem * var(--density));
   --space-7: calc(3rem * var(--density));
   --space-8: calc(4.5rem * var(--density));
+
+  /* Vertical rhythm (home page and section pages) ------------------------ */
+  --rhythm-hero: 3.5rem;       /* below the hero */
+  --rhythm-section: 3.5rem;    /* between sections */
+  --rhythm-title: 1rem;        /* section title to its content */
+  --card-pad: 1rem;            /* inside cards */
 
   /* Corners -------------------------------------------------------------- */
   --radius-sm: 8px;          /* thumbnails, small controls */
@@ -63,6 +69,8 @@
   --text-price-lg: clamp(2.75rem, 2.2rem + 2vw, 3.75rem);
   --text-price-card: 2rem;
   --text-price-md: 1.25rem;
+  --text-price-focal: clamp(2rem, 1.5rem + 2vw, 3rem);
+  --text-headline: clamp(1.75rem, 1.2rem + 2.4vw, 2.75rem);   /* home page headline */
 
   --weight-body: 400;
   --weight-medium: 500;
@@ -82,6 +90,7 @@
   --color-shelf: #f6f6f8;        /* image wells and quiet backgrounds */
   --color-line: #e6e8ec;
   --color-line-soft: #eef0f3;    /* dividers inside cards */
+  --color-line-strong: #cfd4dc;  /* the search box */
   --color-placeholder: #c9cdd4;  /* outline drawings when there is no image */
 
   --color-brand: #ff5a1f;        /* logo and large headings only */
@@ -105,6 +114,7 @@
   /* Shadows -------------------------------------------------------------- */
   --shadow-card: 0 1px 2px rgb(31 36 48 / 0.04), 0 2px 8px rgb(31 36 48 / 0.04);
   --shadow-input: 0 1px 2px rgb(31 36 48 / 0.05);
+  --shadow-search: 0 2px 6px rgb(31 36 48 / 0.06), 0 10px 30px rgb(31 36 48 / 0.08);
   --shadow-hover: 0 2px 4px rgb(31 36 48 / 0.05), 0 10px 24px rgb(31 36 48 / 0.09);
   --shadow-lift: 0 12px 32px rgb(31 36 48 / 0.14), 0 2px 6px rgb(31 36 48 / 0.06);
   --shadow-button: 0 1px 2px rgb(232 77 20 / 0.25);

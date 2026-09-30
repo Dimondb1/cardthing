@@ -87,6 +87,24 @@ def price_drops(limit=6, days=None, today=None):
     )
 
 
+def previous_price_map(product_ids, days=None, today=None):
+    """{product id: cheapest price recorded about ``days`` ago}, for movement labels."""
+    days = days or settings.RIPRAPTOR_TRENDING_DAYS
+    today = today or timezone.localdate()
+    target = today - timedelta(days=days)
+    previous = {}
+    rows = (
+        DailyLowestPrice.objects.filter(
+            product_id__in=list(product_ids), date__lte=target, date__gt=target - timedelta(days=days)
+        )
+        .order_by("product_id", "-date")
+        .values_list("product_id", "price")
+    )
+    for pk, price in rows:
+        previous.setdefault(pk, price)
+    return previous
+
+
 def popular(limit=8, days=None):
     """Products with the most clicks through to a retailer recently."""
     days = days or settings.RIPRAPTOR_TRENDING_DAYS

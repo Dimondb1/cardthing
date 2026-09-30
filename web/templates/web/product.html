@@ -111,7 +111,7 @@
         <span class="chart__marker" style="--x: {{ chart.low_left_pct }}%; --y: {{ chart.low_top_pct }}%" aria-hidden="true"></span>
       </div>
       <div class="chart__axis" aria-hidden="true"><span>{{ chart.start|short_date }}</span><span>{{ chart.end|short_date }}</span></div>
-      <figcaption class="chart__summary">{% copy "product.history.summary" low=chart.low|gbp low_date=chart.low_date|short_date high=chart.high|gbp high_date=chart.high_date|short_date %}</figcaption>
+      <figcaption class="chart__summary">{% copy "product.history.summary" low=chart.low|gbp low_date=chart.low_date|short_date high=chart.high|gbp high_date=chart.high_date|short_date %}{% if month_ago %} {% copy "product.history.month_ago" price=month_ago|gbp %}{% endif %}</figcaption>
     </figure>
     {% else %}
     <p class="history__empty">{% copy "product.history.empty" %}</p>

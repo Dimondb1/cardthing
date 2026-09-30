@@ -2,19 +2,56 @@
 {% load sitecopy ripraptor %}
 
 {% block content %}
-<section class="intro" aria-labelledby="intro-title">
-  <h1 id="intro-title" class="intro__title">{% copy "home.hero.title" %}</h1>
-  {% copy "site.tagline" as tagline %}{% if tagline %}<p class="intro__tagline">{{ tagline }}</p>{% endif %}
-  {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" field_id="home-q" live=True %}
-  {% if last_checked %}<p class="intro__checked"><svg class="intro__checked-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>{% copy "home.search.checked" time=last_checked|ago %}</p>{% endif %}
+<section class="hero" aria-labelledby="hero-title">
+  <h1 id="hero-title" class="hero__title">{% copy "home.hero.title" %}</h1>
+  {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
+  <div class="hero__search">
+    {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
+  </div>
+  {% if last_checked %}
+  <p class="hero__meta">
+    <span class="hero__checked"><svg class="hero__icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.6 1.8v3.2h-3.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "home.search.checked" time=last_checked|ago %}</span>
+    {% if retailer_count %}<span class="hero__sep" aria-hidden="true">·</span><span class="hero__retailers">{% copy "home.search.retailers" count=retailer_count %}</span>{% endif %}
+  </p>
+  {% endif %}
   {% if games %}
     <nav class="chips" aria-label="{% copy 'site.nav.games' %}">
       <ul class="chips__list">
-        {% for game in games %}<li><a class="chip" href="{{ game.get_absolute_url }}">{{ game.display_short }}</a></li>{% endfor %}
+        {% for game in games|slice:":6" %}<li><a class="chip" href="{{ game.get_absolute_url }}">{{ game.display_short }}</a></li>{% endfor %}
+        {% for game in games|slice:"6:" %}<li class="chips__extra"><a class="chip" href="{{ game.get_absolute_url }}">{{ game.display_short }}</a></li>{% endfor %}
+        <li class="chips__more"><a class="chip chip--more" href="{% url 'web:games' %}">{% copy "home.games.more" %} <span aria-hidden="true">›</span></a></li>
       </ul>
     </nav>
   {% endif %}
 </section>
+
+{% if focal %}
+<section class="home-section home-section--focal" aria-labelledby="focal-title">
+  {% with product=focal.product %}
+  <a class="focal" href="{{ product.get_absolute_url }}">
+    <span class="focal__image">{% product_image product "focal" %}</span>
+    <span class="focal__body">
+      <span id="focal-title" class="focal__kicker">{% if focal.kind == "drop" %}<svg class="focal__kicker-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4v14m0 0l-6-6m6 6l6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "home.focal.drop.title" %}{% else %}<svg class="focal__kicker-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 12l9-9h9v9l-9 9z" fill="currentColor"/><circle cx="16.5" cy="7.5" r="1.6" fill="#fff"/></svg>{% copy "home.focal.saving.title" %}{% endif %}</span>
+      <span class="focal__name">{{ product.name }}</span>
+      <span class="focal__meta">{{ product.game.display_short }} · {{ product.get_product_type_display }}</span>
+      <span class="focal__prices">
+        {% if focal.kind == "drop" %}
+          <s class="focal__was">{% copy "home.focal.was" price=product.previous_price|gbp %}</s>
+          <span class="focal__arrow" aria-hidden="true">→</span>
+          {% price product.lowest_price size="focal" %}
+          <span class="focal__save"><strong>{% copy "home.savings.save" amount=product.drop|gbp %}</strong></span>
+        {% else %}
+          {% price focal.summary.best.delivered_price size="focal" %}
+          <span class="focal__at">at {{ focal.summary.best.retailer.name }}</span>
+          <span class="focal__save"><strong>{% copy "home.savings.save" amount=focal.summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=focal.summary.percent %}</small></span>
+        {% endif %}
+      </span>
+      {% if focal.kind == "saving" %}<span class="focal__next">{% copy "home.focal.next" price=focal.summary.second.delivered_price|gbp retailer=focal.summary.second.retailer.name %}</span>{% endif %}
+    </span>
+  </a>
+  {% endwith %}
+</section>
+{% endif %}
 
 {% if trending %}
 <section class="home-section" aria-labelledby="trending-title">
@@ -28,7 +65,14 @@
       <a class="trending__link" href="{{ product.get_absolute_url }}">
         {% product_image product "trend" %}
         <span class="trending__name">{{ product.name }}</span>
-        {% if product.lowest_price is not None %}<span class="trending__price">{{ product.lowest_price|gbp }}</span>{% endif %}
+        {% if product.lowest_price is not None %}
+          <span class="trending__price">{% price product.lowest_price %}</span>
+          {% if product.best_offer %}<span class="trending__retailer">{{ product.best_offer.retailer.name }}</span>{% endif %}
+          {% if product.movement %}
+            {% if product.movement < 0 %}<span class="trending__move trending__move--down"><span aria-hidden="true">↓</span> {% copy "home.trending.down" amount=product.movement|abs_money|gbp %}</span>
+            {% else %}<span class="trending__move trending__move--up"><span aria-hidden="true">↑</span> {% copy "home.trending.up" amount=product.movement|gbp %}</span>{% endif %}
+          {% endif %}
+        {% endif %}
       </a>
     </li>
     {% endfor %}
@@ -46,10 +90,11 @@
     {% for product, summary in savings %}
     <li class="saving">
       <a class="saving__link" href="{{ product.get_absolute_url }}">
-        {% product_image product "thumb" %}
+        {% product_image product "row" %}
         <span class="saving__body">
           <span class="saving__name">{{ product.name }}</span>
-          <span class="saving__line"><span class="saving__best">{{ summary.best.delivered_price|gbp }}</span> <span class="saving__retailer">{{ summary.best.retailer.name }}</span><span class="saving__sep" aria-hidden="true">·</span><s class="saving__second">{{ summary.second.delivered_price|gbp }}</s> <span class="saving__retailer">{{ summary.second.retailer.name }}</span></span>
+          <span class="saving__best-line"><span class="saving__best">{{ summary.best.delivered_price|gbp }}</span> <span class="saving__retailer">{{ summary.best.retailer.name }}</span></span>
+          <span class="saving__next"><s>{% copy "home.savings.next" price=summary.second.delivered_price|gbp retailer=summary.second.retailer.name %}</s></span>
         </span>
         <span class="saving__pill"><strong>{% copy "home.savings.save" amount=summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=summary.percent %}</small></span>
       </a>
@@ -79,8 +124,28 @@
 </section>
 {% endif %}
 
+{% if recent %}
+<section class="home-section" aria-labelledby="recent-title">
+  <div class="section-head">
+    <h2 id="recent-title" class="section-head__title">{% copy "home.recent.title" %}</h2>
+    <a class="section-head__all" href="{% url 'web:games' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  </div>
+  <ul class="sets" data-scroll>
+    {% for product_set in recent %}
+    <li class="sets__item">
+      <a class="set-card" href="{{ product_set.get_absolute_url }}">
+        <span class="set-card__game">{{ product_set.game.display_short }}</span>
+        <span class="set-card__name">{{ product_set.name }}</span>
+        <span class="set-card__count">{% copy "home.recent.count" count=product_set.product_count %}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if games %}
-<section class="home-section" aria-labelledby="sets-title">
+<section class="home-section home-section--directory" aria-labelledby="sets-title">
   <div class="section-head"><h2 id="sets-title" class="section-head__title">{% copy "home.games.title" %}</h2></div>
   <div class="set-directory">
     {% for game in games %}

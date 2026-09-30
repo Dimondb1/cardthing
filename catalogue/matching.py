@@ -17,13 +17,16 @@ STOP = {"the", "and", "of", "a", "tcg", "trading", "card", "game", "pokemon", "p
 
 # If the shop title has one of these and our product name does not, it is a different thing.
 DIFFERENT = {"case", "sleeves", "single", "singles", "playmat", "binder", "deck box", "x2", "x3", "x4",
-             "x6", "japanese", "korean", "chinese", "pack of 2", "pack of 3", "pack of 6", "empty", "damaged"}
+             "x6", "japanese", "korean", "chinese", "traditional", "simplified", "thai", "german", "french",
+             "italian", "spanish", "portuguese", "pack of 2", "pack of 3", "pack of 6", "empty", "damaged",
+             "collectors edition", "collector's edition", "extended art", "borderless", "foil", "promo"}
 
 # Product types that must both appear or both not appear.
 TYPE_WORDS = ("elite trainer box", "booster box", "booster bundle", "bundle", "booster pack", "collection",
               "tin", "deck", "gift set", "display")
 
 AUTO_LINK = 100
+REVERSE_LINK = 70   # share of the shop title's own words that must be in our name for an automatic link
 SUGGEST = 60
 
 

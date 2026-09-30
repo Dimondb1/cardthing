@@ -1,4 +1,4 @@
-{% load sitecopy %}{% copy "site.search.placeholder" as search_hint %}
+{% load sitecopy %}{% if placeholder_key %}{% copy placeholder_key as search_hint %}{% else %}{% copy "site.search.placeholder" as search_hint %}{% endif %}
 <form class="search search--{{ variant }}" action="{% url 'web:search' %}" method="get" role="search"{% if live %} data-live-search="{% url 'web:search_api' %}" data-checking="{% copy 'home.search.checking' %}" data-none="{% copy 'browse.no_results.title' query='{query}' %}" data-all="{% copy 'home.search.all_results' query='{query}' %}"{% endif %}>
   <label class="visually-hidden" for="{{ field_id }}">{{ search_hint }}</label>
   <span class="search__icon icon icon--search" aria-hidden="true"></span>

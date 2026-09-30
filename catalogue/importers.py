@@ -36,7 +36,7 @@ from django.utils import timezone
 
 from . import pricing
 from .classify import GAMES, classify, find_game
-from .matching import AUTO_LINK, SUGGEST, best_match, match_key, score
+from .matching import AUTO_LINK, REVERSE_LINK, SUGGEST, best_match, match_key, score
 from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
 
 logger = logging.getLogger(__name__)
@@ -458,7 +458,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None):
     unmatched = []
     seen_products = set()
     images_by_product = {}
-    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name"))
+    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
     ignored = set(
         ShopProduct.objects.filter(retailer=retailer, status=ShopProduct.Status.IGNORED).values_list("url", flat=True)
     )
@@ -471,14 +471,19 @@ def apply_offers(retailer, offers, checked_at=None, run=None):
             product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
             if product_pk is None:
                 product_pk = products_by_link.get(link_key(offer.url))
+            sealed = None
             if product_pk is None and offer.url not in ignored:
-                # No barcode and no hand-made link: guess from the name.
-                match, value = catalogue.best_match(offer.title)
+                # No barcode and no hand-made link: guess from the name, but
+                # only for things that are sealed products of a known game.
+                sealed = classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price)
+                if sealed is None:
+                    unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url}")
+                    continue
+                match, value = catalogue.best_match(offer.title, game=sealed.game)
                 if (match is None or value < AUTO_LINK) and getattr(settings, "RIPRAPTOR_AUTO_CATALOGUE", True):
-                    created_pk = create_from_offer(offer, catalogue)
+                    created_pk = create_from_offer(offer, catalogue, sealed=sealed)
                     if created_pk is not None:
                         product_pk = created_pk
-                        products_by_ean.update({})
                 if product_pk is not None:
                     pass
                 elif match and value >= AUTO_LINK and match[0] not in seen_products:
@@ -489,7 +494,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None):
                                   "suggested_id": product_pk, "confidence": value,
                                   "status": ShopProduct.Status.LINKED, "last_seen": checked_at},
                     )
-                elif match and value >= SUGGEST and classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price):
+                elif match and value >= SUGGEST:
                     ShopProduct.objects.update_or_create(
                         retailer=retailer, url=offer.url,
                         defaults={"title": offer.title, "price": offer.price, "image_url": offer.image,
@@ -546,15 +551,17 @@ class Catalogue:
         from .matching import words
 
         self.names = {}
+        self.games = {}
         self.index = {}
         self.by_key = {}
         self._words = words
-        for pk, name in rows:
-            self.add(pk, name)
+        for row in rows:
+            self.add(*row)
 
-    def add(self, pk, name):
+    def add(self, pk, name, game=None):
         self.names[pk] = name
-        self.by_key.setdefault(match_key(name), []).append(pk)
+        self.games[pk] = game
+        self.by_key.setdefault((game, match_key(name)), []).append(pk)
         for word in set(self._words(name)):
             self.index.setdefault(word, set()).add(pk)
 
@@ -564,33 +571,42 @@ class Catalogue:
     def __iter__(self):
         return iter(self.names.items())
 
-    def best_match(self, title):
+    def best_match(self, title, game=None):
+        """(product, score) for the shop title, only among products of ``game``.
+
+        A full score needs every meaningful word of our name in the title
+        and most of the title's own words in our name, so a short product
+        name cannot swallow another set's or another game's product.
+        """
         title_words = set(self._words(title))
-        key = match_key(title)
-        for pk in self.by_key.get(key, ()):
+        for pk in self.by_key.get((game, match_key(title)), ()):
             return (pk, self.names[pk]), AUTO_LINK
         counts = {}
         for word in title_words:
             for pk in self.index.get(word, ()):
-                counts[pk] = counts.get(pk, 0) + 1
+                if game is None or self.games.get(pk) == game:
+                    counts[pk] = counts.get(pk, 0) + 1
         # Only products sharing at least two words (or all of a short name) are worth scoring.
         candidates = [(pk, self.names[pk]) for pk, n in counts.items() if n >= 2 or n >= len(set(self._words(self.names[pk])))]
-        return best_match(title, candidates)
+        match, value = best_match(title, candidates)
+        if match and value >= AUTO_LINK and score(title, match[1]) < REVERSE_LINK:
+            value = SUGGEST
+        return match, value
 
 
-def create_from_offer(offer, catalogue):
+def create_from_offer(offer, catalogue, sealed=None):
     """Make a product for a sealed item no catalogue product matches. Returns its pk or None.
 
-    ``catalogue`` is the live list of (pk, name) and is extended in place so
-    later offers in the same run match the new product.
+    ``catalogue`` is the live list of (pk, name, game) and is extended in place
+    so later offers in the same run match the new product.
     """
-    sealed = classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price)
+    sealed = sealed or classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price)
     if sealed is None:
         return None
     # The clean name may already exist under a slightly different shop title.
-    for pk, name in catalogue:
-        if score(name, sealed.name) >= AUTO_LINK and score(sealed.name, name) >= AUTO_LINK:
-            return pk
+    match, value = catalogue.best_match(sealed.name, game=sealed.game)
+    if match and value >= AUTO_LINK and score(sealed.name, match[1]) >= AUTO_LINK:
+        return match[0]
     game = Game.objects.filter(slug=sealed.game).first()
     if game is None:
         for slug, name, short, words in GAMES:
@@ -601,14 +617,21 @@ def create_from_offer(offer, catalogue):
 
     slug = slugify(sealed.name)[:220]
     existing = Product.objects.filter(slug=slug).first()
-    if existing is not None:
-        catalogue.append((existing.pk, existing.name))
+    if existing is not None and existing.game_id == game.pk:
+        catalogue.append((existing.pk, existing.name, game.slug))
         return existing.pk
+    if existing is not None:
+        # Same words, another game ("Origins Booster Pack"): keep the addresses apart.
+        slug = f"{slug[:200]}-{game.slug}"
+        existing = Product.objects.filter(slug=slug).first()
+        if existing is not None:
+            catalogue.append((existing.pk, existing.name, game.slug))
+            return existing.pk
     product = Product.objects.create(
         game=game, name=sealed.name, slug=slug, product_type=sealed.product_type,
         ean=offer.ean or "", image_url=offer.image[:1000] if offer.image else "",
     )
-    catalogue.append((product.pk, product.name))
+    catalogue.append((product.pk, product.name, game.slug))
     return product.pk
 
 

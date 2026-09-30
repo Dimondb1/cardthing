@@ -5,7 +5,7 @@ from django.dispatch import receiver
 from .models import Game, Listing, Product, ProductSet
 from .search import build_search_text
 
-HOME_CACHE_KEY = "web:home-lists:v1"
+HOME_CACHE_KEY = "web:home-lists:v2"
 
 
 @receiver([post_save, post_delete], sender=Product)

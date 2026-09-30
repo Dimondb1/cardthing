@@ -32,6 +32,12 @@ def gbp(value):
     return f"£{amount:,.2f}"
 
 
+@register.filter
+def abs_money(value):
+    amount = _money(value)
+    return None if amount is None else abs(amount)
+
+
 @register.simple_tag
 def price(value, tag=False, size=""):
     """A price for display.

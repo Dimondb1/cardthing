@@ -131,7 +131,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
 
 
 def home_lists():
-    """Biggest savings and trending, cached because they read every priced product."""
+    """Biggest savings, trending and the newest sets, cached because they read every priced product."""
     from django.core.cache import cache
 
     from catalogue.signals import HOME_CACHE_KEY as key
@@ -140,9 +140,36 @@ def home_lists():
         return cached
     priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
     savings = offers.biggest_savings(priced, limit=6)
-    trending = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
-    cache.set(key, (savings, trending), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
-    return savings, trending
+    popular = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
+    ids = [product.pk for product in popular]
+    with_offers = {
+        product.pk: product
+        for product in Product.objects.for_lists().filter(pk__in=ids).prefetch_related(offers.buyable_prefetch())
+    }
+    previous = pricing.previous_price_map(ids)
+    trending = []
+    for pk in ids:
+        product = with_offers.get(pk)
+        if product is None:
+            continue
+        product.best_offer = product.offers[0] if product.offers else None
+        before = previous.get(pk)
+        product.movement = None
+        if before is not None and product.lowest_price is not None and before != product.lowest_price:
+            product.movement = product.lowest_price - before
+        trending.append(product)
+    recent = list(
+        ProductSet.objects.filter(products__is_active=True)
+        .select_related("game")
+        .annotate(
+            product_count=Count("products", filter=Q(products__is_active=True), distinct=True),
+            newest=Max("products__created_at"),
+        )
+        .order_by(F("release_date").desc(nulls_last=True), "-newest")[:8]
+    )
+    retailer_count = Listing.objects.live().values("retailer_id").distinct().count()
+    cache.set(key, (savings, trending, recent, retailer_count), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    return savings, trending, recent, retailer_count
 
 
 @require_GET
@@ -151,6 +178,7 @@ def home(request):
         Game.objects.filter(is_active=True)
         .annotate(product_count=Count("products", filter=Q(products__is_active=True)))
         .filter(product_count__gt=0)
+        .order_by("-product_count", "name")
         .prefetch_related(
             Prefetch(
                 "sets",
@@ -160,16 +188,27 @@ def home(request):
         )
     )
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
-    savings, trending = home_lists()
+    savings, trending, recent, retailer_count = home_lists()
+    drops = list(pricing.price_drops(limit=6))
+    focal = None
+    if drops:
+        focal = {"kind": "drop", "product": drops[0]}
+        drops = drops[1:]
+    elif savings:
+        focal = {"kind": "saving", "product": savings[0][0], "summary": savings[0][1]}
+        savings = savings[1:]
     return render(
         request,
         "web/home.html",
         {
             "games": games,
             "last_checked": last_checked,
-            "savings": savings,
+            "retailer_count": retailer_count,
+            "focal": focal,
+            "savings": savings[:5],
             "trending": trending,
-            "drops": list(pricing.price_drops(limit=6)),
+            "recent": recent,
+            "drops": drops,
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
@@ -292,6 +331,7 @@ def product_detail(request, slug):
     today = timezone.localdate()
     days = settings.RIPRAPTOR_HISTORY_DAYS
     chart = price_chart(pricing.history(product, days=days, today=today), days, today)
+    month_ago = pricing.previous_price_map([product.pk], days=30, today=today).get(product.pk)
     last_known = None if cheapest else pricing.last_known_price(product)
 
     related = []
@@ -340,6 +380,7 @@ def product_detail(request, slug):
             "has_listings": bool(listings),
             "chart": chart,
             "history_days": days,
+            "month_ago": month_ago,
             "last_known": last_known,
             "related": related,
             "meta_title": text(request, "meta.product.title", product=product.name),

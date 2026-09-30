@@ -50,7 +50,7 @@ NOT_SEALED = re.compile(
     r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\bcounter\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b|\bkeyring\b|\bposter\b(?! box)|"
     r"\bcode card\b|\bgraded\b|\bpsa\b|\bcgc\b|\bproxy\b|\bbulk\b|\blot of\b|\bjapanese single|\bpromo card\b|"
     r"\(near mint\)|\bnear mint\b|\blightly played\b|\bmoderately played\b|\(nm\)|\bpromo pack\b|\bpromotion pack\b|\bpower pack\b|"
-    r"\(borderless\)|\(extended art\)|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"
+    r"\bborderless\b|\bextended art\b|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"
     r"\b(?:x|×)\s?\d+\b|\b\d+\s?(?:x|×)\b|\bpack of \d+\b|\bbundle of \d+\b|"
     r"\bmystery booster(?: \d)?\s*$|\bdeck protectors?\b|\bprize pack\b|\bleague promo\b|\bnon-?holo\b|"
     r"\(planeswalker deck card\)|\bdeck card\b|\(borderless art\)|\bfull art\b(?!.*(?:box|tin|bundle|collection box))|"

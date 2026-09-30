@@ -58,7 +58,8 @@ SERIES = re.compile(
     re.I,
 )
 # Counts and codes that describe the same product: "36 packs", "(10)", "OP-10", "BT-22", "ST13".
-COUNTS = re.compile(r"\b\d+ (?:booster )?packs?\b|\(\d+\)|\bset of \d+\b|\bx\s?\d+\b|"
+# "set of 4" stays: a set of four decks is not one deck.
+COUNTS = re.compile(r"\b\d+ (?:booster )?packs?\b|\(\d+\)|\bx\s?\d+\b|"
                     r"\b(?:op|st|bt|ex|eb|lm|pb|fb)[- ]?\d{1,3}\b")
 SET_CODE = re.compile(r"^(?:sv|swsh|sm|xy|op|st|bt|ex|eb|lm|pb|b|fb)-?\d{1,3}(?:\.\d)?[a-z]?$")
 KIND_MARKS = (

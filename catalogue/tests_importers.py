@@ -487,6 +487,51 @@ class SitemapRankingTests(TestCase):
         )
 
 
+class PageStockTests(TestCase):
+    def test_control_characters_in_json_ld_do_not_hide_a_sold_out_page(self):
+        from .importers import page_offer
+
+        html = ('<script type="application/ld+json">{"@type": "Product", "name": "Powercode Link Structure Deck", '
+                '"description": "line one\tline two", "offers": [{"price": "13.95", "priceCurrency": "GBP", '
+                '"availability": "http://schema.org/OutOfStock"}]}</script>'
+                '<meta property="product:price:amount" content="13.95"><button class="add-to-cart" disabled>Add to Cart</button>')
+        offer = page_offer("https://shop.example/x", html)
+        self.assertEqual((offer.title, offer.price, offer.availability), ("Powercode Link Structure Deck", Decimal("13.95"), "out_of_stock"))
+
+    def test_a_disabled_add_to_cart_button_means_sold_out(self):
+        from .importers import page_stock_hint
+
+        self.assertEqual(page_stock_hint('<button id="form-action-addToCart" disabled>Add to Cart</button>'), "outofstock")
+        self.assertEqual(page_stock_hint('"instock":false, "stock_message": "Out of stock"'), "outofstock")
+        self.assertEqual(page_stock_hint('<button>Add to Cart</button> In stock'), "")
+
+    def test_shopify_variant_links_land_on_the_variant(self):
+        retailer = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+
+        def fetch(url):
+            if url.endswith("/meta.json"):
+                return b'{"currency": "GBP"}'
+            if "/collections/" in url:
+                return b'{"products": []}'
+            if "page=1" in url:
+                return json.dumps({"products": [{
+                    "title": "Marvel Super Heroes Commander Deck", "handle": "marvel-commander-deck", "tags": [],
+                    "variants": [{"id": 111, "title": "Avengers Assemble", "price": "69.99", "available": True},
+                                 {"id": 222, "title": "Doom Prevails", "price": "69.99", "available": True}],
+                }, {
+                    "title": "Surging Sparks Booster Box", "handle": "surging-sparks", "tags": [],
+                    "variants": [{"id": 333, "title": "Default Title", "price": "139.99", "available": True}],
+                }]}).encode()
+            return b'{"products": []}'
+
+        offers = list(shopify_offers(retailer, fetch=fetch))
+        self.assertEqual([o.url for o in offers], [
+            "https://shop.example/products/marvel-commander-deck?variant=111",
+            "https://shop.example/products/marvel-commander-deck?variant=222",
+            "https://shop.example/products/surging-sparks",
+        ])
+
+
 class SafeUrlTests(TestCase):
     def test_accented_addresses_are_percent_encoded(self):
         from .importers import safe_url
@@ -573,6 +618,7 @@ class MatchKeyTests(TestCase):
             ("Surging Sparks 3 Pack Blister Quagsire", "Surging Sparks 3 Pack Blister Zapdos"),
             ("Journey Together Elite Trainer Box", "Journey Together Pokemon Center Elite Trainer Box"),
             ("Royal Blood Booster Box (OP-10)", "A Fist of Divine Speed Booster Box (OP-11)"),
+            ("Marvel Super Heroes Commander Deck Set of 4", "Marvel Super Heroes Commander Deck"),
         ]
         for a, b in same:
             self.assertEqual(match_key(a), match_key(b), (a, b))

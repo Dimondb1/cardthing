@@ -206,11 +206,15 @@ def shopify_offers(retailer, fetch=fetch):
                 else:
                     availability = Listing.Availability.IN_STOCK
                 title = product.get("title", "")
+                variant_url = url
                 if variant.get("title") and variant["title"] != "Default Title":
                     title = f"{title} ({variant['title']})"
+                    # Land the buyer on this variant, not the page's variant menu.
+                    if variant.get("id"):
+                        variant_url = f"{url}?variant={variant['id']}"
                 yield Offer(
                     title=title,
-                    url=url,
+                    url=variant_url,
                     price=price,
                     ean=clean_ean(variant.get("barcode")),
                     availability=availability,
@@ -316,11 +320,31 @@ def _availability(text):
     return Listing.Availability.IN_STOCK
 
 
+OUT_OF_STOCK_HINTS = re.compile(
+    r"schema\.org/OutOfStock|\"instock\"\s*:\s*false|\"available_to_sell\"\s*:\s*0\b|"
+    r"<button[^>]*add[- ]?to[- ]?(?:cart|basket)[^>]*\bdisabled\b|<button[^>]*\bdisabled\b[^>]*add[- ]?to[- ]?(?:cart|basket)",
+    re.I,
+)
+
+
+def page_stock_hint(html):
+    """"outofstock" when the page carries an explicit sold-out signal, else "" (in stock).
+
+    A visible "Add to Cart" button proves nothing: shops render it disabled
+    when the item is sold out.
+    """
+    if OUT_OF_STOCK_HINTS.search(html):
+        return "outofstock"
+    if re.search(r"out of stock|sold out", html, re.I) and not re.search(r"add to (?:cart|basket)", html, re.I):
+        return "outofstock"
+    return ""
+
+
 def page_offer(url, html):
     """An Offer from a product page's schema.org data or Open Graph tags, or None."""
     for block in JSON_LD.findall(html):
         try:
-            data = json.loads(block.strip())
+            data = json.loads(block.strip(), strict=False)  # some shops leave control characters in descriptions
         except json.JSONDecodeError:
             continue
         for node in _walk(data):
@@ -361,7 +385,7 @@ def page_offer(url, html):
             return Offer(
                 title=title, url=url, price=price,
                 ean=clean_ean(meta.get("product:gtin13") or meta.get("product:ean") or meta.get("product:gtin") or (upc.group(1) if upc else "")),
-                availability=_availability(meta.get("product:availability", "") or ("outofstock" if re.search(r"out of stock|sold out", html, re.I) and not re.search(r"add to (?:cart|basket)", html, re.I) else "")),
+                availability=_availability(meta.get("product:availability", "") or page_stock_hint(html)),
                 image=meta.get("og:image", ""),
             )
     return None

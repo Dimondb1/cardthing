@@ -32,6 +32,16 @@ SHOPS = [
      "Standard £3.99 (basket check), free over £75 (delivery page, confirmed by basket), read 30 Sep 2026"),
     ("travelling-man", "Travelling Man", "https://travellingman.com/", S.SHOPIFY, "2.99", "40",
      "Standard £2.99 (basket check), free over £40 (delivery page), read 30 Sep 2026"),
+    ("jet-cards", "JET Cards", "https://jetcards.uk/", S.SHOPIFY, "3.95", None,
+     "Standard £3.95 (basket check), read 30 Sep 2026"),
+    ("titan-cards", "Titan Cards", "https://titancards.co.uk/", S.SHOPIFY, "0", "30",
+     "Free over £30 (delivery page); standard charge not yet confirmed, read 30 Sep 2026"),
+    ("buy-any-cards", "Buy Any Cards", "https://buyanycards.co.uk/", S.SHOPIFY, "2.95", None,
+     "Standard £2.95 (basket check), read 30 Sep 2026"),
+    ("the-tcg-shop", "The TCG Shop", "https://www.thetcgshop.co.uk/", S.SHOPIFY, "0", None,
+     "Delivery charge not yet confirmed"),
+    ("double-sleeved", "Double Sleeved", "https://www.doublesleeved.co.uk/", S.SHOPIFY, "3.99", None,
+     "Standard £3.99 (basket check), read 30 Sep 2026"),
 ]
 
 # Shops that were set up before and must not be shown: prices in another currency.

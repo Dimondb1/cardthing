@@ -36,7 +36,7 @@ from django.utils import timezone
 
 from . import pricing
 from .classify import GAMES, classify, find_game
-from .matching import AUTO_LINK, SUGGEST, best_match, score
+from .matching import AUTO_LINK, SUGGEST, best_match, match_key, score
 from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
 
 logger = logging.getLogger(__name__)
@@ -125,11 +125,38 @@ def shop_currency(base, fetch=fetch):
         return ""
 
 
+PREORDER_COLLECTIONS = ("pre-order", "pre-orders", "preorder", "preorders")
+
+
+def preorder_handles(base, fetch=fetch, limit=20):
+    """Handles of products the shop lists in a pre-order collection.
+
+    Many Shopify shops mark pre-orders only through a collection, so the
+    product itself says "available" while the shop page says pre-order.
+    """
+    handles = set()
+    for name in PREORDER_COLLECTIONS:
+        for page in range(1, limit + 1):
+            try:
+                products = json.loads(fetch(f"{base}/collections/{name}/products.json?limit=250&page={page}")).get("products", [])
+            except (ImportError_, json.JSONDecodeError, AttributeError):
+                break
+            if not products:
+                break
+            handles.update(p.get("handle", "") for p in products)
+            if len(products) < 250:
+                break
+        if handles:
+            break
+    return handles
+
+
 def shopify_offers(retailer, fetch=fetch):
     base = retailer.source_url.rstrip("/")
     currency = shop_currency(base, fetch=fetch)
     if currency and currency != "GBP":
         raise ImportError_(f"{base} prices in {currency}, not pounds. Prices were not imported.")
+    preorders = preorder_handles(base, fetch=fetch)
     page = 1
     first_handle = None
     while page <= MAX_SHOPIFY_PAGES:
@@ -155,7 +182,7 @@ def shopify_offers(retailer, fetch=fetch):
             url = f"{base}/products/{product.get('handle', '')}"
             preorder = bool(PREORDER_WORDS.search(product.get("title", ""))) or any(
                 PREORDER_WORDS.search(tag) for tag in product.get("tags", [])
-            )
+            ) or product.get("handle") in preorders
             images = product.get("images") or []
             product_image = images[0].get("src", "") if images else ""
             for variant in product.get("variants", []):
@@ -520,12 +547,14 @@ class Catalogue:
 
         self.names = {}
         self.index = {}
+        self.by_key = {}
         self._words = words
         for pk, name in rows:
             self.add(pk, name)
 
     def add(self, pk, name):
         self.names[pk] = name
+        self.by_key.setdefault(match_key(name), []).append(pk)
         for word in set(self._words(name)):
             self.index.setdefault(word, set()).add(pk)
 
@@ -537,6 +566,9 @@ class Catalogue:
 
     def best_match(self, title):
         title_words = set(self._words(title))
+        key = match_key(title)
+        for pk in self.by_key.get(key, ()):
+            return (pk, self.names[pk]), AUTO_LINK
         counts = {}
         for word in title_words:
             for pk in self.index.get(word, ()):

@@ -68,6 +68,7 @@ class ClassifyLeakTests(TestCase):
             ("Pokemon GO App Online Tin Code Sheet", 10),
             ("Mega Evolution Lucario Elite Trainer Box Card Divider", 10),
             ("Star Wars Unlimited Deck Pod Red", 10),
+            ("Gamegenic Star Wars Unlimited Soft Crate Mandalorian", 10),
             ("One Piece Card Game: Booster Pack", 10),
             ("Digimon Card Game: Starter Deck", 10),
             ("Magic The Gathering Hyena Pack Amonkhet", Decimal("0.40")),

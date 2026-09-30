@@ -80,7 +80,7 @@ class ShopifyTests(TestCase):
     def test_pages_are_followed(self):
         fetch = self.fake_fetch([[{"handle": "a", "title": "A", "tags": [], "variants": [{"price": "1", "available": True, "barcode": ""}]}], []])
         list(shopify_offers(self.retailer, fetch=fetch))
-        self.assertEqual(len([c for c in fetch.calls if "page=" in c]), 2)
+        self.assertEqual(len([c for c in fetch.calls if "page=" in c and "/collections/" not in c]), 2)
 
 
 class FeedTests(TestCase):
@@ -512,3 +512,79 @@ class CurrencyGuardTests(TestCase):
 
         run = run_import(retailer, fetch=fetch)
         self.assertTrue(run.ok, run.error)
+
+
+class PreorderCollectionTests(TestCase):
+    def test_products_in_the_shops_preorder_collection_are_preorders(self):
+        retailer = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+        product = make_product(make_set(make_game()), name="Surging Sparks Booster Box", ean="0820650851230")
+
+        def fetch(url):
+            if url.endswith("/meta.json"):
+                return b'{"currency": "GBP"}'
+            if "/collections/pre-order/products.json" in url and "page=1" in url:
+                return b'{"products": [{"handle": "surging-sparks-booster-box"}]}'
+            if "/collections/" in url:
+                return b'{"products": []}'
+            if "page=1" in url:
+                return json.dumps({"products": [{
+                    "title": "Surging Sparks Booster Box", "handle": "surging-sparks-booster-box", "tags": [],
+                    "variants": [{"price": "139.99", "available": True, "barcode": "0820650851230"}],
+                }]}).encode()
+            return b'{"products": []}'
+
+        run = run_import(retailer, fetch=fetch)
+        self.assertTrue(run.ok, run.error)
+        self.assertEqual(Listing.objects.get(product=product).availability, Listing.Availability.PREORDER)
+
+
+class MatchKeyTests(TestCase):
+    def test_same_product_under_different_shop_names_shares_a_key(self):
+        from .matching import match_key
+
+        same = [
+            ("Commander Legends: Battle for Baldur's Gate Bundle", "Commander Legends Battle For Baldurs Gate Bundle"),
+            ("Marvel's Spider Man Bundle", "Universes Beyond Marvel's Spider Man Bundle Box"),
+            ("Prismatic Evolutions ETB", "Prismatic Evolutions Elite Trainer Box"),
+            ("Twilight of the Republic Booster", "Twilight of the Republic Booster Pack"),
+        ]
+        different = [
+            ("Rarity Collection II Booster Box", "Rarity Collection II Booster Pack"),
+            ("Tales of Aria Booster Pack (Unlimited)", "Tales of Aria Booster Pack (First Edition)"),
+            ("Assassin's Creed Booster Pack", "Universes Beyond Assassin's Creed Beyond Booster Pack"),
+            ("Surging Sparks Booster Box", "Surging Sparks Booster Bundle"),
+            ("Charizard ex Super Premium Collection", "Charizard ex Premium Collection"),
+        ]
+        for a, b in same:
+            self.assertEqual(match_key(a), match_key(b), (a, b))
+        for a, b in different:
+            self.assertNotEqual(match_key(a), match_key(b), (a, b))
+
+    def test_an_offer_with_the_same_key_links_to_the_existing_product(self):
+        from .importers import Catalogue
+
+        catalogue = Catalogue([(1, "Commander Legends: Battle for Baldur's Gate Bundle"), (2, "Surging Sparks Booster Box")])
+        match, value = catalogue.best_match("Magic The Gathering Commander Legends Battle For Baldurs Gate Bundle Box")
+        self.assertEqual((match[0], value), (1, 100))
+
+
+class MergeDuplicatesTests(TestCase):
+    def test_duplicates_are_merged_onto_the_product_with_most_listings(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        pset = make_set(make_game())
+        shop_a, shop_b = make_retailer("Shop A"), make_retailer("Shop B")
+        keep = make_product(pset, name="Commander Legends: Battle for Baldur's Gate Bundle", product_type="bundle")
+        dupe = make_product(pset, name="Commander Legends Battle For Baldurs Gate Bundle Box", product_type="bundle", image_url="https://img.example/x.jpg")
+        other = make_product(pset, name="Commander Legends: Battle for Baldur's Gate Booster Box", product_type="booster_box")
+        make_listing(keep, shop_a)
+        make_listing(keep, shop_b)
+        make_listing(dupe, shop_b)
+        call_command("merge_duplicates", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=dupe.pk).exists())
+        self.assertTrue(Product.objects.filter(pk=other.pk).exists())
+        keep.refresh_from_db()
+        self.assertEqual(keep.listings.count(), 2)
+        self.assertEqual(keep.image_url, "https://img.example/x.jpg")

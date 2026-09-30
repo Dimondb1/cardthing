@@ -235,6 +235,7 @@ TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 PRODUCT_PATH_WORDS = ("/product", "/products/", "/p/", "/item", "/shop/", "-p-")
 MAX_PAGES = 3000
 MAX_SITEMAPS = 500
+INFORMATIVE_SITEMAP = 50   # this many product-looking pages and the rest of the sitemap is skipped
 SITEMAP_WORKERS = 4
 
 
@@ -274,6 +275,10 @@ def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
     found = [u for u in found if not u.lower().endswith((".jpg", ".png", ".webp", ".pdf"))]
     ranked = [(rank, i, u) for i, u in enumerate(found) if (rank := page_rank(u)) is not None]
     ranked.sort()
+    # When the sitemap clearly marks its product pages, the pages that read as
+    # neither product nor game (blog posts, guides, policies) are not worth an hour.
+    if sum(1 for rank, _i, _u in ranked if rank <= 1) >= INFORMATIVE_SITEMAP:
+        ranked = [row for row in ranked if row[0] <= 1]
     return [u for _rank, _i, u in ranked[:limit]]
 
 

@@ -422,6 +422,21 @@ class SitemapRankingTests(TestCase):
         self.assertIsNone(page_rank("https://shop.example/pokemon-astral-radiance-142-189-gapejaw-bog-prize-pack-league-promo-non-holo"))
         self.assertIsNone(page_rank("https://shop.example/ultra-pro-pokemon-pikachu-playmat"))
 
+    def test_blog_and_guide_pages_are_skipped_when_the_sitemap_marks_products(self):
+        from .importers import sitemap_urls
+
+        products = b"".join(b"<url><loc>https://shop.example/products/pokemon-set-%d-booster-box</loc></url>" % i for i in range(60))
+        guides = b"".join(b"<url><loc>https://shop.example/guides/best-booster-box-%d</loc></url>" % i for i in range(40))
+
+        def fetch(url):
+            if url.endswith("/sitemap.xml"):
+                return b"<urlset>" + guides + products + b"</urlset>"
+            raise ImportError_("missing")
+
+        urls = sitemap_urls("https://shop.example", fetch=fetch)
+        self.assertEqual(len(urls), 60)
+        self.assertTrue(all("/products/" in u for u in urls))
+
     def test_page_address_words_travel_with_the_offer_as_a_tag(self):
         from .importers import website_offers
 

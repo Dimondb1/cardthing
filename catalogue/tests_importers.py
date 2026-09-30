@@ -364,6 +364,63 @@ class WebsiteScraperTests(TestCase):
         self.assertEqual(Listing.objects.get(product=product, retailer=retailer).price, Decimal("84.99"))
 
 
+class FetchAddressTests(TestCase):
+    """Wix and WooCommerce sitemaps list raw UTF-8 slugs, which http.client cannot send as they are."""
+
+    ACCENTED = "https://www.monarchcards.co.uk/product-page/pokémon—cynthia’s-garchomp-ex"
+    ENCODED = "https://www.monarchcards.co.uk/product-page/pok%C3%A9mon%E2%80%94cynthia%E2%80%99s-garchomp-ex"
+
+    def test_fetch_sends_an_ascii_address_for_an_accented_slug(self):
+        from unittest import mock
+
+        from .importers import fetch
+
+        with mock.patch("urllib.request.urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.read.return_value = b"<html>"
+            self.assertEqual(fetch(self.ACCENTED), b"<html>")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, self.ENCODED)
+        self.assertTrue(request.full_url.isascii())
+
+    def test_an_address_that_is_already_ascii_is_left_as_it_is(self):
+        from .importers import encode_url
+
+        self.assertEqual(encode_url(self.ENCODED), self.ENCODED)
+        for url in ("https://shop.example/products.json?limit=250&page=2", "https://shop.example/p/x?variant=1#top", "https://shop.example"):
+            self.assertEqual(encode_url(url), url)
+
+    def test_an_address_the_client_refuses_is_an_import_error_not_a_crash(self):
+        from unittest import mock
+
+        from .importers import fetch
+
+        with self.assertRaises(ImportError_):
+            fetch("shop.example/sitemap.xml")
+        with mock.patch("urllib.request.urlopen", side_effect=ValueError("URL can't contain control characters")), mock.patch("catalogue.importers.time.sleep") as sleep:
+            with self.assertRaises(ImportError_):
+                fetch("https://shop.example/x")
+        sleep.assert_not_called()
+
+    def test_website_offers_carries_on_past_a_page_that_cannot_be_fetched(self):
+        from .importers import website_offers
+
+        def fetch(url):
+            if url.endswith("/sitemap.xml"):
+                return (
+                    b"<urlset>"
+                    b"<url><loc>https://shop.example/product-page/pok\xc3\xa9mon-tcg-booster-bundle</loc></url>"
+                    b"<url><loc>https://shop.example/product-page/pokemon-surging-sparks-booster-box</loc></url>"
+                    b"</urlset>"
+                )
+            if url.endswith("surging-sparks-booster-box"):
+                return b'<script type="application/ld+json">{"@type": "Product", "name": "Surging Sparks Booster Box", "offers": {"price": "139.99", "priceCurrency": "GBP"}}</script>'
+            raise ImportError_("Could not fetch " + url)
+
+        retailer = make_retailer("Shop", source_type=Retailer.Source.WEBSITE, source_url="https://shop.example/")
+        [offer] = website_offers(retailer, fetch=fetch, pause=0)
+        self.assertEqual(offer.title, "Surging Sparks Booster Box")
+
+
 class AutoCatalogueTests(TestCase):
     def test_new_sealed_products_are_created_and_shared_across_shops(self):
         shop_a = make_retailer("Shop A", source_type=Retailer.Source.SHOPIFY, source_url="https://a.example/")

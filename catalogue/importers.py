@@ -65,10 +65,36 @@ class ImportError_(Exception):
     pass
 
 
+# Every character RFC 3986 allows in a path or query besides letters, digits
+# and "-._~", which quote() never touches. Keeping "%" means a sequence that
+# is already encoded stays as it is.
+URL_SAFE = "%!$&'()*+,/:;=?@[]"
+
+
+def encode_url(url):
+    """The address as http.client can send it: non-ASCII characters in the path and query are percent-encoded.
+
+    Wix and WooCommerce shops list raw UTF-8 slugs in their sitemaps
+    ("/product-page/pokémon-tcg-..."). An address that is already ASCII and
+    already encoded comes back unchanged; the host is left alone because
+    http.client handles international domain names itself.
+    """
+    parts = urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit(parts._replace(
+        path=urllib.parse.quote(parts.path, safe=URL_SAFE),
+        query=urllib.parse.quote(parts.query, safe=URL_SAFE),
+        fragment=urllib.parse.quote(parts.fragment, safe=URL_SAFE),
+    ))
+
+
 def fetch(url, retries=2):
     import http.client
 
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        request = urllib.request.Request(encode_url(url), headers={"User-Agent": USER_AGENT})
+    except ValueError as exc:
+        # No scheme, or otherwise not an address at all.
+        raise ImportError_(f"Could not fetch {url}: {exc}") from exc
     last = None
     for attempt in range(retries + 1):
         try:
@@ -79,6 +105,11 @@ def fetch(url, retries=2):
                 time.sleep(2 * (attempt + 1))
                 last = exc
                 continue
+            raise ImportError_(f"Could not fetch {url}: {exc}") from exc
+        except ValueError as exc:
+            # A bad address (control characters, or one http.client cannot
+            # encode) will not get better on a retry, and must never abort
+            # the whole run.
             raise ImportError_(f"Could not fetch {url}: {exc}") from exc
         except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
             last = exc

@@ -51,6 +51,8 @@ class TidyListingsTests(TestCase):
         shop = make_retailer("Shop")
         wrong = make_listing(box, shop, url="https://shop.example/products/pokemon-tcg-sun-moon-4-crimson-invasion-booster-box")
         right = make_listing(box, make_retailer("Other"), url="https://other.example/magic-the-gathering-invasion-booster-box")
+        no_game = make_listing(box, make_retailer("Third"), url="https://third.example/products/invasion-booster-box")
         call_command("tidy_listings", stdout=StringIO())
         self.assertFalse(Listing.objects.filter(pk=wrong.pk).exists())
         self.assertTrue(Listing.objects.filter(pk=right.pk).exists())
+        self.assertTrue(Listing.objects.filter(pk=no_game.pk).exists())

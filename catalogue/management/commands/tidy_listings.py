@@ -14,7 +14,7 @@ the next import puts them back on the right product or in the review queue.
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from catalogue.classify import classify
+from catalogue.classify import classify, find_game
 from catalogue.importers import slug_words
 from catalogue.matching import AUTO_LINK, REVERSE_LINK, match_key, score
 from catalogue.models import Listing
@@ -25,11 +25,13 @@ def fits(listing):
     title = slug_words(listing.url)
     if not title:
         return True  # nothing to check against
-    sealed = classify(title, tags=(title,))
-    if sealed is None:
-        return False
     product = listing.product
-    if sealed.game != product.game.slug:
+    # An address that names a game must name this product's game. One that
+    # names none ("ixalan-booster-pack") is judged on its words alone.
+    named = find_game(title)
+    if named is not None and named != product.game.slug:
+        return False
+    if classify(title, vendor=product.game.name, tags=(title,)) is None:
         return False
     if match_key(title) == match_key(product.name):
         return True

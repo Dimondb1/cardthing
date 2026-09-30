@@ -4,38 +4,52 @@ Remove shop listings that were linked to the wrong product.
     python manage.py tidy_listings --dry-run
     python manage.py tidy_listings
 
-Before matching required the same game and most of the shop title's words,
-a short product name such as "Invasion Booster Box" could take on a Yu-Gi-Oh
-box, a Cardfight Vanguard box and a single card. This re-checks every
-listing against the words in its shop address and drops those that fail;
-the next import puts them back on the right product or in the review queue.
+Before matching required the same game and agreement both ways, a short
+product name such as "Invasion Booster Box" could take on a Yu-Gi-Oh box, a
+Cardfight Vanguard box and a single card. This re-checks every listing
+against the words in its shop address and drops those that plainly
+contradict the product: another game, a language or edition word, an
+accessory or single, or a box where the product is a pack. An address that
+merely lacks words is left alone, because slugs drop and garble words.
 """
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from catalogue.classify import classify, find_game
+from catalogue.classify import NOT_SEALED, find_game
 from catalogue.importers import slug_words
-from catalogue.matching import AUTO_LINK, covers, match_key, score
+from catalogue.matching import DIFFERENT, expand, match_key
 from catalogue.models import Listing
 
 
 def fits(listing):
-    """Does the shop address read as the listing's product, of the same game?"""
+    """Could the shop address be this product? Only a clear contradiction says no.
+
+    The address is a slug, not the title the importer matched on, so it often
+    lacks or garbles words. It is judged only on what it plainly says: a
+    different game, a word that marks a different product (a language, an
+    edition, an accessory), a different kind of thing (box against pack), or
+    a single card.
+    """
     title = slug_words(listing.url)
     if not title:
         return True  # nothing to check against
     product = listing.product
-    # An address that names a game must name this product's game. One that
-    # names none ("ixalan-booster-pack") is judged on its words alone.
     named = find_game(title)
     if named is not None and named != product.game.slug:
         return False
-    if classify(title, vendor=product.game.name, tags=(title,)) is None:
+    if NOT_SEALED.search(title) and not NOT_SEALED.search(product.name):
         return False
-    if match_key(title) == match_key(product.name):
-        return True
-    return score(product.name, title) >= AUTO_LINK and covers(product.name, title)
+    title_text = " " + expand(title) + " "
+    name_text = " " + expand(product.name) + " "
+    for word in DIFFERENT:
+        if f" {word} " in title_text and f" {word} " not in name_text:
+            return False
+    title_marks = {m for m in match_key(title).split() if m.startswith("#")}
+    name_marks = {m for m in match_key(product.name).split() if m.startswith("#")}
+    if title_marks and name_marks and title_marks != name_marks:
+        return False
+    return True
 
 
 class Command(BaseCommand):

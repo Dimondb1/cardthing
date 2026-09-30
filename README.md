@@ -110,12 +110,16 @@ importer classifies each one (`catalogue/classify.py`): sealed products
 packs, gift sets) for the ten games it knows become RipRaptor products
 automatically, with the shop's photo; singles, accessories, events, cases
 and multipacks are skipped. The same product from two shops lands on one
-page by name. `tidy_catalogue` removes products that a later, stricter
-version of the rules would not have created.
+page by name. Nothing under two pounds is treated as sealed. `tidy_catalogue`
+re-checks products the importer created: it removes any that a later,
+stricter version of the rules would not have created, tidies names (HTML
+entities, a set name repeated after the product) and merges the duplicates
+that shows up. Run it with `--dry-run` first to see what it would do.
 
-The first import takes 20 to 40 minutes because of the number of items;
-later ones are similar, so run it hourly on a server rather than on a
-laptop.
+The first import takes 20 to 40 minutes for a Shopify shop and about an
+hour for a large website shop; later ones are similar, so run it hourly on
+a server rather than on a laptop. The server cron takes a lock so a slow
+import never overlaps the next one.
 
 ## Getting real prices in
 
@@ -130,8 +134,12 @@ laptop.
      terms allow automated price checks before using this.
    - **Website**: for shops that are not on Shopify. Enter the shop address;
      the importer reads the shop's sitemap and each product page's schema.org
-     data (price, stock, barcode, image), which most Magento, WooCommerce and
-     custom shops publish. It pauses half a second between pages.
+     data (price, stock, barcode, image), which most Magento, WooCommerce,
+     BigCommerce and custom shops publish. It pauses half a second between
+     pages. A big shop can list 100,000 pages, so pages whose address reads
+     as a sealed product are fetched first (up to 3,000 a run), pages whose
+     address reads as a single card or accessory are skipped, and the game
+     is taken from the address when the page title leaves it out.
    - **Product feed (CSV)**: enter the feed address from your affiliate
      network or the retailer. Columns `ean`, `url`, `price` are needed;
      `title`, `availability` and `delivery` are used if present. Common

@@ -178,13 +178,6 @@ ENTRIES = [
         "Small label before the list of game links under the home page search box.",
     ),
     Entry(
-        "home.search.retailers", T, "Retailer count",
-        "Live prices from {count} UK shops",
-        "Next to the last-checked time under the home page search box. "
-        "The count is the number of shops with a current price.",
-        placeholders=("count",),
-    ),
-    Entry(
         "home.games.more", B, "More games link",
         "More games",
         "Link at the end of the game shortcuts, leading to the full list of games.",
@@ -228,8 +221,8 @@ ENTRIES = [
     ),
     Entry(
         "home.savings.next", T, "Runner-up price on savings rows",
-        "{price} at {retailer}",
-        "The next cheapest shop on each savings row, shown crossed out.",
+        "{price} elsewhere",
+        "The price at the next cheapest shop on each savings row, shown crossed out.",
         placeholders=("price", "retailer"),
     ),
     Entry(
@@ -504,6 +497,12 @@ ENTRIES = [
         "at {retailer}",
         "Under the big price on product cards.",
         placeholders=("retailer",),
+    ),
+    Entry(
+        "product.last_seen", T, "Last seen price",
+        "Last seen at {price}",
+        "On a product card when no shop has it in stock: the cheapest delivered price a shop last listed.",
+        placeholders=("price",),
     ),
     Entry(
         "product.check_prices", B, "Check prices link",

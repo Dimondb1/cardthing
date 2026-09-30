@@ -427,6 +427,9 @@ ul, ol { margin: 0; padding: 0; }
 /* Biggest savings: the shop that wins, the one it beats, and by how much */
 .savings { list-style: none; border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); overflow: hidden; }
 .saving + .saving { border-top: 1px solid var(--color-line-soft); }
+.saving { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding-right: var(--card-pad); }
+.saving__buy { min-width: 6rem; }
+.saving__buy .icon--bag { width: 1.1rem; height: 1.1rem; }
 .saving__link { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--card-pad); text-decoration: none; transition: background var(--motion-fast); }
 @media (hover: hover) { .saving__link:hover { background: var(--color-shelf); } }
 .saving__link:active { background: var(--color-shelf); }
@@ -440,7 +443,13 @@ ul, ol { margin: 0; padding: 0; }
 .saving__pill strong { font-size: var(--text-base); font-weight: var(--weight-price); font-variant-numeric: tabular-nums; }
 .saving__pill small { font-size: var(--text-xs); font-weight: var(--weight-medium); }
 .saving__chev { display: none; }
+@media (max-width: 40rem) {
+  .saving { grid-template-columns: 1fr; padding: 0 var(--card-pad) var(--space-3); }
+  .saving__link { padding-inline: 0; }
+  .saving__buy { justify-self: end; }
+}
 @media (min-width: 48rem) {
+  .saving { padding-right: var(--space-5); }
   .saving__link { padding: var(--space-4) var(--space-5); gap: var(--space-4); }
   .saving__name { font-size: var(--text-base); }
   .saving__pill { min-width: 7.5rem; }
@@ -546,6 +555,7 @@ ul, ol { margin: 0; padding: 0; }
 .card__body .badge { grid-area: badge; justify-self: start; margin-top: var(--space-1); }
 .card__price { grid-area: price; margin-top: var(--space-1); }
 .card__at { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-muted); }
+.card__last { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
 .card__at strong { color: var(--color-ink); }
 .card__body .button--buy { grid-area: buy; position: relative; z-index: 1; align-self: end; }
 .card__body .stock { grid-area: price; }

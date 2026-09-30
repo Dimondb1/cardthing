@@ -11,6 +11,7 @@
       <a class="button button--buy button--card" href="{{ summary.best.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/bag.html" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>
     {% else %}
       {% include "web/includes/availability.html" %}
+      {% if product.last_price %}<p class="card__last">{% copy "product.last_seen" price=product.last_price|gbp %}</p>{% endif %}
     {% endif %}
   </div>
   {% if summary.best %}<div class="card__rank">{% include "web/includes/rank_row.html" %}</div>{% endif %}

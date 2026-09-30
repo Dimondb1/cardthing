@@ -2,7 +2,7 @@
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import Min
+from django.db.models import Count, Min
 
 from catalogue.classify import MIN_PRICE, NOT_SEALED, is_generic, tidy_name
 from catalogue.models import Listing, Product
@@ -19,12 +19,18 @@ class Command(BaseCommand):
 
     def handle(self, *args, dry_run=False, **options):
         removed = renamed = merged = 0
-        rows = Product.objects.filter(image="").annotate(cheapest=Min("listings__price")).order_by("pk")
+        rows = (
+            Product.objects.filter(image="")
+            .annotate(cheapest=Min("listings__price"), listing_count=Count("listings"))
+            .order_by("pk")
+        )
         with transaction.atomic():
             for product in rows:
                 name = tidy_name(product.name)
                 reason = None
-                if NOT_SEALED.search(product.name):
+                if product.listing_count == 0:
+                    reason = "no shop lists it"
+                elif NOT_SEALED.search(product.name):
                     reason = "not sealed"
                 elif is_generic(name):
                     reason = "generic name"

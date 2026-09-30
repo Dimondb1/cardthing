@@ -55,6 +55,16 @@ class PageTestCase(TestCase):
         ]
 
 
+class LastSeenTests(TestCase):
+    def test_out_of_stock_card_shows_the_last_price(self):
+        from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        product = make_product(make_set(make_game()), name="Surging Sparks Booster Box", product_type="booster_box")
+        make_listing(product, make_retailer("Shop"), price="120.00", delivery="3.00", availability="out_of_stock")
+        response = self.client.get(reverse("web:search"))
+        self.assertContains(response, "Last seen at £123.00")
+
+
 class PageTests(PageTestCase):
     def test_public_pages_load(self):
         for url in self.public_urls():

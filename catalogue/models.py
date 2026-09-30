@@ -100,6 +100,8 @@ class ProductQuerySet(models.QuerySet):
                 distinct=True,
             ),
             listing_count=Count("listings", filter=live, distinct=True),
+            # Cheapest delivered price any shop has listed, whether or not it is in stock now.
+            last_price=Min("listings__delivered_price", filter=live),
         )
 
     def with_release(self):

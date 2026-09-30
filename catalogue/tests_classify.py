@@ -116,8 +116,11 @@ class TidyCatalogueTests(TestCase):
         keep = make_product(pset, name="Innistrad Booster Box")
         make_listing(dupe, shop_b, price=Decimal("300"))
         entity = make_product(pset, name="Ursula&#039;s Return Booster Box")
-        for p in (token, generic, cheap, dupe, keep, entity):
+        orphan = make_product(pset, name="Nobody Sells This Booster Box")
+        for p in (token, generic, cheap, dupe, keep, entity, orphan):
             Product.objects.filter(pk=p.pk).update(image="")
+        make_listing(keep, shop_a, price=Decimal("300"))
+        make_listing(entity, shop_a, price=Decimal("100"))
 
         out = StringIO()
         call_command("tidy_catalogue", stdout=out)
@@ -127,4 +130,5 @@ class TidyCatalogueTests(TestCase):
         self.assertNotIn("Hyena Pack Amonkhet", names)
         self.assertIn("Ursula's Return Booster Box", names)
         self.assertNotIn("Innistrad Booster Box Innistrad", names)
+        self.assertNotIn("Nobody Sells This Booster Box", names)
         self.assertTrue(Listing.objects.filter(product=keep, retailer=shop_b).exists())

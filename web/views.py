@@ -101,7 +101,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
     if sort == "price":
         ordering = [F("lowest_price").asc(nulls_last=True), "name"]
     elif sort == "newest":
-        ordering = [F("release").desc(nulls_last=True), has_price, "name"]
+        ordering = [has_price, F("release").desc(nulls_last=True), "name"]
     else:
         ordering = [has_price, F("release").desc(nulls_last=True), "name"]
         if terms:
@@ -139,7 +139,7 @@ def home_lists():
     if cached is not None:
         return cached
     priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
-    savings = offers.biggest_savings(priced, limit=6)
+    savings = offers.biggest_savings(priced, limit=9)
     popular = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
     ids = [product.pk for product in popular]
     with_offers = {
@@ -205,7 +205,7 @@ def home(request):
             "last_checked": last_checked,
             "retailer_count": retailer_count,
             "focal": focal,
-            "savings": savings[:5],
+            "savings": savings[:8],
             "trending": trending,
             "recent": recent,
             "drops": drops,

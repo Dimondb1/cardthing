@@ -36,7 +36,7 @@ from django.utils import timezone
 
 from . import pricing
 from .classify import GAMES, classify, find_game
-from .matching import AUTO_LINK, REVERSE_LINK, SUGGEST, best_match, match_key, score
+from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score
 from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
 
 logger = logging.getLogger(__name__)
@@ -575,8 +575,8 @@ class Catalogue:
         """(product, score) for the shop title, only among products of ``game``.
 
         A full score needs every meaningful word of our name in the title
-        and most of the title's own words in our name, so a short product
-        name cannot swallow another set's or another game's product.
+        and every identifying word of the title in our name, so a short
+        product name cannot swallow another set's, edition's or game's product.
         """
         title_words = set(self._words(title))
         for pk in self.by_key.get((game, match_key(title)), ()):
@@ -589,7 +589,7 @@ class Catalogue:
         # Only products sharing at least two words (or all of a short name) are worth scoring.
         candidates = [(pk, self.names[pk]) for pk, n in counts.items() if n >= 2 or n >= len(set(self._words(self.names[pk])))]
         match, value = best_match(title, candidates)
-        if match and value >= AUTO_LINK and score(title, match[1]) < REVERSE_LINK:
+        if match and value >= AUTO_LINK and not covers(match[1], title):
             value = SUGGEST
         return match, value
 

@@ -26,7 +26,6 @@ TYPE_WORDS = ("elite trainer box", "booster box", "booster bundle", "bundle", "b
               "tin", "deck", "gift set", "display")
 
 AUTO_LINK = 100
-REVERSE_LINK = 70   # share of the shop title's own words that must be in our name for an automatic link
 SUGGEST = 60
 
 
@@ -62,6 +61,23 @@ KIND_MARKS = (
 )
 
 
+def key_words(text):
+    """The identifying words of a name: everything shops do not add or drop at will."""
+    expanded = expand(text)
+    for phrase in PHRASES:
+        expanded = expanded.replace(phrase, " ")
+    return {w for w in expanded.split() if w not in LOOSE}
+
+
+def covers(product_name, title):
+    """Does our name account for every identifying word in the shop title?
+
+    "Ashes of the Empire Carbonite Booster Pack" is not covered by "Ashes of
+    the Empire Booster Pack": "carbonite" names a different product.
+    """
+    return key_words(title) <= key_words(product_name)
+
+
 def match_key(text):
     """A sorted bag of the words that identify a product, for exact cross-shop matching.
 
@@ -74,7 +90,7 @@ def match_key(text):
     expanded = expand(text)
     for phrase in PHRASES:
         expanded = expanded.replace(phrase, " ")
-    kept = sorted({w for w in expanded.split() if w not in LOOSE})
+    kept = sorted(key_words(text))
     kept += [mark for mark, pattern in KIND_MARKS if pattern.search(expanded)]
     return " ".join(kept)
 

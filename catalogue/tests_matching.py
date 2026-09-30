@@ -34,6 +34,13 @@ class WrongLinkTests(TestCase):
         apply_offers(self.shop, [self.offer("Magic Invasion of Chaos Reprint Unlimited Edition Booster Box", "62")])
         self.assertFalse(Listing.objects.filter(product=self.box).exists())
 
+    def test_a_variant_with_an_extra_identifying_word_is_not_linked(self):
+        pack = make_product(make_set(make_game(name="Star Wars Unlimited", slug="star-wars-unlimited", short_name="Star Wars"), name="Ashes of the Empire", slug="ashes"), name="Ashes of the Empire Booster Pack", product_type="booster_pack")
+        apply_offers(self.shop, [self.offer("Star Wars Unlimited Ashes of the Empire Carbonite Booster Pack", "24.95")])
+        self.assertFalse(Listing.objects.filter(product=pack).exists())
+        apply_offers(make_retailer("Other"), [self.offer("Star Wars Unlimited Ashes of the Empire Booster Pack (Sealed)", "4.99")])
+        self.assertTrue(Listing.objects.filter(product=pack).exists())
+
     def test_the_same_product_in_the_same_game_still_links(self):
         apply_offers(self.shop, [self.offer("Magic The Gathering Invasion Booster Box", "1200")])
         self.assertTrue(Listing.objects.filter(product=self.box).exists())

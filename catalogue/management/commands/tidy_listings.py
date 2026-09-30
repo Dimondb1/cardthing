@@ -16,7 +16,7 @@ from django.db import transaction
 
 from catalogue.classify import classify, find_game
 from catalogue.importers import slug_words
-from catalogue.matching import AUTO_LINK, REVERSE_LINK, match_key, score
+from catalogue.matching import AUTO_LINK, covers, match_key, score
 from catalogue.models import Listing
 
 
@@ -35,7 +35,7 @@ def fits(listing):
         return False
     if match_key(title) == match_key(product.name):
         return True
-    return score(product.name, title) >= AUTO_LINK and score(title, product.name) >= REVERSE_LINK
+    return score(product.name, title) >= AUTO_LINK and covers(product.name, title)
 
 
 class Command(BaseCommand):

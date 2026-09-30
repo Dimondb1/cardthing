@@ -55,9 +55,14 @@ NOT_SEALED = re.compile(
     r"\bmystery booster(?: \d)?\s*$|\bdeck protectors?\b|\bprize pack\b|\bleague promo\b|\bnon-?holo\b|"
     r"\(planeswalker deck card\)|\bdeck card\b|\(borderless art\)|\bfull art\b(?!.*(?:box|tin|bundle|collection box))|"
     r"\btokens?\b|\bemblem\b|\bcode sheet\b|\bonline code\b|\bcard dividers?\b|\bdeck pods?\b|\(display commander\)|"
-    r"\btheme booster card\b|\bbooster card\b|\bstickers?\b|\bmini album\b|\bcrates?\b|\bdeck box(?:es)?\b|\bcard case\b",
+    r"\btheme booster card\b|\bbooster card\b|\bstickers?\b|\bmini album\b|\bcrates?\b|\bdeck box(?:es)?\b|\bcard case\b|"
+    r"\bposters?\b|\bbeanie\b|\bscarf\b|\bfigures\b|\binch\b|\bmug\b|\bkeychain\b|\bwallet\b|\bhoodie\b|\bt-shirt\b|\bsocks\b|\bpuzzle\b|\bsofbits\b|\bshokugan\b",
     re.I,
 )
+# Makers of merchandise and accessories, not cards. Nothing from them is a sealed TCG product.
+NOT_SEALED_VENDORS = {"gb posters", "difuzed", "funko", "loungefly", "paladone", "ultra pro", "ultra-pro", "gamegenic",
+                      "dragon shield", "ultimate guard", "bandai spirits", "jazwares", "mattel", "hasbro", "lego",
+                      "wizkids", "games workshop", "vallejo", "the noble collection", "pyramid international", "cinereplicas"}
 NOT_SEALED_TYPES = {"single card", "singles", "pokemon single", "playmat", "deck box", "card sleeves", "sleeves", "binder",
                     "event", "events", "life counter", "zip binder", "oversized card", "accessory", "accessories", "dice",
                     "board games", "board game", "miniatures", "rpg", "books", "toys", "plush", "apparel", "supplies", "storage"}
@@ -172,6 +177,8 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
     if price is not None and price <= 0:
         return None
     if (shop_type or "").lower() in NOT_SEALED_TYPES:
+        return None
+    if (vendor or "").lower().strip() in NOT_SEALED_VENDORS:
         return None
     if NOT_SEALED.search(title):
         return None

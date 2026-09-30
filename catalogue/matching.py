@@ -48,7 +48,19 @@ LOOSE = STOP | {"edition", "reprint", "reprinted", "sealed", "new", "official", 
                 "structure", "starter", "theme", "preconstructed", "precon", "box", "boxes", "set", "sets",
                 "pack", "packs", "yugioh", "yu", "gi", "oh", "digimon", "riftbound",
                 "star", "wars", "flesh", "blood", "tm"}
-PHRASES = ("universes beyond", "trading card game", "card game", "dragon ball super", "dragon ball")
+PHRASES = ("universes beyond", "trading card game", "card game", "dragon ball super", "dragon ball",
+           "sealed tcg collection")
+# Series prefixes shops add or drop, with any set number after them:
+# "Scarlet & Violet 8 Surging Sparks", "SV8.5 Prismatic Evolutions", "SWSH Evolving Skies".
+SERIES = re.compile(
+    r"\b(?:scarlet (?:&|and) violet|sword (?:&|and) shield|sun (?:&|and) moon|black (?:&|and) white|"
+    r"s ?& ?v|sv|swsh|sm|xy|bw|dp|hgss)\s*-?\s*\d{0,2}(?:\.\d)?\b",
+    re.I,
+)
+# Counts and codes that describe the same product: "36 packs", "(10)", "OP-10", "BT-22", "ST13".
+COUNTS = re.compile(r"\b\d+ (?:booster )?packs?\b|\(\d+\)|\bset of \d+\b|\bx\s?\d+\b|"
+                    r"\b(?:op|st|bt|ex|eb|lm|pb|fb)[- ]?\d{1,3}\b")
+SET_CODE = re.compile(r"^(?:sv|swsh|sm|xy|op|st|bt|ex|eb|lm|pb|b|fb)-?\d{1,3}(?:\.\d)?[a-z]?$")
 KIND_MARKS = (
     ("#box", re.compile(r"\bbooster box\b|\bdisplay\b|\bbox of \d+|\bcase of \d+")),
     ("#pack", re.compile(r"\bbooster\b(?! box| bundle| display)|\bblister\b|\bchecklane\b|\bsleeved\b")),
@@ -61,12 +73,19 @@ KIND_MARKS = (
 )
 
 
+def key_text(text):
+    """The name with every phrase shops add or drop at will taken out."""
+    expanded = " " + expand(text) + " "
+    for phrase in PHRASES:
+        expanded = expanded.replace(f" {phrase} ", " ")
+    expanded = SERIES.sub(" ", expanded)
+    expanded = COUNTS.sub(" ", expanded)
+    return expanded
+
+
 def key_words(text):
     """The identifying words of a name: everything shops do not add or drop at will."""
-    expanded = expand(text)
-    for phrase in PHRASES:
-        expanded = expanded.replace(phrase, " ")
-    return {w for w in expanded.split() if w not in LOOSE}
+    return {w for w in key_text(text).split() if w not in LOOSE and not SET_CODE.match(w)}
 
 
 def covers(product_name, title):
@@ -87,9 +106,7 @@ def match_key(text):
     (box, pack, bundle, deck) is kept as a marker. Editions ("1st",
     "Unlimited") are kept because they are different products.
     """
-    expanded = expand(text)
-    for phrase in PHRASES:
-        expanded = expanded.replace(phrase, " ")
+    expanded = key_text(text)
     kept = sorted(key_words(text))
     kept += [mark for mark, pattern in KIND_MARKS if pattern.search(expanded)]
     return " ".join(kept)

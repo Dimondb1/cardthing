@@ -226,6 +226,23 @@ ENTRIES = [
         placeholders=("price", "retailer"),
     ),
     Entry(
+        "home.restock.title", H, "Back in stock heading",
+        "Back in stock",
+        "Heading for the row of products a shop has just restocked.",
+    ),
+    Entry(
+        "home.restock.intro", T, "Back in stock explanation",
+        "Sold out, and now a shop has it again. Checked every few minutes.",
+        "Short line under the back in stock heading. Leave empty to hide it.",
+        optional=True,
+    ),
+    Entry(
+        "home.restock.when", T, "Restocked time",
+        "Restocked {time}",
+        "Under each product on the back in stock row.",
+        placeholders=("time",),
+    ),
+    Entry(
         "home.recent.title", H, "Recently released heading",
         "Recently released",
         "Heading for the row of the newest sets.",

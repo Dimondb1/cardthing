@@ -17,12 +17,39 @@ from .models import DailyLowestPrice, Listing, OutboundClick, Product
 
 def record_check(listing, *, price, delivery_cost, availability, checked_at=None):
     checked_at = checked_at or timezone.now()
+    fields = ["price", "delivery_cost", "availability", "last_checked"]
+    was_in_stock = listing.availability == Listing.Availability.IN_STOCK
+    if availability == Listing.Availability.IN_STOCK and not was_in_stock and listing.pk and not listing._state.adding:
+        listing.back_in_stock_at = checked_at
+        fields.append("back_in_stock_at")
     listing.price = price
     listing.delivery_cost = delivery_cost
     listing.availability = availability
     listing.last_checked = checked_at
-    listing.save(update_fields=["price", "delivery_cost", "availability", "last_checked"])
+    listing.save(update_fields=fields)
     return update_daily_lowest(listing.product, date=timezone.localdate(checked_at))
+
+
+def back_in_stock(limit=8, hours=None):
+    """Products a shop has just restocked, newest first, as (product, listing)."""
+    hours = hours or settings.RIPRAPTOR_RESTOCK_HOURS
+    since = timezone.now() - timedelta(hours=hours)
+    rows = (
+        Listing.objects.live()
+        .filter(availability=Listing.Availability.IN_STOCK, back_in_stock_at__gte=since)
+        .select_related("retailer")
+        .order_by("-back_in_stock_at")
+    )
+    seen, picked = set(), []
+    for listing in rows:
+        if listing.product_id in seen:
+            continue
+        seen.add(listing.product_id)
+        picked.append(listing)
+        if len(picked) >= limit:
+            break
+    products = {p.pk: p for p in Product.objects.for_lists().filter(pk__in=[l.product_id for l in picked])}
+    return [(products[l.product_id], l) for l in picked if l.product_id in products]
 
 
 def update_daily_lowest(product, date=None):

@@ -543,6 +543,12 @@ class MatchKeyTests(TestCase):
         from .matching import match_key
 
         same = [
+            ("Scarlet & Violet 8 Surging Sparks Booster Box", "Surging Sparks Booster Box 36 Packs"),
+            ("Scarlet & Violet Surging Sparks Booster Box", "SV8 Surging Sparks Booster Box"),
+            ("SV Prismatic Evolutions Booster Pack", "Prismatic Evolutions Booster Pack"),
+            ("Destined Rivals Elite Trainer Box", "Destined Rivals Elite Trainer Box (ETB) Sealed TCG Collection"),
+            ("Journey Together Booster Bundle", "Journey Together Booster Bundle Scarlet & Violet Pokémon TCG English"),
+            ("Royal Blood Booster Box (OP-10)", "Royal Blood Booster Box"),
             ("Commander Legends: Battle for Baldur's Gate Bundle", "Commander Legends Battle For Baldurs Gate Bundle"),
             ("Marvel's Spider Man Bundle", "Universes Beyond Marvel's Spider Man Bundle Box"),
             ("Prismatic Evolutions ETB", "Prismatic Evolutions Elite Trainer Box"),
@@ -554,6 +560,10 @@ class MatchKeyTests(TestCase):
             ("Assassin's Creed Booster Pack", "Universes Beyond Assassin's Creed Beyond Booster Pack"),
             ("Surging Sparks Booster Box", "Surging Sparks Booster Bundle"),
             ("Charizard ex Super Premium Collection", "Charizard ex Premium Collection"),
+            ("Scarlet & Violet 151 Booster Bundle", "Scarlet & Violet Surging Sparks Booster Bundle"),
+            ("Surging Sparks 3 Pack Blister Quagsire", "Surging Sparks 3 Pack Blister Zapdos"),
+            ("Journey Together Elite Trainer Box", "Journey Together Pokemon Center Elite Trainer Box"),
+            ("Royal Blood Booster Box (OP-10)", "A Fist of Divine Speed Booster Box (OP-11)"),
         ]
         for a, b in same:
             self.assertEqual(match_key(a), match_key(b), (a, b))

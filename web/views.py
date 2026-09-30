@@ -190,6 +190,7 @@ def home(request):
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
     savings, trending, recent, retailer_count = home_lists()
     drops = list(pricing.price_drops(limit=6))
+    restocked = pricing.back_in_stock(limit=8)
     focal = None
     if drops:
         focal = {"kind": "drop", "product": drops[0]}
@@ -209,6 +210,7 @@ def home(request):
             "trending": trending,
             "recent": recent,
             "drops": drops,
+            "restocked": restocked,
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME

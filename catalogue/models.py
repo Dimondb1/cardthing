@@ -317,6 +317,10 @@ class Listing(models.Model):
         max_length=20, choices=Availability.choices, default=Availability.IN_STOCK, db_index=True
     )
     last_checked = models.DateTimeField(default=timezone.now, db_index=True)
+    back_in_stock_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text="When this shop last went from not having it to having it in stock.",
+    )
     is_active = models.BooleanField("show on site", default=True)
 
     objects = ListingQuerySet.as_manager()

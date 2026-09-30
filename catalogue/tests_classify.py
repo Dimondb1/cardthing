@@ -69,6 +69,8 @@ class ClassifyLeakTests(TestCase):
             ("Mega Evolution Lucario Elite Trainer Box Card Divider", 10),
             ("Star Wars Unlimited Deck Pod Red", 10),
             ("Gamegenic Star Wars Unlimited Soft Crate Mandalorian", 10),
+            ("Difuzed Star Wars Chewbacca Beanie & Scarf Gift Set", 15),
+            ("Battle Pack Blue Eyes White Dragon & Gate Guardian 3.75 Inch Figures", 15),
             ("One Piece Card Game: Booster Pack", 10),
             ("Digimon Card Game: Starter Deck", 10),
             ("Magic The Gathering Hyena Pack Amonkhet", Decimal("0.40")),
@@ -85,6 +87,10 @@ class ClassifyLeakTests(TestCase):
         sealed = classify("Magic The Gathering Mercadian Masques Booster Box Mercadian Masques", price=300)
         self.assertEqual(sealed.name, "Mercadian Masques Booster Box")
         self.assertEqual(classify("Pokemon V Heroes Tin Umbreon V", price=20).name, "V Heroes Tin Umbreon V")
+
+    def test_merchandise_makers_are_never_sealed(self):
+        self.assertIsNone(classify("Pokemon - Pikachu Gift box", vendor="GB Posters", price=19.99))
+        self.assertIsNotNone(classify("Pokemon - Pikachu Gift box", vendor="The Pokemon Company", price=19.99))
 
     def test_mystery_booster_packs_and_boxes_are_still_sealed(self):
         for title in ["Magic The Gathering Mystery Booster 2 Booster Box", "Magic The Gathering Mystery Booster Pack"]:

@@ -154,6 +154,15 @@ wrong product, judged by the words in its shop address). Each takes
 `--dry-run`. The home page never shows a "saving" above 70%, because a gap
 that large is a wrong link, not a bargain.
 
+`watch_stock` runs every ten minutes on the server. It asks each shop
+about single products (a Shopify shop answers `/products/<handle>.js` in
+milliseconds), starting with in-stock items people click, then sold-out
+items people click, then the rest by age. Anything that comes back is
+stamped and shown on the home page under "Back in stock" for
+`RIPRAPTOR_RESTOCK_HOURS` (48). Checking whole shops more often than hourly
+is not possible: the shops rate-limit scripted requests and a full read of
+all of them takes over an hour.
+
 Price history starts the day a product first gets a price and is kept for
 ever; the product page charts the last 90 days and, after 30 days, says
 what the cheapest price was a month ago. `snapshot_daily_prices` runs
@@ -380,6 +389,7 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
+| `RIPRAPTOR_RESTOCK_HOURS`      | 48      | How long a restocked product stays under "Back in stock". |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
 ## Tests

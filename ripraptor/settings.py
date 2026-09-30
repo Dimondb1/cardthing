@@ -159,6 +159,9 @@ RIPRAPTOR_PAGE_SIZE = 24
 # the result is kept for this many seconds.
 RIPRAPTOR_HOME_CACHE_SECONDS = int(os.environ.get("RIPRAPTOR_HOME_CACHE_SECONDS", "300"))
 
+# A product counts as "back in stock" for this long after a shop restocks it.
+RIPRAPTOR_RESTOCK_HOURS = int(os.environ.get("RIPRAPTOR_RESTOCK_HOURS", "48"))
+
 # Google AdSense publisher id (ca-pub-...). Empty means no adverts and no
 # Google script on any page. Set it once AdSense has approved the site.
 RIPRAPTOR_ADSENSE_CLIENT = os.environ.get("RIPRAPTOR_ADSENSE_CLIENT", "").strip()

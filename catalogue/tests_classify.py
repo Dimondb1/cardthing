@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.test import TestCase
 
 from .classify import classify, clean_name
@@ -61,6 +62,29 @@ class ClassifyLeakTests(TestCase):
         ]:
             self.assertIsNone(classify(title, vendor="Pokemon", price=10), title)
 
+    def test_loose_parts_generic_names_and_cheap_things_are_rejected(self):
+        for title, price in [
+            ("Challenger Deck 2020 Wolf Token / Wolf Token", 10),
+            ("Pokemon GO App Online Tin Code Sheet", 10),
+            ("Mega Evolution Lucario Elite Trainer Box Card Divider", 10),
+            ("Star Wars Unlimited Deck Pod Red", 10),
+            ("One Piece Card Game: Booster Pack", 10),
+            ("Digimon Card Game: Starter Deck", 10),
+            ("Magic The Gathering Hyena Pack Amonkhet", Decimal("0.40")),
+        ]:
+            self.assertIsNone(classify(title, price=price), title)
+
+    def test_repeated_set_name_after_a_bar_is_dropped(self):
+        sealed = classify("Innistrad Booster Box | Innistrad", vendor="Magic The Gathering", price=100)
+        self.assertEqual(sealed.name, "Innistrad Booster Box")
+        sealed = classify("Ursula&#039;s Return Booster Box", vendor="Lorcana", price=100)
+        self.assertEqual(sealed.name, "Ursula's Return Booster Box")
+        sealed = classify("Pokemon Kyurem V Collection Box | Sword and Shield", price=80)
+        self.assertEqual(sealed.name, "Kyurem V Collection Box Sword and Shield")
+        sealed = classify("Magic The Gathering Mercadian Masques Booster Box Mercadian Masques", price=300)
+        self.assertEqual(sealed.name, "Mercadian Masques Booster Box")
+        self.assertEqual(classify("Pokemon V Heroes Tin Umbreon V", price=20).name, "V Heroes Tin Umbreon V")
+
     def test_mystery_booster_packs_and_boxes_are_still_sealed(self):
         for title in ["Magic The Gathering Mystery Booster 2 Booster Box", "Magic The Gathering Mystery Booster Pack"]:
             self.assertIsNotNone(classify(title, price=10), title)
@@ -68,3 +92,38 @@ class ClassifyLeakTests(TestCase):
     def test_flesh_and_blood_prefix(self):
         sealed = classify("Flesh & Blood Armory Deck Malice", price=10)
         self.assertEqual((sealed.game, sealed.name), ("flesh-and-blood", "Armory Deck Malice"))
+
+
+class TidyCatalogueTests(TestCase):
+    def test_tidy_removes_renames_and_merges(self):
+        from decimal import Decimal
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from catalogue.models import Listing, Product
+        from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        game = make_game()
+        pset = make_set(game)
+        shop_a, shop_b = make_retailer("Shop A"), make_retailer("Shop B")
+        token = make_product(pset, name="Challenger Deck 2020 Wolf Token")
+        generic = make_product(pset, name="Booster Pack")
+        cheap = make_product(pset, name="Hyena Pack Amonkhet")
+        make_listing(cheap, shop_a, price=Decimal("0.40"))
+        dupe = make_product(pset, name="Innistrad Booster Box Innistrad")
+        keep = make_product(pset, name="Innistrad Booster Box")
+        make_listing(dupe, shop_b, price=Decimal("300"))
+        entity = make_product(pset, name="Ursula&#039;s Return Booster Box")
+        for p in (token, generic, cheap, dupe, keep, entity):
+            Product.objects.filter(pk=p.pk).update(image="")
+
+        out = StringIO()
+        call_command("tidy_catalogue", stdout=out)
+        names = set(Product.objects.values_list("name", flat=True))
+        self.assertNotIn("Challenger Deck 2020 Wolf Token", names)
+        self.assertNotIn("Booster Pack", names)
+        self.assertNotIn("Hyena Pack Amonkhet", names)
+        self.assertIn("Ursula's Return Booster Box", names)
+        self.assertNotIn("Innistrad Booster Box Innistrad", names)
+        self.assertTrue(Listing.objects.filter(product=keep, retailer=shop_b).exists())

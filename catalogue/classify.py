@@ -8,6 +8,7 @@ This turns all of those into one clean name so prices from different shops
 land on one product page.
 """
 
+import html
 import re
 from dataclasses import dataclass
 
@@ -52,7 +53,9 @@ NOT_SEALED = re.compile(
     r"\(borderless\)|\(extended art\)|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"
     r"\b(?:x|×)\s?\d+\b|\b\d+\s?(?:x|×)\b|\bpack of \d+\b|\bbundle of \d+\b|"
     r"\bmystery booster(?: \d)?\s*$|\bdeck protectors?\b|\bprize pack\b|\bleague promo\b|\bnon-?holo\b|"
-    r"\(planeswalker deck card\)|\bdeck card\b|\(borderless art\)|\bfull art\b(?!.*(?:box|tin|bundle|collection box))",
+    r"\(planeswalker deck card\)|\bdeck card\b|\(borderless art\)|\bfull art\b(?!.*(?:box|tin|bundle|collection box))|"
+    r"\btokens?\b|\bemblem\b|\bcode sheet\b|\bonline code\b|\bcard dividers?\b|\bdeck pods?\b|\(display commander\)|"
+    r"\btheme booster card\b|\bbooster card\b|\bstickers?\b|\bmini album\b",
     re.I,
 )
 NOT_SEALED_TYPES = {"single card", "singles", "pokemon single", "playmat", "deck box", "card sleeves", "sleeves", "binder",
@@ -102,9 +105,59 @@ def find_type(title, shop_type=""):
     return None
 
 
+# Nothing sealed sells for less than this. Cheaper things are single cards,
+# tokens, code sheets and other loose parts.
+MIN_PRICE = 2
+
+# A name made only of these words says what kind of thing it is, not which.
+GENERIC_WORDS = {"booster", "boosters", "pack", "packs", "box", "boxes", "deck", "decks", "starter", "bundle", "tin",
+                 "tins", "collection", "elite", "trainer", "display", "gift", "set", "the", "edition", "of", "and", "&",
+                 "card", "cards", "game", "tcg", "sealed", "new", "a", "an"}
+
+
+def is_generic(name):
+    return not {w for w in re.findall(r"[a-z0-9&']+", name.lower())} - GENERIC_WORDS
+
+
+def drop_repeated_set(title):
+    """'Innistrad Booster Box | Innistrad' -> 'Innistrad Booster Box'.
+
+    Some shops append the set name after a bar. When every word of it is
+    already in the product name it adds nothing.
+    """
+    parts = [p.strip() for p in title.split("|")]
+    if len(parts) == 2 and parts[0] and parts[1]:
+        left, right = (set(re.findall(r"[a-z0-9']+", p.lower())) for p in parts)
+        if right and right <= left:
+            return parts[0]
+    return title
+
+
+def drop_repeated_tail(name):
+    """'Innistrad Booster Box Innistrad' -> 'Innistrad Booster Box'.
+
+    The same set name repeated at the end, once the bar between them has gone.
+    """
+    words = name.split()
+    for k in range(len(words) // 2, 0, -1):
+        tail = words[-k:]
+        meaningful = {w.lower().strip(":,") for w in tail} - GENERIC_WORDS
+        # One short repeated word ("V Heroes Tin Umbreon V") is not a set name.
+        if tail == words[:k] and meaningful and (k > 1 or len(tail[0]) >= 4):
+            return " ".join(words[:-k])
+    return name
+
+
+def tidy_name(title):
+    """The light fixes safe to apply to a name that is already in the catalogue."""
+    name = re.sub(r"\s+", " ", html.unescape(title)).strip()
+    return drop_repeated_tail(drop_repeated_set(name).replace(" | ", " "))
+
+
 def clean_name(title):
-    name = re.sub(r"\s+", " ", title).strip()
-    name = PREFIXES.sub("", name)
+    name = tidy_name(title)
+    name = re.sub(r"\s+", " ", name).strip()
+    name = drop_repeated_tail(PREFIXES.sub("", name))
     for _ in range(3):
         name = NOISE.sub("", name).strip()
     name = re.sub(r"\s*[-–|]\s*", " ", name)  # shop-style " - " separators become spaces
@@ -128,7 +181,9 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
     kind = find_type(title, shop_type)
     if kind is None:
         return None
+    if price is not None and price < MIN_PRICE:
+        return None
     name = clean_name(title)
-    if len(name) < 6:
+    if len(name) < 6 or is_generic(name):
         return None
     return Sealed(game=game, product_type=kind, name=name)

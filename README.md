@@ -115,12 +115,16 @@ the retailer or your affiliate network for a CSV feed instead.
 
 ## Real prices from UK shops
 
-`start.bat` / `start.command` run `setup_shops`, which adds Total Cards,
-Gathering Games, Magic Madhouse, The Card Vault, Lvl Up Gaming, Zatu Games,
-Goblin Gaming, Travelling Man, JET Cards, Titan Cards, Buy Any Cards, The
-TCG Shop and Double Sleeved with the delivery rules read from their delivery
-pages and baskets, and `remove_demo`, which deletes the fictional demo
-retailers. A Shopify shop that prices in another currency is refused
+`start.bat` / `start.command` run `setup_shops`, which adds 26 UK shops
+(Total Cards, Gathering Games, Magic Madhouse, The Card Vault, Lvl Up
+Gaming, Zatu Games, Goblin Gaming, Travelling Man, JET Cards, Titan Cards,
+Buy Any Cards, The TCG Shop, Double Sleeved, Packrat, The Gamers Lodge,
+Kongs Cards, MaxOnCards, Japan2UK, Iconic Trading Cards, Card Empire,
+Griffins Gaming, Tayler TCG, Shiny Vault, Monarch Cards, Castle Comics and
+120HP) with the delivery rules read from their delivery pages and baskets,
+and `remove_demo`, which deletes the fictional demo retailers. Shops that
+cannot be read automatically, and why, are listed under "Shops we cannot
+read" below. A Shopify shop that prices in another currency is refused
 (Poke-Collect turned out to be a US shop pricing in dollars, so it is
 hidden). Then `update_prices` (double-click) or
 `python manage.py import_prices` pulls every product from each shop.
@@ -172,6 +176,30 @@ The first import takes 20 to 40 minutes for a Shopify shop and about an
 hour for a large website shop; later ones are similar, so run it hourly on
 a server rather than on a laptop. The server cron takes a lock so a slow
 import never overlaps the next one.
+
+### Shops we cannot read
+
+Probed and not added, so nobody repeats the work. A feed from an affiliate
+network is the way in for all of these.
+
+- **Chaos Cards, Big Orbit Cards, Plus Cards, Legacy TCG, TCG Shop UK**:
+  a bot challenge (Cloudflare or similar) answers every scripted request.
+- **The Brotherhood Games, Bath TCG, Card Catcher Shop** (Square Online),
+  **Azgard Collectibles** (GoHighLevel), **Hills Cards**: product pages are
+  JavaScript shells with no price in the HTML.
+- **TCG Globe**: readable, but a challenge page appears after a few
+  requests and every product seen was sold out (new shop).
+- **Trading Card Games (Newmarket)**: closed until it reopens; every product
+  sold out. **Hobby Quarter**: every product sold out, prices are RRP.
+  **AJ-TCG**: dormant, every product unavailable.
+- **Troll Trader, Cob and Pip, Evolution Trading Cards, Mage Cards,
+  Findablez**: singles shops. **Sports Cards Direct, Sports Trading Cards
+  UK, P Commando Cards, Fanter, 3rd Down**: sports cards. **Battleground
+  Gaming, 7th City Collectables, Get Decked Games, Hidden Chest, Full Moon
+  Gaming, Quirky and the Geek**: no sealed TCG stock online.
+- **Cardarium**: looked like a fabricated storefront with below-market
+  prices; not added on purpose.
+- **PokeUK**: blocks its sitemaps. **Poke-Collect**: a US shop in dollars.
 
 ## Getting real prices in
 

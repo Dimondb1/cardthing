@@ -88,6 +88,14 @@ class ClassifyLeakTests(TestCase):
         self.assertEqual(sealed.name, "Mercadian Masques Booster Box")
         self.assertEqual(classify("Pokemon V Heroes Tin Umbreon V", price=20).name, "V Heroes Tin Umbreon V")
 
+    def test_a_listing_that_is_both_pack_and_box_is_a_variant_menu(self):
+        for title in ["Pokemon Scarlet & Violet Booster Box / Pack", "Pokemon Journey Together Booster Box Pack",
+                      "Yu-Gi-Oh Dimension Force Booster Pack Box", "One Piece Wings of the Captain Booster Pack / Booster Box"]:
+            self.assertIsNone(classify(title, price=50), title)
+        for title in ["Pokemon Surging Sparks Booster Box (36 Packs)", "Pokemon Surging Sparks Booster Box 36 Packs",
+                      "Yu-Gi-Oh Legacy of Destruction 24-Pack Box", "Pokemon Surging Sparks Booster Pack Display Box", "Pokemon 151 Booster Bundle 6 Booster Packs"]:
+            self.assertIsNotNone(classify(title, price=50), title)
+
     def test_merchandise_makers_are_never_sealed(self):
         self.assertIsNone(classify("Pokemon - Pikachu Gift box", vendor="GB Posters", price=19.99))
         self.assertIsNotNone(classify("Pokemon - Pikachu Gift box", vendor="The Pokemon Company", price=19.99))

@@ -23,6 +23,7 @@ from http.cookiejar import CookieJar
 from urllib.parse import urljoin
 
 from . import importers
+from .classify import classify
 from .importers import ImportError_
 
 PATHS = [
@@ -44,6 +45,8 @@ FREE_OVER = [
         r"[^£.!?]{0,60}?(?:over|above|from|exceeding|of|more than)\s*" + MONEY, re.I),
     re.compile(r"orders? (?:over|above|of|exceeding|more than)\s*" + MONEY + r"[^£.!?]{0,60}?free (?:uk )?(?:delivery|shipping|postage)", re.I),
     re.compile(r"spend\s*" + MONEY + r"[^£.!?]{0,60}?free (?:uk )?(?:delivery|shipping|postage)", re.I),
+    # "free on orders over £150", "£3.99 (free on orders over £50)", "free for UK orders above £30"
+    re.compile(r"\bfree\b(?: uk)?(?: on| for)? (?:all )?(?:uk )?orders? (?:over|above|of|from)\s*" + MONEY, re.I),
 ]
 
 # "Royal Mail Tracked 48 £3.99", "Standard delivery £2.95", "2nd Class: £1.50".
@@ -188,17 +191,26 @@ class CartSession:
         return self._open(url, json.dumps(payload).encode())
 
 
-def sample_variant(products, low=Decimal("3"), high=Decimal("40")):
-    """(variant id, price) of a cheap, in-stock product that has to be posted."""
+def sample_variant(products, low=Decimal("3"), high=Decimal("60")):
+    """(variant id, price) of a cheap, in-stock product that has to be posted.
+
+    A sealed product is preferred: in a singles-heavy shop a single card gets
+    the "singles post" rate, which is not what a booster box pays.
+    """
+    fallback = None
     for product in products:
+        sealed = classify(product.get("title", ""), product.get("product_type", ""), product.get("vendor", ""),
+                          tuple(product.get("tags") or []))
         for variant in product.get("variants", []):
             try:
                 price = Decimal(str(variant.get("price")))
             except (ArithmeticError, TypeError, ValueError):
                 continue
             if variant.get("available") and variant.get("requires_shipping", True) and low <= price <= high:
-                return variant["id"], price
-    return None
+                if sealed:
+                    return variant["id"], price
+                fallback = fallback or (variant["id"], price)
+    return fallback
 
 
 def uk_rate(session, base, variant_id, quantity):

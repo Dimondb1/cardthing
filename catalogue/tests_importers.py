@@ -487,6 +487,15 @@ class SitemapRankingTests(TestCase):
         )
 
 
+class SafeUrlTests(TestCase):
+    def test_accented_addresses_are_percent_encoded(self):
+        from .importers import safe_url
+
+        self.assertEqual(safe_url("https://shop.example/product/pokémon-tcg-‘151’-booster-box?x=é"),
+                         "https://shop.example/product/pok%C3%A9mon-tcg-%E2%80%98151%E2%80%99-booster-box?x=%C3%A9")
+        self.assertEqual(safe_url("https://shop.example/products.json?limit=250&page=2"), "https://shop.example/products.json?limit=250&page=2")
+
+
 class CurrencyGuardTests(TestCase):
     def test_a_shop_pricing_in_dollars_is_refused(self):
         retailer = make_retailer("US Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://us.example/")

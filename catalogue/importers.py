@@ -65,7 +65,16 @@ class ImportError_(Exception):
     pass
 
 
+def safe_url(url):
+    """Percent-encode the characters urllib refuses ("é", curly quotes, spaces) in a page address."""
+    parts = urllib.parse.urlsplit(url)
+    path = urllib.parse.quote(parts.path, safe="/%:@!$&'()*+,;=-._~")
+    query = urllib.parse.quote(parts.query, safe="=&%:@!$'()*+,;/?-._~")
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, query, ""))
+
+
 def fetch(url, retries=2):
+    url = safe_url(url)
     import http.client
 
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})

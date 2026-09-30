@@ -37,6 +37,8 @@ class DeliveryPageTests(TestCase):
             ("Spend £30 and get free postage. 2nd Class: £1.50", (Decimal("1.50"), Decimal("30"))),
             ("Shipping is £3.99 to the UK.", (Decimal("3.99"), None)),
             ("Our courier service is £25.", (None, None)),
+            ("Standard shipping is £4 or free on orders over £150.", (Decimal("4"), Decimal("150"))),
+            ("Royal Mail Tracked 48 £3.99 (free on orders over £50)", (Decimal("3.99"), Decimal("50"))),
         ]:
             cost, free_over, _c, _f = parse_delivery(text)
             self.assertEqual((cost, free_over), expected, text)
@@ -87,13 +89,14 @@ class FakeSession:
         ]}
 
 
-PRODUCTS = b'{"products": [{"title": "Sleeves", "variants": [{"id": 1, "price": "1.00", "available": true}]}, {"title": "Booster Pack", "variants": [{"id": 2, "price": "6.00", "available": true, "requires_shipping": true}]}]}'
+PRODUCTS = b'{"products": [{"title": "Sleeves", "variants": [{"id": 1, "price": "1.00", "available": true}]}, {"title": "Charizard ex 199/165 (Near Mint)", "variants": [{"id": 3, "price": "4.00", "available": true}]}, {"title": "Pokemon Surging Sparks Booster Pack", "variants": [{"id": 2, "price": "6.00", "available": true, "requires_shipping": true}]}]}'
 
 
 class BasketCheckTests(TestCase):
-    def test_sample_variant_is_cheap_in_stock_and_posted(self):
+    def test_sample_variant_is_a_cheap_in_stock_sealed_product(self):
         import json
 
+        # The single card (id 3) is cheaper but a booster pack pays the real parcel rate.
         self.assertEqual(sample_variant(json.loads(PRODUCTS)["products"]), (2, Decimal("6.00")))
 
     def test_uk_rate_is_the_cheapest_real_delivery_option(self):

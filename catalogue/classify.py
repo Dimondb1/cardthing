@@ -63,6 +63,14 @@ NOT_SEALED = re.compile(
 NOT_SEALED_VENDORS = {"gb posters", "difuzed", "funko", "loungefly", "paladone", "ultra pro", "ultra-pro", "gamegenic",
                       "dragon shield", "ultimate guard", "bandai spirits", "jazwares", "mattel", "hasbro", "lego",
                       "wizkids", "games workshop", "vallejo", "the noble collection", "pyramid international", "cinereplicas"}
+# One shop listing that covers several kinds at once ("Booster Pack / Booster
+# Box", "Pack Box Case") carries only the cheapest kind's price, so it cannot
+# be priced as any one product.
+VARIANT_MENU = re.compile(
+    r"(?<![\d(])(?<!\d-)\bpacks?\b\s*(?:[/&,+-]|or|and)?\s*(?:booster\s*)?\b(?:box|boxes|case)\b(?! of)|"
+    r"\b(?:box|boxes)\b\s*(?:[/&,+-]|or|and)?\s*(?:booster\s*)?(?<![\d(])(?<!\d-)\bpacks?\b(?!\))",
+    re.I,
+)
 NOT_SEALED_TYPES = {"single card", "singles", "pokemon single", "playmat", "deck box", "card sleeves", "sleeves", "binder",
                     "event", "events", "life counter", "zip binder", "oversized card", "accessory", "accessories", "dice",
                     "board games", "board game", "miniatures", "rpg", "books", "toys", "plush", "apparel", "supplies", "storage"}
@@ -181,6 +189,8 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
     if (vendor or "").lower().strip() in NOT_SEALED_VENDORS:
         return None
     if NOT_SEALED.search(title):
+        return None
+    if VARIANT_MENU.search(title):
         return None
     game = find_game(title, vendor, " ".join(tags))
     if game is None:

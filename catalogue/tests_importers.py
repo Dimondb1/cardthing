@@ -410,6 +410,29 @@ class SetupShopsTests(TestCase):
         self.assertEqual(dollars.listings.count(), 0)
 
 
+class WebsiteCrawlIsNotCompleteTests(TestCase):
+    def test_products_beyond_the_page_cap_keep_their_stock_state(self):
+        retailer = make_retailer("Shop", source_type=Retailer.Source.WEBSITE, source_url="https://shop.example/")
+        pset = make_set(make_game())
+        unseen = make_product(pset, name="Surging Sparks Booster Box", product_type="booster_box")
+        make_listing(unseen, retailer, availability="in_stock", url="https://shop.example/surging-sparks-booster-box")
+
+        def fetch(url):
+            if url.endswith("/sitemap.xml"):
+                return b"<urlset><url><loc>https://shop.example/pokemon-prismatic-evolutions-elite-trainer-box</loc></url></urlset>"
+            if url.endswith("elite-trainer-box"):
+                return (b'<script type="application/ld+json">{"@type": "Product", "name": "Prismatic Evolutions Elite Trainer Box",'
+                        b' "offers": {"price": "84.99", "priceCurrency": "GBP"}}</script>')
+            raise ImportError_("missing")
+
+        from unittest import mock
+
+        with mock.patch("catalogue.importers.time.sleep", lambda s: None):
+            run = run_import(retailer, fetch=fetch)
+        self.assertTrue(run.ok, run.error)
+        self.assertEqual(Listing.objects.get(product=unseen).availability, "in_stock")
+
+
 class SitemapRankingTests(TestCase):
     def test_pages_are_ranked_by_what_their_address_says(self):
         from .importers import page_rank

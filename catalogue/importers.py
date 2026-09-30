@@ -477,8 +477,12 @@ def link_key(url):
     return host + path
 
 
-def apply_offers(retailer, offers, checked_at=None, run=None):
+def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     """Update listings from ``offers``.
+
+    ``complete`` says the offers cover the shop's whole range, so anything not
+    among them is out of stock there. A website crawl stops at MAX_PAGES and
+    is not complete: its unseen products keep their last state.
 
     Offers match a product by barcode, or by the link of a listing that was
     added by hand for this retailer. Returns (found, updated, unmatched titles).
@@ -575,9 +579,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None):
                 product.save(update_fields=["image_url"])
 
         # Anything the retailer no longer lists is out of stock there.
-        Listing.objects.filter(retailer=retailer).exclude(product_id__in=seen_products).exclude(
-            availability=Listing.Availability.OUT_OF_STOCK
-        ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at)
+        if complete:
+            Listing.objects.filter(retailer=retailer).exclude(product_id__in=seen_products).exclude(
+                availability=Listing.Availability.OUT_OF_STOCK
+            ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at)
 
     return found, updated, unmatched
 
@@ -694,7 +699,8 @@ def run_import(retailer, feed_path=None, fetch=fetch):
             offers = feed_offers(text)
         else:
             raise ImportError_("This retailer's prices are entered by hand.")
-        found, updated, unmatched = apply_offers(retailer, offers, run=run)
+        complete = retailer.source_type != Retailer.Source.WEBSITE
+        found, updated, unmatched = apply_offers(retailer, offers, run=run, complete=complete)
         run.offers_found = found
         run.listings_updated = updated
         run.unmatched = "\n".join(unmatched)

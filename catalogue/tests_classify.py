@@ -109,6 +109,9 @@ class ClassifyLeakTests(TestCase):
         for title in ["Relentless Flame Charizard Online Deck Code", "Acrylic Pokemon Booster Pack Protector Display Holder",
                       "Gamegenic - Magic The Gathering - Reality Fracture - Bastion 100+ XL - Charge the Sanctum",
                       "Ultra Pro Pokemon Charizard 9-Pocket Binder", "Dragon Shield Matte Sleeves Lorcana",
+                      "RB1 031 Arcturusmon: Super Rare Foil: AD01: Advanced Booster Digimon Generation",
+                      "P 108 Wisdom Training: Promo: AD01: Advanced Booster Digimon Generation",
+                      "BT8 094 Digimon Emperor: Rare Foil: AD01: Advanced Booster",
                       "Pokemon Island Guardians GX Premium Collection Play Mat"]:
             self.assertIsNone(classify(title, price=10), title)
 

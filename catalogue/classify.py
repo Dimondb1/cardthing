@@ -45,6 +45,8 @@ TYPES = [
 
 # A title with any of these is not a sealed product we list.
 NOT_SEALED = re.compile(
+    r"^\s*[A-Z]{1,4}\d{0,2}[- ]\d{2,3}\b|\b(?:super|ultra|secret|hyper|special|alternate|alt) ?(?:art )?rare\b|\brare foil\b|"
+    r"\b(?:common|uncommon|rare)\s*:|\bpromo\s*:|\bfoil\s*:|"
     r"\b\d{1,3}\s*/\s*\d{1,3}\b|\bsingle\b|holofoil|holo rare|reverse holo|\bfoil\b(?!.*booster)|\bplaymat\b|\bsleeves?\b|\bbinder\b|"
     r"\bdeck box\b|\bportfolio\b|\btoploader|\bevent\b|\bpre-?release event\b|\bticket\b|\bcase\b(?! of)|\bcarton\b|"
     r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\bcounter\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b|\bkeyring\b|\bposter\b(?! box)|"

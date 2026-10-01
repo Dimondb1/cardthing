@@ -52,7 +52,7 @@ NOT_SEALED = re.compile(
     r"\(near mint\)|\bnear mint\b|\blightly played\b|\bmoderately played\b|\(nm\)|\bpromo pack\b|\bpromotion pack\b|\bpower pack\b|"
     r"\bborderless\b|\bextended art\b|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"
     r"\b(?:x|×)\s?\d+\b|\b\d+\s?(?:x|×)\b|\bpack of \d+\b|\bbundle of \d+\b|"
-    r"\bmystery booster(?: \d)?\s*$|\bdeck protectors?\b|\bprize pack\b|\bleague promo\b|\bnon-?holo\b|"
+    r"\bmystery booster(?: \d)?\s*$|\bdeck protectors?\b|\bprotectors?\b|\bholder\b|\bplay ?mat\b|\bonline (?:deck )?code\b|\bprize pack\b|\bleague promo\b|\bnon-?holo\b|"
     r"\(planeswalker deck card\)|\bdeck card\b|\(borderless art\)|\bfull art\b(?!.*(?:box|tin|bundle|collection box))|"
     r"\btokens?\b|\bemblem\b|\bcode sheet\b|\bonline code\b|\bcard dividers?\b|\bdeck pods?\b|\(display commander\)|"
     r"\btheme booster card\b|\bbooster card\b|\bstickers?\b|\bmini album\b|\bcrates?\b|\bdeck box(?:es)?\b|\bcard case\b|"
@@ -167,7 +167,21 @@ def tidy_name(title):
     return drop_repeated_tail(drop_repeated_set(name).replace(" | ", " "))
 
 
+LANGUAGE = re.compile(
+    r"\b(traditional chinese|simplified chinese|japanese|korean|chinese|german|french|italian|spanish|portuguese|"
+    r"thai|russian|indonesian)\b",
+    re.I,
+)
+
+
+def language_of(title):
+    """The language a title names ("[JAPANESE]", "Korean"), capitalised, or ""."""
+    match = LANGUAGE.search(title)
+    return match.group(1).title() if match else ""
+
+
 def clean_name(title):
+    language = language_of(title)
     name = tidy_name(title)
     name = re.sub(r"\s+", " ", name).strip()
     name = drop_repeated_tail(PREFIXES.sub("", name))
@@ -177,6 +191,10 @@ def clean_name(title):
     name = re.sub(r"\s*:\s*", ": ", name)
     name = re.sub(r"\s+", " ", name).strip(" :,-")
     name = name.replace("Elite Trainer Box", "Elite Trainer Box").replace(" Etb", " ETB").replace(" ETB", " Elite Trainer Box")
+    # A language edition is a different product; keep it in the name even
+    # when the shop wrote it in brackets, which are otherwise noise.
+    if language and not LANGUAGE.search(name):
+        name = f"{name} ({language})"
     return name[:200]
 
 

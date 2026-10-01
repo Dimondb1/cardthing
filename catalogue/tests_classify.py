@@ -96,6 +96,17 @@ class ClassifyLeakTests(TestCase):
                       "Yu-Gi-Oh Legacy of Destruction 24-Pack Box", "Pokemon Surging Sparks Booster Pack Display Box", "Pokemon 151 Booster Bundle 6 Booster Packs"]:
             self.assertIsNotNone(classify(title, price=50), title)
 
+    def test_language_editions_keep_their_language(self):
+        self.assertEqual(classify("Return to Ravnica Booster Pack [JAPANESE] | Return to Ravnica", vendor="Magic The Gathering", price=10).name,
+                         "Return to Ravnica Booster Pack (Japanese)")
+        self.assertEqual(classify("Pokemon Korean Sword Booster Box", price=50).name, "Korean Sword Booster Box")
+        self.assertEqual(classify("Magic The Gathering Theros Booster Pack", price=5).name, "Theros Booster Pack")
+
+    def test_codes_protectors_and_play_mats_are_not_sealed(self):
+        for title in ["Relentless Flame Charizard Online Deck Code", "Acrylic Pokemon Booster Pack Protector Display Holder",
+                      "Pokemon Island Guardians GX Premium Collection Play Mat"]:
+            self.assertIsNone(classify(title, price=10), title)
+
     def test_merchandise_makers_are_never_sealed(self):
         self.assertIsNone(classify("Pokemon - Pikachu Gift box", vendor="GB Posters", price=19.99))
         self.assertIsNotNone(classify("Pokemon - Pikachu Gift box", vendor="The Pokemon Company", price=19.99))

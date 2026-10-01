@@ -132,6 +132,15 @@ class LookupTests(TestCase):
         self.assertEqual(offers[0].availability, Listing.Availability.OUT_OF_STOCK)
         self.assertEqual(offers[0].url, "https://www.ebay.co.uk/itm/9?campid=1")
 
+    def test_progress_is_written_to_the_run_every_hundred_products(self):
+        for n in range(120):
+            make_product(self.set, name=f"Set {n} Booster Box", slug=f"set-{n}-box")
+        run = ImportRun.objects.create(retailer=self.retailer)
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=150, request=api, pause=0, run=run)
+        run.refresh_from_db()
+        self.assertEqual(run.offers_found, 100)
+
     def test_limit_counts_products_not_results(self):
         api = FakeApi([])
         ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)

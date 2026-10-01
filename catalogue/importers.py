@@ -773,7 +773,7 @@ def run_import(retailer, feed_path=None, fetch=None):
                 if retailer.source_type == Retailer.Source.AMAZON:
                     offers = amazon_offers(retailer)
                 else:
-                    offers = ebay_offers(retailer)
+                    offers = ebay_offers(retailer, run=run)
             except (AmazonError, EbayError) as exc:
                 raise ImportError_(str(exc)) from exc
         else:

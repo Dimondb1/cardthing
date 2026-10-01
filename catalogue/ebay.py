@@ -141,8 +141,12 @@ def item_offer(item, product, Offer):
     )
 
 
-def ebay_offers(retailer, limit=None, request=None, pause=None):
-    """Offers for up to ``limit`` products: those already on eBay first, then the rest."""
+def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
+    """Offers for up to ``limit`` products: those already on eBay first, then the rest.
+
+    ``run`` is the ImportRun to keep posted: its offers found counts products checked
+    so far, so admin shows progress while the run is going.
+    """
     from .importers import Catalogue, Offer
 
     request = request or http
@@ -185,6 +189,9 @@ def ebay_offers(retailer, limit=None, request=None, pause=None):
             )
         if best is not None:
             offers.append(best)
+        if run is not None and len(checked) % 100 == 0:
+            type(run).objects.filter(pk=run.pk).update(offers_found=len(checked), listings_updated=len(offers))
+            logger.info("eBay: %d products checked, %d matched so far", len(checked), len(offers))
         time.sleep(pause)
     Product.objects.filter(pk__in=checked).update(ebay_checked_at=timezone.now())
     logger.info("eBay: %d products checked, %d offers", len(checked), len(offers))

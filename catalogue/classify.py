@@ -163,9 +163,20 @@ def drop_repeated_tail(name):
     return name
 
 
+SHOP_TAILS = re.compile(
+    r"\s*:?\s*:\s*(?:brand new(?: and| &)? sealed(?: box)?|new (?:and|&) sealed(?: box)?|pre[- ]?order\b.*|"
+    r"in stock(?: now)?|sealed)\s*!*\s*$",
+    re.I,
+)
+
+
 def tidy_name(title):
     """The light fixes safe to apply to a name that is already in the catalogue."""
     name = re.sub(r"\s+", " ", html.unescape(title)).strip()
+    name = name.lstrip("!¡*#~ ").replace("!", "")          # "! Duelist Nexus", "Sealed Box!"
+    name = re.sub(r"\s*:\s*:\s*", ": ", name)               # "Tin: : Brand New" from an empty shop field
+    for _ in range(2):
+        name = SHOP_TAILS.sub("", name).strip(" :,-")
     name = re.sub(r"\b(\w+)( \1\b)+", r"\1", name, flags=re.I)  # "Booster Booster Pack"
     return drop_repeated_tail(drop_repeated_set(name).replace(" | ", " "))
 

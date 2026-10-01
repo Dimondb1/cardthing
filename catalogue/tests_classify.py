@@ -1,7 +1,7 @@
 from decimal import Decimal
 from django.test import TestCase
 
-from .classify import classify, clean_name
+from .classify import classify, clean_name, tidy_name
 
 
 class ClassifyTests(TestCase):
@@ -127,6 +127,19 @@ class ClassifyLeakTests(TestCase):
     def test_flesh_and_blood_prefix(self):
         sealed = classify("Flesh & Blood Armory Deck Malice", price=10)
         self.assertEqual((sealed.game, sealed.name), ("flesh-and-blood", "Armory Deck Malice"))
+
+
+class TidyNameTests(TestCase):
+    def test_shop_punctuation_and_stock_tails_go(self):
+        self.assertEqual(tidy_name("! Duelist Nexus 1st Edition Booster Box"), "Duelist Nexus 1st Edition Booster Box")
+        self.assertEqual(tidy_name("! Cyberse Link Structure Deck: Brand New And Sealed Box!"), "Cyberse Link Structure Deck")
+        self.assertEqual(tidy_name("2020 Tin of Lost Memories 1st Edition: : Brand New and Sealed"), "2020 Tin of Lost Memories 1st Edition")
+        self.assertEqual(tidy_name("Beyond The Brave Booster Display Box: Pre Order October 8, 2026"), "Beyond The Brave Booster Display Box")
+        self.assertEqual(tidy_name("Reality Fracture Bundle: Pre-order 2 Oct"), "Reality Fracture Bundle")
+
+    def test_ordinary_names_are_left_alone(self):
+        self.assertEqual(tidy_name("Scarlet & Violet 8: Surging Sparks Booster Box"), "Scarlet & Violet 8: Surging Sparks Booster Box")
+        self.assertEqual(tidy_name("Yu-Gi-Oh! Rarity Collection"), "Yu-Gi-Oh Rarity Collection")
 
 
 class TidyCatalogueTests(TestCase):

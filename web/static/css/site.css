@@ -758,16 +758,19 @@ ul, ol { margin: 0; padding: 0; }
   .filters--deck { flex-wrap: nowrap; overflow-x: auto; padding-top: var(--space-1); padding-bottom: var(--space-1); scrollbar-width: none; }
   .filters--deck::-webkit-scrollbar { display: none; }
   .filters--deck .pill { flex: none; }
-  /* The page is a column the height of the screen; the deck takes what is left
-     after the header row and the two buttons, so both are always on screen. */
+  /* The deck screen is a column exactly the height of the screen: heading,
+     filters, the card taking all that is left, then the two buttons. The
+     saved list sits below the fold and never squeezes the card. */
   .body--deck .page { padding-bottom: 0; }
-  .deck-page { display: flex; flex-direction: column; height: calc(100dvh - var(--masthead-height, 3.75rem)); }
-  .deck { flex: 1 1 auto; height: auto; min-height: 14rem; max-height: none; margin-top: var(--space-2); }
-  .deck-actions { flex: none; margin: var(--space-2) 0 var(--space-3); gap: var(--space-7); }
-  .saved { flex: none; }
+  .deck-screen { display: flex; flex-direction: column; height: calc(100dvh - var(--masthead-height, 3.75rem)); }
+  .deck-head, .filters--deck, .deck-actions { flex: none; }
+  .deck { flex: 1 1 auto; height: auto; min-height: 0; max-height: none; margin-top: var(--space-2); }
+  .deck-actions { margin: var(--space-2) 0 var(--space-3); gap: var(--space-7); }
   .deck-btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .deck-btn svg { width: 3.25rem; height: 3.25rem; padding: 0.85rem; }
   .swipe { padding: var(--space-2); }
+  .swipe__top { grid-template-rows: minmax(0, 1fr) auto auto; }
+  .swipe__image { min-height: 10rem; }
   .swipe__name { font-size: var(--text-lg); }
   .swipe__price { font-size: 1.75rem; }
   .saved { margin-top: var(--space-5); }

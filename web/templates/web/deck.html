@@ -12,6 +12,7 @@
      data-buy="{% copy 'product.buy.button' %}" data-at="{% copy 'product.rank.at' retailer='{retailer}' %}"
      data-save-amount="{% copy 'home.savings.save' amount='{amount}' %}" data-percent="{% copy 'home.savings.percent' percent='{percent}' %}"
      data-empty="{% copy 'deck.saved.empty' %}" data-restart-label="{% copy 'deck.restart' %}">
+  <div class="deck-screen">
   <div class="deck-head">
     <h1 class="deck-title">{% copy "deck.title" %}</h1>
   </div>
@@ -45,6 +46,7 @@
   <div class="deck-actions">
     <button type="button" class="deck-btn deck-btn--skip" data-deck-skip><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><span>{% copy "deck.skip" %}</span></button>
     <button type="button" class="deck-btn deck-btn--save" data-deck-save><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z" fill="currentColor"/></svg><span>{% copy "deck.save" %}</span></button>
+  </div>
   </div>
 
   <section class="saved" aria-labelledby="saved-title">

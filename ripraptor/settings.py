@@ -125,6 +125,15 @@ WHITENOISE_MAX_AGE = 60 * 60 * 24 * 30
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Import progress and errors go to the console (and so to the cron log on a server).
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(message)s", "datefmt": "%H:%M:%S"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
+    "loggers": {"catalogue": {"handlers": ["console"], "level": "INFO", "propagate": False}},
+}
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 if not DEBUG:

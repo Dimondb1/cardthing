@@ -851,7 +851,7 @@ ENTRIES = [
     Entry(
         "terms.amazon", T, "Amazon disclosure",
         "As an Amazon Associate, RipRaptor earns from qualifying purchases.",
-        "Terms page, shown only while Amazon is one of the shops. Amazon requires this wording.",
+        "Terms page, shown while Amazon links carry our tag. Amazon requires this wording.",
         legal=True,
     ),
     Entry("terms.prices.title", H, "Prices heading", "Prices", "Heading on the terms page."),

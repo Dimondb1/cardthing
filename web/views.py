@@ -429,7 +429,8 @@ def terms(request):
         {
             "meta_title": text(request, "terms.title"),
             "canonical_url": request.build_absolute_uri(request.path),
-            "amazon": Retailer.objects.filter(is_active=True, source_type=Retailer.Source.AMAZON).exists(),
+            "amazon": bool(settings.RIPRAPTOR_AMAZON_PARTNER_TAG)
+            or Retailer.objects.filter(is_active=True, source_type=Retailer.Source.AMAZON).exists(),
         },
     )
 

@@ -126,6 +126,55 @@ def money(value):
 
 # Shopify --------------------------------------------------------------------
 
+def session_fetch(session_url, timeout=None):
+    """A fetch that keeps cookies, having first opened ``session_url``.
+
+    Some shops show each visitor their own currency. Opening the shop's
+    "switch to pounds" link sets a cookie, and every page read with this
+    fetch afterwards is priced in pounds.
+    """
+    import http.cookiejar
+
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    state = {"ready": False}
+
+    def fetch_with_cookies(url, retries=2):
+        if not state["ready"]:
+            state["ready"] = True
+            try:
+                fetch_with_cookies(session_url, retries=retries)
+            except ImportError_:
+                pass
+        request = urllib.request.Request(safe_url(url), headers={"User-Agent": USER_AGENT})
+        last = None
+        for attempt in range(retries + 1):
+            try:
+                with opener.open(request, timeout=timeout or TIMEOUT) as response:
+                    return response.read()
+            except urllib.error.HTTPError as exc:
+                last = exc
+                if exc.code in (429, 500, 502, 503, 504) and attempt < retries:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                raise ImportError_(f"Could not fetch {url}: HTTP Error {exc.code}") from exc
+            except (urllib.error.URLError, OSError) as exc:
+                last = exc
+                if attempt < retries:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                raise ImportError_(f"Could not fetch {url}: {exc}") from exc
+        raise ImportError_(f"Could not fetch {url}: {last}")
+
+    return fetch_with_cookies
+
+
+def retailer_fetch(retailer, fetch=None):
+    """The fetch to read this retailer with: cookie-keeping when it needs a session."""
+    if retailer.session_url and fetch is None:
+        return session_fetch(retailer.session_url)
+    return fetch or globals()["fetch"]
+
+
 def shop_currency(base, fetch=fetch):
     """The currency a Shopify shop prices in, from its /meta.json, or "" if unknown."""
     try:
@@ -678,8 +727,9 @@ def create_from_offer(offer, catalogue, sealed=None):
     return product.pk
 
 
-def run_import(retailer, feed_path=None, fetch=fetch):
+def run_import(retailer, feed_path=None, fetch=None):
     run = ImportRun.objects.create(retailer=retailer)
+    fetch = retailer_fetch(retailer, fetch)
     try:
         if retailer.source_type == Retailer.Source.SHOPIFY:
             if not retailer.source_url:

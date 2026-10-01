@@ -72,7 +72,14 @@ SHOPS = [
      "Free over £200 (delivery page); standard charge not published, read 1 Oct 2026"),
     ("asmodee-uk", "Asmodee UK", "https://www.asmodee.co.uk/", S.SHOPIFY, "0", None,
      "Free UK delivery (basket check), read 1 Oct 2026"),
+    ("unicorn-cards", "Unicorn Cards", "https://unicorncards.co.uk/", S.WEBSITE, "0", None,
+     "Delivery charge not yet confirmed"),
 ]
+
+# Shops that show each visitor their own currency: the address that switches to pounds.
+SESSIONS = {
+    "unicorn-cards": "https://unicorncards.co.uk/changecurrency/3?returnUrl=%2F",
+}
 
 # Shops that were set up before and must not be shown: prices in another currency.
 HIDDEN = ["poke-collect"]
@@ -84,14 +91,21 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         for slug, name, website, source, cost, free, note in SHOPS:
             existing = Retailer.objects.filter(website=website).first() or Retailer.objects.filter(slug=slug).first()
+            session_url = SESSIONS.get(slug, "")
             if existing:
+                changed = []
                 if existing.name != name or existing.slug != slug:
                     existing.name, existing.slug = name, slug
-                    existing.save(update_fields=["name", "slug"])
+                    changed += ["name", "slug"]
+                if session_url and existing.session_url != session_url:
+                    existing.session_url = session_url
+                    changed.append("session_url")
+                if changed:
+                    existing.save(update_fields=changed)
                 self.stdout.write(f"{name}: already set up")
                 continue
             Retailer.objects.create(
-                slug=slug, name=name, website=website, source_type=source, source_url=website,
+                slug=slug, name=name, website=website, source_type=source, source_url=website, session_url=session_url,
                 delivery_cost=Decimal(cost), free_delivery_over=Decimal(free) if free else None, delivery_note=note,
             )
             self.stdout.write(f"{name}: added")

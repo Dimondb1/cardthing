@@ -36,6 +36,9 @@ def shopify_js_url(url):
     return urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/") + ".js", "", ""))
 
 
+_session_fetches = {}
+
+
 def check_listing(listing, fetch=None):
     """(price, availability) from the shop right now, or None if it could not be read."""
     fetch = fetch or importers.fetch
@@ -58,6 +61,8 @@ def check_listing(listing, fetch=None):
         if listing.availability == Listing.Availability.PREORDER:
             return price, Listing.Availability.PREORDER
         return price, Listing.Availability.IN_STOCK
+    if listing.retailer.session_url and fetch is importers.fetch:
+        fetch = _session_fetches.setdefault(listing.retailer_id, importers.session_fetch(listing.retailer.session_url))
     try:
         offer = page_offer(listing.url, fetch(listing.url).decode("utf-8", "replace"))
     except ImportError_:

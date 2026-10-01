@@ -570,6 +570,54 @@ class PageStockTests(TestCase):
         ])
 
 
+class SessionFetchTests(TestCase):
+    def test_the_session_address_is_opened_first_and_its_cookie_kept(self):
+        import http.server
+        import threading
+
+        seen = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append((self.path, self.headers.get("Cookie", "")))
+                self.send_response(200)
+                if self.path.startswith("/changecurrency"):
+                    self.send_header("Set-Cookie", "currency=GBP; Path=/")
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base = f"http://127.0.0.1:{server.server_port}"
+            from .importers import session_fetch
+
+            fetch = session_fetch(f"{base}/changecurrency/3?returnUrl=%2F")
+            self.assertEqual(fetch(f"{base}/product-one"), b"ok")
+            fetch(f"{base}/product-two")
+        finally:
+            server.shutdown()
+        self.assertEqual(seen[0][0], "/changecurrency/3?returnUrl=%2F")
+        self.assertEqual(seen[1], ("/product-one", "currency=GBP"))
+        self.assertEqual(seen[2], ("/product-two", "currency=GBP"))
+
+    def test_a_retailer_with_a_session_address_is_read_through_it(self):
+        from .importers import retailer_fetch
+
+        plain = make_retailer("Plain", source_type=Retailer.Source.WEBSITE, source_url="https://a.example/")
+        session = make_retailer("Session", source_type=Retailer.Source.WEBSITE, source_url="https://b.example/", session_url="https://b.example/changecurrency/3")
+        from . import importers
+
+        self.assertIs(retailer_fetch(plain), importers.fetch)
+        self.assertIsNot(retailer_fetch(session), importers.fetch)
+        self.assertIs(retailer_fetch(session, fetch=len), len)
+
+
 class SafeUrlTests(TestCase):
     def test_accented_addresses_are_percent_encoded(self):
         from .importers import safe_url

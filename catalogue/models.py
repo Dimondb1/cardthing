@@ -251,6 +251,14 @@ class Retailer(models.Model):
         "its sitemap and read for schema.org product data. Leave empty for a local file "
         "passed to import_prices.",
     )
+    session_url = models.URLField(
+        "visit first",
+        max_length=500,
+        blank=True,
+        help_text="An address the importer opens before reading product pages, keeping the cookies it "
+        "sets. For a shop that shows each visitor their own currency, this is its link to switch "
+        "to pounds, for example https://shop.example/changecurrency/3?returnUrl=%2F.",
+    )
     is_active = models.BooleanField("show on site", default=True)
 
     class Meta:

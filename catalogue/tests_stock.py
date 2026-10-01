@@ -5,13 +5,14 @@ from io import StringIO
 from unittest import mock
 
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from . import pricing
 from .management.commands.watch_stock import check_listing, shopify_js_url
-from .models import Listing, Retailer
+from .models import Listing, OutboundClick, Retailer
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
 
@@ -64,3 +65,34 @@ class WatchStockTests(TestCase):
         self.assertEqual((listing.availability, listing.price), ("in_stock", Decimal("49.99")))
         self.assertIsNotNone(listing.back_in_stock_at)
         self.assertIn("1 back in stock", out.getvalue())
+
+
+class ShopReportTests(TestCase):
+    def setUp(self):
+        self.product = make_product(make_set(make_game()), name="Paldea Evolved Booster Box")
+        self.small = make_retailer(name="Jet Cards", slug="jet-cards")
+        self.big = make_retailer(name="Big Shop", slug="big-shop")
+        make_listing(self.product, self.small, price="90.00")
+        make_listing(self.product, self.big, price="99.00")
+        OutboundClick.objects.create(product=self.product, retailer=self.small)
+
+    def run_report(self, *args):
+        out = StringIO()
+        call_command("shop_report", *args, stdout=out)
+        return out.getvalue()
+
+    def test_one_shop_report_names_wins_and_clicks(self):
+        text = self.run_report("jet-cards")
+        self.assertIn("Cheapest UK shop on: 1 products", text)
+        self.assertIn("Clicks sent in the last 30 days: 1", text)
+        self.assertIn("Big Shop: 1 products", text)
+        self.assertIn("£9.00 under Big Shop", text)
+
+    def test_table_lists_every_active_shop(self):
+        text = self.run_report()
+        self.assertIn("Jet Cards", text)
+        self.assertIn("Big Shop", text)
+
+    def test_unknown_slug_is_an_error(self):
+        with self.assertRaises(CommandError):
+            self.run_report("nowhere")

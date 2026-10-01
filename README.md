@@ -113,6 +113,18 @@ reports whether the shop publishes Shopify product data, how many products
 carry barcodes, and how many look like sealed TCG. If it is not Shopify, ask
 the retailer or your affiliate network for a CSV feed instead.
 
+## What we do for a shop
+
+```sh
+python manage.py shop_report              # one line per shop
+python manage.py shop_report jet-cards    # the full picture for one shop
+```
+
+prints how many of a shop's products we list, how many are in stock, on
+how many it is the cheapest UK shop, which shops it beats, and the clicks we
+sent it in the last 30 days. Use the figures when asking a shop to start an
+affiliate programme. Shopify shops can turn on Shopify Collabs for free.
+
 ## Real prices from UK shops
 
 `start.bat` / `start.command` run `setup_shops`, which adds 28 UK shops

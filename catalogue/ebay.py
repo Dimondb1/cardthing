@@ -24,10 +24,10 @@ import urllib.request
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
-from django.db.models import F
+from django.db.models import Count, F
 from django.utils import timezone
 
-from .matching import AUTO_LINK, SUGGEST
+from .matching import AUTO_LINK, SUGGEST, match_key
 from .models import Listing, Product
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,8 @@ def search_url(product):
     if product.ean:
         params["gtin"] = product.ean
     else:
-        params["q"] = product.name
+        # The game name keeps "Marvel Super Heroes Bundle" away from sticker bundles.
+        params["q"] = f"{product.game.name} {product.name}"
     return SEARCH_URL + "?" + urllib.parse.urlencode(params)
 
 
@@ -162,9 +163,11 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
     }
     products = Product.objects.filter(is_active=True).select_related("game")
     known = list(products.filter(pk__in=existing).order_by("ebay_checked_at"))
+    # Never tried first, then the longest ago; within that, the products most shops stock.
     fresh = list(
         products.exclude(pk__in=existing)
-        .order_by(F("ebay_checked_at").asc(nulls_first=True), "-ean", "-pk")[: max(0, limit - len(known))]
+        .annotate(shops=Count("listings"))
+        .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk")[: max(0, limit - len(known))]
     )
     offers = []
     checked = []
@@ -178,7 +181,9 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
                 continue
             match, value = catalogue.best_match(offer.title, game=product.game.slug)
             needed = SUGGEST if product.ean else AUTO_LINK
-            if match and match[0] == product.pk and value >= needed:
+            # A duplicate catalogue entry with the same key counts as this product.
+            same = catalogue.by_key.get((product.game.slug, match_key(product.name)), ())
+            if match and (match[0] == product.pk or match[0] in same) and value >= needed:
                 best = offer
                 break   # results are cheapest first including postage
         if best is None and product.pk in existing:

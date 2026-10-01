@@ -84,7 +84,7 @@ class ItemTests(TestCase):
     def test_search_uses_barcode_when_we_have_one_and_name_otherwise(self):
         self.assertIn("gtin=0820650853500", ebay.search_url(self.product))
         self.product.ean = ""
-        self.assertIn("q=Prismatic+Evolutions+Elite+Trainer+Box", ebay.search_url(self.product))
+        self.assertIn("q=Pok%C3%A9mon+Prismatic+Evolutions+Elite+Trainer+Box", ebay.search_url(self.product))
         self.assertIn("conditions%3A%7BNEW%7D", ebay.search_url(self.product))
 
 
@@ -123,11 +123,27 @@ class LookupTests(TestCase):
         offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
         self.assertEqual([o.product_pk for o in offers], [self.bundle.pk])
 
+    def test_widely_stocked_products_are_looked_up_first(self):
+        from .testing import make_retailer
+
+        make_listing(self.bundle, make_retailer("Shop A"), price="30.00")
+        make_listing(self.bundle, make_retailer("Shop B"), price="31.00")
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("Booster+Bundle", api.calls[1][0])
+
+    def test_a_duplicate_catalogue_entry_does_not_steal_the_match(self):
+        twin = make_product(self.set, name="Pokemon Prismatic Evolutions Elite Trainer Box", slug="pev-etb-twin")
+        api = FakeApi([item("Pokemon Prismatic Evolutions Elite Trainer Box", price="79.99")])
+        offers = ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertEqual([o.product_pk for o in offers], [self.etb.pk])
+        self.assertIsNotNone(twin.pk)
+
     def test_products_already_on_ebay_are_refreshed_first_and_marked_sold_out_when_gone(self):
         make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
         api = FakeApi([])
         offers = ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
-        self.assertIn("q=Prismatic+Evolutions+Booster+Bundle", api.calls[1][0])
+        self.assertIn("q=Pok%C3%A9mon+Prismatic+Evolutions+Booster+Bundle", api.calls[1][0])
         self.assertEqual(len(offers), 1)
         self.assertEqual(offers[0].availability, Listing.Availability.OUT_OF_STOCK)
         self.assertEqual(offers[0].url, "https://www.ebay.co.uk/itm/9?campid=1")

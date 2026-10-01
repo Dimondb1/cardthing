@@ -164,6 +164,7 @@ def drop_repeated_tail(name):
 def tidy_name(title):
     """The light fixes safe to apply to a name that is already in the catalogue."""
     name = re.sub(r"\s+", " ", html.unescape(title)).strip()
+    name = re.sub(r"\b(\w+)( \1\b)+", r"\1", name, flags=re.I)  # "Booster Booster Pack"
     return drop_repeated_tail(drop_repeated_set(name).replace(" | ", " "))
 
 

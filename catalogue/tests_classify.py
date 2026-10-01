@@ -96,6 +96,9 @@ class ClassifyLeakTests(TestCase):
                       "Yu-Gi-Oh Legacy of Destruction 24-Pack Box", "Pokemon Surging Sparks Booster Pack Display Box", "Pokemon 151 Booster Bundle 6 Booster Packs"]:
             self.assertIsNotNone(classify(title, price=50), title)
 
+    def test_a_word_repeated_by_the_shop_appears_once(self):
+        self.assertEqual(classify("Yu-Gi-Oh! Justice Hunters Booster Booster Pack", price=3).name, "Justice Hunters Booster Pack")
+
     def test_language_editions_keep_their_language(self):
         self.assertEqual(classify("Return to Ravnica Booster Pack [JAPANESE] | Return to Ravnica", vendor="Magic The Gathering", price=10).name,
                          "Return to Ravnica Booster Pack (Japanese)")

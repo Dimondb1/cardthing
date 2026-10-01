@@ -160,6 +160,7 @@ class Product(models.Model):
         help_text="Found by the Amazon import. Clear it to make the import look again.",
     )
     amazon_checked_at = models.DateTimeField(null=True, blank=True, editable=False)
+    ebay_checked_at = models.DateTimeField(null=True, blank=True, editable=False)
     release_date = models.DateField(
         null=True, blank=True, help_text="Leave empty to use the set's release date."
     )
@@ -243,6 +244,7 @@ class Retailer(models.Model):
         SHOPIFY = "shopify", "Shopify store"
         FEED = "feed", "Product feed (CSV)"
         AMAZON = "amazon", "Amazon (Product Advertising API)"
+        EBAY = "ebay", "eBay (Browse API)"
         WEBSITE = "website", "Website (sitemap and product pages)"
 
     source_type = models.CharField(

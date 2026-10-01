@@ -60,14 +60,15 @@ class Offer:
     shop_type: str = ""   # the shop's own category, for example "Booster Box"
     vendor: str = ""
     tags: tuple = ()
+    product_pk: int | None = None   # set when the source already knows which product this is
 
 
 class ImportError_(Exception):
     pass
 
 
-# Amazon allows a limited number of calls a day, so it is read this often, not hourly.
-AMAZON_EVERY_HOURS = 20
+# Marketplaces allow a limited number of calls a day, so they are read this often, not hourly.
+DAILY_EVERY_HOURS = 20
 
 
 def safe_url(url):
@@ -564,7 +565,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             found += 1
             if run is not None and found % 250 == 0:
                 ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
-            product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
+            product_pk = offer.product_pk
+            if product_pk is None:
+                product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
             if product_pk is None:
                 product_pk = products_by_link.get(link_key(offer.url))
             sealed = None
@@ -752,8 +755,9 @@ def run_import(retailer, feed_path=None, fetch=None):
             else:
                 raise ImportError_("Set the feed address on the retailer or pass a file.")
             offers = feed_offers(text)
-        elif retailer.source_type == Retailer.Source.AMAZON:
+        elif retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY):
             from .amazon import AmazonError, amazon_offers
+            from .ebay import EbayError, ebay_offers
 
             last = (
                 ImportRun.objects.filter(retailer=retailer, error="", finished_at__isnull=False)
@@ -761,17 +765,20 @@ def run_import(retailer, feed_path=None, fetch=None):
                 .order_by("-finished_at")
                 .first()
             )
-            if last and last.finished_at > timezone.now() - timedelta(hours=AMAZON_EVERY_HOURS):
+            if last and last.finished_at > timezone.now() - timedelta(hours=DAILY_EVERY_HOURS):
                 run.finished_at = timezone.now()
                 run.save()
                 return run
             try:
-                offers = amazon_offers(retailer)
-            except AmazonError as exc:
+                if retailer.source_type == Retailer.Source.AMAZON:
+                    offers = amazon_offers(retailer)
+                else:
+                    offers = ebay_offers(retailer)
+            except (AmazonError, EbayError) as exc:
                 raise ImportError_(str(exc)) from exc
         else:
             raise ImportError_("This retailer's prices are entered by hand.")
-        complete = retailer.source_type != Retailer.Source.WEBSITE
+        complete = retailer.source_type not in (Retailer.Source.WEBSITE, Retailer.Source.EBAY)
         found, updated, unmatched = apply_offers(retailer, offers, run=run, complete=complete)
         run.offers_found = found
         run.listings_updated = updated

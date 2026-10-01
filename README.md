@@ -152,6 +152,31 @@ Amazon Associates line while Amazon is an active shop. Amazon removes API
 access from accounts with no sales in their first months; the import then
 reports the error in admin until access is restored.
 
+## eBay
+
+eBay gives affiliates a free price API straight away. Join eBay Partner
+Network, note the Campaign ID under Campaigns, then at developer.ebay.com
+create an application and copy its production App ID and Cert ID. Put the
+three values in the server's `.env`:
+
+```sh
+RIPRAPTOR_EBAY_APP_ID=...
+RIPRAPTOR_EBAY_CERT_ID=...
+RIPRAPTOR_EBAY_CAMPAIGN_ID=...
+```
+
+then run `setup_shops`, which adds eBay as a shop only when the keys are
+set. The hourly import reads eBay once a day, up to
+`RIPRAPTOR_EBAY_DAILY_LIMIT` products a run: those already listed first,
+then the rest, by barcode where we have one and otherwise by name. For
+each product it asks for new, buy-it-now items in Britain delivered to a
+London postcode, cheapest first including postage, from sellers with at
+least 95 percent feedback, and keeps the cheapest whose title matches the
+product. Postage is stored as the delivery charge. Links are eBay's own
+affiliate links for the campaign, so the shop needs no affiliate link
+format. A product whose listing has gone is marked out of stock; products
+not reached in a run keep their last state.
+
 ## Real prices from UK shops
 
 `start.bat` / `start.command` run `setup_shops`, which adds 28 UK shops
@@ -474,6 +499,10 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_AMAZON_SECRET_KEY`  |         | Its secret. |
 | `RIPRAPTOR_AMAZON_PARTNER_TAG` |         | The Associates tracking tag, for example `ripraptor-21`. All three set means Amazon is read once a day. |
 | `RIPRAPTOR_AMAZON_DAILY_LIMIT` | 2000    | New products looked up on Amazon per day. |
+| `RIPRAPTOR_EBAY_APP_ID`        |         | Production App ID (Client ID) from developer.ebay.com. |
+| `RIPRAPTOR_EBAY_CERT_ID`       |         | Its Cert ID (Client Secret). |
+| `RIPRAPTOR_EBAY_CAMPAIGN_ID`   |         | eBay Partner Network campaign id. All three set means eBay is read once a day. |
+| `RIPRAPTOR_EBAY_DAILY_LIMIT`   | 4000    | Products checked on eBay per day. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
 ## Tests

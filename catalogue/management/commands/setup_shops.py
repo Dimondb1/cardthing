@@ -80,6 +80,10 @@ SHOPS = [
 AMAZON = ("amazon", "Amazon", "https://www.amazon.co.uk/", S.AMAZON, "4.99", "35",
           "Standard £4.99, free over £35 for items dispatched by Amazon (Amazon delivery rates page), read 1 Oct 2026")
 
+# Added only once the eBay keys are set. Delivery comes with each listing.
+EBAY = ("ebay", "eBay", "https://www.ebay.co.uk/", S.EBAY, "0", None,
+        "Delivery is read from each listing, to a London postcode")
+
 # Shops that show each visitor their own currency: the address that switches to pounds.
 SESSIONS = {
     "unicorn-cards": "https://unicorncards.co.uk/changecurrency/3?returnUrl=%2F",
@@ -97,6 +101,8 @@ class Command(BaseCommand):
         shops = list(SHOPS)
         if settings.RIPRAPTOR_AMAZON_ACCESS_KEY and settings.RIPRAPTOR_AMAZON_PARTNER_TAG:
             shops.append(AMAZON)
+        if settings.RIPRAPTOR_EBAY_APP_ID and settings.RIPRAPTOR_EBAY_CAMPAIGN_ID:
+            shops.append(EBAY)
         for slug, name, website, source, cost, free, note in shops:
             existing = Retailer.objects.filter(website=website).first() or Retailer.objects.filter(slug=slug).first()
             session_url = SESSIONS.get(slug, "")

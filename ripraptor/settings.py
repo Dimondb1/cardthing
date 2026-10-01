@@ -174,6 +174,15 @@ RIPRAPTOR_AMAZON_PARTNER_TAG = os.environ.get("RIPRAPTOR_AMAZON_PARTNER_TAG", ""
 # New products looked up on Amazon per daily run. Amazon allows 8,640 calls a day at first.
 RIPRAPTOR_AMAZON_DAILY_LIMIT = int(os.environ.get("RIPRAPTOR_AMAZON_DAILY_LIMIT", "2000"))
 
+# eBay Partner Network: a developer keyset (App ID and Cert ID from
+# developer.ebay.com, production) and the EPN campaign id. All three set
+# means eBay is read once a day.
+RIPRAPTOR_EBAY_APP_ID = os.environ.get("RIPRAPTOR_EBAY_APP_ID", "").strip()
+RIPRAPTOR_EBAY_CERT_ID = os.environ.get("RIPRAPTOR_EBAY_CERT_ID", "").strip()
+RIPRAPTOR_EBAY_CAMPAIGN_ID = os.environ.get("RIPRAPTOR_EBAY_CAMPAIGN_ID", "").strip()
+# Products checked on eBay per daily run. The Browse API allows 5,000 calls a day.
+RIPRAPTOR_EBAY_DAILY_LIMIT = int(os.environ.get("RIPRAPTOR_EBAY_DAILY_LIMIT", "4000"))
+
 # Price imports may record a retailer's product image for products that have
 # no uploaded image. Turn off if you would rather upload every image yourself.
 RIPRAPTOR_USE_FEED_IMAGES = env_bool("RIPRAPTOR_USE_FEED_IMAGES", default=True)

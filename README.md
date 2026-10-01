@@ -202,6 +202,10 @@ network is the way in for all of these.
 - **Cardarium**: looked like a fabricated storefront with below-market
   prices; not added on purpose.
 - **PokeUK**: blocks its sitemaps. **Poke-Collect**: a US shop in dollars.
+  **Zardo Cards**: a Canadian shop in dollars. **Shop Rurob**: registered in
+  the US, three sealed products. **Cisul**: a Birmingham gift shop whose
+  card items are hidden from its product feed and are collection-only.
+  **Ancient Warrior**: connected, but sells no sealed card products.
 
 ## Getting real prices in
 

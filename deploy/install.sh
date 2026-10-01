@@ -21,6 +21,7 @@ apt-get update -qq
 apt-get install -y -qq git python3 python3-venv python3-pip curl caddy >/dev/null
 
 id -u ripraptor >/dev/null 2>&1 || useradd --system --home "$DIR" --shell /usr/sbin/nologin ripraptor
+git config --global --add safe.directory "$DIR" >/dev/null 2>&1 || true   # the checkout is owned by ripraptor, git runs as root
 if [ -d "$DIR/.git" ]; then
   git -C "$DIR" fetch -q origin "$BRANCH" && git -C "$DIR" checkout -q "$BRANCH" && git -C "$DIR" reset -q --hard "origin/$BRANCH"
 else

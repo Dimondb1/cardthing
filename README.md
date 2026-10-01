@@ -151,7 +151,9 @@ Anything less certain goes to Shop products to review. Shops mark
 pre-orders in a pre-order collection, which the importer reads, so a
 pre-order never shows as in stock.
 
-Three cleanup commands keep the catalogue honest after the rules improve:
+Three cleanup commands keep the catalogue honest after the rules improve
+(`tidy_all` runs them in order, and `start.bat`, `update_prices` and the
+server's hourly import run `tidy_all` automatically):
 `tidy_catalogue` (products that no longer pass), `merge_duplicates` (one
 product under two names) and `tidy_listings` (a shop item linked to the
 wrong product, judged by the words in its shop address). Each takes

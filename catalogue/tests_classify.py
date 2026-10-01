@@ -161,3 +161,19 @@ class TidyCatalogueTests(TestCase):
         self.assertNotIn("Innistrad Booster Box Innistrad", names)
         self.assertNotIn("Nobody Sells This Booster Box", names)
         self.assertTrue(Listing.objects.filter(product=keep, retailer=shop_b).exists())
+
+
+class TidyAllTests(TestCase):
+    def test_tidy_all_removes_a_merchandise_product_linked_before_the_rule_existed(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from catalogue.models import Product
+        from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        box = make_product(make_set(make_game()), name="Pikachu Gift Box", product_type="collection_box")
+        Product.objects.filter(pk=box.pk).update(image="")
+        make_listing(box, make_retailer("Shop", source_type="website"), url="https://shop.example/gb-posters-pokemon-pikachu-gift-box")
+        call_command("tidy_all", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=box.pk).exists())

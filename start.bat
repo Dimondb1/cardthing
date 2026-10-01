@@ -13,6 +13,7 @@ pip install -q -r requirements.txt
 python manage.py migrate -v0
 python manage.py remove_demo
 python manage.py setup_shops
+python manage.py tidy_all
 python manage.py shell -c "from django.contrib.auth import get_user_model as g; import sys; sys.exit(0 if g().objects.filter(is_superuser=True).exists() else 1)" >nul 2>nul
 if errorlevel 1 (
   echo.

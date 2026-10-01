@@ -392,3 +392,58 @@ class AmazonLinkTests(PageTestCase):
             response = self.client.get(self.etb.get_absolute_url())
         self.assertNotContains(response, "Check price on Amazon")
         self.assertContains(response, "Amazon")
+
+
+class LanguageAndSortTests(PageTestCase):
+    def setUp(self):
+        super().setUp()
+        self.japanese = make_product(self.pre, name="Prismatic Evolutions Booster Box (Japanese)", slug="pev-box-ja")
+        make_listing(self.japanese, make_retailer("Japan Shop"), price="70.00")
+        self.chinese = make_product(self.pre, name="Prismatic Evolutions Booster Box (Simplified Chinese)", slug="pev-box-zh")
+        make_listing(self.chinese, make_retailer("China Shop"), price="60.00")
+        # The ETB (54.99 against 58.00) saves £3.01; the Japanese box has one shop so no saving.
+        # The ETB's recorded prices (60, 57, 54.99) put it at its 90-day low; the Japanese box at £70 is above its £65.
+        DailyLowestPrice.objects.create(product=self.japanese, date=timezone.localdate() - timedelta(days=3), price="65.00")
+
+    def names(self, url, **params):
+        return [c["name"] for c in self.client.get(url, params).json()["cards"]]
+
+    def test_deck_language_filter_keeps_only_chosen_languages(self):
+        url = reverse("web:deck_api")
+        english = self.names(url, lang="en")
+        self.assertIn(self.etb.name, english)
+        self.assertNotIn(self.japanese.name, english)
+        self.assertNotIn(self.chinese.name, english)
+        both = self.client.get(url + "?lang=en&lang=ja").json()["cards"]
+        both_names = [c["name"] for c in both]
+        self.assertIn(self.japanese.name, both_names)
+        self.assertNotIn(self.chinese.name, both_names)
+        self.assertEqual(self.names(url, lang="zh"), [self.chinese.name])
+
+    def test_deck_sort_by_biggest_saving_puts_the_two_shop_product_first(self):
+        names = self.names(reverse("web:deck_api"), sort="saving")
+        self.assertEqual(names[0], self.etb.name)
+
+    def test_deck_sort_by_ninety_day_low_puts_products_at_their_low_first(self):
+        # The ETB is at £54.99 against a recorded £59.99: at its low. The Japanese box is £70 against £65: not.
+        names = self.names(reverse("web:deck_api"), sort="low")
+        self.assertEqual(names[0], self.etb.name)
+        self.assertEqual(names[-1], self.japanese.name)
+
+    def test_unknown_deck_sort_falls_back_to_newest(self):
+        self.assertEqual(self.client.get(reverse("web:deck_api"), {"sort": "nonsense"}).status_code, 200)
+
+    def test_deck_page_offers_sort_and_language_choices(self):
+        response = self.client.get(reverse("web:deck"), {"lang": "ja", "sort": "saving"})
+        self.assertContains(response, 'value="ja" checked')
+        self.assertContains(response, '<option value="saving" selected>')
+        self.assertContains(response, "Lowest in 90 days")
+
+    def test_browse_pages_take_the_same_filters(self):
+        response = self.client.get(reverse("web:search"), {"lang": ["ja"], "sort": "saving"})
+        self.assertContains(response, self.japanese.name)
+        self.assertNotContains(response, self.chinese.name)
+        self.assertContains(response, "Biggest saving")
+        response = self.client.get(reverse("web:search"), {"q": "prismatic", "sort": "low"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Clear filters")

@@ -16,10 +16,11 @@
   const STORE = "ripraptor.saved";
   const SEEN = "ripraptor.seen";
   const VISIBLE = 3;           // cards rendered in the stack
-  const THRESHOLD = 0.32;      // fraction of card width that counts as a swipe
-  const FLING = 0.55;          // px per ms
+  const THRESHOLD = 0.5;       // fraction of card width that counts as a swipe
+  const FLING = 1.0;           // px per ms: a flick has to mean it
 
-  const game = new URLSearchParams(location.search).get("game") || "";
+  // The page's game, sort and language choices go to the API as they are.
+  const filters = new URLSearchParams(location.search);
   let queue = [];
   let nextOffset = 0;
   let loading = false;
@@ -42,7 +43,7 @@
     try {
       const url = new URL(root.dataset.deck, location.href);
       url.searchParams.set("offset", nextOffset);
-      if (game) url.searchParams.set("game", game);
+      filters.forEach((value, key) => { if (value) url.searchParams.append(key, value); });
       const data = await (await fetch(url, { headers: { Accept: "application/json" } })).json();
       data.cards.forEach((c) => { if (!seen.has(c.id)) queue.push(c); });
       data.cards.forEach((c) => { if (c.image) { const img = new Image(); img.src = c.image; } });
@@ -283,8 +284,6 @@
     });
   }
   savedClear.addEventListener("click", () => { saved = []; store(STORE, saved); renderSaved(); });
-
-  root.querySelector("[data-deck-filter] select").addEventListener("change", (e) => e.target.form.submit());
 
   renderSaved();
   render();

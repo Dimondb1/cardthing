@@ -65,6 +65,10 @@
     <svg class="pill__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 20V10M12 20V4M19 20v-8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
     {{ form.in_stock }}<span>{{ form.in_stock.label }}</span>
   </label>
+  <fieldset class="langs">
+    <legend class="visually-hidden">{{ form.lang.label }}</legend>
+    {% for choice in form.lang %}<label class="pill pill--check pill--small">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}
+  </fieldset>
   <div class="filters__actions">
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
     {% if filters_active %}<a class="filters__clear" href="?{% if query %}q={{ query|urlencode }}{% endif %}">{% copy "browse.filters.clear" %}</a>{% endif %}

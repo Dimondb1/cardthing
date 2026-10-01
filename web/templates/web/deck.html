@@ -14,14 +14,27 @@
      data-empty="{% copy 'deck.saved.empty' %}" data-restart-label="{% copy 'deck.restart' %}">
   <div class="deck-head">
     <h1 class="deck-title">{% copy "deck.title" %}</h1>
-    <form class="deck-filter" method="get" action="{% url 'web:deck' %}" data-deck-filter>
+  </div>
+  <form class="filters filters--deck" method="get" action="{% url 'web:deck' %}" data-autosubmit>
+    <div class="pill">
       <label class="visually-hidden" for="deck-game">{% copy "site.nav.games" %}</label>
       <select id="deck-game" name="game" class="pill__select">
         <option value="">{% copy "deck.all_games" %}</option>
         {% for game in games %}<option value="{{ game.slug }}"{% if request.GET.game == game.slug %} selected{% endif %}>{{ game.name }}</option>{% endfor %}
       </select>
-    </form>
-  </div>
+    </div>
+    <div class="pill pill--sort">
+      <label class="visually-hidden" for="deck-sort">Sort by</label>
+      <select id="deck-sort" name="sort" class="pill__select">
+        {% for code, label in sorts %}<option value="{{ code }}"{% if sort == code %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <fieldset class="langs">
+      <legend class="visually-hidden">Language</legend>
+      {% for code, label, on in languages %}<label class="pill pill--check pill--small"><input type="checkbox" name="lang" value="{{ code }}"{% if on %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+    </fieldset>
+    <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
+  </form>
   <p class="deck-hint" data-deck-hint>{% copy "deck.hint" %}</p>
 
   {% for type, label in product_types %}<template data-placeholder="{{ type }}">{% include "web/includes/placeholder.svg" with type=type %}</template>{% endfor %}

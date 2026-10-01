@@ -530,6 +530,8 @@ ul, ol { margin: 0; padding: 0; }
 .pill--check { cursor: pointer; }
 .pill--check input { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--color-brand); }
 .filters__actions { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-sm); }
+.langs { display: contents; border: 0; margin: 0; padding: 0; min-width: 0; }
+.pill--small { height: 2.25rem; padding: 0 var(--space-3); font-size: var(--text-xs); }
 .filters__clear { color: var(--color-brand-text); }
 
 /* Product cards (search results) */
@@ -746,11 +748,16 @@ ul, ol { margin: 0; padding: 0; }
 .deck-page { max-width: 30rem; margin: 0 auto; }
 .deck-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-1); }
 .deck-title { font-size: var(--text-lg); }
+.filters--deck { padding-bottom: 0; }
 @media (max-width: 47.99rem) {
   /* Phones: the header search goes so the card, buttons and saved count fit on one screen. */
   .body--deck .masthead__search { display: none; }
   .body--deck .masthead__inner { grid-template-areas: "back brand nav"; }
   .deck-hint { display: none; }
+  .deck-title { font-size: var(--text-base); }
+  .filters--deck { flex-wrap: nowrap; overflow-x: auto; padding-top: var(--space-1); padding-bottom: var(--space-1); scrollbar-width: none; }
+  .filters--deck::-webkit-scrollbar { display: none; }
+  .filters--deck .pill { flex: none; }
   /* The page is a column the height of the screen; the deck takes what is left
      after the header row and the two buttons, so both are always on screen. */
   .body--deck .page { padding-bottom: 0; }
@@ -765,7 +772,6 @@ ul, ol { margin: 0; padding: 0; }
   .swipe__price { font-size: 1.75rem; }
   .saved { margin-top: var(--space-5); }
 }
-.deck-filter { flex: none; display: inline-flex; align-items: center; height: 2.5rem; padding: 0 var(--space-3); border: 1.5px solid var(--color-line); border-radius: var(--radius-pill); font-size: var(--text-sm); font-weight: var(--weight-strong); }
 .deck-hint { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink-subtle); }
 
 .deck { position: relative; height: min(70vh, 34rem); margin-top: var(--space-4); touch-action: pan-y; user-select: none; -webkit-user-select: none; }
@@ -791,9 +797,10 @@ ul, ol { margin: 0; padding: 0; }
 .swipe--settle { transition: transform var(--motion-slow) var(--ease-out), opacity var(--motion-slow); }
 .swipe--fly { transition: transform var(--motion-slow) var(--ease-out), opacity var(--motion-slow); }
 .swipe__top { display: grid; grid-template-rows: minmax(3rem, 1fr) auto auto; gap: var(--space-2); min-height: 0; overflow: hidden; }
-.swipe__image { display: grid; place-items: center; min-height: 3rem; border-radius: var(--radius); background: var(--color-shelf); overflow: hidden; }
+.swipe__image { position: relative; display: grid; place-items: center; min-height: 3rem; border-radius: var(--radius); background: var(--color-shelf); overflow: hidden; }
 @media (max-height: 40rem) { .swipe__meta { display: none; } .swipe__name { font-size: var(--text-base); } }
-.swipe__image img { max-height: 100%; width: auto; object-fit: contain; padding: 4%; mix-blend-mode: multiply; pointer-events: none; opacity: 0.85; transition: opacity var(--motion-normal); }
+/* Absolute so the picture is sized to the box the grid gives it, never the other way round. */
+.swipe__image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 4%; box-sizing: border-box; mix-blend-mode: multiply; pointer-events: none; opacity: 0.85; transition: opacity var(--motion-normal); }
 .swipe__image img.is-loaded { opacity: 1; }
 .swipe__image .placeholder { width: 45%; height: 45%; color: var(--color-ink-subtle); }
 .swipe__name { font-size: var(--text-xl); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); color: var(--color-brand); line-height: var(--leading-tight); text-align: center; }

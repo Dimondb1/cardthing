@@ -4,13 +4,14 @@ from urllib.parse import urlencode
 from django import forms
 from django.conf import settings
 from django.core.paginator import Paginator
-from django.db.models import Case, Count, F, IntegerField, Max, Prefetch, Q, Value, When
+from django.db.models import Count, F, Max, Prefetch, Q
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from catalogue import offers, pricing
+from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products
 from catalogue.models import Game, Listing, OutboundClick, Product, ProductSet, Retailer
 from catalogue.search import apply_search
 from content import service as copy
@@ -29,15 +30,8 @@ class FilterForm(forms.Form):
     """Search and filters. Labels here are short functional labels."""
 
     # "Best match" only means something when there is a search query.
-    SEARCH_SORTS = [
-        ("best", "Best match"),
-        ("price", "Lowest price"),
-        ("newest", "Newest first"),
-    ]
-    BROWSE_SORTS = [
-        ("newest", "Newest first"),
-        ("price", "Lowest price"),
-    ]
+    SEARCH_SORTS = [("best", "Best match")] + SORTS
+    BROWSE_SORTS = SORTS
 
     q = forms.CharField(required=False, max_length=100)
     game = forms.ModelChoiceField(
@@ -54,6 +48,9 @@ class FilterForm(forms.Form):
     )
     sort = forms.ChoiceField(label="Sort by", choices=SEARCH_SORTS, required=False)
     in_stock = forms.BooleanField(label="In stock only", required=False)
+    lang = forms.MultipleChoiceField(
+        label="Language", choices=LANGUAGES, required=False, widget=forms.CheckboxSelectMultiple
+    )
 
     def __init__(self, *args, fixed_game=None, has_query=False, **kwargs):
         super().__init__(*args, **kwargs)
@@ -90,24 +87,13 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
         products = products.filter(product_type=product_type)
     if form.value("in_stock"):
         products = products.filter(in_stock_count__gt=0)
+    languages = form.value("lang") or []
+    products = apply_languages(products, languages)
 
     sort = form.value("sort", form.default_sort)
     if sort == "best" and not terms:
         sort = "newest"
-    has_price = Case(
-        When(lowest_price__isnull=True, then=Value(1)),
-        default=Value(0),
-        output_field=IntegerField(),
-    )
-    if sort == "price":
-        ordering = [F("lowest_price").asc(nulls_last=True), "name"]
-    elif sort == "newest":
-        ordering = [has_price, F("release").desc(nulls_last=True), "name"]
-    else:
-        ordering = [has_price, F("release").desc(nulls_last=True), "name"]
-        if terms:
-            ordering.insert(0, "name_rank")
-    products = products.annotate(has_price=has_price).order_by(*ordering)
+    products = order_products(products, sort, first="name_rank" if sort == "best" else None)
 
     paginator = Paginator(products.prefetch_related(offers.buyable_prefetch()), settings.RIPRAPTOR_PAGE_SIZE)
     page = paginator.get_page(request.GET.get("page"))
@@ -115,7 +101,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
     cards = [(product, offers.summarise(product, week_lows)) for product in page.object_list]
 
     filters_active = bool(
-        game or product_type or form.value("in_stock") or sort != form.default_sort
+        game or product_type or form.value("in_stock") or languages or sort != form.default_sort
     )
     context = {
         "form": form,
@@ -537,6 +523,19 @@ def card_data(request, product, summary):
     return data
 
 
+def deck_products(request):
+    """The deck's products under the page's game, language and sort choices."""
+    products = Product.objects.for_lists().filter(lowest_price__isnull=False)
+    game = request.GET.get("game")
+    if game:
+        products = products.filter(game__slug=game)
+    products = apply_languages(products, request.GET.getlist("lang"))
+    sort = request.GET.get("sort") or "newest"
+    if sort not in dict(SORTS):
+        sort = "newest"
+    return order_products(products, sort)
+
+
 @require_GET
 def deck_api(request):
     """Cards for the swipe deck, cheapest-first within newest sets."""
@@ -544,11 +543,7 @@ def deck_api(request):
         offset = max(int(request.GET.get("offset", 0)), 0)
     except ValueError:
         offset = 0
-    products = Product.objects.for_lists().filter(lowest_price__isnull=False)
-    game = request.GET.get("game")
-    if game:
-        products = products.filter(game__slug=game)
-    products = products.order_by(F("release").desc(nulls_last=True), "name")
+    products = deck_products(request)
     batch = list(products.prefetch_related(offers.buyable_prefetch())[offset : offset + DECK_PAGE + 1])
     more = len(batch) > DECK_PAGE
     batch = batch[:DECK_PAGE]
@@ -561,13 +556,17 @@ def deck_api(request):
 
 @require_GET
 def deck(request):
-    products = Product.objects.for_lists().filter(lowest_price__isnull=False)
+    products = deck_products(request)
+    chosen = request.GET.getlist("lang")
     return render(
         request,
         "web/deck.html",
         {
             "games": Game.objects.filter(is_active=True),
             "product_types": Product.Type.choices,
+            "sorts": SORTS,
+            "sort": request.GET.get("sort") if request.GET.get("sort") in dict(SORTS) else "newest",
+            "languages": [(code, label, code in chosen) for code, label in LANGUAGES],
             "total": products.count(),
             "meta_title": text(request, "deck.title"),
             "noindex": True,

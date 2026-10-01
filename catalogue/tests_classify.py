@@ -136,6 +136,11 @@ class TidyNameTests(TestCase):
         self.assertEqual(tidy_name("2020 Tin of Lost Memories 1st Edition: : Brand New and Sealed"), "2020 Tin of Lost Memories 1st Edition")
         self.assertEqual(tidy_name("Beyond The Brave Booster Display Box: Pre Order October 8, 2026"), "Beyond The Brave Booster Display Box")
         self.assertEqual(tidy_name("Reality Fracture Bundle: Pre-order 2 Oct"), "Reality Fracture Bundle")
+        self.assertEqual(tidy_name("Mega Evolution Perfect Order Elite Trainer Box PRE ORDER"), "Mega Evolution Perfect Order Elite Trainer Box")
+        self.assertEqual(tidy_name("PRE ORDER: Magic The Gathering Reality Fracture Secret Lair Bundle"), "Magic The Gathering Reality Fracture Secret Lair Bundle")
+        self.assertEqual(tidy_name("PRE ORDER 7+ Day Delivery Time Pokémon TCG: JAPANESE 30th Celebration Booster Box"), "Pokémon TCG: JAPANESE 30th Celebration Booster Box")
+        self.assertEqual(tidy_name("Detective Pikachu 1 Booster Pack Brand New And Sealed"), "Detective Pikachu 1 Booster Pack")
+        self.assertEqual(tidy_name("Starter Deck: Dawn of the Xyz 1st Edition Brand New and Sealed Box"), "Starter Deck: Dawn of the Xyz 1st Edition")
 
     def test_ordinary_names_are_left_alone(self):
         self.assertEqual(tidy_name("Scarlet & Violet 8: Surging Sparks Booster Box"), "Scarlet & Violet 8: Surging Sparks Booster Box")

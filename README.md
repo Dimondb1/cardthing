@@ -174,8 +174,14 @@ London postcode, cheapest first including postage, from sellers with at
 least 95 percent feedback, and keeps the cheapest whose title matches the
 product. Postage is stored as the delivery charge. Links are eBay's own
 affiliate links for the campaign, so the shop needs no affiliate link
-format. A product whose listing has gone is marked out of stock; products
-not reached in a run keep their last state.
+format. Listings we already have are refreshed twenty at a time through eBay's
+bulk item lookup, which has its own daily allowance, so searches go on
+new products. The run asks eBay how many searches are left today and
+stays inside that; when the allowance is used up it stops and keeps what
+it found, and the hourly import tries again after the reset at 08:00 UK
+time. A product whose listing has gone is searched again and marked out
+of stock if nothing matches; products not reached in a run keep their
+last state.
 
 ## Real prices from UK shops
 

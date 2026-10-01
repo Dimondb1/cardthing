@@ -35,16 +35,36 @@ def item(title, price="79.99", postage="0.00", item_id="v1|123|0", feedback="99.
     return row
 
 
+def limits(searches=4900, bulk=5000):
+    return {"rateLimits": [{"resources": [
+        {"name": "buy.browse", "rates": [{"remaining": searches, "limit": 5000, "reset": "2026-10-02T07:00:00.000Z"}]},
+        {"name": "buy.browse.item.bulk", "rates": [{"remaining": bulk, "limit": 5000, "reset": "2026-10-02T07:00:00.000Z"}]},
+    ]}]}
+
+
 class FakeApi:
-    def __init__(self, results):
+    def __init__(self, results, items=None, searches_left=4900, fail_after=None):
         self.results = results
+        self.items = items or []
+        self.searches_left = searches_left
+        self.fail_after = fail_after
         self.calls = []
 
     def __call__(self, url, headers, data=None):
         self.calls.append((url, headers, data))
         if url == ebay.TOKEN_URL:
             return {"access_token": "tok", "expires_in": 7200}
+        if url.startswith(ebay.LIMITS_URL):
+            return limits(self.searches_left)
+        if url.startswith(ebay.ITEMS_URL):
+            return {"items": self.items}
+        searches = sum(1 for u, _, _ in self.calls if u.startswith(ebay.SEARCH_URL))
+        if self.fail_after is not None and searches > self.fail_after:
+            raise ebay.EbayError("eBay API 429: Too many requests.")
         return {"itemSummaries": self.results}
+
+    def searches(self):
+        return [u for u, _, _ in self.calls if u.startswith(ebay.SEARCH_URL)]
 
 
 class TokenTests(TestCase):
@@ -108,7 +128,8 @@ class LookupTests(TestCase):
         self.assertEqual(len(offers), 1)
         self.assertEqual(offers[0].price, Decimal("79.99"))
         self.assertEqual(offers[0].product_pk, self.etb.pk)
-        search_url, headers, _ = api.calls[1]
+        search_url = api.searches()[0]
+        headers = api.calls[-1][1]
         self.assertIn("gtin=0820650853500", search_url)
         self.assertEqual(headers["X-EBAY-C-MARKETPLACE-ID"], "EBAY_GB")
         self.assertIn("affiliateCampaignId=5339012345", headers["X-EBAY-C-ENDUSERCTX"])
@@ -130,7 +151,7 @@ class LookupTests(TestCase):
         make_listing(self.bundle, make_retailer("Shop B"), price="31.00")
         api = FakeApi([])
         ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
-        self.assertIn("Booster+Bundle", api.calls[1][0])
+        self.assertIn("Booster+Bundle", api.searches()[0])
 
     def test_a_duplicate_catalogue_entry_does_not_steal_the_match(self):
         twin = make_product(self.set, name="Pokemon Prismatic Evolutions Elite Trainer Box", slug="pev-etb-twin")
@@ -139,14 +160,47 @@ class LookupTests(TestCase):
         self.assertEqual([o.product_pk for o in offers], [self.etb.pk])
         self.assertIsNotNone(twin.pk)
 
-    def test_products_already_on_ebay_are_refreshed_first_and_marked_sold_out_when_gone(self):
+    def test_known_listings_are_refreshed_in_bulk_without_spending_searches(self):
         make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
-        api = FakeApi([])
+        fresh = item("Pokemon Prismatic Evolutions Booster Bundle", price="28.50", item_id="v1|9|0")
+        fresh["itemId"] = "v1|9|0"
+        api = FakeApi([], items=[fresh])
+        offers = ebay.ebay_offers(self.retailer, limit=0, request=api, pause=0)
+        bulk = [u for u, _, _ in api.calls if u.startswith(ebay.ITEMS_URL)]
+        self.assertEqual(len(bulk), 1)
+        self.assertIn("item_ids=v1%7C9%7C0", bulk[0].replace("|", "%7C"))
+        self.assertEqual(api.searches(), [])
+        self.assertEqual([(o.product_pk, o.price) for o in offers], [(self.bundle.pk, Decimal("28.50"))])
+
+    def test_a_listing_the_bulk_lookup_no_longer_knows_is_searched_again_then_marked_sold_out(self):
+        make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
+        api = FakeApi([], items=[])
         offers = ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
-        self.assertIn("q=Pok%C3%A9mon+Prismatic+Evolutions+Booster+Bundle", api.calls[1][0])
+        self.assertIn("q=Pok%C3%A9mon+Prismatic+Evolutions+Booster+Bundle", api.searches()[0])
         self.assertEqual(len(offers), 1)
         self.assertEqual(offers[0].availability, Listing.Availability.OUT_OF_STOCK)
         self.assertEqual(offers[0].url, "https://www.ebay.co.uk/itm/9?campid=1")
+
+    def test_a_used_up_allowance_is_an_error_so_the_next_hour_tries_again(self):
+        api = FakeApi([], searches_left=20)
+        with self.assertRaises(ebay.EbayError) as caught:
+            ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
+        self.assertIn("resets at 2026-10-02T07:00:00.000Z", str(caught.exception))
+        self.assertEqual(api.searches(), [])
+
+    def test_the_run_stays_inside_what_is_left_today(self):
+        for n in range(5):
+            make_product(self.set, name=f"Set {n} Booster Box", slug=f"set-{n}-box")
+        api = FakeApi([], searches_left=ebay.KEEP_BACK + 2)
+        ebay.ebay_offers(self.retailer, limit=100, request=api, pause=0)
+        self.assertEqual(len(api.searches()), 2)
+
+    def test_hitting_the_wall_mid_run_keeps_what_was_found(self):
+        api = FakeApi([item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="79.99")], fail_after=1)
+        offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
+        self.assertEqual(len(offers), 1)
+        self.etb.refresh_from_db()
+        self.assertIsNotNone(self.etb.ebay_checked_at)
 
     def test_progress_is_written_to_the_run_every_hundred_products(self):
         for n in range(120):
@@ -155,12 +209,12 @@ class LookupTests(TestCase):
         api = FakeApi([])
         ebay.ebay_offers(self.retailer, limit=150, request=api, pause=0, run=run)
         run.refresh_from_db()
-        self.assertEqual(run.offers_found, 100)
+        self.assertEqual(run.offers_found, 122)   # every hundred, then the final count
 
     def test_limit_counts_products_not_results(self):
         api = FakeApi([])
         ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
-        self.assertEqual(len(api.calls), 2)   # token plus one search
+        self.assertEqual(len(api.searches()), 1)
 
 
 @override_settings(**KEYS)

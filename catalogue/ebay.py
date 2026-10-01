@@ -17,6 +17,7 @@ needs no affiliate link format.
 import base64
 import json
 import logging
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -34,6 +35,11 @@ logger = logging.getLogger(__name__)
 
 TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
 SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
+ITEMS_URL = "https://api.ebay.com/buy/browse/v1/item/get_items"
+LIMITS_URL = "https://api.ebay.com/developer/analytics/v1_beta/rate_limit/?api_context=buy&api_name=Browse"
+ITEM_ID = re.compile(r"/itm/(\d+)")
+BULK = 20          # item ids per bulk lookup
+KEEP_BACK = 50     # searches left unused so the hourly stock watcher never hits the wall
 SCOPE = "https://api.ebay.com/oauth/api_scope"
 MARKETPLACE = "EBAY_GB"
 POSTCODE = "SW1A1AA"
@@ -85,6 +91,27 @@ def access_token(app, cert, request=None):
     if not token:
         raise EbayError("eBay did not issue a token. Check the App ID and Cert ID are the production keys.")
     return token
+
+
+def allowances(headers, request=None):
+    """(searches left today, bulk lookups left today, reset time) from eBay's own counter."""
+    request = request or http
+    answer = request(LIMITS_URL, headers)
+    left = {"buy.browse": None, "buy.browse.item.bulk": None}
+    reset = ""
+    for api in answer.get("rateLimits", []) or []:
+        for resource in api.get("resources", []) or []:
+            for rate in resource.get("rates", []) or []:
+                if resource.get("name") in left:
+                    left[resource["name"]] = rate.get("remaining")
+                    reset = rate.get("reset", reset)
+    return left["buy.browse"], left["buy.browse.item.bulk"], reset
+
+
+def item_id_of(url):
+    """eBay's API id for a listing link: the number after /itm/, as a plain item."""
+    match = ITEM_ID.search(url or "")
+    return f"v1|{match.group(1)}|0" if match else ""
 
 
 def search_url(product):
@@ -143,10 +170,12 @@ def item_offer(item, product, Offer):
 
 
 def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
-    """Offers for up to ``limit`` products: those already on eBay first, then the rest.
+    """Offers for every product already on eBay, then up to ``limit`` new lookups.
 
-    ``run`` is the ImportRun to keep posted: its offers found counts products checked
-    so far, so admin shows progress while the run is going.
+    Known listings are refreshed through eBay's bulk item lookup, which has
+    its own daily allowance, so the search allowance goes on new products.
+    When an allowance runs out the run stops and keeps what it found.
+    ``run`` is the ImportRun to keep posted so admin shows progress.
     """
     from .importers import Catalogue, Offer
 
@@ -156,23 +185,82 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
     limit = limit if limit is not None else getattr(settings, "RIPRAPTOR_EBAY_DAILY_LIMIT", 4000)
     token = access_token(app, cert, request=request)
     headers = headers_for(token, campaign)
+    searches_left, bulk_left, reset = allowances(headers, request=request)
+    if searches_left is not None and searches_left <= KEEP_BACK:
+        raise EbayError(f"eBay's search allowance for today is used up. It resets at {reset or 'midnight Pacific time'}.")
+    if searches_left is not None:
+        limit = min(limit, searches_left - KEEP_BACK)
     catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
-    existing = {
-        row.product_id: row
-        for row in Listing.objects.filter(retailer=retailer, is_active=True)
-    }
+    existing = {row.product_id: row for row in Listing.objects.filter(retailer=retailer, is_active=True)}
     products = Product.objects.filter(is_active=True).select_related("game")
+    offers = []
+    checked = []
+    gone = []
+
+    def post():
+        if run is not None:
+            type(run).objects.filter(pk=run.pk).update(offers_found=len(checked), listings_updated=len(offers))
+        logger.info("eBay: %d products checked, %d matched so far", len(checked), len(offers))
+
+    def out_of_stock(product):
+        old = existing[product.pk]
+        return Offer(
+            title=product.name, url=old.url, price=old.price, ean=product.ean or "",
+            availability=Listing.Availability.OUT_OF_STOCK, delivery=old.delivery_cost, product_pk=product.pk,
+        )
+
+    # Known listings, twenty at a time through the bulk lookup.
     known = list(products.filter(pk__in=existing).order_by("ebay_checked_at"))
-    # Never tried first, then the longest ago; within that, the products most shops stock.
+    by_item = {}
+    for product in known:
+        item_id = item_id_of(existing[product.pk].url)
+        if item_id:
+            by_item[item_id] = product
+        else:
+            gone.append(product)
+    ids = list(by_item)
+    for start in range(0, len(ids), BULK):
+        batch = ids[start:start + BULK]
+        if bulk_left is not None and bulk_left <= 0:
+            break
+        try:
+            answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
+        except EbayError as exc:
+            if "429" in str(exc):
+                logger.warning("eBay: bulk allowance used up, %s", exc)
+                break
+            raise
+        if bulk_left is not None:
+            bulk_left -= 1
+        found = set()
+        for item in answer.get("items", []) or []:
+            product = by_item.get(item.get("itemId"))
+            if product is None:
+                continue
+            found.add(item["itemId"])
+            offer = item_offer(item, product, Offer)
+            offers.append(offer if offer is not None else out_of_stock(product))
+            checked.append(product.pk)
+        for item_id in batch:
+            if item_id not in found:
+                gone.append(by_item[item_id])
+        time.sleep(pause)
+    # Listings the bulk lookup no longer knows (ended) are searched again below, first.
+
+    # New lookups, the products most shops stock first.
     fresh = list(
         products.exclude(pk__in=existing)
         .annotate(shops=Count("listings"))
-        .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk")[: max(0, limit - len(known))]
+        .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk")[: max(0, limit - len(gone))]
     )
-    offers = []
-    checked = []
-    for product in (known + fresh)[:limit]:
-        answer = request(search_url(product), headers)
+    for product in (gone + fresh)[:limit]:
+        try:
+            answer = request(search_url(product), headers)
+        except EbayError as exc:
+            if "429" in str(exc):
+                logger.warning("eBay: search allowance used up after %d products, keeping what was found", len(checked))
+                break
+            raise
         checked.append(product.pk)
         best = None
         for item in answer.get("itemSummaries", []) or []:
@@ -187,17 +275,12 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
                 best = offer
                 break   # results are cheapest first including postage
         if best is None and product.pk in existing:
-            old = existing[product.pk]
-            best = Offer(
-                title=product.name, url=old.url, price=old.price, ean=product.ean or "",
-                availability=Listing.Availability.OUT_OF_STOCK, delivery=old.delivery_cost, product_pk=product.pk,
-            )
+            best = out_of_stock(product)
         if best is not None:
             offers.append(best)
-        if run is not None and len(checked) % 100 == 0:
-            type(run).objects.filter(pk=run.pk).update(offers_found=len(checked), listings_updated=len(offers))
-            logger.info("eBay: %d products checked, %d matched so far", len(checked), len(offers))
+        if len(checked) % 100 == 0:
+            post()
         time.sleep(pause)
     Product.objects.filter(pk__in=checked).update(ebay_checked_at=timezone.now())
-    logger.info("eBay: %d products checked, %d offers", len(checked), len(offers))
+    post()
     return offers

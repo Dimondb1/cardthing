@@ -658,6 +658,7 @@ ul, ol { margin: 0; padding: 0; }
 
 /* Price list */
 .offers-section .section-title { margin-bottom: var(--space-3); }
+.amazon-check .section-note { margin-bottom: var(--space-3); max-width: 44rem; }
 .offers { list-style: none; border: 1px solid var(--color-line); border-radius: var(--radius-card); overflow: hidden; }
 .offers__head { display: none; }
 .offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "retailer total" "stock action" "meta meta"; gap: var(--space-1) var(--space-3); align-items: center; padding: var(--space-3); }

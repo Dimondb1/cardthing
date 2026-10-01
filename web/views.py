@@ -1,4 +1,5 @@
 import json
+from urllib.parse import urlencode
 
 from django import forms
 from django.conf import settings
@@ -301,6 +302,15 @@ def set_detail(request, game_slug, set_slug):
     )
 
 
+def amazon_search_url(product, listings):
+    """A tagged Amazon search for the product, or None when we have no tag or a real Amazon price."""
+    tag = settings.RIPRAPTOR_AMAZON_PARTNER_TAG
+    if not tag or any(row.retailer.source_type == Retailer.Source.AMAZON for row in listings):
+        return None
+    query = urlencode({"k": product.name, "tag": tag})
+    return f"https://www.amazon.co.uk/s?{query}"
+
+
 @require_GET
 def product_detail(request, slug):
     product = get_object_or_404(
@@ -384,6 +394,7 @@ def product_detail(request, slug):
             "history_days": days,
             "month_ago": month_ago,
             "last_known": last_known,
+            "amazon_search": amazon_search_url(product, listings),
             "related": related,
             "meta_title": text(request, "meta.product.title", product=product.name),
             "meta_description": text(request, "meta.product.description", product=product.name),

@@ -365,3 +365,30 @@ class AdminAddProductTests(TestCase):
         product = Product.objects.get(slug="browser-test-booster-box")
         self.assertEqual(product.listings.count(), 1)
         self.assertContains(self.client.get(product.get_absolute_url()), "£99.99")
+
+
+class AmazonLinkTests(PageTestCase):
+    def test_no_link_without_a_tracking_tag(self):
+        response = self.client.get(self.etb.get_absolute_url())
+        self.assertNotContains(response, "Check price on Amazon")
+
+    def test_tagged_search_link_when_we_have_no_amazon_price(self):
+        from django.test import override_settings
+
+        with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            response = self.client.get(self.etb.get_absolute_url())
+        self.assertContains(response, "Check price on Amazon")
+        self.assertContains(response, 'href="https://www.amazon.co.uk/s?k=Prismatic+Evolutions+Elite+Trainer+Box&amp;tag=ripraptor-21"')
+        self.assertContains(response, 'rel="sponsored nofollow noopener"')
+
+    def test_no_search_link_once_amazon_has_a_real_price(self):
+        from django.test import override_settings
+
+        from catalogue.models import Retailer
+
+        amazon = make_retailer("Amazon", slug="amazon", source_type=Retailer.Source.AMAZON)
+        make_listing(self.etb, amazon, price="80.00")
+        with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            response = self.client.get(self.etb.get_absolute_url())
+        self.assertNotContains(response, "Check price on Amazon")
+        self.assertContains(response, "Amazon")

@@ -94,6 +94,14 @@
 </section>
 {% endif %}
 
+{% if amazon_search %}
+<section class="block amazon-check" aria-labelledby="amazon-title">
+  <h2 id="amazon-title" class="section-title">{% copy "product.amazon.title" %}</h2>
+  <p class="section-note">{% copy "product.amazon.note" %}</p>
+  <a class="button button--quiet" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}</a>
+</section>
+{% endif %}
+
 <div class="block product-lower">
   {% if chart or has_listings %}
   <section class="history" aria-labelledby="history-title">

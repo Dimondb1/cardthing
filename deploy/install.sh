@@ -14,12 +14,11 @@ DIR=/srv/ripraptor
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq git python3 python3-venv python3-pip debian-keyring debian-archive-keyring apt-transport-https curl >/dev/null
-if ! command -v caddy >/dev/null; then
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -qq && apt-get install -y -qq caddy >/dev/null
-fi
+# Caddy comes from Ubuntu's own repository: the signing key on Caddy's
+# third-party repository expired and apt then refuses it.
+rm -f /etc/apt/sources.list.d/caddy-stable.list
+apt-get update -qq
+apt-get install -y -qq git python3 python3-venv python3-pip curl caddy >/dev/null
 
 id -u ripraptor >/dev/null 2>&1 || useradd --system --home "$DIR" --shell /usr/sbin/nologin ripraptor
 if [ -d "$DIR/.git" ]; then

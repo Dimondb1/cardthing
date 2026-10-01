@@ -40,8 +40,8 @@
           {% price product.lowest_price size="focal" %}
           <span class="focal__save"><strong>{% copy "home.savings.save" amount=product.drop|gbp %}</strong></span>
         {% else %}
-          {% price focal.summary.best.delivered_price size="focal" %}
-          <span class="focal__at">at {{ focal.summary.best.retailer.name }}</span>
+          {% price focal.summary.best.price size="focal" %}
+          <span class="focal__at"><span class="delivered">{% copy "product.delivered.line" price=focal.summary.best.delivered_price|gbp %}</span> at {{ focal.summary.best.retailer.name }}</span>
           <span class="focal__save"><strong>{% copy "home.savings.save" amount=focal.summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=focal.summary.percent %}</small></span>
         {% endif %}
       </span>
@@ -65,7 +65,7 @@
         {% product_image product "row" %}
         <span class="saving__body">
           <span class="saving__name">{{ product.name }}</span>
-          <span class="saving__best-line"><span class="saving__best">{{ summary.best.delivered_price|gbp }}</span> <span class="saving__retailer">{{ summary.best.retailer.name }}</span></span>
+          <span class="saving__best-line"><span class="saving__best">{{ summary.best.price|gbp }}</span> <span class="saving__retailer">{{ summary.best.retailer.name }}</span> <span class="delivered">{% copy "product.delivered.line" price=summary.best.delivered_price|gbp %}</span></span>
           <span class="saving__next"><s>{% copy "home.savings.next" price=summary.second.delivered_price|gbp %}</s></span>
         </span>
         <span class="saving__pill"><strong>{% copy "home.savings.save" amount=summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=summary.percent %}</small></span>
@@ -112,8 +112,12 @@
         {% product_image product "trend" %}
         <span class="trending__name">{{ product.name }}</span>
         {% if product.lowest_price is not None %}
-          <span class="trending__price">{% price product.lowest_price %}</span>
-          {% if product.best_offer %}<span class="trending__retailer">{{ product.best_offer.retailer.name }}</span>{% endif %}
+          {% if product.best_offer %}
+            <span class="trending__price">{% price product.best_offer.price %}</span>
+            <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=product.best_offer.delivered_price|gbp %}</span> · {{ product.best_offer.retailer.name }}</span>
+          {% else %}
+            <span class="trending__price">{% price product.lowest_price %}</span>
+          {% endif %}
           {% if product.movement %}
             {% if product.movement < 0 %}<span class="trending__move trending__move--down"><span aria-hidden="true">↓</span> {% copy "home.trending.down" amount=product.movement|abs_money|gbp %}</span>
             {% else %}<span class="trending__move trending__move--up"><span aria-hidden="true">↑</span> {% copy "home.trending.up" amount=product.movement|gbp %}</span>{% endif %}

@@ -77,6 +77,7 @@ KIND_MARKS = (
 def key_text(text):
     """The name with every phrase shops add or drop at will taken out."""
     expanded = " " + expand(text) + " "
+    expanded = re.sub(r"\b(\w+)( \1\b)+", r"\1", expanded)  # "booster booster box", a shop's slip
     for phrase in PHRASES:
         expanded = expanded.replace(f" {phrase} ", " ")
     expanded = SERIES.sub(" ", expanded)

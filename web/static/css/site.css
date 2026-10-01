@@ -557,6 +557,7 @@ ul, ol { margin: 0; padding: 0; }
 .card__at { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-muted); }
 .card__last { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
 .card__at strong { color: var(--color-ink); }
+.delivered { font-weight: var(--weight-strong); color: var(--color-price); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .card__body .button--buy { grid-area: buy; position: relative; z-index: 1; align-self: end; }
 .card__body .stock { grid-area: price; }
 .card__rank { grid-area: rank; }
@@ -627,6 +628,7 @@ ul, ol { margin: 0; padding: 0; }
 .buybox__main { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
 .buybox__offer { display: grid; gap: var(--space-1); justify-items: start; }
 .buybox__label { font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-ink-subtle); }
+.buybox__delivered { font-size: var(--text-lg); }
 .buybox__retailer { font-weight: var(--weight-strong); }
 .buybox__breakdown { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__sep { color: var(--color-ink-subtle); }

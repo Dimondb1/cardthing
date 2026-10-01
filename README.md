@@ -115,13 +115,13 @@ the retailer or your affiliate network for a CSV feed instead.
 
 ## Real prices from UK shops
 
-`start.bat` / `start.command` run `setup_shops`, which adds 27 UK shops
+`start.bat` / `start.command` run `setup_shops`, which adds 28 UK shops
 (Total Cards, Gathering Games, Magic Madhouse, The Card Vault, Lvl Up
 Gaming, Zatu Games, Goblin Gaming, Travelling Man, JET Cards, Titan Cards,
 Buy Any Cards, The TCG Shop, Double Sleeved, Packrat, The Gamers Lodge,
 Kongs Cards, MaxOnCards, Japan2UK, Iconic Trading Cards, Card Empire,
-Griffins Gaming, Tayler TCG, Shiny Vault, Monarch Cards, Castle Comics, 120HP
-and Ancient Warrior) with the delivery rules read from their delivery pages and baskets,
+Griffins Gaming, Tayler TCG, Shiny Vault, Monarch Cards, Castle Comics, 120HP,
+Ancient Warrior and Asmodee UK) with the delivery rules read from their delivery pages and baskets,
 and `remove_demo`, which deletes the fictional demo retailers. Shops that
 cannot be read automatically, and why, are listed under "Shops we cannot
 read" below. A Shopify shop that prices in another currency is refused

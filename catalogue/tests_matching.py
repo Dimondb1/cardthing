@@ -63,6 +63,7 @@ class TidyListingsTests(TestCase):
         japanese = make_listing(box, make_retailer("Fifth"), url="https://fifth.example/magic-the-gathering-invasion-booster-box-japanese")
         pack = make_listing(box, make_retailer("Sixth"), url="https://sixth.example/products/magic-invasion-booster-pack")
         single = make_listing(box, make_retailer("Seventh"), url="https://seventh.example/products/magic-invasion-booster-box-playmat")
+        slip = make_listing(box, make_retailer("Eighth"), url="https://eighth.example/products/magic-invasion-booster-booster-box-36-packs")
         call_command("tidy_listings", stdout=StringIO())
         self.assertFalse(Listing.objects.filter(pk=wrong.pk).exists())
         self.assertTrue(Listing.objects.filter(pk=right.pk).exists())
@@ -71,3 +72,4 @@ class TidyListingsTests(TestCase):
         self.assertFalse(Listing.objects.filter(pk=japanese.pk).exists())
         self.assertFalse(Listing.objects.filter(pk=pack.pk).exists())
         self.assertFalse(Listing.objects.filter(pk=single.pk).exists())
+        self.assertTrue(Listing.objects.filter(pk=slip.pk).exists())

@@ -107,6 +107,8 @@ class ClassifyLeakTests(TestCase):
 
     def test_codes_protectors_and_play_mats_are_not_sealed(self):
         for title in ["Relentless Flame Charizard Online Deck Code", "Acrylic Pokemon Booster Pack Protector Display Holder",
+                      "Gamegenic - Magic The Gathering - Reality Fracture - Bastion 100+ XL - Charge the Sanctum",
+                      "Ultra Pro Pokemon Charizard 9-Pocket Binder", "Dragon Shield Matte Sleeves Lorcana",
                       "Pokemon Island Guardians GX Premium Collection Play Mat"]:
             self.assertIsNone(classify(title, price=10), title)
 

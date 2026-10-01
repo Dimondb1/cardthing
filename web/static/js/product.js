@@ -48,8 +48,10 @@
           const checked = item.querySelector("[data-checked]");
           if (checked) checked.textContent = row.checked;
         }
-        const main = document.querySelector(`[data-total-for="${row.id}"]`);
-        if (main) swap(main, row.total);
+        const main = document.querySelector(`[data-price-for="${row.id}"]`);
+        if (main) swap(main, row.price);
+        const total = document.querySelector(`[data-total-for="${row.id}"]`);
+        if (total) swap(total, `${row.total} delivered`);
       });
       say(button.dataset.done, false);
     } catch (err) {

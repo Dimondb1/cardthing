@@ -478,7 +478,7 @@ ENTRIES = [
     # Product page ----------------------------------------------------------
     Entry(
         "product.cheapest.label", T, "Cheapest price label",
-        "Cheapest delivered price",
+        "Cheapest price",
         "Small label above the main price on a product page.",
     ),
     Entry(
@@ -486,6 +486,12 @@ ENTRIES = [
         "at {retailer}",
         "Shown next to the main price.",
         placeholders=("retailer",),
+    ),
+    Entry(
+        "product.delivered.line", T, "Delivered price line",
+        "{price} delivered",
+        "Under the shop's own price on cards and the product page: what you pay with delivery.",
+        placeholders=("price",),
     ),
     Entry(
         "product.breakdown.delivery", T, "Price breakdown",

@@ -70,6 +70,8 @@ SHOPS = [
      "Delivery charge not yet confirmed"),
     ("ancient-warrior", "Ancient Warrior", "https://www.ancientwarrior.co.uk/", S.SHOPIFY, "0", "200",
      "Free over £200 (delivery page); standard charge not published, read 1 Oct 2026"),
+    ("asmodee-uk", "Asmodee UK", "https://www.asmodee.co.uk/", S.SHOPIFY, "0", None,
+     "Free UK delivery (basket check), read 1 Oct 2026"),
 ]
 
 # Shops that were set up before and must not be shown: prices in another currency.

@@ -24,7 +24,8 @@
         <div class="buybox__offer">
           {% include "web/includes/badge.html" %}
           <p class="buybox__label">{% copy "product.cheapest.label" %}</p>
-          <p class="buybox__price"><span class="money" data-total-for="{{ cheapest.pk }}">{% price cheapest.delivered_price size="lg" %}</span></p>
+          <p class="buybox__price"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.price size="lg" %}</span></p>
+          <p class="buybox__delivered"><span class="money delivered" data-total-for="{{ cheapest.pk }}">{% copy "product.delivered.line" price=cheapest.delivered_price|gbp %}</span></p>
           <p class="buybox__retailer">{% copy "product.cheapest.retailer" retailer=cheapest.retailer.name %}</p>
         </div>
         <a class="button button--buy button--big" href="{{ cheapest.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">

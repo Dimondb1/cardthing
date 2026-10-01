@@ -78,7 +78,8 @@ class PageTests(PageTestCase):
 
     def test_product_page_leads_with_the_cheapest_delivered_price(self):
         response = self.client.get(self.etb.get_absolute_url())
-        self.assertContains(response, "Cheapest delivered price")
+        self.assertContains(response, "Cheapest price")
+        self.assertContains(response, "£54.99 delivered")
         self.assertContains(response, "at Harbour Games")
         self.assertContains(response, "£52.00 plus £2.99 delivery")
         self.assertContains(response, "Buy now")

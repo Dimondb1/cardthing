@@ -197,7 +197,8 @@ class ImportTests(TestCase):
         self.assertIn("As an Amazon Associate", html)
         self.retailer.is_active = False
         self.retailer.save()
-        html = self.client.get(reverse("web:terms")).content.decode()
+        with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG=""):
+            html = self.client.get(reverse("web:terms")).content.decode()
         self.assertNotIn("As an Amazon Associate", html)
 
     def test_terms_page_carries_the_amazon_line_while_the_search_link_is_tagged(self):

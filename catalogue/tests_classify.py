@@ -112,6 +112,7 @@ class ClassifyLeakTests(TestCase):
 
     def test_merchandise_makers_are_never_sealed(self):
         self.assertIsNone(classify("Pokemon - Pikachu Gift box", vendor="GB Posters", price=19.99))
+        self.assertIsNone(classify("Pikachu Gift Box Set Pokemon", vendor="GB EYE", price=19.99))
         self.assertIsNotNone(classify("Pokemon - Pikachu Gift box", vendor="The Pokemon Company", price=19.99))
 
     def test_mystery_booster_packs_and_boxes_are_still_sealed(self):

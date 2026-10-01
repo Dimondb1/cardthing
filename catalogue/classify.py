@@ -60,7 +60,7 @@ NOT_SEALED = re.compile(
     re.I,
 )
 # Makers of merchandise and accessories, not cards. Nothing from them is a sealed TCG product.
-NOT_SEALED_VENDORS = {"gb posters", "difuzed", "funko", "loungefly", "paladone", "ultra pro", "ultra-pro", "gamegenic",
+NOT_SEALED_VENDORS = {"gb posters", "gb eye", "difuzed", "funko", "loungefly", "paladone", "ultra pro", "ultra-pro", "gamegenic",
                       "dragon shield", "ultimate guard", "bandai spirits", "jazwares", "mattel", "hasbro", "lego",
                       "wizkids", "games workshop", "vallejo", "the noble collection", "pyramid international", "cinereplicas"}
 # One shop listing that covers several kinds at once ("Booster Pack / Booster

@@ -68,6 +68,8 @@ SHOPS = [
      "Standard £3.99, free over £150 (delivery page), read 30 Sep 2026"),
     ("120hp", "120HP", "https://www.120hp.co.uk/", S.SHOPIFY, "0", None,
      "Delivery charge not yet confirmed"),
+    ("ancient-warrior", "Ancient Warrior", "https://www.ancientwarrior.co.uk/", S.SHOPIFY, "0", "200",
+     "Free over £200 (delivery page); standard charge not published, read 1 Oct 2026"),
 ]
 
 # Shops that were set up before and must not be shown: prices in another currency.

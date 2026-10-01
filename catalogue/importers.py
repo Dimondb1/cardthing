@@ -29,6 +29,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
@@ -63,6 +64,10 @@ class Offer:
 
 class ImportError_(Exception):
     pass
+
+
+# Amazon allows a limited number of calls a day, so it is read this often, not hourly.
+AMAZON_EVERY_HOURS = 20
 
 
 def safe_url(url):
@@ -747,6 +752,23 @@ def run_import(retailer, feed_path=None, fetch=None):
             else:
                 raise ImportError_("Set the feed address on the retailer or pass a file.")
             offers = feed_offers(text)
+        elif retailer.source_type == Retailer.Source.AMAZON:
+            from .amazon import AmazonError, amazon_offers
+
+            last = (
+                ImportRun.objects.filter(retailer=retailer, error="", finished_at__isnull=False)
+                .exclude(pk=run.pk)
+                .order_by("-finished_at")
+                .first()
+            )
+            if last and last.finished_at > timezone.now() - timedelta(hours=AMAZON_EVERY_HOURS):
+                run.finished_at = timezone.now()
+                run.save()
+                return run
+            try:
+                offers = amazon_offers(retailer)
+            except AmazonError as exc:
+                raise ImportError_(str(exc)) from exc
         else:
             raise ImportError_("This retailer's prices are entered by hand.")
         complete = retailer.source_type != Retailer.Source.WEBSITE

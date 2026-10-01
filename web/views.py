@@ -415,7 +415,11 @@ def terms(request):
     return render(
         request,
         "web/terms.html",
-        {"meta_title": text(request, "terms.title"), "canonical_url": request.build_absolute_uri(request.path)},
+        {
+            "meta_title": text(request, "terms.title"),
+            "canonical_url": request.build_absolute_uri(request.path),
+            "amazon": Retailer.objects.filter(is_active=True, source_type=Retailer.Source.AMAZON).exists(),
+        },
     )
 
 

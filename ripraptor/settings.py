@@ -166,6 +166,14 @@ RIPRAPTOR_RESTOCK_HOURS = int(os.environ.get("RIPRAPTOR_RESTOCK_HOURS", "48"))
 # Google script on any page. Set it once AdSense has approved the site.
 RIPRAPTOR_ADSENSE_CLIENT = os.environ.get("RIPRAPTOR_ADSENSE_CLIENT", "").strip()
 
+# Amazon Associates: Product Advertising API keys and the tracking tag
+# (ripraptor-21). All three empty means Amazon is not read.
+RIPRAPTOR_AMAZON_ACCESS_KEY = os.environ.get("RIPRAPTOR_AMAZON_ACCESS_KEY", "").strip()
+RIPRAPTOR_AMAZON_SECRET_KEY = os.environ.get("RIPRAPTOR_AMAZON_SECRET_KEY", "").strip()
+RIPRAPTOR_AMAZON_PARTNER_TAG = os.environ.get("RIPRAPTOR_AMAZON_PARTNER_TAG", "").strip()
+# New products looked up on Amazon per daily run. Amazon allows 8,640 calls a day at first.
+RIPRAPTOR_AMAZON_DAILY_LIMIT = int(os.environ.get("RIPRAPTOR_AMAZON_DAILY_LIMIT", "2000"))
+
 # Price imports may record a retailer's product image for products that have
 # no uploaded image. Turn off if you would rather upload every image yourself.
 RIPRAPTOR_USE_FEED_IMAGES = env_bool("RIPRAPTOR_USE_FEED_IMAGES", default=True)

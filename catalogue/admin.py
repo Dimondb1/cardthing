@@ -80,7 +80,7 @@ class ProductAdmin(admin.ModelAdmin):
     readonly_fields = ("image_preview", "created_at", "updated_at")
     fieldsets = (
         (None, {"fields": ("name", "slug", "game", "product_set", "product_type", "is_active")}),
-        ("Details", {"fields": ("image", "image_url", "image_preview", "ean", "release_date")}),
+        ("Details", {"fields": ("image", "image_url", "image_preview", "ean", "amazon_asin", "release_date")}),
         ("Record", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
     inlines = [ListingInline]

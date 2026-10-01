@@ -155,6 +155,11 @@ class Product(models.Model):
         "image always takes priority.",
     )
     ean = models.CharField("barcode", max_length=20, blank=True, db_index=True)
+    amazon_asin = models.CharField(
+        "Amazon product id", max_length=20, blank=True,
+        help_text="Found by the Amazon import. Clear it to make the import look again.",
+    )
+    amazon_checked_at = models.DateTimeField(null=True, blank=True, editable=False)
     release_date = models.DateField(
         null=True, blank=True, help_text="Leave empty to use the set's release date."
     )
@@ -237,6 +242,7 @@ class Retailer(models.Model):
         MANUAL = "manual", "Entered by hand"
         SHOPIFY = "shopify", "Shopify store"
         FEED = "feed", "Product feed (CSV)"
+        AMAZON = "amazon", "Amazon (Product Advertising API)"
         WEBSITE = "website", "Website (sitemap and product pages)"
 
     source_type = models.CharField(

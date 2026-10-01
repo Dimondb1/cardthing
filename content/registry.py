@@ -836,6 +836,12 @@ ENTRIES = [
         "First paragraph on the terms page.",
         legal=True,
     ),
+    Entry(
+        "terms.amazon", T, "Amazon disclosure",
+        "As an Amazon Associate, RipRaptor earns from qualifying purchases.",
+        "Terms page, shown only while Amazon is one of the shops. Amazon requires this wording.",
+        legal=True,
+    ),
     Entry("terms.prices.title", H, "Prices heading", "Prices", "Heading on the terms page."),
     Entry("terms.independence.title", H, "Independence heading", "Independence", "Heading on the terms page."),
     Entry("terms.data.title", H, "Data heading", "Your data", "Heading on the terms page."),

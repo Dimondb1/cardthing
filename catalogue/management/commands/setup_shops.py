@@ -9,6 +9,7 @@ is in the note, so they can be checked.
 
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from catalogue.models import Retailer
@@ -74,6 +75,11 @@ SHOPS = [
      "Delivery charge not yet confirmed"),
 ]
 
+# Added only once the Amazon API keys are set. Delivery figures are Amazon's
+# published standard rates for items it dispatches; sellers' own charges vary.
+AMAZON = ("amazon", "Amazon", "https://www.amazon.co.uk/", S.AMAZON, "4.99", "35",
+          "Standard £4.99, free over £35 for items dispatched by Amazon (Amazon delivery rates page), read 1 Oct 2026")
+
 # Shops that show each visitor their own currency: the address that switches to pounds.
 SESSIONS = {
     "unicorn-cards": "https://unicorncards.co.uk/changecurrency/3?returnUrl=%2F",
@@ -88,7 +94,10 @@ class Command(BaseCommand):
     help = "Add the shops RipRaptor reads prices from. Run import_prices afterwards."
 
     def handle(self, *args, **options):
-        for slug, name, website, source, cost, free, note in SHOPS:
+        shops = list(SHOPS)
+        if settings.RIPRAPTOR_AMAZON_ACCESS_KEY and settings.RIPRAPTOR_AMAZON_PARTNER_TAG:
+            shops.append(AMAZON)
+        for slug, name, website, source, cost, free, note in shops:
             existing = Retailer.objects.filter(website=website).first() or Retailer.objects.filter(slug=slug).first()
             session_url = SESSIONS.get(slug, "")
             if existing:

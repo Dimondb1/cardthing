@@ -125,6 +125,30 @@ how many it is the cheapest UK shop, which shops it beats, and the clicks we
 sent it in the last 30 days. Use the figures when asking a shop to start an
 affiliate programme. Shopify shops can turn on Shopify Collabs for free.
 
+## Amazon
+
+Amazon publishes no feed, so prices come from its Product Advertising API,
+which needs an Amazon Associates account. In Associates Central open Tools,
+Product Advertising API, and add credentials. Put the three values in the
+server's `.env`:
+
+```sh
+RIPRAPTOR_AMAZON_ACCESS_KEY=...
+RIPRAPTOR_AMAZON_SECRET_KEY=...
+RIPRAPTOR_AMAZON_PARTNER_TAG=ripraptor-21
+```
+
+then run `setup_shops`, which adds Amazon as a shop only when the keys are
+set. The hourly import reads Amazon once a day: every product already
+found there is refreshed in batches of ten, then up to
+`RIPRAPTOR_AMAZON_DAILY_LIMIT` products are looked up, by barcode where we
+have one and otherwise by name, keeping a result only when it matches the
+product asked about. Amazon's own tracked link is stored on each listing,
+so the shop needs no affiliate link format. The Terms page carries the
+Amazon Associates line while Amazon is an active shop. Amazon removes API
+access from accounts with no sales in their first months; the import then
+reports the error in admin until access is restored.
+
 ## Real prices from UK shops
 
 `start.bat` / `start.command` run `setup_shops`, which adds 28 UK shops
@@ -443,6 +467,10 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
 | `RIPRAPTOR_RESTOCK_HOURS`      | 48      | How long a restocked product stays under "Back in stock". |
+| `RIPRAPTOR_AMAZON_ACCESS_KEY`  |         | Product Advertising API key from Amazon Associates. |
+| `RIPRAPTOR_AMAZON_SECRET_KEY`  |         | Its secret. |
+| `RIPRAPTOR_AMAZON_PARTNER_TAG` |         | The Associates tracking tag, for example `ripraptor-21`. All three set means Amazon is read once a day. |
+| `RIPRAPTOR_AMAZON_DAILY_LIMIT` | 2000    | New products looked up on Amazon per day. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
 ## Tests

@@ -654,21 +654,16 @@ ENTRIES = [
         placeholders=("count",),
     ),
     Entry(
-        "product.amazon.title", H, "Amazon heading",
-        "Also on Amazon",
-        "Product page heading above the Amazon search link. Shown only when an Amazon "
-        "tracking tag is set and we have no Amazon price for the product.",
-    ),
-    Entry(
         "product.amazon.note", T, "Amazon note",
         "We do not have an Amazon price for this product yet. The link opens an Amazon search for it.",
-        "Product page, under the Amazon heading.",
+        "Product page, under the Check price on Amazon button in the price box.",
         legal=True,
     ),
     Entry(
         "product.amazon.button", B, "Amazon button",
         "Check price on Amazon",
-        "Product page, opens Amazon in a new tab.",
+        "Product page price box, under the cheapest price. Shown only when an Amazon tracking "
+        "tag is set and we have no Amazon price for the product. Opens Amazon in a new tab.",
     ),
     Entry(
         "product.small_print", T, "Small print under the price list",

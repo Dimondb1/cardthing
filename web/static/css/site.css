@@ -633,6 +633,7 @@ ul, ol { margin: 0; padding: 0; }
 .buybox__breakdown { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__sep { color: var(--color-ink-subtle); }
 .buybox__summary { font-size: var(--text-sm); color: var(--color-ink-muted); }
+.buybox__amazon { display: grid; gap: var(--space-2); justify-items: start; padding-top: var(--space-3); border-top: 1px solid var(--color-line); }
 .buybox__none { font-size: var(--text-xl); font-weight: var(--weight-heading); line-height: var(--leading-snug); }
 
 /* Check prices */
@@ -658,7 +659,6 @@ ul, ol { margin: 0; padding: 0; }
 
 /* Price list */
 .offers-section .section-title { margin-bottom: var(--space-3); }
-.amazon-check .section-note { margin-bottom: var(--space-3); max-width: 44rem; }
 .offers { list-style: none; border: 1px solid var(--color-line); border-radius: var(--radius-card); overflow: hidden; }
 .offers__head { display: none; }
 .offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "retailer total" "stock action" "meta meta"; gap: var(--space-1) var(--space-3); align-items: center; padding: var(--space-3); }

@@ -70,8 +70,6 @@ SHOPS = [
      "Delivery charge not yet confirmed"),
     ("ancient-warrior", "Ancient Warrior", "https://www.ancientwarrior.co.uk/", S.SHOPIFY, "0", "200",
      "Free over £200 (delivery page); standard charge not published, read 1 Oct 2026"),
-    ("asmodee-uk", "Asmodee UK", "https://www.asmodee.co.uk/", S.SHOPIFY, "0", None,
-     "Free UK delivery (basket check), read 1 Oct 2026"),
     ("unicorn-cards", "Unicorn Cards", "https://unicorncards.co.uk/", S.WEBSITE, "0", None,
      "Delivery charge not yet confirmed"),
 ]
@@ -81,8 +79,9 @@ SESSIONS = {
     "unicorn-cards": "https://unicorncards.co.uk/changecurrency/3?returnUrl=%2F",
 }
 
-# Shops that were set up before and must not be shown: prices in another currency.
-HIDDEN = ["poke-collect"]
+# Shops that were set up before and must not be shown: prices in another currency,
+# or not a stockist the owner wants compared (Asmodee UK is the distributor's own store).
+HIDDEN = ["poke-collect", "asmodee-uk"]
 
 
 class Command(BaseCommand):
@@ -115,4 +114,4 @@ class Command(BaseCommand):
                 hidden.listings.all().delete()
                 hidden.is_active = False
                 hidden.save(update_fields=["is_active"])
-                self.stdout.write(f"{hidden.name}: hidden (prices are not in pounds)")
+                self.stdout.write(f"{hidden.name}: hidden")

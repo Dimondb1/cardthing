@@ -191,7 +191,7 @@ Gaming, Zatu Games, Goblin Gaming, Travelling Man, JET Cards, Titan Cards,
 Buy Any Cards, The TCG Shop, Double Sleeved, Packrat, The Gamers Lodge,
 Kongs Cards, MaxOnCards, Japan2UK, Iconic Trading Cards, Card Empire,
 Griffins Gaming, Tayler TCG, Shiny Vault, Monarch Cards, Castle Comics, 120HP,
-Ancient Warrior and Unicorn Cards) with the delivery rules read from their delivery pages and baskets,
+Ancient Warrior, Unicorn Cards and Sports Cards Direct) with the delivery rules read from their delivery pages and baskets,
 and `remove_demo`, which deletes the fictional demo retailers. Shops that
 cannot be read automatically, and why, are listed under "Shops we cannot
 read" below. A Shopify shop that prices in another currency is refused

@@ -40,6 +40,7 @@ DJANGO_ALLOWED_HOSTS=$DOMAIN,www.$DOMAIN
 DJANGO_CSRF_TRUSTED_ORIGINS=https://$DOMAIN,https://www.$DOMAIN
 DJANGO_SQLITE_PATH=/var/lib/ripraptor/db.sqlite3
 RIPRAPTOR_USE_FEED_IMAGES=1
+RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb
 ENV
 fi
 mkdir -p /var/lib/ripraptor media
@@ -47,6 +48,9 @@ set -a; . ./.env; set +a
 .venv/bin/python manage.py migrate -v0
 .venv/bin/python manage.py collectstatic --noinput -v0
 .venv/bin/python manage.py setup_shops
+grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb" >> .env
+set -a; . ./.env; set +a
+[ -f /var/lib/ripraptor/dbip-country.mmdb ] || .venv/bin/python manage.py fetch_geoip || true
 chown -R ripraptor:ripraptor "$DIR" /var/lib/ripraptor
 
 cp deploy/ripraptor.service /etc/systemd/system/ripraptor.service
@@ -70,7 +74,8 @@ echo "PYTHONUNBUFFERED=1
 0 * * * *  cd $DIR && set -a && . ./.env && set +a && flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 && .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
 15 0 * * * cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
-*/10 * * * * cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
+*/10 * * * * cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock >> /var/log/ripraptor-import.log 2>&1
+45 4 5 * * cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
 touch /var/log/ripraptor-import.log && chown ripraptor /var/log/ripraptor-import.log
 
 # First price import in the background so the site is usable straight away.

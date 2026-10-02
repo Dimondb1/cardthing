@@ -176,6 +176,10 @@ RIPRAPTOR_RESTOCK_HOURS = int(os.environ.get("RIPRAPTOR_RESTOCK_HOURS", "48"))
 # Google script on any page. Set it once AdSense has approved the site.
 RIPRAPTOR_ADSENSE_CLIENT = os.environ.get("RIPRAPTOR_ADSENSE_CLIENT", "").strip()
 
+# Free DB-IP country database for visitor countries on the Insights page.
+# Empty, or no file there, means countries are not recorded. fetch_geoip downloads it.
+RIPRAPTOR_GEOIP_DB = os.environ.get("RIPRAPTOR_GEOIP_DB", "").strip()
+
 # Awin publisher id. Loads Awin's MasterTag on every public page so clicks
 # through Awin shops are tracked. Empty means no Awin script.
 RIPRAPTOR_AWIN_PUBLISHER_ID = os.environ.get("RIPRAPTOR_AWIN_PUBLISHER_ID", "3111686").strip()

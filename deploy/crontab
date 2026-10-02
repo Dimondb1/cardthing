@@ -5,3 +5,4 @@ PYTHONUNBUFFERED=1
 15 0 * * * cd /srv/ripraptor && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd /srv/ripraptor && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
 */10 * * * * cd /srv/ripraptor && flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock >> /var/log/ripraptor-import.log 2>&1
+45 4 5 * * cd /srv/ripraptor && .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1

@@ -95,5 +95,105 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        with self.assertNumQueries(12):
+        with self.assertNumQueries(14):
             insights.report(30)
+
+
+class VisitorTests(TestCase):
+    def setUp(self):
+        self.product = make_product(make_set(make_game()))
+        self.url = self.product.get_absolute_url()
+
+    def test_the_same_visitor_counts_once_a_day_and_different_browsers_count_apart(self):
+        from catalogue.models import DailyVisitor
+
+        self.client.get(self.url, **HUMAN)
+        self.client.get(self.url, **HUMAN)
+        self.client.get(reverse("web:home"), **HUMAN)
+        self.assertEqual(DailyVisitor.objects.count(), 1)
+        self.client.get(self.url, HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0) Chrome/124")
+        self.assertEqual(DailyVisitor.objects.count(), 2)
+        self.client.get(self.url, **BOT)
+        self.assertEqual(DailyVisitor.objects.count(), 2)
+        token = DailyVisitor.objects.first().token
+        self.assertEqual(len(token), 32)
+        self.assertNotIn("127.0.0.1", token)
+
+    def test_the_address_behind_the_proxy_is_the_one_used(self):
+        from catalogue.models import DailyVisitor
+
+        self.client.get(self.url, HTTP_X_FORWARDED_FOR="203.0.113.9", **HUMAN)
+        self.client.get(self.url, HTTP_X_FORWARDED_FOR="198.51.100.4", **HUMAN)
+        self.assertEqual(DailyVisitor.objects.count(), 2)
+
+    def test_country_is_recorded_when_the_database_is_there(self):
+        from unittest import mock
+
+        from catalogue import geo
+        from catalogue.models import DailyVisitor
+
+        class FakeReader:
+            def get(self, ip):
+                return {"country": {"iso_code": "gb"}} if ip.startswith("203.") else None
+
+        with mock.patch.object(geo, "reader", return_value=FakeReader()):
+            self.client.get(self.url, HTTP_X_FORWARDED_FOR="203.0.113.9", **HUMAN)
+            self.client.get(self.url, HTTP_X_FORWARDED_FOR="198.51.100.4", **HUMAN)
+        self.assertEqual(sorted(DailyVisitor.objects.values_list("country", flat=True)), ["", "GB"])
+
+    def test_no_database_means_no_country_and_no_error(self):
+        from catalogue import geo
+
+        with self.settings(RIPRAPTOR_GEOIP_DB="/nowhere/dbip.mmdb"):
+            geo.reset()
+            self.assertEqual(geo.country_of("203.0.113.9"), "")
+            self.client.get(self.url, **HUMAN)
+
+    def test_fetch_downloads_and_unpacks_this_months_database(self):
+        import gzip
+        import io
+        import tempfile
+        from datetime import date
+
+        from catalogue import geo
+
+        asked = []
+
+        class Response(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+        def opener(url, timeout=0):
+            asked.append(url)
+            if "2026-10" in url:
+                raise OSError("not published yet")
+            return Response(gzip.compress(b"MMDB-BYTES"))
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = f"{folder}/dbip-country.mmdb"
+            geo.fetch(path=path, when=date(2026, 10, 2), opener=opener)
+            self.assertEqual(open(path, "rb").read(), b"MMDB-BYTES")
+        self.assertTrue(asked[0].endswith("dbip-country-lite-2026-10.mmdb.gz"))
+        self.assertTrue(asked[1].endswith("dbip-country-lite-2026-09.mmdb.gz"))
+
+    def test_insights_shows_visitors_and_countries(self):
+        from datetime import timedelta
+
+        from catalogue.models import DailyVisitor
+
+        today = timezone.localdate()
+        DailyVisitor.objects.create(date=today, token="a" * 32, country="GB")
+        DailyVisitor.objects.create(date=today, token="b" * 32, country="GB")
+        DailyVisitor.objects.create(date=today - timedelta(days=1), token="c" * 32, country="US")
+        DailyVisitor.objects.create(date=today - timedelta(days=60), token="d" * 32, country="DE")
+        data = insights.report(30)
+        self.assertEqual(data["total_visitors"], 3)
+        self.assertEqual(data["countries"][0], {"code": "GB", "name": "United Kingdom", "visitors": 2, "share": 66.7})
+        staff = User.objects.create_user("ben2", password="pw", is_staff=True)
+        self.client.force_login(staff)
+        response = self.client.get(reverse("insights"))
+        self.assertContains(response, "United Kingdom")
+        self.assertContains(response, "<b>3</b> visitors")

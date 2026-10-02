@@ -4,13 +4,23 @@ searches and clicks to shops, totalled by day. The Insights page in admin
 reads them back.
 """
 
+import hashlib
 from datetime import timedelta
 
-from django.db import transaction
+from django.conf import settings
+from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Sum
 from django.utils import timezone
 
-from .models import DailyPageView, DailySearch, OutboundClick, Product, Retailer
+from . import geo
+from .models import DailyPageView, DailySearch, DailyVisitor, OutboundClick, Product, Retailer
+
+COUNTRY_NAMES = {
+    "GB": "United Kingdom", "IE": "Ireland", "US": "United States", "DE": "Germany", "FR": "France", "NL": "Netherlands",
+    "ES": "Spain", "IT": "Italy", "AU": "Australia", "CA": "Canada", "SE": "Sweden", "NO": "Norway", "DK": "Denmark",
+    "PL": "Poland", "BE": "Belgium", "PT": "Portugal", "JP": "Japan", "IN": "India", "NZ": "New Zealand", "CH": "Switzerland",
+    "AT": "Austria", "FI": "Finland", "BR": "Brazil", "MX": "Mexico", "SG": "Singapore", "HK": "Hong Kong", "AE": "United Arab Emirates",
+}
 
 BOT_MARKERS = ("bot", "crawl", "spider", "slurp", "preview", "monitor", "python-requests", "curl/")
 
@@ -28,9 +38,37 @@ def bump(model, **keys):
             model.objects.create(date=timezone.localdate(), hits=1, **keys)
 
 
+def client_ip(request):
+    """The visitor's address. Caddy puts the real one last in X-Forwarded-For."""
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.META.get("REMOTE_ADDR", "")
+
+
+def visitor_token(request, day):
+    """A one-way token for this visitor today. The day's secret is never stored, so it cannot be reversed."""
+    secret = f"{settings.SECRET_KEY}:{day.isoformat()}"
+    raw = f"{secret}|{client_ip(request)}|{request.headers.get('User-Agent', '')}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def record_visitor(request):
+    day = timezone.localdate()
+    token = visitor_token(request, day)
+    if DailyVisitor.objects.filter(date=day, token=token).exists():
+        return
+    try:
+        with transaction.atomic():
+            DailyVisitor.objects.create(date=day, token=token, country=geo.country_of(client_ip(request)))
+    except IntegrityError:
+        pass   # two requests from the same visitor at once
+
+
 def record_view(request, kind, key=""):
     if request.method == "GET" and not is_bot(request):
         bump(DailyPageView, kind=kind, key=key[:220])
+        record_visitor(request)
 
 
 def record_search(request, query, results):
@@ -51,12 +89,26 @@ def report(days=30):
     clicks = OutboundClick.objects.filter(created_at__date__gte=since)
     searches = DailySearch.objects.filter(date__gte=since)
 
+    visitors = DailyVisitor.objects.filter(date__gte=since)
     by_day = {row["date"]: row for row in views.values("date").annotate(hits=Sum("hits")).order_by("date")}
     clicks_by_day = dict(clicks.values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n"))
+    visitors_by_day = dict(visitors.values_list("date").annotate(n=Count("id")).values_list("date", "n"))
     days_out = []
     for offset in range(days):
         day = since + timedelta(days=offset)
-        days_out.append({"date": day, "views": by_day.get(day, {}).get("hits", 0), "clicks": clicks_by_day.get(day, 0)})
+        days_out.append({
+            "date": day,
+            "visitors": visitors_by_day.get(day, 0),
+            "views": by_day.get(day, {}).get("hits", 0),
+            "clicks": clicks_by_day.get(day, 0),
+        })
+    country_rows = list(visitors.values("country").annotate(n=Count("id")).order_by("-n")[:15])
+    total_visitors = sum(d["visitors"] for d in days_out)
+    countries = [
+        {"code": row["country"] or "", "name": COUNTRY_NAMES.get(row["country"], row["country"] or "Unknown"),
+         "visitors": row["n"], "share": round(100 * row["n"] / total_visitors, 1) if total_visitors else 0}
+        for row in country_rows
+    ]
 
     product_views = {
         row["key"]: row["hits"]
@@ -95,6 +147,9 @@ def report(days=30):
         "today": today,
         "by_day": days_out,
         "total_views": total_views,
+        "total_visitors": total_visitors,
+        "countries": countries,
+        "geoip_ready": geo.reader() is not None,
         "total_clicks": total_clicks,
         "click_rate": round(100 * total_clicks / product_page_views, 1) if product_page_views else 0,
         "kinds": [(label, kinds.get(code, 0)) for code, label in DailyPageView.Kind.choices],

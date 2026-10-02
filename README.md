@@ -509,6 +509,7 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_EBAY_CERT_ID`       |         | Its Cert ID (Client Secret). |
 | `RIPRAPTOR_EBAY_CAMPAIGN_ID`   |         | eBay Partner Network campaign id. All three set means eBay is read once a day. |
 | `RIPRAPTOR_EBAY_DAILY_LIMIT`   | 4000    | Products checked on eBay per day. |
+| `RIPRAPTOR_GEOIP_DB`           |         | Path of the DB-IP country database for visitor countries. Empty means countries are not recorded. |
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
@@ -546,8 +547,13 @@ Admin, Insights (`/admin/insights/`) shows what visitors do: page views
 and clicks to shops by day, the most viewed products with their clicks,
 clicks by shop, game, product type and hour, top searches, and searches
 that found nothing. Views and searches are counted by day with no record
-of who made them; clicks were already counted the same way. Bots are
-left out. The window is 7, 30, 90 or 365 days.
+of who made them; clicks were already counted the same way. Visitors are
+counted once a day each through a one-way token made from their address
+and browser with a secret that changes daily, so nobody can be traced
+and yesterday's visitor is a stranger today. Only the visitor's country
+is kept, looked up in the free DB-IP country database that `fetch_geoip`
+downloads (the installer fetches it and cron refreshes it monthly). Bots
+are left out. The window is 7, 30, 90 or 365 days.
 
 ## Tests
 

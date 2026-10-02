@@ -523,3 +523,24 @@ class DailySearch(models.Model):
 
     def __str__(self):
         return f"{self.date} {self.query!r}: {self.hits}"
+
+
+class DailyVisitor(models.Model):
+    """One visitor on one day, known only by a token that cannot be traced back.
+
+    The token is a hash of the address and browser with a secret that changes
+    every day, so the same person is one visitor for the day and a stranger
+    again tomorrow. The country comes from the address and is all that is kept.
+    """
+
+    date = models.DateField(db_index=True)
+    token = models.CharField(max_length=32)
+    country = models.CharField(max_length=2, blank=True)
+
+    class Meta:
+        unique_together = [("date", "token")]
+        verbose_name = "visitor for a day"
+        verbose_name_plural = "visitors by day"
+
+    def __str__(self):
+        return f"{self.date} {self.country or '??'}"

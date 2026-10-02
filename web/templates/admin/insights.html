@@ -23,10 +23,11 @@
       <option value="365"{% if days == 365 %} selected{% endif %}>365 days</option>
     </select>
     <noscript><button type="submit">Show</button></noscript>
-    <span>{{ since }} to {{ today }}. Visitors are counted, never identified.</span>
+    <span>{{ since }} to {{ today }}. A visitor is one person for one day; nobody is identified and only their country is kept.</span>
   </form>
 
   <div class="ins__totals">
+    <div class="ins__total"><b>{{ total_visitors }}</b> visitors</div>
     <div class="ins__total"><b>{{ total_views }}</b> page views</div>
     <div class="ins__total"><b>{{ total_clicks }}</b> clicks to shops</div>
     <div class="ins__total"><b>{{ click_rate }}%</b> of product page views end in a click</div>
@@ -36,8 +37,8 @@
   <div class="module">
     <h2>By day</h2>
     <table>
-      <thead><tr><th>Day</th><th>Page views</th><th>Clicks</th></tr></thead>
-      <tbody>{% for d in by_day reversed %}<tr><td>{{ d.date|date:"D j M" }}</td><td class="n">{{ d.views }}</td><td class="n">{{ d.clicks }}</td></tr>{% endfor %}</tbody>
+      <thead><tr><th>Day</th><th>Visitors</th><th>Page views</th><th>Clicks</th></tr></thead>
+      <tbody>{% for d in by_day reversed %}<tr><td>{{ d.date|date:"D j M" }}</td><td class="n">{{ d.visitors }}</td><td class="n">{{ d.views }}</td><td class="n">{{ d.clicks }}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 
@@ -45,6 +46,11 @@
     <div class="module">
       <h2>Pages</h2>
       <table><tbody>{% for label, n in kinds %}<tr><td>{{ label }}</td><td class="n">{{ n }}</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
+      <h2>Visitors by country</h2>
+      {% if not geoip_ready %}<p>Country database not loaded yet. It is fetched by the installer and monthly after that.</p>{% endif %}
+      <table><tbody>{% for c in countries %}<tr><td>{{ c.name }}</td><td class="n">{{ c.visitors }}</td><td class="n">{{ c.share }}%</td></tr>{% empty %}<tr><td>No visitors yet.</td></tr>{% endfor %}</tbody></table>
     </div>
     <div class="module">
       <h2>Clicks by shop</h2>

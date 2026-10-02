@@ -175,6 +175,10 @@ RIPRAPTOR_RESTOCK_HOURS = int(os.environ.get("RIPRAPTOR_RESTOCK_HOURS", "48"))
 # Google script on any page. Set it once AdSense has approved the site.
 RIPRAPTOR_ADSENSE_CLIENT = os.environ.get("RIPRAPTOR_ADSENSE_CLIENT", "").strip()
 
+# Awin publisher id. Loads Awin's MasterTag on every public page so clicks
+# through Awin shops are tracked. Empty means no Awin script.
+RIPRAPTOR_AWIN_PUBLISHER_ID = os.environ.get("RIPRAPTOR_AWIN_PUBLISHER_ID", "3111686").strip()
+
 # Amazon Associates: Product Advertising API keys and the tracking tag
 # (ripraptor-21). All three empty means Amazon is not read.
 RIPRAPTOR_AMAZON_ACCESS_KEY = os.environ.get("RIPRAPTOR_AMAZON_ACCESS_KEY", "").strip()

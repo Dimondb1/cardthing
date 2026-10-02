@@ -367,6 +367,17 @@ class AdminAddProductTests(TestCase):
         self.assertContains(self.client.get(product.get_absolute_url()), "£99.99")
 
 
+class AwinTagTests(PageTestCase):
+    def test_every_public_page_loads_the_awin_mastertag(self):
+        from django.test import override_settings
+
+        for url in self.public_urls():
+            with self.subTest(url=url):
+                self.assertContains(self.client.get(url), 'src="https://www.dwin2.com/pub.3111686.min.js"')
+        with override_settings(RIPRAPTOR_AWIN_PUBLISHER_ID=""):
+            self.assertNotContains(self.client.get(reverse("web:home")), "dwin2.com")
+
+
 class AmazonLinkTests(PageTestCase):
     def test_no_link_without_a_tracking_tag(self):
         response = self.client.get(self.etb.get_absolute_url())

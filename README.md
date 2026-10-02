@@ -509,6 +509,7 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_EBAY_CERT_ID`       |         | Its Cert ID (Client Secret). |
 | `RIPRAPTOR_EBAY_CAMPAIGN_ID`   |         | eBay Partner Network campaign id. All three set means eBay is read once a day. |
 | `RIPRAPTOR_EBAY_DAILY_LIMIT`   | 4000    | Products checked on eBay per day. |
+| `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
 ## Tests

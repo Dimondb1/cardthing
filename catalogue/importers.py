@@ -46,6 +46,9 @@ USER_AGENT = "RipRaptor price check (+https://ripraptor.example)"
 MAX_SHOPIFY_PAGES = 400
 TIMEOUT = 30
 PREORDER_WORDS = re.compile(r"pre[\s-]?order", re.I)
+# A tag counts only when it says pre-order and nothing else. Shop apps add tags
+# like "Pre-Order - Inventory Trigger" to products that are in stock today.
+PREORDER_TAG = re.compile(r"^\s*pre[\s-]?orders?\s*$", re.I)
 
 
 @dataclass
@@ -192,14 +195,30 @@ def shop_currency(base, fetch=fetch):
 PREORDER_COLLECTIONS = ("pre-order", "pre-orders", "preorder", "preorders")
 
 
+def preorder_collections(base, fetch=fetch):
+    """Handles of the shop's collections whose names say pre-order, plus the usual names."""
+    names = list(PREORDER_COLLECTIONS)
+    try:
+        listed = json.loads(fetch(f"{base}/collections.json?limit=250")).get("collections", [])
+    except Exception:   # a shop without the listing, or a test fake that has no answer for it
+        listed = []
+    for collection in listed:
+        handle = collection.get("handle", "")
+        if PREORDER_WORDS.search(handle) and handle not in names:
+            names.append(handle)
+    return names
+
+
 def preorder_handles(base, fetch=fetch, limit=20):
     """Handles of products the shop lists in a pre-order collection.
 
     Many Shopify shops mark pre-orders only through a collection, so the
     product itself says "available" while the shop page says pre-order.
+    Every collection named for pre-orders is read: shops call them
+    "pre-order", "all-pre-order-items", "pokemon-pre-orders" and so on.
     """
     handles = set()
-    for name in PREORDER_COLLECTIONS:
+    for name in preorder_collections(base, fetch=fetch):
         for page in range(1, limit + 1):
             try:
                 products = json.loads(fetch(f"{base}/collections/{name}/products.json?limit=250&page={page}")).get("products", [])
@@ -210,8 +229,6 @@ def preorder_handles(base, fetch=fetch, limit=20):
             handles.update(p.get("handle", "") for p in products)
             if len(products) < 250:
                 break
-        if handles:
-            break
     return handles
 
 
@@ -245,7 +262,7 @@ def shopify_offers(retailer, fetch=fetch):
         for product in products:
             url = f"{base}/products/{product.get('handle', '')}"
             preorder = bool(PREORDER_WORDS.search(product.get("title", ""))) or any(
-                PREORDER_WORDS.search(tag) for tag in product.get("tags", [])
+                PREORDER_TAG.match(tag) for tag in product.get("tags", [])
             ) or product.get("handle") in preorders
             images = product.get("images") or []
             product_image = images[0].get("src", "") if images else ""

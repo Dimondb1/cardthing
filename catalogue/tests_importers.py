@@ -678,6 +678,58 @@ class PreorderCollectionTests(TestCase):
         self.assertEqual(Listing.objects.get(product=product).availability, Listing.Availability.PREORDER)
 
 
+class PreorderTagTests(TestCase):
+    def run_shop(self, products, collections=None, collection_products=None):
+        retailer = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+
+        def fetch(url):
+            if url.endswith("/meta.json"):
+                return b'{"currency": "GBP"}'
+            if url.endswith("/collections.json?limit=250"):
+                return json.dumps({"collections": [{"handle": h} for h in (collections or [])]}).encode()
+            for handle, items in (collection_products or {}).items():
+                if f"/collections/{handle}/products.json" in url and "page=1" in url:
+                    return json.dumps({"products": [{"handle": i} for i in items]}).encode()
+            if "/collections/" in url:
+                return b'{"products": []}'
+            if "page=1" in url:
+                return json.dumps({"products": products}).encode()
+            return b'{"products": []}'
+
+        run = run_import(retailer, fetch=fetch)
+        self.assertTrue(run.ok, run.error)
+        return retailer
+
+    def test_an_app_trigger_tag_does_not_make_an_in_stock_product_a_preorder(self):
+        product = make_product(make_set(make_game()), name="EFL Premium Box", ean="0820650851230")
+        self.run_shop([{
+            "title": "Panini EFL Premium Box", "handle": "efl-premium-box",
+            "tags": ["Pre-Order - Inventory Trigger", "out-of-stock", "panini"],
+            "variants": [{"price": "169.95", "available": True, "barcode": "0820650851230"}],
+        }])
+        self.assertEqual(Listing.objects.get(product=product).availability, Listing.Availability.IN_STOCK)
+
+    def test_a_plain_preorder_tag_still_counts(self):
+        product = make_product(make_set(make_game()), name="EFL Premium Box", ean="0820650851230")
+        self.run_shop([{
+            "title": "Panini EFL Premium Box", "handle": "efl-premium-box", "tags": ["Pre-order"],
+            "variants": [{"price": "169.95", "available": True, "barcode": "0820650851230"}],
+        }])
+        self.assertEqual(Listing.objects.get(product=product).availability, Listing.Availability.PREORDER)
+
+    def test_every_collection_named_for_preorders_is_read(self):
+        product = make_product(make_set(make_game()), name="EFL Premium Box", ean="0820650851230")
+        self.run_shop(
+            [{
+                "title": "Panini EFL Premium Box", "handle": "efl-premium-box", "tags": [],
+                "variants": [{"price": "169.95", "available": True, "barcode": "0820650851230"}],
+            }],
+            collections=["all-pre-order-items", "panini", "pokemon-pre-orders"],
+            collection_products={"all-pre-order-items": ["efl-premium-box"]},
+        )
+        self.assertEqual(Listing.objects.get(product=product).availability, Listing.Availability.PREORDER)
+
+
 class MatchKeyTests(TestCase):
     def test_same_product_under_different_shop_names_shares_a_key(self):
         from .matching import match_key

@@ -25,6 +25,7 @@
   </nav>
   {% endif %}
   <h1 class="browse-head__title">{{ heading }}</h1>
+  {% if intro %}<p class="browse-head__meta">{{ intro }}</p>{% endif %}
   {% if product_set %}
     <p class="browse-head__meta">{% if product_set.code %}{{ product_set.code }}{% if product_set.release_date %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% endif %}{% if product_set.release_date %}{% copy "browse.set.released" date=product_set.release_date|short_date %}{% endif %}</p>
   {% endif %}

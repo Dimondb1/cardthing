@@ -33,7 +33,7 @@ class PageSitemap(Sitemap):
     changefreq = "weekly"
 
     def items(self):
-        return ["web:home", "web:deals", "web:games", "web:about", "web:terms"]
+        return ["web:home", "web:deals", "web:new", "web:games", "web:about", "web:terms"]
 
     def location(self, name):
         return reverse(name)

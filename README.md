@@ -525,6 +525,13 @@ collector boosters are their own types, and `tidy_catalogue` retypes any
 that were filed as play boosters. Browsing also filters by price band and
 by products compared at two or more shops.
 
+## Latest drops
+
+`/new/` lists sealed products released in the last 45 days, on pre-order,
+or first listed by a shop in the last 14 days, newest release first, with
+the usual filters. The home page carries a Latest drops row of the same
+list, cached with the other home lists.
+
 ## Deals page
 
 `/deals/` is the page to link from social posts: the biggest savings

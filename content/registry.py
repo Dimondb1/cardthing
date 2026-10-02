@@ -232,6 +232,29 @@ ENTRIES = [
         placeholders=("price", "retailer"),
     ),
     Entry(
+        "home.new.title", H, "Latest drops heading",
+        "Latest drops",
+        "Home page heading above the newest products.",
+    ),
+    Entry(
+        "home.new.intro", T, "Latest drops note",
+        "New sealed products as UK shops list them, newest release first.",
+        "One line under the latest drops heading. Leave empty to hide it.",
+        optional=True,
+    ),
+    Entry(
+        "home.new.out", T, "Pre-order release date",
+        "Out {date}",
+        "On a latest-drops card that is on pre-order. {date} is the release date.",
+        placeholders=("date",),
+    ),
+    Entry(
+        "home.new.released", T, "Released date",
+        "Released {date}",
+        "On a latest-drops card that is out. {date} is the release date.",
+        placeholders=("date",),
+    ),
+    Entry(
         "home.football.title", H, "Football row heading",
         "Football and sports cards",
         "Home page heading above the football row. Shown only while football products are in stock.",
@@ -369,6 +392,17 @@ ENTRIES = [
         "browse.no_filtered_results", T, "No results with filters",
         "Nothing matches these filters.",
         "Shown when filters such as game or product type rule out every product.",
+    ),
+    Entry(
+        "browse.new.title", H, "Latest drops page heading",
+        "Latest drops",
+        "Heading of the latest drops page.",
+    ),
+    Entry(
+        "browse.new.intro", T, "Latest drops page introduction",
+        "Sealed products released in the last few weeks, on pre-order, or newly listed by UK shops, "
+        "with the cheapest delivered price for each.",
+        "Under the latest drops page heading.",
     ),
     Entry(
         "browse.filters.apply", B, "Apply filters button",
@@ -967,6 +1001,17 @@ ENTRIES = [
         "stock, delivery and the time each price was checked.",
         "Search engine description for product pages that have a current price.",
         placeholders=("product", "price", "retailer", "count"),
+    ),
+    Entry(
+        "meta.new.title", T, "Latest drops page title",
+        "Latest TCG drops and new releases: UK prices",
+        "Browser tab title for the latest drops page. The site name is added after it.",
+    ),
+    Entry(
+        "meta.new.description", T, "Latest drops page description",
+        "New and upcoming sealed Pokemon, Magic, One Piece, Yu-Gi-Oh and Lorcana products with the "
+        "cheapest UK delivered price, updated every hour.",
+        "Search engine description for the latest drops page.",
     ),
     Entry(
         "meta.game.title", T, "Game page title",

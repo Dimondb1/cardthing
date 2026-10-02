@@ -633,3 +633,42 @@ class HomeFootballTests(PageTestCase):
         self.assertIn("/games/football/", chips.split("chips__extra")[0])
         self.assertContains(response, "Football and sports cards")
         self.assertContains(response, "Match Attax 2026/27 Mega Tin")
+
+
+class LatestDropsTests(PageTestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.old_set = make_set(self.game, name="Base Set", slug="base-set", code="BS", release_date=timezone.localdate() - timedelta(days=400))
+        self.old = make_product(self.old_set, name="Base Set Booster Box", slug="base-set-box", product_type="booster_box")
+        make_listing(self.old, self.harbour, price="400.00")
+        Product.objects.filter(pk=self.old.pk).update(created_at=timezone.now() - timedelta(days=100))
+        self.soon_set = make_set(self.game, name="Mega Evolution", slug="mega-evolution", code="ME1", release_date=timezone.localdate() + timedelta(days=10))
+        self.soon = make_product(self.soon_set, name="Mega Evolution Elite Trainer Box", slug="me1-etb")
+        make_listing(self.soon, self.harbour, price="49.99", availability=Listing.Availability.PREORDER)
+
+    def test_home_row_leads_with_the_newest_release_and_skips_old_stock(self):
+        response = self.client.get(reverse("web:home"))
+        self.assertContains(response, "Latest drops")
+        html = response.content.decode()
+        row = html[html.index('id="latest-title"'):html.index("</section>", html.index('id="latest-title"'))]
+        self.assertIn("Mega Evolution Elite Trainer Box", row)
+        self.assertIn("Out ", row)
+        self.assertNotIn("Base Set Booster Box", row)
+        self.assertLess(row.index("Mega Evolution"), row.index("Prismatic Evolutions Elite Trainer Box"))
+
+    def test_latest_drops_page_lists_new_products_with_filters_and_is_in_the_sitemap(self):
+        response = self.client.get(reverse("web:new"))
+        self.assertContains(response, "Latest drops")
+        self.assertContains(response, "Mega Evolution Elite Trainer Box")
+        self.assertNotContains(response, "Base Set Booster Box")
+        self.assertContains(response, 'name="price"')
+        self.assertContains(response, '<link rel="canonical" href="http://testserver/new/">')
+        self.assertContains(self.client.get("/sitemap.xml"), "http://testserver/new/")
+        self.assertContains(self.client.get(reverse("web:home")), 'href="/new/"')
+
+    def test_a_product_shops_only_just_listed_counts_as_a_drop_even_without_a_release_date(self):
+        fresh = make_product(self.old_set, name="Base Set Blister", slug="base-set-blister", product_type="bundle")
+        make_listing(fresh, self.harbour, price="12.00")
+        self.assertContains(self.client.get(reverse("web:new")), "Base Set Blister")

@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 from urllib.parse import urlencode
 
 from django import forms
@@ -225,6 +226,60 @@ def home_football():
     return rows
 
 
+NEW_RELEASE_DAYS = 45    # a product counts as a drop while its release is this recent or still to come
+NEW_SEEN_DAYS = 14       # or while shops have only just started listing it
+
+
+def latest_drops_queryset():
+    """New sealed products with a price: just released, about to be, or just listed by shops."""
+    today = timezone.localdate()
+    return (
+        Product.objects.for_lists()
+        .filter(lowest_price__isnull=False)
+        .filter(
+            Q(release__gte=today - timedelta(days=NEW_RELEASE_DAYS))
+            | Q(created_at__gte=timezone.now() - timedelta(days=NEW_SEEN_DAYS))
+        )
+    )
+
+
+def home_drops_new():
+    """The home row of latest drops, newest release first, cached with the other lists."""
+    from django.core.cache import cache
+
+    from catalogue.signals import NEW_CACHE_KEY as key
+
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    rows = list(
+        latest_drops_queryset()
+        .prefetch_related(offers.buyable_prefetch())
+        .order_by(F("release").desc(nulls_last=True), "-created_at")[:10]
+    )
+    for product in rows:
+        product.best_offer = product.offers[0] if product.offers else None
+    cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    return rows
+
+
+@require_GET
+def latest_drops(request):
+    heading = text(request, "browse.new.title")
+    return _browse(
+        request,
+        {
+            "heading": heading,
+            "intro": text(request, "browse.new.intro"),
+            "meta_title": text(request, "meta.new.title"),
+            "meta_description": text(request, "meta.new.description"),
+            "canonical_url": request.build_absolute_uri(reverse("web:new")),
+            "structured_json": json.dumps(breadcrumbs_json(request, [(heading, reverse("web:new"))])),
+        },
+        base_queryset=latest_drops_queryset(),
+    )
+
+
 @require_GET
 def home(request):
     games = list(
@@ -267,6 +322,7 @@ def home(request):
             "drops": drops,
             "restocked": restocked,
             "football": home_football(),
+            "latest": home_drops_new(),
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME

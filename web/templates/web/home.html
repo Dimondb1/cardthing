@@ -52,6 +52,31 @@
 </section>
 {% endif %}
 
+{% if latest %}
+<section class="home-section" aria-labelledby="latest-title">
+  <div class="section-head">
+    <h2 id="latest-title" class="section-head__title"><svg class="section-head__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" fill="currentColor"/></svg>{% copy "home.new.title" %}</h2>
+    <a class="section-head__all" href="{% url 'web:new' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  </div>
+  {% copy "home.new.intro" as new_intro %}{% if new_intro %}<p class="section-head__note">{{ new_intro }}</p>{% endif %}
+  <ul class="trending" data-scroll>
+    {% for product in latest %}
+    <li class="trending__item">
+      <a class="trending__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "trend" %}
+        <span class="trending__name">{{ product.name }}</span>
+        {% if product.best_offer %}
+          <span class="trending__price">{% price product.best_offer.price %}</span>
+          <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=product.best_offer.delivered_price|gbp %}</span> · {{ product.best_offer.retailer.name }}</span>
+        {% endif %}
+        {% if product.release %}<span class="trending__move trending__move--down">{% if product.best_offer.availability == "preorder" %}{% copy "home.new.out" date=product.release|short_date %}{% else %}{% copy "home.new.released" date=product.release|short_date %}{% endif %}</span>{% endif %}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if savings %}
 <section class="home-section" aria-labelledby="savings-title">
   <div class="section-head">

@@ -652,6 +652,7 @@ class LatestDropsTests(PageTestCase):
         response = self.client.get(reverse("web:home"))
         self.assertContains(response, "Latest drops")
         html = response.content.decode()
+        self.assertLess(html.index('id="savings-title"'), html.index('id="latest-title"'))
         row = html[html.index('id="latest-title"'):html.index("</section>", html.index('id="latest-title"'))]
         self.assertIn("Mega Evolution Elite Trainer Box", row)
         self.assertIn("Out ", row)

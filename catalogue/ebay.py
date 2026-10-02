@@ -46,6 +46,7 @@ POSTCODE = "SW1A1AA"
 FILTER = "conditions:{NEW},buyingOptions:{FIXED_PRICE},itemLocationCountry:GB,deliveryCountry:GB,priceCurrency:GBP"
 MIN_FEEDBACK = 95.0
 PAUSE = 0.2
+GIVE_UP_AFTER = 5  # failed lookups in a row before a run stops and keeps what it found
 
 
 class EbayError(Exception):
@@ -61,7 +62,7 @@ def credentials():
     return app, cert, campaign
 
 
-def http(url, headers, data=None, retries=2):
+def http(url, headers, data=None, retries=3, wait=5):
     request = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
     for attempt in range(retries + 1):
         try:
@@ -69,11 +70,16 @@ def http(url, headers, data=None, retries=2):
                 return json.loads(response.read() or b"{}")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "ignore")[:300]
-            if exc.code in (429, 500, 502, 503) and attempt < retries:
-                time.sleep(5 * (attempt + 1))
+            if exc.code in (429, 500, 502, 503, 504) and attempt < retries:
+                time.sleep(wait * (attempt + 1))
                 continue
             raise EbayError(f"eBay API {exc.code}: {detail}") from exc
         except OSError as exc:
+            # A dropped connection or a timeout is usually momentary: wait and ask again.
+            if attempt < retries:
+                logger.warning("eBay: %s, retrying", exc)
+                time.sleep(wait * (attempt + 1))
+                continue
             raise EbayError(f"eBay API unreachable: {exc}") from exc
     raise EbayError("eBay API kept throttling us.")
 
@@ -228,8 +234,9 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         except EbayError as exc:
             if "429" in str(exc):
                 logger.warning("eBay: bulk allowance used up, %s", exc)
-                break
-            raise
+            else:
+                logger.warning("eBay: bulk lookup failed, keeping what was found: %s", exc)
+            break
         if bulk_left is not None:
             bulk_left -= 1
         found = set()
@@ -253,6 +260,7 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         .annotate(shops=Count("listings"))
         .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk")[: max(0, limit - len(gone))]
     )
+    failures = 0
     for product in (gone + fresh)[:limit]:
         try:
             answer = request(search_url(product), headers)
@@ -260,7 +268,14 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
             if "429" in str(exc):
                 logger.warning("eBay: search allowance used up after %d products, keeping what was found", len(checked))
                 break
-            raise
+            # Skip this product (it stays first in line tomorrow) unless eBay keeps failing.
+            failures += 1
+            logger.warning("eBay: lookup for %s failed: %s", product, exc)
+            if failures >= GIVE_UP_AFTER:
+                logger.warning("eBay: %d failures in a row, stopping after %d products and keeping what was found", failures, len(checked))
+                break
+            continue
+        failures = 0
         checked.append(product.pk)
         best = None
         for item in answer.get("itemSummaries", []) or []:

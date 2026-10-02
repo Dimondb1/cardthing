@@ -202,6 +202,41 @@ class LookupTests(TestCase):
         self.etb.refresh_from_db()
         self.assertIsNotNone(self.etb.ebay_checked_at)
 
+    def test_a_dropped_connection_mid_run_skips_that_product_and_keeps_going(self):
+        make_product(self.set, name="Set 9 Booster Box", slug="set-9-box")
+        api = FakeApi([item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="79.99")])
+        real = api.__call__
+        state = {"n": 0}
+
+        def flaky(url, headers, data=None):
+            if url.startswith(ebay.SEARCH_URL):
+                state["n"] += 1
+                if state["n"] == 1:
+                    raise ebay.EbayError("eBay API unreachable: [Errno 104] Connection reset by peer")
+            return real(url, headers, data)
+
+        products = Product.objects.filter(is_active=True).count()
+        ebay.ebay_offers(self.retailer, limit=50, request=flaky, pause=0)   # does not raise
+        self.assertEqual(state["n"], products)   # every product was still looked up
+
+    def test_eBay_down_for_good_stops_the_run_and_keeps_what_was_found(self):
+        for n in range(10):
+            make_product(self.set, name=f"Set {n} Booster Box", slug=f"set-{n}-box")
+        api = FakeApi([item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="79.99")])
+        real = api.__call__
+        state = {"n": 0}
+
+        def dies(url, headers, data=None):
+            if url.startswith(ebay.SEARCH_URL):
+                state["n"] += 1
+                if state["n"] > 1:
+                    raise ebay.EbayError("eBay API unreachable: [Errno 104] Connection reset by peer")
+            return real(url, headers, data)
+
+        offers = ebay.ebay_offers(self.retailer, limit=20, request=dies, pause=0)
+        self.assertEqual(state["n"], 1 + ebay.GIVE_UP_AFTER)
+        self.assertEqual(len(offers), 1)
+
     def test_progress_is_written_to_the_run_every_hundred_products(self):
         for n in range(120):
             make_product(self.set, name=f"Set {n} Booster Box", slug=f"set-{n}-box")
@@ -266,3 +301,30 @@ class ImportTests(TestCase):
         call_command("setup_shops", stdout=out)
         self.assertEqual(Retailer.objects.get(slug="ebay").source_type, Retailer.Source.EBAY)
         self.assertEqual(Product.objects.count(), 1)
+
+
+class HttpRetryTests(TestCase):
+    def test_a_reset_connection_is_retried_then_succeeds(self):
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b'{"ok": 1}'
+        calls = {"n": 0}
+
+        def opener(request, timeout=30):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise ConnectionResetError(104, "Connection reset by peer")
+            return Response()
+
+        with mock.patch("urllib.request.urlopen", opener), mock.patch("time.sleep"):
+            self.assertEqual(ebay.http("https://api.ebay.com/x", {}), {"ok": 1})
+        self.assertEqual(calls["n"], 3)
+
+    def test_a_connection_that_never_comes_back_is_an_error(self):
+        def opener(request, timeout=30):
+            raise ConnectionResetError(104, "Connection reset by peer")
+
+        with mock.patch("urllib.request.urlopen", opener), mock.patch("time.sleep"):
+            with self.assertRaises(ebay.EbayError):
+                ebay.http("https://api.ebay.com/x", {})

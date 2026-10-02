@@ -788,9 +788,7 @@ def run_import(retailer, feed_path=None, fetch=None):
         logger.error("Import for %s failed: %s", retailer, exc)
     run.finished_at = timezone.now()
     run.save()
-    from django.core.cache import cache
+    from .signals import clear_list_caches
 
-    from .signals import HOME_CACHE_KEY
-
-    cache.delete(HOME_CACHE_KEY)
+    clear_list_caches()
     return run

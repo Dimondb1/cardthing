@@ -512,6 +512,22 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
+## Deals page
+
+`/deals/` is the page to link from social posts: the biggest savings
+between the cheapest shop and the next, the biggest price drops this
+week and what just came back in stock, server rendered and in the
+sitemap. Its lists are cached like the home page's and cleared by
+imports.
+
+## Merged products keep their addresses
+
+`merge_duplicates` (run hourly by `tidy_all`) records every merged
+product's old address, and a visit to an old address is sent to the
+kept product with a permanent redirect, so links and search results
+keep working. Old addresses are listed in admin under "Old product
+addresses".
+
 ## Search engines and AI crawlers
 
 Every page carries a canonical link, Open Graph and Twitter sharing tags,

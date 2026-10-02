@@ -3,7 +3,7 @@ from django.db.models import Count
 from django.utils.html import format_html
 
 from . import pricing
-from .models import DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Retailer, ShopProduct
+from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Retailer, ShopProduct
 
 
 @admin.register(Game)
@@ -246,3 +246,10 @@ class OutboundClickAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(ProductAlias)
+class ProductAliasAdmin(admin.ModelAdmin):
+    list_display = ("slug", "product", "created_at")
+    search_fields = ("slug", "product__name")
+    autocomplete_fields = ("product",)

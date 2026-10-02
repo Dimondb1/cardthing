@@ -8,7 +8,7 @@ from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
 from django.db.models import Count, F, Max, Prefetch, Q
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -16,7 +16,7 @@ from django.views.decorators.http import require_GET
 
 from catalogue import insights, offers, pricing
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products
-from catalogue.models import Game, Listing, OutboundClick, Product, ProductSet, Retailer
+from catalogue.models import Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Retailer
 from catalogue.search import apply_search
 from content import service as copy
 
@@ -348,9 +348,12 @@ def amazon_search_url(product, listings):
 
 @require_GET
 def product_detail(request, slug):
-    product = get_object_or_404(
-        Product.objects.active().select_related("game", "product_set"), slug=slug
-    )
+    product = Product.objects.active().select_related("game", "product_set").filter(slug=slug).first()
+    if product is None:
+        alias = ProductAlias.objects.filter(slug=slug, product__is_active=True).select_related("product").first()
+        if alias is None:
+            raise Http404("No product with that address.")
+        return HttpResponsePermanentRedirect(alias.product.get_absolute_url())
     listings = list(
         Listing.objects.filter(product=product)
         .live()
@@ -643,6 +646,43 @@ def deck(request):
 
 AI_CRAWLERS = ("GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-SearchBot", "anthropic-ai",
                "PerplexityBot", "Google-Extended", "Applebot-Extended", "Bingbot", "CCBot", "Amazonbot")
+
+
+def deals_lists():
+    """Biggest savings, price drops and restocks for the deals page, cached like the home lists."""
+    from django.core.cache import cache
+
+    from catalogue.signals import DEALS_CACHE_KEY
+
+    cached = cache.get(DEALS_CACHE_KEY)
+    if cached is not None:
+        return cached
+    priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
+    lists = {
+        "savings": offers.biggest_savings(priced, limit=30),
+        "drops": list(pricing.price_drops(limit=12)),
+        "restocked": pricing.back_in_stock(limit=12),
+    }
+    cache.set(DEALS_CACHE_KEY, lists, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    return lists
+
+
+@require_GET
+def deals(request):
+    lists = deals_lists()
+    last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
+    return render(
+        request,
+        "web/deals.html",
+        {
+            **lists,
+            "last_checked": last_checked,
+            "meta_title": text(request, "meta.deals.title"),
+            "meta_description": text(request, "meta.deals.description"),
+            "canonical_url": request.build_absolute_uri(reverse("web:deals")),
+            "structured_json": json.dumps(breadcrumbs_json(request, [(text(request, "deals.title"), reverse("web:deals"))])),
+        },
+    )
 
 
 @require_GET

@@ -18,7 +18,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from catalogue.matching import match_key
-from catalogue.models import Listing, Product
+from catalogue.models import Listing, Product, ProductAlias
 
 
 def merge(keep, others):
@@ -38,7 +38,11 @@ def merge(keep, others):
         if not keep.ean and other.ean:
             keep.ean = other.ean
             keep.save(update_fields=["ean"])
+        # The old address keeps working: it sends visitors and search engines to the kept page.
+        ProductAlias.objects.filter(product=other).update(product=keep)
+        ProductAlias.objects.filter(slug=other.slug).delete()
         other.delete()
+        ProductAlias.objects.create(slug=other.slug, product=keep)
     return moved
 
 

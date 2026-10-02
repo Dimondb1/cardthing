@@ -293,6 +293,21 @@ class Retailer(models.Model):
         return template.replace("{url}", quote(product_url, safe=""))
 
 
+class ProductAlias(models.Model):
+    """An old product address that now points at a merged product, so links keep working."""
+
+    slug = models.SlugField(max_length=220, unique=True)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="aliases")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "old product address"
+        verbose_name_plural = "old product addresses"
+
+    def __str__(self):
+        return f"{self.slug} -> {self.product.slug}"
+
+
 class ListingQuerySet(models.QuerySet):
     def live(self):
         return self.filter(is_active=True, retailer__is_active=True)

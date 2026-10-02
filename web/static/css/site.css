@@ -74,6 +74,8 @@ ul, ol { margin: 0; padding: 0; }
   text-transform: uppercase; color: var(--color-ink-subtle); line-height: var(--leading-snug);
 }
 .page-title { font-size: var(--text-page-title); margin: var(--space-5) 0 var(--space-4); }
+.page-head .page-title { margin-bottom: var(--space-2); }
+.page-intro { max-width: 44rem; margin-bottom: var(--space-5); color: var(--color-ink-muted); }
 .section-title { font-size: var(--text-section); }
 .section-note { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-ink-subtle); }
 .block { margin-top: var(--space-7); }

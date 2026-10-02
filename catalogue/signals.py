@@ -6,12 +6,18 @@ from .models import Game, Listing, Product, ProductSet
 from .search import build_search_text
 
 HOME_CACHE_KEY = "web:home-lists:v2"
+DEALS_CACHE_KEY = "web:deals:v1"
+LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY)
+
+
+def clear_list_caches():
+    cache.delete_many(LIST_CACHE_KEYS)
 
 
 @receiver([post_save, post_delete], sender=Product)
 @receiver([post_save, post_delete], sender=Listing)
 def clear_home_lists(sender, **kwargs):
-    cache.delete(HOME_CACHE_KEY)
+    clear_list_caches()
 
 
 def _refresh(products):

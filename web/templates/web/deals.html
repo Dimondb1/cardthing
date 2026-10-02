@@ -1,0 +1,79 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "deals.title" %}</h1>
+  {% if last_checked %}<p class="page-intro">{% copy "deals.intro" time=last_checked|ago %}</p>{% endif %}
+</div>
+
+{% if savings %}
+<section class="home-section" aria-labelledby="savings-title">
+  <div class="section-head">
+    <h2 id="savings-title" class="section-head__title">{% copy "deals.savings.title" %}</h2>
+  </div>
+  <ol class="savings">
+    {% for product, summary in savings %}
+    <li class="saving">
+      <a class="saving__link" href="{{ product.get_absolute_url }}" aria-label="{{ product.name }}">
+        {% product_image product "row" %}
+        <span class="saving__body">
+          <span class="saving__name">{{ product.name }}</span>
+          <span class="saving__best-line"><span class="saving__best">{{ summary.best.price|gbp }}</span> <span class="saving__retailer">{{ summary.best.retailer.name }}</span> <span class="delivered">{% copy "product.delivered.line" price=summary.best.delivered_price|gbp %}</span></span>
+          <span class="saving__next"><s>{% copy "home.savings.next" price=summary.second.delivered_price|gbp %}</s></span>
+        </span>
+        <span class="saving__pill"><strong>{% copy "home.savings.save" amount=summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=summary.percent %}</small></span>
+      </a>
+      <a class="button button--small saving__buy" href="{{ summary.best.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/bag.html" %}{% copy "product.buy.button" %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+{% if drops %}
+<section class="home-section" aria-labelledby="drops-title">
+  <div class="section-head">
+    <h2 id="drops-title" class="section-head__title">{% copy "deals.drops.title" %}</h2>
+    {% copy "home.price_drops.intro" days=trending_days as drops_intro %}{% if drops_intro %}<p class="section-head__note">{{ drops_intro }}</p>{% endif %}
+  </div>
+  <ul class="drops">
+    {% for product in drops %}
+    <li class="drop">
+      <a class="drop__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "thumb" %}
+        <span class="drop__body"><span class="drop__name">{{ product.name }}</span><span class="drop__meta">{{ product.game.display_short }} · {{ product.get_product_type_display }}</span></span>
+        <span class="drop__prices"><s class="drop__was">{% copy "home.price_drops.was" price=product.previous_price|gbp %}</s>{% price product.lowest_price size="md" %}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if restocked %}
+<section class="home-section" aria-labelledby="restock-title">
+  <div class="section-head">
+    <h2 id="restock-title" class="section-head__title">{% copy "deals.restock.title" %}</h2>
+    {% copy "home.restock.intro" as restock_intro %}{% if restock_intro %}<p class="section-head__note">{{ restock_intro }}</p>{% endif %}
+  </div>
+  <ul class="trending" data-scroll>
+    {% for product, listing in restocked %}
+    <li class="trending__item">
+      <a class="trending__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "trend" %}
+        <span class="trending__name">{{ product.name }}</span>
+        <span class="trending__price">{% price listing.delivered_price %}</span>
+        <span class="trending__retailer">{{ listing.retailer.name }}</span>
+        <span class="trending__move trending__move--down">{% copy "home.restock.when" time=listing.back_in_stock_at|ago %}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if not savings and not drops and not restocked %}
+<p class="page-intro">{% copy "deals.empty" %}</p>
+{% endif %}
+<p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
+{% endblock %}

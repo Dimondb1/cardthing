@@ -115,9 +115,7 @@ class Command(BaseCommand):
             if pause:
                 time.sleep(pause)
         if restocked:
-            from django.core.cache import cache
+            from catalogue.signals import clear_list_caches
 
-            from catalogue.signals import HOME_CACHE_KEY
-
-            cache.delete(HOME_CACHE_KEY)
+            clear_list_caches()
         self.stdout.write(f"{checked} checked, {changed} changed, {restocked} back in stock.")

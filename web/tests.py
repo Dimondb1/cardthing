@@ -480,7 +480,7 @@ class DiscoverabilityTests(PageTestCase):
         response = self.client.get(reverse("web:home"))
         self.assertContains(response, '"@type": "WebSite"')
         self.assertContains(response, 'search/?q={query}')
-        self.assertContains(response, '<meta property="og:image" content="http://testserver/static/img/logo.png">')
+        self.assertContains(response, '<meta property="og:image" content="http://testserver/static/img/share.png">')
 
     def test_game_and_set_pages_carry_breadcrumbs(self):
         for url in (self.game.get_absolute_url(), self.pre.get_absolute_url()):
@@ -500,3 +500,51 @@ class DiscoverabilityTests(PageTestCase):
         self.assertIn("User-agent: GPTBot\nAllow: /\nDisallow: /admin/", body)
         self.assertIn("User-agent: ClaudeBot", body)
         self.assertTrue(body.strip().endswith("Sitemap: http://testserver/sitemap.xml"))
+
+
+class DealsAndAliasTests(PageTestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+
+    def test_deals_page_lists_savings_with_a_buy_button_and_is_linked_everywhere(self):
+        response = self.client.get(reverse("web:deals"))
+        self.assertContains(response, "best sealed TCG deals")
+        self.assertContains(response, self.etb.name)
+        self.assertContains(response, "Save £3.01")
+        self.assertContains(response, 'rel="sponsored nofollow noopener"')
+        self.assertContains(response, '<link rel="canonical" href="http://testserver/deals/">')
+        self.assertContains(response, '"@type": "BreadcrumbList"')
+        self.assertContains(self.client.get(reverse("web:home")), 'href="/deals/"')
+        self.assertContains(self.client.get("/sitemap.xml"), "http://testserver/deals/")
+
+    def test_deals_page_copes_with_nothing_to_show(self):
+        Listing.objects.all().delete()
+        from django.core.cache import cache
+
+        cache.clear()
+        self.assertContains(self.client.get(reverse("web:deals")), "No deals to show yet")
+
+    def test_old_product_address_redirects_for_good(self):
+        from catalogue.models import ProductAlias
+
+        ProductAlias.objects.create(slug="old-etb-address", product=self.etb)
+        response = self.client.get("/products/old-etb-address/")
+        self.assertEqual((response.status_code, response["Location"]), (301, self.etb.get_absolute_url()))
+        self.assertEqual(self.client.get("/products/never-existed/").status_code, 404)
+
+    def test_merging_duplicates_records_the_old_address(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from catalogue.models import ProductAlias
+
+        twin = make_product(self.pre, name="Scarlet & Violet 8.5 Prismatic Evolutions Elite Trainer Box", slug="sv85-pev-etb")
+        make_listing(twin, make_retailer("Third Shop"), price="56.00")
+        call_command("merge_duplicates", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=twin.pk).exists())
+        self.assertEqual(ProductAlias.objects.get(slug="sv85-pev-etb").product, self.etb)
+        self.assertEqual(self.client.get("/products/sv85-pev-etb/").status_code, 301)
+        self.assertEqual(self.etb.listings.count(), 3)

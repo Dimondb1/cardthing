@@ -5,6 +5,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from .importers import Offer, apply_offers
+from .matching import match_key
 from .models import Listing, Product
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
@@ -73,3 +74,13 @@ class TidyListingsTests(TestCase):
         self.assertFalse(Listing.objects.filter(pk=pack.pk).exists())
         self.assertFalse(Listing.objects.filter(pk=single.pk).exists())
         self.assertTrue(Listing.objects.filter(pk=slip.pk).exists())
+
+
+class SeriesDecimalTests(TestCase):
+    def test_a_point_release_series_number_is_part_of_the_series(self):
+        self.assertEqual(
+            match_key("Scarlet & Violet 8.5 Prismatic Evolutions Elite Trainer Box"),
+            match_key("Prismatic Evolutions Elite Trainer Box"),
+        )
+        self.assertEqual(match_key("Scarlet & Violet 151 Booster Bundle"), match_key("151 Booster Bundle"))
+        self.assertNotEqual(match_key("151 Booster Bundle"), match_key("Booster Bundle"))

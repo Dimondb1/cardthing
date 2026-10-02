@@ -40,6 +40,7 @@ SECTIONS = [
     ("site", "Header and search box"),
     ("deck", "Swipe page"),
     ("home", "Home page"),
+    ("deals", "Deals page"),
     ("browse", "Search results and browsing"),
     ("product", "Product page"),
     ("about", "How it works page"),
@@ -125,6 +126,11 @@ ENTRIES = [
         "site.nav.games", B, "Games link",
         "Games",
         "Header link to the list of games and sets.",
+    ),
+    Entry(
+        "site.nav.deals", B, "Deals link",
+        "Deals",
+        "Header and footer link to the deals page.",
     ),
     Entry(
         "site.nav.about", B, "How it works link",
@@ -833,6 +839,39 @@ ENTRIES = [
         "publisher. Product names and trademarks belong to their owners.",
         "Terms page.",
         legal=True,
+    ),
+
+    # Deals page ------------------------------------------------------------
+    Entry(
+        "deals.title", H, "Deals page heading",
+        "Today's best sealed TCG deals in the UK",
+        "Heading of the deals page.",
+    ),
+    Entry(
+        "deals.intro", T, "Deals page introduction",
+        "The biggest gaps between the cheapest shop and the next one, the biggest price drops this "
+        "week and what just came back in stock. Delivered prices, checked {time}.",
+        "Under the deals page heading.",
+        placeholders=("time",),
+    ),
+    Entry("deals.savings.title", H, "Deals savings heading", "Biggest savings right now", "Deals page section heading."),
+    Entry("deals.drops.title", H, "Deals drops heading", "Biggest price drops", "Deals page section heading."),
+    Entry("deals.restock.title", H, "Deals restock heading", "Back in stock", "Deals page section heading."),
+    Entry(
+        "deals.empty", T, "Deals page empty",
+        "No deals to show yet. Prices are checked every hour, so try again soon.",
+        "Shown when there is nothing on the deals page.",
+    ),
+    Entry(
+        "meta.deals.title", T, "Deals page title",
+        "Cheapest TCG booster box and ETB deals in the UK today",
+        "Browser tab title for the deals page. The site name is added after it.",
+    ),
+    Entry(
+        "meta.deals.description", T, "Deals page description",
+        "Today's biggest savings on sealed Pokemon, Magic, One Piece and Yu-Gi-Oh products across UK shops, "
+        "with delivered prices checked every hour.",
+        "Search engine description for the deals page.",
     ),
 
     # Terms page ------------------------------------------------------------

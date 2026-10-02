@@ -54,7 +54,7 @@ PHRASES = ("universes beyond", "trading card game", "card game", "dragon ball su
 # "Scarlet & Violet 8 Surging Sparks", "SV8.5 Prismatic Evolutions", "SWSH Evolving Skies".
 SERIES = re.compile(
     r"\b(?:scarlet (?:&|and) violet|sword (?:&|and) shield|sun (?:&|and) moon|black (?:&|and) white|"
-    r"s ?& ?v|sv|swsh|sm|xy|bw|dp|hgss)\s*-?\s*\d{0,2}(?:\.\d)?\b",
+    r"s ?& ?v|sv|swsh|sm|xy|bw|dp|hgss)\s*-?\s*\d{0,2}(?:\.\d|\s\d(?=\s|$))?\b",
     re.I,
 )
 # Counts and codes that describe the same product: "36 packs", "(10)", "OP-10", "BT-22", "ST13".

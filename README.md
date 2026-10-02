@@ -512,6 +512,15 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
+## Insights
+
+Admin, Insights (`/admin/insights/`) shows what visitors do: page views
+and clicks to shops by day, the most viewed products with their clicks,
+clicks by shop, game, product type and hour, top searches, and searches
+that found nothing. Views and searches are counted by day with no record
+of who made them; clicks were already counted the same way. Bots are
+left out. The window is 7, 30, 90 or 365 days.
+
 ## Tests
 
 ```sh

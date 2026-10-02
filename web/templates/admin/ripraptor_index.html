@@ -1,0 +1,10 @@
+{% extends "admin/index.html" %}
+{% block content %}
+<div class="module" style="margin-bottom: 20px;">
+  <table>
+    <caption><a href="{% url 'insights' %}" class="section">Insights</a></caption>
+    <tr><th scope="row"><a href="{% url 'insights' %}">What visitors look at, search for and click</a></th><td></td></tr>
+  </table>
+</div>
+{{ block.super }}
+{% endblock %}

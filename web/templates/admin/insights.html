@@ -1,0 +1,89 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Insights | {{ site_title }}{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .ins { display: grid; gap: 24px; max-width: 70rem; }
+  .ins__totals { display: flex; flex-wrap: wrap; gap: 16px; }
+  .ins__total { padding: 12px 16px; border: 1px solid var(--hairline-color, #ddd); border-radius: 8px; min-width: 10rem; }
+  .ins__total b { display: block; font-size: 1.6rem; }
+  .ins__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 24px; }
+  .ins table { width: 100%; }
+  .ins td.n { text-align: right; white-space: nowrap; }
+  .ins .bar { display: inline-block; height: 0.6rem; background: var(--primary, #417690); vertical-align: middle; }
+  .ins form { display: flex; gap: 8px; align-items: center; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Insights</div>{% endblock %}
+{% block content %}
+<div class="ins">
+  <form method="get">
+    <label for="days">Last</label>
+    <select id="days" name="days" onchange="this.form.submit()">
+      <option value="7"{% if days == 7 %} selected{% endif %}>7 days</option>
+      <option value="30"{% if days == 30 %} selected{% endif %}>30 days</option>
+      <option value="90"{% if days == 90 %} selected{% endif %}>90 days</option>
+      <option value="365"{% if days == 365 %} selected{% endif %}>365 days</option>
+    </select>
+    <noscript><button type="submit">Show</button></noscript>
+    <span>{{ since }} to {{ today }}. Visitors are counted, never identified.</span>
+  </form>
+
+  <div class="ins__totals">
+    <div class="ins__total"><b>{{ total_views }}</b> page views</div>
+    <div class="ins__total"><b>{{ total_clicks }}</b> clicks to shops</div>
+    <div class="ins__total"><b>{{ click_rate }}%</b> of product page views end in a click</div>
+    <div class="ins__total"><b>{{ shop_count }}</b> shops live</div>
+  </div>
+
+  <div class="module">
+    <h2>By day</h2>
+    <table>
+      <thead><tr><th>Day</th><th>Page views</th><th>Clicks</th></tr></thead>
+      <tbody>{% for d in by_day reversed %}<tr><td>{{ d.date|date:"D j M" }}</td><td class="n">{{ d.views }}</td><td class="n">{{ d.clicks }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+
+  <div class="ins__grid">
+    <div class="module">
+      <h2>Pages</h2>
+      <table><tbody>{% for label, n in kinds %}<tr><td>{{ label }}</td><td class="n">{{ n }}</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
+      <h2>Clicks by shop</h2>
+      <table><tbody>{% for s in shops %}<tr><td>{{ s.name }}</td><td class="n">{{ s.clicks }}</td></tr>{% empty %}<tr><td>No clicks yet.</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
+      <h2>Clicks by game</h2>
+      <table><tbody>{% for g in games %}<tr><td>{{ g.name }}</td><td class="n">{{ g.clicks }}</td></tr>{% empty %}<tr><td>No clicks yet.</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
+      <h2>Clicks by product type</h2>
+      <table><tbody>{% for t in types %}<tr><td>{{ t.name }}</td><td class="n">{{ t.clicks }}</td></tr>{% empty %}<tr><td>No clicks yet.</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
+      <h2>Clicks by hour</h2>
+      <table><tbody>{% for h in hours %}<tr><td>{{ h.hour|stringformat:"02d" }}:00</td><td class="n">{{ h.clicks }}</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </div>
+
+  <div class="module">
+    <h2>Most viewed products</h2>
+    <table>
+      <thead><tr><th>Product</th><th>Game</th><th>Views</th><th>Clicks</th></tr></thead>
+      <tbody>{% for row in top_products %}<tr><td><a href="{{ row.product.get_absolute_url }}">{{ row.product.name }}</a></td><td>{{ row.product.game.name }}</td><td class="n">{{ row.views }}</td><td class="n">{{ row.clicks }}</td></tr>{% empty %}<tr><td>No product views yet.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+
+  <div class="ins__grid">
+    <div class="module">
+      <h2>Top searches</h2>
+      <table><thead><tr><th>Search</th><th>Times</th></tr></thead>
+      <tbody>{% for s in top_searches %}<tr><td>{{ s.query }}</td><td class="n">{{ s.hits }}</td></tr>{% empty %}<tr><td>No searches yet.</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
+      <h2>Searches that found nothing</h2>
+      <p>Products to add, or names to fix.</p>
+      <table><thead><tr><th>Search</th><th>Times</th></tr></thead>
+      <tbody>{% for s in empty_searches %}<tr><td>{{ s.query }}</td><td class="n">{{ s.hits }}</td></tr>{% empty %}<tr><td>None.</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </div>
+</div>
+{% endblock %}

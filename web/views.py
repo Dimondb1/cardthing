@@ -3,6 +3,8 @@ from urllib.parse import urlencode
 
 from django import forms
 from django.conf import settings
+from django.contrib import admin
+from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
 from django.db.models import Count, F, Max, Prefetch, Q
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -10,7 +12,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from catalogue import offers, pricing
+from catalogue import insights, offers, pricing
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products
 from catalogue.models import Game, Listing, OutboundClick, Product, ProductSet, Retailer
 from catalogue.search import apply_search
@@ -97,6 +99,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
 
     paginator = Paginator(products.prefetch_related(offers.buyable_prefetch()), settings.RIPRAPTOR_PAGE_SIZE)
     page = paginator.get_page(request.GET.get("page"))
+    if query and not request.GET.get("page"):
+        insights.record_search(request, query, paginator.count)
     week_lows = offers.week_low_map([p.pk for p in page.object_list])
     cards = [(product, offers.summarise(product, week_lows)) for product in page.object_list]
 
@@ -586,3 +590,14 @@ def robots_txt(request):
         "Sitemap: " + request.build_absolute_uri("/sitemap.xml"),
     ]
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")
+
+
+@staff_member_required
+def insights_page(request):
+    """What visitors look at, search for and click. Staff only, under admin."""
+    try:
+        days = min(max(int(request.GET.get("days", 30)), 1), 365)
+    except ValueError:
+        days = 30
+    context = {**admin.site.each_context(request), "title": "Insights", **insights.report(days)}
+    return render(request, "admin/insights.html", context)

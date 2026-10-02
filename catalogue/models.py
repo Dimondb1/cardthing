@@ -465,3 +465,46 @@ class OutboundClick(models.Model):
 
     def __str__(self):
         return f"{self.product} to {self.retailer}"
+
+
+class DailyPageView(models.Model):
+    """How many times a kind of page was opened on one day. No personal data."""
+
+    class Kind(models.TextChoices):
+        HOME = "home", "Home"
+        PRODUCT = "product", "Product"
+        GAME = "game", "Game"
+        SET = "set", "Set"
+        SEARCH = "search", "Search"
+        SWIPE = "swipe", "Swipe"
+        OTHER = "other", "Other"
+
+    date = models.DateField(db_index=True)
+    kind = models.CharField(max_length=12, choices=Kind.choices)
+    key = models.CharField(max_length=220, blank=True)   # product, game or set slug
+    hits = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = [("date", "kind", "key")]
+        verbose_name = "page views for a day"
+        verbose_name_plural = "page views by day"
+
+    def __str__(self):
+        return f"{self.date} {self.kind} {self.key}: {self.hits}"
+
+
+class DailySearch(models.Model):
+    """How often a search was made on one day and how many products it found."""
+
+    date = models.DateField(db_index=True)
+    query = models.CharField(max_length=100)
+    results = models.PositiveIntegerField(default=0)
+    hits = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = [("date", "query")]
+        verbose_name = "searches for a day"
+        verbose_name_plural = "searches by day"
+
+    def __str__(self):
+        return f"{self.date} {self.query!r}: {self.hits}"

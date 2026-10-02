@@ -513,6 +513,18 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
+## Product types per game
+
+`catalogue/types.py` lists, for each game, which product types it has and
+what its players call them: Play booster box and Commander deck for
+Magic, Structure deck for Yu-Gi-Oh, Illumineer's Trove for Lorcana, Hobby
+or retail box for football, and so on. The type filter on game, set,
+search and swipe pages offers only the types that game's catalogue holds,
+in the game's words, and product pages use the same words. Magic's
+collector boosters are their own types, and `tidy_catalogue` retypes any
+that were filed as play boosters. Browsing also filters by price band and
+by products compared at two or more shops.
+
 ## Deals page
 
 `/deals/` is the page to link from social posts: the biggest savings

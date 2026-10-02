@@ -36,6 +36,8 @@ GAMES = [
 
 # Order matters: the first matching type wins.
 TYPES = [
+    ("collector_booster_box", ("collector booster box", "collector booster display", "collector display", "collector box")),
+    ("collector_booster_pack", ("collector booster pack", "collector booster", "collector pack")),
     ("elite_trainer_box", ("elite trainer box", "etb", "trainer box")),
     ("collection_box", ("ultra premium collection", "super premium collection", "premium collection", "collection box",
                         "collector's box", "collectors box", "illumineer's trove", "illumineers trove", "trove", "box set",

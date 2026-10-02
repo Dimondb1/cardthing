@@ -127,6 +127,8 @@ class Product(models.Model):
         TIN = "tin", "Tin"
         BOOSTER_PACK = "booster_pack", "Booster pack"
         GIFT_SET = "gift_set", "Gift set"
+        COLLECTOR_BOOSTER_BOX = "collector_booster_box", "Collector booster box"
+        COLLECTOR_BOOSTER_PACK = "collector_booster_pack", "Collector booster pack"
         OTHER = "other", "Other"
 
     game = models.ForeignKey(Game, on_delete=models.PROTECT, related_name="products")
@@ -192,6 +194,13 @@ class Product(models.Model):
 
     def get_absolute_url(self):
         return reverse("web:product", args=[self.slug])
+
+    @property
+    def type_name(self):
+        """The product type in the words this game's players use."""
+        from .types import type_label
+
+        return type_label(self.game.slug, self.product_type)
 
     @property
     def image_src(self):

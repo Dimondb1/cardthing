@@ -13,7 +13,7 @@
 <div class="product-head">
   <div class="hero-card">
     <div class="hero-card__image">{% product_image product "large" %}</div>
-    <p class="eyebrow">{{ product.get_product_type_display }}</p>
+    <p class="eyebrow">{{ product.type_name }}</p>
     <h1 class="product-title">{{ product.name }}</h1>
   </div>
 
@@ -130,7 +130,7 @@
     <dl class="details__list">
       <div><dt>{% copy "product.details.game" %}</dt><dd><a href="{{ product.game.get_absolute_url }}">{{ product.game.name }}</a></dd></div>
       {% if product.product_set %}<div><dt>{% copy "product.details.set" %}</dt><dd><a href="{{ product.product_set.get_absolute_url }}">{{ product.product_set.name }}</a>{% if product.product_set.code %} <span class="muted">({{ product.product_set.code }})</span>{% endif %}</dd></div>{% endif %}
-      <div><dt>{% copy "product.details.type" %}</dt><dd>{{ product.get_product_type_display }}</dd></div>
+      <div><dt>{% copy "product.details.type" %}</dt><dd>{{ product.type_name }}</dd></div>
       {% if product.effective_release_date %}<div><dt>{% copy "product.details.release_date" %}</dt><dd>{{ product.effective_release_date|short_date }}</dd></div>{% endif %}
       {% if product.ean %}<div><dt>{% copy "product.details.barcode" %}</dt><dd class="num">{{ product.ean }}</dd></div>{% endif %}
     </dl>

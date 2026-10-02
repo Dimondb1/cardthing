@@ -61,9 +61,16 @@
     <label class="visually-hidden" for="{{ form.type.id_for_label }}">{{ form.type.label }}</label>
     {{ form.type }}
   </div>
+  <div class="pill">
+    <label class="visually-hidden" for="{{ form.price.id_for_label }}">{{ form.price.label }}</label>
+    {{ form.price }}
+  </div>
   <label class="pill pill--check">
     <svg class="pill__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 20V10M12 20V4M19 20v-8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
     {{ form.in_stock }}<span>{{ form.in_stock.label }}</span>
+  </label>
+  <label class="pill pill--check">
+    {{ form.compared }}<span>{{ form.compared.label }}</span>
   </label>
   <fieldset class="langs">
     <legend class="visually-hidden">{{ form.lang.label }}</legend>

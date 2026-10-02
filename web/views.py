@@ -18,6 +18,7 @@ from catalogue import insights, offers, pricing
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products
 from catalogue.models import Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Retailer
 from catalogue.search import apply_search
+from catalogue.types import type_choices
 from content import service as copy
 
 from .charts import price_chart
@@ -29,6 +30,16 @@ BOT_MARKERS = ("bot", "crawl", "spider", "slurp", "preview", "monitor")
 def text(request, key, **values):
     """Site wording for use in a view, sharing the request's single lookup."""
     return copy.get(key, store=copy.for_request(request), **values)
+
+
+PRICE_BANDS = [
+    ("", "Any price"),
+    ("0-10", "Under £10"),
+    ("10-25", "£10 to £25"),
+    ("25-50", "£25 to £50"),
+    ("50-100", "£50 to £100"),
+    ("100-", "£100 and up"),
+]
 
 
 class FilterForm(forms.Form):
@@ -53,14 +64,18 @@ class FilterForm(forms.Form):
     )
     sort = forms.ChoiceField(label="Sort by", choices=SEARCH_SORTS, required=False)
     in_stock = forms.BooleanField(label="In stock only", required=False)
+    compared = forms.BooleanField(label="2+ shops", required=False)
+    price = forms.ChoiceField(label="Price", choices=PRICE_BANDS, required=False)
     lang = forms.MultipleChoiceField(
         label="Language", choices=LANGUAGES, required=False, widget=forms.CheckboxSelectMultiple
     )
 
-    def __init__(self, *args, fixed_game=None, has_query=False, **kwargs):
+    def __init__(self, *args, fixed_game=None, has_query=False, type_options=None, **kwargs):
         super().__init__(*args, **kwargs)
         if fixed_game is not None:
             del self.fields["game"]
+        if type_options is not None:
+            self.fields["type"].choices = [("", "All types")] + list(type_options)
         if not has_query:
             self.fields["sort"].choices = self.BROWSE_SORTS
         self.default_sort = "best" if has_query else "newest"
@@ -72,10 +87,20 @@ class FilterForm(forms.Form):
         return self.cleaned_data.get(name) or default
 
 
+def types_for(game, queryset):
+    """The type filter's choices: this game's words, only for types the list holds."""
+    present = set(queryset.order_by().values_list("product_type", flat=True).distinct())
+    return type_choices(game.slug if game else None, present=present)
+
+
 def _browse(request, template_context, *, base_queryset, fixed_game=None):
     """Shared by search, game and set pages."""
     has_query = bool(request.GET.get("q", "").strip())
-    form = FilterForm(request.GET or None, fixed_game=fixed_game, has_query=has_query)
+    chosen_game = fixed_game or Game.objects.filter(slug=request.GET.get("game", "")).first()
+    scope = base_queryset.filter(game=chosen_game) if chosen_game and fixed_game is None else base_queryset
+    form = FilterForm(
+        request.GET or None, fixed_game=fixed_game, has_query=has_query, type_options=types_for(chosen_game, scope)
+    )
     form.is_valid()
 
     query = (form.value("q") or "").strip()
@@ -92,6 +117,14 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
         products = products.filter(product_type=product_type)
     if form.value("in_stock"):
         products = products.filter(in_stock_count__gt=0)
+    if form.value("compared"):
+        products = products.filter(in_stock_count__gte=2)
+    band = form.value("price")
+    if band:
+        low, _, high = band.partition("-")
+        products = products.filter(lowest_price__gte=low)
+        if high:
+            products = products.filter(lowest_price__lt=high)
     languages = form.value("lang") or []
     products = apply_languages(products, languages)
 
@@ -108,7 +141,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
     cards = [(product, offers.summarise(product, week_lows)) for product in page.object_list]
 
     filters_active = bool(
-        game or product_type or form.value("in_stock") or languages or sort != form.default_sort
+        game or product_type or form.value("in_stock") or form.value("compared") or band or languages
+        or sort != form.default_sort
     )
     context = {
         "form": form,
@@ -166,6 +200,31 @@ def home_lists():
     return savings, trending, recent, retailer_count
 
 
+# Games shown first on the home page, in this order; the rest follow by size.
+PINNED_GAMES = ["pokemon", "magic-the-gathering", "football", "one-piece", "yu-gi-oh", "lorcana"]
+
+
+def home_football():
+    """In-stock football products for the home row, most widely stocked first."""
+    from django.core.cache import cache
+
+    from catalogue.signals import FOOTBALL_CACHE_KEY as key
+
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    rows = list(
+        Product.objects.for_lists()
+        .filter(game__slug="football", in_stock_count__gte=1)
+        .prefetch_related(offers.buyable_prefetch())
+        .order_by("-in_stock_count", F("lowest_price").asc(nulls_last=True))[:10]
+    )
+    for product in rows:
+        product.best_offer = product.offers[0] if product.offers else None
+    cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    return rows
+
+
 @require_GET
 def home(request):
     games = list(
@@ -181,6 +240,8 @@ def home(request):
             )
         )
     )
+    rank = {slug: i for i, slug in enumerate(PINNED_GAMES)}
+    games.sort(key=lambda g: (rank.get(g.slug, len(PINNED_GAMES)), -g.product_count, g.name))
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
     savings, trending, recent, retailer_count = home_lists()
     drops = list(pricing.price_drops(limit=6))
@@ -205,6 +266,7 @@ def home(request):
             "recent": recent,
             "drops": drops,
             "restocked": restocked,
+            "football": home_football(),
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
@@ -398,7 +460,7 @@ def product_detail(request, slug):
         "@type": "Product",
         "name": product.name,
         "url": request.build_absolute_uri(product.get_absolute_url()),
-        "category": product.get_product_type_display(),
+        "category": product.type_name,
         "brand": {"@type": "Brand", "name": product.game.name},
     }
     if product.image_src:
@@ -555,7 +617,7 @@ def search_api(request):
             results.append({
                 "name": product.name,
                 "url": product.get_absolute_url(),
-                "meta": f"{product.game.display_short} · {product.get_product_type_display()}",
+                "meta": f"{product.game.display_short} · {product.type_name}",
                 "price": gbp(product.lowest_price) if product.lowest_price is not None else "",
                 "stock": stock,
                 "state": state,
@@ -578,7 +640,7 @@ def card_data(request, product, summary):
         "id": product.pk,
         "name": product.name,
         "url": product.get_absolute_url(),
-        "meta": f"{product.game.display_short} · {product.get_product_type_display()}",
+        "meta": f"{product.game.display_short} · {product.type_name}",
         "type": product.product_type,
         "image": product.image_src,
         "price": gbp(best.delivered_price) if best else "",
@@ -600,6 +662,9 @@ def deck_products(request):
     if game:
         products = products.filter(game__slug=game)
     products = apply_languages(products, request.GET.getlist("lang"))
+    kind = request.GET.get("type", "")
+    if kind in dict(Product.Type.choices):
+        products = products.filter(product_type=kind)
     sort = request.GET.get("sort") or "newest"
     if sort not in dict(SORTS):
         sort = "newest"
@@ -628,6 +693,10 @@ def deck_api(request):
 def deck(request):
     products = deck_products(request)
     chosen = request.GET.getlist("lang")
+    game = Game.objects.filter(slug=request.GET.get("game", ""), is_active=True).first()
+    scope = Product.objects.for_lists().filter(lowest_price__isnull=False)
+    if game:
+        scope = scope.filter(game=game)
     return render(
         request,
         "web/deck.html",
@@ -636,6 +705,8 @@ def deck(request):
             "product_types": Product.Type.choices,
             "sorts": SORTS,
             "sort": request.GET.get("sort") if request.GET.get("sort") in dict(SORTS) else "newest",
+            "types": types_for(game, scope),
+            "type": request.GET.get("type", ""),
             "languages": [(code, label, code in chosen) for code, label in LANGUAGES],
             "total": products.count(),
             "meta_title": text(request, "deck.title"),

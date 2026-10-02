@@ -232,6 +232,17 @@ ENTRIES = [
         placeholders=("price", "retailer"),
     ),
     Entry(
+        "home.football.title", H, "Football row heading",
+        "Football and sports cards",
+        "Home page heading above the football row. Shown only while football products are in stock.",
+    ),
+    Entry(
+        "home.football.intro", T, "Football row note",
+        "Match Attax, Topps and Panini boxes, tins and packs, with the cheapest delivered price.",
+        "One line under the football heading. Leave empty to hide it.",
+        optional=True,
+    ),
+    Entry(
         "home.restock.title", H, "Back in stock heading",
         "Back in stock",
         "Heading for the row of products a shop has just restocked.",

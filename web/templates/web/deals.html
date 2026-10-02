@@ -41,7 +41,7 @@
     <li class="drop">
       <a class="drop__link" href="{{ product.get_absolute_url }}">
         {% product_image product "thumb" %}
-        <span class="drop__body"><span class="drop__name">{{ product.name }}</span><span class="drop__meta">{{ product.game.display_short }} · {{ product.get_product_type_display }}</span></span>
+        <span class="drop__body"><span class="drop__name">{{ product.name }}</span><span class="drop__meta">{{ product.game.display_short }} · {{ product.type_name }}</span></span>
         <span class="drop__prices"><s class="drop__was">{% copy "home.price_drops.was" price=product.previous_price|gbp %}</s>{% price product.lowest_price size="md" %}</span>
       </a>
     </li>

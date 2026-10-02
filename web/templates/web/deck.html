@@ -24,6 +24,13 @@
         {% for game in games %}<option value="{{ game.slug }}"{% if request.GET.game == game.slug %} selected{% endif %}>{{ game.name }}</option>{% endfor %}
       </select>
     </div>
+    <div class="pill">
+      <label class="visually-hidden" for="deck-type">Product type</label>
+      <select id="deck-type" name="type" class="pill__select">
+        <option value="">All types</option>
+        {% for code, label in types %}<option value="{{ code }}"{% if type == code %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
     <div class="pill pill--sort">
       <label class="visually-hidden" for="deck-sort">Sort by</label>
       <select id="deck-sort" name="sort" class="pill__select">

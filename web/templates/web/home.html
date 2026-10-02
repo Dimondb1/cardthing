@@ -32,7 +32,7 @@
     <span class="focal__body">
       <span id="focal-title" class="focal__kicker">{% if focal.kind == "drop" %}<svg class="focal__kicker-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4v14m0 0l-6-6m6 6l6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "home.focal.drop.title" %}{% else %}<svg class="focal__kicker-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 12l9-9h9v9l-9 9z" fill="currentColor"/><circle cx="16.5" cy="7.5" r="1.6" fill="#fff"/></svg>{% copy "home.focal.saving.title" %}{% endif %}</span>
       <span class="focal__name">{{ product.name }}</span>
-      <span class="focal__meta">{{ product.game.display_short }} · {{ product.get_product_type_display }}</span>
+      <span class="focal__meta">{{ product.game.display_short }} · {{ product.type_name }}</span>
       <span class="focal__prices">
         {% if focal.kind == "drop" %}
           <s class="focal__was">{% copy "home.focal.was" price=product.previous_price|gbp %}</s>
@@ -74,6 +74,30 @@
     </li>
     {% endfor %}
   </ol>
+</section>
+{% endif %}
+
+{% if football %}
+<section class="home-section" aria-labelledby="football-title">
+  <div class="section-head">
+    <h2 id="football-title" class="section-head__title">{% copy "home.football.title" %}</h2>
+    <a class="section-head__all" href="{% url 'web:game' 'football' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  </div>
+  {% copy "home.football.intro" as football_intro %}{% if football_intro %}<p class="section-head__note">{{ football_intro }}</p>{% endif %}
+  <ul class="trending" data-scroll>
+    {% for product in football %}
+    <li class="trending__item">
+      <a class="trending__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "trend" %}
+        <span class="trending__name">{{ product.name }}</span>
+        {% if product.best_offer %}
+          <span class="trending__price">{% price product.best_offer.price %}</span>
+          <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=product.best_offer.delivered_price|gbp %}</span> · {{ product.best_offer.retailer.name }}</span>
+        {% endif %}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
 </section>
 {% endif %}
 
@@ -141,7 +165,7 @@
     <li class="drop">
       <a class="drop__link" href="{{ product.get_absolute_url }}">
         {% product_image product "thumb" %}
-        <span class="drop__body"><span class="drop__name">{{ product.name }}</span><span class="drop__meta">{{ product.game.display_short }} · {{ product.get_product_type_display }}</span></span>
+        <span class="drop__body"><span class="drop__name">{{ product.name }}</span><span class="drop__meta">{{ product.game.display_short }} · {{ product.type_name }}</span></span>
         <span class="drop__prices"><s class="drop__was">{% copy "home.price_drops.was" price=product.previous_price|gbp %}</s>{% price product.lowest_price size="md" %}</span>
       </a>
     </li>

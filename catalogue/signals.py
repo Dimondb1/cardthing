@@ -7,7 +7,8 @@ from .search import build_search_text
 
 HOME_CACHE_KEY = "web:home-lists:v2"
 DEALS_CACHE_KEY = "web:deals:v1"
-LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY)
+FOOTBALL_CACHE_KEY = "web:home-football:v1"
+LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, FOOTBALL_CACHE_KEY)
 
 
 def clear_list_caches():

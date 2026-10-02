@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Count, Min
 
-from catalogue.classify import MIN_PRICE, NOT_SEALED, is_generic, tidy_name
+from catalogue.classify import find_type, MIN_PRICE, NOT_SEALED, is_generic, tidy_name
 from catalogue.models import Listing, Product
 
 
@@ -42,6 +42,12 @@ class Command(BaseCommand):
                     if not dry_run:
                         product.delete()
                     continue
+                kind = find_type(name)
+                if kind and kind.startswith("collector_") and product.product_type != kind:
+                    self.stdout.write(f"{'would retype' if dry_run else 'retyped'}: {product.name} -> {kind}")
+                    if not dry_run:
+                        product.product_type = kind
+                        product.save(update_fields=["product_type"])
                 if name != product.name:
                     other = Product.objects.filter(game=product.game, name=name).exclude(pk=product.pk).first()
                     if other is not None:

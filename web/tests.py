@@ -548,3 +548,88 @@ class DealsAndAliasTests(PageTestCase):
         self.assertEqual(ProductAlias.objects.get(slug="sv85-pev-etb").product, self.etb)
         self.assertEqual(self.client.get("/products/sv85-pev-etb/").status_code, 301)
         self.assertEqual(self.etb.listings.count(), 3)
+
+
+class GameTypesAndFilterTests(PageTestCase):
+    def setUp(self):
+        self.magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering")
+        self.bloom = make_set(self.magic, name="Bloomburrow", slug="bloomburrow")
+        self.play_box = make_product(self.bloom, name="Bloomburrow Play Booster Box", slug="blb-play-box", product_type="booster_box")
+        self.collector_box = make_product(
+            self.bloom, name="Bloomburrow Collector Booster Box", slug="blb-collector-box", product_type="collector_booster_box"
+        )
+        make_listing(self.play_box, self.harbour, price="110.00")
+        make_listing(self.collector_box, self.harbour, price="230.00")
+
+    def test_type_filter_speaks_the_games_language_and_lists_only_types_it_has(self):
+        response = self.client.get(self.magic.get_absolute_url())
+        self.assertContains(response, '<option value="booster_box">Play booster box</option>')
+        self.assertContains(response, '<option value="collector_booster_box">Collector booster box</option>')
+        self.assertNotContains(response, "Elite Trainer Box</option>")
+        self.assertNotContains(response, '<option value="deck">')
+        response = self.client.get(self.game.get_absolute_url())
+        self.assertContains(response, '<option value="elite_trainer_box">Elite Trainer Box</option>')
+        self.assertNotContains(response, "Play booster box")
+
+    def test_search_type_filter_follows_the_chosen_game(self):
+        response = self.client.get(reverse("web:search"), {"game": "magic-the-gathering"})
+        self.assertContains(response, "Play booster box")
+        response = self.client.get(reverse("web:search"))
+        self.assertContains(response, '<option value="booster_box">Booster box</option>')
+
+    def test_product_pages_use_the_games_words_for_the_type(self):
+        self.assertContains(self.client.get(self.play_box.get_absolute_url()), "Play booster box")
+        self.assertContains(self.client.get(self.etb.get_absolute_url()), "Elite Trainer Box")
+
+    def test_price_band_and_two_shops_filters(self):
+        names = lambda **params: [c[0].name for c in self.client.get(reverse("web:search"), params).context["cards"]]
+        self.assertEqual(sorted(names(price="100-")), ["Bloomburrow Collector Booster Box", "Bloomburrow Play Booster Box"])
+        self.assertEqual(names(price="50-100"), [self.etb.name])
+        self.assertEqual(names(compared="on"), [self.etb.name])
+        self.assertContains(self.client.get(reverse("web:search"), {"price": "0-10"}), "Clear filters")
+
+    def test_collector_boosters_classify_as_their_own_type(self):
+        from decimal import Decimal
+
+        from catalogue.classify import classify
+
+        sealed = classify("Magic: The Gathering Bloomburrow Collector Booster Box", "", "", (), Decimal("230"))
+        self.assertEqual(sealed.product_type, "collector_booster_box")
+        sealed = classify("MTG Bloomburrow Collector Booster Pack", "", "", (), Decimal("25"))
+        self.assertEqual(sealed.product_type, "collector_booster_pack")
+        sealed = classify("MTG Bloomburrow Play Booster Box", "", "", (), Decimal("110"))
+        self.assertEqual(sealed.product_type, "booster_box")
+
+    def test_tidy_retypes_old_collector_boxes(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        old = make_product(self.bloom, name="Duskmourn Collector Booster Box", slug="dsk-cb", product_type="booster_box")
+        make_listing(old, self.harbour, price="200.00")
+        call_command("tidy_catalogue", stdout=StringIO())
+        old.refresh_from_db()
+        self.assertEqual(old.product_type, "collector_booster_box")
+
+    def test_deck_filters_by_type_with_the_games_words(self):
+        response = self.client.get(reverse("web:deck"), {"game": "magic-the-gathering"})
+        self.assertContains(response, "Collector booster box</option>")
+        names = [c["name"] for c in self.client.get(reverse("web:deck_api"), {"game": "magic-the-gathering", "type": "collector_booster_box"}).json()["cards"]]
+        self.assertEqual(names, ["Bloomburrow Collector Booster Box"])
+
+
+class HomeFootballTests(PageTestCase):
+    def test_football_is_pinned_among_the_first_chips_and_has_its_own_row(self):
+        from django.core.cache import cache
+
+        football = make_game(name="Football cards", slug="football", search_aliases="")
+        attax = make_set(football, name="Match Attax 2026/27", slug="match-attax-2026-27", code="MA27")
+        tin = make_product(attax, name="Match Attax 2026/27 Mega Tin", slug="ma27-mega-tin", product_type="tin")
+        make_listing(tin, self.harbour, price="14.99")
+        cache.clear()
+        response = self.client.get(reverse("web:home"))
+        html = response.content.decode()
+        chips = html[html.index('class="chips"'):html.index("</nav>", html.index('class="chips"'))]
+        self.assertIn("/games/football/", chips.split("chips__extra")[0])
+        self.assertContains(response, "Football and sports cards")
+        self.assertContains(response, "Match Attax 2026/27 Mega Tin")

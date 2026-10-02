@@ -8,7 +8,7 @@ from django.templatetags.static import static
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
-from django.db.models import Count, F, Max, Prefetch, Q
+from django.db.models import Case, Count, Exists, F, IntegerField, Max, OuterRef, Prefetch, Q, Value, When
 from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -16,8 +16,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from catalogue import insights, offers, pricing
-from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products
-from catalogue.models import Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Retailer
+from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
+from catalogue.models import Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Retailer, stale_cutoff
 from catalogue.search import apply_search
 from catalogue.types import type_choices
 from content import service as copy
@@ -94,7 +94,7 @@ def types_for(game, queryset):
     return type_choices(game.slug if game else None, present=present)
 
 
-def _browse(request, template_context, *, base_queryset, fixed_game=None):
+def _browse(request, template_context, *, base_queryset, fixed_game=None, default_ordering=None):
     """Shared by search, game and set pages."""
     has_query = bool(request.GET.get("q", "").strip())
     chosen_game = fixed_game or Game.objects.filter(slug=request.GET.get("game", "")).first()
@@ -132,7 +132,10 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None):
     sort = form.value("sort", form.default_sort)
     if sort == "best" and not terms:
         sort = "newest"
-    products = order_products(products, sort, first="name_rank" if sort == "best" else None)
+    if default_ordering and sort == "newest":
+        products = order_products_default(products, sort, default_ordering)
+    else:
+        products = order_products(products, sort, first="name_rank" if sort == "best" else None)
 
     paginator = Paginator(products.prefetch_related(offers.buyable_prefetch()), settings.RIPRAPTOR_PAGE_SIZE)
     page = paginator.get_page(request.GET.get("page"))
@@ -231,21 +234,39 @@ NEW_SEEN_DAYS = 14       # or while shops have only just started listing it
 
 
 def latest_drops_queryset():
-    """New sealed products with a price: just released, about to be, or just listed by shops.
+    """New sealed products with a price: on pre-order, just released, or just listed by shops.
 
-    "Just listed" starts two days after the catalogue's first product, so the
-    launch import does not make the whole catalogue a drop for a fortnight.
+    Few products carry a release date, so a current pre-order listing is the
+    main sign of an upcoming drop. "Just listed" starts two days after the
+    catalogue's first product, so the launch import does not make the whole
+    catalogue a drop for a fortnight. ``tier`` orders them: upcoming first,
+    then recently released, then newly listed.
     """
     today = timezone.localdate()
     seen_since = timezone.now() - timedelta(days=NEW_SEEN_DAYS)
     first = Product.objects.order_by("created_at").values_list("created_at", flat=True).first()
     if first is not None:
         seen_since = max(seen_since, first + timedelta(days=2))
+    on_preorder = Exists(
+        Listing.objects.filter(
+            product=OuterRef("pk"), is_active=True, retailer__is_active=True,
+            last_checked__gte=stale_cutoff(), availability=Listing.Availability.PREORDER,
+        )
+    )
+    upcoming = Q(release__gt=today) | Q(on_preorder=True)
+    recent = Q(release__gte=today - timedelta(days=NEW_RELEASE_DAYS))
+    fresh = Q(created_at__gte=seen_since)
     return (
         Product.objects.for_lists()
         .filter(lowest_price__isnull=False)
-        .filter(Q(release__gte=today - timedelta(days=NEW_RELEASE_DAYS)) | Q(created_at__gte=seen_since))
+        .annotate(on_preorder=on_preorder)
+        .filter(upcoming | recent | fresh)
+        .annotate(tier=Case(When(upcoming, then=Value(0)), When(recent, then=Value(1)), default=Value(2),
+                            output_field=IntegerField()))
     )
+
+
+DROPS_ORDER = ("tier", F("release").desc(nulls_last=True), "-created_at", "name")
 
 
 def home_drops_new():
@@ -257,11 +278,7 @@ def home_drops_new():
     cached = cache.get(key)
     if cached is not None:
         return cached
-    rows = list(
-        latest_drops_queryset()
-        .prefetch_related(offers.buyable_prefetch())
-        .order_by(F("release").desc(nulls_last=True), "-created_at")[:10]
-    )
+    rows = list(latest_drops_queryset().prefetch_related(offers.buyable_prefetch()).order_by(*DROPS_ORDER)[:10])
     for product in rows:
         product.best_offer = product.offers[0] if product.offers else None
     cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
@@ -282,6 +299,7 @@ def latest_drops(request):
             "structured_json": json.dumps(breadcrumbs_json(request, [(heading, reverse("web:new"))])),
         },
         base_queryset=latest_drops_queryset(),
+        default_ordering=DROPS_ORDER,
     )
 
 

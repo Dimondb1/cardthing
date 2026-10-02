@@ -673,6 +673,19 @@ class LatestDropsTests(PageTestCase):
         make_listing(fresh, self.harbour, price="12.00")
         self.assertContains(self.client.get(reverse("web:new")), "Base Set Blister")
 
+    def test_a_pre_order_counts_as_a_drop_without_any_release_date_and_leads_the_list(self):
+        from django.core.cache import cache
+
+        Product.objects.update(created_at=timezone.now() - timedelta(days=100))
+        loose = make_product(self.old_set, name="Phantasmal Flames Booster Bundle", slug="pfl-bundle", product_type="bundle")
+        Product.objects.filter(pk=loose.pk).update(created_at=timezone.now() - timedelta(days=100))
+        make_listing(loose, self.harbour, price="29.99", availability=Listing.Availability.PREORDER)
+        cache.clear()
+        response = self.client.get(reverse("web:new"))
+        names = [c[0].name for c in response.context["cards"]]
+        self.assertEqual(names[:2], ["Mega Evolution Elite Trainer Box", "Phantasmal Flames Booster Bundle"])
+        self.assertIn("Phantasmal Flames Booster Bundle", self.client.get(reverse("web:home")).content.decode())
+
     def test_the_launch_import_itself_is_not_a_drop(self):
         from django.core.cache import cache
 

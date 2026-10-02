@@ -95,3 +95,12 @@ def order_products(products, sort, first=None):
     if first:
         ordering.insert(0, first)
     return products.order_by(*ordering)
+
+
+def order_products_default(products, sort, default_ordering, first=None):
+    """Like order_products, but a sort of "newest" uses the list's own ordering."""
+    if sort == "newest":
+        return products.annotate(
+            has_price=Case(When(lowest_price__isnull=True, then=Value(1)), default=Value(0), output_field=IntegerField())
+        ).order_by(*default_ordering)
+    return order_products(products, sort, first=first)

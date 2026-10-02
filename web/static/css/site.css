@@ -308,10 +308,7 @@ ul, ol { margin: 0; padding: 0; }
 /* Hero: one unit. Headline, one line, search, one line of meta, game chips. */
 .hero { padding: var(--space-3) 0 0; text-align: center; }
 .hero + .home-section { margin-top: var(--rhythm-hero); }
-.hero > *, .masthead--home .wordmark { animation: rise var(--motion-slow) var(--ease-out) both; }
-.hero > :nth-child(2) { animation-delay: 40ms; }
-.hero > :nth-child(3) { animation-delay: 80ms; }
-.hero > :nth-child(n + 4) { animation-delay: 120ms; }
+/* The hero does not animate on load: text arriving in sequence is decoration, not information. */
 .reveal { opacity: 0; transform: translateY(6px); transition: opacity var(--motion-slow) var(--ease-out), transform var(--motion-slow) var(--ease-out); }
 .reveal.is-visible, .no-js .reveal { opacity: 1; transform: none; }
 .hero__title { font-size: var(--text-headline); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-tight); letter-spacing: -0.02em; max-width: 22ch; margin: 0 auto; }
@@ -790,13 +787,8 @@ ul, ol { margin: 0; padding: 0; }
   background: var(--color-paper); box-shadow: var(--shadow-lift);
   will-change: transform; transform-origin: 50% 110%; touch-action: pan-y; cursor: grab;
 }
-/* The new top card reveals in order: image, title, price, badge, button. */
-.swipe--enter .swipe__image { animation: fade-in var(--motion-normal) var(--ease-out) both; }
-.swipe--enter .swipe__name, .swipe--enter .swipe__meta { animation: rise var(--motion-normal) var(--ease-out) both 60ms; }
-.swipe--enter .swipe__price, .swipe--enter .swipe__at { animation: rise var(--motion-normal) var(--ease-out) both 110ms; }
-.swipe--enter .badge { animation: badge-in var(--motion-normal) var(--ease-out) both 170ms; }
-.swipe--enter .button--buy, .swipe--enter .rank { animation: rise var(--motion-normal) var(--ease-out) both 210ms; }
-@keyframes badge-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+/* A new top card fades in as one piece: continuity from the card that just left, nothing more. */
+.swipe--enter { animation: fade-in var(--motion-normal) var(--ease-out) both; }
 .swipe:active { cursor: grabbing; }
 .swipe--behind { box-shadow: var(--shadow-card); }
 .swipe--settle { transition: transform var(--motion-slow) var(--ease-out), opacity var(--motion-slow); }

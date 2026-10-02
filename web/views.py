@@ -3,12 +3,14 @@ from urllib.parse import urlencode
 
 from django import forms
 from django.conf import settings
+from django.templatetags.static import static
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
 from django.db.models import Count, F, Max, Prefetch, Q
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
@@ -19,6 +21,7 @@ from catalogue.search import apply_search
 from content import service as copy
 
 from .charts import price_chart
+from .templatetags.ripraptor import gbp
 
 BOT_MARKERS = ("bot", "crawl", "spider", "slurp", "preview", "monitor")
 
@@ -207,6 +210,7 @@ def home(request):
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
             ),
             "canonical_url": request.build_absolute_uri("/"),
+            "structured_json": json.dumps(site_json(request)),
         },
     )
 
@@ -260,6 +264,7 @@ def game_detail(request, game_slug):
             "meta_title": text(request, "meta.game.title", game=game.name),
             "meta_description": text(request, "meta.game.description", game=game.name),
             "canonical_url": request.build_absolute_uri(game.get_absolute_url()),
+            "structured_json": json.dumps(breadcrumbs_json(request, [(game.name, game.get_absolute_url())])),
         },
         base_queryset=Product.objects.for_lists().filter(game=game),
         fixed_game=game,
@@ -286,10 +291,50 @@ def set_detail(request, game_slug, set_slug):
             "meta_title": text(request, "meta.set.title", **values),
             "meta_description": text(request, "meta.set.description", **values),
             "canonical_url": request.build_absolute_uri(product_set.get_absolute_url()),
+            "structured_json": json.dumps(breadcrumbs_json(
+                request, [(game.name, game.get_absolute_url()), (product_set.name, product_set.get_absolute_url())]
+            )),
         },
         base_queryset=Product.objects.for_lists().filter(product_set=product_set),
         fixed_game=game,
     )
+
+
+def breadcrumbs_json(request, crumbs):
+    """schema.org BreadcrumbList for [(name, path), ...]."""
+    return {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": i + 1, "name": name, "item": request.build_absolute_uri(path)}
+            for i, (name, path) in enumerate(crumbs)
+        ],
+    }
+
+
+def site_json(request):
+    """schema.org WebSite and Organization, with the site search for search engines."""
+    home = request.build_absolute_uri("/")
+    return [
+        {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "name": settings.RIPRAPTOR_SITE_NAME,
+            "url": home,
+            "potentialAction": {
+                "@type": "SearchAction",
+                "target": {"@type": "EntryPoint", "urlTemplate": home + "search/?q={query}"},
+                "query-input": "required name=query",
+            },
+        },
+        {
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "name": settings.RIPRAPTOR_SITE_NAME,
+            "url": home,
+            "logo": request.build_absolute_uri(static("img/logo.png")),
+        },
+    ]
 
 
 def amazon_search_url(product, listings):
@@ -366,12 +411,30 @@ def product_detail(request, slug):
             "offerCount": len(current),
             "availability": "https://schema.org/InStock" if in_stock_count else "https://schema.org/PreOrder",
         }
+    crumbs = [(product.game.name, product.game.get_absolute_url())]
+    if product.product_set:
+        crumbs.append((product.product_set.name, product.product_set.get_absolute_url()))
+    crumbs.append((product.name, product.get_absolute_url()))
+    if cheapest:
+        meta_values = {
+            "product": product.name,
+            "price": gbp(cheapest.delivered_price),
+            "retailer": cheapest.retailer.name,
+            "count": len(current),
+        }
+        meta_title = text(request, "meta.product.title_priced", **meta_values)
+        meta_description = text(request, "meta.product.description_priced", **meta_values)
+    else:
+        meta_title = text(request, "meta.product.title", product=product.name)
+        meta_description = text(request, "meta.product.description", product=product.name)
     return render(
         request,
         "web/product.html",
         {
             "product": product,
-            "structured_json": json.dumps(structured),
+            "structured_json": json.dumps([structured, breadcrumbs_json(request, crumbs)]),
+            "meta_type": "product",
+            "meta_image": request.build_absolute_uri(product.image_src) if product.image_src else "",
             "current": current,
             "unavailable": unavailable,
             "cheapest": cheapest,
@@ -386,8 +449,8 @@ def product_detail(request, slug):
             "last_known": last_known,
             "amazon_search": amazon_search_url(product, listings),
             "related": related,
-            "meta_title": text(request, "meta.product.title", product=product.name),
-            "meta_description": text(request, "meta.product.description", product=product.name),
+            "meta_title": meta_title,
+            "meta_description": meta_description,
             "canonical_url": request.build_absolute_uri(product.get_absolute_url()),
         },
     )
@@ -428,7 +491,7 @@ def terms(request):
 @require_GET
 def product_prices_api(request, slug):
     """Current prices for the product page's refresh control."""
-    from .templatetags.ripraptor import ago, gbp
+    from .templatetags.ripraptor import ago
 
     product = get_object_or_404(Product.objects.active(), slug=slug)
     rows = []
@@ -578,18 +641,58 @@ def deck(request):
     )
 
 
+AI_CRAWLERS = ("GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-SearchBot", "anthropic-ai",
+               "PerplexityBot", "Google-Extended", "Applebot-Extended", "Bingbot", "CCBot", "Amazonbot")
+
+
 @require_GET
 def robots_txt(request):
-    lines = [
-        "User-agent: *",
-        "Disallow: /admin/",
-        "Disallow: /go/",
-        "Disallow: /search/",
-        "Disallow: /api/",
-        "Disallow: /swipe/",
-        "Sitemap: " + request.build_absolute_uri("/sitemap.xml"),
-    ]
+    private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/"]
+    lines = ["User-agent: *", *private, ""]
+    # Named so a crawler that only honours its own section still gets the same answer.
+    for agent in AI_CRAWLERS:
+        lines += [f"User-agent: {agent}", "Allow: /", *private, ""]
+    lines += ["Sitemap: " + request.build_absolute_uri("/sitemap.xml")]
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")
+
+
+@require_GET
+def llms_txt(request):
+    """A plain description of the site for AI crawlers, with the pages worth reading."""
+    games = (
+        Game.objects.filter(is_active=True)
+        .annotate(product_count=Count("products", filter=Q(products__is_active=True)))
+        .filter(product_count__gt=0)
+        .order_by("-product_count", "name")
+    )
+    shops = Retailer.objects.filter(is_active=True).count()
+    lines = [
+        f"# {settings.RIPRAPTOR_SITE_NAME}",
+        "",
+        f"> {text(request, 'meta.default.description')}",
+        "",
+        text(request, 'about.introduction'),
+        "",
+        f"Prices are in pounds, include UK delivery, and come from {shops} UK shops. "
+        "Each product page lists every shop's price with stock and the time it was checked, "
+        "and links to the shop to buy. Nothing is sold here.",
+        "",
+        "## Games",
+        "",
+    ]
+    for game in games:
+        lines.append(f"- [{game.name}]({request.build_absolute_uri(game.get_absolute_url())}): {game.product_count} sealed products")
+    lines += [
+        "",
+        "## Pages",
+        "",
+        f"- [Every game and set]({request.build_absolute_uri(reverse('web:games'))})",
+        f"- [How it works]({request.build_absolute_uri(reverse('web:about'))})",
+        f"- [Terms and disclosures]({request.build_absolute_uri(reverse('web:terms'))})",
+        f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product page",
+        "",
+    ]
+    return HttpResponse("\n".join(lines), content_type="text/markdown; charset=utf-8")
 
 
 @staff_member_required

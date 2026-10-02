@@ -304,8 +304,10 @@ class SeoAndEdgeCaseTests(PageTestCase):
 
         html = self.client.get(self.etb.get_absolute_url()).content.decode()
         start = html.index('<script type="application/ld+json">') + len('<script type="application/ld+json">')
-        data = json.loads(html[start:html.index("</script>", start)])
+        data, crumbs = json.loads(html[start:html.index("</script>", start)])
         self.assertEqual(data["@type"], "Product")
+        self.assertEqual(crumbs["@type"], "BreadcrumbList")
+        self.assertEqual([c["name"] for c in crumbs["itemListElement"]], ["Pokémon", "Prismatic Evolutions", self.etb.name])
         self.assertEqual(data["offers"]["lowPrice"], "54.99")
         self.assertEqual(data["offers"]["offerCount"], 2)
 
@@ -458,3 +460,43 @@ class LanguageAndSortTests(PageTestCase):
         response = self.client.get(reverse("web:search"), {"q": "prismatic", "sort": "low"})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Clear filters")
+
+
+class DiscoverabilityTests(PageTestCase):
+    def test_product_page_has_price_led_title_description_and_sharing_tags(self):
+        response = self.client.get(self.etb.get_absolute_url())
+        self.assertContains(response, "<title>Prismatic Evolutions Elite Trainer Box from £54.99 delivered: UK price comparison | RipRaptor</title>")
+        self.assertContains(response, 'content="Cheapest Prismatic Evolutions Elite Trainer Box today is £54.99 delivered at Harbour Games. Compare 2 UK shops')
+        self.assertContains(response, '<meta property="og:type" content="product">')
+        self.assertContains(response, '<meta property="og:url" content="http://testserver' + self.etb.get_absolute_url() + '">')
+        self.assertContains(response, '"@type": "BreadcrumbList"')
+        self.assertContains(response, '"@type": "Product"')
+
+    def test_unpriced_product_keeps_the_plain_title(self):
+        response = self.client.get(self.unpriced.get_absolute_url())
+        self.assertContains(response, "<title>Prismatic Evolutions Booster Bundle: UK prices | RipRaptor</title>")
+
+    def test_home_declares_the_site_and_its_search(self):
+        response = self.client.get(reverse("web:home"))
+        self.assertContains(response, '"@type": "WebSite"')
+        self.assertContains(response, 'search/?q={query}')
+        self.assertContains(response, '<meta property="og:image" content="http://testserver/static/img/logo.png">')
+
+    def test_game_and_set_pages_carry_breadcrumbs(self):
+        for url in (self.game.get_absolute_url(), self.pre.get_absolute_url()):
+            self.assertContains(self.client.get(url), '"@type": "BreadcrumbList"')
+
+    def test_llms_txt_describes_the_site_for_ai_crawlers(self):
+        response = self.client.get("/llms.txt")
+        self.assertEqual(response["Content-Type"], "text/markdown; charset=utf-8")
+        body = response.content.decode()
+        self.assertIn("# RipRaptor", body)
+        self.assertIn("[Pokémon](http://testserver" + self.game.get_absolute_url() + ")", body)
+        self.assertIn("/sitemap.xml", body)
+        self.assertNotIn("<p>", body)
+
+    def test_robots_names_ai_crawlers_and_keeps_private_paths_out(self):
+        body = self.client.get("/robots.txt").content.decode()
+        self.assertIn("User-agent: GPTBot\nAllow: /\nDisallow: /admin/", body)
+        self.assertIn("User-agent: ClaudeBot", body)
+        self.assertTrue(body.strip().endswith("Sitemap: http://testserver/sitemap.xml"))

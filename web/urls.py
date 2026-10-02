@@ -22,4 +22,5 @@ urlpatterns = [
     path("api/products/<slug:slug>/prices/", views.product_prices_api, name="product_prices_api"),
     path("robots.txt", views.robots_txt, name="robots"),
     path("sitemap.xml", sitemap, {"sitemaps": SITEMAPS}, name="sitemap"),
+    path("llms.txt", views.llms_txt, name="llms"),
 ]

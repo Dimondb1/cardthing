@@ -512,6 +512,18 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
+## Search engines and AI crawlers
+
+Every page carries a canonical link, Open Graph and Twitter sharing tags,
+and structured data: WebSite with site search and Organization on the
+home page, Product with its offers plus a BreadcrumbList on product
+pages, and BreadcrumbList on game and set pages. Product titles and
+descriptions lead with the cheapest delivered price. `/robots.txt`
+names the AI crawlers and allows them the same pages as everyone else,
+and `/llms.txt` describes the site in plain Markdown with links to the
+games, the how it works page and the sitemap. Search, swipe and the
+click redirect stay out of the index.
+
 ## Insights
 
 Admin, Insights (`/admin/insights/`) shows what visitors do: page views

@@ -906,6 +906,19 @@ ENTRIES = [
         placeholders=("product",),
     ),
     Entry(
+        "meta.product.title_priced", T, "Product page title with a price",
+        "{product} from {price} delivered: UK price comparison",
+        "Browser tab title for product pages that have a current price. The site name is added after it.",
+        placeholders=("product", "price", "retailer", "count"),
+    ),
+    Entry(
+        "meta.product.description_priced", T, "Product page description with a price",
+        "Cheapest {product} today is {price} delivered at {retailer}. Compare {count} UK shops with "
+        "stock, delivery and the time each price was checked.",
+        "Search engine description for product pages that have a current price.",
+        placeholders=("product", "price", "retailer", "count"),
+    ),
+    Entry(
         "meta.game.title", T, "Game page title",
         "{game} sealed product prices",
         "Browser tab title for game pages. The site name is added after it.",

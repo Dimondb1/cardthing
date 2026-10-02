@@ -7,6 +7,14 @@
   <meta name="description" content="{% if meta_description %}{{ meta_description }}{% else %}{% copy "meta.default.description" %}{% endif %}">
   {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
   {% if noindex %}<meta name="robots" content="noindex, follow">{% endif %}
+  <meta property="og:site_name" content="{{ site_name }}">
+  <meta property="og:type" content="{% if meta_type %}{{ meta_type }}{% else %}website{% endif %}">
+  <meta property="og:title" content="{% if meta_full_title %}{{ meta_full_title }}{% elif meta_title %}{{ meta_title }}{% else %}{{ site_name }}{% endif %}">
+  <meta property="og:description" content="{% if meta_description %}{{ meta_description }}{% else %}{% copy "meta.default.description" %}{% endif %}">
+  {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+  <meta property="og:image" content="{% if meta_image %}{{ meta_image }}{% else %}{{ request.scheme }}://{{ request.get_host }}{% static 'img/logo.png' %}{% endif %}">
+  <meta name="twitter:card" content="{% if meta_image %}summary_large_image{% else %}summary{% endif %}">
+  {% if structured_json %}<script type="application/ld+json">{{ structured_json|safe }}</script>{% endif %}
   <meta name="theme-color" content="#ffffff">
   <!-- Awin publisher verification: RipRaptor -->
   <link rel="icon" href="{% static 'img/favicon.png' %}" type="image/png">

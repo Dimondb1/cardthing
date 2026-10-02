@@ -140,6 +140,12 @@ class FootballTests(TestCase):
         sealed = classify("Panini Premier League 2026 Adrenalyn XL Mega Tin", "", "Panini", (), Decimal("12.00"))
         self.assertEqual((sealed.game, sealed.product_type), ("football", "collection_box"))
 
+    def test_card_vault_style_titles_are_football(self):
+        sealed = classify("Panini - 2025/26 WLS Eternity Football (Soccer) - Hobby Box", "Booster Box", "Panini", (), Decimal("119.95"))
+        self.assertEqual((sealed.game, sealed.product_type), ("football", "booster_box"))
+        sealed = classify("Topps - 2026/27 Premier League Flagship Edition Football (Soccer) - Super Tin", "Super Tin", "Topps", (), Decimal("19.95"))
+        self.assertEqual((sealed.game, sealed.product_type), ("football", "tin"))
+
     def test_football_stickers_and_singles_stay_out(self):
         self.assertIsNone(classify("Panini Premier League 2026 Sticker Collection Packet", "", "Panini", (), Decimal("1.00")))
         self.assertIsNone(classify("Erling Haaland 100 Club Match Attax 2025/26 single card", "", "", (), Decimal("4.00")))

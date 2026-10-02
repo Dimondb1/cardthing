@@ -129,6 +129,22 @@ class ClassifyLeakTests(TestCase):
         self.assertEqual((sealed.game, sealed.name), ("flesh-and-blood", "Armory Deck Malice"))
 
 
+class FootballTests(TestCase):
+    def test_match_attax_and_topps_products_are_football(self):
+        sealed = classify("Topps Match Attax 2025/26 Booster Box (24 Packs)", "", "Topps", (), Decimal("45.00"))
+        self.assertEqual((sealed.game, sealed.product_type), ("football", "booster_box"))
+        sealed = classify("Match Attax 2025/26 Starter Pack", "", "Topps", (), Decimal("9.99"))
+        self.assertEqual((sealed.game, sealed.product_type), ("football", "collection_box"))
+        sealed = classify("Topps UEFA Champions League Chrome 2024/25 Hobby Box", "", "", (), Decimal("120.00"))
+        self.assertEqual(sealed.game, "football")
+        sealed = classify("Panini Premier League 2026 Adrenalyn XL Mega Tin", "", "Panini", (), Decimal("12.00"))
+        self.assertEqual((sealed.game, sealed.product_type), ("football", "collection_box"))
+
+    def test_football_stickers_and_singles_stay_out(self):
+        self.assertIsNone(classify("Panini Premier League 2026 Sticker Collection Packet", "", "Panini", (), Decimal("1.00")))
+        self.assertIsNone(classify("Erling Haaland 100 Club Match Attax 2025/26 single card", "", "", (), Decimal("4.00")))
+
+
 class TidyNameTests(TestCase):
     def test_shop_punctuation_and_stock_tails_go(self):
         self.assertEqual(tidy_name("! Duelist Nexus 1st Edition Booster Box"), "Duelist Nexus 1st Edition Booster Box")

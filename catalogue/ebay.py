@@ -121,7 +121,7 @@ def item_id_of(url):
 
 
 def search_url(product):
-    params = {"filter": FILTER, "sort": "price", "limit": "10"}
+    params = {"filter": FILTER, "sort": "price", "limit": "20"}
     if product.ean:
         params["gtin"] = product.ean
     else:
@@ -277,6 +277,7 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
             continue
         failures = 0
         checked.append(product.pk)
+        # Of every result that really is this product, keep the cheapest delivered.
         best = None
         for item in answer.get("itemSummaries", []) or []:
             offer = item_offer(item, product, Offer)
@@ -287,8 +288,8 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
             # A duplicate catalogue entry with the same key counts as this product.
             same = catalogue.by_key.get((product.game.slug, match_key(product.name)), ())
             if match and (match[0] == product.pk or match[0] in same) and value >= needed:
-                best = offer
-                break   # results are cheapest first including postage
+                if best is None or offer.price + offer.delivery < best.price + best.delivery:
+                    best = offer
         if best is None and product.pk in existing:
             best = out_of_stock(product)
         if best is not None:

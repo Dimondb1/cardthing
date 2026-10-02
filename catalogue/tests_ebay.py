@@ -136,6 +136,14 @@ class LookupTests(TestCase):
         self.etb.refresh_from_db()
         self.assertIsNotNone(self.etb.ebay_checked_at)
 
+    def test_the_cheapest_delivered_match_wins_even_when_listed_later(self):
+        api = FakeApi([
+            item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="80.00", postage="4.99", item_id="v1|2|0"),
+            item("Pokemon TCG Prismatic Evolutions Elite Trainer Box sealed", price="82.00", postage="0.00", item_id="v1|3|0"),
+        ])
+        offers = ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertEqual(offers[0].price + offers[0].delivery, Decimal("82.00"))
+
     def test_name_search_needs_a_full_match(self):
         self.etb.delete()
         api = FakeApi([item("Prismatic Evolutions Booster Bundle x2 bundles", price="30.00")])

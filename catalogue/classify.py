@@ -26,6 +26,12 @@ GAMES = [
     ("digimon", "Digimon Card Game", "Digimon", ("digimon",)),
     ("dragon-ball", "Dragon Ball Super Card Game", "Dragon Ball", ("dragon ball",)),
     ("riftbound", "Riftbound", "Riftbound", ("riftbound",)),
+    ("football", "Football cards", "Football", ("match attax", "adrenalyn", "topps chrome", "premier league",
+                                                 "champions league", "uefa", "fifa", "topps football", "panini football",
+                                                 "world cup", "euros 20", "euro 20", "merlin heritage", "topps merlin",
+                                                 "bundesliga", "la liga", "serie a", "topps now", "women's super league",
+                                                 "topps tier one", "topps finest", "panini prizm", "panini select",
+                                                 "panini donruss", "panini obsidian", "panini mosaic", "panini score")),
 ]
 
 # Order matters: the first matching type wins.
@@ -33,8 +39,10 @@ TYPES = [
     ("elite_trainer_box", ("elite trainer box", "etb", "trainer box")),
     ("collection_box", ("ultra premium collection", "super premium collection", "premium collection", "collection box",
                         "collector's box", "collectors box", "illumineer's trove", "illumineers trove", "trove", "box set",
-                        "gift box", "collection", "figure box", "poster box", "pin box", "surprise box", "battle box", "starter kit")),
-    ("booster_box", ("booster box", "booster display", "display box", "display", "case of 36", "box of 36", "box of 24", "box of 30")),
+                        "gift box", "collection", "figure box", "poster box", "pin box", "surprise box", "battle box", "starter kit",
+                        "starter pack", "mega tin", "mega multipack", "multipack", "mega pack")),
+    ("booster_box", ("booster box", "booster display", "display box", "display", "case of 36", "box of 36", "box of 24", "box of 30",
+                     "hobby box", "retail box", "blaster box", "mega box", "jumbo box", "value box")),
     ("bundle", ("booster bundle", "bundle", "sleeved booster 3", "blister")),
     ("deck", ("commander deck", "starter deck", "theme deck", "battle deck", "league battle deck", "deck", "precon",
               "two player starter", "2 player starter", "2-player starter")),

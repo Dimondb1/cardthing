@@ -672,3 +672,14 @@ class LatestDropsTests(PageTestCase):
         fresh = make_product(self.old_set, name="Base Set Blister", slug="base-set-blister", product_type="bundle")
         make_listing(fresh, self.harbour, price="12.00")
         self.assertContains(self.client.get(reverse("web:new")), "Base Set Blister")
+
+    def test_the_launch_import_itself_is_not_a_drop(self):
+        from django.core.cache import cache
+
+        # Everything created at launch: only products with a recent release date count.
+        Product.objects.update(created_at=timezone.now() - timedelta(hours=3))
+        cache.clear()
+        response = self.client.get(reverse("web:new"))
+        self.assertContains(response, "Mega Evolution Elite Trainer Box")
+        self.assertNotContains(response, "Base Set Booster Box")
+        self.assertNotContains(response, "Prismatic Evolutions Booster Bundle")

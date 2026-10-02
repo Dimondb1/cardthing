@@ -231,15 +231,20 @@ NEW_SEEN_DAYS = 14       # or while shops have only just started listing it
 
 
 def latest_drops_queryset():
-    """New sealed products with a price: just released, about to be, or just listed by shops."""
+    """New sealed products with a price: just released, about to be, or just listed by shops.
+
+    "Just listed" starts two days after the catalogue's first product, so the
+    launch import does not make the whole catalogue a drop for a fortnight.
+    """
     today = timezone.localdate()
+    seen_since = timezone.now() - timedelta(days=NEW_SEEN_DAYS)
+    first = Product.objects.order_by("created_at").values_list("created_at", flat=True).first()
+    if first is not None:
+        seen_since = max(seen_since, first + timedelta(days=2))
     return (
         Product.objects.for_lists()
         .filter(lowest_price__isnull=False)
-        .filter(
-            Q(release__gte=today - timedelta(days=NEW_RELEASE_DAYS))
-            | Q(created_at__gte=timezone.now() - timedelta(days=NEW_SEEN_DAYS))
-        )
+        .filter(Q(release__gte=today - timedelta(days=NEW_RELEASE_DAYS)) | Q(created_at__gte=seen_since))
     )
 
 

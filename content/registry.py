@@ -562,6 +562,11 @@ ENTRIES = [
         "Green badge when the cheapest price is the lowest recorded in the last 7 days.",
     ),
     Entry(
+        "product.badge.soon", T, "Badge: dropping soon",
+        "Dropping soon",
+        "Badge on a product that is on pre-order at its cheapest shop.",
+    ),
+    Entry(
         "product.badge.lowest_today", T, "Badge: lowest today",
         "Lowest today",
         "Green badge when the price is the lowest available today but was lower this week.",

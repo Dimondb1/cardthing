@@ -61,9 +61,10 @@
   {% copy "home.new.intro" as new_intro %}{% if new_intro %}<p class="section-head__note">{{ new_intro }}</p>{% endif %}
   <ul class="trending" data-scroll>
     {% for product in latest %}
-    <li class="trending__item">
+    <li class="trending__item{% if product.best_offer.availability == "preorder" %} is-upcoming{% endif %}">
       <a class="trending__link" href="{{ product.get_absolute_url }}">
         {% product_image product "trend" %}
+        {% if product.best_offer.availability == "preorder" %}<span class="badge badge--soon trending__badge">{% copy "product.badge.soon" %}</span>{% endif %}
         <span class="trending__name">{{ product.name }}</span>
         {% if product.best_offer %}
           <span class="trending__price">{% price product.best_offer.price %}</span>

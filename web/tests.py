@@ -686,6 +686,17 @@ class LatestDropsTests(PageTestCase):
         self.assertEqual(names[:2], ["Mega Evolution Elite Trainer Box", "Phantasmal Flames Booster Bundle"])
         self.assertIn("Phantasmal Flames Booster Bundle", self.client.get(reverse("web:home")).content.decode())
 
+    def test_pre_orders_are_marked_dropping_soon_and_muted(self):
+        home = self.client.get(reverse("web:home")).content.decode()
+        row = home[home.index('id="latest-title"'):home.index("</section>", home.index('id="latest-title"'))]
+        self.assertIn("Dropping soon", row)
+        self.assertIn("is-upcoming", row)
+        page = self.client.get(reverse("web:new")).content.decode()
+        self.assertIn('class="card is-upcoming"', page)
+        self.assertIn("Dropping soon", page)
+        # A product that is out is not marked.
+        self.assertNotIn("is-upcoming", self.client.get(self.game.get_absolute_url(), {"q": ""}).content.decode().split("Mega Evolution")[0].split('class="card"')[-1])
+
     def test_the_launch_import_itself_is_not_a_drop(self):
         from django.core.cache import cache
 

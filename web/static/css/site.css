@@ -152,6 +152,10 @@ ul, ol { margin: 0; padding: 0; }
 }
 .badge svg { width: 1em; height: 1em; }
 .badge--good { background: var(--color-price-soft); color: var(--color-price); }
+.badge--soon { background: var(--color-shelf); color: var(--color-ink-subtle); }
+/* Pre-orders look the part: a quieter picture until the product is actually out. */
+.is-upcoming .product-image img { opacity: 0.6; filter: grayscale(0.35); }
+.trending__badge { align-self: flex-start; margin-top: var(--space-1); }
 
 /* Product images */
 .product-image {

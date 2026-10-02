@@ -1,5 +1,5 @@
 {% load sitecopy ripraptor %}
-<li class="card">
+<li class="card{% if summary.best and summary.best.availability == "preorder" %} is-upcoming{% endif %}">
   <a class="card__image" href="{{ product.get_absolute_url }}" tabindex="-1" aria-hidden="true">{% product_image product "card" %}</a>
   <div class="card__body">
     <{{ heading_tag|default:"h2" }} class="card__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></{{ heading_tag|default:"h2" }}>

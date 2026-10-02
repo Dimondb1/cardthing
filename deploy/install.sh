@@ -63,14 +63,18 @@ CADDY
 systemctl enable -q --now caddy
 systemctl reload caddy
 
-echo "0 * * * *  cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 && .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
+# The hourly import waits up to 30 minutes for the lock rather than skipping, so the
+# 10-minute stock watcher (which fires at the same minute and skips while the lock is
+# held) can never crowd it out. Output is unbuffered so the log shows progress live.
+echo "PYTHONUNBUFFERED=1
+0 * * * *  cd $DIR && set -a && . ./.env && set +a && flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 && .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
 15 0 * * * cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
 */10 * * * * cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
 touch /var/log/ripraptor-import.log && chown ripraptor /var/log/ripraptor-import.log
 
 # First price import in the background so the site is usable straight away.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && nohup .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 &"
+sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && PYTHONUNBUFFERED=1 nohup flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 &"
 
 echo
 echo "Done. https://$DOMAIN should answer within a minute (Caddy fetches the certificate)."

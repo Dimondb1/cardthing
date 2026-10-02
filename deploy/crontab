@@ -1,5 +1,7 @@
-# Price checks every hour (skipped if the last one is still running), price history once a day, delivery charges once a week. Install with: crontab deploy/crontab
-0 * * * *  cd /srv/ripraptor && flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 && cd /srv/ripraptor && .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
+# Price checks every hour (waits up to 30 minutes for the lock), stock watch every 10 minutes (skipped while
+# the lock is held), price history once a day, delivery charges once a week. Install with: crontab deploy/crontab
+PYTHONUNBUFFERED=1
+0 * * * *  cd /srv/ripraptor && flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 && cd /srv/ripraptor && .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
 15 0 * * * cd /srv/ripraptor && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd /srv/ripraptor && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
 */10 * * * * cd /srv/ripraptor && flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock >> /var/log/ripraptor-import.log 2>&1

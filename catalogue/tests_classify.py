@@ -146,6 +146,11 @@ class FootballTests(TestCase):
         sealed = classify("Topps - 2026/27 Premier League Flagship Edition Football (Soccer) - Super Tin", "Super Tin", "Topps", (), Decimal("19.95"))
         self.assertEqual((sealed.game, sealed.product_type), ("football", "tin"))
 
+    def test_a_shops_own_football_category_counts_and_formula_one_chrome_does_not(self):
+        sealed = classify("Topps Premier League Debut Edition 2026 Golden Boot Tin", "football", "Topps", (), Decimal("29.99"))
+        self.assertEqual((sealed.game, sealed.product_type), ("football", "tin"))
+        self.assertIsNone(classify("Topps Chrome Formula 1 2026 Hobby Box", "f1", "Topps", (), Decimal("649.99")))
+
     def test_football_stickers_and_singles_stay_out(self):
         self.assertIsNone(classify("Panini Premier League 2026 Sticker Collection Packet", "", "Panini", (), Decimal("1.00")))
         self.assertIsNone(classify("Erling Haaland 100 Club Match Attax 2025/26 single card", "", "", (), Decimal("4.00")))

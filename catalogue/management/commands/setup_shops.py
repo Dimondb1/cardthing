@@ -73,6 +73,8 @@ SHOPS = [
      "Free over £200 (delivery page); standard charge not published, read 1 Oct 2026"),
     ("unicorn-cards", "Unicorn Cards", "https://unicorncards.co.uk/", S.WEBSITE, "0", None,
      "Delivery charge not yet confirmed"),
+    ("sports-cards-direct", "Sports Cards Direct", "https://www.sportscardsdirect.co.uk/", S.SHOPIFY, "5.49", "200",
+     "DPD 1 to 2 day £5.49, free over £200 (shipping policy page), read 2 Oct 2026"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's

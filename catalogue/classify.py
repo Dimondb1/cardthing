@@ -26,7 +26,7 @@ GAMES = [
     ("digimon", "Digimon Card Game", "Digimon", ("digimon",)),
     ("dragon-ball", "Dragon Ball Super Card Game", "Dragon Ball", ("dragon ball",)),
     ("riftbound", "Riftbound", "Riftbound", ("riftbound",)),
-    ("football", "Football cards", "Football", ("football", "soccer", "match attax", "adrenalyn", "topps chrome", "premier league",
+    ("football", "Football cards", "Football", ("football", "soccer", "match attax", "adrenalyn", "premier league",
                                                  "champions league", "uefa", "fifa", "topps football", "panini football",
                                                  "world cup", "euros 20", "euro 20", "merlin heritage", "topps merlin",
                                                  "bundesliga", "la liga", "serie a", "topps now", "women's super league",
@@ -50,7 +50,7 @@ TYPES = [
               "two player starter", "2 player starter", "2-player starter")),
     ("tin", ("tin", "super tin", "booster tin")),
     ("gift_set", ("gift set", "gift pack")),
-    ("booster_pack", ("booster pack", "booster", "pack", "checklane", "sleeved")),
+    ("booster_pack", ("booster pack", "booster", "pack", "packet", "checklane", "sleeved")),
 ]
 
 # A title with any of these is not a sealed product we list.
@@ -235,7 +235,7 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
         return None
     if VARIANT_MENU.search(title):
         return None
-    game = find_game(title, vendor, " ".join(tags))
+    game = find_game(title, vendor, " ".join(tags), shop_type)
     if game is None:
         return None
     kind = find_type(title, shop_type)

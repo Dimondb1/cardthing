@@ -185,7 +185,7 @@ last state.
 
 ## Real prices from UK shops
 
-`start.bat` / `start.command` run `setup_shops`, which adds 28 UK shops
+`start.bat` / `start.command` run `setup_shops`, which adds 29 UK shops
 (Total Cards, Gathering Games, Magic Madhouse, The Card Vault, Lvl Up
 Gaming, Zatu Games, Goblin Gaming, Travelling Man, JET Cards, Titan Cards,
 Buy Any Cards, The TCG Shop, Double Sleeved, Packrat, The Gamers Lodge,
@@ -265,8 +265,9 @@ network is the way in for all of these.
   sold out. **Hobby Quarter**: every product sold out, prices are RRP.
   **AJ-TCG**: dormant, every product unavailable.
 - **Troll Trader, Cob and Pip, Evolution Trading Cards, Mage Cards,
-  Findablez**: singles shops. **Sports Cards Direct, Sports Trading Cards
-  UK, P Commando Cards, Fanter, 3rd Down**: sports cards. **Battleground
+  Findablez**: singles shops. **Sports Trading Cards
+  UK, P Commando Cards, Fanter, 3rd Down**: sports cards (Sports Cards
+  Direct is connected for its football ranges). **Battleground
   Gaming, 7th City Collectables, Get Decked Games, Hidden Chest, Full Moon
   Gaming, Quirky and the Geek**: no sealed TCG stock online.
 - **Cardarium**: looked like a fabricated storefront with below-market

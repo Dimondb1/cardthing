@@ -49,6 +49,8 @@ PREORDER_WORDS = re.compile(r"pre[\s-]?order", re.I)
 # A tag counts only when it says pre-order and nothing else. Shop apps add tags
 # like "Pre-Order - Inventory Trigger" to products that are in stock today.
 PREORDER_TAG = re.compile(r"^\s*pre[\s-]?orders?\s*$", re.I)
+# A collection named for leaving pre-orders out ("all-products-excluding-pre-orders").
+NOT_PREORDER = re.compile(r"\b(?:exclud\w*|without|except|no|non|not)[\s-]+(?:\w+[\s-]+)?pre[\s-]?orders?", re.I)
 
 
 @dataclass
@@ -204,7 +206,7 @@ def preorder_collections(base, fetch=fetch):
         listed = []
     for collection in listed:
         handle = collection.get("handle", "")
-        if PREORDER_WORDS.search(handle) and handle not in names:
+        if PREORDER_WORDS.search(handle) and not NOT_PREORDER.search(handle) and handle not in names:
             names.append(handle)
     return names
 

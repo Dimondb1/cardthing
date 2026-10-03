@@ -717,6 +717,21 @@ class PreorderTagTests(TestCase):
         }])
         self.assertEqual(Listing.objects.get(product=product).availability, Listing.Availability.PREORDER)
 
+    def test_a_collection_that_excludes_preorders_is_not_a_preorder_list(self):
+        product = make_product(make_set(make_game()), name="Supreme Darkness Booster Pack", ean="4012927154422")
+        self.run_shop(
+            [{
+                "title": "Yu-Gi-Oh! Supreme Darkness Booster Pack", "handle": "supreme-darkness-booster-pack", "tags": ["TCG"],
+                "variants": [{"price": "3.49", "available": True, "barcode": "4012927154422"}],
+            }],
+            collections=["all-products-excluding-pre-orders", "pre-order", "non-pre-order-items"],
+            collection_products={
+                "all-products-excluding-pre-orders": ["supreme-darkness-booster-pack"],
+                "non-pre-order-items": ["supreme-darkness-booster-pack"],
+            },
+        )
+        self.assertEqual(Listing.objects.get(product=product).availability, Listing.Availability.IN_STOCK)
+
     def test_every_collection_named_for_preorders_is_read(self):
         product = make_product(make_set(make_game()), name="EFL Premium Box", ean="0820650851230")
         self.run_shop(

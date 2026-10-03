@@ -545,6 +545,8 @@ class DailyVisitor(models.Model):
     date = models.DateField(db_index=True)
     token = models.CharField(max_length=32)
     country = models.CharField(max_length=2, blank=True)
+    device = models.CharField(max_length=8, blank=True)    # mobile, tablet or desktop
+    source = models.CharField(max_length=80, blank=True)   # the site that sent them, domain only; empty means typed or bookmarked
 
     class Meta:
         unique_together = [("date", "token")]

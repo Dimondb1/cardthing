@@ -95,7 +95,7 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        with self.assertNumQueries(14):
+        with self.assertNumQueries(23):
             insights.report(30)
 
 
@@ -197,3 +197,68 @@ class VisitorTests(TestCase):
         response = self.client.get(reverse("insights"))
         self.assertContains(response, "United Kingdom")
         self.assertContains(response, "<b>3</b> visitors")
+
+
+class ImprovementTests(TestCase):
+    def setUp(self):
+        from catalogue.models import Retailer
+
+        self.product = make_product(make_set(make_game()))
+        self.paid = make_retailer("Paid Shop", affiliate_url_template="https://aff.example/?u={url}",
+                                  source_type=Retailer.Source.SHOPIFY, source_url="https://paid.example/")
+        self.free = make_retailer("Free Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://free.example/")
+        self.paid_listing = make_listing(self.product, self.paid, price="50.00")
+        self.free_listing = make_listing(self.product, self.free, price="49.00")
+
+    def test_device_and_source_are_recorded_by_domain_only(self):
+        from catalogue.models import DailyVisitor
+
+        self.client.get(self.product.get_absolute_url(), HTTP_USER_AGENT="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile Safari",
+                        HTTP_REFERER="https://www.google.co.uk/search?q=prismatic+etb")
+        self.client.get(self.product.get_absolute_url(), HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0) Chrome/124",
+                        HTTP_REFERER="https://old.reddit.com/r/PokemonTCG/comments/abc")
+        self.client.get(self.product.get_absolute_url(), HTTP_USER_AGENT="Mozilla/5.0 (iPad; CPU OS 17_0) Safari")
+        rows = {(v.device, v.source) for v in DailyVisitor.objects.all()}
+        self.assertEqual(rows, {("mobile", "google.co.uk"), ("desktop", "old.reddit.com"), ("tablet", "")})
+        data = insights.report(30)
+        groups = {s["name"]: s["visitors"] for s in data["sources"]}
+        self.assertEqual(groups, {"Search engines": 1, "Reddit": 1, "Typed or bookmarked": 1})
+        self.assertEqual({d["name"]: d["visitors"] for d in data["devices"]}, {"Phone": 1, "Tablet": 1, "Computer": 1})
+
+    def test_unpaid_clicks_and_broken_shops_lead_the_improvements(self):
+        from catalogue.models import ImportRun
+
+        for _ in range(3):
+            OutboundClick.objects.create(listing=self.free_listing, product=self.product, retailer=self.free)
+        OutboundClick.objects.create(listing=self.paid_listing, product=self.product, retailer=self.paid)
+        ImportRun.objects.create(retailer=self.paid, finished_at=timezone.now())
+        ImportRun.objects.create(retailer=self.free, finished_at=timezone.now(), error="HTTP 503")
+        data = insights.report(30)
+        self.assertEqual(data["earning_clicks"], 1)
+        self.assertEqual(data["unpaid"][0]["name"], "Free Shop")
+        titles = [i["title"] for i in data["improvements"]]
+        self.assertEqual(titles[0], "1 shop not updating")
+        self.assertEqual(titles[1], "75% of clicks earn nothing")
+        health = {s["name"]: s for s in data["shops_health"]}
+        self.assertEqual(health["Free Shop"]["problem"], "HTTP 503")
+        self.assertTrue(health["Paid Shop"]["earns"])
+
+    def test_viewed_never_clicked_and_one_shop_products_are_found(self):
+        lonely = make_product(self.product.product_set, name="Prismatic Evolutions Booster Bundle", slug="pev-bundle", product_type="bundle")
+        make_listing(lonely, self.free, price="30.00")
+        for _ in range(3):
+            self.client.get(lonely.get_absolute_url(), **HUMAN)
+        data = insights.report(30)
+        self.assertEqual([r["product"] for r in data["viewed_no_click"]], [lonely])
+        self.assertEqual(data["viewed_no_click"][0]["shops"], 1)
+        self.assertEqual([r["product"] for r in data["one_shop"]], [lonely])
+
+    def test_page_shows_improvements_first(self):
+        staff = User.objects.create_user("ben3", password="pw", is_staff=True)
+        self.client.force_login(staff)
+        DailySearch.objects.create(date=timezone.localdate(), query="obscure box", results=0, hits=2)
+        html = self.client.get(reverse("insights")).content.decode()
+        self.assertLess(html.index("Areas to improve"), html.index("page views"))
+        self.assertIn("1 search found nothing", html)
+        self.assertIn("Shop health", html)
+        self.assertIn("Where visitors come from", html)

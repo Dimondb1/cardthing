@@ -9,7 +9,13 @@
   .ins table { width: 100%; }
   .ins td.n { text-align: right; white-space: nowrap; }
   .ins .bar { display: inline-block; height: 0.6rem; background: var(--primary, #417690); vertical-align: middle; }
-  .ins form { display: flex; gap: 8px; align-items: center; }
+  .ins form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .ins__todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .ins__todo li { padding: 12px 16px; border: 1px solid var(--hairline-color, #ddd); border-left: 4px solid var(--primary, #417690); border-radius: 6px; }
+  .ins__todo b { display: block; font-size: 1.05rem; margin-bottom: 4px; }
+  .ins__todo p { margin: 0; }
+  .ins .bad { color: var(--error-fg, #ba2121); }
+  .ins .ok { color: var(--message-success-fg, #2a7a2a); }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Insights</div>{% endblock %}
 {% block content %}
@@ -26,11 +32,23 @@
     <span>{{ since }} to {{ today }}. A visitor is one person for one day; nobody is identified and only their country is kept.</span>
   </form>
 
+  <div class="module">
+    <h2>Areas to improve</h2>
+    {% if improvements %}
+    <ol class="ins__todo">
+      {% for item in improvements %}<li><b>{{ item.title }}</b><p>{{ item.detail }}{% if item.link %} <a href="{{ item.link }}">{{ item.link_label }}</a>{% endif %}</p></li>{% endfor %}
+    </ol>
+    {% else %}<p>Nothing stands out yet. Come back once there is a week of visitors.</p>{% endif %}
+  </div>
+
   <div class="ins__totals">
     <div class="ins__total"><b>{{ total_visitors }}</b> visitors</div>
     <div class="ins__total"><b>{{ total_views }}</b> page views</div>
     <div class="ins__total"><b>{{ total_clicks }}</b> clicks to shops</div>
+    <div class="ins__total"><b>{{ pages_per_visitor }}</b> pages per visitor</div>
     <div class="ins__total"><b>{{ click_rate }}%</b> of product page views end in a click</div>
+    <div class="ins__total"><b>{{ earning_clicks }}</b> of {{ total_clicks }} clicks can earn commission</div>
+    <div class="ins__total"><b>{{ catalogue.compared }}</b> of {{ catalogue.total }} products compared at 2+ shops</div>
     <div class="ins__total"><b>{{ shop_count }}</b> shops live</div>
   </div>
 
@@ -46,6 +64,16 @@
     <div class="module">
       <h2>Pages</h2>
       <table><tbody>{% for label, n in kinds %}<tr><td>{{ label }}</td><td class="n">{{ n }}</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
+      <h2>Where visitors come from</h2>
+      <table><tbody>{% for s in sources %}<tr><td>{{ s.name }}</td><td class="n">{{ s.visitors }}</td><td class="n">{{ s.share }}%</td></tr>{% empty %}<tr><td>No visitors yet.</td></tr>{% endfor %}</tbody></table>
+      {% if top_hosts %}<h3>Sites that sent visitors</h3>
+      <table><tbody>{% for host, n in top_hosts %}<tr><td>{{ host }}</td><td class="n">{{ n }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+    </div>
+    <div class="module">
+      <h2>Devices</h2>
+      <table><tbody>{% for d in devices %}<tr><td>{{ d.name }}</td><td class="n">{{ d.visitors }}</td><td class="n">{{ d.share }}%</td></tr>{% endfor %}</tbody></table>
     </div>
     <div class="module">
       <h2>Visitors by country</h2>
@@ -75,6 +103,32 @@
     <table>
       <thead><tr><th>Product</th><th>Game</th><th>Views</th><th>Clicks</th></tr></thead>
       <tbody>{% for row in top_products %}<tr><td><a href="{{ row.product.get_absolute_url }}">{{ row.product.name }}</a></td><td>{{ row.product.game.name }}</td><td class="n">{{ row.views }}</td><td class="n">{{ row.clicks }}</td></tr>{% empty %}<tr><td>No product views yet.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+
+  <div class="ins__grid">
+    <div class="module">
+      <h2>Clicks that earn nothing</h2>
+      <p>Shops with no affiliate link yet, by clicks sent.</p>
+      <table><tbody>{% for u in unpaid %}<tr><td>{{ u.name }}</td><td class="n">{{ u.clicks }}</td></tr>{% empty %}<tr><td>Every click can earn.</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
+      <h2>Viewed, never clicked</h2>
+      <p>Three or more views and no click.</p>
+      <table><thead><tr><th>Product</th><th>Views</th><th>Shops in stock</th></tr></thead>
+      <tbody>{% for r in viewed_no_click %}<tr><td><a href="{{ r.product.get_absolute_url }}">{{ r.product.name }}</a></td><td class="n">{{ r.views }}</td><td class="n">{{ r.shops }}</td></tr>{% empty %}<tr><td>None.</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
+      <h2>Popular with only one shop</h2>
+      <table><tbody>{% for r in one_shop %}<tr><td><a href="{{ r.product.get_absolute_url }}">{{ r.product.name }}</a></td><td class="n">{{ r.views }} views</td></tr>{% empty %}<tr><td>None.</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </div>
+
+  <div class="module">
+    <h2>Shop health</h2>
+    <table>
+      <thead><tr><th>Shop</th><th>Last read</th><th>In stock</th><th>Earns</th><th>Problem</th></tr></thead>
+      <tbody>{% for s in shops_health %}<tr><td>{{ s.name }}</td><td>{% if s.last_ok %}{{ s.last_ok|date:"j M H:i" }}{% else %}never{% endif %}</td><td class="n">{{ s.in_stock }}</td><td>{% if s.earns %}<span class="ok">yes</span>{% else %}no{% endif %}</td><td>{% if s.problem %}<span class="bad">{{ s.problem }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 

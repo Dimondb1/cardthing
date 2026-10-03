@@ -572,8 +572,20 @@ counted once a day each through a one-way token made from their address
 and browser with a secret that changes daily, so nobody can be traced
 and yesterday's visitor is a stranger today. Only the visitor's country
 is kept, looked up in the free DB-IP country database that `fetch_geoip`
-downloads (the installer fetches it and cron refreshes it monthly). Bots
+downloads (the installer fetches it and cron refreshes it monthly). Each visitor also
+records their device type and the domain of the site that sent them, so
+the page shows where visitors come from (search engines, AI assistants,
+Reddit, Facebook, Discord and so on) and what they browse on. Bots
 are left out. The window is 7, 30, 90 or 365 days.
+
+The page opens with "Areas to improve": a ranked list worked out from the
+figures, such as shops whose imports are failing, the share of clicks
+going to shops with no affiliate link, searches that found nothing,
+popular products with only one shop, products viewed but never clicked,
+low search engine traffic and products with no picture. Below it are
+shop health (last good read, stock, whether clicks can earn, latest
+error), clicks that earn nothing, and the catalogue's comparison
+coverage.
 
 ## Tests
 

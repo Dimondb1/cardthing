@@ -555,6 +555,18 @@ def product_detail(request, slug):
             "offerCount": len(current),
             "availability": "https://schema.org/InStock" if in_stock_count else "https://schema.org/PreOrder",
         }
+    elif unavailable:
+        # Sold out everywhere: Google still needs offers, so give the shops' last prices, marked out of stock.
+        prices = sorted(listing.delivered_price for listing in unavailable)
+        structured["offers"] = {
+            "@type": "AggregateOffer",
+            "priceCurrency": "GBP",
+            "lowPrice": str(prices[0]),
+            "highPrice": str(prices[-1]),
+            "offerCount": len(prices),
+            "availability": "https://schema.org/OutOfStock",
+        }
+    product_json = [structured] if "offers" in structured else []
     crumbs = [(product.game.name, product.game.get_absolute_url())]
     if product.product_set:
         crumbs.append((product.product_set.name, product.product_set.get_absolute_url()))
@@ -576,7 +588,8 @@ def product_detail(request, slug):
         "web/product.html",
         {
             "product": product,
-            "structured_json": json.dumps([structured, breadcrumbs_json(request, crumbs)]),
+            # A product with no prices at all carries only its breadcrumbs: Product data without offers is invalid.
+            "structured_json": json.dumps(product_json + [breadcrumbs_json(request, crumbs)]),
             "meta_type": "product",
             "meta_image": request.build_absolute_uri(product.image_src) if product.image_src else "",
             "current": current,

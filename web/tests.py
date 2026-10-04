@@ -475,6 +475,24 @@ class DiscoverabilityTests(PageTestCase):
         self.assertContains(response, '"@type": "BreadcrumbList"')
         self.assertContains(response, '"@type": "Product"')
 
+    def test_every_product_data_block_carries_offers(self):
+        import json
+
+        def blocks(url):
+            html = self.client.get(url).content.decode()
+            start = html.index('<script type="application/ld+json">') + len('<script type="application/ld+json">')
+            return json.loads(html[start:html.index("</script>", start)])
+
+        sold_out = {b["@type"]: b for b in blocks(self.sold_out.get_absolute_url())}
+        self.assertEqual(sold_out["Product"]["offers"]["availability"], "https://schema.org/OutOfStock")
+        self.assertEqual(sold_out["Product"]["offers"]["lowPrice"], "140.00")
+        unlisted = [b["@type"] for b in blocks(self.unpriced.get_absolute_url())]
+        self.assertEqual(unlisted, ["BreadcrumbList"])
+        for url in (self.etb.get_absolute_url(), self.sold_out.get_absolute_url()):
+            for block in blocks(url):
+                if block["@type"] == "Product":
+                    self.assertIn("offers", block)
+
     def test_unpriced_product_keeps_the_plain_title(self):
         response = self.client.get(self.unpriced.get_absolute_url())
         self.assertContains(response, "<title>Prismatic Evolutions Booster Bundle: UK prices | RipRaptor</title>")

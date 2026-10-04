@@ -28,7 +28,8 @@ from django.conf import settings
 from django.db.models import Count, F
 from django.utils import timezone
 
-from .matching import AUTO_LINK, SUGGEST, match_key
+from .classify import LANGUAGE, find_type
+from .matching import AUTO_LINK, SUGGEST, key_words, match_key, score
 from .models import Listing, Product
 
 logger = logging.getLogger(__name__)
@@ -120,14 +121,95 @@ def item_id_of(url):
     return f"v1|{match.group(1)}|0" if match else ""
 
 
-def search_url(product):
-    params = {"filter": FILTER, "sort": "price", "limit": "20"}
-    if product.ean:
+# Words shops add that eBay sellers rarely repeat; dropped from the fallback search.
+QUERY_NOISE = re.compile(
+    r"\((?:[^)]*)\)|\bofficial\b|\btrading cards?\b|\bcard game\b|\btcg\b|\bsealed\b|\benglish\b|[:|,!]", re.I
+)
+# Games whose name sellers put in the title, and which keeps a search away from other things of the same name.
+GAME_IN_QUERY = {"pokemon": "Pokemon", "magic-the-gathering": "MTG", "one-piece": "One Piece", "yu-gi-oh": "Yu-Gi-Oh",
+                 "lorcana": "Lorcana", "star-wars-unlimited": "Star Wars Unlimited", "flesh-and-blood": "Flesh and Blood",
+                 "digimon": "Digimon", "dragon-ball": "Dragon Ball", "riftbound": "Riftbound"}
+
+
+def search_queries(product):
+    """Keyword searches to try in turn, the next only when the one before found nothing."""
+    name = " ".join(product.name.split())
+    game = GAME_IN_QUERY.get(product.game.slug, "")
+    lead = f"{game} " if game and game.lower().split()[0] not in name.lower() else ""
+    first = f"{lead}{name}"
+    plain = " ".join(QUERY_NOISE.sub(" ", name).split())
+    second = f"{lead}{plain}" if plain and plain != name else ""
+    return [q for q in (first, second, plain if lead and plain else "") if q]
+
+
+def search_url(product, query=None):
+    params = {"filter": FILTER, "sort": "price", "limit": "50"}
+    if product.ean and query is None:
         params["gtin"] = product.ean
     else:
-        # The game name keeps "Marvel Super Heroes Bundle" away from sticker bundles.
-        params["q"] = f"{product.game.name} {product.name}"
+        params["q"] = (query or search_queries(product)[0])[:100]
     return SEARCH_URL + "?" + urllib.parse.urlencode(params)
+
+
+# A listing that is several of the thing, part of it, or something sold alongside it.
+NOT_THE_THING = re.compile(
+    r"\b[2-9]\s*x\b|\bx\s*[2-9]\b|\bjob ?lot\b|\blot of\b|\bbundle of\b|\bset of [2-9]\b|\bcase\b|\bcode cards?\b|"
+    r"\bsleeves?\b|\bsingles?\b|\bpromo\b|\bplay ?mats?\b|\bbinder\b|\bdeck ?box\b|\bempty\b|\bproxy\b|\bdamaged\b|"
+    r"\bonly\b|\btokens?\b|\bbasic lands?\b|\bfrom\b|\bcontents\b|\bopened\b|\bcustom\b|\breplica\b|\bart cards?\b|\bdice\b",
+    re.I,
+)
+PACK_COUNT = re.compile(r"\b(?:[2-9]|\d{2,})\s*(?:booster\s*)?packs?\b", re.I)
+
+
+class Specifics:
+    """For one game, which of our products a title could name more precisely than the one searched for."""
+
+    def __init__(self, rows):
+        self.words = {}
+        self.index = {}
+        for pk, name in rows:
+            kw = frozenset(key_words(name))
+            self.words[pk] = (name, kw)
+            for word in kw:
+                self.index.setdefault(word, set()).add(pk)
+
+    def more_specific(self, product, title):
+        """True when another product's name holds all of ours and more, and the title holds all of it."""
+        mine = self.words.get(product.pk, (product.name, frozenset(key_words(product.name))))[1]
+        if not mine:
+            return False
+        candidates = set.intersection(*(self.index.get(word, set()) for word in mine))
+        for pk in candidates - {product.pk}:
+            name, theirs = self.words[pk]
+            if len(theirs) > len(mine) and score(name, title) == 100:
+                return True
+        return False
+
+
+def is_this_product(product, title, specifics):
+    """Does an eBay title name exactly this product?
+
+    eBay sellers pad titles with the game's name and selling words, so the
+    rule runs the other way round from shop matching: every word of our
+    name must be in the title, the title must be the same kind of product,
+    in the same language, one of it, and not a more specific product of ours.
+    """
+    if product.product_type == "booster_box":
+        # A booster display is a booster box.
+        title = re.sub(r"\bbooster display(?: box)?\b", "booster box", title, flags=re.I)
+        title = re.sub(r"\bdisplay(?: box)?\b", "booster box", title, flags=re.I)
+    if score(product.name, title) < 100:
+        return False
+    if {m.lower() for m in LANGUAGE.findall(title)} != {m.lower() for m in LANGUAGE.findall(product.name)}:
+        return False
+    if NOT_THE_THING.search(title) and not NOT_THE_THING.search(product.name):
+        return False
+    if product.product_type == "booster_pack" and PACK_COUNT.search(title):
+        return False
+    kind = find_type(title)
+    if kind and kind != product.product_type:
+        return False
+    return not specifics.more_specific(product, title)
 
 
 def headers_for(token, campaign):
@@ -261,9 +343,27 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk")[: max(0, limit - len(gone))]
     )
     failures = 0
+    specifics = {}
+
+    def specifics_for(game_slug):
+        if game_slug not in specifics:
+            specifics[game_slug] = Specifics(
+                Product.objects.filter(is_active=True, game__slug=game_slug).values_list("pk", "name")
+            )
+        return specifics[game_slug]
+
+    searches = 0
     for product in (gone + fresh)[:limit]:
+        if searches >= limit:
+            break
         try:
-            answer = request(search_url(product), headers)
+            urls = ([search_url(product)] if product.ean else []) + [search_url(product, q) for q in search_queries(product)]
+            answer = {}
+            for url in urls:
+                answer = request(url, headers)
+                searches += 1
+                if answer.get("itemSummaries") or searches >= limit:
+                    break
         except EbayError as exc:
             if "429" in str(exc):
                 logger.warning("eBay: search allowance used up after %d products, keeping what was found", len(checked))
@@ -287,7 +387,8 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
             needed = SUGGEST if product.ean else AUTO_LINK
             # A duplicate catalogue entry with the same key counts as this product.
             same = catalogue.by_key.get((product.game.slug, match_key(product.name)), ())
-            if match and (match[0] == product.pk or match[0] in same) and value >= needed:
+            named = match and (match[0] == product.pk or match[0] in same) and value >= needed
+            if named or is_this_product(product, offer.title, specifics_for(product.game.slug)):
                 if best is None or offer.price + offer.delivery < best.price + best.delivery:
                     best = offer
         if best is None and product.pk in existing:

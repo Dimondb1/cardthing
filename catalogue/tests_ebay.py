@@ -104,7 +104,7 @@ class ItemTests(TestCase):
     def test_search_uses_barcode_when_we_have_one_and_name_otherwise(self):
         self.assertIn("gtin=0820650853500", ebay.search_url(self.product))
         self.product.ean = ""
-        self.assertIn("q=Pok%C3%A9mon+Prismatic+Evolutions+Elite+Trainer+Box", ebay.search_url(self.product))
+        self.assertIn("q=Pokemon+Prismatic+Evolutions+Elite+Trainer+Box", ebay.search_url(self.product))
         self.assertIn("conditions%3A%7BNEW%7D", ebay.search_url(self.product))
 
 
@@ -184,7 +184,7 @@ class LookupTests(TestCase):
         make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
         api = FakeApi([], items=[])
         offers = ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
-        self.assertIn("q=Pok%C3%A9mon+Prismatic+Evolutions+Booster+Bundle", api.searches()[0])
+        self.assertIn("q=Pokemon+Prismatic+Evolutions+Booster+Bundle", api.searches()[0])
         self.assertEqual(len(offers), 1)
         self.assertEqual(offers[0].availability, Listing.Availability.OUT_OF_STOCK)
         self.assertEqual(offers[0].url, "https://www.ebay.co.uk/itm/9?campid=1")
@@ -252,7 +252,9 @@ class LookupTests(TestCase):
         api = FakeApi([])
         ebay.ebay_offers(self.retailer, limit=150, request=api, pause=0, run=run)
         run.refresh_from_db()
-        self.assertEqual(run.offers_found, 122)   # every hundred, then the final count
+        # The limit counts searches; the run reports the products it got through.
+        self.assertEqual(run.offers_found, Product.objects.filter(ebay_checked_at__isnull=False).count())
+        self.assertLessEqual(len(api.searches()), 150)
 
     def test_limit_counts_products_not_results(self):
         api = FakeApi([])
@@ -336,3 +338,87 @@ class HttpRetryTests(TestCase):
         with mock.patch("urllib.request.urlopen", opener), mock.patch("time.sleep"):
             with self.assertRaises(ebay.EbayError):
                 ebay.http("https://api.ebay.com/x", {})
+
+
+class ThisProductTests(TestCase):
+    def setUp(self):
+        self.game = make_game(name="Star Wars Unlimited", slug="star-wars-unlimited", search_aliases="swu")
+        self.set = make_set(self.game, name="Jump to Lightspeed", slug="jtl", code="JTL")
+        self.box = make_product(self.set, name="Jump To Lightspeed Booster Box", slug="jtl-box", product_type="booster_box")
+        self.pack = make_product(self.set, name="Jump to Lightspeed Booster Pack", slug="jtl-pack", product_type="booster_pack")
+        self.han = make_product(self.set, name="Jump to Lightspeed Spotlight Deck Han Solo", slug="jtl-han", product_type="deck")
+        self.spotlight = make_product(self.set, name="Jump to Lightspeed Spotlight Deck", slug="jtl-spot", product_type="deck")
+        self.specifics = ebay.Specifics(Product.objects.values_list("pk", "name"))
+
+    def ok(self, product, title):
+        return ebay.is_this_product(product, title, self.specifics)
+
+    def test_padded_seller_titles_are_accepted(self):
+        self.assertTrue(self.ok(self.box, "Star Wars Unlimited Jump to Lightspeed : Sealed Booster Box of 24 Packs"))
+        self.assertTrue(self.ok(self.han, "Star Wars: Unlimited - Jump to Lightspeed Spotlight Deck : Han Solo"))
+        self.assertTrue(self.ok(self.box, "Star Wars Unlimited Jump to Lightspeed Booster Display - English New"))
+
+    def test_the_wrong_thing_is_refused(self):
+        self.assertFalse(self.ok(self.box, "Star Wars Unlimited Jump to Lightspeed Booster Pack x3"))
+        self.assertFalse(self.ok(self.pack, "Star Wars Unlimited Jump to Lightspeed 5 Booster Packs sealed"))
+        self.assertFalse(self.ok(self.pack, "Star Wars Unlimited Jump to Lightspeed Booster Pack Japanese"))
+        self.assertFalse(self.ok(self.box, "Jump to Lightspeed Booster Box Sleeves 60 pack"))
+        self.assertFalse(self.ok(self.box, "Jump to Lightspeed Booster Box Play Mat"))
+        self.assertFalse(self.ok(self.han, "Star Wars Unlimited Jump to Lightspeed Spotlight Deck Display (6)"))
+        self.assertFalse(self.ok(self.han, "Jump to Lightspeed Spotlight Deck Han Solo (Deck Only)"))
+        self.assertFalse(self.ok(self.box, "Jump to Lightspeed Booster Box 20 tokens from the box"))
+
+    def test_a_more_specific_product_of_ours_keeps_its_listing(self):
+        self.assertFalse(self.ok(self.spotlight, "Star Wars Unlimited Jump to Lightspeed Spotlight Deck Han Solo"))
+        self.assertTrue(self.ok(self.han, "Star Wars Unlimited Jump to Lightspeed Spotlight Deck Han Solo"))
+
+    def test_queries_lead_with_the_game_and_fall_back_to_a_plainer_name(self):
+        football = make_game(name="Football cards", slug="football", search_aliases="")
+        tin = make_product(make_set(football, name="WSL", slug="wsl", code="WSL"),
+                           name="Women's WSL Eternity 2025/26 Official Trading Card Hobby Box (Soccer)", slug="wsl-box",
+                           product_type="booster_box")
+        self.assertEqual(ebay.search_queries(self.box)[0], "Star Wars Unlimited Jump To Lightspeed Booster Box")
+        queries = ebay.search_queries(tin)
+        self.assertEqual(queries[0], "Women's WSL Eternity 2025/26 Official Trading Card Hobby Box (Soccer)")
+        self.assertEqual(queries[1], "Women's WSL Eternity 2025/26 Hobby Box")
+
+
+@override_settings(**KEYS)
+class FallbackSearchTests(TestCase):
+    def setUp(self):
+        self.set = make_set(make_game())
+        self.retailer = Retailer.objects.create(
+            name="eBay", slug="ebay", website="https://www.ebay.co.uk/", source_type=Retailer.Source.EBAY
+        )
+
+    def test_a_barcode_with_no_results_falls_back_to_the_name(self):
+        product = make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pev-bundle",
+                               product_type="bundle", ean="0196214108325")
+        state = {"n": 0}
+        real = FakeApi([item("Pokemon TCG Prismatic Evolutions Booster Bundle", price="29.99")])
+
+        def api(url, headers, data=None):
+            if url.startswith(ebay.SEARCH_URL):
+                state["n"] += 1
+                if "gtin=" in url:
+                    return {}
+            return real(url, headers, data)
+
+        offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
+        self.assertEqual([o.product_pk for o in offers], [product.pk])
+        self.assertEqual(state["n"], 2)
+
+    def test_coverage_report(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        a = make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pev-bundle", product_type="bundle")
+        b = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", slug="pev-etb")
+        Product.objects.filter(pk__in=[a.pk, b.pk]).update(ebay_checked_at=timezone.now())
+        make_listing(a, self.retailer, price="29.99", url="https://www.ebay.co.uk/itm/1")
+        out = StringIO()
+        call_command("ebay_report", stdout=out)
+        text = out.getvalue()
+        self.assertIn("Matched on eBay:             1 (50% of those looked up)", text)
+        self.assertIn("Looked up on eBay:           2", text)

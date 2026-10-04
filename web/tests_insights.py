@@ -95,7 +95,7 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        with self.assertNumQueries(23):
+        with self.assertNumQueries(24):
             insights.report(30)
 
 

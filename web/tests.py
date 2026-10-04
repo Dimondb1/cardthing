@@ -375,7 +375,10 @@ class AwinTagTests(PageTestCase):
 
         for url in self.public_urls():
             with self.subTest(url=url):
-                self.assertContains(self.client.get(url), 'src="https://www.dwin2.com/pub.3111686.min.js"')
+                html = self.client.get(url).content.decode()
+                self.assertIn('<script src="https://www.dwin2.com/pub.3111686.min.js"></script>', html)
+                self.assertLess(html.index("dwin2.com"), html.index("</body>"))
+                self.assertGreater(html.index("dwin2.com"), html.index("site-footer"))
         with override_settings(RIPRAPTOR_AWIN_PUBLISHER_ID=""):
             self.assertNotContains(self.client.get(reverse("web:home")), "dwin2.com")
 

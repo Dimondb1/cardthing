@@ -309,9 +309,51 @@ def report(days=30):
         "one_shop": one_shop,
         "catalogue": catalogue_stats,
         "pages_per_visitor": round(total_views / total_visitors, 1) if total_visitors else 0,
+        "ebay": ebay_coverage(),
     }
     data["improvements"] = improvements(data)
     return data
+
+
+def ebay_coverage():
+    """How much of the catalogue eBay covers, or None when eBay is not a shop."""
+    ebay = Retailer.objects.filter(source_type=Retailer.Source.EBAY, is_active=True).first()
+    if ebay is None:
+        return None
+    products = Product.objects.filter(is_active=True)
+    total = products.count()
+    checked = products.filter(ebay_checked_at__isnull=False).count()
+    listings = Listing.objects.filter(retailer=ebay, is_active=True)
+    matched = listings.values("product").distinct().count()
+    in_stock = listings.filter(availability=Listing.Availability.IN_STOCK).count()
+    ebay_prices = dict(listings.buyable().values_list("product_id", "delivered_price"))
+    lowest = dict(
+        Product.objects.for_lists().filter(pk__in=list(ebay_prices)).order_by().values_list("pk", "lowest_price")
+    )
+    cheapest = sum(1 for pk, price in ebay_prices.items() if lowest.get(pk) is not None and price <= lowest[pk])
+    from django.conf import settings as dj
+
+    per_day = getattr(dj, "RIPRAPTOR_EBAY_DAILY_LIMIT", 4000) or 4000
+    waiting = total - checked
+    missed = list(
+        Product.objects.for_lists()
+        .filter(ebay_checked_at__isnull=False, in_stock_count__gte=2)
+        .exclude(listings__retailer=ebay)
+        .order_by("-in_stock_count", "name")
+        .values("name", "in_stock_count")[:15]
+    )
+    return {
+        "products": total,
+        "checked": checked,
+        "checked_share": round(100 * checked / total) if total else 0,
+        "matched": matched,
+        "match_rate": round(100 * matched / checked) if checked else 0,
+        "in_stock": in_stock,
+        "cheapest": cheapest,
+        "waiting": waiting,
+        "days_left": -(-waiting // per_day) if waiting else 0,
+        "missed": [{"name": row["name"], "shops": row["in_stock_count"]} for row in missed],
+    }
 
 
 def plural(n, one, many):
@@ -390,6 +432,15 @@ def improvements(data):
     if data["total_visitors"] >= 20 and phone >= 60:
         add(40, f"{phone}% of visitors are on a phone",
             "Phone is the main screen. Check new pages at phone width first.")
+
+    ebay = data.get("ebay")
+    if ebay and ebay["checked"] and ebay["match_rate"] < 50:
+        add(68, f"eBay matches only {ebay['match_rate']}% of the products it has looked up",
+            f"{ebay['matched']} of {ebay['checked']} products have an eBay price. The eBay table below lists widely "
+            "stocked products it misses; send any you can find on eBay so the matching can learn from them.")
+    if ebay and ebay["waiting"]:
+        add(25, f"{plural(ebay['waiting'], 'product is', 'products are')} still waiting for a first eBay look",
+            f"At today's allowance that takes about {plural(ebay['days_left'], 'more day', 'more days')}.")
 
     if not data["geoip_ready"]:
         add(20, "Visitor countries are not being recorded",

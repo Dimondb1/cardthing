@@ -172,7 +172,23 @@ then the rest, by barcode where we have one and otherwise by name. For
 each product it asks for new, buy-it-now items in Britain delivered to a
 London postcode, cheapest first including postage, from sellers with at
 least 95 percent feedback, and keeps the cheapest whose title matches the
-product. Postage is stored as the delivery charge. Links are eBay's own
+product. Postage is stored as the delivery charge.
+
+eBay sellers pad titles with the game's name and selling words, so a
+result counts as our product when every word of our name is in its title,
+it is the same kind of product in the same language, it is one of it (not
+a lot, a case, sleeves, a play mat, tokens or "deck only"), and no more
+specific product of ours fits it better. A booster display counts as a
+booster box. Products with a barcode are searched by barcode first and by
+name when that finds nothing; a name search that finds nothing is retried
+without shop words such as "Official" or "(Soccer)". The daily limit
+counts searches, not products.
+
+    python manage.py ebay_report
+
+prints how much of the catalogue eBay covers: products looked up, matched,
+in stock, cheapest on eBay, still waiting, and the widely stocked products
+it has no match for. The same figures are on the Insights page. Links are eBay's own
 affiliate links for the campaign, so the shop needs no affiliate link
 format. Listings we already have are refreshed twenty at a time through eBay's
 bulk item lookup, which has its own daily allowance, so searches go on

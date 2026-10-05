@@ -153,8 +153,9 @@ def search_url(product, query=None):
 
 # A listing that is several of the thing, part of it, or something sold alongside it.
 NOT_THE_THING = re.compile(
-    r"\b[2-9]\s*x\b|\bx\s*[2-9]\b|\bjob ?lot\b|\blot of\b|\bbundle of\b|\bset of [2-9]\b|\bcase\b|\bcode cards?\b|"
-    r"\bsleeves?\b|\bsingles?\b|\bpromo\b|\bplay ?mats?\b|\bbinder\b|\bdeck ?box\b|\bempty\b|\bproxy\b|\bdamaged\b|"
+    r"\b(?:[2-9]|\d{2,})\s*x\b|\bx\s*(?:[2-9]|\d{2,})\b|\bjob ?lot\b|\blot of\b|\bbundle of\b|\bset of [2-9]\b|\bcase\b|"
+    r"\bcodes?\b|\bcode cards?\b|\bp?tcgo\b|\btcg ?live\b|\bonline\b|\bdigital\b|\bfun ?packs?\b|"
+    r"\bsleeves?\b|\bsingles\b|\bsingle cards?\b|\bpromo\b|\bplay ?mats?\b|\bbinder\b|\bdeck ?box\b|\bempty\b|\bproxy\b|\bdamaged\b|"
     r"\bstickers?\b|\bonly\b|\btokens?\b|\bbasic lands?\b|\bfrom\b|\bcontents\b|\bopened\b|\bcustom\b|\breplica\b|\bart cards?\b|\bdice\b",
     re.I,
 )
@@ -218,6 +219,19 @@ class Specifics:
         return False
 
 
+def junk(product, title):
+    """Is the listing plainly not one sealed unit of this product, whatever its name says?
+
+    A multi-buy, an online code, a part, another language. Checked on every
+    result, including those that name the product word for word.
+    """
+    if {m.lower() for m in LANGUAGE.findall(title)} != {m.lower() for m in LANGUAGE.findall(product.name)}:
+        return True
+    if NOT_THE_THING.search(title) and not NOT_THE_THING.search(product.name):
+        return True
+    return product.product_type == "booster_pack" and bool(PACK_COUNT.search(title))
+
+
 def is_this_product(product, title, specifics):
     """Does an eBay title name exactly this product?
 
@@ -234,11 +248,7 @@ def is_this_product(product, title, specifics):
         return False
     if score(product.name, title) < 100:
         return False
-    if {m.lower() for m in LANGUAGE.findall(title)} != {m.lower() for m in LANGUAGE.findall(product.name)}:
-        return False
-    if NOT_THE_THING.search(title) and not NOT_THE_THING.search(product.name):
-        return False
-    if product.product_type == "booster_pack" and PACK_COUNT.search(title):
+    if junk(product, title):
         return False
     kind = find_type(title)
     if kind and kind != product.product_type:
@@ -298,6 +308,8 @@ def verdict(product, item, Offer, catalogue, specifics, shops):
         return None, "not a clean UK buy-it-now price (currency, seller feedback or no UK postage)"
     if product.pk in shops and offer.price + offer.delivery < shops[product.pk] * PRICE_FLOOR:
         return offer, f"too cheap to be the sealed product (under £{shops[product.pk] * PRICE_FLOOR:.2f})"
+    if junk(product, offer.title):
+        return offer, "a multi-buy, an online code, a part or another language"
     match, value = catalogue.best_match(offer.title, game=product.game.slug)
     needed = SUGGEST if product.ean else AUTO_LINK
     # A duplicate catalogue entry with the same key counts as this product.
@@ -419,7 +431,7 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
                 if product is None:
                     continue
                 offer = item_offer(item, product, Offer)
-                if offer is not None and too_cheap(product, offer):
+                if offer is not None and (too_cheap(product, offer) or junk(product, offer.title)):
                     continue   # left unfound, so it is searched again and a genuine listing can replace it
                 found.add(item["itemId"])
                 offers.append(offer if offer is not None else out_of_stock(product))

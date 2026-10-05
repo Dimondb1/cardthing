@@ -532,6 +532,9 @@ class FallbackSearchTests(TestCase):
             item("Pokemon Darkness Ablaze Booster Pack", price="1.36", item_id="v1|1|0"),
             item("Pokemon Darkness Ablaze Booster Pack X1 Sealed New choose your artwork", price="5.99", item_id="v1|2|0"),
             item("Pokemon Darkness Ablaze Sleeved Booster Pack x3", price="17.00", item_id="v1|3|0"),
+            item("50 X Darkness Ablaze Booster Pack TCGO Codes Pokemon Trading Card Game Online", price="3.48", item_id="v1|4|0"),
+            item("1x Pokemon Sword & Darkness Ablaze Fun Pack New Sealed Booster Pack UK", price="4.16", item_id="v1|5|0"),
+            item("Pokémon - Sword & Shield - Darkness Ablaze - Booster x2", price="18.85", item_id="v1|6|0"),
         ])
         out = StringIO()
         with mock.patch.object(ebay, "http", api), \
@@ -540,7 +543,7 @@ class FallbackSearchTests(TestCase):
         text = out.getvalue()
         self.assertIn("PICK    £5.99  Pokemon Darkness Ablaze Booster Pack X1 Sealed", text)
         self.assertIn("too cheap to be the sealed product (under £3.16)", text)
-        self.assertIn("a different product, a part or a multi-buy", text)
+        self.assertEqual(text.count("a multi-buy, an online code, a part or another language"), 4)
 
     def test_coverage_report(self):
         from io import StringIO

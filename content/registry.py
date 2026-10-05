@@ -948,9 +948,11 @@ ENTRIES = [
     Entry("terms.data.title", H, "Data heading", "Your data", "Heading on the terms page."),
     Entry(
         "terms.data.body", P, "Data explanation",
-        "RipRaptor does not ask you to create an account. Products you save on the "
-        "swipe page are stored in your browser only. We count clicks to retailers "
-        "without recording who clicked.",
+        "RipRaptor does not ask you to create an account. Products you save are "
+        "stored in your browser only. We count clicks to retailers without "
+        "recording who clicked. One small cookie remembers only that your browser "
+        "has visited before, so we can count returning visitors. It holds nothing "
+        "about you.",
         "Data section of the terms page.",
         legal=True,
     ),

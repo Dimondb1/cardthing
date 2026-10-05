@@ -95,7 +95,7 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        with self.assertNumQueries(24):
+        with self.assertNumQueries(25):
             insights.report(30)
 
 
@@ -118,6 +118,34 @@ class VisitorTests(TestCase):
         token = DailyVisitor.objects.first().token
         self.assertEqual(len(token), 32)
         self.assertNotIn("127.0.0.1", token)
+
+    def test_a_browser_that_comes_back_another_day_counts_as_returning(self):
+        from unittest import mock
+
+        from catalogue.models import DailyVisitor
+
+        response = self.client.get(self.url, **HUMAN)
+        cookie = response.cookies[insights.RETURN_COOKIE]
+        self.assertEqual((cookie.value, cookie["httponly"], cookie["samesite"]), ("1", True, "Lax"))
+        self.assertEqual(int(cookie["max-age"]), 365 * 24 * 3600)
+        self.assertFalse(DailyVisitor.objects.get().returning)
+        # The same day: no second row, and the cookie is not set again.
+        again = self.client.get(self.url, **HUMAN)
+        self.assertNotIn(insights.RETURN_COOKIE, again.cookies)
+        tomorrow = timezone.localdate() + timedelta(days=1)
+        with mock.patch.object(insights.timezone, "localdate", return_value=tomorrow):
+            self.client.get(self.url, **HUMAN)
+        rows = DailyVisitor.objects.order_by("date")
+        self.assertEqual([(r.date, r.returning) for r in rows], [(tomorrow - timedelta(days=1), False), (tomorrow, True)])
+
+    def test_bots_get_no_cookie(self):
+        response = self.client.get(self.url, **BOT)
+        self.assertNotIn(insights.RETURN_COOKIE, response.cookies)
+
+    def test_deals_and_latest_drops_pages_are_counted(self):
+        self.client.get(reverse("web:deals"), **HUMAN)
+        self.client.get(reverse("web:new"), **HUMAN)
+        self.assertEqual(set(DailyPageView.objects.values_list("kind", flat=True)), {"deals", "new"})
 
     def test_the_address_behind_the_proxy_is_the_one_used(self):
         from catalogue.models import DailyVisitor
@@ -185,18 +213,21 @@ class VisitorTests(TestCase):
         from catalogue.models import DailyVisitor
 
         today = timezone.localdate()
-        DailyVisitor.objects.create(date=today, token="a" * 32, country="GB")
+        DailyVisitor.objects.create(date=today, token="a" * 32, country="GB", returning=True)
         DailyVisitor.objects.create(date=today, token="b" * 32, country="GB")
         DailyVisitor.objects.create(date=today - timedelta(days=1), token="c" * 32, country="US")
-        DailyVisitor.objects.create(date=today - timedelta(days=60), token="d" * 32, country="DE")
+        DailyVisitor.objects.create(date=today - timedelta(days=60), token="d" * 32, country="DE", returning=True)
         data = insights.report(30)
         self.assertEqual(data["total_visitors"], 3)
+        self.assertEqual((data["returning_visitors"], data["returning_share"]), (1, 33.3))
+        self.assertEqual(data["by_day"][-1]["returning"], 1)
         self.assertEqual(data["countries"][0], {"code": "GB", "name": "United Kingdom", "visitors": 2, "share": 66.7})
         staff = User.objects.create_user("ben2", password="pw", is_staff=True)
         self.client.force_login(staff)
         response = self.client.get(reverse("insights"))
         self.assertContains(response, "United Kingdom")
         self.assertContains(response, "<b>3</b> visitors")
+        self.assertContains(response, "<b>33.3%</b> returning visitors (1 had been before)")
 
 
 class ImprovementTests(TestCase):

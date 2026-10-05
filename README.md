@@ -609,6 +609,12 @@ the page shows where visitors come from (search engines, AI assistants,
 Reddit, Facebook, Discord and so on) and what they browse on. Bots
 are left out. The window is 7, 30, 90 or 365 days.
 
+Returning visitors are counted with one cookie, `rr_back`, set the first
+time a browser views a page. It holds only "1", for a year, so a visit on
+a later day is marked as a return; the daily token cannot do this because
+it changes every day. Nothing identifies the person, and the Terms page
+says so. The page shows the returning share and a Returning column by day.
+
 The page opens with "Areas to improve": a ranked list worked out from the
 figures, such as shops whose imports are failing, the share of clicks
 going to shops with no affiliate link, searches that found nothing,

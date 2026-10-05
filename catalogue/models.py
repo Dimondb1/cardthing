@@ -501,6 +501,9 @@ class DailyPageView(models.Model):
         SET = "set", "Set"
         SEARCH = "search", "Search"
         SWIPE = "swipe", "Swipe"
+        DEALS = "deals", "Deals"
+        NEW = "new", "Latest drops"
+        WATCHLIST = "watchlist", "Watchlist"
         OTHER = "other", "Other"
 
     date = models.DateField(db_index=True)
@@ -540,6 +543,8 @@ class DailyVisitor(models.Model):
     The token is a hash of the address and browser with a secret that changes
     every day, so the same person is one visitor for the day and a stranger
     again tomorrow. The country comes from the address and is all that is kept.
+    ``returning`` says only that the browser had visited before: the cookie
+    behind it holds a single "1" and nothing that identifies anyone.
     """
 
     date = models.DateField(db_index=True)
@@ -547,6 +552,7 @@ class DailyVisitor(models.Model):
     country = models.CharField(max_length=2, blank=True)
     device = models.CharField(max_length=8, blank=True)    # mobile, tablet or desktop
     source = models.CharField(max_length=80, blank=True)   # the site that sent them, domain only; empty means typed or bookmarked
+    returning = models.BooleanField(default=False)         # their browser carried the "been here before" cookie
 
     class Meta:
         unique_together = [("date", "token")]

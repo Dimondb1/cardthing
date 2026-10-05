@@ -100,6 +100,11 @@ def source_group(host):
     return "Other sites"
 
 
+# Set once a browser has viewed a page, holding only "1": the next day's visit then counts as a return.
+RETURN_COOKIE = "rr_back"
+RETURN_COOKIE_DAYS = 365
+
+
 def record_visitor(request):
     day = timezone.localdate()
     token = visitor_token(request, day)
@@ -110,6 +115,7 @@ def record_visitor(request):
             DailyVisitor.objects.create(
                 date=day, token=token, country=geo.country_of(client_ip(request)),
                 device=device_of(request), source=source_of(request),
+                returning=request.COOKIES.get(RETURN_COOKIE) == "1",
             )
     except IntegrityError:
         pass   # two requests from the same visitor at once
@@ -143,17 +149,22 @@ def report(days=30):
     by_day = {row["date"]: row for row in views.values("date").annotate(hits=Sum("hits")).order_by("date")}
     clicks_by_day = dict(clicks.values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n"))
     visitors_by_day = dict(visitors.values_list("date").annotate(n=Count("id")).values_list("date", "n"))
+    returning_by_day = dict(
+        visitors.filter(returning=True).values_list("date").annotate(n=Count("id")).values_list("date", "n")
+    )
     days_out = []
     for offset in range(days):
         day = since + timedelta(days=offset)
         days_out.append({
             "date": day,
             "visitors": visitors_by_day.get(day, 0),
+            "returning": returning_by_day.get(day, 0),
             "views": by_day.get(day, {}).get("hits", 0),
             "clicks": clicks_by_day.get(day, 0),
         })
     country_rows = list(visitors.values("country").annotate(n=Count("id")).order_by("-n")[:15])
     total_visitors = sum(d["visitors"] for d in days_out)
+    returning_visitors = sum(d["returning"] for d in days_out)
     countries = [
         {"code": row["country"] or "", "name": COUNTRY_NAMES.get(row["country"], row["country"] or "Unknown"),
          "visitors": row["n"], "share": round(100 * row["n"] / total_visitors, 1) if total_visitors else 0}
@@ -286,6 +297,8 @@ def report(days=30):
         "by_day": days_out,
         "total_views": total_views,
         "total_visitors": total_visitors,
+        "returning_visitors": returning_visitors,
+        "returning_share": round(100 * returning_visitors / total_visitors, 1) if total_visitors else 0,
         "countries": countries,
         "geoip_ready": geo.reader() is not None,
         "total_clicks": total_clicks,

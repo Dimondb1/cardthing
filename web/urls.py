@@ -27,6 +27,7 @@ urlpatterns = [
     path("robots.txt", views.robots_txt, name="robots"),
     path("sitemap.xml", sitemap, {"sitemaps": SITEMAPS}, name="sitemap"),
     path("llms.txt", views.llms_txt, name="llms"),
+    path("manifest.webmanifest", views.manifest, name="manifest"),
     path("feeds/deals.xml", DealsFeed(), name="feed_deals"),
     path("feeds/<slug:game_slug>.xml", DealsFeed(), name="feed_game"),
 ]

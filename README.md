@@ -465,7 +465,10 @@ License), so there are no requests to Google Fonts.
 
 The wordmark is plain text in `web/templates/web/includes/wordmark.html`.
 Replace that file to change the logo everywhere. The favicon is
-`web/static/img/favicon.svg`.
+`web/static/img/favicon.png`. The home screen icons (`icon-192.png`,
+`icon-512.png`, `icon-maskable-512.png` and `apple-touch-icon.png`) are
+made from `web/static/img/mark.png` by `python manage.py make_icons`; run
+it again after changing the mark and commit the files.
 
 ## Prices
 
@@ -608,6 +611,15 @@ robots.txt. Buy clicks from it carry `?from=watchlist`, stored in
 `OutboundClick.source`, and each product on a loaded list is counted as a
 "watchlist row" page view by slug, so Insights shows clicks from
 watchlists and the stock watcher can put watched products first.
+
+## Add to home screen
+
+`/manifest.webmanifest` is a web app manifest, built by a view so it
+carries the site name and the hashed icon addresses, and every page links
+it along with an Apple touch icon. A phone can then pin RipRaptor to its
+home screen with its own icon and open it without browser chrome. There
+is no service worker and no push: nothing runs in the background and
+nothing is stored.
 
 ## Feeds
 

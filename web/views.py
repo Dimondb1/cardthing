@@ -899,6 +899,30 @@ def watchlist(request):
 
 
 @require_GET
+def manifest(request):
+    """The web app manifest, so a phone can pin RipRaptor to its home screen. No service worker, no push."""
+    data = {
+        "id": "/",
+        "name": settings.RIPRAPTOR_SITE_NAME,
+        "short_name": settings.RIPRAPTOR_SITE_NAME,
+        "description": text(request, "meta.default.description"),
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "theme_color": "#ffffff",
+        "icons": [
+            {"src": static("img/icon-192.png"), "sizes": "192x192", "type": "image/png"},
+            {"src": static("img/icon-512.png"), "sizes": "512x512", "type": "image/png"},
+            {"src": static("img/icon-maskable-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+    }
+    response = JsonResponse(data, content_type="application/manifest+json")
+    response["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
+@require_GET
 def robots_txt(request):
     private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/", "Disallow: /watchlist/"]
     lines = ["User-agent: *", *private, ""]

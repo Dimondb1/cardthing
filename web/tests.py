@@ -626,6 +626,28 @@ class WatchlistTests(PageTestCase):
         self.assertContains(self.client.get("/robots.txt"), "Disallow: /watchlist/")
 
 
+class HomeScreenTests(PageTestCase):
+    def test_manifest_names_the_site_and_its_icons(self):
+        import json as json_module
+
+        response = self.client.get("/manifest.webmanifest")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/manifest+json")
+        data = json_module.loads(response.content)
+        self.assertEqual((data["name"], data["start_url"], data["display"]), ("RipRaptor", "/", "standalone"))
+        self.assertEqual([i["sizes"] for i in data["icons"]], ["192x192", "512x512", "512x512"])
+        self.assertEqual(data["icons"][2]["purpose"], "maskable")
+        from django.contrib.staticfiles import finders
+
+        for icon in data["icons"]:
+            self.assertTrue(finders.find(icon["src"].replace("/static/", "", 1)), icon["src"])
+
+    def test_pages_link_the_manifest_and_the_apple_icon(self):
+        page = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('<link rel="manifest" href="/manifest.webmanifest">', page)
+        self.assertIn('<link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">', page)
+
+
 class FeedTests(PageTestCase):
     def setUp(self):
         from django.core.cache import cache

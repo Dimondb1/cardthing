@@ -131,7 +131,9 @@
       <tr><td>Products in the catalogue</td><td class="n">{{ ebay.products }}</td></tr>
       <tr><td>Looked up on eBay</td><td class="n">{{ ebay.checked }} ({{ ebay.checked_share }}%)</td></tr>
       <tr><td>Matched on eBay</td><td class="n">{{ ebay.matched }} ({{ ebay.match_rate }}% of those looked up)</td></tr>
+      <tr><td>Last eBay run that found offers</td><td class="n">{% if ebay.last_run %}{{ ebay.last_run|date:"j M H:i" }}{% else %}never{% endif %}</td></tr>
       <tr><td>In stock on eBay now</td><td class="n">{{ ebay.in_stock }}</td></tr>
+      {% if ebay.stale %}<tr><td>Out of date, not shown</td><td class="n">{{ ebay.stale }}</td></tr>{% endif %}
       <tr><td>Cheapest on eBay</td><td class="n">{{ ebay.cheapest }}</td></tr>
       <tr><td>Not looked up yet</td><td class="n">{{ ebay.waiting }}{% if ebay.days_left %} (about {{ ebay.days_left }} more days){% endif %}</td></tr>
     </tbody></table>

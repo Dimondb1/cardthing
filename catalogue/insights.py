@@ -325,7 +325,12 @@ def ebay_coverage():
     checked = products.filter(ebay_checked_at__isnull=False).count()
     listings = Listing.objects.filter(retailer=ebay, is_active=True)
     matched = listings.values("product").distinct().count()
-    in_stock = listings.filter(availability=Listing.Availability.IN_STOCK).count()
+    in_stock = listings.buyable().count()
+    stale = listings.filter(availability=Listing.Availability.IN_STOCK).count() - in_stock
+    last_run = (
+        ImportRun.objects.filter(retailer=ebay, finished_at__isnull=False, offers_found__gt=0)
+        .order_by("-finished_at").values_list("finished_at", flat=True).first()
+    )
     ebay_prices = dict(listings.buyable().values_list("product_id", "delivered_price"))
     lowest = dict(
         Product.objects.for_lists().filter(pk__in=list(ebay_prices)).order_by().values_list("pk", "lowest_price")
@@ -349,6 +354,8 @@ def ebay_coverage():
         "matched": matched,
         "match_rate": round(100 * matched / checked) if checked else 0,
         "in_stock": in_stock,
+        "stale": stale,
+        "last_run": last_run,
         "cheapest": cheapest,
         "waiting": waiting,
         "days_left": -(-waiting // per_day) if waiting else 0,

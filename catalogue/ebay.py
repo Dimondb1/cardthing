@@ -155,9 +155,15 @@ def search_url(product, query=None):
 NOT_THE_THING = re.compile(
     r"\b[2-9]\s*x\b|\bx\s*[2-9]\b|\bjob ?lot\b|\blot of\b|\bbundle of\b|\bset of [2-9]\b|\bcase\b|\bcode cards?\b|"
     r"\bsleeves?\b|\bsingles?\b|\bpromo\b|\bplay ?mats?\b|\bbinder\b|\bdeck ?box\b|\bempty\b|\bproxy\b|\bdamaged\b|"
-    r"\bonly\b|\btokens?\b|\bbasic lands?\b|\bfrom\b|\bcontents\b|\bopened\b|\bcustom\b|\breplica\b|\bart cards?\b|\bdice\b",
+    r"\bstickers?\b|\bonly\b|\btokens?\b|\bbasic lands?\b|\bfrom\b|\bcontents\b|\bopened\b|\bcustom\b|\breplica\b|\bart cards?\b|\bdice\b",
     re.I,
 )
+# Nothing genuine sells for under this share of the cheapest shop's price: below it the listing is
+# stickers, a part, a single pack of a box, or another thing with the same words.
+PRICE_FLOOR = Decimal("0.4")
+# A name with fewer identifying words than this ("151 Booster Pack") only matches the strict way.
+MIN_LOOSE_WORDS = 2
+
 PACK_COUNT = re.compile(r"\b(?:[2-9]|\d{2,})\s*(?:booster\s*)?packs?\b", re.I)
 
 
@@ -198,6 +204,8 @@ def is_this_product(product, title, specifics):
         # A booster display is a booster box.
         title = re.sub(r"\bbooster display(?: box)?\b", "booster box", title, flags=re.I)
         title = re.sub(r"\bdisplay(?: box)?\b", "booster box", title, flags=re.I)
+    if len(key_words(product.name)) < MIN_LOOSE_WORDS:
+        return False
     if score(product.name, title) < 100:
         return False
     if {m.lower() for m in LANGUAGE.findall(title)} != {m.lower() for m in LANGUAGE.findall(product.name)}:
@@ -352,6 +360,14 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
             )
         return specifics[game_slug]
 
+    lowest = dict(
+        Product.objects.for_lists()
+        .filter(pk__in=[p.pk for p in gone + fresh])
+        .exclude(lowest_price__isnull=True)
+        .order_by()
+        .values_list("pk", "lowest_price")
+    )
+
     searches = 0
     for product in (gone + fresh)[:limit]:
         if searches >= limit:
@@ -382,6 +398,9 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         for item in answer.get("itemSummaries", []) or []:
             offer = item_offer(item, product, Offer)
             if offer is None:
+                continue
+            shops = lowest.get(product.pk)
+            if shops is not None and offer.price + offer.delivery < shops * PRICE_FLOOR:
                 continue
             match, value = catalogue.best_match(offer.title, game=product.game.slug)
             needed = SUGGEST if product.ean else AUTO_LINK

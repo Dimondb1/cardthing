@@ -392,6 +392,11 @@ class ThisProductTests(TestCase):
         self.assertFalse(self.ok(self.han, "Jump to Lightspeed Spotlight Deck Han Solo (Deck Only)"))
         self.assertFalse(self.ok(self.box, "Jump to Lightspeed Booster Box 20 tokens from the box"))
 
+    def test_stickers_and_too_short_names_are_refused(self):
+        self.assertFalse(self.ok(self.han, "Jump to Lightspeed Spotlight Deck Han Solo Sticker Collection"))
+        short = make_product(self.set, name="151 Booster Pack", slug="151-pack", product_type="booster_pack")
+        self.assertFalse(self.ok(short, "Pokemon Collect 151: Surprise Slim Booster Pack 151C Sealed"))
+
     def test_a_more_specific_product_of_ours_keeps_its_listing(self):
         self.assertFalse(self.ok(self.spotlight, "Star Wars Unlimited Jump to Lightspeed Spotlight Deck Han Solo"))
         self.assertTrue(self.ok(self.han, "Star Wars Unlimited Jump to Lightspeed Spotlight Deck Han Solo"))
@@ -431,6 +436,18 @@ class FallbackSearchTests(TestCase):
         offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
         self.assertEqual([o.product_pk for o in offers], [product.pk])
         self.assertEqual(state["n"], 2)
+
+    def test_a_listing_far_below_the_shops_price_is_refused(self):
+        from .testing import make_retailer
+
+        bundle = make_product(self.set, name="The Hobbit Bundle", slug="hobbit-bundle", product_type="bundle")
+        make_listing(bundle, make_retailer("Shop"), price="50.00")
+        api = FakeApi([
+            item("MTG The Hobbit Bundle 50 card bundle", price="8.66", item_id="v1|1|0"),
+            item("Magic The Gathering The Hobbit Bundle Sealed", price="46.00", item_id="v1|2|0"),
+        ])
+        offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
+        self.assertEqual([(o.product_pk, o.price) for o in offers], [(bundle.pk, Decimal("46.00"))])
 
     def test_coverage_report(self):
         from io import StringIO

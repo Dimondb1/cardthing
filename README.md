@@ -179,7 +179,10 @@ result counts as our product when every word of our name is in its title,
 it is the same kind of product in the same language, it is one of it (not
 a lot, a case, sleeves, a play mat, tokens or "deck only"), and no more
 specific product of ours fits it better. A booster display counts as a
-booster box. Products with a barcode are searched by barcode first and by
+booster box. A listing priced under 40% of the cheapest shop's price for
+the same product is refused, because it is always something else (stickers,
+a single pack, a part), and names with only one identifying word, such as
+"151 Booster Pack", only match the strict way. Products with a barcode are searched by barcode first and by
 name when that finds nothing; a name search that finds nothing is retried
 without shop words such as "Official" or "(Soccer)". The daily limit
 counts searches, not products.

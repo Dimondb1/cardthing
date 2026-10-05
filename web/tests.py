@@ -296,6 +296,13 @@ class SeoAndEdgeCaseTests(PageTestCase):
         self.assertIn(reverse("web:terms"), body)
         self.assertNotIn("/swipe/", body)
 
+    def test_product_images_describe_the_product(self):
+        Product.objects.filter(pk=self.etb.pk).update(image_url="https://img.example/etb.jpg")
+        for url in (self.etb.get_absolute_url(), self.game.get_absolute_url()):
+            body = self.client.get(url).content.decode()
+            self.assertIn(f'alt="{self.etb.name}"', body, url)
+            self.assertNotIn('alt=""', body, url)
+
     def test_robots_points_at_sitemap(self):
         self.assertContains(self.client.get("/robots.txt"), "Sitemap: http://testserver/sitemap.xml")
 

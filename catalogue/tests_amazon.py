@@ -181,7 +181,7 @@ class ImportTests(TestCase):
         self.assertEqual(listing.delivered_price, Decimal("89.99"))
 
     def test_import_runs_at_most_once_a_day(self):
-        ImportRun.objects.create(retailer=self.retailer, finished_at=timezone.now() - datetime.timedelta(hours=2))
+        ImportRun.objects.create(retailer=self.retailer, offers_found=10, finished_at=timezone.now() - datetime.timedelta(hours=2))
         with mock.patch.object(amazon, "call") as called:
             run = run_import(self.retailer)
         called.assert_not_called()

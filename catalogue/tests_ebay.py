@@ -291,11 +291,35 @@ class ImportTests(TestCase):
         self.assertEqual(kept.availability, Listing.Availability.IN_STOCK)
 
     def test_import_runs_at_most_once_a_day(self):
-        ImportRun.objects.create(retailer=self.retailer, finished_at=timezone.now() - datetime.timedelta(hours=2))
+        ImportRun.objects.create(retailer=self.retailer, offers_found=10, finished_at=timezone.now() - datetime.timedelta(hours=2))
         with mock.patch.object(ebay, "http") as called:
             run = run_import(self.retailer)
         called.assert_not_called()
         self.assertEqual(run.error, "")
+
+    def test_a_skipped_hour_does_not_postpone_tomorrows_fetch(self):
+        # A real fetch 19 hours ago, then the hourly import skipped eBay (as it should).
+        ImportRun.objects.create(retailer=self.retailer, offers_found=5, finished_at=timezone.now() - datetime.timedelta(hours=19))
+        with mock.patch.object(ebay, "http") as called:
+            run_import(self.retailer)
+        called.assert_not_called()
+        self.assertEqual(ImportRun.objects.filter(retailer=self.retailer).count(), 1)   # the skip left no run behind
+        # Later the real fetch is older than the daily window, so eBay must be read again.
+        ImportRun.objects.update(finished_at=timezone.now() - datetime.timedelta(hours=25))
+        api = FakeApi([item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="79.99")])
+        with mock.patch.object(ebay, "http", api):
+            run = run_import(self.retailer)
+        self.assertTrue(api.searches())
+        self.assertEqual(run.error, "")
+
+    def test_old_empty_skip_runs_do_not_block_the_fetch(self):
+        # What the server holds now: a stack of empty runs from hourly skips, the newest minutes old.
+        for hours in (3, 2, 1):
+            ImportRun.objects.create(retailer=self.retailer, finished_at=timezone.now() - datetime.timedelta(hours=hours))
+        api = FakeApi([item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="79.99")])
+        with mock.patch.object(ebay, "http", api):
+            run_import(self.retailer)
+        self.assertTrue(api.searches())
 
     def test_missing_keys_are_reported_not_raised(self):
         with override_settings(RIPRAPTOR_EBAY_APP_ID=""):

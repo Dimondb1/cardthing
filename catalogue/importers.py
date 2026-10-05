@@ -778,16 +778,20 @@ def run_import(retailer, feed_path=None, fetch=None):
             from .amazon import AmazonError, amazon_offers
             from .ebay import EbayError, ebay_offers
 
+            # The last run that actually fetched something. Empty runs are left out, so the
+            # skip records an older version of this code saved cannot keep postponing the fetch.
             last = (
-                ImportRun.objects.filter(retailer=retailer, error="", finished_at__isnull=False)
+                ImportRun.objects.filter(retailer=retailer, error="", finished_at__isnull=False, offers_found__gt=0)
                 .exclude(pk=run.pk)
                 .order_by("-finished_at")
                 .first()
             )
             if last and last.finished_at > timezone.now() - timedelta(hours=DAILY_EVERY_HOURS):
-                run.finished_at = timezone.now()
-                run.save()
-                return run
+                # Already fetched today. Leave no trace of this skip: an empty, error-free
+                # run here would itself count as "fetched today" next hour, and the
+                # retailer would never be read again.
+                run.delete()
+                return last
             try:
                 if retailer.source_type == Retailer.Source.AMAZON:
                     offers = amazon_offers(retailer)

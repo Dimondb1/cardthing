@@ -509,3 +509,34 @@ class ImportOrderTests(TestCase):
             call_command("import_prices", stdout=out)
         self.assertEqual(order, ["eBay", "Aardvark Cards"])
         self.assertRegex(out.getvalue(), r"eBay: 0 offers, 0 listings updated in \d+s")
+
+
+@override_settings(**KEYS)
+class SaveAsFoundTests(TestCase):
+    def setUp(self):
+        self.set = make_set(make_game())
+        self.retailer = Retailer.objects.create(
+            name="eBay", slug="ebay", website="https://www.ebay.co.uk/", source_type=Retailer.Source.EBAY
+        )
+        self.etb = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", slug="pev-etb")
+        self.bundle = make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pev-bundle", product_type="bundle")
+
+    def test_prices_found_before_an_interruption_are_kept(self):
+        searches = {"n": 0}
+        base = FakeApi([])
+
+        def api(url, headers, data=None):
+            if url.startswith(ebay.SEARCH_URL):
+                searches["n"] += 1
+                if searches["n"] == 1:
+                    return {"itemSummaries": [item("Pokemon TCG Prismatic Evolutions Booster Bundle", price="29.99")]}
+                raise KeyboardInterrupt   # the run is stopped part-way
+            return base(url, headers, data)
+
+        with mock.patch.object(ebay, "http", api), mock.patch.object(ebay, "PAUSE", 0):
+            with self.assertRaises(KeyboardInterrupt):
+                run_import(self.retailer)
+        # The first price was saved before the stop.
+        self.assertEqual(Listing.objects.get(retailer=self.retailer).product, self.bundle)
+        # The interrupted run did not finish, so it does not count as today's fetch.
+        self.assertFalse(ImportRun.objects.filter(retailer=self.retailer, finished_at__isnull=False).exists())

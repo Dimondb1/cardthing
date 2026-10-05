@@ -754,6 +754,14 @@ def create_from_offer(offer, catalogue, sealed=None):
     return product.pk
 
 
+def _as_import_errors(offers, errors):
+    """Pass offers through, turning a source's own errors into ImportError_ for run_import to record."""
+    try:
+        yield from offers
+    except errors as exc:
+        raise ImportError_(str(exc)) from exc
+
+
 def run_import(retailer, feed_path=None, fetch=None):
     run = ImportRun.objects.create(retailer=retailer)
     fetch = retailer_fetch(retailer, fetch)
@@ -776,7 +784,7 @@ def run_import(retailer, feed_path=None, fetch=None):
             offers = feed_offers(text)
         elif retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY):
             from .amazon import AmazonError, amazon_offers
-            from .ebay import EbayError, ebay_offers
+            from .ebay import EbayError, iter_ebay_offers
 
             # The last run that actually fetched something. Empty runs are left out, so the
             # skip records an older version of this code saved cannot keep postponing the fetch.
@@ -796,7 +804,8 @@ def run_import(retailer, feed_path=None, fetch=None):
                 if retailer.source_type == Retailer.Source.AMAZON:
                     offers = amazon_offers(retailer)
                 else:
-                    offers = ebay_offers(retailer, run=run)
+                    # Saved one by one as eBay finds them, so an interrupted run keeps its work.
+                    offers = _as_import_errors(iter_ebay_offers(retailer, run=run), (EbayError,))
             except (AmazonError, EbayError) as exc:
                 raise ImportError_(str(exc)) from exc
         else:

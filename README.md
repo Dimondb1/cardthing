@@ -185,7 +185,10 @@ a single pack, a part), and names with only one identifying word, such as
 "151 Booster Pack", only match the strict way. Products with a barcode are searched by barcode first and by
 name when that finds nothing; a name search that finds nothing is retried
 without shop words such as "Official" or "(Soccer)". The daily limit
-counts searches, not products.
+counts searches, not products. Each eBay price is saved the moment it is
+found and progress is recorded every 100 products, so a run that is
+stopped part-way (an update, a restart) keeps what it found and the next
+run carries on from where it stopped.
 
     python manage.py ebay_report
 

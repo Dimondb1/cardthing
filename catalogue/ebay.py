@@ -266,7 +266,16 @@ def item_offer(item, product, Offer):
 
 
 def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
+    """All the offers of one run, as a list. See iter_ebay_offers."""
+    return list(iter_ebay_offers(retailer, limit=limit, request=request, pause=pause, run=run))
+
+
+def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
     """Offers for every product already on eBay, then up to ``limit`` new lookups.
+
+    Credentials and allowances are checked straight away; the offers then
+    come one at a time as they are found, so the importer saves each as it
+    arrives and an interrupted run keeps everything found before it stopped.
 
     Known listings are refreshed through eBay's bulk item lookup, which has
     its own daily allowance, so the search allowance goes on new products.
@@ -286,154 +295,169 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         raise EbayError(f"eBay's search allowance for today is used up. It resets at {reset or 'midnight Pacific time'}.")
     if searches_left is not None:
         limit = min(limit, searches_left - KEEP_BACK)
-    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
-    existing = {row.product_id: row for row in Listing.objects.filter(retailer=retailer, is_active=True)}
-    products = Product.objects.filter(is_active=True).select_related("game")
-    offers = []
-    checked = []
-    gone = []
 
-    def post():
-        if run is not None:
-            type(run).objects.filter(pk=run.pk).update(offers_found=len(checked), listings_updated=len(offers))
-        logger.info("eBay: %d products checked, %d matched so far", len(checked), len(offers))
+    def offers_as_found():
+        nonlocal bulk_left
+        catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
+        existing = {row.product_id: row for row in Listing.objects.filter(retailer=retailer, is_active=True)}
+        products = Product.objects.filter(is_active=True).select_related("game")
+        offers = []
+        checked = []
+        gone = []
 
-    def out_of_stock(product):
-        old = existing[product.pk]
-        return Offer(
-            title=product.name, url=old.url, price=old.price, ean=product.ean or "",
-            availability=Listing.Availability.OUT_OF_STOCK, delivery=old.delivery_cost, product_pk=product.pk,
-        )
+        marked = set()
 
-    # Known listings, twenty at a time through the bulk lookup.
-    known = list(products.filter(pk__in=existing).order_by("ebay_checked_at"))
-    by_item = {}
-    for product in known:
-        item_id = item_id_of(existing[product.pk].url)
-        if item_id:
-            by_item[item_id] = product
-        else:
-            gone.append(product)
-    ids = list(by_item)
-    batches = [ids[start:start + BULK] for start in range(0, len(ids), BULK)]
-    done = 0
-    while done < len(batches):
-        batch = batches[done]
-        if bulk_left is not None and bulk_left <= 0:
-            break
-        try:
-            answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
-        except EbayError as exc:
+        def mark_checked():
+            new = [pk for pk in checked if pk not in marked]
+            if new:
+                Product.objects.filter(pk__in=new).update(ebay_checked_at=timezone.now())
+                marked.update(new)
+
+        def post():
+            if run is not None:
+                type(run).objects.filter(pk=run.pk).update(offers_found=len(checked), listings_updated=len(offers))
+            logger.info("eBay: %d products checked, %d matched so far", len(checked), len(offers))
+
+        def out_of_stock(product):
+            old = existing[product.pk]
+            return Offer(
+                title=product.name, url=old.url, price=old.price, ean=product.ean or "",
+                availability=Listing.Availability.OUT_OF_STOCK, delivery=old.delivery_cost, product_pk=product.pk,
+            )
+
+        # Known listings, twenty at a time through the bulk lookup.
+        known = list(products.filter(pk__in=existing).order_by("ebay_checked_at"))
+        by_item = {}
+        for product in known:
+            item_id = item_id_of(existing[product.pk].url)
+            if item_id:
+                by_item[item_id] = product
+            else:
+                gone.append(product)
+        ids = list(by_item)
+        batches = [ids[start:start + BULK] for start in range(0, len(ids), BULK)]
+        done = 0
+        while done < len(batches):
+            batch = batches[done]
+            if bulk_left is not None and bulk_left <= 0:
+                break
+            try:
+                answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
+            except EbayError as exc:
+                if bulk_left is not None:
+                    bulk_left -= 1
+                if "11001" in str(exc) or "404" in str(exc):
+                    # eBay refuses the whole batch when one listing has ended. Ask for each on its own,
+                    # so one ended listing does not stop the rest being refreshed.
+                    if len(batch) > 1:
+                        batches[done:done + 1] = [[item_id] for item_id in batch]
+                    else:
+                        gone.append(by_item[batch[0]])
+                        done += 1
+                    continue
+                if "429" in str(exc):
+                    logger.warning("eBay: bulk allowance used up, %s", exc)
+                else:
+                    logger.warning("eBay: bulk lookup failed, keeping what was found: %s", exc)
+                break
+            done += 1
             if bulk_left is not None:
                 bulk_left -= 1
-            if "11001" in str(exc) or "404" in str(exc):
-                # eBay refuses the whole batch when one listing has ended. Ask for each on its own,
-                # so one ended listing does not stop the rest being refreshed.
-                if len(batch) > 1:
-                    batches[done:done + 1] = [[item_id] for item_id in batch]
-                else:
-                    gone.append(by_item[batch[0]])
-                    done += 1
-                continue
-            if "429" in str(exc):
-                logger.warning("eBay: bulk allowance used up, %s", exc)
-            else:
-                logger.warning("eBay: bulk lookup failed, keeping what was found: %s", exc)
-            break
-        done += 1
-        if bulk_left is not None:
-            bulk_left -= 1
-        found = set()
-        for item in answer.get("items", []) or []:
-            product = by_item.get(item.get("itemId"))
-            if product is None:
-                continue
-            found.add(item["itemId"])
-            offer = item_offer(item, product, Offer)
-            offers.append(offer if offer is not None else out_of_stock(product))
-            checked.append(product.pk)
-        for item_id in batch:
-            if item_id not in found:
-                gone.append(by_item[item_id])
-        time.sleep(pause)
-    # Batches never reached (allowance or an error) are searched again instead, so they are not left stale.
-    for batch in batches[done:]:
-        gone.extend(by_item[item_id] for item_id in batch)
-    # Listings the bulk lookup no longer knows (ended) are searched again below, first.
+            found = set()
+            for item in answer.get("items", []) or []:
+                product = by_item.get(item.get("itemId"))
+                if product is None:
+                    continue
+                found.add(item["itemId"])
+                offer = item_offer(item, product, Offer)
+                offers.append(offer if offer is not None else out_of_stock(product))
+                yield offers[-1]
+                checked.append(product.pk)
+            for item_id in batch:
+                if item_id not in found:
+                    gone.append(by_item[item_id])
+            time.sleep(pause)
+        # Batches never reached (allowance or an error) are searched again instead, so they are not left stale.
+        for batch in batches[done:]:
+            gone.extend(by_item[item_id] for item_id in batch)
+        # Listings the bulk lookup no longer knows (ended) are searched again below, first.
 
-    # New lookups, the products most shops stock first.
-    fresh = list(
-        products.exclude(pk__in=existing)
-        .annotate(shops=Count("listings"))
-        .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk")[: max(0, limit - len(gone))]
-    )
-    failures = 0
-    specifics = {}
-
-    def specifics_for(game_slug):
-        if game_slug not in specifics:
-            specifics[game_slug] = Specifics(
-                Product.objects.filter(is_active=True, game__slug=game_slug).values_list("pk", "name")
-            )
-        return specifics[game_slug]
-
-    lowest = dict(
-        Product.objects.for_lists()
-        .filter(pk__in=[p.pk for p in gone + fresh])
-        .exclude(lowest_price__isnull=True)
-        .order_by()
-        .values_list("pk", "lowest_price")
-    )
-
-    searches = 0
-    for product in (gone + fresh)[:limit]:
-        if searches >= limit:
-            break
-        try:
-            urls = ([search_url(product)] if product.ean else []) + [search_url(product, q) for q in search_queries(product)]
-            answer = {}
-            for url in urls:
-                answer = request(url, headers)
-                searches += 1
-                if answer.get("itemSummaries") or searches >= limit:
-                    break
-        except EbayError as exc:
-            if "429" in str(exc):
-                logger.warning("eBay: search allowance used up after %d products, keeping what was found", len(checked))
-                break
-            # Skip this product (it stays first in line tomorrow) unless eBay keeps failing.
-            failures += 1
-            logger.warning("eBay: lookup for %s failed: %s", product, exc)
-            if failures >= GIVE_UP_AFTER:
-                logger.warning("eBay: %d failures in a row, stopping after %d products and keeping what was found", failures, len(checked))
-                break
-            continue
+        # New lookups, the products most shops stock first.
+        fresh = list(
+            products.exclude(pk__in=existing)
+            .annotate(shops=Count("listings"))
+            .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk")[: max(0, limit - len(gone))]
+        )
         failures = 0
-        checked.append(product.pk)
-        # Of every result that really is this product, keep the cheapest delivered.
-        best = None
-        for item in answer.get("itemSummaries", []) or []:
-            offer = item_offer(item, product, Offer)
-            if offer is None:
+        specifics = {}
+
+        def specifics_for(game_slug):
+            if game_slug not in specifics:
+                specifics[game_slug] = Specifics(
+                    Product.objects.filter(is_active=True, game__slug=game_slug).values_list("pk", "name")
+                )
+            return specifics[game_slug]
+
+        lowest = dict(
+            Product.objects.for_lists()
+            .filter(pk__in=[p.pk for p in gone + fresh])
+            .exclude(lowest_price__isnull=True)
+            .order_by()
+            .values_list("pk", "lowest_price")
+        )
+
+        searches = 0
+        for product in (gone + fresh)[:limit]:
+            if searches >= limit:
+                break
+            try:
+                urls = ([search_url(product)] if product.ean else []) + [search_url(product, q) for q in search_queries(product)]
+                answer = {}
+                for url in urls:
+                    answer = request(url, headers)
+                    searches += 1
+                    if answer.get("itemSummaries") or searches >= limit:
+                        break
+            except EbayError as exc:
+                if "429" in str(exc):
+                    logger.warning("eBay: search allowance used up after %d products, keeping what was found", len(checked))
+                    break
+                # Skip this product (it stays first in line tomorrow) unless eBay keeps failing.
+                failures += 1
+                logger.warning("eBay: lookup for %s failed: %s", product, exc)
+                if failures >= GIVE_UP_AFTER:
+                    logger.warning("eBay: %d failures in a row, stopping after %d products and keeping what was found", failures, len(checked))
+                    break
                 continue
-            shops = lowest.get(product.pk)
-            if shops is not None and offer.price + offer.delivery < shops * PRICE_FLOOR:
-                continue
-            match, value = catalogue.best_match(offer.title, game=product.game.slug)
-            needed = SUGGEST if product.ean else AUTO_LINK
-            # A duplicate catalogue entry with the same key counts as this product.
-            same = catalogue.by_key.get((product.game.slug, match_key(product.name)), ())
-            named = match and (match[0] == product.pk or match[0] in same) and value >= needed
-            if named or is_this_product(product, offer.title, specifics_for(product.game.slug)):
-                if best is None or offer.price + offer.delivery < best.price + best.delivery:
-                    best = offer
-        if best is None and product.pk in existing:
-            best = out_of_stock(product)
-        if best is not None:
-            offers.append(best)
-        if len(checked) % 100 == 0:
-            post()
-        time.sleep(pause)
-    Product.objects.filter(pk__in=checked).update(ebay_checked_at=timezone.now())
-    post()
-    return offers
+            failures = 0
+            checked.append(product.pk)
+            # Of every result that really is this product, keep the cheapest delivered.
+            best = None
+            for item in answer.get("itemSummaries", []) or []:
+                offer = item_offer(item, product, Offer)
+                if offer is None:
+                    continue
+                shops = lowest.get(product.pk)
+                if shops is not None and offer.price + offer.delivery < shops * PRICE_FLOOR:
+                    continue
+                match, value = catalogue.best_match(offer.title, game=product.game.slug)
+                needed = SUGGEST if product.ean else AUTO_LINK
+                # A duplicate catalogue entry with the same key counts as this product.
+                same = catalogue.by_key.get((product.game.slug, match_key(product.name)), ())
+                named = match and (match[0] == product.pk or match[0] in same) and value >= needed
+                if named or is_this_product(product, offer.title, specifics_for(product.game.slug)):
+                    if best is None or offer.price + offer.delivery < best.price + best.delivery:
+                        best = offer
+            if best is None and product.pk in existing:
+                best = out_of_stock(product)
+            if best is not None:
+                offers.append(best)
+                yield offers[-1]
+            if len(checked) % 100 == 0:
+                mark_checked()
+                post()
+            time.sleep(pause)
+        mark_checked()
+        post()
+
+    return offers_as_found()

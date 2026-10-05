@@ -562,6 +562,80 @@ class RestockRecordPageTests(PageTestCase):
         self.assertLess(body.index(self.etb.name + "</span>"), body.index(self.sold_out.name + "</span>"))
 
 
+class FeedTests(PageTestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+
+    def feed(self, url):
+        import xml.etree.ElementTree as ET
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/rss+xml", response["Content-Type"])
+        return ET.fromstring(response.content)
+
+    def test_deals_feed_carries_restocks_and_price_drops_newest_first(self):
+        from catalogue.models import Restock
+
+        # The fixture holds £60 nine days ago, £57 five days ago and £54.99 today: the drop is dated today.
+        today = timezone.localdate()
+        Restock.objects.create(product=self.sold_out, retailer=self.harbour, at=timezone.now() - timedelta(hours=1), price="140.00")
+        channel = self.feed(reverse("web:feed_deals")).find("channel")
+        self.assertEqual(channel.findtext("title"), "RipRaptor: restocks and price drops")
+        self.assertEqual(channel.findtext("link"), "http://testserver/deals/")
+        items = channel.findall("item")
+        self.assertEqual(
+            [item.findtext("title") for item in items],
+            [
+                "Back in stock: Prismatic Evolutions Super-Premium Collection, £140.00 at Harbour Games",
+                "Price drop: Prismatic Evolutions Elite Trainer Box, now £54.99 delivered, was £57.00",
+            ],
+        )
+        self.assertEqual(items[0].findtext("link"), "http://testserver" + self.sold_out.get_absolute_url())
+        self.assertIn("£140.00 delivered", items[0].findtext("description"))
+        self.assertTrue(items[0].findtext("pubDate"))
+        self.assertEqual(items[1].find("guid").get("isPermaLink"), "false")
+        self.assertIn(f"fell from £57.00 to £54.99 on {today.strftime('%-d %b')}", items[1].findtext("description"))
+
+    def test_game_feed_keeps_to_its_game_and_unknown_games_are_404(self):
+        from catalogue.models import Restock
+
+        magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
+        box = make_product(make_set(magic, name="Foundations", slug="foundations"), name="Foundations Play Booster Box", product_type="booster_box")
+        Restock.objects.create(product=box, retailer=self.harbour, at=timezone.now(), price="110.00")
+        Restock.objects.create(product=self.etb, retailer=self.harbour, at=timezone.now(), price="54.99")
+        titles = [i.findtext("title") for i in self.feed(reverse("web:feed_game", args=["pokemon"])).find("channel").findall("item")]
+        self.assertEqual([t for t in titles if t.startswith("Back in stock")], ["Back in stock: Prismatic Evolutions Elite Trainer Box, £54.99 at Harbour Games"])
+        magic_titles = [i.findtext("title") for i in self.feed(reverse("web:feed_game", args=["magic-the-gathering"])).find("channel").findall("item")]
+        self.assertEqual(magic_titles, ["Back in stock: Foundations Play Booster Box, £110.00 at Harbour Games"])
+        self.assertEqual(self.feed(reverse("web:feed_game", args=["pokemon"])).find("channel").findtext("title"), "RipRaptor: Pokémon restocks and price drops")
+        self.assertEqual(self.client.get("/feeds/no-such-game.xml").status_code, 404)
+
+    def test_pages_announce_the_feeds_and_the_deals_page_shows_the_address(self):
+        home = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('<link rel="alternate" type="application/rss+xml" title="RipRaptor: restocks and price drops" href="/feeds/deals.xml">', home)
+        self.assertNotIn("/feeds/pokemon.xml", home)
+        game = self.client.get(self.game.get_absolute_url()).content.decode()
+        self.assertIn('title="RipRaptor: Pokémon restocks and price drops" href="/feeds/pokemon.xml"', game)
+        deals = self.client.get(reverse("web:deals")).content.decode()
+        self.assertIn("Follow restocks and price drops in a feed reader", deals)
+        self.assertIn('<a href="/feeds/deals.xml">http://testserver/feeds/deals.xml</a>', deals)
+
+    def test_a_restock_recorded_by_a_check_reaches_the_feed_without_waiting_for_the_cache(self):
+        from decimal import Decimal
+
+        from catalogue import pricing
+
+        before = [i.findtext("title") for i in self.feed(reverse("web:feed_deals")).find("channel").findall("item")]
+        self.assertEqual([t for t in before if t.startswith("Back in stock")], [])
+        sold = Listing.objects.get(product=self.sold_out)
+        pricing.record_check(sold, price=Decimal("139.00"), delivery_cost=Decimal("0"), availability="in_stock")
+        titles = [i.findtext("title") for i in self.feed(reverse("web:feed_deals")).find("channel").findall("item")]
+        self.assertIn("Back in stock: Prismatic Evolutions Super-Premium Collection, £139.00 at Harbour Games", titles)
+
+
 class DealsAndAliasTests(PageTestCase):
     def setUp(self):
         from django.core.cache import cache

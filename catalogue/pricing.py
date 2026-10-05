@@ -168,8 +168,8 @@ def snapshot_all(date=None):
     return count
 
 
-def price_drops(limit=6, days=None, today=None):
-    """Products whose cheapest delivered price is lower than ``days`` ago."""
+def price_drops(limit=6, days=None, today=None, game=None):
+    """Products whose cheapest delivered price is lower than ``days`` ago, optionally within one game."""
     days = days or settings.RIPRAPTOR_TRENDING_DAYS
     today = today or timezone.localdate()
     target = today - timedelta(days=days)
@@ -183,8 +183,11 @@ def price_drops(limit=6, days=None, today=None):
         .values("price")[:1]
     )
     money = DecimalField(max_digits=9, decimal_places=2)
+    products = Product.objects.for_lists()
+    if game is not None:
+        products = products.filter(game=game)
     return (
-        Product.objects.for_lists()
+        products
         .annotate(previous_price=Subquery(previous, output_field=money))
         .filter(lowest_price__lt=F("previous_price"))
         .annotate(

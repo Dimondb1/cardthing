@@ -2,6 +2,7 @@ from django.contrib.sitemaps.views import sitemap
 from django.urls import path
 
 from . import views
+from .feeds import DealsFeed
 from .sitemaps import SITEMAPS
 
 app_name = "web"
@@ -25,4 +26,6 @@ urlpatterns = [
     path("robots.txt", views.robots_txt, name="robots"),
     path("sitemap.xml", sitemap, {"sitemaps": SITEMAPS}, name="sitemap"),
     path("llms.txt", views.llms_txt, name="llms"),
+    path("feeds/deals.xml", DealsFeed(), name="feed_deals"),
+    path("feeds/<slug:game_slug>.xml", DealsFeed(), name="feed_game"),
 ]

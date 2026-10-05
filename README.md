@@ -586,6 +586,19 @@ restocks in 90 days the line adds the two-hour window most of them landed
 in. `backfill_restocks` turns the stamps listings already carried into
 rows; the installer runs it, and it is safe to run again.
 
+## Feeds
+
+`/feeds/deals.xml` is an RSS feed of restocks and price drops across the
+site, and `/feeds/<game>.xml` (for example `/feeds/pokemon.xml`) the same
+for one game. Every page announces them in its head, and the deals page
+prints the address, so a feed reader or a Discord feed bot can follow
+them. Restocks come from the Restock rows with the shop and the delivered
+price. Price drops come from the daily lowest prices, which hold a date
+and no time, so a drop is dated to its day and a product appears once.
+Entries link to the product page. Feeds are built with Django's own
+syndication module and cached like the home lists, so a restock recorded
+by a check appears on the next request.
+
 ## Merged products keep their addresses
 
 `merge_duplicates` (run hourly by `tidy_all`) records every merged

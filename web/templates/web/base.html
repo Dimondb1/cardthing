@@ -18,6 +18,8 @@
   <meta name="theme-color" content="#ffffff">
   <!-- Awin publisher verification: RipRaptor -->
   <link rel="icon" href="{% static 'img/favicon.png' %}" type="image/png">
+  <link rel="alternate" type="application/rss+xml" title="{% copy 'feeds.deals.title' site_name=site_name %}" href="{% url 'web:feed_deals' %}">
+  {% if game %}<link rel="alternate" type="application/rss+xml" title="{% copy 'feeds.game.title' site_name=site_name game=game.name %}" href="{% url 'web:feed_game' game.slug %}">{% endif %}
   <link rel="preload" href="{% static 'fonts/archivo-variable-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
   <link rel="stylesheet" href="{% static 'css/site.css' %}">

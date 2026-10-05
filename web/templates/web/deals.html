@@ -76,5 +76,6 @@
 {% if not savings and not drops and not restock_log %}
 <p class="page-intro">{% copy "deals.empty" %}</p>
 {% endif %}
+<p class="small-print">{% copy "feeds.deals.link" %} <a href="{% url 'web:feed_deals' %}">{% url 'web:feed_deals' as feed_path %}{{ request.scheme }}://{{ request.get_host }}{{ feed_path }}</a></p>
 <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
 {% endblock %}

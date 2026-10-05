@@ -13,7 +13,10 @@ LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, FOOTBALL_CACHE_KEY, NEW_CACH
 
 
 def clear_list_caches():
+    from web.feeds import clear_feed_caches
+
     cache.delete_many(LIST_CACHE_KEYS)
+    clear_feed_caches()
 
 
 @receiver([post_save, post_delete], sender=Product)

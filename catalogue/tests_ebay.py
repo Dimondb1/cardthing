@@ -518,6 +518,30 @@ class FallbackSearchTests(TestCase):
         self.assertEqual(cheap.availability, Listing.Availability.OUT_OF_STOCK)
         self.assertEqual(kept.availability, Listing.Availability.IN_STOCK)
 
+    def test_check_command_shows_the_pick_and_why_others_were_refused(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .testing import make_retailer
+
+        pack = make_product(self.set, name="Darkness Ablaze Booster Pack", slug="da-pack", product_type="booster_pack")
+        make_listing(pack, make_retailer("Shop"), price="3.95", delivery="3.95",
+                     availability=Listing.Availability.OUT_OF_STOCK)
+        api = FakeApi([
+            item("Pokemon Darkness Ablaze Booster Pack", price="1.36", item_id="v1|1|0"),
+            item("Pokemon Darkness Ablaze Booster Pack X1 Sealed New choose your artwork", price="5.99", item_id="v1|2|0"),
+            item("Pokemon Darkness Ablaze Sleeved Booster Pack x3", price="17.00", item_id="v1|3|0"),
+        ])
+        out = StringIO()
+        with mock.patch.object(ebay, "http", api), \
+                mock.patch.object(ebay, "credentials", return_value=("a", "c", "5339000000")):
+            call_command("ebay_check", "https://ripraptor.com/products/da-pack/", stdout=out)
+        text = out.getvalue()
+        self.assertIn("PICK    £5.99  Pokemon Darkness Ablaze Booster Pack X1 Sealed", text)
+        self.assertIn("too cheap to be the sealed product (under £3.16)", text)
+        self.assertIn("a different product, a part or a multi-buy", text)
+
     def test_coverage_report(self):
         from io import StringIO
 

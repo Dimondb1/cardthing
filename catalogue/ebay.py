@@ -291,6 +291,23 @@ def item_offer(item, product, Offer):
     )
 
 
+def verdict(product, item, Offer, catalogue, specifics, shops):
+    """(offer, None) when one search result is this product at a believable price, else (offer, why not)."""
+    offer = item_offer(item, product, Offer)
+    if offer is None:
+        return None, "not a clean UK buy-it-now price (currency, seller feedback or no UK postage)"
+    if product.pk in shops and offer.price + offer.delivery < shops[product.pk] * PRICE_FLOOR:
+        return offer, f"too cheap to be the sealed product (under £{shops[product.pk] * PRICE_FLOOR:.2f})"
+    match, value = catalogue.best_match(offer.title, game=product.game.slug)
+    needed = SUGGEST if product.ean else AUTO_LINK
+    # A duplicate catalogue entry with the same key counts as this product.
+    same = catalogue.by_key.get((product.game.slug, match_key(product.name)), ())
+    named = match and (match[0] == product.pk or match[0] in same) and value >= needed
+    if named or is_this_product(product, offer.title, specifics):
+        return offer, None
+    return offer, "a different product, a part or a multi-buy"
+
+
 def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
     """All the offers of one run, as a list. See iter_ebay_offers."""
     return list(iter_ebay_offers(retailer, limit=limit, request=request, pause=pause, run=run))
@@ -464,19 +481,9 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
             # Of every result that really is this product, keep the cheapest delivered.
             best = None
             for item in answer.get("itemSummaries", []) or []:
-                offer = item_offer(item, product, Offer)
-                if offer is None:
-                    continue
-                if too_cheap(product, offer):
-                    continue
-                match, value = catalogue.best_match(offer.title, game=product.game.slug)
-                needed = SUGGEST if product.ean else AUTO_LINK
-                # A duplicate catalogue entry with the same key counts as this product.
-                same = catalogue.by_key.get((product.game.slug, match_key(product.name)), ())
-                named = match and (match[0] == product.pk or match[0] in same) and value >= needed
-                if named or is_this_product(product, offer.title, specifics_for(product.game.slug)):
-                    if best is None or offer.price + offer.delivery < best.price + best.delivery:
-                        best = offer
+                offer, reason = verdict(product, item, Offer, catalogue, specifics_for(product.game.slug), shops)
+                if reason is None and (best is None or offer.price + offer.delivery < best.price + best.delivery):
+                    best = offer
             if best is None and product.pk in existing:
                 best = out_of_stock(product)
             if best is not None:

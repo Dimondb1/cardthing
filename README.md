@@ -194,7 +194,14 @@ run carries on from where it stopped.
 
 prints how much of the catalogue eBay covers: products looked up, matched,
 in stock, cheapest on eBay, still waiting, and the widely stocked products
-it has no match for. The same figures are on the Insights page. Links are eBay's own
+it has no match for. The same figures are on the Insights page.
+
+    python manage.py ebay_check https://ripraptor.com/products/<slug>/
+
+shows one product's saved eBay listing and eBay's results right now, with
+the price delivered, which one the import would pick, and why each other
+is refused (too cheap, a different product, no UK postage). It uses one or
+two searches and saves nothing. Links are eBay's own
 affiliate links for the campaign, so the shop needs no affiliate link
 format. Listings we already have are refreshed twenty at a time through eBay's
 bulk item lookup, which has its own daily allowance, so searches go on

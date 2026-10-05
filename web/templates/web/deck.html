@@ -59,6 +59,7 @@
   <section class="saved" aria-labelledby="saved-title">
     <div class="section-head">
       <h2 id="saved-title" class="section-head__title">{% copy "deck.saved.title" %} <span class="saved__count" data-saved-count></span></h2>
+      <a class="section-head__all" href="{% url 'web:watchlist' %}" data-watch-link="{% url 'web:watchlist' %}">{% copy "watchlist.open" %}</a>
       <button type="button" class="section-head__all" data-saved-clear hidden>{% copy "deck.saved.clear" %}</button>
     </div>
     <p class="saved__empty" data-saved-empty>{% copy "deck.saved.empty" %}</p>

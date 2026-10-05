@@ -17,7 +17,7 @@ from django.views.decorators.http import require_GET
 
 from catalogue import insights, offers, pricing
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
-from catalogue.models import Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Retailer, stale_cutoff
+from catalogue.models import DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Retailer, stale_cutoff
 from catalogue.search import apply_search
 from catalogue.types import type_choices
 from content import service as copy
@@ -615,9 +615,12 @@ def product_detail(request, slug):
     )
 
 
+CLICK_SOURCES = ("watchlist",)
+
+
 @require_GET
 def go(request, listing_id):
-    """Send the visitor to the retailer and count the click."""
+    """Send the visitor to the retailer and count the click, noting a click from a watchlist."""
     listing = get_object_or_404(
         Listing.objects.live().select_related("retailer", "product"),
         pk=listing_id,
@@ -625,8 +628,10 @@ def go(request, listing_id):
     )
     agent = request.headers.get("User-Agent", "").lower()
     if agent and not any(marker in agent for marker in BOT_MARKERS):
+        source = request.GET.get("from", "")
         OutboundClick.objects.create(
-            listing=listing, product=listing.product, retailer=listing.retailer
+            listing=listing, product=listing.product, retailer=listing.retailer,
+            source=source if source in CLICK_SOURCES else "",
         )
     response = HttpResponseRedirect(listing.retailer.outbound_url(listing.url))
     response["X-Robots-Tag"] = "noindex, nofollow"
@@ -850,9 +855,52 @@ def deals(request):
     )
 
 
+WATCHLIST_MAX = 50
+
+
+@require_GET
+def watchlist(request):
+    """The products a visitor saved, named in the address, with live prices.
+
+    The list lives in the browser and in this page's address, never on the
+    server, so the page works bookmarked, pasted into a chat, or with
+    JavaScript off. The script fills in what each was saved at.
+    """
+    wanted = [slug for slug in request.GET.get("p", "").split(",") if slug][:WATCHLIST_MAX]
+    rows = []
+    if wanted:
+        found = {p.slug: p for p in Product.objects.for_lists().filter(slug__in=wanted).prefetch_related(offers.buyable_prefetch())}
+        missing = [slug for slug in wanted if slug not in found]
+        if missing:
+            aliases = ProductAlias.objects.filter(slug__in=missing, product__is_active=True).values_list("slug", "product__slug")
+            moved = dict(aliases)
+            for product in Product.objects.for_lists().filter(slug__in=moved.values()).prefetch_related(offers.buyable_prefetch()):
+                for old, new in moved.items():
+                    if new == product.slug:
+                        found[old] = product
+        products = []
+        for slug in wanted:
+            product = found.get(slug)
+            if product is not None and product not in products:
+                products.append(product)
+        week_lows = offers.week_low_map([p.pk for p in products])
+        rows = [(product, offers.summarise(product, week_lows)) for product in products]
+        if not insights.is_bot(request):
+            insights.bump_many(DailyPageView, DailyPageView.Kind.WATCHED, [p.slug for p in products])
+    return render(
+        request,
+        "web/watchlist.html",
+        {
+            "rows": rows,
+            "meta_title": text(request, "meta.watchlist.title"),
+            "noindex": True,
+        },
+    )
+
+
 @require_GET
 def robots_txt(request):
-    private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/"]
+    private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/", "Disallow: /watchlist/"]
     lines = ["User-agent: *", *private, ""]
     # Named so a crawler that only honours its own section still gets the same answer.
     for agent in AI_CRAWLERS:

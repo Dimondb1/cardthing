@@ -15,6 +15,7 @@ urlpatterns = [
     path("swipe/", views.deck, name="deck"),
     path("deals/", views.deals, name="deals"),
     path("new/", views.latest_drops, name="new"),
+    path("watchlist/", views.watchlist, name="watchlist"),
     path("games/", views.games, name="games"),
     path("games/<slug:game_slug>/", views.game_detail, name="game"),
     path("games/<slug:game_slug>/<slug:set_slug>/", views.set_detail, name="set"),

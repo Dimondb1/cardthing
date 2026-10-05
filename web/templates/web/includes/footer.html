@@ -5,6 +5,7 @@
     <nav class="site-footer__nav" aria-label="Footer">
       <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a>
       <a href="{% url 'web:deals' %}">{% copy "site.nav.deals" %}</a>
+      <a href="{% url 'web:watchlist' %}" data-watch-link="{% url 'web:watchlist' %}">{% copy "site.nav.watchlist" %}</a>
       <a href="{% url 'web:games' %}">{% copy "site.nav.games" %}</a>
       <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a>
       <span>&copy; {% now "Y" %} {{ site_name }}</span>

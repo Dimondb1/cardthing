@@ -16,6 +16,7 @@ KINDS = {
     "deck": DailyPageView.Kind.SWIPE,
     "deals": DailyPageView.Kind.DEALS,
     "new": DailyPageView.Kind.NEW,
+    "watchlist": DailyPageView.Kind.WATCHLIST,
     "games": DailyPageView.Kind.OTHER,
     "about": DailyPageView.Kind.OTHER,
     "terms": DailyPageView.Kind.OTHER,

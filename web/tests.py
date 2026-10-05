@@ -52,6 +52,8 @@ class PageTestCase(TestCase):
             self.sold_out.get_absolute_url(),
             self.unpriced.get_absolute_url(),
             reverse("web:about"),
+            reverse("web:watchlist"),
+            reverse("web:watchlist") + f"?p={self.etb.slug},{self.sold_out.slug}",
         ]
 
 
@@ -560,6 +562,66 @@ class RestockRecordPageTests(PageTestCase):
         self.assertIn(timezone.localtime(now).strftime("%A %-d %B"), body)
         self.assertIn("sold out again", body)
         self.assertLess(body.index(self.etb.name + "</span>"), body.index(self.sold_out.name + "</span>"))
+
+
+class WatchlistTests(PageTestCase):
+    HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (iPhone) Safari/605.1"}
+
+    def test_lists_the_named_products_in_order_with_live_prices(self):
+        url = reverse("web:watchlist") + f"?p={self.sold_out.slug},{self.etb.slug},no-such-product"
+        response = self.client.get(url)
+        body = response.content.decode()
+        self.assertLess(body.index(f'data-watch-row="{self.sold_out.slug}"'), body.index(f'data-watch-row="{self.etb.slug}"'))
+        self.assertNotIn("no-such-product", body)
+        self.assertIn('data-now="54.99"', body)
+        self.assertIn("delivered at Harbour Games", body)
+        self.assertIn(f'href="{self.cheap.get_outbound_url()}?from=watchlist" target="_blank" rel="sponsored nofollow noopener"', body)
+        self.assertIn("Last seen at £140.00", body)
+        self.assertIn("Saved on this device only.", body)
+        self.assertIn('<meta name="robots" content="noindex, follow">', body)
+        self.assertIn("<title>Your watchlist | RipRaptor</title>", body)
+
+    def test_an_old_address_still_finds_its_product(self):
+        from catalogue.models import ProductAlias
+
+        ProductAlias.objects.create(slug="old-etb-address", product=self.etb)
+        body = self.client.get(reverse("web:watchlist") + "?p=old-etb-address").content.decode()
+        self.assertIn(f'data-watch-row="{self.etb.slug}"', body)
+
+    def test_an_empty_list_explains_itself(self):
+        response = self.client.get(reverse("web:watchlist"))
+        self.assertContains(response, "Nothing saved yet")
+        self.assertContains(response, "See today&#x27;s deals")
+
+    def test_save_links_work_without_the_script_and_carry_what_it_needs(self):
+        page = self.client.get(self.etb.get_absolute_url()).content.decode()
+        self.assertIn(f'href="/watchlist/?p={self.etb.slug}" data-watch="{self.etb.slug}" data-watch-id="{self.etb.pk}"', page)
+        self.assertIn('data-watch-price="54.99"', page)
+        sold = self.client.get(self.sold_out.get_absolute_url()).content.decode()
+        self.assertIn(f'data-watch="{self.sold_out.slug}"', sold)
+        self.assertIn('data-watch-price=""', sold)
+        results = self.client.get(reverse("web:search") + "?q=etb").content.decode()
+        self.assertIn(f'button--save button--small" href="/watchlist/?p={self.etb.slug}"', results)
+        self.assertIn('data-watch-link="/watchlist/"', page)
+        self.assertIn('<span data-watch-count></span>', page)
+
+    def test_clicks_from_a_watchlist_are_marked_and_other_sources_are_not(self):
+        self.client.get(self.cheap.get_outbound_url() + "?from=watchlist", HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0")
+        self.client.get(self.cheap.get_outbound_url() + "?from=elsewhere", HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0")
+        self.assertEqual(list(OutboundClick.objects.order_by("-pk").values_list("source", flat=True)[:2]), ["", "watchlist"])
+
+    def test_each_product_on_a_loaded_list_is_counted_and_the_page_is_too(self):
+        from catalogue.models import DailyPageView
+
+        url = reverse("web:watchlist") + f"?p={self.etb.slug},{self.sold_out.slug}"
+        self.client.get(url, **self.HUMAN)
+        self.client.get(url, **self.HUMAN)
+        self.client.get(url, HTTP_USER_AGENT="Googlebot/2.1")
+        rows = {(r.kind, r.key): r.hits for r in DailyPageView.objects.all()}
+        self.assertEqual(rows, {("watched", self.etb.slug): 2, ("watched", self.sold_out.slug): 2, ("watchlist", ""): 2})
+
+    def test_robots_keeps_watchlists_out_of_search_engines(self):
+        self.assertContains(self.client.get("/robots.txt"), "Disallow: /watchlist/")
 
 
 class FeedTests(PageTestCase):

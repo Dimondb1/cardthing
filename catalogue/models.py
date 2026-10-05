@@ -481,6 +481,7 @@ class OutboundClick(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="outbound_clicks")
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="outbound_clicks")
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    source = models.CharField(max_length=12, blank=True)   # "watchlist" when the click came from a saved list
 
     class Meta:
         ordering = ["-created_at"]
@@ -526,6 +527,7 @@ class DailyPageView(models.Model):
         DEALS = "deals", "Deals"
         NEW = "new", "Latest drops"
         WATCHLIST = "watchlist", "Watchlist"
+        WATCHED = "watched", "Watchlist rows"   # one per product on a loaded watchlist, keyed by slug
         OTHER = "other", "Other"
 
     date = models.DateField(db_index=True)

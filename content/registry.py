@@ -42,6 +42,7 @@ SECTIONS = [
     ("home", "Home page"),
     ("deals", "Deals page"),
     ("feeds", "Feeds (RSS)"),
+    ("watchlist", "Watchlist page"),
     ("browse", "Search results and browsing"),
     ("product", "Product page"),
     ("about", "How it works page"),
@@ -130,6 +131,11 @@ ENTRIES = [
         "site.nav.games", B, "Games link",
         "Games",
         "Header link to the list of games and sets.",
+    ),
+    Entry(
+        "site.nav.watchlist", B, "Watchlist link",
+        "Watchlist",
+        "Header and footer link to the products the visitor saved.",
     ),
     Entry(
         "site.nav.deals", B, "Deals link",
@@ -945,6 +951,45 @@ ENTRIES = [
         "sold out again",
         "After a restock in the log whose shop has since sold out.",
     ),
+    Entry("watchlist.title", H, "Watchlist heading", "Your watchlist", "Heading of the watchlist page."),
+    Entry(
+        "watchlist.intro", T, "Watchlist introduction",
+        "Live prices for the products you saved.",
+        "Under the watchlist heading.",
+    ),
+    Entry("watchlist.save", B, "Save button", "Save", "On product pages and cards. Adds the product to the watchlist."),
+    Entry("watchlist.saved", B, "Saved state", "Saved", "The Save button once the product is on the watchlist."),
+    Entry("watchlist.remove", B, "Remove button", "Remove", "On the watchlist page. Takes the product off the list."),
+    Entry("watchlist.open", B, "Open watchlist link", "Open watchlist", "On the swipe page, above the saved products."),
+    Entry(
+        "watchlist.saved_at", T, "Saved at price",
+        "Saved at {price}",
+        "On the watchlist page, the delivered price when the product was saved. Green when it is cheaper now, red when dearer.",
+        placeholders=("price",),
+    ),
+    Entry(
+        "watchlist.now", T, "Current price shop",
+        "delivered at {retailer}",
+        "After the current price on the watchlist page.",
+        placeholders=("retailer",),
+    ),
+    Entry(
+        "watchlist.device_note", T, "Saved on this device",
+        "Saved on this device only.",
+        "Small print on the watchlist page.",
+    ),
+    Entry(
+        "watchlist.share", T, "Address holds the list",
+        "This page's address holds your list, so bookmark it or paste it into a chat to keep it or share it.",
+        "Small print on the watchlist page.",
+    ),
+    Entry("watchlist.empty.title", H, "Empty watchlist heading", "Nothing saved yet", "Heading when the watchlist is empty."),
+    Entry(
+        "watchlist.empty.body", T, "Empty watchlist text",
+        "Press Save on any product and it will show here with its current price. The list stays in this browser only.",
+        "Text when the watchlist is empty.",
+    ),
+    Entry("watchlist.empty.button", B, "Empty watchlist button", "See today's deals", "Button when the watchlist is empty."),
     Entry(
         "feeds.deals.title", T, "Site feed title",
         "{site_name}: restocks and price drops",
@@ -1098,6 +1143,11 @@ ENTRIES = [
         "stock, delivery and the time each price was checked.",
         "Search engine description for product pages that have a current price.",
         placeholders=("product", "price", "retailer", "count"),
+    ),
+    Entry(
+        "meta.watchlist.title", T, "Watchlist page title",
+        "Your watchlist",
+        "Browser tab title for the watchlist page. The site name is added after it.",
     ),
     Entry(
         "meta.new.title", T, "Latest drops page title",

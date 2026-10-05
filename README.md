@@ -586,6 +586,25 @@ restocks in 90 days the line adds the two-hour window most of them landed
 in. `backfill_restocks` turns the stamps listings already carried into
 rows; the installer runs it, and it is safe to run again.
 
+## Watchlist
+
+Every product page and card has a Save link. With JavaScript it adds the
+product to a list kept in the browser's localStorage (the same store the
+swipe page uses, so swipe saves land there too), and the header link
+becomes "Watchlist (3)" pointing at `/watchlist/?p=slug,slug`. That page
+is rendered by the server from the slugs in the address, with each
+product's live cheapest price, shop and check time, a Buy button and a
+Remove link; the script adds "Saved at £X" in green when the price is
+lower now and red when higher. Nothing is stored on the server, which is
+why the address carries the list: it can be bookmarked or pasted into a
+chat, and without JavaScript a Save link simply opens the watchlist page
+for that one product. Old product addresses resolve through
+`ProductAlias`. The page is `noindex` and `/watchlist/` is disallowed in
+robots.txt. Buy clicks from it carry `?from=watchlist`, stored in
+`OutboundClick.source`, and each product on a loaded list is counted as a
+"watchlist row" page view by slug, so Insights shows clicks from
+watchlists and the stock watcher can put watched products first.
+
 ## Feeds
 
 `/feeds/deals.xml` is an RSS feed of restocks and price drops across the

@@ -40,6 +40,22 @@ def bump(model, **keys):
             model.objects.create(date=timezone.localdate(), hits=1, **keys)
 
 
+def bump_many(model, kind, keys):
+    """Add one to today's row for each of ``keys`` under ``kind``, in three queries however many there are."""
+    keys = list(dict.fromkeys(key[:220] for key in keys if key))
+    if not keys:
+        return
+    today = timezone.localdate()
+    with transaction.atomic():
+        existing = set(model.objects.filter(date=today, kind=kind, key__in=keys).values_list("key", flat=True))
+        if existing:
+            model.objects.filter(date=today, kind=kind, key__in=existing).update(hits=F("hits") + 1)
+        model.objects.bulk_create(
+            [model(date=today, kind=kind, key=key, hits=1) for key in keys if key not in existing],
+            ignore_conflicts=True,
+        )
+
+
 def client_ip(request):
     """The visitor's address. Caddy puts the real one last in X-Forwarded-For."""
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
@@ -222,6 +238,7 @@ def report(days=30):
         retailer__source_type__in=[Retailer.Source.AMAZON, Retailer.Source.EBAY]
     )
     earning_clicks = clicks.filter(earning).count()
+    watchlist_clicks = clicks.filter(source="watchlist").count()
     unpaid = [
         {"name": row["retailer__name"], "slug": row["retailer__slug"], "clicks": row["n"]}
         for row in clicks.exclude(earning).values("retailer__name", "retailer__slug").annotate(n=Count("id")).order_by("-n")[:10]
@@ -316,6 +333,7 @@ def report(days=30):
         "sources": sources,
         "top_hosts": top_hosts,
         "earning_clicks": earning_clicks,
+        "watchlist_clicks": watchlist_clicks,
         "unpaid": unpaid,
         "shops_health": shops_health,
         "viewed_no_click": viewed_no_click,

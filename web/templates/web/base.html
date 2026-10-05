@@ -24,6 +24,7 @@
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
   <link rel="stylesheet" href="{% static 'css/site.css' %}">
   <script src="{% static 'js/site.js' %}" defer></script>
+  <script src="{% static 'js/watch.js' %}" defer></script>
   {% if adsense_client and not noindex %}<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_client }}" crossorigin="anonymous"></script>{% endif %}
   {% block scripts %}{% endblock %}
 </head>

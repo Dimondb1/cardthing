@@ -1,0 +1,49 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "watchlist.title" %}</h1>
+  <p class="page-intro">{% copy "watchlist.intro" %}</p>
+</div>
+
+<div data-watchlist data-saved-at="{% copy 'watchlist.saved_at' price='{price}' %}">
+{% if rows %}
+<ul class="watch">
+  {% for product, summary in rows %}
+  <li class="watch__item" data-watch-row="{{ product.slug }}">
+    <a class="watch__link" href="{{ product.get_absolute_url }}">
+      {% product_image product "row" %}
+      <span class="watch__body">
+        <span class="watch__name">{{ product.name }}</span>
+        <span class="watch__meta">{{ product.game.display_short }} · {{ product.type_name }}</span>
+      </span>
+    </a>
+    <div class="watch__prices">
+      {% if summary.best %}
+        <p class="watch__now" data-now="{{ summary.best.delivered_price }}">{% price summary.best.delivered_price size="md" %} <span class="watch__at">{% copy "watchlist.now" retailer=summary.best.retailer.name %}</span></p>
+        <p class="watch__saved" data-saved-for="{{ product.slug }}" hidden></p>
+        <p class="watch__checked">{% copy "product.last_checked" time=summary.best.last_checked|ago %}</p>
+      {% else %}
+        {% include "web/includes/availability.html" %}
+        {% if product.last_price %}<p class="watch__checked">{% copy "product.last_seen" price=product.last_price|gbp %}</p>{% endif %}
+        <p class="watch__saved" data-saved-for="{{ product.slug }}" hidden></p>
+      {% endif %}
+    </div>
+    <div class="watch__actions">
+      {% if summary.best %}<a class="button button--buy button--card" href="{{ summary.best.get_outbound_url }}?from=watchlist" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/bag.html" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>{% endif %}
+      {% include "web/includes/save_link.html" with price=summary.best.delivered_price small=True %}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+<p class="small-print">{% copy "watchlist.device_note" %} {% copy "watchlist.share" %}</p>
+<p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
+{% else %}
+<div class="empty">
+  <h2 class="empty__title">{% copy "watchlist.empty.title" %}</h2>
+  <p>{% copy "watchlist.empty.body" %}</p>
+  <p class="empty__action"><a class="button" href="{% url 'web:deals' %}">{% copy "watchlist.empty.button" %}</a></p>
+</div>
+{% endif %}
+</div>
+{% endblock %}

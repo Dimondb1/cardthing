@@ -60,11 +60,12 @@ class CountingTests(TestCase):
             created_at=timezone.now() - timedelta(days=40),   # outside the window
         )
         DailySearch.objects.create(date=timezone.localdate(), query="nothing", results=0, hits=3)
+        OutboundClick.objects.create(listing=self.listing, product=self.etb, retailer=self.shop, source="watchlist")
         data = insights.report(30)
-        self.assertEqual((data["total_views"], data["total_clicks"]), (2, 1))
-        self.assertEqual(data["click_rate"], 100.0)
+        self.assertEqual((data["total_views"], data["total_clicks"], data["watchlist_clicks"]), (2, 2, 1))
+        self.assertEqual(data["click_rate"], 200.0)
         self.assertEqual(data["top_products"][0]["product"], self.etb)
-        self.assertEqual(data["shops"], [{"name": "Harbour Games", "clicks": 1}])
+        self.assertEqual(data["shops"], [{"name": "Harbour Games", "clicks": 2}])
         self.assertEqual(data["games"][0]["name"], "Pokémon")
         self.assertEqual(data["empty_searches"][0]["query"], "nothing")
         self.assertEqual(len(data["by_day"]), 30)
@@ -95,7 +96,7 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        with self.assertNumQueries(25):
+        with self.assertNumQueries(26):
             insights.report(30)
 
 

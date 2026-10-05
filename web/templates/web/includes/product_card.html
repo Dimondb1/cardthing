@@ -3,7 +3,7 @@
   <a class="card__image" href="{{ product.get_absolute_url }}" tabindex="-1" aria-hidden="true">{% product_image product "card" %}</a>
   <div class="card__body">
     <{{ heading_tag|default:"h2" }} class="card__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></{{ heading_tag|default:"h2" }}>
-    <a class="card__check" href="{{ product.get_absolute_url }}#offers-title"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13 8A5 5 0 1 1 11.5 4.5M11 2v3h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "product.check_prices" %}</a>
+    <div class="card__tools">{% include "web/includes/save_link.html" with price=summary.best.delivered_price small=True %}<a class="card__check" href="{{ product.get_absolute_url }}#offers-title"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13 8A5 5 0 1 1 11.5 4.5M11 2v3h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "product.check_prices" %}</a></div>
     {% if summary.best %}
       {% include "web/includes/badge.html" %}
       <p class="card__price">{% price summary.best.price size="card" %}</p>

@@ -17,9 +17,11 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from catalogue.classify import NOT_SEALED, find_game
+from catalogue.ebay import too_cheap_listings
 from catalogue.importers import slug_words
 from catalogue.matching import DIFFERENT, expand, match_key
 from catalogue.models import Listing
+from catalogue.signals import clear_list_caches
 
 
 def fits(listing):
@@ -68,6 +70,17 @@ class Command(BaseCommand):
                 self.stdout.write(f"{'would remove' if dry_run else 'removed'}: {listing.product.name} <- {listing.retailer.name} {listing.url}")
                 if not dry_run:
                     listing.delete()
+            # An eBay price far under every shop's is not the sealed product: hide it until eBay is
+            # searched again, when a genuine listing can take its place.
+            cheap = too_cheap_listings()
+            for listing in cheap:
+                self.stdout.write(f"{'would hide' if dry_run else 'hidden'}: {listing.product.name} <- eBay £{listing.delivered_price}")
+            if not dry_run:
+                Listing.objects.filter(pk__in=[listing.pk for listing in cheap]).update(
+                    availability=Listing.Availability.OUT_OF_STOCK
+                )
+                if cheap:
+                    clear_list_caches()
             if dry_run:
                 transaction.set_rollback(True)
-        self.stdout.write(f"{removed} listings. {Listing.objects.count()} remain.")
+        self.stdout.write(f"{removed} listings. {Listing.objects.count()} remain. {len(cheap)} eBay prices too low to trust.")

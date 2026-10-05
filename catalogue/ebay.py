@@ -25,7 +25,7 @@ import urllib.request
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
-from django.db.models import Count, F
+from django.db.models import Count, F, Min
 from django.utils import timezone
 
 from .classify import LANGUAGE, find_type
@@ -159,10 +159,36 @@ NOT_THE_THING = re.compile(
     re.I,
 )
 # Nothing genuine sells for under this share of the cheapest shop's price: below it the listing is
-# stickers, a part, a single pack of a box, or another thing with the same words.
+# stickers, a part, a single pack of a box, or another thing with the same words. Shops' last known
+# prices count even when out of stock, and marketplaces' own prices never set the bar.
 PRICE_FLOOR = Decimal("0.4")
+MARKETPLACES = ("ebay", "amazon")
 # A name with fewer identifying words than this ("151 Booster Pack") only matches the strict way.
 MIN_LOOSE_WORDS = 2
+
+def shop_prices():
+    """{product pk: the cheapest delivered price any shop last showed}, in stock or not."""
+    return dict(
+        Listing.objects.filter(is_active=True, product__is_active=True)
+        .exclude(retailer__source_type__in=MARKETPLACES)
+        .order_by()
+        .values("product")
+        .annotate(cheapest=Min("delivered_price"))
+        .values_list("product", "cheapest")
+    )
+
+
+def too_cheap_listings():
+    """eBay listings on sale for less than the floor: matched before the floor applied, or since undercut."""
+    shops = shop_prices()
+    live = Listing.objects.filter(retailer__source_type="ebay", is_active=True).exclude(
+        availability=Listing.Availability.OUT_OF_STOCK
+    )
+    return [
+        listing for listing in live.select_related("product")
+        if listing.product_id in shops and listing.delivered_price < shops[listing.product_id] * PRICE_FLOOR
+    ]
+
 
 PACK_COUNT = re.compile(r"\b(?:[2-9]|\d{2,})\s*(?:booster\s*)?packs?\b", re.I)
 
@@ -325,6 +351,11 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
                 availability=Listing.Availability.OUT_OF_STOCK, delivery=old.delivery_cost, product_pk=product.pk,
             )
 
+        shops = shop_prices()
+
+        def too_cheap(product, offer):
+            return product.pk in shops and offer.price + offer.delivery < shops[product.pk] * PRICE_FLOOR
+
         # Known listings, twenty at a time through the bulk lookup.
         known = list(products.filter(pk__in=existing).order_by("ebay_checked_at"))
         by_item = {}
@@ -370,8 +401,10 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
                 product = by_item.get(item.get("itemId"))
                 if product is None:
                     continue
-                found.add(item["itemId"])
                 offer = item_offer(item, product, Offer)
+                if offer is not None and too_cheap(product, offer):
+                    continue   # left unfound, so it is searched again and a genuine listing can replace it
+                found.add(item["itemId"])
                 offers.append(offer if offer is not None else out_of_stock(product))
                 yield offers[-1]
                 checked.append(product.pk)
@@ -402,14 +435,6 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
                     Product.objects.filter(is_active=True, game__slug=game_slug).values_list("pk", "name")
                 )
             return specifics[game_slug]
-
-        lowest = dict(
-            Product.objects.for_lists()
-            .filter(pk__in=[p.pk for p in gone + fresh])
-            .exclude(lowest_price__isnull=True)
-            .order_by()
-            .values_list("pk", "lowest_price")
-        )
 
         searches = 0
         for product in (gone + fresh)[:limit]:
@@ -442,8 +467,7 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
                 offer = item_offer(item, product, Offer)
                 if offer is None:
                     continue
-                shops = lowest.get(product.pk)
-                if shops is not None and offer.price + offer.delivery < shops * PRICE_FLOOR:
+                if too_cheap(product, offer):
                     continue
                 match, value = catalogue.best_match(offer.title, game=product.game.slug)
                 needed = SUGGEST if product.ean else AUTO_LINK

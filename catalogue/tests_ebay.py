@@ -472,6 +472,52 @@ class FallbackSearchTests(TestCase):
         offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
         self.assertEqual([(o.product_pk, o.price) for o in offers], [(bundle.pk, Decimal("46.00"))])
 
+    def test_a_sold_out_shop_still_sets_the_floor(self):
+        from .testing import make_retailer
+
+        pack = make_product(self.set, name="Darkness Ablaze Booster Pack", slug="da-pack", product_type="booster_pack")
+        make_listing(pack, make_retailer("Shop"), price="3.95", delivery="3.95",
+                     availability=Listing.Availability.OUT_OF_STOCK)
+        api = FakeApi([
+            item("Pokemon Darkness Ablaze Booster Pack", price="1.36", item_id="v1|1|0"),
+            item("Pokemon TCG Darkness Ablaze Booster Pack Sealed", price="5.50", item_id="v1|2|0"),
+        ])
+        offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
+        self.assertEqual([(o.product_pk, o.price) for o in offers], [(pack.pk, Decimal("5.50"))])
+
+    def test_a_known_listing_now_too_cheap_is_searched_for_again(self):
+        from .testing import make_retailer
+
+        pack = make_product(self.set, name="Darkness Ablaze Booster Pack", slug="da-pack", product_type="booster_pack")
+        make_listing(pack, make_retailer("Shop"), price="4.95", availability=Listing.Availability.OUT_OF_STOCK)
+        make_listing(pack, self.retailer, price="1.36", url="https://www.ebay.co.uk/itm/1?campid=1")
+        cheap = item("Pokemon Darkness Ablaze Booster Pack", price="1.36", item_id="v1|1|0")
+        api = FakeApi([item("Pokemon TCG Darkness Ablaze Booster Pack Sealed", price="5.50", item_id="v1|2|0")],
+                      items=[cheap])
+        offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
+        self.assertEqual([(o.product_pk, o.price) for o in offers], [(pack.pk, Decimal("5.50"))])
+        self.assertEqual(len(api.searches()), 1)
+
+    def test_tidy_hides_an_ebay_price_far_under_the_shops(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .testing import make_retailer
+
+        pack = make_product(self.set, name="Darkness Ablaze Booster Pack", slug="da-pack", product_type="booster_pack")
+        make_listing(pack, make_retailer("Shop"), price="3.95", delivery="3.95",
+                     availability=Listing.Availability.OUT_OF_STOCK)
+        cheap = make_listing(pack, self.retailer, price="1.36", url="https://www.ebay.co.uk/itm/1?campid=1")
+        fair = make_product(self.set, name="Darkness Ablaze Elite Trainer Box", slug="da-etb")
+        make_listing(fair, make_retailer("Other"), price="60.00")
+        kept = make_listing(fair, self.retailer, price="45.00", url="https://www.ebay.co.uk/itm/2?campid=1")
+        call_command("tidy_listings", stdout=StringIO())
+        cheap.refresh_from_db()
+        kept.refresh_from_db()
+        self.assertEqual(cheap.availability, Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(kept.availability, Listing.Availability.IN_STOCK)
+
     def test_coverage_report(self):
         from io import StringIO
 

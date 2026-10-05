@@ -263,8 +263,12 @@ that large is a wrong link, not a bargain.
 
 `watch_stock` runs every ten minutes on the server. It asks each shop
 about single products (a Shopify shop answers `/products/<handle>.js` in
-milliseconds), starting with in-stock items people click, then sold-out
-items people click, then the rest by age. Anything that comes back is
+milliseconds). Half its budget of 300 goes to the products people are
+watching: the most viewed and most saved to a watchlist over the last two
+days, in or out of stock. The rest starts with in-stock items people
+click, then sold-out items people click, then everything else by age. The
+"Reload prices" button on a product page only re-reads what the site
+holds; it never asks a shop. Anything that comes back is
 stamped and shown on the home page under "Back in stock" for
 `RIPRAPTOR_RESTOCK_HOURS` (48). Checking whole shops more often than hourly
 is not possible: the shops rate-limit scripted requests and a full read of

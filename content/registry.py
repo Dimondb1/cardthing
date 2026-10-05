@@ -762,14 +762,19 @@ ENTRIES = [
         legal=True,
     ),
     Entry(
-        "product.refresh.done", T, "Prices checked message",
-        "Prices are current.",
-        "Shown for a moment after Check prices finishes.",
+        "product.reload_prices", B, "Reload prices button",
+        "Reload prices",
+        "Button above the price list on a product page. It re-reads the latest prices we hold; it does not ask the shops.",
     ),
     Entry(
-        "product.refresh.failed", T, "Prices check failed",
-        "Couldn't check prices. Try again in a moment.",
-        "Shown if Check prices fails.",
+        "product.refresh.done", T, "Prices reloaded message",
+        "Prices are current.",
+        "Shown for a moment after Reload prices finishes.",
+    ),
+    Entry(
+        "product.refresh.failed", T, "Prices reload failed",
+        "Couldn't reload prices. Try again in a moment.",
+        "Shown if Reload prices fails.",
     ),
     Entry(
         "product.affiliate_note", T, "Commission note",

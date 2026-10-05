@@ -140,6 +140,38 @@ class WatchStockTests(TestCase):
         self.assertIn("1 back in stock", out.getvalue())
 
 
+class WatchedFirstTests(TestCase):
+    def test_viewed_and_watched_products_take_half_the_budget_before_clicked_ones(self):
+        from catalogue.models import DailyPageView
+
+        game_set = make_set(make_game())
+        shop = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+        viewed = make_product(game_set, name="Viewed Box", slug="viewed-box", product_type="booster_box")
+        saved = make_product(game_set, name="Saved Box", slug="saved-box", product_type="booster_box")
+        clicked = make_product(game_set, name="Clicked Box", slug="clicked-box", product_type="booster_box")
+        quiet = make_product(game_set, name="Quiet Box", slug="quiet-box", product_type="booster_box")
+        listings = {
+            p.slug: make_listing(p, shop, availability="out_of_stock", url=f"https://shop.example/products/{p.slug}", hours_ago=5)
+            for p in (viewed, saved, clicked, quiet)
+        }
+        today = timezone.localdate()
+        DailyPageView.objects.create(date=today, kind="product", key="viewed-box", hits=9)
+        DailyPageView.objects.create(date=today - timedelta(days=1), kind="watched", key="saved-box", hits=4)
+        DailyPageView.objects.create(date=today - timedelta(days=5), kind="product", key="quiet-box", hits=50)   # too old
+        OutboundClick.objects.create(product=clicked, retailer=shop)
+        asked = []
+
+        def fetch(url):
+            asked.append(url)
+            return json.dumps({"variants": [{"price": 4999, "available": False}]}).encode()
+
+        with mock.patch("catalogue.importers.fetch", fetch):
+            call_command("watch_stock", "--limit", "4", "--pause", "0", stdout=StringIO())
+        # Half the budget (two) to the most watched, then the clicked one, then the rest by age.
+        self.assertEqual(asked, [f"https://shop.example/products/{slug}.js" for slug in ("viewed-box", "saved-box", "clicked-box", "quiet-box")])
+        self.assertEqual(len(listings), 4)
+
+
 class ShopReportTests(TestCase):
     def setUp(self):
         self.product = make_product(make_set(make_game()), name="Paldea Evolved Booster Box")

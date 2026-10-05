@@ -1,5 +1,6 @@
-// Product page: "Check prices" fetches the current listings and updates the
-// numbers in place. The icon turns once; prices that changed slide to the
+// Product page: "Reload prices" fetches the listings we hold now and updates
+// the numbers in place. It does not ask the shops; the hourly import and the
+// ten-minute stock watcher do that. The icon turns once; prices that changed slide to the
 // new value, green if lower, red if higher.
 (() => {
   const button = document.querySelector("[data-refresh]");

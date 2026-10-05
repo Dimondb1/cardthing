@@ -8,12 +8,14 @@ the hourly import can.
 The hourly import reads whole shops, which takes an hour or more across all
 of them. This command instead asks each shop about single products, which is
 cheap: a Shopify shop answers /products/<handle>.js in a few milliseconds,
-and a website shop's product page carries the same data. It checks, in
-order: listings that were in stock but are not now (so the site never shows
-a sold-out item as in stock for long), then out-of-stock listings of the
-products people click most, then the rest by how long ago they were checked.
-A listing that comes back is stamped, and the home page shows it under
-"Back in stock". Meant for a cron entry every ten minutes.
+and a website shop's product page carries the same data. Half the budget
+goes to the products people are watching: the most viewed and most saved
+to a watchlist over the last two days, in or out of stock. The rest checks,
+in order: in-stock listings of the products people click (so the site never
+shows a sold-out item as in stock for long), then out-of-stock listings of
+those, then everything else by how long ago it was checked. A listing that
+comes back is stamped, and the home page shows it under "Back in stock".
+Meant for a cron entry every ten minutes.
 """
 
 import json
@@ -22,13 +24,28 @@ from datetime import timedelta
 from urllib.parse import urlsplit, urlunsplit
 
 from django.core.management.base import BaseCommand
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from catalogue import pricing
 from catalogue import importers
 from catalogue.importers import ImportError_, money, page_offer
-from catalogue.models import Listing, OutboundClick, Retailer
+from catalogue.models import DailyPageView, Listing, OutboundClick, Product, Retailer
+
+WATCHED_DAYS = 2        # page views and watchlist rows this recent count as "watching"
+WATCHED_PRODUCTS = 200  # the most watched products considered each run
+
+
+def watched_products(now):
+    """Ids of the products most viewed or most saved to a watchlist lately, most watched first."""
+    since = timezone.localdate(now) - timedelta(days=WATCHED_DAYS - 1)
+    slugs = list(
+        DailyPageView.objects.filter(date__gte=since, kind__in=[DailyPageView.Kind.PRODUCT, DailyPageView.Kind.WATCHED])
+        .exclude(key="")
+        .values("key").annotate(n=Sum("hits")).order_by("-n").values_list("key", flat=True)[:WATCHED_PRODUCTS]
+    )
+    ids = dict(Product.objects.filter(slug__in=slugs, is_active=True).values_list("slug", "pk"))
+    return [ids[slug] for slug in slugs if slug in ids]
 
 
 def shopify_js_url(url):
@@ -88,6 +105,12 @@ class Command(BaseCommand):
         base = Listing.objects.filter(is_active=True, retailer__is_active=True).exclude(retailer__source_type=Retailer.Source.MANUAL)
         recently_checked = Q(last_checked__gte=now - timedelta(minutes=8))
         queue = []
+        # 0. Up to half the budget: what people are viewing and watching, in or out of stock.
+        watched = watched_products(now)
+        if watched:
+            rank = {pk: i for i, pk in enumerate(watched)}
+            rows = base.filter(product_id__in=watched).exclude(recently_checked).exclude(availability=Listing.Availability.PREORDER)
+            queue += sorted(rows, key=lambda l: (rank[l.product_id], l.last_checked))[: limit // 2]
         # 1. In stock now: confirm it still is, popular products first.
         queue += list(base.filter(availability=Listing.Availability.IN_STOCK, product_id__in=popular).exclude(recently_checked).order_by("last_checked")[:limit])
         # 2. Out of stock on popular products: the ones people are waiting for.

@@ -67,7 +67,7 @@
   <div class="section-head section-head--tight">
     <h2 id="offers-title" class="section-title">{% copy "product.compare.title" %}</h2>
     <button type="button" class="refresh" data-refresh="{% url 'web:product_prices_api' product.slug %}" data-done="{% copy 'product.refresh.done' %}" data-failed="{% copy 'product.refresh.failed' %}">
-      <span class="icon icon--refresh" aria-hidden="true"></span><span class="refresh__label">{% copy "product.check_prices" %}</span>
+      <span class="icon icon--refresh" aria-hidden="true"></span><span class="refresh__label">{% copy "product.reload_prices" %}</span>
     </button>
   </div>
   <p class="refresh__status" role="status" aria-live="polite" data-refresh-status></p>

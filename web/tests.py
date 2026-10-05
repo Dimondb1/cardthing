@@ -285,6 +285,8 @@ class TermsAndRefreshTests(PageTestCase):
     def test_product_page_has_refresh_control(self):
         response = self.client.get(self.etb.get_absolute_url())
         self.assertContains(response, 'data-refresh="')
+        self.assertContains(response, "Reload prices")
+        self.assertNotContains(response, "Check prices")
         self.assertContains(response, f'data-listing="{self.cheap.pk}"')
 
 

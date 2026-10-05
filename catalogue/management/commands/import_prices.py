@@ -1,3 +1,5 @@
+import time
+
 from django.core.management.base import BaseCommand, CommandError
 
 from catalogue.importers import run_import
@@ -25,12 +27,18 @@ class Command(BaseCommand):
         if not retailers.exists():
             self.stdout.write("No retailers have a price source. Set one in admin.")
             return
-        for item in retailers:
+        # Marketplaces first: they have a daily allowance and take minutes, while one big shop
+        # can take most of an hour. Then shops by name.
+        first = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
+        ordered = sorted(retailers, key=lambda r: (r.source_type not in first, r.name.lower()))
+        for item in ordered:
+            started = time.monotonic()
             run = run_import(item, feed_path=feed)
             if run.error:
                 self.stderr.write(f"{item}: {run.error}")
                 continue
             line = f"{item}: {run.offers_found} offers, {run.listings_updated} listings updated"
+            line += f" in {int(time.monotonic() - started)}s"
             if run.unmatched:
                 line += f", {run.unmatched.count(chr(10)) + 1} unmatched (see admin)"
             self.stdout.write(line)

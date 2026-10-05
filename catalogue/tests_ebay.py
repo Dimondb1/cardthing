@@ -463,3 +463,26 @@ class FallbackSearchTests(TestCase):
         text = out.getvalue()
         self.assertIn("Matched on eBay:             1 (50% of those looked up)", text)
         self.assertIn("Looked up on eBay:           2", text)
+
+
+class ImportOrderTests(TestCase):
+    def test_marketplaces_are_read_before_the_shops(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .testing import make_retailer
+
+        make_retailer("Aardvark Cards", source_type=Retailer.Source.SHOPIFY, source_url="https://a.example/")
+        Retailer.objects.create(name="eBay", slug="ebay", website="https://www.ebay.co.uk/", source_type=Retailer.Source.EBAY)
+        order = []
+
+        def fake_run(retailer, feed_path=None):
+            order.append(retailer.name)
+            return ImportRun.objects.create(retailer=retailer, finished_at=timezone.now())
+
+        with mock.patch("catalogue.management.commands.import_prices.run_import", fake_run):
+            out = StringIO()
+            call_command("import_prices", stdout=out)
+        self.assertEqual(order, ["eBay", "Aardvark Cards"])
+        self.assertRegex(out.getvalue(), r"eBay: 0 offers, 0 listings updated in \d+s")

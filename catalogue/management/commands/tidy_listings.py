@@ -13,6 +13,8 @@ accessory or single, or a box where the product is a pack. An address that
 merely lacks words is left alone, because slugs drop and garble words.
 """
 
+import re
+
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -22,6 +24,9 @@ from catalogue.importers import slug_words
 from catalogue.matching import DIFFERENT, expand, match_key
 from catalogue.models import Listing
 from catalogue.signals import clear_list_caches
+
+
+PACK_WORDS = re.compile(r"\bpacks?\b|\bblister\b|\bchecklane\b|\bsleeved\b")
 
 
 def fits(listing):
@@ -49,7 +54,13 @@ def fits(listing):
             return False
     title_marks = {m for m in match_key(title).split() if m.startswith("#")}
     name_marks = {m for m in match_key(product.name).split() if m.startswith("#")}
-    if title_marks and name_marks and title_marks != name_marks:
+    if not PACK_WORDS.search(title):
+        # A slug ending "...-booster" is as often the box as the pack ("blazing-dominion-booster"),
+        # and "151-booster-etb" is an ETB, so a bare "booster" says nothing about the kind.
+        title_marks.discard("#pack")
+    # The address names a kind of thing the product is not. A name that lists its contents
+    # ("Booster Box (36 Booster Packs)") carries both kinds, so the address need only name one.
+    if title_marks and name_marks and title_marks - name_marks:
         return False
     return True
 

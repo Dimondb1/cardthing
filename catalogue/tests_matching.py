@@ -53,6 +53,25 @@ class WrongLinkTests(TestCase):
 
 
 class TidyListingsTests(TestCase):
+    def test_a_slug_ending_in_booster_is_not_taken_for_a_pack(self):
+        yugioh = make_game(name="Yu-Gi-Oh", slug="yu-gi-oh", short_name="Yu-Gi-Oh")
+        box = make_product(make_set(yugioh, name="Blazing Dominion", slug="bd"), name="TCG: Blazing Dominion Booster Box",
+                           product_type="booster_box")
+        pokemon = make_game(name="Pokemon", slug="pokemon", short_name="Pokemon")
+        etb = make_product(make_set(pokemon, name="151", slug="151"), name="151 Elite Trainer Box", product_type="elite_trainer_box")
+        rebel = make_product(make_set(pokemon, name="Rebel Clash", slug="rc"), name="Rebel Clash Booster Box (36 Sealed Booster Packs)",
+                             product_type="booster_box")
+        kept = [
+            make_listing(box, make_retailer("A"), url="https://a.example/products/yu-gi-oh-tcg-blazing-dominion-booster"),
+            make_listing(etb, make_retailer("B"), url="https://b.example/products/pokemon-scarlet-violet-151-booster-etb"),
+            make_listing(rebel, make_retailer("C"), url="https://c.example/products/pokemon-rebel-clash-booster-box"),
+        ]
+        wrong = make_listing(box, make_retailer("D"), url="https://d.example/products/yu-gi-oh-blazing-dominion-booster-pack")
+        call_command("tidy_listings", stdout=StringIO())
+        for listing in kept:
+            self.assertTrue(Listing.objects.filter(pk=listing.pk).exists(), listing.url)
+        self.assertFalse(Listing.objects.filter(pk=wrong.pk).exists())
+
     def test_listings_on_the_wrong_product_are_removed(self):
         magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
         box = make_product(make_set(magic, name="Invasion", slug="invasion"), name="Invasion Booster Box", product_type="booster_box")

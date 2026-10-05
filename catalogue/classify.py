@@ -235,7 +235,8 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
         return None
     if VARIANT_MENU.search(title):
         return None
-    game = find_game(title, vendor, " ".join(tags), shop_type)
+    # The title first: shops mis-tag (Card Empire files Magic boxes under "Pokemon cards").
+    game = find_game(title) or find_game(vendor, " ".join(tags), shop_type)
     if game is None:
         return None
     kind = find_type(title, shop_type)

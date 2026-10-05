@@ -53,6 +53,26 @@ class WrongLinkTests(TestCase):
 
 
 class TidyListingsTests(TestCase):
+    def test_a_product_filed_under_the_wrong_game_is_moved_not_emptied(self):
+        pokemon = make_game(name="Pokemon", slug="pokemon", short_name="Pokemon")
+        magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
+        box = make_product(make_set(pokemon, name="Misc", slug="misc"), name="Zendikar Rising Set Booster Display (30 Count)",
+                           product_type="booster_box")
+        listing = make_listing(box, make_retailer("Card Empire"),
+                               url="https://www.cardempire.co.uk/products/magic-the-gathering-zendikar-rising-set-booster-display-30-count")
+        call_command("tidy_listings", stdout=StringIO())
+        box.refresh_from_db()
+        self.assertEqual(box.game, magic)
+        self.assertIsNone(box.product_set)
+        self.assertTrue(Listing.objects.filter(pk=listing.pk).exists())
+
+    def test_the_title_beats_a_shop_tag_for_the_game(self):
+        from .classify import classify
+
+        sealed = classify("Magic: The Gathering - Zendikar Rising Set Booster Display (30 Count)",
+                          vendor="cardempireuk", tags=["Booster Box", "Pokemon"], shop_type="Pokemon cards", price=120)
+        self.assertEqual(sealed.game, "magic-the-gathering")
+
     def test_a_slug_ending_in_booster_is_not_taken_for_a_pack(self):
         yugioh = make_game(name="Yu-Gi-Oh", slug="yu-gi-oh", short_name="Yu-Gi-Oh")
         box = make_product(make_set(yugioh, name="Blazing Dominion", slug="bd"), name="TCG: Blazing Dominion Booster Box",

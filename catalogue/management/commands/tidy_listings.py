@@ -22,7 +22,7 @@ from catalogue.classify import NOT_SEALED, find_game
 from catalogue.ebay import too_cheap_listings
 from catalogue.importers import slug_words
 from catalogue.matching import DIFFERENT, expand, match_key
-from catalogue.models import Listing
+from catalogue.models import Game, Listing, Product
 from catalogue.signals import clear_list_caches
 
 
@@ -65,6 +65,27 @@ def fits(listing):
     return True
 
 
+def misfiled():
+    """{product: game} for products whose shop addresses all name one other game.
+
+    A shop can tag a Magic box as Pokemon; the product is then made under the
+    wrong game and its right listings look wrong. Only products whose own
+    name names no game are moved, and only when every address that names a
+    game agrees.
+    """
+    named = {}
+    rows = Listing.objects.filter(product__is_active=True).values_list("product_id", "url", "product__game__slug", "product__name")
+    for product_id, url, current, name in rows.iterator():
+        game = find_game(slug_words(url))
+        if game is None or find_game(name) is not None:
+            continue
+        named.setdefault(product_id, (current, set()))[1].add(game)
+    moves = {pk: games.pop() for pk, (current, games) in named.items() if len(games) == 1 and current not in games}
+    games = {game.slug: game for game in Game.objects.filter(slug__in=set(moves.values()))}
+    return {product: games[moves[product.pk]] for product in Product.objects.filter(pk__in=moves).select_related("game", "product_set")
+            if moves[product.pk] in games}
+
+
 class Command(BaseCommand):
     help = "Delete listings whose shop address does not read as their product."
 
@@ -74,6 +95,13 @@ class Command(BaseCommand):
     def handle(self, *args, dry_run=False, **options):
         removed = 0
         with transaction.atomic():
+            for product, game in misfiled().items():
+                self.stdout.write(f"{'would move' if dry_run else 'moved'}: {product.name} from {product.game.name} to {game.name}")
+                if not dry_run:
+                    product.game = game
+                    if product.product_set_id and product.product_set.game_id != game.pk:
+                        product.product_set = None
+                    product.save(update_fields=["game", "product_set"])
             for listing in Listing.objects.select_related("product__game", "retailer").iterator():
                 if fits(listing):
                     continue

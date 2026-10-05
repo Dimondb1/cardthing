@@ -19,6 +19,8 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 DOWNLOAD = "https://download.db-ip.com/free/dbip-country-lite-{year}-{month:02d}.mmdb.gz"
+# DB-IP refuses Python's default user agent with 403.
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) RipRaptor/1.0 (+https://ripraptor.com)"
 _reader = None
 _reader_path = None
 
@@ -66,7 +68,8 @@ def fetch(path=None, when=None, opener=None):
     if not path:
         raise ValueError("Set RIPRAPTOR_GEOIP_DB to the file the database should be saved as.")
     when = when or date.today()
-    opener = opener or urllib.request.urlopen
+    opener = opener or (lambda target, timeout: urllib.request.urlopen(
+        urllib.request.Request(target, headers={"User-Agent": USER_AGENT}), timeout=timeout))
     url = DOWNLOAD.format(year=when.year, month=when.month)
     try:
         with opener(url, timeout=120) as response:

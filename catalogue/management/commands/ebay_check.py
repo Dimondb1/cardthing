@@ -43,16 +43,26 @@ class Command(BaseCommand):
         else:
             self.stdout.write("Saved now: no eBay listing")
 
-        app, cert, campaign = ebay.credentials()
-        headers = ebay.headers_for(ebay.access_token(app, cert), campaign)
-        urls = ([ebay.search_url(product)] if product.ean else []) + [
-            ebay.search_url(product, q) for q in ebay.search_queries(product)
-        ]
-        items = []
-        for url in urls:
-            items = ebay.http(url, headers).get("itemSummaries", []) or []
-            if items:
-                break
+        try:
+            app, cert, campaign = ebay.credentials()
+            headers = ebay.headers_for(ebay.access_token(app, cert), campaign)
+            searches_left, _bulk, reset = ebay.allowances(headers)
+            if searches_left is not None and searches_left < 2:
+                self.stdout.write(f"eBay's searches for today are used up. They come back at {reset or 'the daily reset'}.")
+                return
+            urls = ([ebay.search_url(product)] if product.ean else []) + [
+                ebay.search_url(product, q) for q in ebay.search_queries(product)
+            ]
+            items = []
+            for url in urls:
+                items = ebay.http(url, headers).get("itemSummaries", []) or []
+                if items:
+                    break
+        except ebay.EbayError as exc:
+            if "429" in str(exc):
+                self.stdout.write("eBay's searches for today are used up. Try again after 8am UK time.")
+                return
+            raise CommandError(str(exc))
         if not items:
             self.stdout.write("eBay has no results for it.")
             return

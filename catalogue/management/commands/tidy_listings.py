@@ -97,11 +97,12 @@ class Command(BaseCommand):
         with transaction.atomic():
             for product, game in misfiled().items():
                 self.stdout.write(f"{'would move' if dry_run else 'moved'}: {product.name} from {product.game.name} to {game.name}")
-                if not dry_run:
-                    product.game = game
-                    if product.product_set_id and product.product_set.game_id != game.pk:
-                        product.product_set = None
-                    product.save(update_fields=["game", "product_set"])
+                # Saved in a dry run too: the transaction is rolled back, and the listings below are
+                # then judged against the right game, as they will be for real.
+                product.game = game
+                if product.product_set_id and product.product_set.game_id != game.pk:
+                    product.product_set = None
+                product.save(update_fields=["game", "product_set"])
             for listing in Listing.objects.select_related("product__game", "retailer").iterator():
                 if fits(listing):
                     continue

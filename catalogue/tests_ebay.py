@@ -545,6 +545,18 @@ class FallbackSearchTests(TestCase):
         self.assertIn("too cheap to be the sealed product (under £3.16)", text)
         self.assertEqual(text.count("a multi-buy, an online code, a part or another language"), 4)
 
+    def test_check_command_says_when_the_allowance_is_spent(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        make_product(self.set, name="Darkness Ablaze Booster Pack", slug="da-pack", product_type="booster_pack")
+        out = StringIO()
+        with mock.patch.object(ebay, "http", FakeApi([], searches_left=0)), \
+                mock.patch.object(ebay, "credentials", return_value=("a", "c", "5339000000")):
+            call_command("ebay_check", "da-pack", stdout=out)
+        self.assertIn("searches for today are used up", out.getvalue())
+
     def test_coverage_report(self):
         from io import StringIO
 

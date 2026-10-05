@@ -60,6 +60,12 @@ class TidyListingsTests(TestCase):
                            product_type="booster_box")
         listing = make_listing(box, make_retailer("Card Empire"),
                                url="https://www.cardempire.co.uk/products/magic-the-gathering-zendikar-rising-set-booster-display-30-count")
+        preview = StringIO()
+        call_command("tidy_listings", "--dry-run", stdout=preview)
+        self.assertIn("would move: Zendikar Rising", preview.getvalue())
+        self.assertNotIn("would remove", preview.getvalue())
+        box.refresh_from_db()
+        self.assertEqual(box.game, pokemon)
         call_command("tidy_listings", stdout=StringIO())
         box.refresh_from_db()
         self.assertEqual(box.game, magic)

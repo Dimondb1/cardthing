@@ -73,6 +73,8 @@ PLACEHOLDER_HELP = {
     "set": "a set name",
     "site_name": "the site name, RipRaptor",
     "time": "how long ago, for example 18 minutes ago",
+    "start": "a time of day, for example 9am",
+    "end": "a time of day, for example 11am",
 }
 
 
@@ -699,6 +701,30 @@ ENTRIES = [
         placeholders=("date",),
     ),
     Entry(
+        "product.restock.recent.one", T, "Restock line (one)",
+        "Back in stock once in the last {days} days, at {retailer} on {date}.",
+        "Under the price list, from the restocks we have seen.",
+        placeholders=("days", "retailer", "date"),
+    ),
+    Entry(
+        "product.restock.recent.other", T, "Restock line (several)",
+        "Back in stock {count} times in the last {days} days, most recently at {retailer} on {date}.",
+        "Under the price list, from the restocks we have seen.",
+        placeholders=("count", "days", "retailer", "date"),
+    ),
+    Entry(
+        "product.restock.last", T, "Restock line (none recently)",
+        "Last back in stock on {date} at {retailer}.",
+        "Under the price list when the last restock we saw is older than the window.",
+        placeholders=("date", "retailer"),
+    ),
+    Entry(
+        "product.restock.hours", T, "Restock hours",
+        "Most restocks landed between {start} and {end}.",
+        "Added to the restock line once enough restocks have been seen to show a pattern.",
+        placeholders=("start", "end"),
+    ),
+    Entry(
         "product.compare.unavailable.one", B, "Show unavailable (one)",
         "Show 1 retailer without a current price",
         "Expands the out of stock and out of date rows.",
@@ -907,6 +933,16 @@ ENTRIES = [
     Entry("deals.savings.title", H, "Deals savings heading", "Biggest savings right now", "Deals page section heading."),
     Entry("deals.drops.title", H, "Deals drops heading", "Biggest price drops", "Deals page section heading."),
     Entry("deals.restock.title", H, "Deals restock heading", "Back in stock", "Deals page section heading."),
+    Entry(
+        "deals.restock.note", T, "Restock log explanation",
+        "Every time a shop we check went from sold out to in stock in the last 7 days. Marketplaces are left out.",
+        "Under the Back in stock heading on the deals page.",
+    ),
+    Entry(
+        "deals.restock.again", T, "Sold out again marker",
+        "sold out again",
+        "After a restock in the log whose shop has since sold out.",
+    ),
     Entry(
         "deals.empty", T, "Deals page empty",
         "No deals to show yet. Prices are checked every hour, so try again soon.",

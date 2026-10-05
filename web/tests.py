@@ -530,6 +530,38 @@ class DiscoverabilityTests(PageTestCase):
         self.assertTrue(body.strip().endswith("Sitemap: http://testserver/sitemap.xml"))
 
 
+class RestockRecordPageTests(PageTestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+
+    def test_product_page_says_how_often_it_comes_back(self):
+        from catalogue.models import Restock
+
+        now = timezone.now()
+        Restock.objects.create(product=self.etb, retailer=self.north, listing=self.cheap, at=now - timedelta(days=3), price="55.00")
+        Restock.objects.create(product=self.etb, retailer=self.harbour, listing=self.cheap, at=now - timedelta(days=1), price="54.99")
+        response = self.client.get(self.etb.get_absolute_url())
+        when = timezone.localdate(now - timedelta(days=1)).strftime("%-d %b %Y")
+        self.assertContains(response, f"Back in stock 2 times in the last 30 days, most recently at Harbour Games on {when}.")
+        self.assertNotContains(response, "Most restocks landed")
+        self.assertNotContains(self.client.get(self.sold_out.get_absolute_url()), "Back in stock")
+
+    def test_deals_page_logs_restocks_by_day(self):
+        from catalogue.models import Restock
+
+        now = timezone.now()
+        sold = Listing.objects.get(product=self.sold_out)
+        Restock.objects.create(product=self.etb, retailer=self.harbour, listing=self.cheap, at=now - timedelta(minutes=10), price="54.99")
+        Restock.objects.create(product=self.sold_out, retailer=self.harbour, listing=sold, at=now - timedelta(days=1, hours=2), price="140.00")
+        body = self.client.get(reverse("web:deals")).content.decode()
+        self.assertIn("Every time a shop we check went from sold out to in stock", body)
+        self.assertIn(timezone.localtime(now).strftime("%A %-d %B"), body)
+        self.assertIn("sold out again", body)
+        self.assertLess(body.index(self.etb.name + "</span>"), body.index(self.sold_out.name + "</span>"))
+
+
 class DealsAndAliasTests(PageTestCase):
     def setUp(self):
         from django.core.cache import cache

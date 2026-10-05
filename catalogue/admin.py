@@ -3,7 +3,7 @@ from django.db.models import Count
 from django.utils.html import format_html
 
 from . import pricing
-from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Retailer, ShopProduct
+from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Restock, Retailer, ShopProduct
 
 
 @admin.register(Game)
@@ -240,6 +240,21 @@ class OutboundClickAdmin(admin.ModelAdmin):
     search_fields = ("product__name",)
     list_select_related = ("product", "retailer")
     date_hierarchy = "created_at"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Restock)
+class RestockAdmin(admin.ModelAdmin):
+    list_display = ("at", "product", "retailer", "price")
+    list_filter = ("retailer",)
+    search_fields = ("product__name",)
+    list_select_related = ("product", "retailer")
+    date_hierarchy = "at"
 
     def has_add_permission(self, request):
         return False

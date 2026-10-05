@@ -491,6 +491,28 @@ class OutboundClick(models.Model):
         return f"{self.product} to {self.retailer}"
 
 
+class Restock(models.Model):
+    """One time a shop went from not having a product to having it in stock.
+
+    Written by ``pricing.record_check``. A listing that flips back and forth
+    within two hours counts once, and marketplaces (eBay, Amazon) are left
+    out because their stock is many sellers, not one shop restocking.
+    """
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="restocks")
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="restocks")
+    listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True, related_name="restocks")
+    at = models.DateTimeField(default=timezone.now, db_index=True)
+    price = models.DecimalField(max_digits=9, decimal_places=2, help_text="Delivered price when it came back.")
+
+    class Meta:
+        ordering = ["-at"]
+        verbose_name = "restock"
+
+    def __str__(self):
+        return f"{self.product} at {self.retailer}, {self.at:%d %b %H:%M}"
+
+
 class DailyPageView(models.Model):
     """How many times a kind of page was opened on one day. No personal data."""
 

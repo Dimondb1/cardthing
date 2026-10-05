@@ -50,29 +50,30 @@
 </section>
 {% endif %}
 
-{% if restocked %}
+{% if restock_log %}
 <section class="home-section" aria-labelledby="restock-title">
   <div class="section-head">
     <h2 id="restock-title" class="section-head__title">{% copy "deals.restock.title" %}</h2>
-    {% copy "home.restock.intro" as restock_intro %}{% if restock_intro %}<p class="section-head__note">{{ restock_intro }}</p>{% endif %}
+    <p class="section-head__note">{% copy "deals.restock.note" %}</p>
   </div>
-  <ul class="trending" data-scroll>
-    {% for product, listing in restocked %}
-    <li class="trending__item">
-      <a class="trending__link" href="{{ product.get_absolute_url }}">
-        {% product_image product "trend" %}
-        <span class="trending__name">{{ product.name }}</span>
-        <span class="trending__price">{% price listing.delivered_price %}</span>
-        <span class="trending__retailer">{{ listing.retailer.name }}</span>
-        <span class="trending__move trending__move--down">{% copy "home.restock.when" time=listing.back_in_stock_at|ago %}</span>
+  {% for day, events in restock_log %}
+  <h3 class="log__day">{{ day|date:"l j F" }}</h3>
+  <ul class="drops">
+    {% for event in events %}
+    <li class="drop">
+      <a class="drop__link" href="{{ event.product.get_absolute_url }}">
+        {% product_image event.product "thumb" %}
+        <span class="drop__body"><span class="drop__name">{{ event.product.name }}</span><span class="drop__meta">{{ event.retailer.name }} · {{ event.at|date:"H:i" }}{% if not event.still_in_stock %} · {% copy "deals.restock.again" %}{% endif %}</span></span>
+        <span class="drop__prices">{% price event.price size="md" %}</span>
       </a>
     </li>
     {% endfor %}
   </ul>
+  {% endfor %}
 </section>
 {% endif %}
 
-{% if not savings and not drops and not restocked %}
+{% if not savings and not drops and not restock_log %}
 <p class="page-intro">{% copy "deals.empty" %}</p>
 {% endif %}
 <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>

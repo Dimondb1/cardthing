@@ -95,6 +95,12 @@
     {% endfor %}
   </ul>
   {% endif %}
+  {% if restocks %}
+  <p class="restock-note">
+    {% if restocks.count %}{% copy_count "product.restock.recent" restocks.count days=restocks.days retailer=restocks.latest.retailer.name date=restocks.latest_date|short_date %}{% else %}{% copy "product.restock.last" retailer=restocks.latest.retailer.name date=restocks.latest_date|short_date %}{% endif %}
+    {% if restocks.band %}{% copy "product.restock.hours" start=restocks.band.0 end=restocks.band.1 %}{% endif %}
+  </p>
+  {% endif %}
   <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
 </section>
 {% endif %}

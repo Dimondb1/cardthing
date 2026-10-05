@@ -12,14 +12,22 @@ from django.conf import settings
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, FloatField, Min, OuterRef, Subquery
 from django.utils import timezone
 
-from .models import DailyLowestPrice, Listing, OutboundClick, Product
+from .models import DailyLowestPrice, Listing, OutboundClick, Product, Restock, Retailer
+
+# A listing that flips out and back within this long is one restock, not two.
+RESTOCK_COLLAPSE = timedelta(hours=2)
+# Marketplaces are many sellers, so their stock coming and going is not a shop restocking.
+MARKETPLACES = (Retailer.Source.AMAZON, Retailer.Source.EBAY)
+# The busiest restock hours are only worth printing once there are this many to count.
+RESTOCK_PATTERN_MIN = 6
 
 
 def record_check(listing, *, price, delivery_cost, availability, checked_at=None):
     checked_at = checked_at or timezone.now()
     fields = ["price", "delivery_cost", "availability", "last_checked"]
     was_in_stock = listing.availability == Listing.Availability.IN_STOCK
-    if availability == Listing.Availability.IN_STOCK and not was_in_stock and listing.pk and not listing._state.adding:
+    restocked = availability == Listing.Availability.IN_STOCK and not was_in_stock and listing.pk and not listing._state.adding
+    if restocked:
         listing.back_in_stock_at = checked_at
         fields.append("back_in_stock_at")
     listing.price = price
@@ -27,7 +35,83 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     listing.availability = availability
     listing.last_checked = checked_at
     listing.save(update_fields=fields)
+    if restocked:
+        record_restock(listing, checked_at)
     return update_daily_lowest(listing.product, date=timezone.localdate(checked_at))
+
+
+def record_restock(listing, at):
+    """Keep a Restock for this listing coming back, unless it only flickered or the shop is a marketplace."""
+    if listing.retailer.source_type in MARKETPLACES:
+        return None
+    if Restock.objects.filter(listing=listing, at__gte=at - RESTOCK_COLLAPSE).exists():
+        return None
+    return Restock.objects.create(
+        product_id=listing.product_id, retailer_id=listing.retailer_id, listing=listing, at=at, price=listing.total
+    )
+
+
+def hour_label(hour):
+    if hour == 0:
+        return "midnight"
+    if hour == 12:
+        return "midday"
+    return f"{hour % 12}{'am' if hour < 12 else 'pm'}"
+
+
+def restock_summary(product, days=30, pattern_days=90, now=None):
+    """What the product page says about restocks, or None when none has been seen.
+
+    ``count`` and ``latest`` cover the last ``days``; ``latest`` falls back to
+    the last restock ever. ``band`` is the two-hour window most restocks of the
+    last ``pattern_days`` landed in, as (start label, end label), only once
+    there are enough to mean something.
+    """
+    now = now or timezone.now()
+    recent = list(
+        Restock.objects.filter(product=product, at__gte=now - timedelta(days=pattern_days))
+        .select_related("retailer").order_by("-at")
+    )
+    in_window = [r for r in recent if r.at >= now - timedelta(days=days)]
+    latest = in_window[0] if in_window else (recent[0] if recent else None)
+    if latest is None:
+        latest = Restock.objects.filter(product=product).select_related("retailer").order_by("-at").first()
+        if latest is None:
+            return None
+    band = None
+    if len(recent) >= RESTOCK_PATTERN_MIN:
+        hours = [0] * 24
+        for restock in recent:
+            hours[timezone.localtime(restock.at).hour] += 1
+        # The fullest two-hour window; on a tie, the one that starts in the busier hour.
+        start = max(range(24), key=lambda h: (hours[h] + hours[(h + 1) % 24], hours[h], -h))
+        band = (hour_label(start), hour_label((start + 2) % 24))
+    return {
+        "count": len(in_window), "days": days, "latest": latest,
+        "latest_date": timezone.localdate(latest.at), "band": band,
+    }
+
+
+def restock_log(days=7, per_day=30, now=None):
+    """Restocks of the last ``days`` grouped by day, newest first: [(date, [Restock, ...]), ...].
+
+    Each Restock carries ``still_in_stock`` so the page can say when a shop has sold out again.
+    """
+    now = now or timezone.now()
+    rows = (
+        Restock.objects.filter(at__gte=now - timedelta(days=days), product__is_active=True, retailer__is_active=True)
+        .select_related("product__game", "retailer", "listing")
+        .order_by("-at")
+    )
+    grouped = {}
+    for restock in rows:
+        listing = restock.listing
+        restock.still_in_stock = bool(listing and listing.availability == Listing.Availability.IN_STOCK and listing.is_active)
+        day = timezone.localtime(restock.at).date()
+        bucket = grouped.setdefault(day, [])
+        if len(bucket) < per_day:
+            bucket.append(restock)
+    return sorted(grouped.items(), key=lambda item: item[0], reverse=True)
 
 
 def back_in_stock(limit=8, hours=None):

@@ -524,6 +524,7 @@ def product_detail(request, slug):
     chart = price_chart(pricing.history(product, days=days, today=today), days, today)
     month_ago = pricing.previous_price_map([product.pk], days=30, today=today).get(product.pk)
     last_known = None if cheapest else pricing.last_known_price(product)
+    restocks = pricing.restock_summary(product) if listings else None
 
     related = []
     if product.product_set_id:
@@ -604,6 +605,7 @@ def product_detail(request, slug):
             "history_days": days,
             "month_ago": month_ago,
             "last_known": last_known,
+            "restocks": restocks,
             "amazon_search": amazon_search_url(product, listings),
             "related": related,
             "meta_title": meta_title,
@@ -812,7 +814,7 @@ AI_CRAWLERS = ("GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-S
 
 
 def deals_lists():
-    """Biggest savings, price drops and restocks for the deals page, cached like the home lists."""
+    """Biggest savings, price drops and the restock log for the deals page, cached like the home lists."""
     from django.core.cache import cache
 
     from catalogue.signals import DEALS_CACHE_KEY
@@ -824,7 +826,7 @@ def deals_lists():
     lists = {
         "savings": offers.biggest_savings(priced, limit=30),
         "drops": list(pricing.price_drops(limit=12)),
-        "restocked": pricing.back_in_stock(limit=12),
+        "restock_log": pricing.restock_log(days=7),
     }
     cache.set(DEALS_CACHE_KEY, lists, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
     return lists

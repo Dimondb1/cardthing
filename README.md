@@ -572,6 +572,20 @@ week and what just came back in stock, server rendered and in the
 sitemap. Its lists are cached like the home page's and cleared by
 imports.
 
+## Restock record
+
+Every time a shop goes from not having a product to having it in stock,
+`pricing.record_check` keeps a `Restock` row (product, shop, time,
+delivered price). A listing that flips out and back within two hours
+counts once, and eBay and Amazon are left out because their stock is many
+sellers rather than one shop restocking. The deals page shows the last
+seven days as a log by day, marking restocks whose shop has since sold out
+again, and each product page says how often it has come back in the last
+30 days and where, or when it last did. Once a product has six or more
+restocks in 90 days the line adds the two-hour window most of them landed
+in. `backfill_restocks` turns the stamps listings already carried into
+rows; the installer runs it, and it is safe to run again.
+
 ## Merged products keep their addresses
 
 `merge_duplicates` (run hourly by `tidy_all`) records every merged

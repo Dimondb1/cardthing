@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from . import pricing
 from .management.commands.watch_stock import check_listing, shopify_js_url
-from .models import Listing, OutboundClick, Retailer
+from .models import Listing, OutboundClick, Restock, Retailer
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
 
@@ -40,6 +40,79 @@ class BackInStockTests(TestCase):
         listing = make_listing(self.product, self.shop, availability="in_stock")
         Listing.objects.filter(pk=listing.pk).update(back_in_stock_at=timezone.now() - timedelta(hours=72))
         self.assertEqual(pricing.back_in_stock(), [])
+
+
+class RestockRecordTests(TestCase):
+    def setUp(self):
+        self.product = make_product(make_set(make_game()), name="Surging Sparks Booster Box", product_type="booster_box")
+        self.shop = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+
+    def flip(self, listing, availability, at):
+        pricing.record_check(listing, price=Decimal("139.99"), delivery_cost=Decimal("2.99"), availability=availability, checked_at=at)
+
+    def test_a_restock_is_kept_with_its_delivered_price(self):
+        listing = make_listing(self.product, self.shop, availability="out_of_stock")
+        self.flip(listing, "in_stock", timezone.now())
+        restock = Restock.objects.get()
+        self.assertEqual((restock.product, restock.retailer, restock.listing, restock.price), (self.product, self.shop, listing, Decimal("142.98")))
+
+    def test_a_flicker_within_two_hours_counts_once(self):
+        listing = make_listing(self.product, self.shop, availability="out_of_stock")
+        start = timezone.now() - timedelta(hours=5)
+        self.flip(listing, "in_stock", start)
+        self.flip(listing, "out_of_stock", start + timedelta(minutes=20))
+        self.flip(listing, "in_stock", start + timedelta(minutes=40))
+        self.assertEqual(Restock.objects.count(), 1)
+        self.flip(listing, "out_of_stock", start + timedelta(hours=3))
+        self.flip(listing, "in_stock", start + timedelta(hours=4))
+        self.assertEqual(Restock.objects.count(), 2)
+
+    def test_marketplaces_are_left_out(self):
+        ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
+        listing = make_listing(self.product, ebay, availability="out_of_stock")
+        self.flip(listing, "in_stock", timezone.now())
+        listing.refresh_from_db()
+        self.assertIsNotNone(listing.back_in_stock_at)
+        self.assertEqual(Restock.objects.count(), 0)
+
+    def test_summary_counts_the_window_and_finds_the_busy_hours(self):
+        other = make_retailer("Other")
+        now = timezone.now()
+        for days_ago in range(1, 7):
+            at = timezone.make_aware(timezone.datetime.combine(timezone.localdate(now) - timedelta(days=days_ago), timezone.datetime.min.time())) + timedelta(hours=9, minutes=30)
+            Restock.objects.create(product=self.product, retailer=self.shop if days_ago > 1 else other, at=at, price="140.00")
+        Restock.objects.create(product=self.product, retailer=self.shop, at=now - timedelta(days=45, hours=3), price="140.00")
+        summary = pricing.restock_summary(self.product, now=now)
+        self.assertEqual((summary["count"], summary["days"], summary["latest"].retailer, summary["band"]), (6, 30, other, ("9am", "11am")))
+
+    def test_summary_falls_back_to_the_last_restock_ever_and_is_none_without_any(self):
+        self.assertIsNone(pricing.restock_summary(self.product))
+        old = Restock.objects.create(product=self.product, retailer=self.shop, at=timezone.now() - timedelta(days=200), price="140.00")
+        summary = pricing.restock_summary(self.product)
+        self.assertEqual((summary["count"], summary["latest"], summary["band"]), (0, old, None))
+
+    def test_log_groups_by_day_newest_first_and_marks_sold_out_again(self):
+        live = make_listing(self.product, self.shop, availability="in_stock")
+        gone = make_listing(make_product(self.product.product_set, name="Surging Sparks Elite Trainer Box", slug="ss-etb"), self.shop, availability="out_of_stock")
+        now = timezone.now()
+        Restock.objects.create(product=live.product, retailer=self.shop, listing=live, at=now - timedelta(minutes=5), price="140.00")
+        Restock.objects.create(product=gone.product, retailer=self.shop, listing=gone, at=now - timedelta(days=1, hours=1), price="50.00")
+        Restock.objects.create(product=gone.product, retailer=self.shop, listing=gone, at=now - timedelta(days=9), price="50.00")
+        log = pricing.restock_log(days=7, now=now)
+        self.assertEqual([day for day, _ in log], [timezone.localdate(now), timezone.localdate(now - timedelta(days=1, hours=1))])
+        self.assertEqual([[e.still_in_stock for e in events] for _, events in log], [[True], [False]])
+
+    def test_backfill_turns_stamps_into_rows_once(self):
+        listing = make_listing(self.product, self.shop, availability="in_stock")
+        when = timezone.now() - timedelta(hours=3)
+        Listing.objects.filter(pk=listing.pk).update(back_in_stock_at=when)
+        ebay = make_listing(self.product, make_retailer("eBay", source_type=Retailer.Source.EBAY), availability="in_stock")
+        Listing.objects.filter(pk=ebay.pk).update(back_in_stock_at=when)
+        out = StringIO()
+        call_command("backfill_restocks", stdout=out)
+        call_command("backfill_restocks", stdout=out)
+        self.assertEqual(out.getvalue(), "1 restocks recorded.\n0 restocks recorded.\n")
+        self.assertEqual(Restock.objects.get().at, when)
 
 
 class WatchStockTests(TestCase):

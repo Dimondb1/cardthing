@@ -712,6 +712,8 @@ ul, ol { margin: 0; padding: 0; }
 .chart__axis { display: flex; justify-content: space-between; margin-top: var(--space-1); margin-right: 4.5rem; font-size: var(--text-xs); color: var(--color-ink-subtle); }
 .chart__summary { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .history__empty { margin-top: var(--space-4); color: var(--color-ink-muted); }
+.restock-note { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
+.log__day { margin: var(--space-4) 0 var(--space-1); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink-subtle); }
 .details__list { margin: var(--space-4) 0 0; border-top: 1px solid var(--color-line); }
 .details__list div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line); }
 .details__list dt { color: var(--color-ink-subtle); font-size: var(--text-sm); padding-top: 0.1em; }

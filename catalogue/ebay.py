@@ -337,6 +337,8 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         ids = list(by_item)
         batches = [ids[start:start + BULK] for start in range(0, len(ids), BULK)]
         done = 0
+        if ids:
+            logger.info("eBay: refreshing %d known listings", len(ids))
         while done < len(batches):
             batch = batches[done]
             if bulk_left is not None and bulk_left <= 0:
@@ -381,6 +383,9 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         for batch in batches[done:]:
             gone.extend(by_item[item_id] for item_id in batch)
         # Listings the bulk lookup no longer knows (ended) are searched again below, first.
+        if ids:
+            mark_checked()
+            logger.info("eBay: %d known listings still live, %d ended or not reached, now searching", len(checked), len(gone))
 
         # New lookups, the products most shops stock first.
         fresh = list(

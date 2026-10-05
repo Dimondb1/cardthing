@@ -180,6 +180,29 @@ class LookupTests(TestCase):
         self.assertEqual(api.searches(), [])
         self.assertEqual([(o.product_pk, o.price) for o in offers], [(self.bundle.pk, Decimal("28.50"))])
 
+    def test_one_ended_listing_does_not_stop_the_rest_being_refreshed(self):
+        etb_listing = make_listing(self.etb, self.retailer, price="80.00", url="https://www.ebay.co.uk/itm/7?campid=1")
+        make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
+        live = item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="78.00", item_id="v1|7|0")
+        live["itemId"] = "v1|7|0"
+        bulk_calls = []
+
+        def api(url, headers, data=None):
+            if url.startswith(ebay.ITEMS_URL):
+                bulk_calls.append(url)
+                if "9" in url.split("item_ids=")[1]:
+                    raise ebay.EbayError('eBay API 404: {"errors":[{"errorId":11001,"message":"The specified item Id was not found."}]}')
+                return {"items": [live]}
+            return FakeApi([])(url, headers, data)
+
+        offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
+        by_product = {o.product_pk: o for o in offers}
+        self.assertEqual(by_product[self.etb.pk].price, Decimal("78.00"))
+        # The ended one was searched for again, found nothing, and is marked sold out.
+        self.assertEqual(by_product[self.bundle.pk].availability, Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(len(bulk_calls), 3)   # the batch, then each listing on its own
+        self.assertIsNotNone(etb_listing.pk)
+
     def test_a_listing_the_bulk_lookup_no_longer_knows_is_searched_again_then_marked_sold_out(self):
         make_listing(self.bundle, self.retailer, price="30.00", url="https://www.ebay.co.uk/itm/9?campid=1")
         api = FakeApi([], items=[])

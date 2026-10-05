@@ -315,18 +315,32 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         else:
             gone.append(product)
     ids = list(by_item)
-    for start in range(0, len(ids), BULK):
-        batch = ids[start:start + BULK]
+    batches = [ids[start:start + BULK] for start in range(0, len(ids), BULK)]
+    done = 0
+    while done < len(batches):
+        batch = batches[done]
         if bulk_left is not None and bulk_left <= 0:
             break
         try:
             answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
         except EbayError as exc:
+            if bulk_left is not None:
+                bulk_left -= 1
+            if "11001" in str(exc) or "404" in str(exc):
+                # eBay refuses the whole batch when one listing has ended. Ask for each on its own,
+                # so one ended listing does not stop the rest being refreshed.
+                if len(batch) > 1:
+                    batches[done:done + 1] = [[item_id] for item_id in batch]
+                else:
+                    gone.append(by_item[batch[0]])
+                    done += 1
+                continue
             if "429" in str(exc):
                 logger.warning("eBay: bulk allowance used up, %s", exc)
             else:
                 logger.warning("eBay: bulk lookup failed, keeping what was found: %s", exc)
             break
+        done += 1
         if bulk_left is not None:
             bulk_left -= 1
         found = set()
@@ -342,6 +356,9 @@ def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
             if item_id not in found:
                 gone.append(by_item[item_id])
         time.sleep(pause)
+    # Batches never reached (allowance or an error) are searched again instead, so they are not left stale.
+    for batch in batches[done:]:
+        gone.extend(by_item[item_id] for item_id in batch)
     # Listings the bulk lookup no longer knows (ended) are searched again below, first.
 
     # New lookups, the products most shops stock first.

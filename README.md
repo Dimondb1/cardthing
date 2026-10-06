@@ -571,6 +571,18 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
+## Games
+
+The games the classifier recognises are listed in `catalogue/classify.py`
+(`GAMES`): Pokémon, Magic, One Piece, Lorcana, Yu-Gi-Oh, Star Wars
+Unlimited, Flesh and Blood, Digimon, Dragon Ball Super, Riftbound,
+Cardfight!! Vanguard, Weiss Schwarz and football cards. A game is created
+in the database the first time a shop product of it is imported, so adding
+one means adding its words there, its filter labels in
+`catalogue/types.py`, its eBay search word in `catalogue/ebay.py` and its
+prefix to `GAME_PREFIX` in `catalogue/matching.py`. Pick games several
+shops stock: one shop's price is a listing, not a comparison.
+
 ## Product types per game
 
 `catalogue/types.py` lists, for each game, which product types it has and

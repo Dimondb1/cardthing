@@ -104,6 +104,20 @@ GAME_TYPES = {
         ("collection_box", "Proving grounds"),
         ("other", "Other"),
     ],
+    "cardfight-vanguard": [
+        ("booster_box", "Booster box"),
+        ("booster_pack", "Booster pack"),
+        ("deck", "Start deck"),
+        ("collection_box", "Special set"),
+        ("other", "Other"),
+    ],
+    "weiss-schwarz": [
+        ("booster_box", "Booster box"),
+        ("booster_pack", "Booster pack"),
+        ("deck", "Trial deck"),
+        ("collection_box", "Premium set"),
+        ("other", "Other"),
+    ],
     "football": [
         ("booster_box", "Hobby or retail box"),
         ("booster_pack", "Pack"),

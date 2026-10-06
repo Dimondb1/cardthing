@@ -26,6 +26,8 @@ GAMES = [
     ("digimon", "Digimon Card Game", "Digimon", ("digimon",)),
     ("dragon-ball", "Dragon Ball Super Card Game", "Dragon Ball", ("dragon ball",)),
     ("riftbound", "Riftbound", "Riftbound", ("riftbound",)),
+    ("cardfight-vanguard", "Cardfight!! Vanguard", "Vanguard", ("cardfight", "vanguard overdress", "vanguard: overdress")),
+    ("weiss-schwarz", "Weiss Schwarz", "Weiss Schwarz", ("weiss schwarz", "weiß schwarz", "weiss-schwarz")),
     ("football", "Football cards", "Football", ("football", "soccer", "match attax", "adrenalyn", "premier league",
                                                  "champions league", "uefa", "fifa", "topps football", "panini football",
                                                  "world cup", "euros 20", "euro 20", "merlin heritage", "topps merlin",
@@ -46,8 +48,8 @@ TYPES = [
     ("booster_box", ("booster box", "booster display", "display box", "display", "case of 36", "box of 36", "box of 24", "box of 30",
                      "hobby box", "retail box", "blaster box", "mega box", "jumbo box", "value box", "premium box", "fat pack box")),
     ("bundle", ("booster bundle", "bundle", "sleeved booster 3", "blister")),
-    ("deck", ("commander deck", "starter deck", "theme deck", "battle deck", "league battle deck", "deck", "precon",
-              "two player starter", "2 player starter", "2-player starter")),
+    ("deck", ("commander deck", "starter deck", "theme deck", "battle deck", "league battle deck", "start deck", "trial deck",
+              "deck", "precon", "two player starter", "2 player starter", "2-player starter")),
     ("tin", ("tin", "super tin", "booster tin")),
     ("gift_set", ("gift set", "gift pack")),
     ("booster_pack", ("booster pack", "booster", "pack", "packet", "checklane", "sleeved")),
@@ -91,9 +93,11 @@ NOT_SEALED_TYPES = {"single card", "singles", "pokemon single", "playmat", "deck
 PREFIXES = re.compile(
     r"^(?:pok[eé]mon(?: tcg| trading card game)?|magic(?: the gathering|: the gathering)?|mtg|one piece(?: card game| tcg)?|"
     r"disney lorcana(?: tcg)?|lorcana(?: tcg)?|yu-gi-oh!?|yugioh|star wars(?::)? unlimited|flesh (?:and|&) blood(?: tcg)?|"
-    r"digimon(?: card game| tcg)?|dragon ball super(?: card game| tcg)?|riftbound(?::)?(?: league of legends tcg)?)\s*[:\-–|]*\s*",
+    r"digimon(?: card game| tcg)?|dragon ball super(?: card game| tcg)?|riftbound(?::)?(?: league of legends tcg)?|"
+    r"cardfight!*(?: vanguard)?(?: overdress)?|weiss schwarz|weiß schwarz)\s*[:\-–|]*\s*",
     re.I,
 )
+KIND_FIRST = re.compile(r"^(Booster Box|Booster Pack|Trial Deck\+?|Start Deck|Starter Deck|Extra Booster(?: Box| Pack)?)\s*[:\-–]\s*(.+)$", re.I)
 NOISE = re.compile(
     r"\s*\((?:en|eng|english|uk|new|sealed|in stock|pre-?order|\d+ packs?|\d+ boosters?|\d+ ct|[a-z]{2,3}-?\d{2,3}[a-z]?)\)"
     r"|\s*\[[^\]]*\]|\s*[-–:|]\s*(?:english|en|sealed|new|pre-?order|in stock)\s*$|\s*[-–]\s*$|^\s*[-–:]\s*",
@@ -210,6 +214,8 @@ def clean_name(title):
     name = tidy_name(title)
     name = re.sub(r"\s+", " ", name).strip()
     name = drop_repeated_tail(PREFIXES.sub("", name))
+    # Some shops write the kind first: "Booster Box - Kaguya-sama" becomes "Kaguya-sama Booster Box".
+    name = KIND_FIRST.sub(lambda m: f"{m.group(2).strip()} {m.group(1)}", name)
     for _ in range(3):
         name = NOISE.sub("", name).strip()
     name = re.sub(r"\s*[-–|]\s*", " ", name)  # shop-style " - " separators become spaces

@@ -128,7 +128,8 @@ QUERY_NOISE = re.compile(
 # Games whose name sellers put in the title, and which keeps a search away from other things of the same name.
 GAME_IN_QUERY = {"pokemon": "Pokemon", "magic-the-gathering": "MTG", "one-piece": "One Piece", "yu-gi-oh": "Yu-Gi-Oh",
                  "lorcana": "Lorcana", "star-wars-unlimited": "Star Wars Unlimited", "flesh-and-blood": "Flesh and Blood",
-                 "digimon": "Digimon", "dragon-ball": "Dragon Ball", "riftbound": "Riftbound"}
+                 "digimon": "Digimon", "dragon-ball": "Dragon Ball", "riftbound": "Riftbound",
+                 "cardfight-vanguard": "Cardfight Vanguard", "weiss-schwarz": "Weiss Schwarz"}
 
 
 def search_queries(product):

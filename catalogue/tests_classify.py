@@ -38,6 +38,18 @@ class ClassifyTests(TestCase):
                 kwargs.setdefault("price", 10)
                 self.assertIsNone(classify(title, **kwargs), title)
 
+    def test_cardfight_and_weiss_schwarz_are_games_with_the_kind_moved_last(self):
+        from .classify import classify
+
+        weiss = classify("Weiss Schwarz: Booster Box - Kaguya-Sama: Love Is War? (2023)", "Trading Card Games", price=70)
+        self.assertEqual((weiss.game, weiss.product_type, weiss.name), ("weiss-schwarz", "booster_box", "Kaguya Sama: Love Is War? (2023) Booster Box"))
+        trial = classify("Weiss Schwarz Trial Deck+ Hatsune Miku: Colorful Stage!", "Trading Card Games", price=20)
+        self.assertEqual((trial.game, trial.product_type), ("weiss-schwarz", "deck"))
+        cf = classify("Cardfight!! Vanguard: Booster Pack: Chasm of Lost Souls", "Trading Card Games", price=4)
+        self.assertEqual((cf.game, cf.product_type, cf.name), ("cardfight-vanguard", "booster_pack", "Chasm of Lost Souls Booster Pack"))
+        cf_box = classify("Cardfight!! Vanguard: overDress - Touken Ranbu Online - Booster Box", "Trading Card Games", price=80)
+        self.assertEqual((cf_box.game, cf_box.product_type), ("cardfight-vanguard", "booster_box"))
+
     def test_game_from_vendor_or_tag(self):
         sealed = classify("Surging Sparks Booster Box", vendor="Pokemon", price=100)
         self.assertEqual(sealed.game, "pokemon")

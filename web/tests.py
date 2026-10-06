@@ -664,7 +664,7 @@ class AmazonLeadTests(PageTestCase):
 class NetworkVerificationTests(PageTestCase):
     def test_impact_site_verification_tag_is_on_every_page(self):
         for url in (reverse("web:home"), self.etb.get_absolute_url()):
-            self.assertContains(self.client.get(url), '<meta name="impact-site-verification" value="425461e9-0aed-4eb6-80e8-83a354bd3b60">')
+            self.assertContains(self.client.get(url), '<meta name="impact-site-verification" value="fb2ca9a2-0f96-46ce-b287-b35517e23ca5">')
 
 
 class HomeScreenTests(PageTestCase):

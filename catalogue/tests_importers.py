@@ -38,6 +38,34 @@ class ShopifyTests(TestCase):
         fetch.calls = calls
         return fetch
 
+    def test_a_collection_is_read_instead_of_the_whole_shop(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        self.retailer.collection = "trading-card-games"
+        self.retailer.save()
+        asked = []
+
+        def fetch(url):
+            asked.append(url)
+            if "/collections/trading-card-games/products.json?limit=250&page=1" in url:
+                return shopify_page([{"handle": "etb", "title": "Pokemon TCG: Prismatic Evolutions - Elite Trainer Box", "tags": [],
+                                      "variants": [{"price": "54.99", "available": True, "barcode": "0820650851230"}]}])
+            if "products.json" in url:
+                return shopify_page([])
+            return b"{}"
+
+        offers = list(shopify_offers(self.retailer, fetch=fetch))
+        self.assertEqual([o.ean for o in offers], ["0820650851230"])
+        self.assertTrue(any("/collections/trading-card-games/products.json" in u for u in asked))
+        self.assertFalse(any(u.startswith("https://harbour.example/products.json") for u in asked))
+        # setup_shops gives Zatu its collection without touching a shop that has one.
+        zatu = make_retailer("Zatu Games", slug="zatu-games", website="https://zatu.com/", source_type=Retailer.Source.SHOPIFY, source_url="https://zatu.com/")
+        call_command("setup_shops", stdout=StringIO())
+        zatu.refresh_from_db()
+        self.assertEqual(zatu.collection, "trading-card-games")
+
     def test_offers_are_matched_by_barcode_and_delivery_applied(self):
         fetch = self.fake_fetch([[
             {"handle": "pe-etb", "title": "Prismatic Evolutions ETB", "tags": [],
@@ -92,6 +120,25 @@ class FeedTests(TestCase):
         self.assertEqual(offers[0].price, Decimal("44.99"))
         self.assertEqual(offers[0].delivery, Decimal("2.99"))
         self.assertEqual(offers[0].availability, Listing.Availability.IN_STOCK)
+
+    def test_google_shopping_xml_feed_is_read_with_gtin_first(self):
+        text = """<?xml version="1.0"?>
+<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><title>Shop</title>
+<item><title>Pokemon TCG: Prismatic Evolutions - Elite Trainer Box</title><link>https://x.example/pev-etb</link>
+<g:price>59.99 GBP</g:price><g:sale_price>54.99 GBP</g:sale_price><g:gtin>0820650851230</g:gtin>
+<g:availability>in stock</g:availability><g:image_link>https://x.example/etb.jpg</g:image_link>
+<g:shipping><g:country>GB</g:country><g:price>2.49 GBP</g:price></g:shipping></item>
+<item><title>No price</title><link>https://x.example/none</link></item>
+</channel></rss>"""
+        offers = list(feed_offers(text))
+        self.assertEqual(len(offers), 1)
+        offer = offers[0]
+        self.assertEqual((offer.price, offer.ean, offer.delivery, offer.availability), (Decimal("54.99"), "0820650851230", Decimal("2.49"), Listing.Availability.IN_STOCK))
+        self.assertEqual((offer.url, offer.image), ("https://x.example/pev-etb", "https://x.example/etb.jpg"))
+
+    def test_a_broken_xml_feed_is_an_import_error(self):
+        with self.assertRaises(ImportError_):
+            list(feed_offers("<rss><channel><item>"))
 
     def test_apply_keeps_cheapest_variant(self):
         retailer = make_retailer("Northgate Cards")

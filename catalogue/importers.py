@@ -37,7 +37,7 @@ from django.utils import timezone
 
 from . import pricing
 from .classify import GAMES, classify, find_game
-from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score
+from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
 from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
 
 logger = logging.getLogger(__name__)
@@ -240,11 +240,14 @@ def shopify_offers(retailer, fetch=fetch):
     if currency and currency != "GBP":
         raise ImportError_(f"{base} prices in {currency}, not pounds. Prices were not imported.")
     preorders = preorder_handles(base, fetch=fetch)
+    # A shop that sells far more than cards (Zatu: board games, puzzles, books) is read from its
+    # card game collection, so the thousands of other products never reach the matcher.
+    listing = f"{base}/collections/{retailer.collection}/products.json" if retailer.collection else f"{base}/products.json"
     page = 1
     first_handle = None
     while page <= MAX_SHOPIFY_PAGES:
         try:
-            raw = fetch(f"{base}/products.json?limit=250&page={page}")
+            raw = fetch(f"{listing}?limit=250&page={page}")
             products = json.loads(raw).get("products", [])
         except ImportError_:
             if page == 1:
@@ -505,7 +508,54 @@ AVAILABILITY_WORDS = {
 }
 
 
+GOOGLE_NS = "{http://base.google.com/ns/1.0}"
+ATOM_NS = "{http://www.w3.org/2005/Atom}"
+
+
+def xml_feed_offers(text):
+    """Offers from a Google Shopping feed (RSS 2.0 or Atom with the g: namespace)."""
+    import xml.etree.ElementTree as ET
+
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as exc:
+        raise ImportError_(f"The feed is not valid XML: {exc}") from exc
+    items = root.iter("item") if root.find("channel") is not None else root.iter(f"{ATOM_NS}entry")
+
+    def field(item, name):
+        node = item.find(f"{GOOGLE_NS}{name}")
+        if node is None:
+            node = item.find(name)
+        if node is None:
+            node = item.find(f"{ATOM_NS}{name}")
+        return (node.text or "").strip() if node is not None and node.text else ""
+
+    for item in items:
+        price = money(field(item, "sale_price") or field(item, "price"))
+        url = field(item, "link")
+        if not url:
+            link = item.find(f"{ATOM_NS}link")
+            url = (link.get("href") or "").strip() if link is not None else ""
+        if price is None or not url:
+            continue
+        shipping = item.find(f"{GOOGLE_NS}shipping")
+        delivery = money(field(shipping, "price")) if shipping is not None else None
+        yield Offer(
+            title=field(item, "title"),
+            url=url,
+            price=price,
+            ean=clean_ean(field(item, "gtin")),
+            availability=AVAILABILITY_WORDS.get(field(item, "availability").lower(), Listing.Availability.IN_STOCK),
+            delivery=delivery,
+            image=field(item, "image_link"),
+        )
+
+
 def feed_offers(text):
+    """Offers from a CSV feed (Awin, Google Merchant columns) or a Google Shopping XML feed."""
+    if text.lstrip().startswith("<"):
+        yield from xml_feed_offers(text)
+        return
     reader = csv.DictReader(io.StringIO(text))
     fields = {name.strip().lower(): name for name in reader.fieldnames or []}
 
@@ -698,6 +748,7 @@ class Catalogue:
         and every identifying word of the title in our name, so a short
         product name cannot swallow another set's, edition's or game's product.
         """
+        title = shop_title(title)
         title_words = set(self._words(title))
         for pk in self.by_key.get((game, match_key(title)), ()):
             return (pk, self.names[pk]), AUTO_LINK

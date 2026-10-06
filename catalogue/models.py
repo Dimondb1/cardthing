@@ -251,7 +251,7 @@ class Retailer(models.Model):
     class Source(models.TextChoices):
         MANUAL = "manual", "Entered by hand"
         SHOPIFY = "shopify", "Shopify store"
-        FEED = "feed", "Product feed (CSV)"
+        FEED = "feed", "Product feed (CSV or Google Shopping XML)"
         AMAZON = "amazon", "Amazon (Product Advertising API)"
         EBAY = "ebay", "eBay (Browse API)"
         WEBSITE = "website", "Website (sitemap and product pages)"
@@ -264,9 +264,17 @@ class Retailer(models.Model):
         max_length=500,
         blank=True,
         help_text="Shopify: the shop address, for example https://shop.example/. "
-        "Feed: the CSV address. Website: the shop address; product pages are found through "
+        "Feed: the CSV or Google Shopping XML address. Website: the shop address; product pages are found through "
         "its sitemap and read for schema.org product data. Leave empty for a local file "
         "passed to import_prices.",
+    )
+    collection = models.SlugField(
+        "Shopify collection",
+        max_length=120,
+        blank=True,
+        help_text="Shopify only: read this collection's products instead of the whole shop, for example "
+        "trading-card-games for a board game shop with one card game section. Products outside it are "
+        "treated as not stocked.",
     )
     session_url = models.URLField(
         "visit first",

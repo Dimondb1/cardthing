@@ -8,6 +8,7 @@ Pack" or a case of six boxes.
 """
 
 import re
+from html import unescape as html_unescape
 
 from .search import normalise
 
@@ -72,6 +73,29 @@ KIND_MARKS = (
     ("#deck", re.compile(r"\bdecks?\b|\bprecon\b")),
     ("#gift", re.compile(r"\bgift\b")),
 )
+
+
+# The game a shop writes in front of a product name, with whatever separator follows. Taken off a
+# shop title before matching, so "Star Wars: Unlimited - A Lawless Time - Booster Box" is judged on
+# "A Lawless Time Booster Box"; our names never carry the game, the product's game field does.
+GAME_PREFIX = re.compile(
+    r"^\s*(?:pok[eé]mon(?: tcg| trading card game)?|magic(?: the gathering|: the gathering)?|mtg|"
+    r"one piece(?: card game| tcg)?|disney lorcana(?: tcg| trading card game)?|lorcana(?: tcg)?|"
+    r"yu-?gi-?oh!*(?: tcg| trading card game)?|star wars:? unlimited|swu|flesh (?:and|&) blood(?: tcg)?|"
+    r"digimon(?: card game| tcg)?|dragon ball super(?: card game| cg| fusion world)?(?: fusion world)?|dbs(?: cg)?|"
+    r"riftbound:?(?: league of legends(?: tcg)?)?|league of legends(?: tcg)?|union arena|gundam(?: card game| tcg)?|"
+    r"weiss schwarz|cardfight!*(?: vanguard)?|final fantasy tcg|ff ?tcg|topps|panini)\s*[:\-–|]*\s+",
+    re.I,
+)
+SEPARATORS = re.compile(r"\s*[-–|]\s*|\s*:\s+")
+
+
+def shop_title(title):
+    """A shop title with the game prefix taken off and its separators collapsed to spaces."""
+    text = html_unescape(title or "").strip()
+    for _ in range(2):   # "Pokemon TCG: Pokemon - Scarlet & Violet ..." carries it twice
+        text = GAME_PREFIX.sub("", text)
+    return re.sub(r"\s+", " ", SEPARATORS.sub(" ", text)).strip(" :,-")
 
 
 def key_text(text):

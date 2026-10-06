@@ -91,6 +91,12 @@ SESSIONS = {
     "unicorn-cards": "https://unicorncards.co.uk/changecurrency/3?returnUrl=%2F",
 }
 
+# Shopify shops read from one collection instead of the whole store: Zatu sells thousands of board
+# games, puzzles and books, and all its card products sit in one collection.
+COLLECTIONS = {
+    "zatu-games": "trading-card-games",
+}
+
 # Shops that were set up before and must not be shown: prices in another currency,
 # or not a stockist the owner wants compared (Asmodee UK is the distributor's own store).
 HIDDEN = ["poke-collect", "asmodee-uk"]
@@ -108,6 +114,7 @@ class Command(BaseCommand):
         for slug, name, website, source, cost, free, note in shops:
             existing = Retailer.objects.filter(website=website).first() or Retailer.objects.filter(slug=slug).first()
             session_url = SESSIONS.get(slug, "")
+            collection = COLLECTIONS.get(slug, "")
             if existing:
                 changed = []
                 if existing.name != name or existing.slug != slug:
@@ -116,12 +123,16 @@ class Command(BaseCommand):
                 if session_url and existing.session_url != session_url:
                     existing.session_url = session_url
                     changed.append("session_url")
+                if collection and not existing.collection:
+                    existing.collection = collection
+                    changed.append("collection")
                 if changed:
                     existing.save(update_fields=changed)
                 self.stdout.write(f"{name}: already set up")
                 continue
             Retailer.objects.create(
                 slug=slug, name=name, website=website, source_type=source, source_url=website, session_url=session_url,
+                collection=collection,
                 delivery_cost=Decimal(cost), free_delivery_over=Decimal(free) if free else None, delivery_note=note,
             )
             self.stdout.write(f"{name}: added")

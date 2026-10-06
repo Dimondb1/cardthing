@@ -75,6 +75,22 @@ reports script errors, horizontal overflow, unlabelled controls and tap
 targets under 24px. It needs `pip install playwright` and a running dev
 server.
 
+A Shopify shop that sells far more than cards (Zatu: board games, puzzles,
+books) can be read from one collection instead of the whole store: set
+"Shopify collection" on the retailer to the collection's handle, for
+example `trading-card-games`, and the import reads
+`/collections/<handle>/products.json`. Products outside the collection are
+treated as not stocked there. `setup_shops` sets this for Zatu.
+
+Shop titles are matched with the game prefix taken off and the separators
+collapsed, so "Disney Lorcana: Shimmering Skies - Booster Box" is judged
+on "Shimmering Skies Booster Box" and counts as a full match for our
+product of that name. The game itself still comes from the whole title.
+
+A feed retailer accepts a Google Shopping XML feed (RSS or Atom with the
+`g:` namespace) as well as CSV: barcode (`g:gtin`) first, title second,
+with `g:sale_price` over `g:price`, `g:availability` and `g:shipping`.
+
 ## Adding several shops at once
 
 ```sh

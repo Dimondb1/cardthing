@@ -52,6 +52,28 @@ class WrongLinkTests(TestCase):
         self.assertEqual(len(slugs), 2)
 
 
+class ShopTitleTests(TestCase):
+    def test_game_prefixes_and_separators_come_off(self):
+        from .matching import shop_title
+
+        self.assertEqual(shop_title("Disney Lorcana: Shimmering Skies - Booster Box"), "Shimmering Skies Booster Box")
+        self.assertEqual(shop_title("Star Wars: Unlimited - A Lawless Time - Booster Box"), "A Lawless Time Booster Box")
+        self.assertEqual(shop_title("Pokemon TCG: Mega Evolution Perfect Order - Booster Pack"), "Mega Evolution Perfect Order Booster Pack")
+        self.assertEqual(shop_title("Magic: The Gathering - Foundations - Beginner Box"), "Foundations Beginner Box")
+        self.assertEqual(shop_title("Yu-Gi-Oh! TCG: Battles of Legend: Chapter 1 Box"), "Battles of Legend Chapter 1 Box")
+        self.assertEqual(shop_title("Prismatic Evolutions Elite Trainer Box"), "Prismatic Evolutions Elite Trainer Box")
+
+    def test_a_prefixed_shop_title_matches_our_plain_name_in_full(self):
+        from .importers import Catalogue
+        from .matching import AUTO_LINK
+
+        catalogue = Catalogue([(1, "A Lawless Time Booster Box", "star-wars-unlimited"), (2, "Shimmering Skies Booster Box", "lorcana")])
+        match, value = catalogue.best_match("Star Wars: Unlimited - A Lawless Time - Booster Box", game="star-wars-unlimited")
+        self.assertEqual((match[0], value), (1, AUTO_LINK))
+        match, value = catalogue.best_match("Disney Lorcana: Shimmering Skies - Booster Box", game="lorcana")
+        self.assertEqual((match[0], value), (2, AUTO_LINK))
+
+
 class TidyListingsTests(TestCase):
     def test_a_product_filed_under_the_wrong_game_is_moved_not_emptied(self):
         pokemon = make_game(name="Pokemon", slug="pokemon", short_name="Pokemon")

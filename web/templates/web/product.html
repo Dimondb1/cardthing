@@ -52,8 +52,15 @@
     {% else %}
       <p class="buybox__none">{% copy "product.no_listings" %}</p>
     {% endif %}
+    {% if amazon_search and not cheapest %}
+      {# Sold out everywhere we check: Amazon is the obvious next step, so it leads. #}
+      <div class="buybox__amazon buybox__amazon--lead">
+        <a class="button button--big buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+        <p class="buybox__summary">{% copy "product.amazon.note_sold_out" %}</p>
+      </div>
+    {% endif %}
     <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.delivered_price %}</div>
-    {% if amazon_search %}
+    {% if amazon_search and cheapest %}
       <div class="buybox__amazon">
         <a class="button button--small buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
         <p class="buybox__summary">{% copy "product.amazon.note" %}</p>

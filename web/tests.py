@@ -649,6 +649,18 @@ class PickUpTests(PageTestCase):
         self.assertContains(self.client.get(reverse("web:terms")), "searches you make are stored in your browser")
 
 
+class AmazonLeadTests(PageTestCase):
+    def test_amazon_leads_the_box_when_nothing_is_in_stock(self):
+        with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            sold = self.client.get(self.sold_out.get_absolute_url()).content.decode()
+            priced = self.client.get(self.etb.get_absolute_url()).content.decode()
+        self.assertIn("buybox__amazon--lead", sold)
+        self.assertIn("Sold out at the shops we check. Amazon often has it", sold)
+        self.assertLess(sold.index("buybox__amazon--lead"), sold.index("buybox__save"))
+        self.assertNotIn("buybox__amazon--lead", priced)
+        self.assertEqual(priced.count("Compare on Amazon"), 1)
+
+
 class HomeScreenTests(PageTestCase):
     def test_the_offer_card_is_on_every_page_hidden_and_events_are_counted(self):
         from catalogue.models import DailyPageView

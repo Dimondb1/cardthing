@@ -651,6 +651,9 @@ ul, ol { margin: 0; padding: 0; }
 .buybox__save { display: flex; justify-content: flex-start; }
 .buybox__amazon { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-line); }
 .buybox__amazon-button { flex: none; }
+.buybox__amazon--lead { border-top: 0; padding-top: 0; }
+.buybox__amazon--lead .buybox__amazon-button { width: 100%; }
+@media (min-width: 48rem) { .buybox__amazon--lead .buybox__amazon-button { width: auto; } }
 .buybox__amazon .buybox__summary { flex: 1 1 14rem; }
 .buybox__none { font-size: var(--text-xl); font-weight: var(--weight-heading); line-height: var(--leading-snug); }
 

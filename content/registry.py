@@ -781,6 +781,12 @@ ENTRIES = [
         legal=True,
     ),
     Entry(
+        "product.amazon.note_sold_out", T, "Amazon note when sold out",
+        "Sold out at the shops we check. Amazon often has it, with Prime delivery. The link opens an Amazon search for it.",
+        "Product page price box when no shop has stock. Shown under the Amazon button, which then leads the box.",
+        legal=True,
+    ),
+    Entry(
         "product.amazon.button", B, "Amazon button",
         "Compare on Amazon",
         "Product page price box, under the cheapest price. Shown only when an Amazon tracking "

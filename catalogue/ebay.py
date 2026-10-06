@@ -155,6 +155,7 @@ def search_url(product, query=None):
 NOT_THE_THING = re.compile(
     r"\b(?:[2-9]|\d{2,})\s*x\b|\bx\s*(?:[2-9]|\d{2,})\b|\bjob ?lot\b|\blot of\b|\bbundle of\b|\bset of [2-9]\b|\bcase\b|"
     r"\bcodes?\b|\bcode cards?\b|\bp?tcgo\b|\btcg ?live\b|\bonline\b|\bdigital\b|\bfun ?packs?\b|"
+    r"\bsampl(?:e|ing)\b|\bsample packs?\b|\bpromo ?packs?\b|\bmini ?packs?\b|\b3[ -]?cards?\b|\bthree[ -]?cards?\b|"
     r"\bsleeves?\b|\bsingles\b|\bsingle cards?\b|\bpromo\b|\bplay ?mats?\b|\bbinder\b|\bdeck ?box\b|\bempty\b|\bproxy\b|\bdamaged\b|"
     r"\bstickers?\b|\bonly\b|\btokens?\b|\bbasic lands?\b|\bfrom\b|\bcontents\b|\bopened\b|\bcustom\b|\breplica\b|\bart cards?\b|\bdice\b",
     re.I,

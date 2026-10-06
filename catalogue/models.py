@@ -341,6 +341,7 @@ class Listing(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="listings")
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="listings")
     url = models.URLField("product link", max_length=1000)
+    title = models.CharField(max_length=300, blank=True, help_text="The shop's own name for it, kept so a match can be re-judged when the rules change.")
     price = models.DecimalField(max_digits=8, decimal_places=2)
     delivery_cost = models.DecimalField(
         max_digits=6,

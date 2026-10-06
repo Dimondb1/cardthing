@@ -110,8 +110,8 @@ class Command(BaseCommand):
                 self.stdout.write(f"{'would remove' if dry_run else 'removed'}: {listing.product.name} <- {listing.retailer.name} {listing.url}")
                 if not dry_run:
                     listing.delete()
-            # An eBay price far under every shop's is not the sealed product: hide it until eBay is
-            # searched again, when a genuine listing can take its place.
+            # An eBay listing the current rules refuse (far under every shop's price, or a title that is a
+            # multi-buy, a code or a sampling pack) is hidden until eBay is searched again.
             cheap = too_cheap_listings()
             for listing in cheap:
                 self.stdout.write(f"{'would hide' if dry_run else 'hidden'}: {listing.product.name} <- eBay £{listing.delivered_price}")

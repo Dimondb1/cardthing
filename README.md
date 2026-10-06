@@ -256,8 +256,11 @@ server's hourly import run `tidy_all` automatically):
 `tidy_catalogue` (products that no longer pass), `merge_duplicates` (one
 product under two names) and `tidy_listings` (a shop item linked to the
 wrong product, judged by the words in its shop address; it also hides an
-eBay price under 40% of the cheapest any shop last showed, in stock or
-not, because that is a part or a different item). Each takes
+eBay listing the current rules refuse: a price under 40% of the cheapest
+any shop last showed, in stock or not, or a title that is a multi-buy, a
+code, a sampling pack or another language. Listings keep the shop's own
+title for this, so a new rule applies at the next hourly import rather
+than the next eBay run). Each takes
 `--dry-run`. The home page never shows a "saving" above 70%, because a gap
 that large is a wrong link, not a bargain.
 

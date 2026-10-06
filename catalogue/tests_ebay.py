@@ -498,6 +498,23 @@ class FallbackSearchTests(TestCase):
         self.assertEqual([(o.product_pk, o.price) for o in offers], [(pack.pk, Decimal("5.50"))])
         self.assertEqual(len(api.searches()), 1)
 
+    def test_the_import_keeps_the_ebay_title_and_tidy_hides_one_the_rules_now_refuse(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        pack = make_product(self.set, name="XY Breakpoint Booster Pack", slug="xy-bp-pack", product_type="booster_pack")
+        api = FakeApi([item("Pokemon XY Breakpoint Booster Pack Sealed", price="9.00", item_id="v1|1|0")])
+        with mock.patch.object(ebay, "http", api), mock.patch.object(ebay, "PAUSE", 0):
+            run_import(self.retailer)
+        listing = Listing.objects.get(retailer=self.retailer, product=pack)
+        self.assertEqual(listing.title, "Pokemon XY Breakpoint Booster Pack Sealed")
+        # A match saved before the rule existed: its title now fails, so the tidy-up hides it.
+        Listing.objects.filter(pk=listing.pk).update(title="Pokemon XY Breakpoint Sampling Pack Booster Pack NEW and SEALED")
+        call_command("tidy_listings", stdout=StringIO())
+        listing.refresh_from_db()
+        self.assertEqual(listing.availability, Listing.Availability.OUT_OF_STOCK)
+
     def test_tidy_hides_an_ebay_price_far_under_the_shops(self):
         from io import StringIO
 

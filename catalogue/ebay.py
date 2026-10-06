@@ -181,14 +181,16 @@ def shop_prices():
 
 
 def too_cheap_listings():
-    """eBay listings on sale for less than the floor: matched before the floor applied, or since undercut."""
+    """eBay listings on sale that the current rules refuse: under the price floor, or a title that is
+    a multi-buy, a code, a sampling pack or another language. Matched before the rule existed."""
     shops = shop_prices()
     live = Listing.objects.filter(retailer__source_type="ebay", is_active=True).exclude(
         availability=Listing.Availability.OUT_OF_STOCK
     )
     return [
         listing for listing in live.select_related("product")
-        if listing.product_id in shops and listing.delivered_price < shops[listing.product_id] * PRICE_FLOOR
+        if (listing.product_id in shops and listing.delivered_price < shops[listing.product_id] * PRICE_FLOOR)
+        or (listing.title and junk(listing.product, listing.title))
     ]
 
 

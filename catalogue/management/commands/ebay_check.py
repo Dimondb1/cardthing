@@ -40,6 +40,8 @@ class Command(BaseCommand):
         if saved:
             self.stdout.write(f"Saved now: £{saved.delivered_price} delivered, {saved.get_availability_display().lower()}, "
                               f"{saved.url.split('?')[0]}")
+            if saved.title:
+                self.stdout.write(f"           {saved.title}")
         else:
             self.stdout.write("Saved now: no eBay listing")
 

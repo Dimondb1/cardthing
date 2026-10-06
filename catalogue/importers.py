@@ -635,7 +635,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     continue
             seen_products.add(product_pk)
             listing.url = offer.url
-            listing.save(update_fields=["url"])
+            listing.title = (offer.title or "")[:300]
+            listing.save(update_fields=["url", "title"])
             if offer.image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
                 images_by_product.setdefault(product_pk, offer.image)
             delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)

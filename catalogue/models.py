@@ -528,6 +528,7 @@ class DailyPageView(models.Model):
         NEW = "new", "Latest drops"
         WATCHLIST = "watchlist", "Watchlist"
         WATCHED = "watched", "Watchlist rows"   # one per product on a loaded watchlist, keyed by slug
+        INSTALL = "install", "Home screen"     # keyed by event: shown, added, dismissed, opened
         OTHER = "other", "Other"
 
     date = models.DateField(db_index=True)

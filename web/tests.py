@@ -650,6 +650,27 @@ class PickUpTests(PageTestCase):
 
 
 class HomeScreenTests(PageTestCase):
+    def test_the_offer_card_is_on_every_page_hidden_and_events_are_counted(self):
+        from catalogue.models import DailyPageView
+
+        home = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('data-install data-note="/api/note/" hidden', home)
+        self.assertIn("Add to home screen", home)
+        self.assertIn("Not now", home)
+        human = {"HTTP_USER_AGENT": "Mozilla/5.0 (iPhone) Safari/605.1"}
+        for what in ("shown", "added", "dismissed", "opened", "opened", "nonsense"):
+            self.assertEqual(self.client.get(reverse("web:note_api") + f"?what={what}", **human).status_code, 204)
+        self.client.get(reverse("web:note_api") + "?what=shown", HTTP_USER_AGENT="Googlebot/2.1")
+        rows = {r.key: r.hits for r in DailyPageView.objects.filter(kind="install")}
+        self.assertEqual(rows, {"shown": 1, "added": 1, "dismissed": 1, "opened": 2})
+        staff = self.client
+        from django.contrib.auth.models import User
+
+        staff.force_login(User.objects.create_user("ben3", password="pw", is_staff=True))
+        page = staff.get(reverse("insights")).content.decode()
+        self.assertIn("<td>Added it</td><td class=\"n\">1</td>", page)
+        self.assertNotIn("<td>Home screen</td>", page)
+
     def test_manifest_names_the_site_and_its_icons(self):
         import json as json_module
 

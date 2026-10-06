@@ -1,0 +1,7 @@
+{% load sitecopy %}<aside class="install" data-install data-note="{% url 'web:note_api' %}" hidden aria-label="{% copy 'site.install.label' %}">
+  <p class="install__text"><span data-install-android>{% copy "site.install.android" %}</span><span data-install-ios hidden>{% copy "site.install.ios" %}</span></p>
+  <div class="install__actions">
+    <button type="button" class="button button--small" data-install-go>{% copy "site.install.add" %}</button>
+    <button type="button" class="button button--quiet button--small" data-install-dismiss>{% copy "site.install.dismiss" %}</button>
+  </div>
+</aside>

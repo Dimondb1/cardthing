@@ -925,6 +925,17 @@ def recent_api(request):
 
 
 @require_GET
+def note_api(request):
+    """Count one home screen event (shown, added, dismissed, opened). Nothing about the visitor is kept."""
+    event = request.GET.get("what", "")
+    if event in insights.INSTALL_EVENTS and not insights.is_bot(request):
+        insights.bump(DailyPageView, kind=DailyPageView.Kind.INSTALL, key=event)
+    response = HttpResponse(status=204)
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_GET
 def manifest(request):
     """The web app manifest, so a phone can pin RipRaptor to its home screen. No service worker, no push."""
     data = {

@@ -117,6 +117,19 @@ ENTRIES = [
         "Recent searches",
         "Above the searches this browser made before, shown under the search box before anything is typed.",
     ),
+    Entry("site.install.label", T, "Home screen card name", "Add to home screen", "Name of the card for screen readers."),
+    Entry(
+        "site.install.android", T, "Home screen offer (Android)",
+        "Keep RipRaptor on your home screen. It opens like an app, with no browser bar.",
+        "The card shown once on an Android phone after a few pages.",
+    ),
+    Entry(
+        "site.install.ios", T, "Home screen offer (iPhone)",
+        "Keep RipRaptor on your home screen: tap Share, then Add to Home Screen.",
+        "The card shown once on an iPhone after a few pages. Safari has no install button, so this explains the menu.",
+    ),
+    Entry("site.install.add", B, "Add to home screen button", "Add to home screen", "On the card, Android only."),
+    Entry("site.install.dismiss", B, "Not now button", "Not now", "On the card. Pressing it means the card never shows again in that browser."),
     Entry(
         "site.nav.swipe", B, "Swipe link",
         "Swipe",

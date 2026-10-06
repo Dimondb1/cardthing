@@ -64,6 +64,13 @@
 
   <div class="ins__grid">
     <div class="module">
+      <h2>Home screen</h2>
+      <table><tbody>
+        <tr><td>Asked to add the site</td><td class="n">{{ install.shown }}</td></tr>
+        <tr><td>Added it</td><td class="n">{{ install.added }}</td></tr>
+        <tr><td>Said not now</td><td class="n">{{ install.dismissed }}</td></tr>
+        <tr><td>Opened from the icon (browser days)</td><td class="n">{{ install.opened }}</td></tr>
+      </tbody></table>
       <h2>Pages</h2>
       <table><tbody>{% for label, n in kinds %}<tr><td>{{ label }}</td><td class="n">{{ n }}</td></tr>{% endfor %}</tbody></table>
     </div>

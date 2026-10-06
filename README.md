@@ -634,6 +634,15 @@ home screen with its own icon and open it without browser chrome. There
 is no service worker and no push: nothing runs in the background and
 nothing is stored.
 
+On a phone, after the third page in that browser, a small card offers to
+add the site to the home screen (`web/static/js/install.js`). Android
+Chrome supplies its install prompt; iPhone Safari has none, so there the
+card explains Share, then Add to Home Screen. Answered either way, or
+once the site is installed, it never shows again in that browser. Four
+events are counted with no record of who, through `/api/note/`: shown,
+added, dismissed, and opened from the icon (once per browser per day).
+Insights shows them under "Home screen".
+
 ## Feeds
 
 `/feeds/deals.xml` is an RSS feed of restocks and price drops across the

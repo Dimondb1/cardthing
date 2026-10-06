@@ -40,6 +40,11 @@ def bump(model, **keys):
             model.objects.create(date=timezone.localdate(), hits=1, **keys)
 
 
+# What the home screen prompt reports: the prompt shown, the site added, the prompt dismissed,
+# and the site opened from its icon (once per browser per day).
+INSTALL_EVENTS = ("shown", "added", "dismissed", "opened")
+
+
 def bump_many(model, kind, keys):
     """Add one to today's row for each of ``keys`` under ``kind``, in three queries however many there are."""
     keys = list(dict.fromkeys(key[:220] for key in keys if key))
@@ -306,7 +311,11 @@ def report(days=30):
     total_views = sum(d["views"] for d in days_out)
     total_clicks = sum(d["clicks"] for d in days_out)
     product_page_views = sum(product_views.values())
-    kinds = {row["kind"]: row["hits"] for row in views.values("kind").annotate(hits=Sum("hits"))}
+    kinds = {row["kind"]: row["hits"] for row in views.exclude(kind=DailyPageView.Kind.INSTALL).values("kind").annotate(hits=Sum("hits"))}
+    install_rows = dict(
+        views.filter(kind=DailyPageView.Kind.INSTALL).values_list("key").annotate(hits=Sum("hits")).values_list("key", "hits")
+    )
+    install = {event: install_rows.get(event, 0) for event in INSTALL_EVENTS}
     data = {
         "days": days,
         "since": since,
@@ -320,7 +329,8 @@ def report(days=30):
         "geoip_ready": geo.reader() is not None,
         "total_clicks": total_clicks,
         "click_rate": round(100 * total_clicks / product_page_views, 1) if product_page_views else 0,
-        "kinds": [(label, kinds.get(code, 0)) for code, label in DailyPageView.Kind.choices],
+        "kinds": [(label, kinds.get(code, 0)) for code, label in DailyPageView.Kind.choices if code != DailyPageView.Kind.INSTALL],
+        "install": install,
         "top_products": top_products,
         "shops": shops,
         "games": games,

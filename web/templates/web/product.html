@@ -55,7 +55,7 @@
     <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.delivered_price %}</div>
     {% if amazon_search %}
       <div class="buybox__amazon">
-        <a class="button button--quiet" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}</a>
+        <a class="button button--small buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
         <p class="buybox__summary">{% copy "product.amazon.note" %}</p>
       </div>
     {% endif %}

@@ -776,13 +776,13 @@ ENTRIES = [
     ),
     Entry(
         "product.amazon.note", T, "Amazon note",
-        "We do not have an Amazon price for this product yet. The link opens an Amazon search for it.",
+        "Often in stock with Prime delivery. We do not have Amazon's price yet, so the link opens an Amazon search for it.",
         "Product page, under the Check price on Amazon button in the price box.",
         legal=True,
     ),
     Entry(
         "product.amazon.button", B, "Amazon button",
-        "Check price on Amazon",
+        "Compare on Amazon",
         "Product page price box, under the cheapest price. Shown only when an Amazon tracking "
         "tag is set and we have no Amazon price for the product. Opens Amazon in a new tab.",
     ),

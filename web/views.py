@@ -856,6 +856,29 @@ def deals(request):
 
 
 WATCHLIST_MAX = 50
+RECENT_MAX = 12
+
+
+def products_for_slugs(wanted):
+    """Products for ``wanted`` slugs in that order, with buyable offers attached and old addresses resolved."""
+    found = {p.slug: p for p in Product.objects.for_lists().filter(slug__in=wanted).prefetch_related(offers.buyable_prefetch())}
+    missing = [slug for slug in wanted if slug not in found]
+    if missing:
+        moved = dict(ProductAlias.objects.filter(slug__in=missing, product__is_active=True).values_list("slug", "product__slug"))
+        for product in Product.objects.for_lists().filter(slug__in=moved.values()).prefetch_related(offers.buyable_prefetch()):
+            for old, new in moved.items():
+                if new == product.slug:
+                    found[old] = product
+    products = []
+    for slug in wanted:
+        product = found.get(slug)
+        if product is not None and product not in products:
+            products.append(product)
+    return products
+
+
+def slugs_in(request, limit):
+    return [slug for slug in request.GET.get("p", "").split(",") if slug][:limit]
 
 
 @require_GET
@@ -866,23 +889,10 @@ def watchlist(request):
     server, so the page works bookmarked, pasted into a chat, or with
     JavaScript off. The script fills in what each was saved at.
     """
-    wanted = [slug for slug in request.GET.get("p", "").split(",") if slug][:WATCHLIST_MAX]
+    wanted = slugs_in(request, WATCHLIST_MAX)
     rows = []
     if wanted:
-        found = {p.slug: p for p in Product.objects.for_lists().filter(slug__in=wanted).prefetch_related(offers.buyable_prefetch())}
-        missing = [slug for slug in wanted if slug not in found]
-        if missing:
-            aliases = ProductAlias.objects.filter(slug__in=missing, product__is_active=True).values_list("slug", "product__slug")
-            moved = dict(aliases)
-            for product in Product.objects.for_lists().filter(slug__in=moved.values()).prefetch_related(offers.buyable_prefetch()):
-                for old, new in moved.items():
-                    if new == product.slug:
-                        found[old] = product
-        products = []
-        for slug in wanted:
-            product = found.get(slug)
-            if product is not None and product not in products:
-                products.append(product)
+        products = products_for_slugs(wanted)
         week_lows = offers.week_low_map([p.pk for p in products])
         rows = [(product, offers.summarise(product, week_lows)) for product in products]
         if not insights.is_bot(request):
@@ -896,6 +906,22 @@ def watchlist(request):
             "noindex": True,
         },
     )
+
+
+@require_GET
+def recent_api(request):
+    """A row of the products named in ``p`` with live prices, for the home page's recently viewed list.
+
+    The list of what was viewed lives in the browser; the server only prices it.
+    """
+    from django.template.loader import render_to_string
+
+    products = products_for_slugs(slugs_in(request, RECENT_MAX))
+    week_lows = offers.week_low_map([p.pk for p in products])
+    rows = [(product, offers.summarise(product, week_lows)) for product in products]
+    response = HttpResponse(render_to_string("web/includes/recent_row.html", {"rows": rows}, request=request))
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @require_GET

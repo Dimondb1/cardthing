@@ -612,6 +612,19 @@ robots.txt. Buy clicks from it carry `?from=watchlist`, stored in
 "watchlist row" page view by slug, so Insights shows clicks from
 watchlists and the stock watcher can put watched products first.
 
+## Recent searches and recently viewed
+
+The browser remembers the last 8 searches and the last 12 product pages
+it opened (`ripraptor.searches` and `ripraptor.viewed` in localStorage;
+`web/static/js/history.js`). Tapping into an empty search box lists the
+recent searches. The home page shows "Pick up where you left off" with
+the searches as chips and the viewed products as a row with live prices,
+fetched from `/api/recent/?p=slug,slug`, which renders the row for the
+slugs it is given. The section stays hidden until there is something to
+show, and "Clear history" forgets both. Nothing is sent to or stored on
+the server, and nobody is sent back to where they were: the site opens
+the same for everyone and the recent things are simply there.
+
 ## Add to home screen
 
 `/manifest.webmanifest` is a web app manifest, built by a view so it

@@ -626,6 +626,29 @@ class WatchlistTests(PageTestCase):
         self.assertContains(self.client.get("/robots.txt"), "Disallow: /watchlist/")
 
 
+class PickUpTests(PageTestCase):
+    def test_recent_row_prices_the_named_products_in_order(self):
+        body = self.client.get(reverse("web:recent_api") + f"?p={self.sold_out.slug},{self.etb.slug},nope").content.decode()
+        self.assertLess(body.index(self.sold_out.name), body.index(self.etb.name))
+        self.assertIn("£54.99 delivered", body)
+        self.assertIn("Last checked", body)
+        self.assertNotIn("<html", body)
+        self.assertEqual(self.client.get(reverse("web:recent_api")).content.decode().count("trending__item"), 0)
+
+    def test_pages_carry_what_the_script_remembers_and_the_home_page_has_the_section(self):
+        product = self.client.get(self.etb.get_absolute_url()).content.decode()
+        self.assertIn(f'data-viewed-slug="{self.etb.slug}" data-viewed-name="{self.etb.name}"', product)
+        results = self.client.get(reverse("web:search") + "?q=etb").content.decode()
+        self.assertIn('<span data-search-query="etb" hidden></span>', results)
+        home = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('data-resume hidden', home)
+        self.assertIn("Pick up where you left off", home)
+        self.assertIn("Clear history", home)
+        self.assertIn('data-endpoint="/api/recent/"', home)
+        self.assertIn('data-recent="Recent searches"', home)
+        self.assertContains(self.client.get(reverse("web:terms")), "searches you make are stored in your browser")
+
+
 class HomeScreenTests(PageTestCase):
     def test_manifest_names_the_site_and_its_icons(self):
         import json as json_module

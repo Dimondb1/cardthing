@@ -2,6 +2,7 @@
 {% load sitecopy ripraptor %}
 
 {% block content %}
+{% if query %}<span data-search-query="{{ query }}" hidden></span>{% endif %}
 {% if no_matches %}
 {# A plain search found nothing: lead with that and offer a way forward. #}
 <div class="browse-head browse-head--empty">

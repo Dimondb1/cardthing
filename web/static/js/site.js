@@ -108,12 +108,34 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
     return index.filter((r) => terms.every((t) => r.text.includes(" " + t))).slice(0, 6);
   };
 
+  // Before anything is typed: the searches this browser made before, newest first.
+  const recentSearches = () => { try { return JSON.parse(localStorage.getItem("ripraptor.searches")) || []; } catch (e) { return []; } };
+  const showRecent = () => {
+    const recent = recentSearches();
+    list.textContent = "";
+    select(-1);
+    if (!recent.length || !form.dataset.recent) { open(false); status.textContent = ""; return; }
+    status.textContent = form.dataset.recent;
+    recent.forEach((term, i) => {
+      const li = document.createElement("li");
+      li.className = "live__item live__item--recent";
+      li.id = `${input.id}-option-${i}`;
+      li.setAttribute("role", "option");
+      li.style.setProperty("--i", i);
+      const a = document.createElement("a");
+      a.href = `${form.action}?q=${encodeURIComponent(term)}`;
+      a.className = "live__link";
+      a.textContent = term;
+      li.append(a);
+      list.append(li);
+    });
+    open(true);
+  };
+
   const run = async (query) => {
     const id = ++latest;
     if (!query) {
-      open(false);
-      list.textContent = "";
-      status.textContent = "";
+      showRecent();
       return;
     }
     if (index) {
@@ -161,6 +183,7 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
   });
   input.addEventListener("focus", () => {
     if (list.children.length) open(true);
+    else if (!input.value.trim()) showRecent();
   });
 });
 

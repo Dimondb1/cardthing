@@ -10,7 +10,7 @@
   </ol>
 </nav>
 
-<div class="product-head">
+<div class="product-head" data-viewed-slug="{{ product.slug }}" data-viewed-name="{{ product.name }}">
   <div class="hero-card">
     <div class="hero-card__image">{% product_image product "large" %}</div>
     <p class="eyebrow">{{ product.type_name }}</p>

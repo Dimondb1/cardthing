@@ -24,6 +24,22 @@
   {% endif %}
 </section>
 
+<section class="home-section resume" aria-labelledby="resume-title" data-resume hidden>
+  <div class="section-head">
+    <h2 id="resume-title" class="section-head__title">{% copy "home.resume.title" %}</h2>
+    <button type="button" class="section-head__all" data-resume-clear>{% copy "home.resume.clear" %}</button>
+  </div>
+  <div class="resume__block" data-resume-searches hidden>
+    <p class="resume__label">{% copy "home.resume.searches" %}</p>
+    <ul class="chips__list resume__chips" data-resume-search-list data-search-url="{% url 'web:search' %}"></ul>
+  </div>
+  <div class="resume__block" data-resume-viewed data-endpoint="{% url 'web:recent_api' %}" hidden>
+    <p class="resume__label">{% copy "home.resume.viewed" %}</p>
+    <div data-resume-viewed-list></div>
+  </div>
+  <p class="section-head__note">{% copy "home.resume.note" %}</p>
+</section>
+
 {% if focal %}
 <section class="home-section home-section--focal" aria-labelledby="focal-title">
   {% with product=focal.product %}

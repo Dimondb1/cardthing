@@ -1,0 +1,17 @@
+{% load sitecopy ripraptor %}<ul class="trending" data-scroll>
+{% for product, summary in rows %}
+  <li class="trending__item">
+    <a class="trending__link" href="{{ product.get_absolute_url }}">
+      {% product_image product "trend" %}
+      <span class="trending__name">{{ product.name }}</span>
+      {% if summary.best %}
+        <span class="trending__price">{% price summary.best.delivered_price %}</span>
+        <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=summary.best.delivered_price|gbp %}</span> · {{ summary.best.retailer.name }}</span>
+        <span class="trending__move">{% copy "product.last_checked" time=summary.best.last_checked|ago %}</span>
+      {% else %}
+        <span class="trending__retailer">{% copy "browse.availability.none" %}</span>
+      {% endif %}
+    </a>
+  </li>
+{% endfor %}
+</ul>

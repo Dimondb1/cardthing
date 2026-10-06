@@ -113,6 +113,11 @@ ENTRIES = [
         "Button next to the search box in the header.",
     ),
     Entry(
+        "site.search.recent", T, "Recent searches label",
+        "Recent searches",
+        "Above the searches this browser made before, shown under the search box before anything is typed.",
+    ),
+    Entry(
         "site.nav.swipe", B, "Swipe link",
         "Swipe",
         "Header link to the swipe page on phones.",
@@ -356,6 +361,19 @@ ENTRIES = [
         "Leave empty to hide it.",
         placeholders=("days",),
         optional=True,
+    ),
+    Entry(
+        "home.resume.title", H, "Pick up heading",
+        "Pick up where you left off",
+        "Home page section with this browser's recent searches and viewed products. Hidden until there are some.",
+    ),
+    Entry("home.resume.searches", T, "Recent searches label", "Recent searches", "Label in the pick up section."),
+    Entry("home.resume.viewed", T, "Recently viewed label", "Recently viewed", "Label in the pick up section."),
+    Entry("home.resume.clear", B, "Clear history button", "Clear history", "Forgets the recent searches and viewed products in this browser."),
+    Entry(
+        "home.resume.note", T, "Pick up note",
+        "Kept in this browser only.",
+        "Small note under the pick up section.",
     ),
     Entry(
         "home.games.title", H, "All games heading",
@@ -1088,8 +1106,9 @@ ENTRIES = [
     Entry("terms.data.title", H, "Data heading", "Your data", "Heading on the terms page."),
     Entry(
         "terms.data.body", P, "Data explanation",
-        "RipRaptor does not ask you to create an account. Products you save are "
-        "stored in your browser only. We count clicks to retailers without "
+        "RipRaptor does not ask you to create an account. Products you save, "
+        "products you view and searches you make are stored in your browser "
+        "only, and you can clear them from the home page. We count clicks to retailers without "
         "recording who clicked. One small cookie remembers only that your browser "
         "has visited before, so we can count returning visitors. It holds nothing "
         "about you.",

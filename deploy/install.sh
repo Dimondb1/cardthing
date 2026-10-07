@@ -45,6 +45,14 @@ ENV
 fi
 mkdir -p /var/lib/ripraptor media
 set -a; . ./.env; set +a
+# A copy of the database before any change, so an update can be rolled back. SQLite's own backup
+# is safe while the site is running. The newest five are kept.
+if [ -f /var/lib/ripraptor/db.sqlite3 ]; then
+  mkdir -p /var/lib/ripraptor/backups
+  .venv/bin/python -c "import sqlite3,sys; s=sqlite3.connect(sys.argv[1]); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close()" \
+    /var/lib/ripraptor/db.sqlite3 "/var/lib/ripraptor/backups/db-$(date +%Y%m%d-%H%M%S).sqlite3"
+  ls -1t /var/lib/ripraptor/backups/db-*.sqlite3 | tail -n +6 | xargs -r rm -f
+fi
 .venv/bin/python manage.py migrate -v0
 .venv/bin/python manage.py backfill_restocks >/dev/null
 .venv/bin/python manage.py collectstatic --noinput -v0

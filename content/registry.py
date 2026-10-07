@@ -42,6 +42,7 @@ SECTIONS = [
     ("home", "Home page"),
     ("deals", "Deals page"),
     ("feeds", "Feeds (RSS)"),
+    ("alerts", "Back in stock emails"),
     ("watchlist", "Watchlist page"),
     ("browse", "Search results and browsing"),
     ("product", "Product page"),
@@ -1032,6 +1033,37 @@ ENTRIES = [
         "Text when the watchlist is empty.",
     ),
     Entry("watchlist.empty.button", B, "Empty watchlist button", "See today's deals", "Button when the watchlist is empty."),
+    Entry("alerts.form.title", T, "Alert form heading", "Email me when it is back in stock", "Above the email box on a product no shop has in stock."),
+    Entry("alerts.form.label", T, "Alert email label", "Your email address", "Label for the email box, read out by screen readers."),
+    Entry("alerts.form.placeholder", T, "Alert email hint", "you@example.com", "Grey hint in the email box."),
+    Entry("alerts.form.button", B, "Alert button", "Email me", "Button that asks for the alert."),
+    Entry(
+        "alerts.form.note", T, "Alert privacy note",
+        "One email when a shop has it, then your address is deleted. We use it for nothing else.",
+        "Under the email box.",
+        legal=True,
+    ),
+    Entry("alerts.form.sent", T, "Alert asked", "Check your inbox and confirm, then we will email you when it is back.", "Shown after the form is sent."),
+    Entry("alerts.form.already", T, "Alert already set", "You already have an alert for this product.", "Shown when the address is already waiting for it."),
+    Entry("alerts.form.limit", T, "Alert limit", "That address is waiting on 30 products already.", "Shown when one address asks for too many."),
+    Entry("alerts.form.invalid", T, "Alert bad address", "That email address does not look right.", "Shown when the address is not valid."),
+    Entry("alerts.form.failed", T, "Alert send failed", "We could not send the confirmation just now. Try again in a minute.", "Shown when the email service fails."),
+    Entry("alerts.confirmed.title", H, "Alert confirmed heading", "Alert confirmed", "Page after the confirm link."),
+    Entry(
+        "alerts.confirmed.body", T, "Alert confirmed text",
+        "We will email you once when {product} is back in stock at a UK shop we check, then delete your address.",
+        "Page after the confirm link.",
+        placeholders=("product",),
+    ),
+    Entry("alerts.stopped.title", H, "Alert stopped heading", "Alert stopped", "Page after the stop link."),
+    Entry("alerts.stopped.body", T, "Alert stopped text", "Your alert and your email address have been deleted.", "Page after the stop link."),
+    Entry("alerts.gone.title", H, "Alert gone heading", "This link has expired", "Page for a confirm link that no longer works."),
+    Entry(
+        "alerts.gone.body", T, "Alert gone text",
+        "The alert was sent, stopped or expired. Ask again on the product page if you still want one.",
+        "Page for a confirm link that no longer works.",
+    ),
+    Entry("alerts.done.back", B, "Back to product button", "Back to the product", "On the alert confirm and stop pages."),
     Entry(
         "feeds.deals.title", T, "Site feed title",
         "{site_name}: restocks and price drops",
@@ -1130,7 +1162,13 @@ ENTRIES = [
         "only, and you can clear them from the home page. We count clicks to retailers without "
         "recording who clicked. One small cookie remembers only that your browser "
         "has visited before, so we can count returning visitors. It holds nothing "
-        "about you.",
+        "about you.\n\n"
+        "If you ask to be emailed when a product is back in stock, we keep your email "
+        "address for that alone. Nothing is sent until you confirm by the link we email "
+        "you. You get one email when a shop has the product, and your address is then "
+        "deleted. Unconfirmed requests are deleted after a week and any still waiting "
+        "after six months are deleted too. Every email has a link that deletes your "
+        "request at once. The emails are sent through Zoho ZeptoMail.",
         "Data section of the terms page.",
         legal=True,
     ),

@@ -649,6 +649,15 @@ ul, ol { margin: 0; padding: 0; }
 .buybox__sep { color: var(--color-ink-subtle); }
 .buybox__summary { font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__save { display: flex; justify-content: flex-start; }
+.alert-box { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-brand-line); border-radius: var(--radius); background: var(--color-brand-soft); scroll-margin-top: var(--space-6); }
+.alert-box__title { font-weight: var(--weight-strong); }
+.alert-box__form { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.alert-box__input { flex: 1 1 12rem; min-width: 0; min-height: 2.25rem; padding: 0 var(--space-3); border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-paper); font: inherit; font-size: var(--text-base); color: var(--color-ink); }
+.alert-box__input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.alert-box__note { font-size: var(--text-xs); color: var(--color-ink-muted); }
+.alert-box__error { font-size: var(--text-sm); color: var(--color-more); font-weight: var(--weight-strong); }
+.alert-box__done { font-weight: var(--weight-strong); color: var(--color-price); }
+.alert-box__trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 .buybox__amazon { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-line); }
 .buybox__amazon-button { flex: none; }
 .buybox__amazon--lead { border-top: 0; padding-top: 0; }

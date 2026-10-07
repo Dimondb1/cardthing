@@ -13,9 +13,9 @@ from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect, Ht
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
-from catalogue import insights, offers, pricing
+from catalogue import alerts, insights, mail, offers, pricing
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Retailer, stale_cutoff
 from catalogue.search import apply_search
@@ -606,6 +606,11 @@ def product_detail(request, slug):
             "month_ago": month_ago,
             "last_known": last_known,
             "restocks": restocks,
+            "alerts_on": mail.enabled() and not any(
+                l.availability == Listing.Availability.IN_STOCK and l.retailer.source_type not in alerts.MARKETPLACES
+                for l in current
+            ),
+            "alert_state": request.GET.get("alert") if request.GET.get("alert") in ALERT_STATES else "",
             "amazon_search": amazon_search_url(product, listings),
             "related": related,
             "meta_title": meta_title,
@@ -935,6 +940,52 @@ def note_api(request):
     return response
 
 
+ALERT_STATES = ("sent", "already", "limit", "invalid", "failed")
+
+
+@require_POST
+def alert_ask(request, slug):
+    """Take an email address for a back-in-stock alert and send the confirmation. Works without JavaScript."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    product = get_object_or_404(Product.objects.active(), slug=slug)
+    back = product.get_absolute_url()
+    if request.POST.get("website") or not mail.enabled():
+        return HttpResponseRedirect(back)   # the hidden field is only ever filled by robots
+    email = request.POST.get("email", "").strip()
+    try:
+        validate_email(email)
+        state = alerts.ask(product, email)
+    except ValidationError:
+        state = "invalid"
+    except mail.MailError:
+        state = "failed"
+    return HttpResponseRedirect(f"{back}?alert={state}#alert")
+
+
+@require_GET
+def alert_confirm(request, token):
+    alert = alerts.confirm(token)
+    if alert is None:
+        heading, message, product = text(request, "alerts.gone.title"), text(request, "alerts.gone.body"), None
+    else:
+        heading = text(request, "alerts.confirmed.title")
+        message = text(request, "alerts.confirmed.body", product=alert.product.name)
+        product = alert.product
+    return render(request, "web/alert_done.html", {"heading": heading, "message": message, "product": product,
+                                                    "meta_title": heading, "noindex": True})
+
+
+@require_GET
+def alert_stop(request, token):
+    product = alerts.stop(token)
+    heading = text(request, "alerts.stopped.title")
+    message = text(request, "alerts.stopped.body")
+    return render(request, "web/alert_done.html", {"heading": heading, "message": message, "product": product,
+                                                    "meta_title": heading, "noindex": True})
+
+
 @require_GET
 def manifest(request):
     """The web app manifest, so a phone can pin RipRaptor to its home screen. No service worker, no push."""
@@ -961,7 +1012,8 @@ def manifest(request):
 
 @require_GET
 def robots_txt(request):
-    private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/", "Disallow: /watchlist/"]
+    private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/", "Disallow: /watchlist/",
+               "Disallow: /alerts/"]
     lines = ["User-agent: *", *private, ""]
     # Named so a crawler that only honours its own section still gets the same answer.
     for agent in AI_CRAWLERS:

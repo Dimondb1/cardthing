@@ -59,6 +59,7 @@
         <p class="buybox__summary">{% copy "product.amazon.note_sold_out" %}</p>
       </div>
     {% endif %}
+    {% if alerts_on %}{% include "web/includes/alert_form.html" %}{% endif %}
     <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.delivered_price %}</div>
     {% if amazon_search and cheapest %}
       <div class="buybox__amazon">

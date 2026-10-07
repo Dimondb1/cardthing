@@ -1,0 +1,18 @@
+{% load sitecopy %}<div class="alert-box" id="alert">
+  {% if alert_state == "sent" %}
+    <p class="alert-box__done" role="status">{% copy "alerts.form.sent" %}</p>
+  {% elif alert_state == "already" %}
+    <p class="alert-box__done" role="status">{% copy "alerts.form.already" %}</p>
+  {% else %}
+    <p class="alert-box__title">{% copy "alerts.form.title" %}</p>
+    {% if alert_state == "limit" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.limit" %}</p>{% elif alert_state == "invalid" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.invalid" %}</p>{% elif alert_state == "failed" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.failed" %}</p>{% endif %}
+    <form class="alert-box__form" method="post" action="{% url 'web:alert_ask' product.slug %}">
+      {% csrf_token %}
+      <label class="visually-hidden" for="alert-email">{% copy "alerts.form.label" %}</label>
+      <input id="alert-email" class="alert-box__input" type="email" name="email" required autocomplete="email" inputmode="email" maxlength="254" placeholder="{% copy 'alerts.form.placeholder' %}">
+      <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+      <button class="button button--small" type="submit">{% copy "alerts.form.button" %}</button>
+    </form>
+    <p class="alert-box__note">{% copy "alerts.form.note" %} <a href="{% url "web:terms" %}#terms-data">{% copy "site.nav.terms" %}</a></p>
+  {% endif %}
+</div>

@@ -1,0 +1,9 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{{ heading }}</h1>
+  <p class="page-intro">{{ message }}</p>
+</div>
+{% if product %}<p><a class="button" href="{{ product.get_absolute_url }}">{% copy "alerts.done.back" %}</a></p>{% endif %}
+{% endblock %}

@@ -569,6 +569,10 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_EBAY_DAILY_LIMIT`   | 4000    | Products checked on eBay per day. |
 | `RIPRAPTOR_GEOIP_DB`           |         | Path of the DB-IP country database for visitor countries. Empty means countries are not recorded. |
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
+| `RIPRAPTOR_ZEPTOMAIL_TOKEN`    |         | Send Mail token from a Zoho ZeptoMail Mail Agent. With `RIPRAPTOR_MAIL_FROM` set, turns on back-in-stock emails. |
+| `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://api.zeptomail.eu/v1.1/email` | The API address shown on the Mail Agent's API page; it differs by Zoho data centre. |
+| `RIPRAPTOR_MAIL_FROM`          |         | The sending address, on a domain verified in ZeptoMail, for example `alerts@ripraptor.com`. |
+| `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
 ## Games
@@ -623,6 +627,28 @@ again, and each product page says how often it has come back in the last
 restocks in 90 days the line adds the two-hour window most of them landed
 in. `backfill_restocks` turns the stamps listings already carried into
 rows; the installer runs it, and it is safe to run again.
+
+## Back in stock emails
+
+On a product no shop has in stock (eBay and Amazon do not count), the
+price box offers "Email me when it is back in stock". The form works
+without JavaScript. The address is stored with the product and a
+confirmation email goes out through Zoho ZeptoMail; nothing else is sent
+until the visitor presses the link in it. `send_stock_alerts` runs every
+ten minutes after `watch_stock`: for each confirmed alert whose product a
+shop now has in stock, it sends one email naming the cheapest shop and
+linking to the product page, then deletes the address. Unconfirmed
+requests are deleted after a week, confirmed ones after six months, and
+every email has a link that deletes the request at once. One address can
+wait on 30 products. The Terms page says all of this. Insights counts
+requests, confirmations, emails sent and stops.
+
+Setting up ZeptoMail: add and verify the domain (the DNS records it gives),
+create a Mail Agent, copy its Send Mail token and API address into `.env`
+as `RIPRAPTOR_ZEPTOMAIL_TOKEN` and `RIPRAPTOR_ZEPTOMAIL_URL`, set
+`RIPRAPTOR_MAIL_FROM`, restart, and check with
+`python manage.py send_stock_alerts --test you@example.com`. Without the
+token the form does not appear.
 
 ## Watchlist
 

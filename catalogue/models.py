@@ -523,6 +523,36 @@ class Restock(models.Model):
         return f"{self.product} at {self.retailer}, {self.at:%d %b %H:%M}"
 
 
+def alert_token():
+    import secrets
+
+    return secrets.token_urlsafe(24)
+
+
+class StockAlert(models.Model):
+    """One email address waiting to hear when one product is back in stock.
+
+    The address is kept for this and nothing else. It is confirmed by a link
+    before anything else is sent, deleted as soon as the one back-in-stock
+    email has gone, and deleted unconfirmed after a week or confirmed after
+    six months. Every email carries a link that deletes it at once.
+    """
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stock_alerts")
+    email = models.EmailField(max_length=254)
+    token = models.CharField(max_length=40, unique=True, default=alert_token)
+    created_at = models.DateTimeField(default=timezone.now)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = [("product", "email")]
+        ordering = ["-created_at"]
+        verbose_name = "back in stock alert"
+
+    def __str__(self):
+        return f"{self.product} for {self.email}"
+
+
 class DailyPageView(models.Model):
     """How many times a kind of page was opened on one day. No personal data."""
 
@@ -538,6 +568,7 @@ class DailyPageView(models.Model):
         WATCHLIST = "watchlist", "Watchlist"
         WATCHED = "watched", "Watchlist rows"   # one per product on a loaded watchlist, keyed by slug
         INSTALL = "install", "Home screen"     # keyed by event: shown, added, dismissed, opened
+        ALERTS = "alerts", "Stock alerts"     # keyed by event: asked, confirmed, sent, stopped
         OTHER = "other", "Other"
 
     date = models.DateField(db_index=True)

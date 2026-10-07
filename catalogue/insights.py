@@ -15,7 +15,7 @@ from django.db.models import Count, F, Max, Q, Sum
 from django.utils import timezone
 
 from . import geo
-from .models import DailyPageView, DailySearch, DailyVisitor, ImportRun, Listing, OutboundClick, Product, Retailer
+from .models import DailyPageView, DailySearch, DailyVisitor, ImportRun, Listing, OutboundClick, Product, Retailer, StockAlert
 
 COUNTRY_NAMES = {
     "GB": "United Kingdom", "IE": "Ireland", "US": "United States", "DE": "Germany", "FR": "France", "NL": "Netherlands",
@@ -175,7 +175,7 @@ def report(days=30):
 
     visitors = DailyVisitor.objects.filter(date__gte=since)
     # Watchlist rows and home screen events are counts of their own, not pages anyone opened.
-    pages = views.exclude(kind__in=[DailyPageView.Kind.WATCHED, DailyPageView.Kind.INSTALL])
+    pages = views.exclude(kind__in=[DailyPageView.Kind.WATCHED, DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS])
     by_day = {row["date"]: row for row in pages.values("date").annotate(hits=Sum("hits")).order_by("date")}
     clicks_by_day = dict(clicks.values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n"))
     visitors_by_day = dict(visitors.values_list("date").annotate(n=Count("id")).values_list("date", "n"))
@@ -320,12 +320,17 @@ def report(days=30):
     total_views = sum(d["views"] for d in days_out)
     total_clicks = sum(d["clicks"] for d in days_out)
     product_page_views = sum(product_views.values())
-    kinds = {row["kind"]: row["hits"] for row in views.exclude(kind=DailyPageView.Kind.INSTALL).values("kind").annotate(hits=Sum("hits"))}
+    kinds = {row["kind"]: row["hits"] for row in views.exclude(kind__in=[DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS]).values("kind").annotate(hits=Sum("hits"))}
     capped = visitors.filter(views__gte=VIEWS_PER_VISITOR_CAP).count()
     install_rows = dict(
         views.filter(kind=DailyPageView.Kind.INSTALL).values_list("key").annotate(hits=Sum("hits")).values_list("key", "hits")
     )
     install = {event: install_rows.get(event, 0) for event in INSTALL_EVENTS}
+    alert_rows = dict(
+        views.filter(kind=DailyPageView.Kind.ALERTS).values_list("key").annotate(hits=Sum("hits")).values_list("key", "hits")
+    )
+    alert_counts = {event: alert_rows.get(event, 0) for event in ("asked", "confirmed", "sent", "stopped")}
+    alert_counts["waiting"] = StockAlert.objects.filter(confirmed_at__isnull=False).count()
     data = {
         "days": days,
         "since": since,
@@ -341,7 +346,9 @@ def report(days=30):
         "geoip_ready": geo.reader() is not None,
         "total_clicks": total_clicks,
         "click_rate": round(100 * total_clicks / product_page_views, 1) if product_page_views else 0,
-        "kinds": [(label, kinds.get(code, 0)) for code, label in DailyPageView.Kind.choices if code != DailyPageView.Kind.INSTALL],
+        "kinds": [(label, kinds.get(code, 0)) for code, label in DailyPageView.Kind.choices
+                  if code not in (DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS)],
+        "alerts": alert_counts,
         "install": install,
         "top_products": top_products,
         "shops": shops,

@@ -1,0 +1,8 @@
+You asked {{ site_name }} to email you when {{ product.name }} is back in stock at a UK shop we check.
+
+Confirm with this link:
+{{ confirm_url }}
+
+Nothing is sent until you confirm. If this was not you, ignore this email and the request is deleted within a week.
+
+Stop and delete this request: {{ stop_url }}

@@ -3,7 +3,7 @@ from django.db.models import Count
 from django.utils.html import format_html
 
 from . import pricing
-from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Restock, Retailer, ShopProduct
+from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Restock, Retailer, ShopProduct, StockAlert
 
 
 @admin.register(Game)
@@ -260,6 +260,18 @@ class RestockAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(StockAlert)
+class StockAlertAdmin(admin.ModelAdmin):
+    list_display = ("product", "email", "created_at", "confirmed_at")
+    list_filter = ("confirmed_at",)
+    search_fields = ("product__name", "email")
+    list_select_related = ("product",)
+    readonly_fields = ("product", "email", "token", "created_at", "confirmed_at")
+
+    def has_add_permission(self, request):
         return False
 
 

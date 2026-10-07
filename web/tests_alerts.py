@@ -19,8 +19,8 @@ class Outbox:
     def __init__(self):
         self.sent = []
 
-    def __call__(self, to, subject, text, html, opener=None):
-        self.sent.append({"to": to, "subject": subject, "text": text, "html": html})
+    def __call__(self, to, subject, text, html, opener=None, unsubscribe=""):
+        self.sent.append({"to": to, "subject": subject, "text": text, "html": html, "unsubscribe": unsubscribe})
         return {}
 
 
@@ -63,6 +63,10 @@ class StockAlertTests(TestCase):
         self.assertEqual(message["subject"], "Confirm your alert for 30th Celebration Booster Bundle")
         self.assertIn(f"https://ripraptor.com/alerts/confirm/{alert.token}/", message["text"])
         self.assertIn(f"https://ripraptor.com/alerts/stop/{alert.token}/", message["html"])
+        self.assertEqual(message["unsubscribe"], f"https://ripraptor.com/alerts/stop/{alert.token}/")
+        self.assertIn(">Unsubscribe</a>", message["html"])
+        self.assertIn('/static/img/logo.png" width="180" alt="RipRaptor"', message["html"])
+        self.assertIn("#ff5a1f", message["html"])
         self.assertContains(self.client.get(self.product.get_absolute_url() + "?alert=sent"), "Check your inbox and confirm")
         # Asking again before confirming resends; after confirming it says so.
         self.ask()
@@ -99,7 +103,9 @@ class StockAlertTests(TestCase):
         self.assertEqual(alerts.send_due(), (1, 0))
         message = self.outbox.sent[0]
         self.assertEqual((message["to"], message["subject"]), ("ben@example.com", "Back in stock: 30th Celebration Booster Bundle"))
-        self.assertIn("Harbour Games has it at £32.99 delivered", message["text"])
+        self.assertIn("£32.99 delivered at Harbour Games", message["text"])
+        self.assertIn(">Unsubscribe</a>", message["html"])
+        self.assertTrue(message["unsubscribe"].startswith("https://ripraptor.com/alerts/stop/"))
         self.assertIn("https://ripraptor.com/products/30th-bundle/", message["text"])
         self.assertFalse(StockAlert.objects.exists())
         self.assertEqual(alerts.send_due(), (0, 0))
@@ -155,8 +161,9 @@ class ZeptoMailTests(TestCase):
             seen["url"], seen["headers"], seen["body"] = request.full_url, dict(request.header_items()), json.loads(request.data)
             return Response()
 
-        mail.send("ben@example.com", "Subject", "text", "<p>html</p>", opener=opener)
+        mail.send("ben@example.com", "Subject", "text", "<p>html</p>", opener=opener, unsubscribe="https://ripraptor.com/alerts/stop/x/")
         self.assertEqual(seen["url"], "https://api.zeptomail.eu/v1.1/email")
+        self.assertEqual(seen["body"]["mime_headers"], {"List-Unsubscribe": "<https://ripraptor.com/alerts/stop/x/>"})
         self.assertEqual(seen["headers"]["Authorization"], "Zoho-enczapikey tok")
         self.assertEqual(seen["body"]["to"], [{"email_address": {"address": "ben@example.com"}}])
         self.assertEqual(seen["body"]["from"], {"address": "alerts@ripraptor.com", "name": "RipRaptor"})
@@ -173,3 +180,5 @@ class ZeptoMailTests(TestCase):
             out = StringIO()
             call_command("send_stock_alerts", "--test", "ben@example.com", stdout=out)
         self.assertEqual(outbox.sent[0]["to"], "ben@example.com")
+        self.assertIn(">Unsubscribe</a>", outbox.sent[0]["html"])
+        self.assertTrue(outbox.sent[0]["unsubscribe"])

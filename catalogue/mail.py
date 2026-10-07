@@ -21,7 +21,7 @@ def enabled():
     return bool(settings.RIPRAPTOR_ZEPTOMAIL_TOKEN and settings.RIPRAPTOR_MAIL_FROM)
 
 
-def send(to, subject, text, html, opener=None):
+def send(to, subject, text, html, opener=None, unsubscribe=""):
     """Send one message. Raises MailError when ZeptoMail refuses it or cannot be reached."""
     if not enabled():
         raise MailError("Email is not set up: RIPRAPTOR_ZEPTOMAIL_TOKEN is needed.")
@@ -35,6 +35,9 @@ def send(to, subject, text, html, opener=None):
         "textbody": text,
         "htmlbody": html,
     }
+    if unsubscribe:
+        # Lets Gmail and Apple Mail show their own Unsubscribe link next to the sender.
+        body["mime_headers"] = {"List-Unsubscribe": f"<{unsubscribe}>"}
     request = urllib.request.Request(
         settings.RIPRAPTOR_ZEPTOMAIL_URL,
         data=json.dumps(body).encode(),

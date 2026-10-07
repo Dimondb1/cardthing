@@ -37,8 +37,25 @@ def shop_stock(product):
     )
 
 
+def absolute(url):
+    if not url:
+        return ""
+    return url if url.startswith(("http://", "https://")) else settings.RIPRAPTOR_SITE_URL + url
+
+
 def render_mail(template, context):
-    context = {**context, "site_name": settings.RIPRAPTOR_SITE_NAME}
+    from django.templatetags.static import static
+
+    product = context.get("product")
+    context = {
+        "site_name": settings.RIPRAPTOR_SITE_NAME,
+        "site_url": settings.RIPRAPTOR_SITE_URL,
+        "logo_url": absolute(static("img/logo.png")),
+        "image_url": absolute(product.image_src) if product is not None else "",
+        "stop_url": settings.RIPRAPTOR_SITE_URL + "/",
+        "preheader": "",
+        **context,
+    }
     return (
         render_to_string(f"web/email/{template}.txt", context).strip(),
         render_to_string(f"web/email/{template}.html", context),
@@ -57,10 +74,12 @@ def ask(product, email):
         existing = StockAlert.objects.create(product=product, email=email)
     text, html = render_mail("confirm", {
         "product": product,
+        "subject": f"Confirm your alert for {product.name}",
+        "preheader": "One click and we will email you when it is back.",
         "confirm_url": link("web:alert_confirm", existing.token),
         "stop_url": link("web:alert_stop", existing.token),
     })
-    mail.send(email, f"Confirm your alert for {product.name}", text, html)
+    mail.send(email, f"Confirm your alert for {product.name}", text, html, unsubscribe=link("web:alert_stop", existing.token))
     note("asked")
     return "sent"
 
@@ -102,12 +121,15 @@ def send_due(now=None, stdout=None):
             continue
         text, html = render_mail("back_in_stock", {
             "product": alert.product,
+            "subject": f"Back in stock: {alert.product.name}",
+            "preheader": f"£{listing.delivered_price} delivered at {listing.retailer.name}, checked just now.",
             "listing": listing,
             "product_url": settings.RIPRAPTOR_SITE_URL + alert.product.get_absolute_url(),
             "stop_url": link("web:alert_stop", alert.token),
         })
         try:
-            mail.send(alert.email, f"Back in stock: {alert.product.name}", text, html)
+            mail.send(alert.email, f"Back in stock: {alert.product.name}", text, html,
+                      unsubscribe=link("web:alert_stop", alert.token))
         except mail.MailError as exc:
             failed += 1
             if stdout:

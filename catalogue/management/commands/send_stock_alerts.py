@@ -27,8 +27,9 @@ class Command(BaseCommand):
             return
         if test:
             try:
-                mail.send(test, "RipRaptor test email", "This is a test of the back-in-stock emails.",
-                          "<p>This is a test of the back-in-stock emails.</p>")
+                text, html = alerts.render_mail("test", {"subject": "RipRaptor test email"})
+                # Sent with the unsubscribe header too, so the test proves ZeptoMail accepts it.
+                mail.send(test, "RipRaptor test email", text, html, unsubscribe=alerts.settings.RIPRAPTOR_SITE_URL + "/terms/")
             except mail.MailError as exc:
                 raise CommandError(str(exc))
             self.stdout.write(f"Sent a test email to {test}.")

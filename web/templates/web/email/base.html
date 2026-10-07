@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f6f6f8;">
+<div style="display:none;max-height:0;overflow:hidden;">{{ preheader }}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f8;">
+<tr><td align="center" style="padding:24px 12px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #ffd6c4;border-radius:16px;overflow:hidden;font-family:Archivo,Arial,Helvetica,sans-serif;color:#1f2430;">
+    <tr><td style="height:6px;background:#ff5a1f;font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td align="center" style="padding:24px 24px 8px;">
+      <a href="{{ site_url }}/" style="text-decoration:none;"><img src="{{ logo_url }}" width="180" alt="{{ site_name }}" style="display:block;width:180px;max-width:60%;height:auto;border:0;"></a>
+    </td></tr>
+    <tr><td style="padding:8px 28px 24px;font-size:16px;line-height:1.55;">
+      {% block body %}{% endblock %}
+    </td></tr>
+    <tr><td style="padding:20px 28px 24px;background:#fff1ea;border-top:1px solid #ffd6c4;font-size:13px;line-height:1.5;color:#545b68;">
+      {% block footer_note %}{% endblock %}
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 12px;"><tr>
+        <td style="border:1px solid #cfd4dc;border-radius:999px;background:#ffffff;">
+          <a href="{{ stop_url }}" style="display:inline-block;padding:9px 18px;font-size:14px;font-weight:bold;color:#1f2430;text-decoration:none;">Unsubscribe</a>
+        </td>
+      </tr></table>
+      <p style="margin:0;">Unsubscribing deletes your email address from {{ site_name }} at once. <a href="{{ site_url }}/terms/#terms-data" style="color:#cc4410;">How we use it</a></p>
+      <p style="margin:8px 0 0;">{{ site_name }} compares UK prices for sealed trading card products and may earn a commission when you buy through its links.</p>
+    </td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>

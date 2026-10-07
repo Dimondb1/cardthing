@@ -1,9 +1,9 @@
-{{ product.name }} is back in stock.
+Back in stock: {{ product.name }}
 
-{{ listing.retailer.name }} has it at £{{ listing.delivered_price }} delivered, checked just now. Stock at small shops can go within minutes.
+Cheapest in stock now: £{{ listing.delivered_price }} delivered at {{ listing.retailer.name }}, checked just now. Stock at small shops can go within minutes.
 
 Compare every shop's price: {{ product_url }}
 
-This was your one alert for this product, so your email address has been deleted. Ask again on the product page if you want another.
+This was your one alert for this product, so your email address has already been deleted. Ask again on the product page if you want another.
 
 {{ site_name }} may earn a commission when you buy through its links.

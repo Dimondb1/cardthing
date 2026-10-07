@@ -1,6 +1,10 @@
-<!doctype html><html lang="en-GB"><body style="margin:0;padding:24px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#1f2430;line-height:1.5">
-<p>You asked {{ site_name }} to email you when <strong>{{ product.name }}</strong> is back in stock at a UK shop we check.</p>
-<p><a href="{{ confirm_url }}" style="display:inline-block;padding:12px 20px;background:#e5470e;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold">Confirm my alert</a></p>
-<p>Nothing is sent until you confirm. If this was not you, ignore this email and the request is deleted within a week.</p>
-<p style="font-size:13px;color:#667085"><a href="{{ stop_url }}" style="color:#667085">Stop and delete this request</a></p>
-</body></html>
+{% extends "web/email/base.html" %}
+{% block body %}
+<h1 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:#1f2430;">Confirm your alert</h1>
+{% if image_url %}<p style="margin:0 0 16px;text-align:center;"><img src="{{ image_url }}" width="160" alt="{{ product.name }}" style="width:160px;max-width:50%;height:auto;border:0;border-radius:12px;"></p>{% endif %}
+<p style="margin:0 0 16px;">You asked us to email you when <strong>{{ product.name }}</strong> is back in stock at a UK shop we check.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>
+  <td style="border-radius:12px;background:#e5470e;"><a href="{{ confirm_url }}" style="display:inline-block;padding:14px 24px;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;">Confirm my alert</a></td>
+</tr></table>
+<p style="margin:0;color:#545b68;">Nothing is sent until you confirm. If this was not you, ignore this email and the request is deleted within a week.</p>
+{% endblock %}

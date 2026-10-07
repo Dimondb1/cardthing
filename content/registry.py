@@ -393,7 +393,7 @@ ENTRIES = [
     Entry(
         "home.featured.note", T, "Featured deals note",
         "Every featured deal is a real saving on the next shop or this week's lowest price. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price.",
-        "Under the featured deals row. Says how the row is chosen.",
+        "On the terms page, under Independence. Says how the home page's featured deals row is chosen.",
         legal=True,
     ),
     Entry(
@@ -963,7 +963,7 @@ ENTRIES = [
     # Footer ---------------------------------------------------------------
     Entry(
         "footer.line", T, "Footer line",
-        "Prices include UK delivery. RipRaptor may earn a commission when you buy.",
+        "Prices include UK delivery. RipRaptor may earn a commission when you buy, and featured deals favour shops that pay one.",
         "The one line in the footer of every page, followed by the Terms link.",
         legal=True,
     ),

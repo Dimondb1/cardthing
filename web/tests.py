@@ -700,7 +700,8 @@ class FeaturedAndMarketplaceTests(TestCase):
         self.assertEqual([earns(s.best) for _, s in featured][:4], [True, True, True, False])
         body = self.client.get(reverse("web:home")).content.decode()
         self.assertIn("Featured deals", body)
-        self.assertIn("We favour shops that pay us a commission", body)
+        self.assertIn("featured deals favour shops that pay one", body)
+        self.assertContains(self.client.get(reverse("web:terms")), "We favour shops that pay us a commission")
 
     def test_featured_fills_from_the_other_side_when_one_is_short(self):
         from web.views import earns, featured_deals

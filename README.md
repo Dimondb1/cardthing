@@ -635,7 +635,8 @@ whose cheapest price is a real saving on the next shop or the week's
 lowest. Six of the eight places go to deals whose cheapest shop pays a
 commission (an affiliate link format, eBay or Amazon), the best of the
 rest take the other two, and either side fills in when the other is
-short. A note under the row says that it favours shops that pay. Product
+short. The footer line on every page says featured deals favour shops
+that pay, and the Terms page explains how they are chosen. Product
 pages and their price order are unchanged.
 
 When no shop has a product in stock, the price box leads with "Compare on

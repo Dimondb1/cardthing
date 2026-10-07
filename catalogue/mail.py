@@ -24,7 +24,7 @@ def enabled():
 def send(to, subject, text, html, opener=None):
     """Send one message. Raises MailError when ZeptoMail refuses it or cannot be reached."""
     if not enabled():
-        raise MailError("Email is not set up: RIPRAPTOR_ZEPTOMAIL_TOKEN and RIPRAPTOR_MAIL_FROM are needed.")
+        raise MailError("Email is not set up: RIPRAPTOR_ZEPTOMAIL_TOKEN is needed.")
     token = settings.RIPRAPTOR_ZEPTOMAIL_TOKEN
     if not token.lower().startswith("zoho-enczapikey"):
         token = f"Zoho-enczapikey {token}"

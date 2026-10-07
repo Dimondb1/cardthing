@@ -197,8 +197,9 @@ RIPRAPTOR_AMAZON_DAILY_LIMIT = int(os.environ.get("RIPRAPTOR_AMAZON_DAILY_LIMIT"
 # means eBay is read once a day.
 # Back-in-stock emails, sent through Zoho ZeptoMail. All of token and from address set turns them on.
 RIPRAPTOR_ZEPTOMAIL_TOKEN = os.environ.get("RIPRAPTOR_ZEPTOMAIL_TOKEN", "").strip()
-RIPRAPTOR_ZEPTOMAIL_URL = os.environ.get("RIPRAPTOR_ZEPTOMAIL_URL", "https://api.zeptomail.eu/v1.1/email").strip()
-RIPRAPTOR_MAIL_FROM = os.environ.get("RIPRAPTOR_MAIL_FROM", "").strip()
+# Zoho renamed ZeptoMail to Zoho CPaaS; this is the address its Mail Agent API page gives.
+RIPRAPTOR_ZEPTOMAIL_URL = os.environ.get("RIPRAPTOR_ZEPTOMAIL_URL", "https://cpaas.zoho.com/v1.1/email").strip()
+RIPRAPTOR_MAIL_FROM = os.environ.get("RIPRAPTOR_MAIL_FROM", "alerts@ripraptor.com").strip()
 RIPRAPTOR_SITE_URL = os.environ.get("RIPRAPTOR_SITE_URL", "https://ripraptor.com").strip().rstrip("/")
 
 RIPRAPTOR_EBAY_APP_ID = os.environ.get("RIPRAPTOR_EBAY_APP_ID", "").strip()

@@ -570,8 +570,8 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_GEOIP_DB`           |         | Path of the DB-IP country database for visitor countries. Empty means countries are not recorded. |
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
 | `RIPRAPTOR_ZEPTOMAIL_TOKEN`    |         | Send Mail token from a Zoho ZeptoMail Mail Agent. With `RIPRAPTOR_MAIL_FROM` set, turns on back-in-stock emails. |
-| `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://api.zeptomail.eu/v1.1/email` | The API address shown on the Mail Agent's API page; it differs by Zoho data centre. |
-| `RIPRAPTOR_MAIL_FROM`          |         | The sending address, on a domain verified in ZeptoMail, for example `alerts@ripraptor.com`. |
+| `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
+| `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
@@ -644,9 +644,8 @@ wait on 30 products. The Terms page says all of this. Insights counts
 requests, confirmations, emails sent and stops.
 
 Setting up ZeptoMail: add and verify the domain (the DNS records it gives),
-create a Mail Agent, copy its Send Mail token and API address into `.env`
-as `RIPRAPTOR_ZEPTOMAIL_TOKEN` and `RIPRAPTOR_ZEPTOMAIL_URL`, set
-`RIPRAPTOR_MAIL_FROM`, restart, and check with
+create a Mail Agent, copy its Send Mail token into `.env` as
+`RIPRAPTOR_ZEPTOMAIL_TOKEN` (the address and sender have working defaults), restart, and check with
 `python manage.py send_stock_alerts --test you@example.com`. Without the
 token the form does not appear.
 

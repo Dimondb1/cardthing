@@ -306,6 +306,13 @@ python manage.py suspect_savings
 lists those products with both links, so you can untick "show on site" on
 whichever listing is the wrong product.
 
+All of this can be done from a phone, without the server console: admin
+has a **Things to check** page (`/admin/checks/`) that lists the wrong
+matches with a Hide button under each price, the possible duplicates the
+`--loose` rule finds with a Merge button for each group (only the group
+exactly as shown is merged), and the shops whose delivery charge is not
+known with a link to fill it in.
+
 `watch_stock` runs every ten minutes on the server. It asks each shop
 about single products (a Shopify shop answers `/products/<handle>.js` in
 milliseconds). Half its budget of 300 goes to the products people are

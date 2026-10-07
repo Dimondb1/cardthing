@@ -104,6 +104,23 @@ def merge(keep, others):
     return moved
 
 
+def duplicate_groups(loose=False):
+    """[(keep, [others])] for every group of products that name the same thing, the one to keep first:
+    most listings, then one with an image, then the shortest name."""
+    groups = defaultdict(list)
+    for product in Product.objects.filter(is_active=True).select_related("game").order_by("pk"):
+        key = loose_key(product.name, product.game.slug) if loose else merge_key(product.name)
+        if key:
+            groups[(product.game_id, product.product_type, key)].append(product)
+    found = []
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        group.sort(key=lambda p: (-p.listings.count(), not p.image, not p.image_url, len(p.name), p.pk))
+        found.append((group[0], group[1:]))
+    return sorted(found, key=lambda row: row[0].name)
+
+
 class Command(BaseCommand):
     help = "Merge products whose names identify the same thing."
 
@@ -112,18 +129,9 @@ class Command(BaseCommand):
         parser.add_argument("--loose", action="store_true", help="Also ignore filler and series words. Review a dry run first.")
 
     def handle(self, *args, dry_run=False, loose=False, **options):
-        groups = defaultdict(list)
-        for product in Product.objects.filter(is_active=True).select_related("game").order_by("pk"):
-            key = loose_key(product.name, product.game.slug) if loose else merge_key(product.name)
-            if key:
-                groups[(product.game_id, product.product_type, key)].append(product)
         merged = moved = 0
         with transaction.atomic():
-            for group in groups.values():
-                if len(group) < 2:
-                    continue
-                group.sort(key=lambda p: (-p.listings.count(), not p.image, not p.image_url, len(p.name), p.pk))
-                keep, others = group[0], group[1:]
+            for keep, others in duplicate_groups(loose):
                 self.stdout.write(f"{'would keep' if dry_run else 'kept'}: {keep.name}")
                 for other in others:
                     self.stdout.write(f"    merged: {other.name}")

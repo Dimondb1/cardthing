@@ -1253,3 +1253,42 @@ def insights_page(request):
         days = 30
     context = {**admin.site.each_context(request), "title": "Insights", **insights.report(days)}
     return render(request, "admin/insights.html", context)
+
+
+@staff_member_required
+def checks_page(request):
+    """Things to check: wrong matches, likely duplicates and unknown delivery, each with a one-tap fix."""
+    from django.contrib import messages
+    from django.db import transaction
+
+    from catalogue import checks
+    from catalogue.management.commands.merge_duplicates import merge
+    from catalogue.signals import clear_list_caches
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "hide":
+            listing = get_object_or_404(Listing.objects.select_related("product", "retailer"), pk=request.POST.get("listing"))
+            Listing.objects.filter(pk=listing.pk).update(is_active=False)
+            clear_list_caches()
+            messages.success(request, f"Hidden: {listing.product.name} at {listing.retailer.name}. "
+                                      "Tick show on site on the listing to bring it back.")
+        elif action == "merge":
+            # Only a group the page offered, exactly as it stands now, is merged.
+            wanted = request.POST.get("keep", ""), sorted(request.POST.getlist("other"))
+            for keep, others in checks.duplicates():
+                if (str(keep.pk), sorted(str(o.pk) for o in others)) == wanted:
+                    with transaction.atomic():
+                        merge(keep, others)
+                    clear_list_caches()
+                    messages.success(request, f"Merged into {keep.name}. The old addresses redirect to it.")
+                    break
+            else:
+                messages.warning(request, "That group has changed since the page loaded. Check it again below.")
+        return HttpResponseRedirect(reverse("checks"))
+    context = {
+        **admin.site.each_context(request), "title": "Things to check",
+        "wrong": checks.wrong_matches(), "duplicates": checks.duplicates(), "shops": checks.unknown_delivery_shops(),
+        "max_percent": offers.MAX_REAL_PERCENT,
+    }
+    return render(request, "admin/checks.html", context)

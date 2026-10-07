@@ -243,3 +243,49 @@ class MergeTests(TestCase):
         self.assertEqual(len(left), 5)
         self.assertEqual(len(left & set(names[:2])), 1)
         self.assertTrue(set(names[2:]) <= left)
+
+
+class ChecksPageTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        cache.clear()
+        self.set = make_set(make_game())
+        self.shop = make_retailer("Magic Madhouse", delivery_cost=Decimal("0"))
+        self.ebay = make_retailer("eBay", slug="ebay", source_type=Retailer.Source.EBAY)
+        self.pack = make_product(self.set, name="Judgment Booster", product_type="booster_pack")
+        self.cheap = make_listing(self.pack, self.shop, price="38.95")
+        self.dear = make_listing(self.pack, self.ebay, price="999.95")
+        self.a = make_product(self.set, name="Pitch Black Pokémon Center Elite Trainer Box (Exclusive)", slug="pb-a")
+        self.b = make_product(self.set, name="Mega Evolution Pitch Black Pokemon Center Elite Trainer Box", slug="pb-b")
+        make_listing(self.a, self.shop, price="80.00")
+        mystery = make_retailer("120HP", delivery_cost=None)
+        unknown(make_listing(self.b, mystery, price="85.00"))
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.url = reverse("checks")
+
+    def test_page_lists_all_three_and_is_staff_only(self):
+        page = self.client.get(self.url)
+        self.assertContains(page, "Wrong matches (1)")
+        self.assertContains(page, "£38.95 at Magic Madhouse")
+        self.assertContains(page, "Possible duplicates (1)")
+        self.assertContains(page, "Unknown delivery charges (1)")
+        self.assertContains(page, "1 price without a known delivery charge")
+        self.assertContains(self.client.get(reverse("admin:index")), "Things to check")
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+
+    def test_hide_button_hides_the_wrong_listing(self):
+        self.client.post(self.url, {"action": "hide", "listing": self.dear.pk})
+        self.dear.refresh_from_db()
+        self.assertFalse(self.dear.is_active)
+        self.assertContains(self.client.get(self.url), "Wrong matches (0)")
+
+    def test_merge_button_merges_only_the_offered_group(self):
+        stale = self.client.post(self.url, {"action": "merge", "keep": self.a.pk, "other": [self.pack.pk]}, follow=True)
+        self.assertContains(stale, "That group has changed")
+        self.assertEqual(Product.objects.filter(pk__in=[self.a.pk, self.b.pk]).count(), 2)
+        self.client.post(self.url, {"action": "merge", "keep": self.a.pk, "other": [self.b.pk]})
+        self.assertFalse(Product.objects.filter(pk=self.b.pk).exists())
+        self.assertEqual(self.a.listings.count(), 2)
+        self.assertRedirects(self.client.get("/products/pb-b/"), self.a.get_absolute_url(), status_code=301)

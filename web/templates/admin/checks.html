@@ -1,0 +1,65 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Things to check | {{ site_title }}{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .chk { display: grid; gap: 28px; max-width: 60rem; }
+  .chk h2 { margin: 0 0 4px; }
+  .chk p.note { margin: 0 0 12px; color: var(--body-quiet-color); }
+  .chk ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .chk ul li.item { list-style-type: none; }
+  .chk li.item { padding: 12px 14px; border: 1px solid var(--hairline-color); border-radius: 8px; background: var(--body-bg); }
+  .chk li.item b { display: block; margin-bottom: 6px; }
+  .chk .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 6px; }
+  .chk form { margin: 0; }
+  .chk .names { margin: 4px 0 8px; padding-left: 18px; list-style: disc; display: block; }
+  .chk .names li { margin: 2px 0; }
+  .chk .none { color: var(--body-quiet-color); }
+  .chk input[type=submit] { min-height: 40px; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Things to check</div>{% endblock %}
+{% block content %}
+<div class="chk">
+  <section>
+    <h2>Wrong matches ({{ wrong|length }})</h2>
+    <p class="note">The cheapest price is over {{ max_percent }}% under the next shop, which usually means a different product was matched (a pack against a box). The site already hides the saving. Open both links, then hide the one that is not this product.</p>
+    {% if wrong %}<ul>
+      {% for product, summary in wrong %}
+      <li class="item"><b><a href="{{ product.get_absolute_url }}" target="_blank" rel="noopener">{{ product.name }}</a></b>
+        {% with a=summary.best b=summary.second %}
+        <div class="row"><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">£{{ a.delivered_price }} at {{ a.retailer.name }}</a>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ a.pk }}"><input type="submit" value="Hide this one"></form></div>
+        <div class="row"><a href="{{ b.url }}" target="_blank" rel="noopener noreferrer">£{{ b.delivered_price }} at {{ b.retailer.name }}</a>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ b.pk }}"><input type="submit" value="Hide this one"></form></div>
+        {% endwith %}
+      </li>
+      {% endfor %}
+    </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Possible duplicates ({{ duplicates|length }})</h2>
+    <p class="note">These names differ only by words like Exclusive, English or the series name. Merge only when they are the same product. Merging keeps every price, the price history and the old addresses. If a group is two different products, leave it.</p>
+    {% if duplicates %}<ul>
+      {% for keep, others in duplicates %}
+      <li class="item"><b>Keep: <a href="{{ keep.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.name }}</a></b>
+        Merge into it:
+        <ul class="names">{% for other in others %}<li><a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a></li>{% endfor %}</ul>
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="keep" value="{{ keep.pk }}">{% for other in others %}<input type="hidden" name="other" value="{{ other.pk }}">{% endfor %}<input type="submit" value="Merge these"></form>
+      </li>
+      {% endfor %}
+    </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Unknown delivery charges ({{ shops|length }})</h2>
+    <p class="note">These shops' prices show as "+ delivery" and rank below confirmed delivered prices. Open the shop, put its standard UK delivery charge in Standard delivery and save: every price updates at once. Leave it empty if you still do not know it.</p>
+    {% if shops %}<ul>
+      {% for shop in shops %}
+      <li class="item"><b><a href="{% url 'admin:catalogue_retailer_change' shop.pk %}">{{ shop.name }}</a></b>
+        {{ shop.unknown }} price{{ shop.unknown|pluralize }} without a known delivery charge.{% if shop.delivery_note %} Note: {{ shop.delivery_note }}{% endif %}
+        <div class="row"><a href="{{ shop.website }}" target="_blank" rel="noopener noreferrer">Visit {{ shop.website }}</a></div>
+      </li>
+      {% endfor %}
+    </ul>{% else %}<p class="none">Every shop's delivery charge is known.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

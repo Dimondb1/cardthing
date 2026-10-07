@@ -4,26 +4,22 @@ different things matched as one (a pack against a box), not a bargain.
 
     python manage.py suspect_savings
 
-The site never shows these savings. Open each product and untick "show on
-site" on whichever listing is the wrong product.
+The site never shows these savings. The same list is in admin under Things
+to check, with a button to hide whichever listing is the wrong product.
 """
 
 from django.core.management.base import BaseCommand
 
 from catalogue import offers
-from catalogue.models import Product
+from catalogue.checks import wrong_matches
 
 
 class Command(BaseCommand):
     help = "List products whose price gap is too large to be a real saving."
 
     def handle(self, *args, **options):
-        products = Product.objects.for_lists().filter(lowest_price__isnull=False).prefetch_related(offers.buyable_prefetch())
         found = 0
-        for product in products.order_by("name"):
-            summary = offers.summarise(product)
-            if not summary.suspect:
-                continue
+        for product, summary in wrong_matches():
             found += 1
             best, second = summary.best, summary.second
             self.stdout.write(

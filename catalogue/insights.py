@@ -24,7 +24,12 @@ COUNTRY_NAMES = {
     "AT": "Austria", "FI": "Finland", "BR": "Brazil", "MX": "Mexico", "SG": "Singapore", "HK": "Hong Kong", "AE": "United Arab Emirates",
 }
 
-BOT_MARKERS = ("bot", "crawl", "spider", "slurp", "preview", "monitor", "python-requests", "curl/")
+BOT_MARKERS = ("bot", "crawl", "spider", "slurp", "preview", "monitor", "python-requests", "curl/", "python-urllib",
+               "python/", "aiohttp", "httpx", "wget", "go-http-client", "java/", "okhttp", "node-fetch", "axios",
+               "headlesschrome", "phantomjs", "scrapy", "playwright", "puppeteer", "selenium", "libwww", "httpclient",
+               "fetch/", "scraper", "facebookexternalhit", "whatsapp", "embedly", "lighthouse", "pagespeed")
+# No person opens more pages than this in a day. Past it a visitor is a script, and its views stop counting.
+VIEWS_PER_VISITOR_CAP = 150
 
 
 def is_bot(request):
@@ -127,25 +132,27 @@ RETURN_COOKIE_DAYS = 365
 
 
 def record_visitor(request):
+    """Note this visitor's page for today. False once they are past the daily cap, so the page is not counted."""
     day = timezone.localdate()
     token = visitor_token(request, day)
-    if DailyVisitor.objects.filter(date=day, token=token).exists():
-        return
+    if DailyVisitor.objects.filter(date=day, token=token, views__lt=VIEWS_PER_VISITOR_CAP).update(views=F("views") + 1):
+        return True
     try:
         with transaction.atomic():
             DailyVisitor.objects.create(
                 date=day, token=token, country=geo.country_of(client_ip(request)),
                 device=device_of(request), source=source_of(request),
-                returning=request.COOKIES.get(RETURN_COOKIE) == "1",
+                returning=request.COOKIES.get(RETURN_COOKIE) == "1", views=1,
             )
+        return True
     except IntegrityError:
-        pass   # two requests from the same visitor at once
+        # Already here today and past the cap (or two requests at once): not counted.
+        return False
 
 
 def record_view(request, kind, key=""):
-    if request.method == "GET" and not is_bot(request):
+    if request.method == "GET" and not is_bot(request) and record_visitor(request):
         bump(DailyPageView, kind=kind, key=key[:220])
-        record_visitor(request)
 
 
 def record_search(request, query, results):
@@ -167,7 +174,9 @@ def report(days=30):
     searches = DailySearch.objects.filter(date__gte=since)
 
     visitors = DailyVisitor.objects.filter(date__gte=since)
-    by_day = {row["date"]: row for row in views.values("date").annotate(hits=Sum("hits")).order_by("date")}
+    # Watchlist rows and home screen events are counts of their own, not pages anyone opened.
+    pages = views.exclude(kind__in=[DailyPageView.Kind.WATCHED, DailyPageView.Kind.INSTALL])
+    by_day = {row["date"]: row for row in pages.values("date").annotate(hits=Sum("hits")).order_by("date")}
     clicks_by_day = dict(clicks.values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n"))
     visitors_by_day = dict(visitors.values_list("date").annotate(n=Count("id")).values_list("date", "n"))
     returning_by_day = dict(
@@ -312,6 +321,7 @@ def report(days=30):
     total_clicks = sum(d["clicks"] for d in days_out)
     product_page_views = sum(product_views.values())
     kinds = {row["kind"]: row["hits"] for row in views.exclude(kind=DailyPageView.Kind.INSTALL).values("kind").annotate(hits=Sum("hits"))}
+    capped = visitors.filter(views__gte=VIEWS_PER_VISITOR_CAP).count()
     install_rows = dict(
         views.filter(kind=DailyPageView.Kind.INSTALL).values_list("key").annotate(hits=Sum("hits")).values_list("key", "hits")
     )
@@ -324,6 +334,8 @@ def report(days=30):
         "total_views": total_views,
         "total_visitors": total_visitors,
         "returning_visitors": returning_visitors,
+        "capped_visitors": capped,
+        "views_cap": VIEWS_PER_VISITOR_CAP,
         "returning_share": round(100 * returning_visitors / total_visitors, 1) if total_visitors else 0,
         "countries": countries,
         "geoip_ready": geo.reader() is not None,

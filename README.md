@@ -722,7 +722,12 @@ downloads (the installer fetches it and cron refreshes it monthly). Each visitor
 records their device type and the domain of the site that sent them, so
 the page shows where visitors come from (search engines, AI assistants,
 Reddit, Facebook, Discord and so on) and what they browse on. Bots
-are left out. The window is 7, 30, 90 or 365 days.
+are left out, including scripts that say what they are (Python, curl,
+headless Chrome, Scrapy and the like). A visitor who opens more than 150
+pages in a day is taken for a script dressed as a browser: their pages
+past 150 are not counted, and Insights says how many such visitors there
+were. Watchlist rows and home screen events are not page views. The
+window is 7, 30, 90 or 365 days.
 
 Returning visitors are counted with one cookie, `rr_back`, set the first
 time a browser views a page. It holds only "1", for a year, so a visit on

@@ -96,7 +96,7 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        with self.assertNumQueries(27):
+        with self.assertNumQueries(28):
             insights.report(30)
 
 
@@ -138,6 +138,26 @@ class VisitorTests(TestCase):
             self.client.get(self.url, **HUMAN)
         rows = DailyVisitor.objects.order_by("date")
         self.assertEqual([(r.date, r.returning) for r in rows], [(tomorrow - timedelta(days=1), False), (tomorrow, True)])
+
+    def test_a_visitor_past_the_daily_cap_stops_counting_and_scripts_are_bots(self):
+        from unittest import mock
+
+        from catalogue.models import DailyVisitor
+
+        with mock.patch.object(insights, "VIEWS_PER_VISITOR_CAP", 3):
+            for _ in range(5):
+                self.client.get(self.url, **HUMAN)
+            self.assertEqual(DailyPageView.objects.get(kind="product").hits, 3)
+            self.assertEqual(DailyVisitor.objects.get().views, 3)
+            self.assertEqual(insights.report(7)["capped_visitors"], 1)
+        for agent in ("Python-urllib/3.12", "Mozilla/5.0 HeadlessChrome/120", "Go-http-client/1.1", "Scrapy/2.11"):
+            self.client.get(self.url, HTTP_USER_AGENT=agent)
+        self.assertEqual(DailyPageView.objects.get(kind="product").hits, 3)
+
+    def test_watchlist_rows_are_not_page_views(self):
+        DailyPageView.objects.create(date=timezone.localdate(), kind="watched", key="x", hits=40)
+        DailyPageView.objects.create(date=timezone.localdate(), kind="home", key="", hits=2)
+        self.assertEqual(insights.report(7)["total_views"], 2)
 
     def test_bots_get_no_cookie(self):
         response = self.client.get(self.url, **BOT)

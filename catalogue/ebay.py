@@ -223,13 +223,35 @@ class Specifics:
         return False
 
 
+# The shorthand eBay sellers use for a language edition, mapped to the word our names use.
+LANGUAGE_SHORTHAND = {
+    "chs": "simplified chinese", "s-chinese": "simplified chinese", "s chinese": "simplified chinese", "sc": "simplified chinese",
+    "cht": "traditional chinese", "t-chinese": "traditional chinese", "t chinese": "traditional chinese", "tc": "traditional chinese",
+    "cn": "chinese", "chn": "chinese", "jp": "japanese", "jpn": "japanese", "japan": "japanese",
+    "kr": "korean", "kor": "korean", "th": "thai", "indo": "indonesian", "de": "german", "fr": "french", "it": "italian",
+}
+SHORTHAND = re.compile(r"(?<![\w-])(" + "|".join(re.escape(k) for k in sorted(LANGUAGE_SHORTHAND, key=len, reverse=True)) + r")(?![\w-])", re.I)
+CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")   # kana, Chinese characters, Hangul
+
+
+def languages_in(text):
+    """The language editions a title names, in full or in sellers' shorthand. Chinese in any form counts as Chinese."""
+    found = {m.lower() for m in LANGUAGE.findall(text)}
+    found |= {LANGUAGE_SHORTHAND[m.lower().replace("_", " ")] for m in SHORTHAND.findall(text)}
+    if CJK.search(text):
+        found.add("foreign script")
+    return {"chinese" if "chinese" in lang else lang for lang in found}
+
+
 def junk(product, title):
     """Is the listing plainly not one sealed unit of this product, whatever its name says?
 
     A multi-buy, an online code, a part, another language. Checked on every
     result, including those that name the product word for word.
     """
-    if {m.lower() for m in LANGUAGE.findall(title)} != {m.lower() for m in LANGUAGE.findall(product.name)}:
+    ours = languages_in(product.name)
+    theirs = languages_in(title) - ({"foreign script"} if ours else set())
+    if theirs != ours:
         return True
     if NOT_THE_THING.search(title) and not NOT_THE_THING.search(product.name):
         return True

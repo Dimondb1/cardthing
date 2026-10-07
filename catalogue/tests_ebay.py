@@ -498,6 +498,19 @@ class FallbackSearchTests(TestCase):
         self.assertEqual([(o.product_pk, o.price) for o in offers], [(pack.pk, Decimal("5.50"))])
         self.assertEqual(len(api.searches()), 1)
 
+    def test_language_shorthand_and_foreign_script_are_another_edition(self):
+        pack = make_product(self.set, name="30th Celebration Booster Pack", slug="30th-pack", product_type="booster_pack")
+        jp = make_product(self.set, name="Japanese Pokemon: Abyss Eye Booster Pack", slug="abyss-jp", product_type="booster_pack")
+        for title in ("CHS Pokémon TCG 30th Celebration Booster Pack", "Pokemon 30th Celebration Booster Pack SC Sealed",
+                      "Pokemon 30th Celebration Booster Pack S-Chinese", "Pokemon 30th Celebration Booster Pack JPN",
+                      "宝可梦 Pokemon 30th Celebration Booster Pack", "Pokemon TCG 30th Celebration Booster Pack KOR"):
+            self.assertTrue(ebay.junk(pack, title), title)
+        self.assertFalse(ebay.junk(pack, "Pokemon TCG 30th Celebration Booster Pack English Sealed"))
+        self.assertFalse(ebay.junk(pack, "Pokemon TCG 30th Celebration Booster Pack TCG Sealed"))
+        self.assertFalse(ebay.junk(jp, "Pokemon Abyss Eye Booster Pack JPN Sealed"))
+        self.assertFalse(ebay.junk(jp, "ポケモン Pokemon Abyss Eye Booster Pack Japanese"))
+        self.assertTrue(ebay.junk(jp, "Pokemon Abyss Eye Booster Pack CHS"))
+
     def test_the_import_keeps_the_ebay_title_and_tidy_hides_one_the_rules_now_refuse(self):
         from io import StringIO
 

@@ -42,8 +42,10 @@ class ConversationAdmin(admin.ModelAdmin):
         from django.utils.html import format_html, format_html_join
 
         rows = format_html_join(
-            "", '<div style="margin:0 0 10px;padding:10px 14px;border-radius:10px;max-width:46rem;{}"><div style="font-size:12px;opacity:.75;margin-bottom:4px"><strong>{}</strong> {}</div>{}</div>',
-            ((("background:#f2f4f7;" if m.from_visitor else "background:#fff1ea;border:1px solid #ffd6c4;"),
+            "", '<div style="margin:0 0 10px;padding:10px 14px;border-radius:10px;max-width:46rem;{}"><div style="font-size:12px;color:var(--body-quiet-color);margin-bottom:4px"><strong>{}</strong> {}</div>{}</div>',
+            # Admin's own colour variables, so the thread reads in its light and dark themes alike.
+            ((("background:var(--darkened-bg);color:var(--body-fg);border:1px solid var(--hairline-color);" if m.from_visitor
+               else "background:var(--selected-bg);color:var(--body-fg);border:1px solid var(--primary);"),
               "Visitor" if m.from_visitor else "You", timezone.localtime(m.created_at).strftime("%-d %b %Y, %H:%M"), linebreaksbr(m.body, autoescape=True))
              for m in obj.messages.all()),
         )

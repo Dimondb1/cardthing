@@ -40,6 +40,29 @@
   <p class="section-head__note">{% copy "home.resume.note" %}</p>
 </section>
 
+{% if featured %}
+<section class="home-section" aria-labelledby="featured-title">
+  <div class="section-head">
+    <h2 id="featured-title" class="section-head__title">{% copy "home.featured.title" %}</h2>
+    <a class="section-head__all" href="{% url 'web:deals' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  </div>
+  <ul class="trending" data-scroll>
+    {% for product, summary in featured %}
+    <li class="trending__item">
+      <a class="trending__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "trend" %}
+        <span class="trending__name">{{ product.name }}</span>
+        <span class="trending__price">{% price summary.best.price %}</span>
+        <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=summary.best.delivered_price|gbp %}</span> · {{ summary.best.retailer.name }}</span>
+        {% if summary.saving %}<span class="trending__move trending__move--down">{% copy "home.savings.save" amount=summary.saving|gbp %}</span>{% elif summary.badge == "best_week" %}<span class="trending__move trending__move--down">{% copy "product.badge.best_week" %}</span>{% elif summary.badge %}<span class="trending__move trending__move--down">{% copy "product.badge.lowest_today" %}</span>{% endif %}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="section-head__note">{% copy "home.featured.note" %}</p>
+</section>
+{% endif %}
+
 {% if focal %}
 <section class="home-section home-section--focal" aria-labelledby="focal-title">
   {% with product=focal.product %}

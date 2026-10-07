@@ -389,6 +389,13 @@ ENTRIES = [
         "Kept in this browser only.",
         "Small note under the pick up section.",
     ),
+    Entry("home.featured.title", H, "Featured deals heading", "Featured deals", "Home page row near the top."),
+    Entry(
+        "home.featured.note", T, "Featured deals note",
+        "Every featured deal is a real saving on the next shop or this week's lowest price. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price.",
+        "Under the featured deals row. Says how the row is chosen.",
+        legal=True,
+    ),
     Entry(
         "home.games.title", H, "All games heading",
         "Browse by game",
@@ -784,9 +791,16 @@ ENTRIES = [
     Entry(
         "product.amazon.note_sold_out", T, "Amazon note when sold out",
         "Sold out at the shops we check. Amazon often has it, with Prime delivery. The link opens an Amazon search for it.",
-        "Product page price box when no shop has stock. Shown under the Amazon button, which then leads the box.",
+        "Not used since eBay joined the sold-out buttons; kept so edited wording is not lost.",
         legal=True,
     ),
+    Entry(
+        "product.marketplaces.note_sold_out", T, "Marketplaces note when sold out",
+        "Sold out at the shops we check. Amazon and eBay sellers often still have it. The links open a search on each, so check the seller and price before you buy.",
+        "Product page price box when no shop has stock, under the Amazon and eBay buttons.",
+        legal=True,
+    ),
+    Entry("product.ebay.button", B, "eBay button", "Search eBay", "Product page price box when no shop has stock. Opens an eBay UK search for new, buy it now listings."),
     Entry(
         "product.amazon.button", B, "Amazon button",
         "Compare on Amazon",

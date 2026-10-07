@@ -200,8 +200,52 @@ def home_lists():
         .order_by(F("release_date").desc(nulls_last=True), "-newest")[:8]
     )
     retailer_count = Listing.objects.live().values("retailer_id").distinct().count()
-    cache.set(key, (savings, trending, recent, retailer_count), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
-    return savings, trending, recent, retailer_count
+    featured = featured_deals(priced)
+    cache.set(key, (savings, trending, recent, retailer_count, featured), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    return savings, trending, recent, retailer_count, featured
+
+
+FEATURED_SLOTS = 8
+FEATURED_EARNING = 6   # three in four featured deals go to shops that pay a commission
+
+
+def earns(listing):
+    retailer = listing.retailer
+    return bool(retailer.affiliate_url_template) or retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY)
+
+
+def featured_deals(products):
+    """Good deals for the top of the home page, as (product, summary), three in four from shops that earn.
+
+    Only genuine deals qualify: the cheapest price is a saving on the next
+    shop or the lowest in the trending window. Among those, deals whose
+    cheapest shop pays a commission take up to six of the eight places and
+    the best of the rest take the others; if either side is short, the other
+    fills in. The page says that featured deals favour those shops.
+    """
+    week_lows = offers.week_low_map([p.pk for p in products])
+    good = []
+    for product in products:
+        summary = offers.summarise(product, week_lows)
+        if summary.best is None or summary.best.availability != Listing.Availability.IN_STOCK:
+            continue
+        if not (summary.badge or (summary.saving and summary.percent <= offers.MAX_REAL_PERCENT)):
+            continue
+        good.append((product, summary))
+    good.sort(key=lambda row: (-(row[1].percent or 0), row[0].name))
+    paying = [row for row in good if earns(row[1].best)]
+    other = [row for row in good if not earns(row[1].best)]
+    picked_paying = paying[:FEATURED_EARNING]
+    picked_other = other[:FEATURED_SLOTS - len(picked_paying)]
+    room = FEATURED_SLOTS - len(picked_paying) - len(picked_other)
+    picked_paying += paying[len(picked_paying):len(picked_paying) + room]
+    # Interleave so the row reads as one list: three earning, one other, and so on.
+    rows, pay, rest = [], list(picked_paying), list(picked_other)
+    while pay or rest:
+        rows += [pay.pop(0) for _ in range(min(3, len(pay)))]
+        if rest:
+            rows.append(rest.pop(0))
+    return rows[:FEATURED_SLOTS]
 
 
 # Games shown first on the home page, in this order; the rest follow by size.
@@ -321,7 +365,7 @@ def home(request):
     rank = {slug: i for i, slug in enumerate(PINNED_GAMES)}
     games.sort(key=lambda g: (rank.get(g.slug, len(PINNED_GAMES)), -g.product_count, g.name))
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
-    savings, trending, recent, retailer_count = home_lists()
+    savings, trending, recent, retailer_count, featured = home_lists()
     drops = list(pricing.price_drops(limit=6))
     restocked = pricing.back_in_stock(limit=8)
     focal = None
@@ -340,6 +384,7 @@ def home(request):
             "retailer_count": retailer_count,
             "focal": focal,
             "savings": savings[:8],
+            "featured": featured,
             "trending": trending,
             "recent": recent,
             "drops": drops,
@@ -478,13 +523,42 @@ def site_json(request):
     ]
 
 
+def search_words(product):
+    """What a person would type to find the product: the game first unless the name already says it."""
+    game = product.game.display_short
+    first = game.lower().split()[0] if game else ""
+    return product.name if not first or first in product.name.lower() else f"{game} {product.name}"
+
+
 def amazon_search_url(product, listings):
     """A tagged Amazon search for the product, or None when we have no tag or a real Amazon price."""
     tag = settings.RIPRAPTOR_AMAZON_PARTNER_TAG
     if not tag or any(row.retailer.source_type == Retailer.Source.AMAZON for row in listings):
         return None
-    query = urlencode({"k": product.name, "tag": tag})
+    query = urlencode({"k": search_words(product), "tag": tag})
     return f"https://www.amazon.co.uk/s?{query}"
+
+
+# eBay Partner Network's UK rotation id, as in the site's own tracked eBay links.
+EBAY_UK_ROTATION = "710-53481-19255-0"
+
+
+def ebay_search_url(product, listings):
+    """A tagged eBay UK search for new, buy-it-now listings of the product, or None.
+
+    Only when eBay has no in-stock listing we already show, since then the
+    real eBay price is in the comparison already.
+    """
+    campaign = settings.RIPRAPTOR_EBAY_CAMPAIGN_ID
+    if not campaign or any(
+        row.retailer.source_type == Retailer.Source.EBAY and row.is_buyable for row in listings
+    ):
+        return None
+    query = urlencode({
+        "_nkw": search_words(product), "LH_BIN": "1", "LH_ItemCondition": "1000", "LH_PrefLoc": "1",
+        "mkevt": "1", "mkcid": "1", "mkrid": EBAY_UK_ROTATION, "campid": campaign, "toolid": "10001",
+    })
+    return f"https://www.ebay.co.uk/sch/i.html?{query}"
 
 
 @require_GET
@@ -612,6 +686,7 @@ def product_detail(request, slug):
             ),
             "alert_state": request.GET.get("alert") if request.GET.get("alert") in ALERT_STATES else "",
             "amazon_search": amazon_search_url(product, listings),
+            "ebay_search": ebay_search_url(product, listings),
             "related": related,
             "meta_title": meta_title,
             "meta_description": meta_description,

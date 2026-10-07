@@ -52,11 +52,12 @@
     {% else %}
       <p class="buybox__none">{% copy "product.no_listings" %}</p>
     {% endif %}
-    {% if amazon_search and not cheapest %}
-      {# Sold out everywhere we check: Amazon is the obvious next step, so it leads. #}
+    {% if not cheapest and amazon_search or not cheapest and ebay_search %}
+      {# Sold out everywhere we check: Amazon and eBay are the obvious next step, so they lead. #}
       <div class="buybox__amazon buybox__amazon--lead">
-        <a class="button button--big buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
-        <p class="buybox__summary">{% copy "product.amazon.note_sold_out" %}</p>
+        {% if amazon_search %}<a class="button button--big buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
+        {% if ebay_search %}<a class="button {% if amazon_search %}button--quiet{% else %}button--big{% endif %} buybox__amazon-button" href="{{ ebay_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.ebay.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
+        <p class="buybox__summary">{% copy "product.marketplaces.note_sold_out" %}</p>
       </div>
     {% endif %}
     {% if alerts_on %}{% include "web/includes/alert_form.html" %}{% endif %}

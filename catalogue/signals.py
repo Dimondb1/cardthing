@@ -5,7 +5,7 @@ from django.dispatch import receiver
 from .models import Game, Listing, Product, ProductSet
 from .search import build_search_text
 
-HOME_CACHE_KEY = "web:home-lists:v2"
+HOME_CACHE_KEY = "web:home-lists:v3"
 DEALS_CACHE_KEY = "web:deals:v1"
 FOOTBALL_CACHE_KEY = "web:home-football:v1"
 NEW_CACHE_KEY = "web:home-new:v1"

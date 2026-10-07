@@ -327,7 +327,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
 
         cache.clear()
         self.client.get(reverse("web:home"))
-        self.assertIsNotNone(cache.get("web:home-lists:v2"))
+        self.assertIsNotNone(cache.get("web:home-lists:v3"))
         from catalogue.importers import run_import
         from catalogue.models import Retailer
 
@@ -335,7 +335,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
         self.harbour.source_url = "https://h.example/"
         self.harbour.save()
         run_import(self.harbour, fetch=lambda url: b'{"products": []}')
-        self.assertIsNone(cache.get("web:home-lists:v2"))
+        self.assertIsNone(cache.get("web:home-lists:v3"))
 
     def test_long_names_unicode_search_and_bad_pages(self):
         long_name = "Pokémon TCG: Scarlet & Violet " + "Ultra Premium Collection " * 5
@@ -405,7 +405,7 @@ class AmazonLinkTests(PageTestCase):
         with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
             response = self.client.get(self.etb.get_absolute_url())
         self.assertContains(response, "Compare on Amazon")
-        self.assertContains(response, 'href="https://www.amazon.co.uk/s?k=Prismatic+Evolutions+Elite+Trainer+Box&amp;tag=ripraptor-21"')
+        self.assertContains(response, 'href="https://www.amazon.co.uk/s?k=Pok%C3%A9mon+Prismatic+Evolutions+Elite+Trainer+Box&amp;tag=ripraptor-21"')
         self.assertContains(response, 'rel="sponsored nofollow noopener"')
 
     def test_no_search_link_once_amazon_has_a_real_price(self):
@@ -655,7 +655,7 @@ class AmazonLeadTests(PageTestCase):
             sold = self.client.get(self.sold_out.get_absolute_url()).content.decode()
             priced = self.client.get(self.etb.get_absolute_url()).content.decode()
         self.assertIn("buybox__amazon--lead", sold)
-        self.assertIn("Sold out at the shops we check. Amazon often has it", sold)
+        self.assertIn("Sold out at the shops we check. Amazon and eBay sellers often still have it", sold)
         self.assertLess(sold.index("buybox__amazon--lead"), sold.index("buybox__save"))
         self.assertNotIn("buybox__amazon--lead", priced)
         self.assertEqual(priced.count("Compare on Amazon"), 1)
@@ -665,6 +665,73 @@ class NetworkVerificationTests(PageTestCase):
     def test_impact_site_verification_tag_is_on_every_page(self):
         for url in (reverse("web:home"), self.etb.get_absolute_url()):
             self.assertContains(self.client.get(url), '<meta name="impact-site-verification" value="fb2ca9a2-0f96-46ce-b287-b35517e23ca5">')
+
+
+class FeaturedAndMarketplaceTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.game = make_game()
+        self.set = make_set(self.game)
+        self.paying = make_retailer("Paying", affiliate_url_template="https://aff.example/?u={url}")
+        self.plain = make_retailer("Plain")
+        self.dear = make_retailer("Dear")
+
+    def deal(self, n, shop):
+        product = make_product(self.set, name=f"Deal Product {n} Booster Box", slug=f"deal-{n}", product_type="booster_box")
+        make_listing(product, shop, price=f"{50 + n}.00")
+        make_listing(product, self.dear, price=f"{60 + n}.00")
+        return product
+
+    def test_featured_is_three_in_four_earning_and_only_real_deals(self):
+        from web.views import earns, home_lists
+
+        for n in range(8):
+            self.deal(n, self.paying)
+        for n in range(8, 12):
+            self.deal(n, self.plain)
+        no_saving = make_product(self.set, name="Lonely Booster Box", slug="lonely", product_type="booster_box")
+        make_listing(no_saving, self.paying, price="40.00")
+        featured = home_lists()[4]
+        self.assertEqual(len(featured), 8)
+        self.assertEqual(sum(1 for _, s in featured if earns(s.best)), 6)
+        self.assertNotIn(no_saving.pk, [p.pk for p, _ in featured])
+        self.assertEqual([earns(s.best) for _, s in featured][:4], [True, True, True, False])
+        body = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn("Featured deals", body)
+        self.assertIn("We favour shops that pay us a commission", body)
+
+    def test_featured_fills_from_the_other_side_when_one_is_short(self):
+        from web.views import earns, featured_deals
+        from catalogue.models import Product as P
+        from catalogue import offers
+
+        for n in range(2):
+            self.deal(n, self.paying)
+        for n in range(2, 12):
+            self.deal(n, self.plain)
+        products = list(P.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch()))
+        featured = featured_deals(products)
+        self.assertEqual((len(featured), sum(1 for _, s in featured if earns(s.best))), (8, 2))
+
+    def test_sold_out_pages_offer_amazon_and_an_ebay_search_with_our_campaign(self):
+        product = make_product(self.set, name="30th Celebration Booster Bundle", slug="30th-bundle", product_type="bundle")
+        make_listing(product, self.plain, price="29.99", availability="out_of_stock")
+        with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21", RIPRAPTOR_EBAY_CAMPAIGN_ID="5339216899"):
+            body = self.client.get(product.get_absolute_url()).content.decode()
+        self.assertIn("Search eBay", body)
+        self.assertIn("https://www.ebay.co.uk/sch/i.html?_nkw=Pok%C3%A9mon+30th+Celebration+Booster+Bundle", body)
+        self.assertIn("campid=5339216899", body)
+        self.assertIn("mkrid=710-53481-19255-0", body)
+        self.assertIn("k=Pok%C3%A9mon+30th+Celebration+Booster+Bundle", body)
+        self.assertIn("Amazon and eBay sellers often still have it", body)
+        for tag in re.findall(r'<a[^>]+href="https://www\.(?:ebay|amazon)\.co\.uk[^>]+>', body):
+            self.assertIn('rel="sponsored nofollow noopener"', tag)
+        # With an eBay price already in the comparison, no eBay search.
+        make_listing(product, make_retailer("eBay", source_type="ebay"), price="40.00")
+        with self.settings(RIPRAPTOR_EBAY_CAMPAIGN_ID="5339216899"):
+            self.assertNotIn("Search eBay", self.client.get(product.get_absolute_url()).content.decode())
 
 
 class HomeScreenTests(PageTestCase):

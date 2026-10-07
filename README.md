@@ -628,6 +628,21 @@ restocks in 90 days the line adds the two-hour window most of them landed
 in. `backfill_restocks` turns the stamps listings already carried into
 rows; the installer runs it, and it is safe to run again.
 
+## Featured deals and sold-out pages
+
+The home page opens with "Featured deals": up to eight in-stock products
+whose cheapest price is a real saving on the next shop or the week's
+lowest. Six of the eight places go to deals whose cheapest shop pays a
+commission (an affiliate link format, eBay or Amazon), the best of the
+rest take the other two, and either side fills in when the other is
+short. A note under the row says that it favours shops that pay. Product
+pages and their price order are unchanged.
+
+When no shop has a product in stock, the price box leads with "Compare on
+Amazon" and "Search eBay": a tagged Amazon search and an eBay UK search
+for new, buy it now listings carrying the eBay Partner Network campaign.
+The eBay search is left out when an eBay price is already in the list.
+
 ## Back in stock emails
 
 On a product no shop has in stock (eBay and Amazon do not count), the

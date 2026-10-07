@@ -495,8 +495,48 @@ class FallbackSearchTests(TestCase):
         api = FakeApi([item("Pokemon TCG Darkness Ablaze Booster Pack Sealed", price="5.50", item_id="v1|2|0")],
                       items=[cheap])
         offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
-        self.assertEqual([(o.product_pk, o.price) for o in offers], [(pack.pk, Decimal("5.50"))])
+        # Taken off the site first, then replaced by the genuine listing the search found.
+        self.assertEqual([(o.product_pk, o.price, o.availability) for o in offers], [
+            (pack.pk, Decimal("1.36"), Listing.Availability.OUT_OF_STOCK),
+            (pack.pk, Decimal("5.50"), Listing.Availability.IN_STOCK),
+        ])
         self.assertEqual(len(api.searches()), 1)
+
+    def test_a_known_listing_in_another_language_is_hidden_even_when_searches_run_out(self):
+        pack = make_product(self.set, name="30th Celebration Booster Pack", slug="30th-pack", product_type="booster_pack")
+        make_listing(pack, self.retailer, price="5.44", url="https://www.ebay.co.uk/itm/1?campid=1")
+        chinese = item("CHS Pokémon TCG 30th Celebration Booster Pack", price="5.44", item_id="v1|1|0")
+        api = FakeApi([], items=[chinese])
+        offers = ebay.ebay_offers(self.retailer, limit=0, request=api, pause=0)
+        self.assertEqual([(o.product_pk, o.availability) for o in offers], [(pack.pk, Listing.Availability.OUT_OF_STOCK)])
+        self.assertEqual(api.searches(), [])
+
+    def test_tidy_fetches_missing_titles_and_hides_a_chinese_pack(self):
+        pack = make_product(self.set, name="30th Celebration Booster Pack", slug="30th-pack", product_type="booster_pack")
+        chinese = make_listing(pack, self.retailer, price="5.44", url="https://www.ebay.co.uk/itm/1?campid=1")
+        etb = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", slug="pev-etb")
+        english = make_listing(etb, self.retailer, price="80.00", url="https://www.ebay.co.uk/itm/2?campid=1")
+        rows = [item("CHS Pokémon TCG 30th Celebration Booster Pack", price="5.44", item_id="v1|1|0"),
+                item("Pokemon TCG Prismatic Evolutions Elite Trainer Box", price="80.00", item_id="v1|2|0")]
+        api = FakeApi([], items=rows)
+        out = StringIO()
+        with mock.patch.object(ebay, "http", api), mock.patch.object(ebay, "PAUSE", 0):
+            call_command("tidy_listings", stdout=out)
+        chinese.refresh_from_db()
+        english.refresh_from_db()
+        self.assertEqual(chinese.title, "CHS Pokémon TCG 30th Celebration Booster Pack")
+        self.assertEqual(chinese.availability, Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(english.availability, Listing.Availability.IN_STOCK)
+        self.assertIn("2 eBay titles fetched", out.getvalue())
+        self.assertEqual(api.searches(), [])
+
+    def test_titles_are_not_fetched_when_every_listing_has_one(self):
+        etb = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", slug="pev-etb")
+        make_listing(etb, self.retailer, price="80.00", url="https://www.ebay.co.uk/itm/2?campid=1",
+                     title="Pokemon TCG Prismatic Evolutions Elite Trainer Box")
+        api = FakeApi([])
+        self.assertEqual(ebay.fill_titles(request=api, pause=0), 0)
+        self.assertEqual(api.calls, [])
 
     def test_language_shorthand_and_foreign_script_are_another_edition(self):
         pack = make_product(self.set, name="30th Celebration Booster Pack", slug="30th-pack", product_type="booster_pack")
@@ -542,7 +582,8 @@ class FallbackSearchTests(TestCase):
         fair = make_product(self.set, name="Darkness Ablaze Elite Trainer Box", slug="da-etb")
         make_listing(fair, make_retailer("Other"), price="60.00")
         kept = make_listing(fair, self.retailer, price="45.00", url="https://www.ebay.co.uk/itm/2?campid=1")
-        call_command("tidy_listings", stdout=StringIO())
+        with mock.patch.object(ebay, "http", FakeApi([])), mock.patch.object(ebay, "PAUSE", 0):
+            call_command("tidy_listings", stdout=StringIO())
         cheap.refresh_from_db()
         kept.refresh_from_db()
         self.assertEqual(cheap.availability, Listing.Availability.OUT_OF_STOCK)

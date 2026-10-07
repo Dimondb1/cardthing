@@ -195,6 +195,47 @@ def too_cheap_listings():
     ]
 
 
+def fill_titles(request=None, pause=None):
+    """Fetch eBay's own title for live eBay listings saved before titles were kept, so the tidy-up can
+    judge them by the current rules. Uses the bulk lookup, not the search allowance. Returns how many
+    titles were filled."""
+    request = request or http
+    pause = PAUSE if pause is None else pause
+    untitled = {}
+    rows = Listing.objects.filter(retailer__source_type="ebay", is_active=True, title="").exclude(
+        availability=Listing.Availability.OUT_OF_STOCK
+    )
+    for listing in rows:
+        item_id = item_id_of(listing.url)
+        if item_id:
+            untitled.setdefault(item_id, []).append(listing.pk)
+    if not untitled:
+        return 0
+    app, cert, campaign = credentials()
+    headers = headers_for(access_token(app, cert, request=request), campaign)
+    ids = list(untitled)
+    batches = [ids[start:start + BULK] for start in range(0, len(ids), BULK)]
+    filled = 0
+    while batches:
+        batch = batches.pop(0)
+        try:
+            answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
+        except EbayError as exc:
+            if ("11001" in str(exc) or "404" in str(exc)) and len(batch) > 1:
+                batches[:0] = [[item_id] for item_id in batch]   # one ended listing refuses the batch
+                continue
+            if "11001" in str(exc) or "404" in str(exc):
+                continue   # ended: the next eBay run searches for it again
+            logger.warning("eBay: title lookup stopped: %s", exc)
+            break
+        for item in answer.get("items", []) or []:
+            title = (item.get("title") or "")[:300]
+            if title and item.get("itemId") in untitled:
+                filled += Listing.objects.filter(pk__in=untitled[item["itemId"]]).update(title=title)
+        time.sleep(pause)
+    return filled
+
+
 PACK_COUNT = re.compile(r"\b(?:[2-9]|\d{2,})\s*(?:booster\s*)?packs?\b", re.I)
 
 
@@ -458,7 +499,11 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
                     continue
                 offer = item_offer(item, product, Offer)
                 if offer is not None and (too_cheap(product, offer) or junk(product, offer.title)):
-                    continue   # left unfound, so it is searched again and a genuine listing can replace it
+                    # Off the site straight away, then left unfound so it is searched again and a genuine
+                    # listing can replace it. Hidden even if the search allowance runs out first.
+                    offers.append(out_of_stock(product))
+                    yield offers[-1]
+                    continue
                 found.add(item["itemId"])
                 offers.append(offer if offer is not None else out_of_stock(product))
                 yield offers[-1]

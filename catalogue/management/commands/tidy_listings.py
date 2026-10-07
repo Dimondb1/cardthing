@@ -19,7 +19,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from catalogue.classify import NOT_SEALED, find_game
-from catalogue.ebay import too_cheap_listings
+from catalogue.ebay import EbayError, fill_titles, too_cheap_listings
 from catalogue.importers import slug_words
 from catalogue.matching import DIFFERENT, expand, match_key
 from catalogue.models import Game, Listing, Product
@@ -94,6 +94,14 @@ class Command(BaseCommand):
 
     def handle(self, *args, dry_run=False, **options):
         removed = 0
+        # eBay listings saved before titles were kept cannot be judged by their title, so ask eBay for it.
+        try:
+            filled = fill_titles()
+        except EbayError as exc:
+            filled = 0
+            self.stdout.write(f"eBay titles not fetched: {exc}")
+        if filled:
+            self.stdout.write(f"{filled} eBay titles fetched.")
         with transaction.atomic():
             for product, game in misfiled().items():
                 self.stdout.write(f"{'would move' if dry_run else 'moved'}: {product.name} from {product.game.name} to {game.name}")

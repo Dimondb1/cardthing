@@ -276,7 +276,9 @@ eBay listing the current rules refuse: a price under 40% of the cheapest
 any shop last showed, in stock or not, or a title that is a multi-buy, a
 code, a sampling pack or another language. Listings keep the shop's own
 title for this, so a new rule applies at the next hourly import rather
-than the next eBay run). Each takes
+than the next eBay run; an eBay listing saved before titles were kept has
+its title fetched through eBay's bulk lookup first, which does not touch the
+search allowance). Each takes
 `--dry-run`. The home page never shows a "saving" above 70%, because a gap
 that large is a wrong link, not a bargain.
 

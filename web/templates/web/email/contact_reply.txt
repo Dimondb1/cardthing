@@ -1,0 +1,10 @@
+{{ site_name }} replied to your message:
+
+{{ reply }}
+
+Open the conversation and reply there:
+{{ thread_url }}
+
+Nobody reads replies to this email.
+
+Unsubscribe and delete your email address: {{ stop_url }}

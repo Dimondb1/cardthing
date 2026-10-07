@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "contact.title" %}</h1>
+  <p class="page-intro">{% copy "contact.intro" %}</p>
+</div>
+{% if existing %}<p class="contact-note">{% copy "contact.continue" %} <a href="{{ existing.get_absolute_url }}">{% copy "contact.continue.link" %}</a></p>{% endif %}
+<form class="contact-form" method="post" action="{% url 'web:contact' %}">
+  {% csrf_token %}
+  {% if error %}<p class="contact-form__error" role="alert">{% copy error %}</p>{% endif %}
+  <label class="contact-form__label" for="contact-body">{% copy "contact.form.message" %}</label>
+  <textarea id="contact-body" class="contact-form__input contact-form__text" name="body" rows="6" maxlength="{{ max_length }}" required>{{ values.body }}</textarea>
+  <label class="contact-form__label" for="contact-name">{% copy "contact.form.name" %}</label>
+  <input id="contact-name" class="contact-form__input" type="text" name="name" maxlength="80" autocomplete="name" value="{{ values.name }}">
+  <label class="contact-form__label" for="contact-email">{% copy "contact.form.email" %}</label>
+  <input id="contact-email" class="contact-form__input" type="email" name="email" maxlength="254" autocomplete="email" inputmode="email" value="{{ values.email }}" aria-describedby="contact-email-note">
+  <p class="contact-form__note" id="contact-email-note">{% copy "contact.form.email_note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.terms" %}</a></p>
+  <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+  <p><button class="button" type="submit">{% copy "contact.form.button" %}</button></p>
+</form>
+{% endblock %}

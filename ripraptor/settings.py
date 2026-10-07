@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "content",
     "catalogue",
     "web",
+    "inbox",
 ]
 
 MIDDLEWARE = [
@@ -201,6 +202,9 @@ RIPRAPTOR_ZEPTOMAIL_TOKEN = os.environ.get("RIPRAPTOR_ZEPTOMAIL_TOKEN", "").stri
 RIPRAPTOR_ZEPTOMAIL_URL = os.environ.get("RIPRAPTOR_ZEPTOMAIL_URL", "https://cpaas.zoho.com/v1.1/email").strip()
 RIPRAPTOR_MAIL_FROM = os.environ.get("RIPRAPTOR_MAIL_FROM", "alerts@ripraptor.com").strip()
 RIPRAPTOR_SITE_URL = os.environ.get("RIPRAPTOR_SITE_URL", "https://ripraptor.com").strip().rstrip("/")
+RIPRAPTOR_INBOX_NOTIFY_EMAIL = os.environ.get("RIPRAPTOR_INBOX_NOTIFY_EMAIL", "").strip()
+RIPRAPTOR_NTFY_TOPIC = os.environ.get("RIPRAPTOR_NTFY_TOPIC", "").strip()
+RIPRAPTOR_NTFY_URL = os.environ.get("RIPRAPTOR_NTFY_URL", "https://ntfy.sh").strip()
 
 RIPRAPTOR_EBAY_APP_ID = os.environ.get("RIPRAPTOR_EBAY_APP_ID", "").strip()
 RIPRAPTOR_EBAY_CERT_ID = os.environ.get("RIPRAPTOR_EBAY_CERT_ID", "").strip()

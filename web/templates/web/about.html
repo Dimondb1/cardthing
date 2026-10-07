@@ -32,12 +32,11 @@
   </section>
   {% endif %}
 
-  {% if contact_email %}
   <section aria-labelledby="contact-title">
     <h2 id="contact-title">{% copy "about.contact.title" %}</h2>
-    {% copy "about.contact.body" email=contact_email as contact_text %}
-    <p>{{ contact_text|link_email:contact_email }}</p>
+    {% if contact_email %}{% copy "about.contact.body" email=contact_email as contact_text %}
+    <p>{{ contact_text|link_email:contact_email }}</p>{% endif %}
+    <p><a class="button button--quiet" href="{% url 'web:contact' %}">{% copy "site.nav.contact" %}</a></p>
   </section>
-  {% endif %}
 </div>
 {% endblock %}

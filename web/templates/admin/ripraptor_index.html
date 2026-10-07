@@ -1,5 +1,13 @@
 {% extends "admin/index.html" %}
+{% load inbox %}
 {% block content %}
+{% inbox_unread as unread %}
+<div class="module" style="margin-bottom: 20px;">
+  <table>
+    <caption><a href="{% url 'admin:inbox_conversation_changelist' %}" class="section">Messages</a></caption>
+    <tr><th scope="row"><a href="{% url 'admin:inbox_conversation_changelist' %}?unread__exact=1">{% if unread %}<strong>{{ unread }} new message{{ unread|pluralize }}</strong>{% else %}No new messages{% endif %}</a></th><td></td></tr>
+  </table>
+</div>
 <div class="module" style="margin-bottom: 20px;">
   <table>
     <caption><a href="{% url 'insights' %}" class="section">Insights</a></caption>

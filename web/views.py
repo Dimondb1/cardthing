@@ -21,6 +21,8 @@ from catalogue.models import DailyPageView, Game, Listing, OutboundClick, Produc
 from catalogue.search import apply_search
 from catalogue.types import type_choices
 from content import service as copy
+from inbox import service as inbox
+from inbox.models import Conversation
 
 from .charts import price_chart
 from .templatetags.ripraptor import gbp
@@ -1061,6 +1063,87 @@ def alert_stop(request, token):
                                                     "meta_title": heading, "noindex": True})
 
 
+INBOX_COOKIE = "rr_inbox"
+
+
+def remember_thread(response, request, conversation):
+    response.set_cookie(INBOX_COOKIE, conversation.token, max_age=inbox.KEEP_DAYS * 86400,
+                        httponly=True, samesite="Lax", secure=request.is_secure())
+    return response
+
+
+def contact(request):
+    """Message us. No account and no email needed: the visitor gets a private link to the thread."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    values = {"body": "", "name": "", "email": ""}
+    error = ""
+    if request.method == "POST":
+        if request.POST.get("website"):
+            return HttpResponseRedirect(reverse("web:contact"))   # the hidden field is only ever filled by robots
+        values = {k: request.POST.get(k, "").strip() for k in values}
+        try:
+            if not values["body"]:
+                raise ValueError("empty")
+            if values["email"]:
+                validate_email(values["email"])
+            conversation = inbox.start(values["body"], name=values["name"], email=values["email"])
+        except ValueError:
+            error = "contact.form.empty"
+        except ValidationError:
+            error = "contact.form.invalid"
+        except inbox.Refused:
+            error = "contact.form.busy"
+        else:
+            response = HttpResponseRedirect(conversation.get_absolute_url() + "?sent=1#reply")
+            return remember_thread(response, request, conversation)
+    elif request.method != "GET":
+        return HttpResponse(status=405)
+    existing = Conversation.objects.filter(token=request.COOKIES.get(INBOX_COOKIE, "")).first()
+    return render(request, "web/contact.html", {
+        "values": values, "error": error, "existing": existing, "max_length": inbox.MAX_LENGTH,
+        "meta_title": text(request, "contact.title"), "canonical_url": request.build_absolute_uri(request.path),
+    })
+
+
+def contact_thread(request, token):
+    conversation = get_object_or_404(Conversation, token=token)
+    state = ""
+    if request.method == "POST" and request.POST.get("forget") == "1":
+        # A button, not the link itself: mail scanners open links in emails and would delete the address unasked.
+        if conversation.email:
+            inbox.forget_email(conversation)
+            conversation.email = ""
+        state = "forgot"
+    elif request.method == "POST":
+        body = request.POST.get("body", "").strip()
+        if request.POST.get("website") or not body:
+            return HttpResponseRedirect(conversation.get_absolute_url())
+        try:
+            inbox.add(conversation, body)
+        except inbox.Refused:
+            state = "closed" if conversation.closed else "busy"
+        else:
+            return HttpResponseRedirect(conversation.get_absolute_url() + "?sent=1#reply")
+    elif request.method != "GET":
+        return HttpResponse(status=405)
+    elif request.GET.get("forget") == "1" and conversation.email:
+        state = "forget"
+    elif request.GET.get("sent") == "1":
+        state = "sent"
+    messages_list = list(conversation.messages.all())
+    response = render(request, "web/contact_thread.html", {
+        "conversation": conversation, "thread": messages_list, "state": state, "max_length": inbox.MAX_LENGTH,
+        "waiting": bool(messages_list) and messages_list[-1].from_visitor,
+        "meta_title": text(request, "contact.thread.title"), "noindex": True,
+    })
+    response["Cache-Control"] = "no-store"
+    if request.user.is_staff:
+        return response   # the owner looking from admin should not take the visitor's thread as their own
+    return remember_thread(response, request, conversation)
+
+
 @require_GET
 def manifest(request):
     """The web app manifest, so a phone can pin RipRaptor to its home screen. No service worker, no push."""
@@ -1088,7 +1171,7 @@ def manifest(request):
 @require_GET
 def robots_txt(request):
     private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/", "Disallow: /watchlist/",
-               "Disallow: /alerts/"]
+               "Disallow: /alerts/", "Disallow: /contact/c/"]
     lines = ["User-agent: *", *private, ""]
     # Named so a crawler that only honours its own section still gets the same answer.
     for agent in AI_CRAWLERS:

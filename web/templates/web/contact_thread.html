@@ -1,0 +1,39 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "contact.thread.title" %}</h1>
+  <p class="page-intro">{% copy "contact.thread.intro" %}</p>
+</div>
+<ol class="thread">
+  {% for message in thread %}
+  <li class="thread__msg{% if not message.from_visitor %} thread__msg--us{% endif %}">
+    <p class="thread__who">{% if message.from_visitor %}{% copy "contact.thread.you" %}{% else %}{% copy "contact.thread.us" %}{% endif %} <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:"j M Y, H:i" }}</time></p>
+    <p class="thread__body">{{ message.body|linebreaksbr }}</p>
+  </li>
+  {% endfor %}
+</ol>
+<div class="contact-form" id="reply">
+  {% if state == "sent" %}<p class="contact-form__done" role="status">{% copy "contact.thread.sent" %}</p>{% elif waiting %}<p class="contact-note">{% copy "contact.thread.waiting" %}</p>{% endif %}
+  {% if state == "forget" %}
+    <form method="post" action="{{ conversation.get_absolute_url }}" class="contact-form">
+      {% csrf_token %}
+      <input type="hidden" name="forget" value="1">
+      <p class="contact-form__note">{% copy "contact.thread.forget" email=conversation.email %}</p>
+      <p><button class="button button--small" type="submit">{% copy "contact.thread.forget.button" %}</button></p>
+    </form>
+  {% elif state == "forgot" %}<p class="contact-form__done" role="status">{% copy "contact.thread.forgot" %}</p>{% elif conversation.email %}<p class="contact-form__note">{% copy "contact.thread.email_on" email=conversation.email %}</p>{% endif %}
+  {% if conversation.closed %}
+    <p class="contact-note">{% copy "contact.thread.closed" %} <a href="{% url 'web:contact' %}">{% copy "contact.thread.new" %}</a></p>
+  {% else %}
+    {% if state == "busy" %}<p class="contact-form__error" role="alert">{% copy "contact.thread.busy" %}</p>{% endif %}
+    <form method="post" action="{{ conversation.get_absolute_url }}" class="contact-form">
+      {% csrf_token %}
+      <label class="contact-form__label" for="thread-body">{% copy "contact.thread.more" %}</label>
+      <textarea id="thread-body" class="contact-form__input contact-form__text" name="body" rows="4" maxlength="{{ max_length }}" required></textarea>
+      <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+      <p><button class="button button--small" type="submit">{% copy "contact.thread.button" %}</button></p>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

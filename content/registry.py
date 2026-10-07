@@ -47,6 +47,7 @@ SECTIONS = [
     ("browse", "Search results and browsing"),
     ("product", "Product page"),
     ("about", "How it works page"),
+    ("contact", "Message us page"),
     ("footer", "Footer"),
     ("terms", "Terms page"),
     ("errors", "Error pages"),
@@ -141,6 +142,7 @@ ENTRIES = [
         "See all",
         "Link at the end of each home page section.",
     ),
+    Entry("site.nav.contact", B, "Message us link", "Message us", "Footer link to the Message us page."),
     Entry(
         "site.nav.terms", B, "Terms link",
         "Terms",
@@ -960,6 +962,47 @@ ENTRIES = [
         placeholders=("email",),
     ),
 
+    # Message us -----------------------------------------------------------
+    Entry("contact.title", H, "Page heading", "Message us", "Top of the Message us page."),
+    Entry(
+        "contact.intro", T, "Introduction",
+        "Spotted a wrong price, a missing product or a shop we should add? Tell us here. We read every message.",
+        "Under the heading on the Message us page.",
+    ),
+    Entry("contact.form.message", T, "Message label", "Your message", "Label above the message box."),
+    Entry("contact.form.name", T, "Name label", "Your name (optional)", "Label above the name box."),
+    Entry("contact.form.email", T, "Email label", "Email (optional)", "Label above the email box."),
+    Entry(
+        "contact.form.email_note", T, "Email note",
+        "Only used to tell you we have replied. Leave it blank and your private link shows our reply instead.",
+        "Under the email box.",
+    ),
+    Entry("contact.form.button", B, "Send button", "Send message", "Button that sends the first message."),
+    Entry("contact.form.empty", T, "Empty message", "Write a message first.", "Shown when the message box is empty."),
+    Entry("contact.form.invalid", T, "Bad email", "That email address does not look right.", "Shown when the email address is not valid."),
+    Entry("contact.form.busy", T, "Too many messages", "We have had a lot of messages just now. Try again in an hour.", "Shown when the flood limit is reached."),
+    Entry("contact.continue", T, "Open conversation note", "You already have a conversation with us.", "On the Message us page when this browser has one."),
+    Entry("contact.continue.link", B, "Open conversation link", "Open your conversation", "Link next to the note above."),
+    Entry("contact.thread.title", H, "Conversation heading", "Your conversation", "Top of a visitor's private conversation page."),
+    Entry(
+        "contact.thread.intro", T, "Conversation introduction",
+        "This page's link is private to you. Our replies appear here, and this browser remembers the page.",
+        "Under the heading on the conversation page.",
+    ),
+    Entry("contact.thread.you", T, "Visitor label", "You", "Above the visitor's messages."),
+    Entry("contact.thread.us", T, "Our label", "RipRaptor", "Above replies."),
+    Entry("contact.thread.waiting", T, "Waiting note", "Our reply will appear here.", "When the last message is the visitor's."),
+    Entry("contact.thread.email_on", T, "Email note", "We will also email {email} when we reply.", "When the visitor left an email address.", placeholders=("email",)),
+    Entry("contact.thread.sent", T, "Sent note", "Sent. Our reply will appear on this page.", "After a message is sent."),
+    Entry("contact.thread.more", T, "Follow-up label", "Add a message", "Label above the box for a follow-up."),
+    Entry("contact.thread.button", B, "Follow-up button", "Send", "Button that sends a follow-up."),
+    Entry("contact.thread.busy", T, "Follow-up limit", "That is a lot of messages in an hour. Try again later.", "When a thread hits the hourly limit."),
+    Entry("contact.thread.closed", T, "Closed note", "This conversation is closed. Start a new one if you need us.", "When the owner has closed the thread."),
+    Entry("contact.thread.new", B, "New conversation link", "Start a new conversation", "On a closed conversation."),
+    Entry("contact.thread.forget", T, "Delete email question", "Stop emails to {email} and delete the address? Replies still show on this page.", "After the Unsubscribe link in a reply email.", placeholders=("email",)),
+    Entry("contact.thread.forget.button", B, "Delete email button", "Delete my email address", "Button under the question above."),
+    Entry("contact.thread.forgot", T, "Email deleted note", "Your email address has been deleted. Replies still show on this page.", "After the email address is deleted."),
+
     # Footer ---------------------------------------------------------------
     Entry(
         "footer.line", T, "Footer line",
@@ -1182,7 +1225,11 @@ ENTRIES = [
         "you. You get one email when a shop has the product, and your address is then "
         "deleted. Unconfirmed requests are deleted after a week and any still waiting "
         "after six months are deleted too. Every email has a link that deletes your "
-        "request at once. The emails are sent through Zoho ZeptoMail.",
+        "request at once. The emails are sent through Zoho ZeptoMail.\n\n"
+        "If you message us, we keep your message, and your name and email address if you "
+        "give them, to answer you and for nothing else. Your conversation is deleted six "
+        "months after its last message. A cookie in your browser remembers the private "
+        "link to your conversation.",
         "Data section of the terms page.",
         legal=True,
     ),

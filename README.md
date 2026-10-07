@@ -575,6 +575,9 @@ product images live in `media/`; back that folder and the database up.
 | `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
 | `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
+| `RIPRAPTOR_INBOX_NOTIFY_EMAIL` |         | Your own address. Each new Message us message is emailed to it through ZeptoMail with a link to reply in admin. Never shown on the site. |
+| `RIPRAPTOR_NTFY_TOPIC`         |         | A long, unguessable ntfy topic name. Each new message sends a push to the free ntfy phone app subscribed to it. The push holds only a link to admin, never the name or the words. |
+| `RIPRAPTOR_NTFY_URL`           | `https://ntfy.sh` | The ntfy server, if you run your own. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
 ## Games
@@ -666,6 +669,30 @@ create a Mail Agent, copy its Send Mail token into `.env` as
 `RIPRAPTOR_ZEPTOMAIL_TOKEN` (the address and sender have working defaults), restart, and check with
 `python manage.py send_stock_alerts --test you@example.com`. Without the
 token the form does not appear.
+
+## Message us
+
+`/contact/` (footer and How it works page) takes a message, an optional
+name and an optional email address. No account and no inbox: the visitor
+lands on a private page at `/contact/c/<token>/` that shows the thread,
+takes follow-ups and is remembered by a cookie, so the Message us page
+links back to it. You read and reply in admin under Messages ->
+Conversations; the admin home shows how many are new. Opening a thread
+marks it read, and "Open what they see" does not tie the thread to your
+browser. Type in Your reply and save: the reply shows on their page and,
+if they gave an address, is emailed to them through ZeptoMail with a link
+back. The email's Unsubscribe opens their page with a button that deletes
+the address (a button, because mail scanners open links). Tick Closed to
+stop follow-ups.
+
+You hear about new messages by email to `RIPRAPTOR_INBOX_NOTIFY_EMAIL`,
+by phone push through ntfy (install the ntfy app, subscribe to the topic
+in `RIPRAPTOR_NTFY_TOPIC`), or both. The push says only that a message
+came in, with a link to admin, because anyone who guesses an ntfy.sh topic
+can read it. A failed notification never loses the message. Limits: 3,000
+characters a message, six follow-ups an hour per thread, 40 new threads an
+hour site-wide. Threads are deleted six months after their last message.
+Thread pages are noindex and kept out of robots.txt.
 
 ## Watchlist
 

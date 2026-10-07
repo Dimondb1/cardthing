@@ -119,6 +119,21 @@ Every figure saved carries its source and the date in the retailer's
 delivery note, so it can be checked. A shop that gives nothing readable is
 listed with its address for checking by hand. The server runs this weekly.
 
+A charge nobody has confirmed is unknown, never free. Leave "standard
+delivery" empty in admin when you do not know it (and set "standard charge
+only up to" when a shop publishes its charge only for small orders). Those
+prices show as "£21.50 + delivery" with "Delivery charge not confirmed",
+are listed after confirmed delivered prices, never count as the cheapest,
+never make a saving, a badge, a featured deal or a price drop, and stay out
+of the price history. Changing a shop's delivery in admin re-prices its
+listings at once. `setup_shops` turns a £0 charge the shop list marks as
+unknown into an empty one; a charge you set yourself is kept.
+
+Everywhere a price is shown, the big number is the delivered total when
+delivery is known ("£24.44 delivered", then "£21.50 plus £2.94 delivery
+at eBay"), and the item price with "+ delivery" when it is not. Lists sort
+on the number they show.
+
 ## Checking a shop before adding it
 
 ```sh
@@ -279,8 +294,17 @@ title for this, so a new rule applies at the next hourly import rather
 than the next eBay run; an eBay listing saved before titles were kept has
 its title fetched through eBay's bulk lookup first, which does not touch the
 search allowance). Each takes
-`--dry-run`. The home page never shows a "saving" above 70%, because a gap
-that large is a wrong link, not a bargain.
+`--dry-run`. No page ever shows a saving or a price drop above 70%, because
+a gap that large is a wrong link, not a bargain, and such a product gets no
+badge and is never featured. Savings name the shop they are measured
+against ("Save £3 vs Zatu"), and only compare confirmed delivered prices.
+
+```sh
+python manage.py suspect_savings
+```
+
+lists those products with both links, so you can untick "show on site" on
+whichever listing is the wrong product.
 
 `watch_stock` runs every ten minutes on the server. It asks each shop
 about single products (a Shopify shop answers `/products/<handle>.js` in
@@ -527,6 +551,18 @@ configures HTTPS for the domain, schedules hourly imports and starts the
 first import. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
 
+Each update first copies the database to `/var/lib/ripraptor/backups/`
+(the newest five are kept). To roll back, stop the site, copy the backup
+over the live database and check out the previous code:
+
+```sh
+sudo systemctl stop ripraptor
+sudo cp /var/lib/ripraptor/backups/db-YYYYMMDD-HHMMSS.sqlite3 /var/lib/ripraptor/db.sqlite3
+sudo chown ripraptor:ripraptor /var/lib/ripraptor/db.sqlite3
+cd /srv/ripraptor && sudo -u ripraptor git checkout <previous commit>
+sudo systemctl start ripraptor
+```
+
 The manual steps:
 
 The `deploy/` folder has everything for a small Linux server (a £4 to £6 a
@@ -761,9 +797,23 @@ by a check appears on the next request.
 
 `merge_duplicates` (run hourly by `tidy_all`) records every merged
 product's old address, and a visit to an old address is sent to the
-kept product with a permanent redirect, so links and search results
-keep working. Old addresses are listed in admin under "Old product
-addresses".
+kept product with a permanent redirect, so links, search results and
+watchlists saved in browsers keep working. Old addresses are listed in
+admin under "Old product addresses". Price history, restocks, clicks and
+stock alerts move to the kept product. A count with and without its noun
+("Display (10 Bundles)" and "Display (10)") counts as the same name; a name
+with nothing but the kind of product left ("Scarlet & Violet Elite Trainer
+Box") is never merged.
+
+```sh
+python manage.py merge_duplicates --loose --dry-run
+```
+
+also ignores filler words ("Exclusive", "English", "TCG") and, for
+Pokémon, series names, so "Pitch Black Pokémon Center Elite Trainer Box
+(Exclusive)" meets "Mega Evolution Pitch Black Pokemon Center Elite Trainer
+Box". It never runs on its own: read the dry run, and run it without
+`--dry-run` only when every group is right.
 
 ## Search engines and AI crawlers
 

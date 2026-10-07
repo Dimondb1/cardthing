@@ -18,8 +18,8 @@
         {% product_image product "row" %}
         <span class="saving__body">
           <span class="saving__name">{{ product.name }}</span>
-          <span class="saving__best-line"><span class="saving__best">{{ summary.best.price|gbp }}</span> <span class="saving__retailer">{{ summary.best.retailer.name }}</span> <span class="delivered">{% copy "product.delivered.line" price=summary.best.delivered_price|gbp %}</span></span>
-          <span class="saving__next"><s>{% copy "home.savings.next" price=summary.second.delivered_price|gbp %}</s></span>
+          <span class="saving__best-line"><span class="saving__best">{{ summary.best.delivered_price|gbp }}</span> <span class="delivered">{% copy "browse.price.label" %}</span> <span class="saving__retailer">{% copy "product.rank.at" retailer=summary.best.retailer.name %}</span></span>
+          <span class="saving__next"><s>{% copy "home.savings.next" price=summary.second.delivered_price|gbp retailer=summary.second.retailer.name %}</s></span>
         </span>
         <span class="saving__pill"><strong>{% copy "home.savings.save" amount=summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=summary.percent %}</small></span>
       </a>
@@ -64,7 +64,7 @@
       <a class="drop__link" href="{{ event.product.get_absolute_url }}">
         {% product_image event.product "thumb" %}
         <span class="drop__body"><span class="drop__name">{{ event.product.name }}</span><span class="drop__meta">{{ event.retailer.name }} · {{ event.at|date:"H:i" }}{% if not event.still_in_stock %} · {% copy "deals.restock.again" %}{% endif %}</span></span>
-        <span class="drop__prices">{% price event.price size="md" %}</span>
+        <span class="drop__prices">{% price event.price size="md" %}{% if not event.delivery_known %} <span class="delivered">{% copy "browse.price.plus" %}</span>{% endif %}</span>
       </a>
     </li>
     {% endfor %}

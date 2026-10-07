@@ -6,7 +6,7 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #e6e8ec;border-radius:12px;">
   <tr><td style="padding:14px 16px;">
     <p style="margin:0;font-size:13px;color:#667085;">Cheapest in stock now</p>
-    <p style="margin:2px 0 0;font-size:28px;font-weight:800;line-height:1.1;color:#107a32;">£{{ listing.delivered_price }} <span style="font-size:15px;font-weight:bold;">delivered</span></p>
+    <p style="margin:2px 0 0;font-size:28px;font-weight:800;line-height:1.1;color:#107a32;">{% if listing.delivery_known %}£{{ listing.delivered_price }} <span style="font-size:15px;font-weight:bold;">delivered</span>{% else %}£{{ listing.price }} <span style="font-size:15px;font-weight:bold;">plus delivery</span>{% endif %}</p>
     <p style="margin:4px 0 0;font-weight:bold;">at {{ listing.retailer.name }}</p>
     <p style="margin:4px 0 0;font-size:13px;color:#667085;">Checked just now. Stock at small shops can go within minutes.</p>
   </td></tr>

@@ -52,9 +52,9 @@
       <a class="trending__link" href="{{ product.get_absolute_url }}">
         {% product_image product "trend" %}
         <span class="trending__name">{{ product.name }}</span>
-        <span class="trending__price">{% price summary.best.price %}</span>
-        <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=summary.best.delivered_price|gbp %}</span> · {{ summary.best.retailer.name }}</span>
-        {% if summary.saving %}<span class="trending__move trending__move--down">{% copy "home.savings.save" amount=summary.saving|gbp %}</span>{% elif summary.badge == "best_week" %}<span class="trending__move trending__move--down">{% copy "product.badge.best_week" %}</span>{% elif summary.badge %}<span class="trending__move trending__move--down">{% copy "product.badge.lowest_today" %}</span>{% endif %}
+        <span class="trending__price">{% price summary.best.shown_price %}</span>
+        <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=summary.best %}</span> · {{ summary.best.retailer.name }}</span>
+        {% if summary.saving %}<span class="trending__move trending__move--down">{% copy "home.savings.save_vs" amount=summary.saving|gbp retailer=summary.second.retailer.name %}</span>{% elif summary.badge == "best_week" %}<span class="trending__move trending__move--down">{% copy "product.badge.best_week" %}</span>{% elif summary.badge %}<span class="trending__move trending__move--down">{% copy "product.badge.lowest_today" %}</span>{% endif %}
       </a>
     </li>
     {% endfor %}
@@ -78,8 +78,8 @@
           {% price product.lowest_price size="focal" %}
           <span class="focal__save"><strong>{% copy "home.savings.save" amount=product.drop|gbp %}</strong></span>
         {% else %}
-          {% price focal.summary.best.price size="focal" %}
-          <span class="focal__at"><span class="delivered">{% copy "product.delivered.line" price=focal.summary.best.delivered_price|gbp %}</span> at {{ focal.summary.best.retailer.name }}</span>
+          {% price focal.summary.best.shown_price size="focal" %}
+          <span class="focal__at"><span class="delivered">{% include "web/includes/price_basis.html" with listing=focal.summary.best %}</span> {% copy "product.rank.at" retailer=focal.summary.best.retailer.name %}</span>
           <span class="focal__save"><strong>{% copy "home.savings.save" amount=focal.summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=focal.summary.percent %}</small></span>
         {% endif %}
       </span>
@@ -103,8 +103,8 @@
         {% product_image product "row" %}
         <span class="saving__body">
           <span class="saving__name">{{ product.name }}</span>
-          <span class="saving__best-line"><span class="saving__best">{{ summary.best.price|gbp }}</span> <span class="saving__retailer">{{ summary.best.retailer.name }}</span> <span class="delivered">{% copy "product.delivered.line" price=summary.best.delivered_price|gbp %}</span></span>
-          <span class="saving__next"><s>{% copy "home.savings.next" price=summary.second.delivered_price|gbp %}</s></span>
+          <span class="saving__best-line"><span class="saving__best">{{ summary.best.delivered_price|gbp }}</span> <span class="delivered">{% copy "browse.price.label" %}</span> <span class="saving__retailer">{% copy "product.rank.at" retailer=summary.best.retailer.name %}</span></span>
+          <span class="saving__next"><s>{% copy "home.savings.next" price=summary.second.delivered_price|gbp retailer=summary.second.retailer.name %}</s></span>
         </span>
         <span class="saving__pill"><strong>{% copy "home.savings.save" amount=summary.saving|gbp %}</strong><small>{% copy "home.savings.percent" percent=summary.percent %}</small></span>
       </a>
@@ -130,8 +130,8 @@
         {% if product.best_offer.availability == "preorder" %}<span class="badge badge--soon trending__badge">{% copy "product.badge.soon" %}</span>{% endif %}
         <span class="trending__name">{{ product.name }}</span>
         {% if product.best_offer %}
-          <span class="trending__price">{% price product.best_offer.price %}</span>
-          <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=product.best_offer.delivered_price|gbp %}</span> · {{ product.best_offer.retailer.name }}</span>
+          <span class="trending__price">{% price product.best_offer.shown_price %}</span>
+        <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=product.best_offer %}</span> · {{ product.best_offer.retailer.name }}</span>
         {% endif %}
         {% if product.release %}<span class="trending__move trending__move--down">{% if product.best_offer.availability == "preorder" %}{% copy "home.new.out" date=product.release|short_date %}{% else %}{% copy "home.new.released" date=product.release|short_date %}{% endif %}</span>{% endif %}
       </a>
@@ -155,8 +155,8 @@
         {% product_image product "trend" %}
         <span class="trending__name">{{ product.name }}</span>
         {% if product.best_offer %}
-          <span class="trending__price">{% price product.best_offer.price %}</span>
-          <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=product.best_offer.delivered_price|gbp %}</span> · {{ product.best_offer.retailer.name }}</span>
+          <span class="trending__price">{% price product.best_offer.shown_price %}</span>
+        <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=product.best_offer %}</span> · {{ product.best_offer.retailer.name }}</span>
         {% endif %}
       </a>
     </li>
@@ -177,8 +177,8 @@
       <a class="trending__link" href="{{ product.get_absolute_url }}">
         {% product_image product "trend" %}
         <span class="trending__name">{{ product.name }}</span>
-        <span class="trending__price">{% price listing.delivered_price %}</span>
-        <span class="trending__retailer">{{ listing.retailer.name }}</span>
+        <span class="trending__price">{% price listing.shown_price %}</span>
+        <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" %}</span> · {{ listing.retailer.name }}</span>
         <span class="trending__move trending__move--down">{% copy "home.restock.when" time=listing.back_in_stock_at|ago %}</span>
       </a>
     </li>
@@ -201,8 +201,8 @@
         <span class="trending__name">{{ product.name }}</span>
         {% if product.lowest_price is not None %}
           {% if product.best_offer %}
-            <span class="trending__price">{% price product.best_offer.price %}</span>
-            <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=product.best_offer.delivered_price|gbp %}</span> · {{ product.best_offer.retailer.name }}</span>
+            <span class="trending__price">{% price product.best_offer.shown_price %}</span>
+        <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=product.best_offer %}</span> · {{ product.best_offer.retailer.name }}</span>
           {% else %}
             <span class="trending__price">{% price product.lowest_price %}</span>
           {% endif %}

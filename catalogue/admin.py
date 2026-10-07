@@ -65,7 +65,7 @@ class ImageFilter(admin.SimpleListFilter):
 class ListingInline(admin.TabularInline):
     model = Listing
     extra = 0
-    fields = ("retailer", "url", "price", "delivery_cost", "availability", "last_checked", "is_active")
+    fields = ("retailer", "url", "price", "delivery_cost", "delivery_known", "availability", "last_checked", "is_active")
     autocomplete_fields = ("retailer",)
 
 
@@ -120,7 +120,7 @@ class RetailerAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     fieldsets = (
         (None, {"fields": ("name", "slug", "website", "is_active")}),
-        ("Delivery", {"fields": ("delivery_cost", "free_delivery_over", "delivery_note")}),
+        ("Delivery", {"fields": ("delivery_cost", "delivery_cost_up_to", "free_delivery_over", "delivery_note")}),
         ("Prices", {"fields": ("source_type", "source_url", "collection", "session_url"),
                     "description": "Run <code>python manage.py import_prices</code> to fetch prices "
                                    "from this source. A shop product is matched to ours by barcode, or by "
@@ -134,10 +134,16 @@ class RetailerAdmin(admin.ModelAdmin):
     def has_affiliate_link(self, obj):
         return bool(obj.affiliate_url_template)
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # New delivery rules apply to the shop's prices at once, not at its next import.
+        if change and {"delivery_cost", "delivery_cost_up_to", "free_delivery_over"} & set(form.changed_data):
+            pricing.apply_delivery_rules(obj)
+
 
 @admin.register(Listing)
 class ListingAdmin(admin.ModelAdmin):
-    list_display = ("product", "retailer", "price", "delivery_cost", "delivered_price", "availability", "last_checked", "is_active")
+    list_display = ("product", "retailer", "price", "delivery_cost", "delivery_known", "delivered_price", "availability", "last_checked", "is_active")
     list_filter = ("availability", "retailer", "is_active")
     search_fields = ("product__name", "retailer__name", "url")
     autocomplete_fields = ("product", "retailer")

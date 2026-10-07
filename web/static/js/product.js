@@ -51,8 +51,8 @@
         }
         const main = document.querySelector(`[data-price-for="${row.id}"]`);
         if (main) swap(main, row.price);
-        const total = document.querySelector(`[data-total-for="${row.id}"]`);
-        if (total) swap(total, `${row.total} delivered`);
+        const note = document.querySelector(`[data-note-for="${row.id}"]`);
+        if (note) swap(note, row.note);
       });
       say(button.dataset.done, false);
     } catch (err) {

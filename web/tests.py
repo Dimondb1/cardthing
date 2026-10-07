@@ -76,8 +76,10 @@ class PageTests(PageTestCase):
 
     def test_home_shows_every_section(self):
         response = self.client.get(reverse("web:home"))
-        for heading in ("Trending now", "Biggest savings", "Save £3.01", "Biggest price drop today", "Recently released", "Browse by game"):
+        for heading in ("Trending now", "Featured deals", "Save £3.01 vs Northgate Cards", "Biggest price drop today", "Recently released", "Browse by game"):
             self.assertContains(response, heading)
+        # The only saving is already a featured deal, so Biggest savings does not repeat it.
+        self.assertNotContains(response, "Biggest savings")
 
     def test_product_page_leads_with_the_cheapest_delivered_price(self):
         response = self.client.get(self.etb.get_absolute_url())
@@ -328,7 +330,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
 
         cache.clear()
         self.client.get(reverse("web:home"))
-        self.assertIsNotNone(cache.get("web:home-lists:v3"))
+        self.assertIsNotNone(cache.get("web:home-lists:v4"))
         from catalogue.importers import run_import
         from catalogue.models import Retailer
 
@@ -336,7 +338,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
         self.harbour.source_url = "https://h.example/"
         self.harbour.save()
         run_import(self.harbour, fetch=lambda url: b'{"products": []}')
-        self.assertIsNone(cache.get("web:home-lists:v3"))
+        self.assertIsNone(cache.get("web:home-lists:v4"))
 
     def test_long_names_unicode_search_and_bad_pages(self):
         long_name = "Pokémon TCG: Scarlet & Violet " + "Ultra Premium Collection " * 5
@@ -631,7 +633,8 @@ class PickUpTests(PageTestCase):
     def test_recent_row_prices_the_named_products_in_order(self):
         body = self.client.get(reverse("web:recent_api") + f"?p={self.sold_out.slug},{self.etb.slug},nope").content.decode()
         self.assertLess(body.index(self.sold_out.name), body.index(self.etb.name))
-        self.assertIn("£54.99 delivered", body)
+        self.assertIn('<span class="price">£54.99</span>', body)
+        self.assertIn('<span class="delivered">delivered</span> · Harbour Games', body)
         self.assertIn("Last checked", body)
         self.assertNotIn("<html", body)
         self.assertEqual(self.client.get(reverse("web:recent_api")).content.decode().count("trending__item"), 0)
@@ -1003,7 +1006,7 @@ class LatestDropsTests(PageTestCase):
         response = self.client.get(reverse("web:home"))
         self.assertContains(response, "Latest drops")
         html = response.content.decode()
-        self.assertLess(html.index('id="savings-title"'), html.index('id="latest-title"'))
+        self.assertLess(html.index('id="featured-title"'), html.index('id="latest-title"'))
         row = html[html.index('id="latest-title"'):html.index("</section>", html.index('id="latest-title"'))]
         self.assertIn("Mega Evolution Elite Trainer Box", row)
         self.assertIn("Out ", row)

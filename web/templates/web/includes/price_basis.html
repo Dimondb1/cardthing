@@ -1,0 +1,1 @@
+{% load sitecopy %}{# What a shown price includes: "delivered" when the delivery charge is known, "+ delivery" when not. #}{% if listing.delivery_known %}{% copy "browse.price.label" %}{% else %}{% copy "browse.price.plus" %}{% endif %}

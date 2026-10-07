@@ -3,13 +3,21 @@ Merge products that are the same thing under slightly different names.
 
     python manage.py merge_duplicates --dry-run
     python manage.py merge_duplicates
+    python manage.py merge_duplicates --loose --dry-run
+
+--loose also ignores words shops add that do not change the product
+("Exclusive", "English", "TCG", and for Pokémon the series name, such as
+"Mega Evolution" or "Scarlet & Violet"). It never runs on its own: read the
+dry run, then run it without --dry-run if every group is right.
 
 Shops write the same product differently ("Commander Legends: Battle for
 Baldur's Gate Bundle" and "Commander Legends Battle For Baldurs Gate
 Bundle"), so one product can end up on two pages, each with one shop. This
 groups products of one game and type whose names share the same matching
 key, keeps the one with the most listings (or an image), moves the other
-listings across and deletes the rest.
+listings, price history, restocks, clicks and stock alerts across, and
+deletes the rest. The old addresses redirect to the kept product, and
+watchlists saved in browsers follow them. Run with --dry-run first.
 """
 
 from collections import defaultdict
@@ -18,7 +26,56 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from catalogue.matching import match_key
-from catalogue.models import Listing, Product, ProductAlias
+from catalogue.models import DailyLowestPrice, Listing, OutboundClick, Product, ProductAlias, Restock, StockAlert
+
+
+# Words that never change which product it is.
+FILLER = {"exclusive", "english", "tcg", "edition"}
+# Pokémon series names, which some shops put before the set name and others leave out.
+POKEMON_SERIES = {"pokemon", "mega", "evolution", "base", "set", "scarlet", "violet", "sv", "sword", "shield", "swsh"}
+# Words that say what kind of thing it is, not which one.
+KIND_WORDS = {"elite", "trainer", "box", "center", "booster", "bundle", "display", "pack", "packs", "case", "tin", "collection"}
+
+
+def identifying(words):
+    return [w for w in words if w not in KIND_WORDS and not w.startswith("#")]
+
+
+def merge_key(name):
+    """The matching key, with a plural dropped when its singular is already there: "Booster Bundle
+    Display (10 Bundles)" and "Booster Bundle Display (10)" name the same thing.
+
+    "" when nothing but the kind of product is left: the matching key drops series names, so
+    "Scarlet & Violet Elite Trainer Box" and "Sword & Shield Elite Trainer Box" would otherwise meet.
+    """
+    words = match_key(name).split()
+    kept = [w for w in words if not (w.endswith("s") and w[:-1] in words)]
+    return " ".join(kept) if identifying(kept) else ""
+
+
+def loose_key(name, game_slug):
+    """``merge_key`` without filler and series words, or "" when nothing identifying is left
+    (a bare "Scarlet & Violet Elite Trainer Box" must never meet "Sword & Shield Elite Trainer Box")."""
+    noise = FILLER | (POKEMON_SERIES if game_slug == "pokemon" else set())
+    words = [w for w in merge_key(name).split() if w not in noise]
+    if not identifying(words):
+        return ""
+    return " ".join(sorted(set(words)))
+
+
+def carry_history(keep, other):
+    """Move what belongs to ``other`` onto ``keep``, so a merge loses no history."""
+    lows = dict(DailyLowestPrice.objects.filter(product=keep).values_list("date", "price"))
+    for row in DailyLowestPrice.objects.filter(product=other):
+        if row.date not in lows:
+            row.product = keep
+            row.save(update_fields=["product"])
+        elif row.price < lows[row.date]:
+            DailyLowestPrice.objects.filter(product=keep, date=row.date).update(price=row.price)
+    Restock.objects.filter(product=other).update(product=keep)
+    OutboundClick.objects.filter(product=other).update(product=keep)
+    asked = set(StockAlert.objects.filter(product=keep).values_list("email", flat=True))
+    StockAlert.objects.filter(product=other).exclude(email__in=asked).update(product=keep)
 
 
 def merge(keep, others):
@@ -32,6 +89,7 @@ def merge(keep, others):
                 listing.product = keep
                 listing.save(update_fields=["product"])
                 moved += 1
+        carry_history(keep, other)
         if not keep.image_url and other.image_url:
             keep.image_url = other.image_url
             keep.save(update_fields=["image_url"])
@@ -51,11 +109,14 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument("--loose", action="store_true", help="Also ignore filler and series words. Review a dry run first.")
 
-    def handle(self, *args, dry_run=False, **options):
+    def handle(self, *args, dry_run=False, loose=False, **options):
         groups = defaultdict(list)
-        for product in Product.objects.filter(is_active=True).order_by("pk"):
-            groups[(product.game_id, product.product_type, match_key(product.name))].append(product)
+        for product in Product.objects.filter(is_active=True).select_related("game").order_by("pk"):
+            key = loose_key(product.name, product.game.slug) if loose else merge_key(product.name)
+            if key:
+                groups[(product.game_id, product.product_type, key)].append(product)
         merged = moved = 0
         with transaction.atomic():
             for group in groups.values():

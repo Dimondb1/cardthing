@@ -87,8 +87,15 @@ class ProductQuerySet(models.QuerySet):
             listings__last_checked__gte=cutoff,
             listings__availability__in=Listing.BUYABLE,
         )
+        known = Q(listings__delivery_known=True)
         return self.annotate(
-            lowest_price=Min("listings__delivered_price", filter=buyable),
+            # The cheapest confirmed delivered price; without one, the cheapest item price of a shop whose
+            # delivery is unknown, which is shown as "plus delivery". Lists sort on what they show.
+            lowest_known=Min("listings__delivered_price", filter=buyable & known),
+            lowest_price=Coalesce(
+                Min("listings__delivered_price", filter=buyable & known),
+                Min("listings__price", filter=buyable & Q(listings__delivery_known=False)),
+            ),
             in_stock_count=Count(
                 "listings",
                 filter=buyable & Q(listings__availability=Listing.Availability.IN_STOCK),
@@ -237,8 +244,20 @@ class Retailer(models.Model):
         "standard delivery",
         max_digits=6,
         decimal_places=2,
-        default=0,
-        help_text="Charge to deliver one item to a UK address. Used for imported prices.",
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Charge to deliver one item to a UK address. Used for imported prices. 0 for free delivery. "
+        "Leave empty when not known: prices then show as plus delivery and never count as the cheapest delivered.",
+    )
+    delivery_cost_up_to = models.DecimalField(
+        "standard charge only up to",
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="When the standard charge is only known for orders under a value (larger orders cost an "
+        "unpublished amount), that value. Items above it show as plus delivery. Leave empty otherwise.",
     )
     free_delivery_over = models.DecimalField(
         max_digits=8,
@@ -293,9 +312,14 @@ class Retailer(models.Model):
         return self.name
 
     def delivery_for(self, price):
-        """Delivery charge for one item at ``price`` under this retailer's rules."""
+        """Delivery charge for one item at ``price`` under this retailer's rules, or None when not known.
+
+        Never guessed: a missing charge is unknown, not free.
+        """
         if self.free_delivery_over is not None and price >= self.free_delivery_over:
             return Decimal("0.00")
+        if self.delivery_cost_up_to is not None and price > self.delivery_cost_up_to:
+            return None
         return self.delivery_cost
 
     @property
@@ -357,6 +381,11 @@ class Listing(models.Model):
         default=0,
         help_text="Standard delivery for one item to a UK address. 0 for free delivery.",
     )
+    delivery_known = models.BooleanField(
+        default=True,
+        help_text="Untick when the delivery charge is not known. The price then shows as plus delivery, "
+        "is listed after confirmed delivered prices and never counts as the cheapest.",
+    )
     delivered_price = models.GeneratedField(
         expression=F("price") + F("delivery_cost"),
         output_field=models.DecimalField(max_digits=9, decimal_places=2),
@@ -385,6 +414,11 @@ class Listing(models.Model):
     def total(self):
         """Delivered price, also correct on an instance that has not been reloaded."""
         return self.price + self.delivery_cost
+
+    @property
+    def shown_price(self):
+        """The price a visitor compares: delivered when delivery is known, the item price otherwise."""
+        return self.delivered_price if self.delivery_known else self.price
 
     @property
     def is_stale(self):
@@ -514,6 +548,7 @@ class Restock(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True, related_name="restocks")
     at = models.DateTimeField(default=timezone.now, db_index=True)
     price = models.DecimalField(max_digits=9, decimal_places=2, help_text="Delivered price when it came back.")
+    delivery_known = models.BooleanField(default=True, help_text="Off when the price is the item price alone.")
 
     class Meta:
         ordering = ["-at"]

@@ -258,8 +258,8 @@ ENTRIES = [
     ),
     Entry(
         "home.savings.next", T, "Runner-up price on savings rows",
-        "{price} elsewhere",
-        "The price at the next cheapest shop on each savings row, shown crossed out.",
+        "{price} at {retailer}",
+        "The price at the next cheapest shop on each savings row, shown crossed out. The saving is measured against it.",
         placeholders=("price", "retailer"),
     ),
     Entry(
@@ -339,6 +339,12 @@ ENTRIES = [
         "Save {amount}",
         "Green label on savings rows and product cards.",
         placeholders=("amount",),
+    ),
+    Entry(
+        "home.savings.save_vs", T, "Saving against a named shop",
+        "Save {amount} vs {retailer}",
+        "Green label on featured deals: the saving and the next cheapest shop it is measured against.",
+        placeholders=("amount", "retailer"),
     ),
     Entry(
         "home.savings.percent", T, "Saving percentage",
@@ -471,6 +477,11 @@ ENTRIES = [
         "Small word under the price in search results and product lists.",
     ),
     Entry(
+        "browse.price.plus", T, "Price label when delivery is unknown",
+        "+ delivery",
+        "After a price whose delivery charge we do not know. Never say delivered for these.",
+    ),
+    Entry(
         "browse.availability.in_stock.one", T, "In stock at one retailer",
         "In stock at 1 retailer",
         "Stock line in search results.",
@@ -584,6 +595,11 @@ ENTRIES = [
         "Small label above the main price on a product page.",
     ),
     Entry(
+        "product.cheapest.label_unknown", T, "Main price label (delivery unknown)",
+        "Lowest item price",
+        "Small label above the main price when no shop's delivery charge is known.",
+    ),
+    Entry(
         "product.cheapest.retailer", T, "Cheapest retailer",
         "at {retailer}",
         "Shown next to the main price.",
@@ -606,6 +622,17 @@ ENTRIES = [
         "{price} with free delivery",
         "Explains the delivered price when delivery is free.",
         placeholders=("price",),
+    ),
+    Entry(
+        "product.delivery.unknown_note", T, "Delivery not known",
+        "Delivery charge not confirmed",
+        "Instead of the price breakdown when we do not know the shop's delivery charge.",
+        placeholders=("price",),
+    ),
+    Entry(
+        "product.delivery.unknown_check", T, "Delivery not known, check",
+        "Check the total at the shop before you buy.",
+        "Under the main price on a product page when its delivery charge is not known.",
     ),
     Entry(
         "product.badge.best_week", T, "Badge: best in 7 days",
@@ -721,6 +748,28 @@ ENTRIES = [
         "product.compare.free_delivery", T, "Free delivery",
         "Free",
         "Shown in the delivery column when delivery costs nothing.",
+    ),
+    Entry(
+        "product.compare.delivery_unknown", T, "Delivery not known",
+        "Not confirmed",
+        "Shown in the delivery column when we do not know the charge.",
+    ),
+    Entry(
+        "product.compare.plus_delivery", T, "Total when delivery is not known",
+        "{price} + delivery",
+        "Shown in the total column when we do not know the delivery charge.",
+        placeholders=("price",),
+    ),
+    Entry(
+        "product.compare.shops", T, "Shop count link",
+        "Compare {count} shops",
+        "Next to the stock line on a product page; jumps to the price list.",
+        placeholders=("count",),
+    ),
+    Entry(
+        "product.compare.one_shop", T, "One shop",
+        "1 shop found",
+        "Next to the stock line when only one shop has a price.",
     ),
     Entry(
         "product.compare.buy", B, "Row button: buy",
@@ -919,6 +968,12 @@ ENTRIES = [
         "The cheapest delivered price only includes retailers that have the product in "
         "stock or open for pre-order, and that we have checked in the last {hours} "
         "hours.\n\n"
+        "When we do not know a retailer's delivery charge, we show the item price "
+        "followed by + delivery. Those prices are listed after confirmed delivered prices, "
+        "never count as the cheapest and never show a saving. Check the total at the shop.\n\n"
+        "A saving compares the cheapest delivered price with the next cheapest shop. "
+        "Very large gaps usually mean two different products were matched, so we do not "
+        "show them.\n\n"
         "Discount codes, loyalty points and membership prices are not included.",
         "Explains the delivered price. Leave a blank line between paragraphs.",
         placeholders=("hours",),
@@ -933,8 +988,11 @@ ENTRIES = [
         "Some links to retailers are affiliate links. If you buy something after "
         "following one, the retailer may pay RipRaptor a commission. You pay the same "
         "price either way.\n\n"
-        "Retailers cannot pay to be listed higher. Prices are always sorted by delivered "
-        "price, cheapest first.",
+        "Price comparisons are always sorted by delivered price, cheapest first. "
+        "Retailers cannot pay to change that order.\n\n"
+        "The featured deals row on the home page is different: it favours deals at "
+        "retailers that pay us a commission. Every featured deal is still a genuine low "
+        "price or saving.",
         "Affiliate disclosure on the how it works page.",
         legal=True,
     ),
@@ -1154,6 +1212,12 @@ ENTRIES = [
         "feeds.restock.body", T, "Feed restock entry text",
         "Back in stock at {retailer} on {date} at {time}, {price} delivered.",
         "Text of a restock in the feed.",
+        placeholders=("retailer", "date", "time", "price"),
+    ),
+    Entry(
+        "feeds.restock.body_unknown", T, "Feed restock entry text (delivery unknown)",
+        "Back in stock at {retailer} on {date} at {time}, {price} plus delivery.",
+        "Text of a restock in the feed when the shop's delivery charge is not known.",
         placeholders=("retailer", "date", "time", "price"),
     ),
     Entry(

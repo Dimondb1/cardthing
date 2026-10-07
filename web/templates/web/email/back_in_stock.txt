@@ -1,6 +1,6 @@
 Back in stock: {{ product.name }}
 
-Cheapest in stock now: £{{ listing.delivered_price }} delivered at {{ listing.retailer.name }}, checked just now. Stock at small shops can go within minutes.
+Cheapest in stock now: {% if listing.delivery_known %}£{{ listing.delivered_price }} delivered{% else %}£{{ listing.price }} plus delivery (check the total at the shop){% endif %} at {{ listing.retailer.name }}, checked just now. Stock at small shops can go within minutes.
 
 Compare every shop's price: {{ product_url }}
 

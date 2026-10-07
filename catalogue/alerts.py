@@ -33,7 +33,7 @@ def shop_stock(product):
         Listing.objects.filter(product=product).buyable()
         .filter(availability=Listing.Availability.IN_STOCK)
         .exclude(retailer__source_type__in=MARKETPLACES)
-        .select_related("retailer").order_by("delivered_price").first()
+        .select_related("retailer").order_by("-delivery_known", "delivered_price").first()
     )
 
 
@@ -122,7 +122,8 @@ def send_due(now=None, stdout=None):
         text, html = render_mail("back_in_stock", {
             "product": alert.product,
             "subject": f"Back in stock: {alert.product.name}",
-            "preheader": f"£{listing.delivered_price} delivered at {listing.retailer.name}, checked just now.",
+            "preheader": (f"£{listing.delivered_price} delivered" if listing.delivery_known else f"£{listing.price} plus delivery")
+            + f" at {listing.retailer.name}, checked just now.",
             "listing": listing,
             "product_url": settings.RIPRAPTOR_SITE_URL + alert.product.get_absolute_url(),
             "stop_url": link("web:alert_stop", alert.token),

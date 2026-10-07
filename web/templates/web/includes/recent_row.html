@@ -5,8 +5,8 @@
       {% product_image product "trend" %}
       <span class="trending__name">{{ product.name }}</span>
       {% if summary.best %}
-        <span class="trending__price">{% price summary.best.delivered_price %}</span>
-        <span class="trending__retailer"><span class="delivered">{% copy "product.delivered.line" price=summary.best.delivered_price|gbp %}</span> · {{ summary.best.retailer.name }}</span>
+        <span class="trending__price">{% price summary.best.shown_price %}</span>
+        <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=summary.best %}</span> · {{ summary.best.retailer.name }}</span>
         <span class="trending__move">{% copy "product.last_checked" time=summary.best.last_checked|ago %}</span>
       {% else %}
         <span class="trending__retailer">{% copy "browse.availability.none" %}</span>

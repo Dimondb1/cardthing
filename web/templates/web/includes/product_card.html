@@ -3,11 +3,11 @@
   <a class="card__image" href="{{ product.get_absolute_url }}" tabindex="-1" aria-hidden="true">{% product_image product "card" %}</a>
   <div class="card__body">
     <{{ heading_tag|default:"h2" }} class="card__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></{{ heading_tag|default:"h2" }}>
-    <div class="card__tools">{% include "web/includes/save_link.html" with price=summary.best.delivered_price small=True %}<a class="card__check" href="{{ product.get_absolute_url }}#offers-title"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13 8A5 5 0 1 1 11.5 4.5M11 2v3h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "product.check_prices" %}</a></div>
+    <div class="card__tools">{% include "web/includes/save_link.html" with price=summary.best.shown_price small=True %}<a class="card__check" href="{{ product.get_absolute_url }}#offers-title"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13 8A5 5 0 1 1 11.5 4.5M11 2v3h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "product.check_prices" %}</a></div>
     {% if summary.best %}
       {% include "web/includes/badge.html" %}
-      <p class="card__price">{% price summary.best.price size="card" %}</p>
-      <p class="card__at"><span class="delivered">{% copy "product.delivered.line" price=summary.best.delivered_price|gbp %}</span> {% copy "product.rank.at" retailer=summary.best.retailer.name %}</p>
+      <p class="card__price">{% price summary.best.shown_price size="card" %} <span class="delivered">{% include "web/includes/price_basis.html" with listing=summary.best %}</span></p>
+      <p class="card__at">{% include "web/includes/price_note.html" with listing=summary.best %} {% copy "product.rank.at" retailer=summary.best.retailer.name %}</p>
       <a class="button button--buy button--card" href="{{ summary.best.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/bag.html" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>
     {% else %}
       {% include "web/includes/availability.html" %}

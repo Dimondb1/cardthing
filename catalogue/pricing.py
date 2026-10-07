@@ -7,12 +7,14 @@ retailer. It updates the listing and today's lowest price for the product.
 """
 
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, FloatField, Min, OuterRef, Subquery
 from django.utils import timezone
 
 from .models import DailyLowestPrice, Listing, OutboundClick, Product, Restock, Retailer
+from .offers import MAX_REAL_PERCENT
 
 # A listing that flips out and back within this long is one restock, not two.
 RESTOCK_COLLAPSE = timedelta(hours=2)
@@ -23,21 +25,46 @@ RESTOCK_PATTERN_MIN = 6
 
 
 def record_check(listing, *, price, delivery_cost, availability, checked_at=None):
+    """Save one check of a listing. ``delivery_cost`` None means the charge is not known: it is stored as
+    unknown, never as free."""
     checked_at = checked_at or timezone.now()
-    fields = ["price", "delivery_cost", "availability", "last_checked"]
+    fields = ["price", "delivery_cost", "delivery_known", "availability", "last_checked"]
     was_in_stock = listing.availability == Listing.Availability.IN_STOCK
     restocked = availability == Listing.Availability.IN_STOCK and not was_in_stock and listing.pk and not listing._state.adding
     if restocked:
         listing.back_in_stock_at = checked_at
         fields.append("back_in_stock_at")
     listing.price = price
-    listing.delivery_cost = delivery_cost
+    listing.delivery_known = delivery_cost is not None
+    listing.delivery_cost = delivery_cost if delivery_cost is not None else Decimal("0.00")
     listing.availability = availability
     listing.last_checked = checked_at
     listing.save(update_fields=fields)
     if restocked:
         record_restock(listing, checked_at)
     return update_daily_lowest(listing.product, date=timezone.localdate(checked_at))
+
+
+def apply_delivery_rules(retailer):
+    """Re-work every listing's delivery from the retailer's rules, after those rules change.
+
+    Marketplaces are left alone: their delivery comes with each listing. Returns how many listings now
+    have an unknown delivery charge.
+    """
+    if retailer.source_type in MARKETPLACES:
+        return 0
+    unknown = 0
+    for listing in Listing.objects.filter(retailer=retailer):
+        delivery = retailer.delivery_for(listing.price)
+        known = delivery is not None
+        cost = delivery if known else Decimal("0.00")
+        unknown += not known
+        if listing.delivery_known != known or listing.delivery_cost != cost:
+            Listing.objects.filter(pk=listing.pk).update(delivery_cost=cost, delivery_known=known)
+    from .signals import clear_list_caches
+
+    clear_list_caches()
+    return unknown
 
 
 def record_restock(listing, at):
@@ -47,7 +74,8 @@ def record_restock(listing, at):
     if Restock.objects.filter(listing=listing, at__gte=at - RESTOCK_COLLAPSE).exists():
         return None
     return Restock.objects.create(
-        product_id=listing.product_id, retailer_id=listing.retailer_id, listing=listing, at=at, price=listing.total
+        product_id=listing.product_id, retailer_id=listing.retailer_id, listing=listing, at=at, price=listing.total,
+        delivery_known=listing.delivery_known,
     )
 
 
@@ -137,9 +165,12 @@ def back_in_stock(limit=8, hours=None):
 
 
 def update_daily_lowest(product, date=None):
-    """Store the product's current cheapest price against ``date`` if it is lower."""
+    """Store the product's current cheapest delivered price against ``date`` if it is lower.
+
+    Only confirmed delivered prices count: an item price without its delivery would make a false low.
+    """
     date = date or timezone.localdate()
-    lowest = Listing.objects.filter(product=product).buyable().aggregate(
+    lowest = Listing.objects.filter(product=product, delivery_known=True).buyable().aggregate(
         lowest=Min("delivered_price")
     )["lowest"]
     if lowest is None:
@@ -157,12 +188,12 @@ def snapshot_all(date=None):
     """Record today's lowest price for every product. Run once a day."""
     date = date or timezone.localdate()
     count = 0
-    for product in Product.objects.active().with_prices().filter(lowest_price__isnull=False):
+    for product in Product.objects.active().with_prices().filter(lowest_known__isnull=False):
         record, created = DailyLowestPrice.objects.get_or_create(
-            product=product, date=date, defaults={"price": product.lowest_price}
+            product=product, date=date, defaults={"price": product.lowest_known}
         )
-        if not created and product.lowest_price < record.price:
-            record.price = product.lowest_price
+        if not created and product.lowest_known < record.price:
+            record.price = product.lowest_known
             record.save(update_fields=["price"])
         count += 1
     return count
@@ -189,7 +220,8 @@ def price_drops(limit=6, days=None, today=None, game=None):
     return (
         products
         .annotate(previous_price=Subquery(previous, output_field=money))
-        .filter(lowest_price__lt=F("previous_price"))
+        # Drops are measured on confirmed delivered prices only, like the history they come from.
+        .filter(lowest_known__isnull=False, lowest_known=F("lowest_price"), lowest_price__lt=F("previous_price"))
         .annotate(
             drop=ExpressionWrapper(F("previous_price") - F("lowest_price"), output_field=money),
             drop_ratio=ExpressionWrapper(
@@ -197,6 +229,8 @@ def price_drops(limit=6, days=None, today=None, game=None):
                 output_field=FloatField(),
             ),
         )
+        # A fall this large is a wrong product link appearing, not a price drop, as with savings.
+        .filter(drop_ratio__lte=MAX_REAL_PERCENT / 100)
         .order_by("-drop_ratio", "name")[:limit]
     )
 

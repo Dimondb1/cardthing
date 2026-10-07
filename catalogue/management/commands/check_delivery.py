@@ -15,6 +15,7 @@ and the date, in the retailer's delivery note.
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from catalogue import pricing
 from catalogue.delivery import check_delivery, shopify_delivery
 from catalogue.importers import ImportError_
 from catalogue.models import Retailer
@@ -80,6 +81,8 @@ class Command(BaseCommand):
             if changed:
                 retailer.save(update_fields=changed)
                 self.stdout.write(f"  saved: {', '.join(changed)}")
+                if {"delivery_cost", "free_delivery_over"} & set(changed):
+                    pricing.apply_delivery_rules(retailer)
         if apply:
             from django.core.cache import cache
 

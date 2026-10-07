@@ -173,7 +173,10 @@ def home_lists():
     if cached is not None:
         return cached
     priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
-    savings = offers.biggest_savings(priced, limit=9)
+    featured = featured_deals(priced)
+    # Biggest savings leaves out what featured deals already show, so the two rows do not repeat.
+    shown = {product.pk for product, _ in featured}
+    savings = [row for row in offers.biggest_savings(priced, limit=9 + len(shown)) if row[0].pk not in shown][:9]
     popular = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
     ids = [product.pk for product in popular]
     with_offers = {
@@ -189,8 +192,8 @@ def home_lists():
         product.best_offer = product.offers[0] if product.offers else None
         before = previous.get(pk)
         product.movement = None
-        if before is not None and product.lowest_price is not None and before != product.lowest_price:
-            product.movement = product.lowest_price - before
+        if before is not None and product.lowest_known is not None and before != product.lowest_known:
+            product.movement = product.lowest_known - before
         trending.append(product)
     recent = list(
         ProductSet.objects.filter(products__is_active=True)
@@ -202,7 +205,6 @@ def home_lists():
         .order_by(F("release_date").desc(nulls_last=True), "-newest")[:8]
     )
     retailer_count = Listing.objects.live().values("retailer_id").distinct().count()
-    featured = featured_deals(priced)
     cache.set(key, (savings, trending, recent, retailer_count, featured), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
     return savings, trending, recent, retailer_count, featured
 
@@ -231,7 +233,10 @@ def featured_deals(products):
         summary = offers.summarise(product, week_lows)
         if summary.best is None or summary.best.availability != Listing.Availability.IN_STOCK:
             continue
-        if not (summary.badge or (summary.saving and summary.percent <= offers.MAX_REAL_PERCENT)):
+        # Promoted deals need a confirmed delivered price and no sign of a wrong product link.
+        if not summary.best.delivery_known or summary.suspect:
+            continue
+        if not (summary.badge or summary.saving):
             continue
         good.append((product, summary))
     good.sort(key=lambda row: (-(row[1].percent or 0), row[0].name))
@@ -575,19 +580,20 @@ def product_detail(request, slug):
         Listing.objects.filter(product=product)
         .live()
         .select_related("retailer")
-        .order_by("delivered_price", "retailer__name")
+        .order_by("-delivery_known", "delivered_price", "retailer__name")
     )
     in_stock_first = {Listing.Availability.IN_STOCK: 0, Listing.Availability.PREORDER: 1}
     current = sorted(
         (listing for listing in listings if listing.is_buyable),
         key=lambda listing: (
-            listing.delivered_price,
+            *offers.offer_order(listing),
             in_stock_first.get(listing.availability, 2),
             listing.retailer.name,
         ),
     )
     unavailable = [listing for listing in listings if not listing.is_buyable]
     cheapest = current[0] if current else None
+    shop_count = len({listing.retailer_id for listing in current})
     product.offers = current
     summary = offers.summarise(product, offers.week_low_map([product.pk]))
 
@@ -627,8 +633,8 @@ def product_detail(request, slug):
         structured["offers"] = {
             "@type": "AggregateOffer",
             "priceCurrency": "GBP",
-            "lowPrice": str(current[0].delivered_price),
-            "highPrice": str(current[-1].delivered_price),
+            "lowPrice": str(min(listing.shown_price for listing in current)),
+            "highPrice": str(max(listing.shown_price for listing in current)),
             "offerCount": len(current),
             "availability": "https://schema.org/InStock" if in_stock_count else "https://schema.org/PreOrder",
         }
@@ -648,7 +654,7 @@ def product_detail(request, slug):
     if product.product_set:
         crumbs.append((product.product_set.name, product.product_set.get_absolute_url()))
     crumbs.append((product.name, product.get_absolute_url()))
-    if cheapest:
+    if cheapest and cheapest.delivery_known:
         meta_values = {
             "product": product.name,
             "price": gbp(cheapest.delivered_price),
@@ -672,6 +678,7 @@ def product_detail(request, slug):
             "current": current,
             "unavailable": unavailable,
             "cheapest": cheapest,
+            "shop_count": shop_count,
             "summary": summary,
             "in_stock_count": in_stock_count,
             "preorder_count": preorder_count,
@@ -744,14 +751,25 @@ def product_prices_api(request, slug):
     for listing in Listing.objects.filter(product=product).live().select_related("retailer"):
         rows.append({
             "id": listing.pk,
-            "total": gbp(listing.delivered_price),
-            "price": gbp(listing.price),
+            "total": gbp(listing.delivered_price) if listing.delivery_known
+            else text(request, "product.compare.plus_delivery", price=gbp(listing.price)),
+            "price": gbp(listing.shown_price),
+            "note": price_note(request, listing),
             "checked": ago(listing.last_checked),
             "buyable": listing.is_buyable,
         })
     response = JsonResponse({"listings": rows})
     response["Cache-Control"] = "no-store"
     return response
+
+
+def price_note(request, listing):
+    """How a shown price is made up, as the price_note include words it."""
+    if not listing.delivery_known:
+        return text(request, "product.delivery.unknown_note", price=gbp(listing.price))
+    if listing.delivery_cost:
+        return text(request, "product.breakdown.delivery", price=gbp(listing.price), delivery=gbp(listing.delivery_cost))
+    return text(request, "product.breakdown.free", price=gbp(listing.price))
 
 
 @require_GET
@@ -812,6 +830,13 @@ def search_api(request):
 DECK_PAGE = 12
 
 
+def shown_text(request, listing):
+    """A listing's shown price as text, marked "+ delivery" when the charge is not known."""
+    if listing.delivery_known:
+        return gbp(listing.delivered_price)
+    return f"{gbp(listing.price)} {text(request, 'browse.price.plus')}"
+
+
 def card_data(request, product, summary):
     """One product as the swipe deck and search cards need it."""
     from .templatetags.ripraptor import ago, gbp
@@ -824,12 +849,12 @@ def card_data(request, product, summary):
         "meta": f"{product.game.display_short} · {product.type_name}",
         "type": product.product_type,
         "image": product.image_src,
-        "price": gbp(best.delivered_price) if best else "",
+        "price": shown_text(request, best) if best else "",
         "retailer": best.retailer.name if best else "",
         "buy": best.get_outbound_url() if best else "",
         "checked": ago(best.last_checked) if best else "",
         "badge": summary.badge or "",
-        "second": {"retailer": summary.second.retailer.name, "price": gbp(summary.second.delivered_price)} if summary.second else None,
+        "second": {"retailer": summary.second.retailer.name, "price": shown_text(request, summary.second)} if summary.second else None,
         "saving": gbp(summary.saving) if summary.saving else "",
         "percent": summary.percent or 0,
     }

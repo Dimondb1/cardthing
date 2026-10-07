@@ -22,22 +22,23 @@
       <div class="buybox__main">
         <div class="buybox__offer">
           {% include "web/includes/badge.html" %}
-          <p class="buybox__label">{% copy "product.cheapest.label" %}</p>
-          <p class="buybox__price"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.price size="lg" %}</span></p>
-          <p class="buybox__delivered"><span class="money delivered" data-total-for="{{ cheapest.pk }}">{% copy "product.delivered.line" price=cheapest.delivered_price|gbp %}</span></p>
+          <p class="buybox__label">{% if cheapest.delivery_known %}{% copy "product.cheapest.label" %}{% else %}{% copy "product.cheapest.label_unknown" %}{% endif %}</p>
+          <p class="buybox__price"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span></p>
+          <p class="buybox__delivered"><span class="money" data-note-for="{{ cheapest.pk }}">{% include "web/includes/price_note.html" with listing=cheapest %}</span>{% if not cheapest.delivery_known %} {% copy "product.delivery.unknown_check" %}{% endif %}</p>
           <p class="buybox__retailer">{% copy "product.cheapest.retailer" retailer=cheapest.retailer.name %}</p>
         </div>
         <a class="button button--buy button--big" href="{{ cheapest.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">
           {% include "web/includes/bag.html" %}
           <span>{% if cheapest.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}</span>
-          <span class="visually-hidden">{{ cheapest.delivered_price|gbp }} at {{ cheapest.retailer.name }} (opens in a new tab)</span>
+          <span class="visually-hidden">{{ cheapest.shown_price|gbp }} at {{ cheapest.retailer.name }} (opens in a new tab)</span>
         </a>
       </div>
       <div class="buybox__rank">{% include "web/includes/rank_row.html" %}</div>
       <p class="buybox__breakdown">
         <span class="stock-inline stock-inline--{{ cheapest.availability }}">{{ cheapest.get_availability_display }}</span>
-        <span aria-hidden="true" class="buybox__sep">·</span>
-        {% if cheapest.delivery_cost %}{% copy "product.breakdown.delivery" price=cheapest.price|gbp delivery=cheapest.delivery_cost|gbp %}{% else %}{% copy "product.breakdown.free" price=cheapest.price|gbp %}{% endif %}
+        {% if shop_count > 1 %}<span aria-hidden="true" class="buybox__sep">·</span>
+        <a href="#offers-title">{% copy "product.compare.shops" count=shop_count %}</a>{% else %}<span aria-hidden="true" class="buybox__sep">·</span>
+        {% copy "product.compare.one_shop" %}{% endif %}
       </p>
       <p class="buybox__summary">
         {% if in_stock_count %}{% copy_count "product.availability.in_stock" in_stock_count %}{% elif preorder_count %}{% copy_count "product.availability.preorder" preorder_count %}{% endif %}
@@ -61,7 +62,7 @@
       </div>
     {% endif %}
     {% if alerts_on %}{% include "web/includes/alert_form.html" %}{% endif %}
-    <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.delivered_price %}</div>
+    <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.shown_price %}</div>
     {% if amazon_search and cheapest %}
       <div class="buybox__amazon">
         <a class="button button--small buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>

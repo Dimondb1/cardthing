@@ -12,16 +12,17 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from catalogue import pricing
 from catalogue.models import Retailer
 
 S = Retailer.Source
 SHOPS = [
-    # slug, name, website, source type, delivery, free over, note
+    # slug, name, website, source type, delivery (None when not known), free over, note
     ("total-cards", "Total Cards", "https://totalcards.net/", S.SHOPIFY, "2.95", "20",
      "Standard £2.95 (basket check), free over £20 on selected orders (delivery page), read 30 Sep 2026"),
     ("gathering-games", "Gathering Games", "https://gatheringgames.co.uk/", S.SHOPIFY, "3.99", "100",
      "Standard £3.99 (basket check), free over £100 (delivery page), read 30 Sep 2026"),
-    ("magic-madhouse", "Magic Madhouse", "https://magicmadhouse.co.uk/", S.WEBSITE, "0", "40",
+    ("magic-madhouse", "Magic Madhouse", "https://magicmadhouse.co.uk/", S.WEBSITE, None, "40",
      "Free over £40 (delivery page); standard charge not published as text, read 30 Sep 2026"),
     ("the-card-vault", "The Card Vault", "https://thecardvault.co.uk/", S.SHOPIFY, "3.95", "50",
      "Standard £3.95 (basket check), free over £50 (delivery page, confirmed by basket), read 30 Sep 2026"),
@@ -35,11 +36,11 @@ SHOPS = [
      "Standard £2.99 (basket check), free over £40 (delivery page), read 30 Sep 2026"),
     ("jet-cards", "JET Cards", "https://jetcards.uk/", S.SHOPIFY, "3.95", None,
      "Standard £3.95 (basket check), read 30 Sep 2026"),
-    ("titan-cards", "Titan Cards", "https://titancards.co.uk/", S.SHOPIFY, "0", "30",
+    ("titan-cards", "Titan Cards", "https://titancards.co.uk/", S.SHOPIFY, None, "30",
      "Free over £30 (delivery page); standard charge not yet confirmed, read 30 Sep 2026"),
     ("buy-any-cards", "Buy Any Cards", "https://buyanycards.co.uk/", S.SHOPIFY, "2.95", None,
      "Standard £2.95 (basket check), read 30 Sep 2026"),
-    ("the-tcg-shop", "The TCG Shop", "https://www.thetcgshop.co.uk/", S.SHOPIFY, "0", None,
+    ("the-tcg-shop", "The TCG Shop", "https://www.thetcgshop.co.uk/", S.SHOPIFY, None, None,
      "Delivery charge not yet confirmed"),
     ("double-sleeved", "Double Sleeved", "https://www.doublesleeved.co.uk/", S.SHOPIFY, "3.99", None,
      "Standard £3.99 (basket check), read 30 Sep 2026"),
@@ -47,7 +48,7 @@ SHOPS = [
      "Royal Mail Tracked 48 small parcel £4.15, free over £50 (delivery page), read 30 Sep 2026"),
     ("the-gamers-lodge", "The Gamers Lodge", "https://thegamerslodge.com/", S.SHOPIFY, "4.49", "150",
      "Standard £4.49 (basket check), free over £150 (delivery page), read 30 Sep 2026"),
-    ("kongs-cards", "Kongs Cards", "https://kongscards.co.uk/", S.SHOPIFY, "0", "20",
+    ("kongs-cards", "Kongs Cards", "https://kongscards.co.uk/", S.SHOPIFY, None, "20",
      "Free UK delivery over £20 (basket check); charge under £20 not published, read 30 Sep 2026"),
     ("maxon-cards", "MaxOnCards", "https://maxoncards.co.uk/", S.WEBSITE, "3.99", "100",
      "Standard £3.99, free over £100 (delivery page), read 30 Sep 2026"),
@@ -61,17 +62,17 @@ SHOPS = [
      "Standard £4, free over £150 (delivery page), read 30 Sep 2026"),
     ("tayler-tcg", "Tayler TCG", "https://taylertcg.com/", S.SHOPIFY, "3.99", "50",
      "Royal Mail Tracked 48 £3.99, free over £50 (delivery page, confirmed by basket), read 30 Sep 2026"),
-    ("shiny-vault", "Shiny Vault", "https://shinyvault.co.uk/", S.WEBSITE, "0", "75",
+    ("shiny-vault", "Shiny Vault", "https://shinyvault.co.uk/", S.WEBSITE, None, "75",
      "Free over £75 (delivery page); standard charge not published, read 30 Sep 2026"),
-    ("monarch-cards", "Monarch Cards", "https://www.monarchcards.co.uk/", S.WEBSITE, "0", "150",
+    ("monarch-cards", "Monarch Cards", "https://www.monarchcards.co.uk/", S.WEBSITE, None, "150",
      "Free over £150 (delivery page); standard charge not published, read 30 Sep 2026"),
     ("castle-comics", "Castle Comics", "https://castlecomicsuk.co.uk/", S.SHOPIFY, "3.99", "150",
      "Standard £3.99, free over £150 (delivery page), read 30 Sep 2026"),
-    ("120hp", "120HP", "https://www.120hp.co.uk/", S.SHOPIFY, "0", None,
+    ("120hp", "120HP", "https://www.120hp.co.uk/", S.SHOPIFY, None, None,
      "Delivery charge not yet confirmed"),
-    ("ancient-warrior", "Ancient Warrior", "https://www.ancientwarrior.co.uk/", S.SHOPIFY, "0", "200",
+    ("ancient-warrior", "Ancient Warrior", "https://www.ancientwarrior.co.uk/", S.SHOPIFY, None, "200",
      "Free over £200 (delivery page); standard charge not published, read 1 Oct 2026"),
-    ("unicorn-cards", "Unicorn Cards", "https://unicorncards.co.uk/", S.WEBSITE, "0", None,
+    ("unicorn-cards", "Unicorn Cards", "https://unicorncards.co.uk/", S.WEBSITE, None, None,
      "Delivery charge not yet confirmed"),
     ("sports-cards-direct", "Sports Cards Direct", "https://www.sportscardsdirect.co.uk/", S.SHOPIFY, "5.49", "200",
      "DPD 1 to 2 day £5.49, free over £200 (shipping policy page), read 2 Oct 2026"),
@@ -125,7 +126,7 @@ AMAZON = ("amazon", "Amazon", "https://www.amazon.co.uk/", S.AMAZON, "4.99", "35
           "Standard £4.99, free over £35 for items dispatched by Amazon (Amazon delivery rates page), read 1 Oct 2026")
 
 # Added only once the eBay keys are set. Delivery comes with each listing.
-EBAY = ("ebay", "eBay", "https://www.ebay.co.uk/", S.EBAY, "0", None,
+EBAY = ("ebay", "eBay", "https://www.ebay.co.uk/", S.EBAY, None, None,
         "Delivery is read from each listing, to a London postcode")
 
 # Shops that show each visitor their own currency: the address that switches to pounds.
@@ -138,6 +139,9 @@ SESSIONS = {
 COLLECTIONS = {
     "zatu-games": "trading-card-games",
 }
+
+# Shops whose standard charge is only known up to an order value; above it the charge is not published.
+DELIVERY_UP_TO = {"card-empire": "20"}
 
 # Shops that were set up before and must not be shown: prices in another currency,
 # or not a stockist the owner wants compared (Asmodee UK is the distributor's own store).
@@ -168,14 +172,26 @@ class Command(BaseCommand):
                 if collection and not existing.collection:
                     existing.collection = collection
                     changed.append("collection")
+                # A charge stored as £0 that was never known: it is unknown, not free. A charge set in admin stays.
+                if cost is None and existing.delivery_cost == 0:
+                    existing.delivery_cost = None
+                    changed.append("delivery_cost")
+                up_to = DELIVERY_UP_TO.get(slug)
+                if up_to and existing.delivery_cost_up_to is None:
+                    existing.delivery_cost_up_to = Decimal(up_to)
+                    changed.append("delivery_cost_up_to")
                 if changed:
                     existing.save(update_fields=changed)
+                if {"delivery_cost", "delivery_cost_up_to"} & set(changed):
+                    self.stdout.write(f"{name}: {pricing.apply_delivery_rules(existing)} prices now show the delivery as unknown")
                 self.stdout.write(f"{name}: already set up")
                 continue
             Retailer.objects.create(
                 slug=slug, name=name, website=website, source_type=source, source_url=website, session_url=session_url,
                 collection=collection,
-                delivery_cost=Decimal(cost), free_delivery_over=Decimal(free) if free else None, delivery_note=note,
+                delivery_cost=Decimal(cost) if cost is not None else None,
+                delivery_cost_up_to=Decimal(DELIVERY_UP_TO[slug]) if slug in DELIVERY_UP_TO else None,
+                free_delivery_over=Decimal(free) if free else None, delivery_note=note,
             )
             self.stdout.write(f"{name}: added")
         for slug in HIDDEN:

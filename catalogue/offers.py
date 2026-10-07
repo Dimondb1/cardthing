@@ -27,16 +27,28 @@ def buyable_prefetch():
             availability__in=Listing.BUYABLE,
         )
         .select_related("retailer")
-        .order_by("delivered_price", "retailer__name"),
+        # Confirmed delivered prices first, cheapest first; shops whose delivery is unknown after them.
+        .order_by("-delivery_known", "delivered_price", "retailer__name"),
         to_attr="offers",
     )
 
 
-class Summary:
-    __slots__ = ("best", "second", "saving", "percent", "badge")
+def offer_order(listing):
+    """Sort key for offers: confirmed delivered prices first, cheapest first, then unknown delivery."""
+    return (not listing.delivery_known, listing.delivered_price)
 
-    def __init__(self, best, second, saving, percent, badge):
+
+# A saving above this share of the runner-up's price is a wrong product link (a pack against a box,
+# a part against the whole), not a bargain. It is never shown, and suspect_savings lists it for checking.
+MAX_REAL_PERCENT = 70
+
+
+class Summary:
+    __slots__ = ("best", "second", "saving", "percent", "badge", "suspect")
+
+    def __init__(self, best, second, saving, percent, badge, suspect=False):
         self.best, self.second, self.saving, self.percent, self.badge = best, second, saving, percent, badge
+        self.suspect = suspect
 
 
 def summarise(product, week_lows=None):
@@ -49,13 +61,19 @@ def summarise(product, week_lows=None):
     best = offers[0] if offers else None
     second = offers[1] if len(offers) > 1 else None
     saving = percent = None
-    if best and second and second.delivered_price > best.delivered_price:
+    suspect = False
+    # A saving is only claimed between two confirmed delivered prices.
+    comparable = best and second and best.delivery_known and second.delivery_known
+    if comparable and second.delivered_price > best.delivered_price:
         saving = second.delivered_price - best.delivered_price
         percent = int((saving / second.delivered_price * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        if percent > MAX_REAL_PERCENT:
+            saving = percent = None
+            suspect = True
     badge = None
-    if best and week_lows is not None and product.pk in week_lows:
+    if best and best.delivery_known and not suspect and week_lows is not None and product.pk in week_lows:
         badge = BEST_WEEK if best.delivered_price <= week_lows[product.pk] else LOWEST_TODAY
-    return Summary(best, second, saving, percent, badge)
+    return Summary(best, second, saving, percent, badge, suspect)
 
 
 def week_low_map(product_ids, days=None, today=None):
@@ -72,16 +90,12 @@ def week_low_map(product_ids, days=None, today=None):
     return lows
 
 
-MAX_REAL_PERCENT = 70
-
-
 def biggest_savings(products, limit=6):
     """Products whose cheapest offer beats the runner-up by the most, as (product, summary)."""
     rows = []
     for product in products:
         summary = summarise(product)
-        # A saving above this share is a wrong product link, not a bargain.
-        if summary.saving and summary.percent <= MAX_REAL_PERCENT:
+        if summary.saving:
             rows.append((product, summary))
     rows.sort(key=lambda row: (-row[1].percent, -row[1].saving, row[0].name))
     return rows[:limit]

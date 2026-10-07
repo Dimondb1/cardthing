@@ -8,7 +8,7 @@
   </div>
   <div class="result__offer">
     {% if product.lowest_price is not None %}
-      <p class="result__price">{% price product.lowest_price size="md" %} <span class="result__price-label">{% copy "browse.price.label" %}</span></p>
+      <p class="result__price">{% price product.lowest_price size="md" %} <span class="result__price-label">{% if product.lowest_known is not None %}{% copy "browse.price.label" %}{% else %}{% copy "browse.price.plus" %}{% endif %}</span></p>
     {% endif %}
     {% include "web/includes/availability.html" %}
   </div>

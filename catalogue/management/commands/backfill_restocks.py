@@ -29,7 +29,7 @@ class Command(BaseCommand):
         for listing in listings.iterator():
             Restock.objects.create(
                 product_id=listing.product_id, retailer_id=listing.retailer_id, listing=listing,
-                at=listing.back_in_stock_at, price=listing.delivered_price,
+                at=listing.back_in_stock_at, price=listing.delivered_price, delivery_known=listing.delivery_known,
             )
             created += 1
         self.stdout.write(f"{created} restocks recorded.")

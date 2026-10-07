@@ -20,7 +20,7 @@
     </a>
     <div class="watch__prices">
       {% if summary.best %}
-        <p class="watch__now" data-now="{{ summary.best.delivered_price }}">{% price summary.best.delivered_price size="md" %} <span class="watch__at">{% copy "watchlist.now" retailer=summary.best.retailer.name %}</span></p>
+        <p class="watch__now"{% if summary.best.delivery_known %} data-now="{{ summary.best.delivered_price }}"{% endif %}>{% price summary.best.shown_price size="md" %} <span class="watch__at">{% if summary.best.delivery_known %}{% copy "watchlist.now" retailer=summary.best.retailer.name %}{% else %}{% copy "browse.price.plus" %} {% copy "product.rank.at" retailer=summary.best.retailer.name %}{% endif %}</span></p>
         <p class="watch__saved" data-saved-for="{{ product.slug }}" hidden></p>
         <p class="watch__checked">{% copy "product.last_checked" time=summary.best.last_checked|ago %}</p>
       {% else %}
@@ -31,7 +31,7 @@
     </div>
     <div class="watch__actions">
       {% if summary.best %}<a class="button button--buy button--card" href="{{ summary.best.get_outbound_url }}?from=watchlist" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/bag.html" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>{% endif %}
-      {% include "web/includes/save_link.html" with price=summary.best.delivered_price small=True %}
+      {% include "web/includes/save_link.html" with price=summary.best.shown_price small=True %}
     </div>
   </li>
   {% endfor %}

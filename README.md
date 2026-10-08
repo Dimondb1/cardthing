@@ -640,6 +640,14 @@ stopped, and killed a minute later (30 seconds for the ten-minute jobs) if
 it has not stopped. `deploy/install.sh` and `deploy/crontab` carry the same
 lines and both load `.env` first; a test fails when they differ.
 
+The nightly snapshot and the weekly delivery check wait for the import
+lock for as long as it takes, and their timeout starts only once they hold
+it (`flock ... timeout ...`). A full import can still be running at 00:15,
+and a wait counted against the snapshot's 30 minutes would stop it before
+it started, so that night's price history and checkpoint would be lost.
+The hourly import keeps `timeout` outside its 30 minute lock wait, so
+the whole line, wait included, ends before the next hour's import starts.
+
 A price import that is stopped part way (a timeout, a deploy, a restart)
 cannot record that it ended, so admin would show it as running for ever.
 Each `import_prices` run first closes every run that started more than

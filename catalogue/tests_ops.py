@@ -1,13 +1,17 @@
 """Operational hygiene: database backups, the nightly checkpoint, runs cut short and the cron timeouts."""
 
 import datetime
+import fcntl
 import re
+import shutil
 import sqlite3
+import subprocess
 import tempfile
+import time
 from contextlib import closing
 from io import StringIO
 from pathlib import Path
-from unittest import mock
+from unittest import mock, skipUnless
 
 from django.conf import settings
 from django.core.management import call_command
@@ -15,7 +19,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from . import ebay
+from . import ebay, insights
 from .importers import STOPPED, close_abandoned_runs, run_import
 from .management.commands import snapshot_daily_prices
 from .management.commands.backup_db import backup_name
@@ -86,7 +90,8 @@ class CronTests(TestCase):
         seen = set()
         for schedule, command in install_cron():
             for part in command.split(" && "):
-                found = re.match(r"timeout -k (\d+) (\d+) .*manage\.py (\w+)", part)
+                # A blocking flock (no -w or -n) comes first, so its wait is not counted; see the test below.
+                found = re.match(r"(?:flock \S+ )?timeout -k (\d+) (\d+) .*manage\.py (\w+)", part)
                 self.assertIsNotNone(found, f"No timeout before: {part}")
                 kill, seconds, name = int(found.group(1)), int(found.group(2)), found.group(3)
                 self.assertEqual(seconds, TIMEOUTS[name], name)
@@ -95,6 +100,40 @@ class CronTests(TestCase):
                     self.assertLess(seconds + kill, 600, name)
                 seen.add(name)
         self.assertEqual(seen, set(TIMEOUTS))
+
+    def test_a_blocking_lock_wait_does_not_count_against_the_timeout(self):
+        blocking = []
+        for _, command in install_cron():
+            for part in command.split(" && "):
+                lock = re.search(r"flock (-\w+ )?(\d+ )?(/\S+)", part)
+                if lock and not lock.group(1):
+                    # flock waits without a limit, then starts the timeout once it holds the lock.
+                    self.assertRegex(part, r"^flock /\S+ timeout -k \d+ \d+ \.venv/bin/python manage\.py ", part)
+                    blocking.append(re.search(r"manage\.py (\w+)", part).group(1))
+        self.assertEqual(sorted(blocking), ["check_delivery", "snapshot_daily_prices"])
+
+    @skipUnless(shutil.which("flock") and shutil.which("timeout"), "needs flock and timeout")
+    def test_the_snapshot_line_runs_after_a_lock_held_longer_than_its_limit(self):
+        """The real snapshot line, scaled down: the lock is held 2 s and the limit is 1 s."""
+        line = next(command for _, command in install_cron() if "snapshot_daily_prices" in command)
+        with tempfile.TemporaryDirectory() as folder:
+            lock = Path(folder) / "import.lock"
+            command = (
+                line.replace("/tmp/ripraptor-import.lock", str(lock))
+                .replace("timeout -k 60 1800", "timeout -k 1 1")
+                .replace(".venv/bin/python manage.py snapshot_daily_prices", "echo SNAPSHOT_RAN")
+            )
+            self.assertIn("echo SNAPSHOT_RAN", command)
+            with open(lock, "w") as held:
+                fcntl.flock(held, fcntl.LOCK_EX)
+                started = time.monotonic()
+                waiter = subprocess.Popen(["sh", "-c", command], stdout=subprocess.PIPE, text=True)
+                time.sleep(2)
+                fcntl.flock(held, fcntl.LOCK_UN)
+            out, _ = waiter.communicate(timeout=20)
+        self.assertEqual(waiter.returncode, 0)
+        self.assertEqual(out.strip(), "SNAPSHOT_RAN")
+        self.assertGreaterEqual(time.monotonic() - started, 2)
 
     def test_the_hourly_import_still_waits_for_the_lock(self):
         hourly = [command for schedule, command in install_cron() if schedule == "0 * * * *"]
@@ -242,3 +281,43 @@ class AbandonedRunTests(TestCase):
             call_command("import_prices", stdout=out)
         self.assertEqual(seen, [STOPPED])
         self.assertIn("Closed 1 earlier runs that stopped before they finished.", out.getvalue())
+
+
+class ClosedRunInsightsTests(TestCase):
+    """A closed run's finished_at is when it was closed, so Insights must not read it as when it ran."""
+
+    def setUp(self):
+        self.now = timezone.now()
+
+    def add_run(self, retailer, started_hours, finished_hours=None, **kwargs):
+        finished = None if finished_hours is None else self.now - datetime.timedelta(hours=finished_hours)
+        return ImportRun.objects.create(
+            retailer=retailer, started_at=self.now - datetime.timedelta(hours=started_hours),
+            finished_at=finished, **kwargs
+        )
+
+    def test_a_closed_ebay_run_is_not_the_last_ebay_run_that_found_offers(self):
+        marketplace = Retailer.objects.create(
+            name="eBay", slug="ebay", website="https://www.ebay.co.uk/", source_type=Retailer.Source.EBAY
+        )
+        self.add_run(marketplace, 5, offers_found=40)               # cut short after posting progress
+        good = self.add_run(marketplace, 4, 3, offers_found=120)
+        self.assertEqual(close_abandoned_runs(now=self.now), 1)
+        self.assertEqual(insights.ebay_coverage()["last_run"], good.finished_at)
+
+    def test_shop_health_reports_the_read_that_started_last(self):
+        shop = make_retailer(source_type=Retailer.Source.SHOPIFY, source_url="https://harbour.example/")
+        self.add_run(shop, 5)                                        # died five hours ago
+        good = self.add_run(shop, 4, 3.5)
+        close_abandoned_runs(now=self.now)
+        health = {row["name"]: row for row in insights.report(30)["shops_health"]}[shop.name]
+        self.assertEqual(health["last_ok"], good.finished_at)
+        self.assertEqual(health["problem"], "")
+
+    def test_a_closed_run_that_is_the_latest_still_shows_as_the_problem(self):
+        shop = make_retailer(source_type=Retailer.Source.SHOPIFY, source_url="https://harbour.example/")
+        self.add_run(shop, 5, 4.5)
+        self.add_run(shop, 4)
+        close_abandoned_runs(now=self.now)
+        health = {row["name"]: row for row in insights.report(30)["shops_health"]}[shop.name]
+        self.assertEqual(health["problem"], STOPPED)

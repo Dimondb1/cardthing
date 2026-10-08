@@ -15,6 +15,7 @@ from django.db.models import Count, F, Max, Q, Sum
 from django.utils import timezone
 
 from . import geo
+from .importers import STOPPED
 from .pricing import drop_if_locked, retry_locked
 from .models import DailyPageView, DailySearch, DailyVisitor, ImportRun, Listing, OutboundClick, Product, Retailer, StockAlert
 
@@ -282,8 +283,10 @@ def report(days=30):
         recent_runs.filter(error="")
         .values_list("retailer_id").annotate(t=Max("finished_at")).values_list("retailer_id", "t")
     )
+    # The latest run is the one that started last: a run closed hours after it died (close_abandoned_runs)
+    # carries the close time as finished_at and must not outrank a later read that worked.
     last_any = {}
-    for run in recent_runs.order_by("retailer_id", "-finished_at").only(
+    for run in recent_runs.order_by("retailer_id", "-started_at", "-finished_at").only(
         "retailer_id", "error", "finished_at"
     ):
         last_any.setdefault(run.retailer_id, run)
@@ -404,8 +407,9 @@ def ebay_coverage():
     in_stock = listings.buyable().count()
     stale = listings.filter(availability=Listing.Availability.IN_STOCK).count() - in_stock
     last_run = (
+        # A run closed by close_abandoned_runs carries the close time, not when it ran, so it is left out.
         ImportRun.objects.filter(retailer=ebay, finished_at__isnull=False, offers_found__gt=0)
-        .order_by("-finished_at").values_list("finished_at", flat=True).first()
+        .exclude(error=STOPPED).order_by("-finished_at").values_list("finished_at", flat=True).first()
     )
     ebay_prices = dict(listings.buyable().values_list("product_id", "delivered_price"))
     lowest = dict(

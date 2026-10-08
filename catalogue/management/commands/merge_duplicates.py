@@ -21,6 +21,7 @@ watchlists saved in browsers follow them. Run with --dry-run first.
 """
 
 from collections import defaultdict
+from contextlib import nullcontext
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -130,14 +131,17 @@ class Command(BaseCommand):
 
     def handle(self, *args, dry_run=False, loose=False, **options):
         merged = moved = 0
-        with transaction.atomic():
+        # Each group is its own short transaction, so a group that fails leaves the earlier ones merged
+        # and nothing else waits for the whole walk. A dry run wraps them all and rolls back.
+        with transaction.atomic() if dry_run else nullcontext():
             for keep, others in duplicate_groups(loose):
                 self.stdout.write(f"{'would keep' if dry_run else 'kept'}: {keep.name}")
                 for other in others:
                     self.stdout.write(f"    merged: {other.name}")
                 merged += len(others)
                 if not dry_run:
-                    moved += merge(keep, others)
+                    with transaction.atomic():
+                        moved += merge(keep, others)
             if dry_run:
                 transaction.set_rollback(True)
         self.stdout.write(f"{merged} products merged, {moved} listings moved. {Product.objects.count()} products remain.")

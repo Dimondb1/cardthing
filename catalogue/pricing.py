@@ -6,10 +6,12 @@ Price importers should call ``record_check`` each time they check a
 retailer. It updates the listing and today's lowest price for the product.
 """
 
+import time
 from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
+from django.db import OperationalError
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, FloatField, Min, OuterRef, Subquery
 from django.utils import timezone
 
@@ -22,6 +24,25 @@ RESTOCK_COLLAPSE = timedelta(hours=2)
 MARKETPLACES = (Retailer.Source.AMAZON, Retailer.Source.EBAY)
 # The busiest restock hours are only worth printing once there are this many to count.
 RESTOCK_PATTERN_MIN = 6
+# How a visitor's small write waits behind another writer: three tries, pausing between them.
+LOCK_ATTEMPTS = 3
+LOCK_WAITS = (0.5, 1, 2)
+
+
+def retry_locked(fn, attempts=LOCK_ATTEMPTS, waits=LOCK_WAITS):
+    """Call ``fn`` and return its result, trying again when SQLite reports the database locked.
+
+    SQLite already waits ``busy_timeout`` for a writer to finish; this covers the rare case of a
+    write that still finds the file locked, without holding a web request for long. Any other
+    OperationalError is raised at once, as is a lock that outlasts every attempt.
+    """
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except OperationalError as exc:
+            if "database is locked" not in str(exc) or attempt == attempts - 1:
+                raise
+            time.sleep(waits[min(attempt, len(waits) - 1)])
 
 
 def record_check(listing, *, price, delivery_cost, availability, checked_at=None):

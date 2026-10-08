@@ -14,6 +14,7 @@ merely lacks words is left alone, because slugs drop and garble words.
 """
 
 import re
+from contextlib import nullcontext
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -102,31 +103,36 @@ class Command(BaseCommand):
             self.stdout.write(f"eBay titles not fetched: {exc}")
         if filled:
             self.stdout.write(f"{filled} eBay titles fetched.")
-        with transaction.atomic():
+        # Each change is its own short transaction, so a web request or another job never waits
+        # for a whole table walk. A dry run wraps them all in one transaction and rolls it back.
+        with transaction.atomic() if dry_run else nullcontext():
             for product, game in misfiled().items():
                 self.stdout.write(f"{'would move' if dry_run else 'moved'}: {product.name} from {product.game.name} to {game.name}")
                 # Saved in a dry run too: the transaction is rolled back, and the listings below are
                 # then judged against the right game, as they will be for real.
-                product.game = game
-                if product.product_set_id and product.product_set.game_id != game.pk:
-                    product.product_set = None
-                product.save(update_fields=["game", "product_set"])
+                with transaction.atomic():
+                    product.game = game
+                    if product.product_set_id and product.product_set.game_id != game.pk:
+                        product.product_set = None
+                    product.save(update_fields=["game", "product_set"])
             for listing in Listing.objects.select_related("product__game", "retailer").iterator():
                 if fits(listing):
                     continue
                 removed += 1
                 self.stdout.write(f"{'would remove' if dry_run else 'removed'}: {listing.product.name} <- {listing.retailer.name} {listing.url}")
                 if not dry_run:
-                    listing.delete()
+                    with transaction.atomic():
+                        listing.delete()
             # An eBay listing the current rules refuse (far under every shop's price, or a title that is a
             # multi-buy, a code or a sampling pack) is hidden until eBay is searched again.
             cheap = too_cheap_listings()
             for listing in cheap:
                 self.stdout.write(f"{'would hide' if dry_run else 'hidden'}: {listing.product.name} <- eBay £{listing.delivered_price}")
             if not dry_run:
-                Listing.objects.filter(pk__in=[listing.pk for listing in cheap]).update(
-                    availability=Listing.Availability.OUT_OF_STOCK
-                )
+                with transaction.atomic():
+                    Listing.objects.filter(pk__in=[listing.pk for listing in cheap]).update(
+                        availability=Listing.Availability.OUT_OF_STOCK
+                    )
                 if cheap:
                     clear_list_caches()
             if dry_run:

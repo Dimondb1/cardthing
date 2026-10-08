@@ -590,6 +590,24 @@ Static files are served by the app itself (WhiteNoise) with hashed names
 and long cache headers, so no separate static hosting is needed. Uploaded
 product images live in `media/`; back that folder and the database up.
 
+## SQLite
+
+The database is one SQLite file shared by the web app, the cron jobs and any
+command you run by hand. It runs in WAL mode (write-ahead log), so readers
+never wait for a writer and a writer never waits for readers; only two
+writers queue, and the busy timeout is 20 seconds, so a short write waits
+rather than failing with "database is locked". The three tidy commands
+commit after each product or group rather than holding one transaction
+across the whole table, and the few writes a visitor's request makes
+(page counts, clicks) try again for a few seconds if the file is locked.
+
+Two extra files sit beside the database: `db.sqlite3-wal` holds changes
+not yet folded into the main file and `db.sqlite3-shm` is its index. Never
+copy the database with `cp` while anything is running: the copy misses
+whatever is still in the `-wal` file. Stop the site and the cron jobs
+first, or use SQLite's own backup (`sqlite3 db.sqlite3 ".backup copy.sqlite3"`),
+which reads a consistent snapshot. Never delete the `-wal` file by hand.
+
 ## Settings
 
 | Environment variable           | Default | Notes |

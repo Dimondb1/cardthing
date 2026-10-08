@@ -15,6 +15,7 @@ from django.db.models import Count, F, Max, Q, Sum
 from django.utils import timezone
 
 from . import geo
+from .pricing import retry_locked
 from .models import DailyPageView, DailySearch, DailyVisitor, ImportRun, Listing, OutboundClick, Product, Retailer, StockAlert
 
 COUNTRY_NAMES = {
@@ -39,10 +40,15 @@ def is_bot(request):
 
 def bump(model, **keys):
     """Add one to today's row for ``keys``, creating it the first time."""
-    with transaction.atomic():
-        updated = model.objects.filter(date=timezone.localdate(), **keys).update(hits=F("hits") + 1)
-        if not updated:
-            model.objects.create(date=timezone.localdate(), hits=1, **keys)
+
+    def write():
+        with transaction.atomic():
+            updated = model.objects.filter(date=timezone.localdate(), **keys).update(hits=F("hits") + 1)
+            if not updated:
+                model.objects.create(date=timezone.localdate(), hits=1, **keys)
+
+    # A visitor's count waits a moment for an import rather than failing the page.
+    retry_locked(write)
 
 
 # What the home screen prompt reports: the prompt shown, the site added, the prompt dismissed,
@@ -135,15 +141,20 @@ def record_visitor(request):
     """Note this visitor's page for today. False once they are past the daily cap, so the page is not counted."""
     day = timezone.localdate()
     token = visitor_token(request, day)
-    if DailyVisitor.objects.filter(date=day, token=token, views__lt=VIEWS_PER_VISITOR_CAP).update(views=F("views") + 1):
+    seen = DailyVisitor.objects.filter(date=day, token=token, views__lt=VIEWS_PER_VISITOR_CAP)
+    if retry_locked(lambda: seen.update(views=F("views") + 1)):
         return True
-    try:
+
+    def create():
         with transaction.atomic():
             DailyVisitor.objects.create(
                 date=day, token=token, country=geo.country_of(client_ip(request)),
                 device=device_of(request), source=source_of(request),
                 returning=request.COOKIES.get(RETURN_COOKIE) == "1", views=1,
             )
+
+    try:
+        retry_locked(create)
         return True
     except IntegrityError:
         # Already here today and past the cap (or two requests at once): not counted.

@@ -16,7 +16,10 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     help = "Run tidy_listings, merge_duplicates and tidy_catalogue in order."
 
-    def handle(self, *args, **options):
+    def add_arguments(self, parser):
+        parser.add_argument("--dry-run", action="store_true", help="Report what each would do and change nothing.")
+
+    def handle(self, *args, dry_run=False, **options):
         for name in ("tidy_listings", "merge_duplicates", "tidy_catalogue"):
             self.stdout.write(f"== {name}")
-            call_command(name, stdout=self.stdout)
+            call_command(name, dry_run=dry_run, stdout=self.stdout)

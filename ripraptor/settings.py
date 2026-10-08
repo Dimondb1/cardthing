@@ -86,10 +86,20 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "ripraptor.wsgi.application"
 
+# SQLite shared by gunicorn, the cron jobs and the background worker. WAL mode
+# lets readers and writers run at once; the busy timeout (20 s, longer than any
+# tidy transaction, shorter than gunicorn's 60 s request timeout) makes a second
+# writer wait instead of failing; IMMEDIATE transactions take the write lock at
+# the start of atomic() so two writers cannot deadlock mid-transaction.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": os.environ.get("DJANGO_SQLITE_PATH", BASE_DIR / "db.sqlite3"),
+        "OPTIONS": {
+            "timeout": 20,
+            "transaction_mode": "IMMEDIATE",
+            "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=20000;",
+        },
     }
 }
 

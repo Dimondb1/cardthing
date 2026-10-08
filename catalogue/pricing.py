@@ -6,7 +6,9 @@ Price importers should call ``record_check`` each time they check a
 retailer. It updates the listing and today's lowest price for the product.
 """
 
+import logging
 import time
+from contextlib import contextmanager
 from datetime import timedelta
 from decimal import Decimal
 
@@ -24,25 +26,50 @@ RESTOCK_COLLAPSE = timedelta(hours=2)
 MARKETPLACES = (Retailer.Source.AMAZON, Retailer.Source.EBAY)
 # The busiest restock hours are only worth printing once there are this many to count.
 RESTOCK_PATTERN_MIN = 6
-# How a visitor's small write waits behind another writer: three tries, pausing between them.
+# How a visitor's small write tries again after a lock: three tries, pausing between them.
 LOCK_ATTEMPTS = 3
 LOCK_WAITS = (0.5, 1, 2)
+# A lock reported sooner than this came from a stale snapshot, which SQLite reports at once instead
+# of waiting its busy timeout; only that kind is tried again. A lock reported after the full busy
+# wait (20 s) is raised, so a request never waits the busy timeout twice.
+LOCK_QUICK_SECONDS = 1.0
+
+logger = logging.getLogger(__name__)
 
 
 def retry_locked(fn, attempts=LOCK_ATTEMPTS, waits=LOCK_WAITS):
-    """Call ``fn`` and return its result, trying again when SQLite reports the database locked.
+    """Call ``fn`` and return its result, trying again when SQLite reports the database locked at once.
 
-    SQLite already waits ``busy_timeout`` for a writer to finish; this covers the rare case of a
-    write that still finds the file locked, without holding a web request for long. Any other
-    OperationalError is raised at once, as is a lock that outlasts every attempt.
+    SQLite already waits ``busy_timeout`` for another writer to finish. A write can still fail
+    straight away when its snapshot went stale under it; that one is worth another try after a short
+    pause. A lock that outlasted the busy wait, any other OperationalError and a lock that outlasts
+    every attempt are raised.
     """
     for attempt in range(attempts):
+        started = time.monotonic()
         try:
             return fn()
         except OperationalError as exc:
-            if "database is locked" not in str(exc) or attempt == attempts - 1:
+            quick = time.monotonic() - started < LOCK_QUICK_SECONDS
+            if not is_locked(exc) or not quick or attempt == attempts - 1:
                 raise
             time.sleep(waits[min(attempt, len(waits) - 1)])
+
+
+def is_locked(exc):
+    return "database is locked" in str(exc)
+
+
+@contextmanager
+def drop_if_locked(what):
+    """Count on a best effort basis: a count that cannot be saved because the database is locked is
+    logged and dropped, so the visitor still gets the page or the shop. Other errors are raised."""
+    try:
+        yield
+    except OperationalError as exc:
+        if not is_locked(exc):
+            raise
+        logger.warning("%s not counted: %s", what, exc)
 
 
 def record_check(listing, *, price, delivery_cost, availability, checked_at=None):

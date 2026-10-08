@@ -96,13 +96,17 @@ class Command(BaseCommand):
     def handle(self, *args, dry_run=False, **options):
         removed = 0
         # eBay listings saved before titles were kept cannot be judged by their title, so ask eBay for it.
-        try:
-            filled = fill_titles()
-        except EbayError as exc:
-            filled = 0
-            self.stdout.write(f"eBay titles not fetched: {exc}")
-        if filled:
-            self.stdout.write(f"{filled} eBay titles fetched.")
+        # Not in a dry run: fetching saves each title, and a dry run changes nothing.
+        if dry_run:
+            self.stdout.write("eBay titles not fetched in a dry run.")
+        else:
+            try:
+                filled = fill_titles()
+            except EbayError as exc:
+                filled = 0
+                self.stdout.write(f"eBay titles not fetched: {exc}")
+            if filled:
+                self.stdout.write(f"{filled} eBay titles fetched.")
         # Each change is its own short transaction, so a web request or another job never waits
         # for a whole table walk. A dry run wraps them all in one transaction and rolls it back.
         with transaction.atomic() if dry_run else nullcontext():
@@ -115,9 +119,14 @@ class Command(BaseCommand):
                     if product.product_set_id and product.product_set.game_id != game.pk:
                         product.product_set = None
                     product.save(update_fields=["game", "product_set"])
-            for listing in Listing.objects.select_related("product__game", "retailer").iterator():
-                if fits(listing):
-                    continue
+            # Judge every listing first, then delete. A write while the chunked read is still open would
+            # find its snapshot out of date as soon as another process commits, and SQLite then reports
+            # the database locked at once rather than waiting.
+            misfits = [
+                listing for listing in Listing.objects.select_related("product__game", "retailer").iterator()
+                if not fits(listing)
+            ]
+            for listing in misfits:
                 removed += 1
                 self.stdout.write(f"{'would remove' if dry_run else 'removed'}: {listing.product.name} <- {listing.retailer.name} {listing.url}")
                 if not dry_run:

@@ -88,9 +88,11 @@ WSGI_APPLICATION = "ripraptor.wsgi.application"
 
 # SQLite shared by gunicorn, the cron jobs and the background worker. WAL mode
 # lets readers and writers run at once; the busy timeout (20 s, longer than any
-# tidy transaction, shorter than gunicorn's 60 s request timeout) makes a second
-# writer wait instead of failing; IMMEDIATE transactions take the write lock at
-# the start of atomic() so two writers cannot deadlock mid-transaction.
+# tidy transaction) makes a second writer wait instead of failing; IMMEDIATE
+# transactions take the write lock at the start of atomic() so two writers
+# cannot deadlock mid-transaction. A visitor's request waits at most one busy
+# timeout for its counts (catalogue.pricing.drop_if_locked), well inside
+# gunicorn's 60 s request timeout.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",

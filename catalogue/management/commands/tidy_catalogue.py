@@ -45,7 +45,9 @@ class Command(BaseCommand):
         """Remove, retype, merge or rename one product. Returns what was done, or "" for nothing."""
         name = tidy_name(product.name)
         reason = None
-        if product.listing_count == 0:
+        # The count was taken before the walk; a product merged into this one earlier in the run now
+        # has its listings, so ask again before removing it and taking a live price with it.
+        if product.listing_count == 0 and not product.listings.exists():
             reason = "no shop lists it"
         elif NOT_SEALED.search(product.name):
             reason = "not sealed"

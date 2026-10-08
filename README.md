@@ -598,8 +598,10 @@ never wait for a writer and a writer never waits for readers; only two
 writers queue, and the busy timeout is 20 seconds, so a short write waits
 rather than failing with "database is locked". The three tidy commands
 commit after each product or group rather than holding one transaction
-across the whole table, and the few writes a visitor's request makes
-(page counts, clicks) try again for a few seconds if the file is locked.
+across the whole table. The few writes a visitor's request makes (page
+counts, clicks) are best effort: if the file is still locked after one busy
+wait, the count is dropped and logged, and the page or the trip to the shop
+goes ahead.
 
 Two extra files sit beside the database: `db.sqlite3-wal` holds changes
 not yet folded into the main file and `db.sqlite3-shm` is its index. Never

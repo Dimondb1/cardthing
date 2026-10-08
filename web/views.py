@@ -718,11 +718,13 @@ def go(request, listing_id):
     agent = request.headers.get("User-Agent", "").lower()
     if agent and not any(marker in agent for marker in BOT_MARKERS):
         source = request.GET.get("from", "")
-        # The click waits a moment for an import rather than failing the visitor's trip to the shop.
-        pricing.retry_locked(lambda: OutboundClick.objects.create(
-            listing=listing, product=listing.product, retailer=listing.retailer,
-            source=source if source in CLICK_SOURCES else "",
-        ))
+        # The click is counted on a best effort basis: a database too busy to save it never stops
+        # the visitor's trip to the shop.
+        with pricing.drop_if_locked("Click"):
+            pricing.retry_locked(lambda: OutboundClick.objects.create(
+                listing=listing, product=listing.product, retailer=listing.retailer,
+                source=source if source in CLICK_SOURCES else "",
+            ))
     response = HttpResponseRedirect(listing.retailer.outbound_url(listing.url))
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response

@@ -15,7 +15,7 @@ from django.db.models import Count, F, Max, Q, Sum
 from django.utils import timezone
 
 from . import geo
-from .pricing import retry_locked
+from .pricing import drop_if_locked, retry_locked
 from .models import DailyPageView, DailySearch, DailyVisitor, ImportRun, Listing, OutboundClick, Product, Retailer, StockAlert
 
 COUNTRY_NAMES = {
@@ -47,8 +47,9 @@ def bump(model, **keys):
             if not updated:
                 model.objects.create(date=timezone.localdate(), hits=1, **keys)
 
-    # A visitor's count waits a moment for an import rather than failing the page.
-    retry_locked(write)
+    # A count is best effort: one the database is too busy to save is dropped rather than failing the page.
+    with drop_if_locked("Page count"):
+        retry_locked(write)
 
 
 # What the home screen prompt reports: the prompt shown, the site added, the prompt dismissed,
@@ -162,8 +163,12 @@ def record_visitor(request):
 
 
 def record_view(request, kind, key=""):
-    if request.method == "GET" and not is_bot(request) and record_visitor(request):
-        bump(DailyPageView, kind=kind, key=key[:220])
+    if request.method == "GET" and not is_bot(request):
+        # The first count that finds the database locked ends counting for this page, so a visitor
+        # waits at most one busy timeout, never one per count.
+        with drop_if_locked("Page view"):
+            if record_visitor(request):
+                bump(DailyPageView, kind=kind, key=key[:220])
 
 
 def record_search(request, query, results):

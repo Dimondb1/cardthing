@@ -2,7 +2,7 @@ import time
 
 from django.core.management.base import BaseCommand, CommandError
 
-from catalogue.importers import run_import
+from catalogue.importers import close_abandoned_runs, run_import
 from catalogue.models import Retailer
 
 
@@ -31,6 +31,10 @@ class Command(BaseCommand):
         # can take most of an hour. Then shops by name.
         first = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
         ordered = sorted(retailers, key=lambda r: (r.source_type not in first, r.name.lower()))
+        # Runs a deploy, a timeout or a crash cut short would otherwise show as running for ever.
+        closed = close_abandoned_runs()
+        if closed:
+            self.stdout.write(f"Closed {closed} earlier runs that stopped before they finished.")
         for item in ordered:
             started = time.monotonic()
             run = run_import(item, feed_path=feed)

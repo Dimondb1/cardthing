@@ -559,15 +559,19 @@ first import. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
 
 Each update first copies the database to `/var/lib/ripraptor/backups/`
-(the newest five are kept). To roll back, stop the site, copy the backup
-over the live database and check out the previous code:
+with `backup_db` (the newest five are kept; see "Backups, timeouts and runs
+cut short" below). To roll back, stop the site and the cron jobs, copy the
+backup over the live database and check out the previous code. The `-wal`
+and `-shm` files belong to the database being replaced, so they go too;
+left in place they would be applied to the restored copy.
 
 ```sh
-sudo systemctl stop ripraptor
-sudo cp /var/lib/ripraptor/backups/db-YYYYMMDD-HHMMSS.sqlite3 /var/lib/ripraptor/db.sqlite3
+sudo systemctl stop ripraptor cron
+sudo rm -f /var/lib/ripraptor/db.sqlite3-wal /var/lib/ripraptor/db.sqlite3-shm
+sudo cp /var/lib/ripraptor/backups/db.sqlite3.YYYYMMDD-HHMM.bak /var/lib/ripraptor/db.sqlite3
 sudo chown ripraptor:ripraptor /var/lib/ripraptor/db.sqlite3
 cd /srv/ripraptor && sudo -u ripraptor git checkout <previous commit>
-sudo systemctl start ripraptor
+sudo systemctl start ripraptor cron
 ```
 
 The manual steps:
@@ -609,6 +613,41 @@ copy the database with `cp` while anything is running: the copy misses
 whatever is still in the `-wal` file. Stop the site and the cron jobs
 first, or use SQLite's own backup (`sqlite3 db.sqlite3 ".backup copy.sqlite3"`),
 which reads a consistent snapshot. Never delete the `-wal` file by hand.
+
+## Backups, timeouts and runs cut short
+
+`python manage.py backup_db` copies the database with SQLite's own backup,
+which reads a consistent snapshot while the site and the cron jobs keep
+writing. The copy is named after the database and the time, for example
+`db.sqlite3.20261008-0040.bak`, and goes in `backups/` beside the database
+unless you pass `--dir`. Only the newest `--keep` copies (5 by default) are
+kept; other files in the folder are left alone, so the older
+`db-YYYYMMDD-HHMMSS.sqlite3` copies from earlier installs stay until you
+delete them. `install.sh` runs `backup_db --keep 5` before every update.
+
+`snapshot_daily_prices` runs a checkpoint after the nightly snapshot: it
+folds the `-wal` file back into the database and empties it, so the file
+cannot keep growing. If another process is busy at that moment it says so
+in the log and tries again the next night.
+
+Every cron line runs its command under `timeout`, set to the command's
+budget plus five minutes: the hourly import 55 minutes, `tidy_all` 25,
+the stock watcher and the stock alerts 9, the nightly snapshot 30, the
+weekly delivery check 50 and the monthly GeoIP download 30. Without it a
+command that hangs while holding a lock would make every later run behind
+the lock give up without a word. A command still running after its limit is
+stopped, and killed a minute later (30 seconds for the ten-minute jobs) if
+it has not stopped. `deploy/install.sh` and `deploy/crontab` carry the same
+lines and both load `.env` first; a test fails when they differ.
+
+A price import that is stopped part way (a timeout, a deploy, a restart)
+cannot record that it ended, so admin would show it as running for ever.
+Each `import_prices` run first closes every run that started more than
+three hours ago and never finished, with the error "Stopped before it
+finished." The prices it saved before it stopped are kept. Because it has
+an error, such a run never counts as the day's eBay or Amazon read, so
+the next hourly import reads them again. Three hours is longer than the
+longest real read (Amazon, about 37 minutes).
 
 ## Settings
 

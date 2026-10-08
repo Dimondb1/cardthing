@@ -74,6 +74,10 @@ class ImportError_(Exception):
 
 # Marketplaces allow a limited number of calls a day, so they are read this often, not hourly.
 DAILY_EVERY_HOURS = 20
+# A run still open after this long was cut short (a deploy, a timeout, a crash): the longest real
+# read, Amazon at 2000 calls 1.1 s apart, takes about 37 minutes.
+ABANDONED_AFTER = timedelta(hours=3)
+STOPPED = "Stopped before it finished."
 
 
 def safe_url(url):
@@ -812,6 +816,18 @@ def _as_import_errors(offers, errors):
         yield from offers
     except errors as exc:
         raise ImportError_(str(exc)) from exc
+
+
+def close_abandoned_runs(older_than=ABANDONED_AFTER, now=None):
+    """Close every run that started more than ``older_than`` ago and never finished. Returns how many.
+
+    Such a run stays "Running" in admin for ever otherwise. It gets an error, so it never counts
+    as today's marketplace fetch and never as a shop's last good read.
+    """
+    now = now or timezone.now()
+    return ImportRun.objects.filter(finished_at__isnull=True, started_at__lt=now - older_than).update(
+        finished_at=now, error=STOPPED
+    )
 
 
 def run_import(retailer, feed_path=None, fetch=None):

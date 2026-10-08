@@ -45,13 +45,11 @@ ENV
 fi
 mkdir -p /var/lib/ripraptor media
 set -a; . ./.env; set +a
-# A copy of the database before any change, so an update can be rolled back. SQLite's own backup
-# is safe while the site is running. The newest five are kept.
+# A copy of the database before any change, so an update can be rolled back. backup_db uses
+# SQLite's own backup, which is safe while the site is running; cp is not (it misses the -wal
+# file). The newest five copies are kept in /var/lib/ripraptor/backups/.
 if [ -f /var/lib/ripraptor/db.sqlite3 ]; then
-  mkdir -p /var/lib/ripraptor/backups
-  .venv/bin/python -c "import sqlite3,sys; s=sqlite3.connect(sys.argv[1]); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close()" \
-    /var/lib/ripraptor/db.sqlite3 "/var/lib/ripraptor/backups/db-$(date +%Y%m%d-%H%M%S).sqlite3"
-  ls -1t /var/lib/ripraptor/backups/db-*.sqlite3 | tail -n +6 | xargs -r rm -f
+  .venv/bin/python manage.py backup_db --keep 5
 fi
 .venv/bin/python manage.py migrate -v0
 .venv/bin/python manage.py backfill_restocks >/dev/null
@@ -79,13 +77,16 @@ systemctl reload caddy
 # The hourly import waits up to 30 minutes for the lock rather than skipping, so the
 # 10-minute stock watcher (which fires at the same minute and skips while the lock is
 # held) can never crowd it out. Output is unbuffered so the log shows progress live.
+# Every command runs under timeout, set to its budget plus five minutes: a command that hangs
+# while holding a lock would otherwise make every later run behind it give up silently.
+# deploy/crontab carries the same lines; catalogue/tests_ops.py fails when they differ.
 echo "PYTHONUNBUFFERED=1
-0 * * * *  cd $DIR && set -a && . ./.env && set +a && flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 && .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
-15 0 * * * cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
-30 3 * * 0 cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
-*/10 * * * * cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock >> /var/log/ripraptor-import.log 2>&1
-*/10 * * * * cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-alerts.lock .venv/bin/python manage.py send_stock_alerts >> /var/log/ripraptor-import.log 2>&1
-45 4 5 * * cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
+0 * * * *  cd $DIR && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 && timeout -k 60 1500 .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
+15 0 * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 flock /tmp/ripraptor-import.lock .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
+30 3 * * 0 cd $DIR && set -a && . ./.env && set +a && timeout -k 60 3000 flock /tmp/ripraptor-import.lock .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
+*/10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock >> /var/log/ripraptor-import.log 2>&1
+*/10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-alerts.lock .venv/bin/python manage.py send_stock_alerts >> /var/log/ripraptor-import.log 2>&1
+45 4 5 * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
 touch /var/log/ripraptor-import.log && chown ripraptor /var/log/ripraptor-import.log
 
 # First price import in the background so the site is usable straight away.

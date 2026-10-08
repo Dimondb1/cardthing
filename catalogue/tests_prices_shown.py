@@ -289,3 +289,72 @@ class ChecksPageTests(TestCase):
         self.assertFalse(Product.objects.filter(pk=self.b.pk).exists())
         self.assertEqual(self.a.listings.count(), 2)
         self.assertRedirects(self.client.get("/products/pb-b/"), self.a.get_absolute_url(), status_code=301)
+
+
+class UnpricedTests(TestCase):
+    """A price of nothing is not a price: it never becomes a product's lowest price."""
+
+    def setUp(self):
+        self.shop = make_retailer("Harbour Games", delivery_cost=Decimal("2.00"))
+        self.product = make_product(make_set(make_game()), ean="0820650851230", image_url="https://img.example/x.jpg")
+
+    def test_a_zero_price_preorder_stamps_availability_only_and_writes_no_history(self):
+        from .models import Restock
+
+        listing = make_listing(self.product, self.shop, price="45.00", delivery="2.00", hours_ago=5,
+                               availability=Listing.Availability.OUT_OF_STOCK)
+        checked_at = timezone.now()
+        self.assertIsNone(pricing.record_check(listing, price=Decimal("0.00"), delivery_cost=Decimal("2.00"),
+                                               availability=Listing.Availability.PREORDER, checked_at=checked_at))
+        listing.refresh_from_db()
+        self.assertEqual((listing.price, listing.delivery_cost, listing.delivery_known), (Decimal("45.00"), Decimal("2.00"), True))
+        self.assertEqual((listing.availability, listing.last_checked), (Listing.Availability.PREORDER, checked_at))
+        self.assertIsNone(listing.back_in_stock_at)
+        self.assertFalse(DailyLowestPrice.objects.exists())
+        # In stock at nothing is treated the same way: a shop never sells for nothing.
+        pricing.record_check(listing, price=Decimal("0"), delivery_cost=None, availability=Listing.Availability.IN_STOCK)
+        listing.refresh_from_db()
+        self.assertEqual((listing.price, listing.delivery_known), (Decimal("45.00"), True))
+        self.assertIsNone(listing.back_in_stock_at)
+        self.assertFalse(Restock.objects.exists())
+        self.assertFalse(DailyLowestPrice.objects.exists())
+
+    def test_a_zero_price_new_offer_creates_no_listing_and_is_listed_as_unmatched(self):
+        from .importers import Offer, apply_offers
+
+        offer = Offer(title="Prismatic Evolutions ETB", url="https://harbour.example/products/pe-etb", price=Decimal("0.00"),
+                      ean="0820650851230", availability=Listing.Availability.PREORDER)
+        found, updated, unmatched = apply_offers(self.shop, [offer])
+        self.assertEqual((found, updated), (1, 0))
+        self.assertEqual(unmatched, ["Prismatic Evolutions ETB [0820650851230] https://harbour.example/products/pe-etb (no price)"])
+        self.assertFalse(Listing.objects.exists())
+        self.assertFalse(DailyLowestPrice.objects.exists())
+        # Called directly, record_check does not create one either.
+        new = Listing(product=self.product, retailer=self.shop, url=offer.url)
+        self.assertIsNone(pricing.record_check(new, price=Decimal("0"), delivery_cost=None, availability=Listing.Availability.PREORDER))
+        self.assertFalse(Listing.objects.exists())
+
+    def test_a_zero_price_offer_updates_the_stock_of_an_existing_listing_through_an_import(self):
+        from .importers import Offer, apply_offers
+
+        listing = make_listing(self.product, self.shop, price="45.00", delivery="2.00", hours_ago=5,
+                               url="https://harbour.example/products/pe-etb")
+        offer = Offer(title="ETB", url=listing.url, price=Decimal("0"), ean="0820650851230",
+                      availability=Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(apply_offers(self.shop, [offer])[1], 1)
+        listing.refresh_from_db()
+        self.assertEqual((listing.price, listing.availability), (Decimal("45.00"), Listing.Availability.OUT_OF_STOCK))
+        self.assertGreater(listing.last_checked, timezone.now() - timezone.timedelta(minutes=1))
+
+    def test_a_priceless_variant_never_stands_in_for_a_priced_one(self):
+        from .importers import Offer, apply_offers
+
+        offers = [
+            Offer(title="ETB", url="https://harbour.example/products/pe-etb", price=Decimal("45.00"), ean="0820650851230"),
+            Offer(title="ETB (pre-order)", url="https://harbour.example/products/pe-etb-2", price=Decimal("0"),
+                  ean="0820650851230", availability=Listing.Availability.PREORDER),
+        ]
+        apply_offers(self.shop, offers)
+        listing = Listing.objects.get(product=self.product, retailer=self.shop)
+        self.assertEqual((listing.price, listing.availability), (Decimal("45.00"), Listing.Availability.IN_STOCK))
+        self.assertEqual(self.product.daily_prices.get().price, Decimal("47.00"))

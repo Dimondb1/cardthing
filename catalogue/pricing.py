@@ -74,8 +74,20 @@ def drop_if_locked(what):
 
 def record_check(listing, *, price, delivery_cost, availability, checked_at=None):
     """Save one check of a listing. ``delivery_cost`` None means the charge is not known: it is stored as
-    unknown, never as free."""
+    unknown, never as free.
+
+    A price of nothing or less is not a price (a shop opening a pre-order before pricing it, or a page
+    that lost its price); a shop never sells for nothing, so this holds whatever the stock says. An
+    existing listing keeps its last price and only its stock and check time are saved, with no restock
+    and no history. A new listing is not created. Returns None in both cases.
+    """
     checked_at = checked_at or timezone.now()
+    if price is None or price <= 0:
+        if listing.pk and not listing._state.adding:
+            listing.availability = availability
+            listing.last_checked = checked_at
+            listing.save(update_fields=["availability", "last_checked"])
+        return None
     fields = ["price", "delivery_cost", "delivery_known", "availability", "last_checked"]
     was_in_stock = listing.availability == Listing.Availability.IN_STOCK
     restocked = availability == Listing.Availability.IN_STOCK and not was_in_stock and listing.pk and not listing._state.adding

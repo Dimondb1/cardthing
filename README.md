@@ -535,6 +535,18 @@ it again after changing the mark and commit the files.
   price=..., delivery_cost=..., availability=...)` after checking a retailer.
   It updates the listing and today's lowest price. The built-in Shopify and
   CSV importers are in `catalogue/importers.py`.
+- Unchanged offers are stamped, not rewritten. When a shop read finds the
+  same price, delivery, stock state and link a listing already holds, only
+  its last checked time moves, 500 listings to one short write, before each
+  progress note on the run (every 250 offers) and at the end. Only offers
+  that change something go through `record_check`, so a read of a large
+  shop writes a few dozen rows instead of thousands.
+- A price of £0.00 or less is not a price, whatever the stock state says (a
+  shop opening a pre-order before pricing it, or a page that lost its
+  price). An existing listing keeps its last price and only its stock state
+  and check time are saved, with no restock and no price history. No new
+  listing is made from such an offer; it appears in the run's unmatched list
+  ending "(no price)".
 - Run `python manage.py snapshot_daily_prices` once a day (for example from
   cron) so price history and "Price drops this week" have no gaps.
 - Retailer affiliate links: set **Affiliate link format** on the retailer, for

@@ -605,6 +605,37 @@ def link_key(url):
     return host + path
 
 
+# Unchanged listings are stamped this many at a time: one short UPDATE each.
+STAMP_CHUNK = 500
+# Progress is written to the run, and unchanged listings stamped, after this many offers.
+PROGRESS_EVERY = 250
+
+
+def unchanged(listing, offer, delivery):
+    """True when this offer says nothing the existing ``listing`` does not already hold, so the check
+    only needs its time stamped. ``delivery`` is the charge worked out for the offer (None = unknown).
+    An offer without a price only ever changes the stock state, so only that is compared."""
+    if listing.pk is None or listing._state.adding:
+        return False
+    if offer.availability != listing.availability:
+        return False
+    if offer.price <= 0:
+        return True
+    return (
+        listing.price == offer.price
+        and listing.delivery_known == (delivery is not None)
+        and listing.delivery_cost == (delivery if delivery is not None else Decimal("0.00"))
+        and link_key(listing.url) == link_key(offer.url)
+    )
+
+
+def stamp_checked(pks, checked_at):
+    """Mark listings as checked at ``checked_at`` without rewriting anything else, then empty ``pks``."""
+    for start in range(0, len(pks), STAMP_CHUNK):
+        Listing.objects.filter(pk__in=pks[start:start + STAMP_CHUNK]).update(last_checked=checked_at)
+    pks.clear()
+
+
 def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     """Update listings from ``offers``.
 
@@ -614,6 +645,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
 
     Offers match a product by barcode, or by the link of a listing that was
     added by hand for this retailer. Returns (found, updated, unmatched titles).
+
+    An offer that changes nothing on its listing is not written: its listing is only stamped as
+    checked, in chunks, before each progress post and at the end. An offer without a price never
+    creates a listing.
     """
     checked_at = checked_at or timezone.now()
     products_by_link = {
@@ -633,11 +668,16 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         ShopProduct.objects.filter(retailer=retailer, status=ShopProduct.Status.IGNORED).values_list("url", flat=True)
     )
 
+    to_stamp = []
+
     if True:
         for offer in offers:
+            if found and found % PROGRESS_EVERY == 0:
+                # Stamp first, so a run cut short after this point leaves these listings fresh.
+                stamp_checked(to_stamp, checked_at)
+                if run is not None:
+                    ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             found += 1
-            if run is not None and found % 250 == 0:
-                ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             product_pk = offer.product_pk
             if product_pk is None:
                 product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
@@ -680,20 +720,37 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if not offer.url.lower().startswith(("http://", "https://")):
                 unmatched.append(f"{offer.title} [link is not a web address]")
                 continue
-            listing, _created = Listing.objects.get_or_create(
-                product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
-            )
+            if offer.price <= 0:
+                # No price is not a price: it may update the stock of a listing we have, never make one,
+                # and never stands in for a sibling variant seen earlier in this run.
+                if product_pk in seen_products:
+                    continue
+                listing = Listing.objects.filter(product_id=product_pk, retailer=retailer).first()
+                if listing is None:
+                    unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url} (no price)")
+                    continue
+                created = False
+            else:
+                listing, created = Listing.objects.get_or_create(
+                    product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
+                )
             if product_pk in seen_products and listing.availability != Listing.Availability.OUT_OF_STOCK:
                 # Several variants of one product: keep the cheapest one that is in stock.
                 if offer.availability == Listing.Availability.OUT_OF_STOCK or offer.price >= listing.price:
                     continue
             seen_products.add(product_pk)
-            listing.url = offer.url
-            listing.title = (offer.title or "")[:300]
-            listing.save(update_fields=["url", "title"])
+            title = (offer.title or "")[:300]
+            if created or listing.url != offer.url or listing.title != title:
+                listing.url = offer.url
+                listing.title = title
+                listing.save(update_fields=["url", "title"])
             if offer.image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
                 images_by_product.setdefault(product_pk, offer.image)
             delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)
+            updated += 1
+            if not created and unchanged(listing, offer, delivery):
+                to_stamp.append(listing.pk)
+                continue
             pricing.record_check(
                 listing,
                 price=offer.price,
@@ -701,7 +758,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 availability=offer.availability,
                 checked_at=checked_at,
             )
-            updated += 1
+
+        stamp_checked(to_stamp, checked_at)
 
         # Fill in images for products that have none.
         if images_by_product:

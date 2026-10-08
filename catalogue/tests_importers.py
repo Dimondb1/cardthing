@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from .classify import classify
 from .importers import ImportError_, apply_offers, feed_offers, run_import, shopify_offers
-from .models import ImportRun, Listing, Product, Retailer, ShopProduct
+from .models import DailyLowestPrice, ImportRun, Listing, Product, Retailer, ShopProduct
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
 
@@ -853,3 +853,121 @@ class MergeDuplicatesTests(TestCase):
         keep.refresh_from_db()
         self.assertEqual(keep.listings.count(), 2)
         self.assertEqual(keep.image_url, "https://img.example/x.jpg")
+
+
+class WriteSkippingTests(TestCase):
+    """A shop read stamps listings whose offer changed nothing instead of rewriting them."""
+
+    def setUp(self):
+        from datetime import timedelta
+
+        self.retailer = make_retailer("Northgate Cards", delivery_cost=Decimal("2.00"))
+        product_set = make_set(make_game())
+        self.products, self.listings = [], []
+        for i in range(3):
+            product = make_product(product_set, name=f"Prismatic Evolutions Box {i}", ean=f"082065085{i:04d}",
+                                   image_url="https://img.example/x.jpg")
+            listing = make_listing(product, self.retailer, price="40.00", delivery="2.00",
+                                   url=f"https://northgate.example/products/box-{i}", title=f"Box {i}")
+            self.products.append(product)
+            self.listings.append(listing)
+        self.old = timezone.now() - timedelta(hours=5)
+        Listing.objects.filter(retailer=self.retailer).update(last_checked=self.old)
+
+    def offer(self, i, price="40.00", **kwargs):
+        from .importers import Offer
+
+        return Offer(title=f"Box {i}", url=f"https://northgate.example/products/box-{i}", price=Decimal(price),
+                     ean=f"082065085{i:04d}", **kwargs)
+
+    def test_unchanged_offers_are_stamped_not_rewritten(self):
+        from unittest import mock
+
+        offers = [self.offer(0), self.offer(1, price="38.00"), self.offer(2)]
+        checked_at = timezone.now()
+        with mock.patch("catalogue.signals.clear_list_caches") as cleared:
+            # Four lookups (links, barcodes, catalogue, ignored), a fetch per offer, seven writes and reads for
+            # the one change (its save, its product, the day's lowest price), one stamp for the other two
+            # and the out-of-stock sweep. Rewriting all three would cost about thirty.
+            with self.assertNumQueries(16):
+                found, updated, unmatched = apply_offers(self.retailer, offers, checked_at=checked_at)
+        self.assertEqual((found, updated, unmatched), (3, 3, []))
+        self.assertEqual(cleared.call_count, 1)
+        for listing in self.listings:
+            listing.refresh_from_db()
+            self.assertEqual(listing.last_checked, checked_at)
+        self.assertEqual([l.price for l in self.listings], [Decimal("40.00"), Decimal("38.00"), Decimal("40.00")])
+        # Only the changed product's history moved.
+        self.assertEqual(list(DailyLowestPrice.objects.values_list("product_id", flat=True)), [self.products[1].pk])
+
+    def test_a_new_link_or_title_is_still_saved_on_an_unchanged_offer(self):
+        from .importers import Offer
+
+        offer = Offer(title="Box 0 (sealed)", url="https://northgate.example/products/box-0?variant=7",
+                      price=Decimal("40.00"), ean="0820650850000")
+        apply_offers(self.retailer, [offer])
+        listing = Listing.objects.get(pk=self.listings[0].pk)
+        self.assertEqual((listing.url, listing.title), (offer.url, "Box 0 (sealed)"))
+        self.assertGreater(listing.last_checked, self.old)
+
+    def test_a_different_delivery_or_stock_state_is_a_change(self):
+        from .importers import unchanged
+
+        listing = self.listings[0]
+        self.assertTrue(unchanged(listing, self.offer(0), Decimal("2.00")))
+        self.assertFalse(unchanged(listing, self.offer(0), Decimal("3.00")))
+        self.assertFalse(unchanged(listing, self.offer(0), None))
+        self.assertFalse(unchanged(listing, self.offer(0, availability=Listing.Availability.PREORDER), Decimal("2.00")))
+        self.assertFalse(unchanged(listing, self.offer(1), Decimal("2.00")))
+        self.assertFalse(unchanged(Listing(product=self.products[0], retailer=self.retailer, price=Decimal("40.00"),
+                                           delivery_cost=Decimal("2.00"), url=listing.url), self.offer(0), Decimal("2.00")))
+
+    def test_stamping_happens_before_each_progress_post(self):
+        from datetime import timedelta
+
+        from .importers import ImportError_
+
+        product_set = make_set(make_game(name="Lorcana", slug="lorcana"), name="First Chapter", slug="first-chapter")
+        listings = []
+        for i in range(260):
+            product = Product.objects.create(game=product_set.game, product_set=product_set, name=f"Booster {i}",
+                                             slug=f"booster-{i}", image_url="https://img.example/x.jpg")
+            listings.append(make_listing(product, self.retailer, price="10.00", delivery="2.00",
+                                         url=f"https://northgate.example/products/booster-{i}", title=f"Booster {i}"))
+        old = timezone.now() - timedelta(hours=5)
+        Listing.objects.filter(retailer=self.retailer).update(last_checked=old)
+        run = ImportRun.objects.create(retailer=self.retailer)
+
+        def offers():
+            from .importers import Offer
+
+            for i, listing in enumerate(listings):
+                yield Offer(title=f"Booster {i}", url=listing.url, price=Decimal("10.00"), product_pk=listing.product_id)
+            raise ImportError_("The shop stopped answering")
+
+        checked_at = timezone.now()
+        with self.assertRaises(ImportError_):
+            apply_offers(self.retailer, offers(), checked_at=checked_at, run=run)
+        stamped = set(Listing.objects.filter(last_checked=checked_at).values_list("pk", flat=True))
+        self.assertTrue({l.pk for l in listings[:250]} <= stamped)
+        run.refresh_from_db()
+        self.assertEqual((run.offers_found, run.listings_updated), (250, 250))
+
+    def test_stamps_go_out_in_chunks(self):
+        from unittest import mock
+
+        from . import importers
+
+        with mock.patch.object(importers, "STAMP_CHUNK", 2), self.assertNumQueries(2):
+            importers.stamp_checked([l.pk for l in self.listings], timezone.now())
+
+    def test_a_changed_availability_still_records_a_restock(self):
+        from .models import Restock
+
+        Listing.objects.filter(pk=self.listings[0].pk).update(availability=Listing.Availability.OUT_OF_STOCK)
+        apply_offers(self.retailer, [self.offer(0), self.offer(1)])
+        listing = Listing.objects.get(pk=self.listings[0].pk)
+        self.assertEqual(listing.availability, Listing.Availability.IN_STOCK)
+        self.assertIsNotNone(listing.back_in_stock_at)
+        self.assertEqual(Restock.objects.filter(listing=listing).count(), 1)
+        self.assertFalse(Restock.objects.filter(listing=self.listings[1]).exists())

@@ -760,9 +760,10 @@ class LoneShopHistoryTests(Shops, TestCase):
         self.assertEqual(self.verdicts(lone), [DOUBTFUL])
 
     def history(self, days, price="90.00"):
+        """``days`` days of history before today, the lowest of them ``price``."""
         for day in range(1, days + 1):
             DailyLowestPrice.objects.create(product=self.product, date=timezone.localdate() - timedelta(days=day),
-                                            price=Decimal(price) + day)
+                                            price=Decimal(price) + day - 1)
 
     def test_far_under_the_ninety_day_low_is_doubtful_and_never_excluded(self):
         self.history(10)
@@ -770,7 +771,7 @@ class LoneShopHistoryTests(Shops, TestCase):
         self.check(lone, 20)
         lone.refresh_from_db()
         self.assertEqual((lone.sanity, lone.sanity_ratio), (DOUBTFUL, Decimal("0.22")))
-        self.assertIn("under a third of the lowest in 90 days, £91.00", lone.sanity_reason)
+        self.assertIn("under a third of the lowest in 90 days, £90.00", lone.sanity_reason)
         self.check(lone, 1)
         self.assertEqual(self.verdicts(lone), [DOUBTFUL])
 
@@ -787,3 +788,120 @@ class LoneShopHistoryTests(Shops, TestCase):
         lone = self.shop(100)
         self.check(lone, 20)
         self.assertEqual(self.verdicts(lone), [OK])
+
+    def test_a_doubtful_price_cannot_vouch_for_itself_the_next_day(self):
+        self.history(10)
+        lone = self.shop(100)
+        now = timezone.now()
+
+        def check(price, days):
+            pricing.record_check(lone, price=Decimal(price), delivery_cost=Decimal("0.00"), availability=IN_STOCK,
+                                 checked_at=now + timedelta(days=days))
+            return Listing.objects.get(pk=lone.pk)
+
+        doubted = check("20.00", 0)
+        self.assertEqual((doubted.sanity, doubted.last_ok_price), (DOUBTFUL, None))
+        # Doubtful prices stay in the daily history, so tomorrow's 90-day low is this very price.
+        self.assertEqual(DailyLowestPrice.objects.get(product=self.product, date=timezone.localdate(now)).price,
+                         Decimal("20.00"))
+        sanity.judge_product(self.product.pk, now=now + timedelta(days=1))
+        lone.refresh_from_db()
+        self.assertEqual((lone.sanity, lone.last_ok_price), (DOUBTFUL, None))
+        self.assertIn("£90.00", lone.sanity_reason)
+        # It is judged by the history before it was doubted, at one more query, however its reason moves.
+        with self.assertNumQueries(3):
+            sanity.judge_product(self.product.pk, now=now + timedelta(days=1))
+        moved = check("21.00", 1)
+        self.assertEqual((moved.sanity, moved.sanity_ratio, moved.sanity_at), (DOUBTFUL, Decimal("0.23"), doubted.sanity_at))
+        self.assertEqual(check("21.00", 2).sanity, DOUBTFUL)
+        # A price the history before the doubt agrees with clears it and is kept as the last good price.
+        cleared = check("88.00", 3)
+        self.assertEqual((cleared.sanity, cleared.last_ok_price), (OK, Decimal("88.00")))
+        self.assertEqual(cleared.sanity_at, now + timedelta(days=3))
+
+    def test_the_ninety_day_low_stops_a_price_walking_down_in_one_day(self):
+        # Each step is within what the shop's last good price allows; the history before today is not.
+        self.history(10)
+        lone = self.shop(120)
+        Listing.objects.filter(pk=lone.pk).update(last_ok_price=Decimal("120.00"))
+        self.check(lone, 50)
+        lone.refresh_from_db()
+        self.assertEqual((lone.sanity, lone.last_ok_price), (OK, Decimal("50.00")))
+        self.check(lone, 20)
+        lone.refresh_from_db()
+        self.assertEqual((lone.sanity, lone.last_ok_price), (DOUBTFUL, Decimal("50.00")))
+        self.assertIn("under a third of the lowest in 90 days", lone.sanity_reason)
+
+
+class KeptOutComesBackTests(Shops, TestCase):
+    """A price the other shops kept out, once fewer than two of them are left."""
+
+    def setUp(self):
+        super().setUp()
+        self.peers = [self.shop(price) for price in (120, 125, 130)]
+        self.odd = self.shop(130)
+        sanity.judge_product(self.product.pk)
+        self.check(self.odd, "9.99")
+        for peer in self.peers:
+            pricing.record_check(peer, price=peer.price, delivery_cost=Decimal("0.00"),
+                                 availability=Listing.Availability.OUT_OF_STOCK)
+        self.odd.refresh_from_db()
+        self.reason = self.odd.sanity_reason
+        self.assertEqual((self.odd.sanity, self.odd.last_ok_price), (EXCLUDED, Decimal("130.00")))
+
+    def test_a_corrected_price_comes_back_on_its_own_evidence(self):
+        self.check(self.odd, 128)
+        self.odd.refresh_from_db()
+        self.assertEqual((self.odd.sanity, self.odd.sanity_reason, self.odd.last_ok_price), (OK, "", Decimal("128.00")))
+        self.assertEqual(Product.objects.for_lists().get(pk=self.product.pk).lowest_price, Decimal("128.00"))
+
+    def test_a_small_change_to_the_wrong_price_stays_out(self):
+        self.check(self.odd, "10.49")
+        self.odd.refresh_from_db()
+        self.assertEqual((self.odd.sanity, self.odd.sanity_reason), (EXCLUDED, self.reason))
+
+    def test_an_unchanged_price_stays_out_even_when_its_evidence_agrees(self):
+        Listing.objects.filter(pk=self.odd.pk).update(last_ok_price=Decimal("9.99"))
+        self.check(self.odd, "9.99")
+        self.assertEqual(self.verdicts(self.odd), [EXCLUDED])
+
+    def test_a_changed_price_with_no_evidence_stays_out(self):
+        Listing.objects.filter(pk=self.odd.pk).update(last_ok_price=None)
+        self.check(self.odd, 128)
+        self.odd.refresh_from_db()
+        self.assertEqual((self.odd.sanity, self.odd.sanity_reason), (EXCLUDED, self.reason))
+
+    def test_a_changed_price_the_one_shop_left_disagrees_with_stays_out(self):
+        pricing.record_check(self.peers[0], price=Decimal("300.00"), delivery_cost=Decimal("0.00"), availability=IN_STOCK)
+        self.check(self.odd, 80)
+        self.assertEqual(self.verdicts(self.odd), [EXCLUDED])
+
+
+class LoneBandPageTests(Boxes, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.boxes(EIGHT)
+        sanity.rebuild_bands()
+        self.lone = self.shop(100)
+
+    def test_the_page_says_a_band_kept_it_out_without_naming_other_shops(self):
+        self.check(self.lone, 12)
+        page = self.client.get(self.product.get_absolute_url())
+        self.assertIn(self.lone.pk, [listing.pk for listing in page.context["unavailable"]])
+        self.assertContains(page, "Not counted: far below the usual price for this kind of product.")
+        self.assertNotContains(page, "far from the other shops")
+
+    def test_two_shops_agreeing_far_below_the_band_are_doubtful_not_hidden(self):
+        other = self.shop(12)
+        self.check(self.lone, 12)
+        self.assertEqual(self.verdicts(self.lone, other), [DOUBTFUL, DOUBTFUL])
+        self.assertIn(sanity.BAND_KEPT_OUT, Listing.objects.get(pk=self.lone.pk).sanity_reason)
+        self.assertEqual(Product.objects.for_lists().get(pk=self.product.pk).lowest_price, Decimal("12.00"))
+        self.assertTrue(self.summary().suspect)
+
+    def test_one_other_shop_far_away_leaves_the_band_to_keep_it_out(self):
+        other = self.shop(100)
+        self.check(self.lone, 12)
+        self.assertEqual(self.verdicts(self.lone, other), [EXCLUDED, OK])
+        page = self.client.get(self.product.get_absolute_url())
+        self.assertContains(page, "Not counted: far below the usual price for this kind of product.")

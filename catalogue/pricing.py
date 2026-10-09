@@ -104,9 +104,12 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
                 judge(listing, checked_at)
         return None
     cost = delivery_cost if delivery_cost is not None else Decimal("0.00")
-    changed = new or (
-        listing.price != price or listing.availability != availability
-        or listing.delivery_known != (delivery_cost is not None) or listing.delivery_cost != cost
+    # The figure it is judged on moved: a price the other shops kept out may then come back on its own evidence.
+    repriced = not new and (
+        listing.price != price or listing.delivery_known != (delivery_cost is not None) or listing.delivery_cost != cost
+    )
+    changed = new or repriced or (
+        listing.availability != availability
         or listing.sanity != Listing.Sanity.OK
         or (listing.last_checked is not None and listing.last_checked < stale_cutoff(checked_at))
         or (listing.trusted_at is not None and listing.trusted_at < trust_expiry(checked_at))
@@ -124,17 +127,20 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     listing.last_checked = checked_at
     listing.save(update_fields=fields)
     if changed:
-        judge(listing, checked_at)
+        judge(listing, checked_at, repriced=repriced)
     if restocked and listing.sanity != Listing.Sanity.EXCLUDED:
         record_restock(listing, checked_at)
     return update_daily_lowest(listing.product, date=timezone.localdate(checked_at))
 
 
-def judge(listing, now):
-    """Judge the listing's product and copy the listing's own new verdict onto the instance."""
+def judge(listing, now, repriced=False):
+    """Judge the listing's product and copy the listing's own new verdict onto the instance.
+
+    ``repriced`` says the check changed the listing's price or delivery.
+    """
     from .sanity import judge_product
 
-    verdict = judge_product(listing.product_id, now=now).get(listing.pk)
+    verdict = judge_product(listing.product_id, now=now, repriced={listing.pk} if repriced else ()).get(listing.pk)
     if verdict is not None:
         listing.sanity, listing.sanity_reason, listing.sanity_ratio = verdict
 

@@ -13,12 +13,17 @@ with one tap, which holds while it moves less than TRUST_BAND for TRUST_DAYS.
 A listing with fewer than two other shops to compare against is also judged against its own evidence:
 the shop's last good price, the product's lowest price over 90 days and the usual price range of
 products of the same kind (a TypeBand). History alone only ever makes a price doubtful, because old
-history may hold prices from listings since deleted; only the band can keep a price out. A lone OK
-that nothing judged is never stored as the shop's last good price.
+history may hold prices from listings since deleted; only the band can keep a price out, and not while
+one other shop charges much the same, since two shops agreeing may mean the product is filed under the
+wrong kind. A lone OK that nothing judged is never stored as the shop's last good price. A price that
+is not OK is judged only by the history recorded before it stopped being OK, because doubtful prices
+stay in the daily history and must not vouch for themselves the next day.
 
 An excluded price stays excluded while fewer than two other shops are left to judge it, or until the
-owner shows it: the shops that showed it was impossible selling out does not make it possible. A price
-the band kept out is judged again on every change, since the band is still there to judge it.
+owner shows it: the shops that showed it was impossible selling out does not make it possible. It comes
+back without them only when the shop changes the price and the new price's own evidence says it is
+right. A price the band kept out is judged again on every change, since the band is still there to
+judge it.
 """
 
 from collections import defaultdict
@@ -73,11 +78,11 @@ RATIO_MAX = Decimal("99999.99")
 FIELDS = (
     "pk", "product_id", "price", "delivered_price", "delivery_known", "availability", "last_checked",
     "retailer__source_type", "sanity", "sanity_reason", "sanity_ratio", "last_ok_price",
-    "trusted_price", "trusted_at",
+    "trusted_price", "trusted_at", "sanity_at",
 )
 # Every reason the band gives for keeping a price out starts with this. Such an exclusion is judged
 # again on every change, unlike one the other shops made.
-BAND_KEPT_OUT = "far below every "
+BAND_KEPT_OUT = Listing.BAND_KEPT_OUT
 
 
 def figure(row):
@@ -161,12 +166,15 @@ class Evidence:
 
     One query, whatever the number of listings: the product's lowest price and days recorded over the
     HISTORY_DAYS before today (today is left out so a price recorded a moment ago cannot vouch for
-    itself), and its band, the set's for its type when there is one, else the game's.
+    itself), and its band, the set's for its type when there is one, else the game's. A listing that
+    stopped being OK on an earlier day is judged by the HISTORY_DAYS before that day, one more query
+    for each such day.
     """
 
     def __init__(self, product_id, now):
         self.product_id = product_id
         self.today = timezone.localdate(now)
+        self.earlier = {}
 
     @cached_property
     def facts(self):
@@ -185,10 +193,20 @@ class Evidence:
             p90=Subquery(bands.values("p90")[:1]),
         ).first() or {}
 
-    @property
-    def history(self):
-        """(lowest price, days recorded) over the HISTORY_DAYS before today."""
-        return self.facts.get("low"), self.facts.get("days") or 0
+    def history(self, row):
+        """(lowest price, days recorded) over the HISTORY_DAYS before today, or for a listing that is not
+        OK, before the day it stopped being OK: what it recorded since then cannot vouch for it."""
+        day = self.today
+        if row["sanity"] != OK and row["sanity_at"] is not None:
+            day = min(day, timezone.localdate(row["sanity_at"]))
+        if day == self.today:
+            return self.facts.get("low"), self.facts.get("days") or 0
+        if day not in self.earlier:
+            found = DailyLowestPrice.objects.filter(
+                product_id=self.product_id, date__lt=day, date__gte=day - timedelta(days=HISTORY_DAYS),
+            ).aggregate(low=Min("price"), days=Count("pk"))
+            self.earlier[day] = found["low"], found["days"] or 0
+        return self.earlier[day]
 
     @property
     def band(self):
@@ -217,7 +235,7 @@ def own_verdict(row, evidence):
         r = row["price"] / last
         if r < HISTORY_LOW or r > HISTORY_HIGH:
             verdict = worse(verdict, (DOUBTFUL, noted(f"was {money(last)} last time at this shop", row, []), ratio_of(r)))
-    low, days = evidence.history
+    low, days = evidence.history(row)
     if days >= HISTORY_MIN_ROWS and low and low > 0:
         judged = True
         r = figure(row) / low
@@ -248,12 +266,22 @@ def worse(current, new):
     return current
 
 
-def verdicts(rows, now, evidence=None):
+def comes_back(row, others, evidence):
+    """Whether a price the other shops kept out, now with fewer than two of them, has evidence to come back:
+    its own evidence (there must be some) and the one other shop, if any, all say OK."""
+    own, judged = own_verdict(row, evidence)
+    if not judged or own[0] != OK:
+        return False
+    return not others or peer_verdict(row, others)[0] == OK
+
+
+def verdicts(rows, now, evidence=None, repriced=()):
     """({pk: (sanity, reason, ratio)} for every row, {pks with an OK that nothing was there to judge}).
 
     Two passes: the second leaves out of every comparison the prices the first kept out, so one wild
     price cannot drag the median the others are judged by. A row with two or more other shops is judged
     by them alone; a row with fewer is judged by them, if any, and by its own evidence, the worst winning.
+    ``repriced`` holds the rows whose price or delivery changed in the check that asked for the verdicts.
     """
     if evidence is None and rows:
         evidence = Evidence(rows[0]["product_id"], now)
@@ -269,8 +297,10 @@ def verdicts(rows, now, evidence=None):
             if row["pk"] in trusted:
                 continue
             others = [p for p in peers if p["pk"] != row["pk"] and p["pk"] not in left_out]
-            if row["sanity"] == EXCLUDED and len(others) < 2 and not row["sanity_reason"].startswith(BAND_KEPT_OUT):
-                # Only two or more shops can keep a price out, so only two or more, or the owner, let it back in.
+            if (row["sanity"] == EXCLUDED and len(others) < 2 and not row["sanity_reason"].startswith(BAND_KEPT_OUT)
+                    and not (row["pk"] in repriced and comes_back(row, others, evidence))):
+                # Only two or more shops can keep a price out, so only two or more, or the owner, let it back
+                # in, unless the shop changed the price and the new one has its own evidence.
                 result[row["pk"]] = (EXCLUDED, row["sanity_reason"], row["sanity_ratio"])
                 continue
             if len(others) >= 2:
@@ -284,6 +314,10 @@ def verdicts(rows, now, evidence=None):
                 result[row["pk"]] = worse(result.get(row["pk"]), own)
                 continue
             sanity, reason, ratio, both = peer_verdict(row, others)
+            if sanity == OK and own[0] == EXCLUDED:
+                # The one other shop charges much the same: two shops agreeing may mean the product is
+                # filed under the wrong kind, so the band makes it doubtful for the owner, never hidden.
+                own = (DOUBTFUL, *own[1:])
             result[row["pk"]] = worse(result.get(row["pk"]), worse((sanity, reason, ratio), own))
             partner = others[0] if both else None
             # Only a peer still in the comparison, whose figure is above nothing, can make its one partner doubtful.
@@ -296,9 +330,11 @@ def verdicts(rows, now, evidence=None):
     return judge(left_out={pk for pk, verdict in first.items() if verdict[0] == EXCLUDED})
 
 
-def judge_product(product_id, now=None):
+def judge_product(product_id, now=None, repriced=()):
     """Judge every live listing of the product against the other shops and save the verdicts that changed.
 
+    ``repriced`` holds the listings whose price or delivery the calling check changed. ``sanity_at`` is
+    when the listing last moved between OK and not OK, so it stays put while a price stays not OK.
     Returns {listing pk: (sanity, reason, ratio)} for every live listing.
     """
     now = now or timezone.now()
@@ -308,14 +344,16 @@ def judge_product(product_id, now=None):
     )
     if not rows:
         return {}
-    result, lone = verdicts(rows, now)
+    result, lone = verdicts(rows, now, repriced=repriced)
     changed = False
     stamp_ok, drop_trust = [], []
     for row in rows:
         sanity, reason, ratio = result[row["pk"]]
         lost_trust = row["trusted_price"] is not None and reason != TRUSTED_REASON
         if (sanity, reason, ratio) != (row["sanity"], row["sanity_reason"], row["sanity_ratio"]):
-            update = {"sanity": sanity, "sanity_reason": reason, "sanity_ratio": ratio, "sanity_at": now}
+            update = {"sanity": sanity, "sanity_reason": reason, "sanity_ratio": ratio}
+            if row["sanity_at"] is None or (sanity == OK) != (row["sanity"] == OK):
+                update["sanity_at"] = now
             if sanity == OK and row["pk"] not in lone:
                 update["last_ok_price"] = row["price"]
             if lost_trust:

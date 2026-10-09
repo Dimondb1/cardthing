@@ -380,6 +380,9 @@ class Listing(models.Model):
 
     # Verdicts that still count in the comparison; an excluded price is kept out of it.
     COUNTED = [Sanity.OK, Sanity.DOUBTFUL]
+    # Every reason the band of products of the same kind gives for keeping a price out starts with this
+    # (catalogue/sanity.py), so the product page can say why without claiming other shops were compared.
+    BAND_KEPT_OUT = "far below every "
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="listings")
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="listings")
@@ -461,6 +464,11 @@ class Listing(models.Model):
             and self.availability in self.BUYABLE
             and self.sanity != self.Sanity.EXCLUDED
         )
+
+    @property
+    def kept_out_by_band(self):
+        """Kept out for being far below products of the same kind, not for being far from other shops."""
+        return self.sanity == self.Sanity.EXCLUDED and self.sanity_reason.startswith(self.BAND_KEPT_OUT)
 
     def get_outbound_url(self):
         return reverse("web:go", args=[self.pk])

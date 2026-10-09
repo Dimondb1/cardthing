@@ -798,6 +798,12 @@ ENTRIES = [
         "Shown on a row whose price is so far from the other shops' prices that it is left out of the comparison.",
     ),
     Entry(
+        "product.price.kept_out_band", T, "Price kept out: far below its kind",
+        "Not counted: far below the usual price for this kind of product.",
+        "Shown on a row whose price is left out of the comparison because it is far below every product "
+        "of the same kind, when there are too few other shops to compare it with.",
+    ),
+    Entry(
         "product.compare.stale", T, "Not checked recently",
         "Not checked since {date}",
         "Shown on a row when we have not been able to check that retailer recently.",

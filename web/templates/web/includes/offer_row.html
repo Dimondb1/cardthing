@@ -5,7 +5,7 @@
     {% if cheapest_row and listing.delivery_known %}<span class="offer__flag">{% copy "product.compare.cheapest" %}</span>{% endif %}
   </div>
   <div class="offer__stock">
-    {% if listing.sanity == "excluded" %}<span class="stock-inline stock-inline--stale">{% copy "product.price.kept_out" %}</span>{% elif listing.is_stale %}<span class="stock-inline stock-inline--stale">{% copy "product.compare.stale" date=listing.last_checked|short_date %}</span>{% else %}<span class="stock-inline stock-inline--{{ listing.availability }}">{{ listing.get_availability_display }}</span>{% endif %}
+    {% if listing.kept_out_by_band %}<span class="stock-inline stock-inline--stale">{% copy "product.price.kept_out_band" %}</span>{% elif listing.sanity == "excluded" %}<span class="stock-inline stock-inline--stale">{% copy "product.price.kept_out" %}</span>{% elif listing.is_stale %}<span class="stock-inline stock-inline--stale">{% copy "product.compare.stale" date=listing.last_checked|short_date %}</span>{% else %}<span class="stock-inline stock-inline--{{ listing.availability }}">{{ listing.get_availability_display }}</span>{% endif %}
   </div>
   <div class="offer__price num"><span class="visually-hidden">{% copy "product.compare.col.price" %}: </span>{{ listing.price|gbp }}</div>
   <div class="offer__delivery num"><span class="visually-hidden">{% copy "product.compare.col.delivery" %}: </span>{% if not listing.delivery_known %}{% copy "product.compare.delivery_unknown" %}{% elif listing.delivery_cost %}{{ listing.delivery_cost|gbp }}{% else %}{% copy "product.compare.free_delivery" %}{% endif %}</div>

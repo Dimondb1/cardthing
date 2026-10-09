@@ -315,7 +315,9 @@ counted. A price well under or over twice the others, or two shops more than
 or a price drop, and listed for you to look at. Marketplaces are judged but
 never judge anyone. An excluded price stays out while fewer than two other
 shops are left to judge it, so it never becomes the cheapest just because the
-others sold out. Nothing is deleted, and the verdict is worked out again on
+others sold out. It comes back without them only when the shop changes the
+price and the new price's own evidence (below) says it is right. Nothing is
+deleted, and the verdict is worked out again on
 the next change, on every read while it is not OK, when a shop comes back
 from being out of date, when your confirmation runs out, when you hide a
 price, and when you save a listing in admin.
@@ -324,11 +326,17 @@ A price with fewer than two other shops to compare against is also judged
 against its own evidence. Under 35% or over three times the shop's last good
 price, or under 30% of the product's lowest price in the 90 days before today
 (once there are 7 days of history), is doubtful, never excluded: old history
-can hold prices from listings since deleted. Each kind of product in each
+can hold prices from listings since deleted. A price that is not OK is judged
+only by the history from before it stopped being OK, so a doubtful price that
+reached the daily history cannot clear itself the next day. Each kind of product in each
 game, and in each set, has a usual price range once 8 or more products have
 an OK delivered shop price (Admin > Price bands). Under a quarter of the
 cheapest tenth is excluded, under half of it doubtful, and over four times
-the dearest tenth doubtful. A set's range is used before the game's.
+the dearest tenth doubtful. A set's range is used before the game's. When one
+other shop charges much the same, the range can only make both prices
+doubtful, since two shops agreeing may mean the product is filed under the
+wrong kind. The product page says a price the range kept out is far below the
+usual price for its kind, not far from other shops.
 `snapshot_daily_prices` rebuilds the ranges every night. To look at them or
 rebuild them at once:
 

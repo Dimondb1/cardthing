@@ -1455,15 +1455,14 @@ def checks_page(request):
             message = autopilot.undo(answer) if answer is not None else ""
             if message:
                 messages.success(request, message)
+            elif answer is not None and answer.kind == CheckAnswer.Kind.MERGE and autopilot.later_merges(answer).exists():
+                later = autopilot.later_merges(answer).order_by("-pk").first()
+                messages.warning(request, f"A later merge built on this one: {later.what}. Undo that merge first, "
+                                          "then this one.")
             elif answer is not None and answer.kind == CheckAnswer.Kind.MERGE and answer.product is not None \
                     and not answer.product.is_active:
-                later = CheckAnswer.objects.filter(kind=CheckAnswer.Kind.MERGE, other=answer.product, undone_at__isnull=True)
-                if later.exists():
-                    messages.warning(request, f"{answer.product.name} was merged into another product since. Undo that "
-                                              "merge first, then this one.")
-                else:
-                    messages.warning(request, f"{answer.product.name} is switched off. Tick show on site on it first, "
-                                              "then undo this merge.")
+                messages.warning(request, f"{answer.product.name} is switched off. Tick show on site on it first, "
+                                          "then undo this merge.")
             else:
                 messages.warning(request, "That one can no longer be undone. Check it on its own page.")
         elif action == "merge_sure":

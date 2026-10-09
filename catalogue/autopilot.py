@@ -35,7 +35,7 @@ from decimal import Decimal
 from statistics import median
 
 from django.conf import settings
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, models, transaction
 from django.utils import timezone
 
 from . import checks, sanity
@@ -382,8 +382,9 @@ def undo(answer, now=None):
             message = undo_set(answer)
         elif answer.kind == Kind.APART:
             message = "Undone: the two products may be suggested as duplicates again."
-        elif answer.kind == Kind.MERGE and answer.undo_note and answer.product is not None and answer.product.is_active:
-            # A kept product a later merge switched off waits until that merge is undone.
+        elif answer.kind == Kind.MERGE and answer.undo_note and answer.product is not None and answer.product.is_active \
+                and not later_merges(answer).exists():
+            # Merges undo newest first: one that a later merge built on waits until that merge is undone.
             from .management.commands.merge_duplicates import unmerge
 
             restored = unmerge(answer.undo_note)
@@ -424,6 +425,14 @@ def undo_set(answer):
     row.refresh_from_db()
     releases.dismiss(row)
     return f"Undone: {row.name} is not a set, and {row.game.name} sets called that are not suggested again from this source."
+
+
+def later_merges(answer):
+    """Merges made after this one that touch either of its products and are not undone: they must be undone
+    first, or this Undo would put back prices and history from the middle of them."""
+    involved = [pk for pk in (answer.product_id, answer.other_id) if pk]
+    return CheckAnswer.objects.filter(kind=Kind.MERGE, pk__gt=answer.pk, undone_at__isnull=True).filter(
+        models.Q(product_id__in=involved) | models.Q(other_id__in=involved))
 
 
 def owner_apart(keep, other):

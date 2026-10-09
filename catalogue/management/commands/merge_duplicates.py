@@ -130,10 +130,11 @@ def merge_undoable(keep, others):
         # Each listing's verdict as it was, with the price it was given for, so Undo can put it back while
         # the price is the same, rather than start it afresh.
         "verdicts": {str(pk): [verdict, reason, str(ratio) if ratio is not None else None,
-                               at.isoformat() if at else None, str(price), str(delivery), known]
-                     for pk, verdict, reason, ratio, at, price, delivery, known in involved.values_list(
+                               at.isoformat() if at else None, str(price), str(delivery), known,
+                               str(last_ok) if last_ok is not None else None]
+                     for pk, verdict, reason, ratio, at, price, delivery, known, last_ok in involved.values_list(
                          "pk", "sanity", "sanity_reason", "sanity_ratio", "sanity_at", "price", "delivery_cost",
-                         "delivery_known")},
+                         "delivery_known", "last_ok_price")},
         # The kept product's low on the merge day as it was: later days held both products' prices.
         "day_low": str(DailyLowestPrice.objects.filter(product=keep, date=today).values_list("price", flat=True).first() or ""),
     }
@@ -198,7 +199,10 @@ def unmerge(note):
     moved shop row brought in while merged goes back too.
 
     Verdicts: a listing on either product whose price is the same as at the merge gets back the verdict
-    it had then; one whose price changed is judged as repriced, on its own evidence. History: the kept
+    and last good price it had then; one whose price changed gets back its last good price and is judged as
+    repriced, on its own evidence; one first seen while merged is judged afresh, since its verdict and last
+    good price came from the other product's shops. Undo runs newest first (autopilot.undo refuses
+    otherwise), so the merge-day low and the lowered days it puts back are the kept product's own. History: the kept
     product's days after the merge held both products' prices, so they are removed (lost rather than
     invented), and its merge-day low is put back as it was. Then both products are judged again.
 
@@ -263,20 +267,27 @@ def unmerge(note):
         Listing.objects.filter(product__in=products, sanity__in=[Listing.Sanity.DOUBTFUL, Listing.Sanity.EXCLUDED]) \
             .exclude(sanity_reason=sanity.TRUSTED_REASON).update(sanity=Listing.Sanity.OK, sanity_reason="", sanity_ratio=None)
     else:
+        known_before = [int(k) for k in saved]
+        # First seen while merged: judged afresh, with no last good price from the other product's shops.
+        Listing.objects.filter(product__in=products).exclude(pk__in=known_before).exclude(
+            sanity_reason=sanity.TRUSTED_REASON).update(sanity=Listing.Sanity.OK, sanity_reason="", sanity_ratio=None,
+                                                        last_ok_price=None)
         current = {pk: (product_id, price, delivery, known) for pk, product_id, price, delivery, known in
-                   Listing.objects.filter(pk__in=[int(k) for k in saved], product__in=products)
+                   Listing.objects.filter(pk__in=known_before, product__in=products)
                    .values_list("pk", "product_id", "price", "delivery_cost", "delivery_known")}
         for key, (verdict, reason, ratio, at, *was) in saved.items():
             pk = int(key)
             if pk not in current:
                 continue   # gone, or on a product this Undo does not judge
             product_id, price, delivery, known = current[pk]
+            last_ok = {"last_ok_price": Decimal(was[3]) if len(was) > 3 and was[3] is not None else None} if len(was) > 3 else {}
             if was and (str(price), str(delivery), known) != (was[0], was[1], was[2]):
+                Listing.objects.filter(pk=pk).update(**last_ok)
                 repriced.setdefault(product_id, set()).add(pk)
                 continue
             Listing.objects.filter(pk=pk).update(
                 sanity=verdict, sanity_reason=reason, sanity_ratio=Decimal(ratio) if ratio is not None else None,
-                sanity_at=datetime.fromisoformat(at) if at else None,
+                sanity_at=datetime.fromisoformat(at) if at else None, **last_ok,
             )
     for product in products:
         sanity.judge_product(product.pk, repriced=repriced.get(product.pk, set()))

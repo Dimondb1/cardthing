@@ -995,11 +995,52 @@ class RecheckTests(Base):
                                    undo_note=self.merge_undoable(top, [keep]))
         self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
         response = self.client.post(reverse("checks"), {"action": "undo", "answer": first.pk}, follow=True)
-        self.assertContains(response, "Undo that merge first")
+        self.assertContains(response, "A later merge built on this one: 2. Undo that merge first")
         self.assertFalse(Product.objects.get(pk=other.pk).is_active)
         CheckAnswer.objects.filter(what="2").update(undone_at=timezone.now())
         response = self.client.post(reverse("checks"), {"action": "undo", "answer": first.pk}, follow=True)
         self.assertContains(response, "is switched off. Tick show on site on it first")
+
+    def test_two_merges_into_one_product_undo_newest_first_only(self):
+        keep, a_product = self.pair()
+        b_product = make_product(self.set, name="Pokemon Surging Sparks Elite Trainer Box")
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(30, product=a_product, title=a_product.name)
+        first = CheckAnswer.objects.create(kind=CheckAnswer.Kind.MERGE, what="a", product=keep, other=a_product,
+                                           undo_note=self.merge_undoable(keep, [a_product]))
+        self.shop(25, product=b_product, title=b_product.name)
+        second = CheckAnswer.objects.create(kind=CheckAnswer.Kind.MERGE, what="b", product=keep, other=b_product,
+                                            undo_note=self.merge_undoable(keep, [b_product]))
+        self.assertEqual(autopilot.undo(first), "")
+        self.assertFalse(Product.objects.get(pk=a_product.pk).is_active)
+        self.assertIn("own product again", autopilot.undo(second))
+        self.assertIn("own product again", autopilot.undo(CheckAnswer.objects.get(pk=first.pk)))
+
+    def test_a_price_first_seen_while_merged_is_judged_afresh_after_undo(self):
+        keep, other = self.pair()
+        self.shop(100, product=keep, title=keep.name)
+        self.shop(104, product=keep, title=keep.name)
+        self.shop(22, product=other, title=other.name)
+        note = self.merge_undoable(keep, [other])
+        # While merged, the kept product's own new shop reads £100 and is judged against all four prices.
+        newcomer = self.shop(101, product=keep, title=keep.name)
+        Listing.objects.filter(pk=newcomer.pk).update(sanity=Listing.Sanity.EXCLUDED, last_ok_price=Decimal("22.00"),
+                                                      sanity_reason="over four times what 3 other shops charge")
+        self.unmerge(note)
+        newcomer.refresh_from_db()
+        self.assertEqual((newcomer.sanity, newcomer.last_ok_price), (Listing.Sanity.OK, Decimal("101.00")))
+
+    def test_a_last_good_price_stamped_while_merged_is_put_back(self):
+        keep, other = self.pair()
+        self.shop(100, product=keep, title=keep.name)
+        c = self.shop(99, product=keep, title=keep.name)
+        sanity.judge_product(keep.pk)
+        self.assertEqual(Listing.objects.get(pk=c.pk).last_ok_price, Decimal("99.00"))
+        self.shop(26, product=other, title=other.name)
+        note = self.merge_undoable(keep, [other])
+        Listing.objects.filter(pk=c.pk).update(last_ok_price=Decimal("25.00"))
+        self.unmerge(note)
+        self.assertEqual(Listing.objects.get(pk=c.pk).last_ok_price, Decimal("99.00"))
 
     def test_what_left_the_server_is_counted_and_what_never_did_is_not(self):
         cases = [

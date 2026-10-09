@@ -442,11 +442,13 @@ site's own rules decide whether its answer may act:
   off, not deleted; its barcode, shop pages and linked shop rows move to the
   kept product so shop reads never price it; and Undo puts back its listings,
   history and address. A price that has not changed since the merge gets
-  back the verdict it had; one that changed is judged on its own evidence.
-  The kept product's days after the merge held both products' prices, so
-  Undo removes them rather than leave a price history that never happened.
-  Merges undo in reverse order: a product merged on into a third waits until
-  that later merge is undone.
+  back the verdict and last good price it had; one that changed is judged on
+  its own evidence; one first seen while merged is judged afresh. The kept
+  product's days after the merge held both products' prices, so Undo removes
+  them rather than leave a price history that never happened. Merges undo
+  newest first: one that a later merge touched (into the same product, or
+  merging the kept product on) waits until that later merge is undone, and
+  the page says which.
 
 It starts in **trial**: it only suggests, and its answer shows under each
 row ("Claude, 9 Oct: same product, sure. ..."). Once you agree with it, tap

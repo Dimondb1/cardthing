@@ -275,8 +275,8 @@ def report(days=30):
         for row in clicks.exclude(earning).values("retailer__name", "retailer__slug").annotate(n=Count("id")).order_by("-n")[:10]
     ]
 
-    # Shop health: when each shop was last read successfully, and its latest error.
-    stale_after = timezone.now() - timedelta(hours=6)
+    # Shop health: when each shop was last read successfully, its latest error and its reading schedule.
+    now = timezone.now()
     shops_health = []
     recent_runs = ImportRun.objects.filter(finished_at__gte=timezone.now() - timedelta(days=7))
     last_ok = dict(
@@ -301,11 +301,11 @@ def report(days=30):
             problem = latest.error[:160]
         elif ok is None:
             problem = "Not read successfully in the last week."
-        elif ok < stale_after:
+        elif ok < now - stale_after(retailer):
             problem = f"Last read {timezone.localtime(ok):%d %b %H:%M}."
         shops_health.append({
             "name": retailer.name, "slug": retailer.slug, "last_ok": ok, "in_stock": stock.get(retailer.pk, 0),
-            "problem": problem, "earns": bool(retailer.affiliate_url_template)
+            "problem": problem, "reading": reading_state(retailer, now), "earns": bool(retailer.affiliate_url_template)
             or retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY),
         })
 
@@ -441,6 +441,28 @@ def ebay_coverage():
         "days_left": -(-waiting // per_day) if waiting else 0,
         "missed": [{"name": row["name"], "shops": row["in_stock_count"]} for row in missed],
     }
+
+
+def stale_after(retailer):
+    """How long since its last good read before a shop counts as not updating: 6 hours, or two of its reads."""
+    return max(timedelta(hours=6), timedelta(minutes=2 * retailer.read_every_minutes))
+
+
+def clock(moment, now):
+    """A time as 14:20 today, or 10 Oct 14:20 on another day."""
+    local = timezone.localtime(moment)
+    return f"{local:%H:%M}" if local.date() == timezone.localtime(now).date() else f"{local:%d %b %H:%M}"
+
+
+def reading_state(retailer, now):
+    """One line on when a shop is read: paused, waiting after errors, or its interval and next read."""
+    if retailer.reading_paused:
+        return "Paused"
+    if retailer.backoff_until and retailer.backoff_until > now:
+        line = f"Backing off until {clock(retailer.backoff_until, now)} after {plural(retailer.error_streak, 'error', 'errors')}"
+        return f"{line}: {retailer.last_error[:160]}" if retailer.last_error else line
+    line = f"Reads every {retailer.read_every_minutes} min"
+    return f"{line}, next {clock(retailer.next_read_at, now)}" if retailer.next_read_at else line
 
 
 def plural(n, one, many):

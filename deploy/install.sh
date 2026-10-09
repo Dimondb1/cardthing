@@ -81,7 +81,8 @@ CADDY
 systemctl enable -q --now caddy
 systemctl reload caddy
 
-# The hourly import waits up to 30 minutes for the lock rather than skipping, so the
+# The hourly import reads the shops whose turn has come (each shop's interval is set in admin).
+# It waits up to 30 minutes for the lock rather than skipping, so the
 # 10-minute stock watcher (which fires at the same minute and skips while the lock is
 # held) can never crowd it out. Output is unbuffered so the log shows progress live.
 # Every command runs under timeout, set to its budget plus five minutes: a command that hangs
@@ -90,7 +91,7 @@ systemctl reload caddy
 # long import does not use up their limit.
 # deploy/crontab carries the same lines; catalogue/tests_ops.py fails when they differ.
 echo "PYTHONUNBUFFERED=1
-0 * * * *  cd $DIR && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 && timeout -k 60 1500 .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
+0 * * * *  cd $DIR && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices --due >> /var/log/ripraptor-import.log 2>&1 && timeout -k 60 1500 .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
 15 0 * * * cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 1800 .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 3000 .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
 */10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock >> /var/log/ripraptor-import.log 2>&1
@@ -98,8 +99,9 @@ echo "PYTHONUNBUFFERED=1
 45 4 5 * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
 touch /var/log/ripraptor-import.log && chown ripraptor /var/log/ripraptor-import.log
 
-# First price import in the background so the site is usable straight away.
-sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && PYTHONUNBUFFERED=1 nohup flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 &"
+# First price import in the background so the site is usable straight away. A shop never read
+# before is always due, so a new server reads every shop.
+sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && PYTHONUNBUFFERED=1 nohup flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices --due >> /var/log/ripraptor-import.log 2>&1 &"
 
 echo
 echo "Done. https://$DOMAIN should answer within a minute (Caddy fetches the certificate)."

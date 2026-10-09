@@ -314,3 +314,39 @@ class ImprovementTests(TestCase):
         self.assertIn("1 search found nothing", html)
         self.assertIn("Shop health", html)
         self.assertIn("Where visitors come from", html)
+
+
+class ShopReadingTests(TestCase):
+    def test_shop_health_explains_cadence_pause_and_backoff(self):
+        from catalogue.models import ImportRun, Retailer
+
+        now = timezone.now()
+        shopify = {"source_type": Retailer.Source.SHOPIFY, "source_url": "https://shop.example/"}
+        regular = make_retailer("Regular Shop", read_every_minutes=45,
+                                next_read_at=now + timedelta(minutes=30), **shopify)
+        make_retailer("Paused Shop", reading_paused=True, **shopify)
+        make_retailer("Failing Shop", error_streak=3, backoff_until=now + timedelta(minutes=40),
+                      last_error="Could not fetch https://failing.example/: HTTP Error 503", **shopify)
+        slow = make_retailer("Slow Shop", read_every_minutes=360, **shopify)
+        for shop in (regular, slow):
+            ImportRun.objects.create(retailer=shop, started_at=now - timedelta(hours=8),
+                                     finished_at=now - timedelta(hours=8))
+        health = {s["name"]: s for s in insights.report(30)["shops_health"]}
+        local = timezone.localtime
+        self.assertIn(health["Regular Shop"]["reading"], {
+            f"Reads every 45 min, next {local(regular.next_read_at):%H:%M}",
+            f"Reads every 45 min, next {local(regular.next_read_at):%d %b %H:%M}",
+        })
+        self.assertEqual(health["Paused Shop"]["reading"], "Paused")
+        self.assertRegex(health["Failing Shop"]["reading"],
+                         r"^Backing off until [\d\w :]+ after 3 errors: Could not fetch https://failing\.example/: HTTP Error 503$")
+        self.assertEqual(health["Slow Shop"]["reading"], "Reads every 360 min")
+        # Not read for 8 hours: late for a shop read every 45 minutes, on time for one read every 6 hours.
+        self.assertTrue(health["Regular Shop"]["problem"].startswith("Last read"))
+        self.assertEqual(health["Slow Shop"]["problem"], "")
+
+        staff = User.objects.create_user("ben", password="pw", is_staff=True)
+        self.client.force_login(staff)
+        html = self.client.get(reverse("insights")).content.decode()
+        self.assertIn("<th>Reading</th>", html)
+        self.assertIn("after 3 errors", html)

@@ -114,7 +114,13 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(Retailer)
 class RetailerAdmin(admin.ModelAdmin):
-    list_display = ("name", "website", "source_type", "delivery_cost", "free_delivery_over", "has_affiliate_link", "is_active")
+    list_display = ("name", "website", "source_type", "delivery_cost", "free_delivery_over", "has_affiliate_link",
+                    "is_active", "read_every_minutes")
+    # How often each shop is read can be changed straight from the list. The rest of the reading record is
+    # written by the reads themselves.
+    list_editable = ("read_every_minutes",)
+    readonly_fields = ("next_read_at", "last_read_seconds", "last_ok_at", "last_error", "error_streak",
+                       "backoff_until", "reading_paused")
     list_filter = ("is_active", "source_type")
     search_fields = ("name", "website")
     prepopulated_fields = {"slug": ("name",)}
@@ -127,6 +133,8 @@ class RetailerAdmin(admin.ModelAdmin):
                                    "the link of a listing you add by hand under the product (any price; "
                                    "the import corrects it). Unmatched shop products are listed on each "
                                    "price import with their links."}),
+        ("Reading", {"fields": ("read_every_minutes", "next_read_at", "last_read_seconds", "last_ok_at",
+                                "error_streak", "backoff_until", "last_error", "reading_paused")}),
         ("Links", {"fields": ("affiliate_url_template",)}),
     )
 

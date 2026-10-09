@@ -996,3 +996,243 @@ class WriteSkippingTests(TestCase):
         with mock.patch.object(importers, "stamp_checked", side_effect=OperationalError("database is locked")), \
                 self.assertLogs("catalogue.importers", "WARNING"), self.assertRaises(ImportError_):
             apply_offers(self.retailer, offers(ImportError_("The shop stopped answering")))
+
+
+class CadenceTests(TestCase):
+    """Each shop's reading schedule: when it is due, how long it waits after errors, and pauses."""
+
+    def setUp(self):
+        self.now = timezone.now()
+
+    def shop(self, name, **kwargs):
+        kwargs.setdefault("source_type", Retailer.Source.SHOPIFY)
+        kwargs.setdefault("source_url", f"https://{name.lower().replace(' ', '-')}.example/")
+        return make_retailer(name, **kwargs)
+
+    def run_due(self, *args, errors=None, **options):
+        """import_prices with a fake read. Returns the names read, in order."""
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        order = []
+
+        def fake_run(retailer, feed_path=None):
+            order.append(retailer.name)
+            error = (errors or {}).get(retailer.name, "")
+            return ImportRun.objects.create(retailer=retailer, finished_at=timezone.now(), error=error)
+
+        with mock.patch("catalogue.management.commands.import_prices.run_import", fake_run):
+            call_command("import_prices", *args, stdout=StringIO(), stderr=StringIO(), **options)
+        return order
+
+    def test_only_due_shops_are_read_and_next_read_is_stamped_before_the_fetch(self):
+        from datetime import timedelta
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        self.shop("Due Shop", next_read_at=self.now - timedelta(minutes=5))
+        self.shop("New Shop")
+        self.shop("Later Shop", next_read_at=self.now + timedelta(hours=2))
+        self.shop("Waiting Shop", backoff_until=self.now + timedelta(hours=1), error_streak=4)
+        self.shop("Hidden Shop", is_active=False)
+        make_retailer("Hand Shop", source_type=Retailer.Source.MANUAL)
+        self.assertEqual(self.run_due(due=True), ["New Shop", "Due Shop"])
+        for name in ("New Shop", "Due Shop"):
+            # Read now, so the next read is a full interval away.
+            self.assertGreater(Retailer.objects.get(name=name).next_read_at, self.now + timedelta(minutes=40))
+        self.assertEqual(self.run_due(due=True), [])
+
+        # A read that dies part way has already pushed its shop's next read on, so it cannot loop.
+        crashing = self.shop("Crashing Shop")
+        stamped = []
+
+        def dying_run(retailer, feed_path=None):
+            stamped.append(Retailer.objects.get(pk=retailer.pk).next_read_at)
+            raise RuntimeError("fetch died midway")
+
+        with mock.patch("catalogue.management.commands.import_prices.run_import", dying_run):
+            with self.assertRaises(RuntimeError):
+                call_command("import_prices", due=True, stdout=StringIO())
+        self.assertGreater(stamped[0], self.now)
+        crashing.refresh_from_db()
+        self.assertGreater(crashing.next_read_at, self.now + timedelta(minutes=40))
+        self.assertNotIn("Crashing Shop", self.run_due(due=True))
+
+    def test_the_hourly_run_reads_a_shop_whose_turn_comes_before_half_past(self):
+        from datetime import timedelta
+
+        self.shop("Soon Shop", next_read_at=self.now + timedelta(minutes=20))
+        self.shop("Late Shop", next_read_at=self.now + timedelta(minutes=50))
+        self.assertEqual(self.run_due(due=True), ["Soon Shop"])
+
+    def test_a_shop_that_comes_due_during_the_run_is_read_in_the_same_run(self):
+        from datetime import timedelta
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        self.shop("First Shop")
+        self.shop("Meanwhile Shop", next_read_at=self.now + timedelta(minutes=50))
+        order = []
+
+        def slow_run(retailer, feed_path=None):
+            order.append(retailer.name)
+            if retailer.name == "First Shop":
+                # The first read takes long enough for the other shop's turn to come.
+                Retailer.objects.filter(name="Meanwhile Shop").update(next_read_at=timezone.now())
+            return ImportRun.objects.create(retailer=retailer, finished_at=timezone.now())
+
+        with mock.patch("catalogue.management.commands.import_prices.run_import", slow_run):
+            call_command("import_prices", due=True, stdout=StringIO())
+        self.assertEqual(order, ["First Shop", "Meanwhile Shop"])
+
+    def test_due_puts_marketplaces_first_then_the_longest_waiting(self):
+        from datetime import timedelta
+
+        self.shop("Aardvark Cards", next_read_at=self.now - timedelta(minutes=5))
+        self.shop("Zebra Cards", next_read_at=self.now - timedelta(minutes=50))
+        self.shop("Never Read")
+        Retailer.objects.create(name="eBay", slug="ebay", website="https://www.ebay.co.uk/",
+                                source_type=Retailer.Source.EBAY, next_read_at=self.now - timedelta(minutes=1))
+        self.assertEqual([r.name for r in Retailer.due(self.now)], ["eBay", "Never Read", "Zebra Cards", "Aardvark Cards"])
+
+    def test_errors_back_off_5_10_20_minutes_up_to_6_hours_and_429_jumps_to_30(self):
+        from datetime import timedelta
+
+        from .management.commands.import_prices import http_status
+
+        shop = self.shop("Flaky Shop")
+        waits = []
+        for _ in range(9):
+            shop.read_failed(self.now, error="Could not fetch https://flaky.example/products.json: HTTP Error 503")
+            waits.append(shop.backoff_until - self.now)
+        minutes = [int(w.total_seconds() // 60) for w in waits]
+        self.assertEqual(minutes, [5, 10, 20, 40, 80, 160, 320, 360, 360])
+        shop.refresh_from_db()
+        self.assertEqual(shop.error_streak, 9)
+        self.assertIn("HTTP Error 503", shop.last_error)
+        self.assertNotIn(shop, Retailer.due(self.now + timedelta(hours=5)))
+
+        # One read that works forgets the errors.
+        shop.read_ok(self.now, 30)
+        shop.refresh_from_db()
+        self.assertEqual((shop.error_streak, shop.backoff_until, shop.last_error), (0, None, ""))
+        self.assertEqual(shop.last_ok_at, self.now)
+
+        # Being told to slow down waits half an hour straight away.
+        self.assertEqual(http_status("Could not fetch https://flaky.example/: HTTP Error 429: Too Many Requests"), 429)
+        self.assertEqual(http_status("eBay API kept throttling us."), 429)
+        self.assertEqual(http_status("eBay API 500: busy"), 500)
+        self.assertIsNone(http_status("Set the shop address on the retailer first."))
+        self.run_due("flaky-shop", errors={"Flaky Shop": "Could not fetch https://flaky.example/: HTTP Error 429: Too Many Requests"})
+        shop.refresh_from_db()
+        self.assertEqual(shop.error_streak, 1)
+        self.assertAlmostEqual((shop.backoff_until - timezone.now()).total_seconds(), 30 * 60, delta=60)
+
+    def test_a_failed_read_through_the_command_backs_off_and_a_good_one_resets(self):
+        from datetime import timedelta
+
+        shop = self.shop("Flaky Shop")
+        self.run_due(due=True, errors={"Flaky Shop": "Could not fetch https://flaky.example/: HTTP Error 503"})
+        shop.refresh_from_db()
+        self.assertEqual(shop.error_streak, 1)
+        self.assertAlmostEqual((shop.backoff_until - timezone.now()).total_seconds(), 5 * 60, delta=60)
+        Retailer.objects.filter(pk=shop.pk).update(next_read_at=self.now - timedelta(minutes=1),
+                                                   backoff_until=self.now - timedelta(minutes=1))
+        self.run_due(due=True)
+        shop.refresh_from_db()
+        self.assertEqual((shop.error_streak, shop.backoff_until), (0, None))
+        self.assertIsNotNone(shop.last_ok_at)
+
+    def test_paused_shops_are_skipped(self):
+        self.shop("Paused Shop", reading_paused=True)
+        self.shop("Open Shop")
+        self.assertEqual(self.run_due(due=True), ["Open Shop"])
+
+    def test_adaptive_cadence_is_three_times_the_read_time_at_least_the_setting(self):
+        from datetime import timedelta
+
+        shop = self.shop("Shop", read_every_minutes=45)
+        self.assertEqual(shop.cadence_for(self.now, 60), self.now + timedelta(minutes=45))
+        self.assertEqual(shop.cadence_for(self.now, 15 * 60), self.now + timedelta(minutes=45))
+        self.assertEqual(shop.cadence_for(self.now, 30 * 60), self.now + timedelta(minutes=90))
+        shop.read_ok(self.now, 30 * 60)
+        shop.refresh_from_db()
+        self.assertEqual(shop.last_read_seconds, 1800)
+        self.assertEqual(shop.next_read_at, self.now + timedelta(minutes=90))
+
+    def test_a_slug_run_ignores_cadence(self):
+        from datetime import timedelta
+
+        self.shop("Paused Shop", reading_paused=True, next_read_at=self.now + timedelta(hours=3),
+                  backoff_until=self.now + timedelta(hours=1), error_streak=3)
+        self.assertEqual(self.run_due("paused-shop", due=True), ["Paused Shop"])
+        shop = Retailer.objects.get(name="Paused Shop")
+        self.assertTrue(shop.reading_paused)
+        self.assertEqual(shop.error_streak, 0)
+
+    def test_without_due_every_shop_is_read_as_before(self):
+        from datetime import timedelta
+
+        self.shop("Later Shop", next_read_at=self.now + timedelta(hours=2))
+        self.shop("Due Shop", next_read_at=self.now - timedelta(minutes=5))
+        self.assertEqual(self.run_due(), ["Due Shop", "Later Shop"])
+
+    def test_a_marketplace_already_read_today_counts_as_a_good_read_of_no_time(self):
+        from datetime import timedelta
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        ebay = Retailer.objects.create(name="eBay", slug="ebay", website="https://www.ebay.co.uk/",
+                                       source_type=Retailer.Source.EBAY, last_read_seconds=900)
+        earlier = ImportRun.objects.create(retailer=ebay, started_at=self.now - timedelta(hours=3),
+                                           finished_at=self.now - timedelta(hours=2), offers_found=5)
+        with mock.patch("catalogue.management.commands.import_prices.run_import", lambda r, feed_path=None: earlier):
+            call_command("import_prices", due=True, stdout=StringIO())
+        ebay.refresh_from_db()
+        self.assertEqual(ebay.error_streak, 0)
+        self.assertEqual(ebay.last_read_seconds, 0)
+        # The last good read is the one that happened, not the skip.
+        self.assertEqual(ebay.last_ok_at, earlier.finished_at)
+        # Tried again within the hour, so a failure on the day is retried hourly.
+        self.assertLessEqual(ebay.next_read_at, timezone.now() + timedelta(minutes=61))
+
+    def test_setup_shops_sets_cadence_once_and_keeps_an_owner_change(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        call_command("setup_shops", stdout=StringIO())
+        shopify = Retailer.objects.get(slug="total-cards")
+        website = Retailer.objects.get(slug="magic-madhouse")
+        self.assertEqual((shopify.read_every_minutes, website.read_every_minutes), (45, 60))
+        # The owner sets a Shopify shop back to an hour and it is read on that schedule.
+        Retailer.objects.filter(pk=shopify.pk).update(read_every_minutes=60, next_read_at=self.now)
+        # Another owner change, made before the shop was ever read on a schedule.
+        Retailer.objects.filter(slug="gathering-games").update(read_every_minutes=120)
+        call_command("setup_shops", stdout=StringIO())
+        shopify.refresh_from_db()
+        self.assertEqual(shopify.read_every_minutes, 60)
+        self.assertEqual(Retailer.objects.get(slug="gathering-games").read_every_minutes, 120)
+        self.assertEqual(Retailer.objects.get(slug="the-card-vault").read_every_minutes, 45)
+
+    def test_the_interval_is_edited_from_the_shops_list_and_the_rest_is_read_only(self):
+        from django.contrib.auth.models import User
+
+        self.shop("Harbour Games", error_streak=2, last_error="HTTP Error 503")
+        self.client.force_login(User.objects.create_superuser("ben", "ben@example.com", "pw"))
+        changelist = self.client.get("/admin/catalogue/retailer/").content.decode()
+        self.assertIn('name="form-0-read_every_minutes"', changelist)
+        shop = Retailer.objects.get(name="Harbour Games")
+        page = self.client.get(f"/admin/catalogue/retailer/{shop.pk}/change/").content.decode()
+        self.assertIn('name="read_every_minutes"', page)
+        for field in ("error_streak", "backoff_until", "next_read_at", "reading_paused", "last_error"):
+            self.assertNotIn(f'name="{field}"', page)
+        self.assertIn("HTTP Error 503", page)

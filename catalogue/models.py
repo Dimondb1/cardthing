@@ -307,11 +307,87 @@ class Retailer(models.Model):
     )
     is_active = models.BooleanField("show on site", default=True)
 
+    # When and how often the shop is read. The hourly import and the background reader follow the same rules.
+    read_every_minutes = models.PositiveIntegerField(
+        "read every (minutes)",
+        default=60,
+        help_text="How often to read this shop's prices. A shop that takes a long time to read is read less "
+        "often: never more than a third of the time.",
+    )
+    next_read_at = models.DateTimeField("next read", null=True, blank=True, db_index=True)
+    last_read_seconds = models.PositiveIntegerField("last read took (seconds)", null=True, blank=True)
+    last_ok_at = models.DateTimeField("last read that worked", null=True, blank=True)
+    last_error = models.CharField(max_length=300, blank=True)
+    error_streak = models.PositiveSmallIntegerField("failed reads in a row", default=0)
+    backoff_until = models.DateTimeField("waiting after errors until", null=True, blank=True)
+    reading_paused = models.BooleanField("reading paused", default=False)
+
+    # A failed read waits 5 minutes, then 10, 20 and so on up to 6 hours. A shop that says it is being
+    # asked too often (HTTP 429) waits at least 30 minutes at once.
+    BACKOFF_FIRST = timedelta(minutes=5)
+    BACKOFF_LONGEST = timedelta(hours=6)
+    BACKOFF_TOO_MANY = timedelta(minutes=30)
+
     class Meta:
         ordering = ["name"]
 
     def __str__(self):
         return self.name
+
+    @classmethod
+    def due(cls, now=None):
+        """Shops whose next read has come and that are not waiting after errors or paused.
+
+        Marketplaces come first (they have a daily allowance), then the shop waiting longest, shops never
+        read before any other, then by name.
+        """
+        now = now or timezone.now()
+        return (
+            cls.objects.filter(is_active=True, reading_paused=False)
+            .exclude(source_type=cls.Source.MANUAL)
+            .filter(Q(next_read_at__isnull=True) | Q(next_read_at__lte=now))
+            .filter(Q(backoff_until__isnull=True) | Q(backoff_until__lte=now))
+            .alias(
+                marketplace=models.Case(
+                    models.When(source_type__in=[cls.Source.EBAY, cls.Source.AMAZON], then=0),
+                    default=1,
+                    output_field=models.IntegerField(),
+                )
+            )
+            .order_by("marketplace", F("next_read_at").asc(nulls_first=True), "name")
+        )
+
+    def cadence_for(self, finished, seconds):
+        """When to read next after a read that ended at ``finished`` and took ``seconds``.
+
+        The setting, or three times the read time when that is longer, so a slow shop is never being read
+        more than a third of the time.
+        """
+        minutes = max(self.read_every_minutes, 3 * (seconds or 0) / 60)
+        return finished + timedelta(minutes=minutes)
+
+    def read_ok(self, now, seconds, ok_at=None):
+        """Record a read that worked: errors forgotten, next read set by the cadence."""
+        self.error_streak = 0
+        self.backoff_until = None
+        self.last_error = ""
+        self.last_ok_at = ok_at or now
+        self.last_read_seconds = int(seconds)
+        self.next_read_at = self.cadence_for(now, seconds)
+        self.save(update_fields=[
+            "error_streak", "backoff_until", "last_error", "last_ok_at", "last_read_seconds", "next_read_at",
+        ])
+
+    def read_failed(self, now, status=None, error=""):
+        """Record a failed read and wait longer after each one in a row."""
+        self.error_streak = min(self.error_streak + 1, 32767)
+        wait = min(self.BACKOFF_FIRST * 2 ** min(self.error_streak - 1, 20), self.BACKOFF_LONGEST)
+        if status == 429:
+            wait = max(wait, self.BACKOFF_TOO_MANY)
+        self.backoff_until = now + wait
+        if error:
+            self.last_error = error[:300]
+        self.save(update_fields=["error_streak", "backoff_until", "last_error"])
 
     def delivery_for(self, price):
         """Delivery charge for one item at ``price`` under this retailer's rules, or None when not known.

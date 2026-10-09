@@ -162,8 +162,8 @@
   <div class="module">
     <h2>Shop health</h2>
     <table>
-      <thead><tr><th>Shop</th><th>Last read</th><th>In stock</th><th>Earns</th><th>Problem</th></tr></thead>
-      <tbody>{% for s in shops_health %}<tr><td>{{ s.name }}</td><td>{% if s.last_ok %}{{ s.last_ok|date:"j M H:i" }}{% else %}never{% endif %}</td><td class="n">{{ s.in_stock }}</td><td>{% if s.earns %}<span class="ok">yes</span>{% else %}no{% endif %}</td><td>{% if s.problem %}<span class="bad">{{ s.problem }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
+      <thead><tr><th>Shop</th><th>Last read</th><th>In stock</th><th>Earns</th><th>Reading</th><th>Problem</th></tr></thead>
+      <tbody>{% for s in shops_health %}<tr><td>{{ s.name }}</td><td>{% if s.last_ok %}{{ s.last_ok|date:"j M H:i" }}{% else %}never{% endif %}</td><td class="n">{{ s.in_stock }}</td><td>{% if s.earns %}<span class="ok">yes</span>{% else %}no{% endif %}</td><td>{{ s.reading }}</td><td>{% if s.problem %}<span class="bad">{{ s.problem }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 

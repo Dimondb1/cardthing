@@ -143,6 +143,11 @@ COLLECTIONS = {
 # Shops whose standard charge is only known up to an order value; above it the charge is not published.
 DELIVERY_UP_TO = {"card-empire": "20"}
 
+# How often each kind of shop is read, in minutes. A Shopify shop is one quick request per 250 products;
+# a website is read a page at a time, and the marketplaces keep their own once-a-day limit inside the
+# import, so their hourly turn only retries a read that failed.
+CADENCE = {S.SHOPIFY: 45, S.FEED: 60, S.WEBSITE: 60, S.EBAY: 60, S.AMAZON: 60}
+
 # Shops that were set up before and must not be shown: prices in another currency,
 # or not a stockist the owner wants compared (Asmodee UK is the distributor's own store).
 HIDDEN = ["poke-collect", "asmodee-uk"]
@@ -194,6 +199,7 @@ class Command(BaseCommand):
                 free_delivery_over=Decimal(free) if free else None, delivery_note=note,
             )
             self.stdout.write(f"{name}: added")
+        self.set_cadence()
         for slug in HIDDEN:
             hidden = Retailer.objects.filter(slug=slug, is_active=True).first()
             if hidden:
@@ -201,3 +207,23 @@ class Command(BaseCommand):
                 hidden.is_active = False
                 hidden.save(update_fields=["is_active"])
                 self.stdout.write(f"{hidden.name}: hidden")
+
+    def set_cadence(self):
+        """Give each kind of shop its reading interval, once.
+
+        Only a shop still on the default that has never been read on a schedule is changed, so an
+        interval the owner sets in admin is kept from then on.
+        """
+        default = Retailer._meta.get_field("read_every_minutes").default
+        for source, minutes in CADENCE.items():
+            if minutes == default:
+                continue
+            changed = Retailer.objects.filter(
+                source_type=source, read_every_minutes=default, next_read_at__isnull=True
+            ).update(read_every_minutes=minutes)
+            if changed:
+                self.stdout.write(f"{S(source).label}: {plural(changed, 'shop')} now read every {minutes} minutes")
+
+
+def plural(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"

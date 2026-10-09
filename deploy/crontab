@@ -1,10 +1,10 @@
-# Price checks every hour (waits up to 30 minutes for the lock), stock watch every 10 minutes (skipped while
-# the lock is held), price history once a day, delivery charges once a week. Install with: crontab deploy/crontab
+# Price checks every hour for the shops whose turn has come (waits up to 30 minutes for the lock), stock watch
+# every 10 minutes (skipped while the lock is held), price history once a day, delivery charges once a week. Install with: crontab deploy/crontab
 # deploy/install.sh writes the same lines (it is the source of truth); catalogue/tests_ops.py fails when they differ.
 # Every command runs under timeout, set to its budget plus five minutes, so a hung command cannot hold a lock for ever.
 # The snapshot and the delivery check put timeout inside flock, so waiting for a long import does not use up their limit.
 PYTHONUNBUFFERED=1
-0 * * * *  cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices >> /var/log/ripraptor-import.log 2>&1 && timeout -k 60 1500 .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
+0 * * * *  cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices --due >> /var/log/ripraptor-import.log 2>&1 && timeout -k 60 1500 .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
 15 0 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 1800 .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd /srv/ripraptor && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 3000 .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
 */10 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock >> /var/log/ripraptor-import.log 2>&1

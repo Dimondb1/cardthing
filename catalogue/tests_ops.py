@@ -139,6 +139,11 @@ class CronTests(TestCase):
         hourly = [command for schedule, command in install_cron() if schedule == "0 * * * *"]
         self.assertIn("flock -w 1800 /tmp/ripraptor-import.lock", hourly[0])
 
+    def test_the_hourly_import_reads_only_the_shops_that_are_due(self):
+        hourly = [command for schedule, command in install_cron() if schedule == "0 * * * *"]
+        self.assertIn("manage.py import_prices --due ", hourly[0])
+        self.assertIn("manage.py import_prices --due ", (DEPLOY / "install.sh").read_text().split("# First price import")[1])
+
     def test_install_backs_up_with_backup_db_not_cp(self):
         text = (DEPLOY / "install.sh").read_text()
         self.assertIn("manage.py backup_db --keep 5", text)

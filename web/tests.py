@@ -561,12 +561,14 @@ class RestockRecordPageTests(PageTestCase):
         from catalogue.models import Restock
 
         now = timezone.now()
+        # The heading is the restock's own day: just after midnight, ten minutes ago is yesterday.
+        recent = now - timedelta(minutes=10)
         sold = Listing.objects.get(product=self.sold_out)
-        Restock.objects.create(product=self.etb, retailer=self.harbour, listing=self.cheap, at=now - timedelta(minutes=10), price="54.99")
+        Restock.objects.create(product=self.etb, retailer=self.harbour, listing=self.cheap, at=recent, price="54.99")
         Restock.objects.create(product=self.sold_out, retailer=self.harbour, listing=sold, at=now - timedelta(days=1, hours=2), price="140.00")
         body = self.client.get(reverse("web:deals")).content.decode()
         self.assertIn("Every time a shop we check went from sold out to in stock", body)
-        self.assertIn(timezone.localtime(now).strftime("%A %-d %B"), body)
+        self.assertIn(timezone.localtime(recent).strftime("%A %-d %B"), body)
         self.assertIn("sold out again", body)
         self.assertLess(body.index(self.etb.name + "</span>"), body.index(self.sold_out.name + "</span>"))
 
@@ -802,8 +804,10 @@ class FeedTests(PageTestCase):
         from catalogue.models import Restock
 
         # The fixture holds £60 nine days ago, £57 five days ago and £54.99 today: the drop is dated today.
+        # A drop is dated to the start of its day, so the restock is stamped now to be the newer entry.
+        # An hour ago would be yesterday for the first hour after midnight, and rightly sort below the drop.
         today = timezone.localdate()
-        Restock.objects.create(product=self.sold_out, retailer=self.harbour, at=timezone.now() - timedelta(hours=1), price="140.00")
+        Restock.objects.create(product=self.sold_out, retailer=self.harbour, at=timezone.now(), price="140.00")
         channel = self.feed(reverse("web:feed_deals")).find("channel")
         self.assertEqual(channel.findtext("title"), "RipRaptor: restocks and price drops")
         self.assertEqual(channel.findtext("link"), "http://testserver/deals/")

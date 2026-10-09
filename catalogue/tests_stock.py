@@ -95,11 +95,13 @@ class RestockRecordTests(TestCase):
         live = make_listing(self.product, self.shop, availability="in_stock")
         gone = make_listing(make_product(self.product.product_set, name="Surging Sparks Elite Trainer Box", slug="ss-etb"), self.shop, availability="out_of_stock")
         now = timezone.now()
-        Restock.objects.create(product=live.product, retailer=self.shop, listing=live, at=now - timedelta(minutes=5), price="140.00")
-        Restock.objects.create(product=gone.product, retailer=self.shop, listing=gone, at=now - timedelta(days=1, hours=1), price="50.00")
+        # Days are named from each restock's own time: just after midnight, five minutes ago is yesterday.
+        recent, older = now - timedelta(minutes=5), now - timedelta(days=1, hours=1)
+        Restock.objects.create(product=live.product, retailer=self.shop, listing=live, at=recent, price="140.00")
+        Restock.objects.create(product=gone.product, retailer=self.shop, listing=gone, at=older, price="50.00")
         Restock.objects.create(product=gone.product, retailer=self.shop, listing=gone, at=now - timedelta(days=9), price="50.00")
         log = pricing.restock_log(days=7, now=now)
-        self.assertEqual([day for day, _ in log], [timezone.localdate(now), timezone.localdate(now - timedelta(days=1, hours=1))])
+        self.assertEqual([day for day, _ in log], [timezone.localdate(recent), timezone.localdate(older)])
         self.assertEqual([[e.still_in_stock for e in events] for _, events in log], [[True], [False]])
 
     def test_backfill_turns_stamps_into_rows_once(self):

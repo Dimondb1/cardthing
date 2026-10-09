@@ -371,7 +371,9 @@ stamped and shown on the home page under "Back in stock" for
 `RIPRAPTOR_RESTOCK_HOURS` (48). A pre-order a shop marks as available stays
 a pre-order after a single-product check until the product's release date
 (or its set's) is known and has come; the next whole-shop read decides
-otherwise. A listing for one variant of a Shopify product (an address
+otherwise. A Shopify product whose own title or tags say pre-order is a
+pre-order after a single-product check too, as in a shop read, so a shop
+opening pre-orders is never shown as a restock. A listing for one variant of a Shopify product (an address
 ending `?variant=...`, for example a case rather than a box) takes that
 variant's price and stock, never the cheapest on the page, and is left as
 it is when the shop no longer has that variant. eBay and Amazon listings are
@@ -917,15 +919,21 @@ pulse: <collections>". It is not a read of the shop, so it never counts as
 the shop's last read on Insights or Crawl health. A shop without a
 collection list (404 or not JSON) is asked once a week; a paused shop or
 one waiting after errors is not asked; a shop that answers 429 waits 30
-minutes like a failed read. Pulses start at least 0.3 seconds apart, a
-shop being read or having single listings checked that minute is pulsed at
-the next plan, and a pulse has a minute: it starts no new request after 40
-seconds and reads any collection it had no time for at the next pulse. A
-shop that prices in another currency has nothing applied.
+minutes like a failed read. Pulses start at least 0.3 seconds apart. A
+shop being read is not pulsed; a shop having single listings checked that
+minute is pulsed at the next plan, unless its pulse is already 15 minutes
+late, when the pulse goes first and the checks wait a minute. A pulse has a
+minute: it starts no new request after 40 seconds. Pre-order and coming
+soon collections are read before new arrivals, and one it had no time for
+is read at the next pulse; a new arrivals collection read part way counts
+as read, so a large one cannot take every pulse. A collection that cannot
+be read is noted on the import and the others are still read. A shop that
+prices in another currency has nothing applied.
 
 Bookkeeping: a listing records when the shop published the product (from
 Shopify, kept from the first read that gives it) and when it was first
-seen on pre-order here. A listing already known as out of stock that goes
+seen arriving on pre-order here (a listing that was already a pre-order
+before this was recorded is left blank, so it is never timed). A listing already known as out of stock that goes
 on pre-order is kept as a pre-order opening (like a restock: once per two
 hours, never for eBay or Amazon, never for a listing seen for the first
 time, never for a price kept out of the comparison). Insights shows

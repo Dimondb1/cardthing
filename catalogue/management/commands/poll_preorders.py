@@ -49,9 +49,11 @@ class Command(BaseCommand):
             pulse = poll_collections(retailer, fetch=retailer_fetch(retailer))
             if pulse.no_list:
                 self.stdout.write(f"{retailer}: no collection list, looked at weekly.")
+            elif pulse.read:
+                # One collection that could not be read does not stop the others, so both are said.
+                failed = f" {pulse.error}" if pulse.error else ""
+                self.stdout.write(f"{retailer}: read {', '.join(pulse.read)}, {pulse.updated} listings checked.{failed}")
             elif pulse.error:
                 self.stdout.write(f"{retailer}: {pulse.error}")
-            elif pulse.read:
-                self.stdout.write(f"{retailer}: read {', '.join(pulse.read)}, {pulse.updated} listings checked.")
             else:
                 self.stdout.write(f"{retailer}: nothing changed.")

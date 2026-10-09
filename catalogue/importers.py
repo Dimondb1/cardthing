@@ -502,7 +502,9 @@ def poll_collections(retailer, fetch=fetch, now=None, pause=0.0, stop=None):
 
     A shop that answers 404 or not JSON has no collection list: it is marked so and looked at weekly.
     The look is stamped before the request, so a pulse that fails is not repeated in a loop. ``stop`` is
-    asked between requests; a collection left part read is read again at the next look.
+    asked between requests; a pre-order collection left part read is read again at the next look. Pre-order
+    and coming soon collections are read before new arrivals, and one collection that cannot be read is
+    noted on the run without stopping the others (a 429 still ends the look).
     """
     now = now or timezone.now()
     base = retailer.source_url.rstrip("/")
@@ -536,16 +538,21 @@ def poll_collections(retailer, fetch=fetch, now=None, pause=0.0, stop=None):
     gone = [handle for handle in known if handle not in tracked]
     if gone:
         RetailerCollection.objects.filter(retailer=retailer, handle__in=gone).delete()
-    changed = [
-        handle for handle, (_kind, count, updated) in tracked.items()
-        if handle not in known or known[handle].products_count != count or known[handle].updated_at != updated
-    ]
+    # Pre-order and coming soon collections first: a large new arrivals collection listed before them
+    # must not spend the pulse's time on products that are only new.
+    changed = sorted(
+        (
+            handle for handle, (_kind, count, updated) in tracked.items()
+            if handle not in known or known[handle].products_count != count or known[handle].updated_at != updated
+        ),
+        key=lambda handle: tracked[handle][0] != PREORDER_KIND,
+    )
     if not changed:
         return pulse
 
     pulse.run = run = ImportRun.objects.create(retailer=retailer, note=f"{PULSE_NOTE}: {', '.join(changed)}"[:200])
     found = updated = 0
-    unmatched = []
+    unmatched, failed = [], []
     try:
         # As a whole-shop read does: prices in another currency are never applied.
         currency = shop_currency(base, fetch=fetch)
@@ -555,7 +562,16 @@ def poll_collections(retailer, fetch=fetch, now=None, pause=0.0, stop=None):
             if attempt and stop is not None and stop():
                 break
             kind, count, changed_at = tracked[handle]
-            products, finished = collection_products(base, handle, fetch, pause=pause, stop=stop)
+            try:
+                products, finished = collection_products(base, handle, fetch, pause=pause, stop=stop)
+            except ImportError_ as exc:
+                # A shop throttling the pulse ends it; one collection that cannot be read is noted and the
+                # rest are still read, so it never blocks the collections listed after it.
+                if status_of(exc) == 429:
+                    raise
+                failed.append(str(exc))
+                pulse.status = status_of(exc)
+                continue
             offers = []
             for product in products:
                 for offer in product_offers(base, product, preorder=kind == PREORDER_KIND):
@@ -564,12 +580,16 @@ def poll_collections(retailer, fetch=fetch, now=None, pause=0.0, stop=None):
             if offers:
                 n, changed_count, missed = apply_offers(retailer, offers, run=run, complete=False)
                 found, updated, unmatched = found + n, updated + changed_count, unmatched + missed
-            if finished:
+            # A new arrivals collection read part way counts as read, so a large one is not read again from
+            # its first page at every look; shops usually list it newest first and the whole read sees the rest.
+            if finished or kind == NEW_KIND:
                 RetailerCollection.objects.update_or_create(
                     retailer=retailer, handle=handle,
                     defaults={"products_count": count, "updated_at": changed_at, "last_read_at": now},
                 )
                 pulse.read.append(handle)
+        if failed:
+            run.error = pulse.error = " ".join(failed)[:300]
     except ImportError_ as exc:
         run.error = pulse.error = str(exc)[:300]
         pulse.status = status_of(exc)

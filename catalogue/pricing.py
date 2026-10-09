@@ -89,7 +89,7 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     run out, so an unchanged price costs no extra queries. It is judged before any restock is kept, so a
     price kept out of the comparison is never announced as back in stock.
 
-    A listing on pre-order is stamped with when it was first seen so, and an existing listing that goes
+    A listing seen arriving on pre-order is stamped with when, and an existing listing that goes
     from out of stock to pre-order keeps a PreorderOpen (record_preorder_open), judged first in the same way.
     """
     from .sanity import trust_expiry
@@ -127,7 +127,9 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     # has is not opening anything), now on pre-order. A listing seen for the first time never counts.
     preorder = availability == Listing.Availability.PREORDER
     opened = preorder and not new and listing.availability not in (Listing.Availability.PREORDER, Listing.Availability.IN_STOCK)
-    if preorder and listing.first_preorder_at is None:
+    # Stamped only when it is seen arriving on pre-order (new, or moving from another state), never on a
+    # listing that was already a pre-order before the field existed, which would time a wait that never was.
+    if preorder and listing.first_preorder_at is None and (new or listing.availability != Listing.Availability.PREORDER):
         listing.first_preorder_at = checked_at
         fields.append("first_preorder_at")
     listing.price = price

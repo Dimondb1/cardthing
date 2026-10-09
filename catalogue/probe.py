@@ -88,6 +88,10 @@ def ask(listing, fetch=None, today=None):
             return None
         if not available:
             return price, Listing.Availability.OUT_OF_STOCK
+        # As a shop read does: a product whose own title or tags say pre-order is a pre-order while
+        # available, so a probe never turns a newly opened pre-order into stock and a restock.
+        if importers.says_preorder(data):
+            return price, Listing.Availability.PREORDER
         return price, settle_preorder(listing, Listing.Availability.IN_STOCK, today)
     if listing.retailer.session_url and fetch is importers.fetch:
         fetch = _session_fetches.setdefault(listing.retailer_id, importers.session_fetch(listing.retailer.session_url))

@@ -401,6 +401,25 @@ class PreorderPulseInsightTests(TestCase):
         self.preorder(5, 600, 16)
         self.assertEqual(insights.preorder_pulse(self.now)["median"], 13)
 
+    def test_preorders_listed_before_the_stamp_existed_are_never_timed(self):
+        from decimal import Decimal
+
+        from catalogue.importers import Offer, apply_offers
+        from catalogue.models import Listing
+
+        offers = []
+        for n in range(5):
+            product = make_product(self.set, name=f"Old Box {n}", slug=f"old-box-{n}", ean=f"019621411200{n}")
+            listing = make_listing(product, self.shop, availability=Listing.Availability.PREORDER,
+                                   url=f"https://pulse.example/products/old-box-{n}")
+            offers.append(Offer(title=product.name, url=listing.url, price=listing.price + Decimal("1"),
+                                ean=product.ean, availability=Listing.Availability.PREORDER,
+                                published_at=self.now - timedelta(days=5)))
+        apply_offers(self.shop, offers, complete=False)
+        self.assertEqual(Listing.objects.filter(shop_published_at__isnull=False).count(), 5)
+        line = insights.preorder_pulse(self.now)
+        self.assertEqual((line["listed"], line["timed"], line["median"]), (0, 0, None))
+
     def test_the_page_shows_the_line_and_each_shops_preorders_and_last_pulse(self):
         staff = User.objects.create_user("ben", password="pw", is_staff=True)
         self.client.force_login(staff)

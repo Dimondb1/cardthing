@@ -91,6 +91,8 @@ PROBE_DEADLINE = timedelta(seconds=60)
 # collection it had no time for is read at the next pulse.
 PULSE_DEADLINE = timedelta(seconds=60)
 PULSE_BUDGET = timedelta(seconds=40)
+# A pulse this far past due goes before a probe of the same shop instead of after it.
+PULSE_LATE = timedelta(minutes=15)
 # Pulses of different shops start at least this far apart.
 PULSE_GAP = 0.3
 # A probe job starts no new request after this, so a slow shop cannot carry it past its deadline.
@@ -284,6 +286,7 @@ class Task:
     tier: str = ""
     listings: list = field(default_factory=list)
     last_read_seconds: int | None = None   # how long the shop's last healthy read took
+    late: bool = False   # a pulse past PULSE_LATE, which goes before a probe of the same shop
 
 
 @dataclass
@@ -370,22 +373,31 @@ class Worker:
                     continue
                 website_free -= 1
             chosen.append(task)
-        # A shop being read, or about to be, is not probed: the read sees every listing.
+        # A shop being read, or about to be, is neither probed nor pulsed: the read sees every listing.
         skip = set(busy) | {t.retailer_id for t in chosen}
-        probes = self.plan_probes(now, skip)
-        # Nor pulsed, and a shop with listings to check this minute is pulsed at the next plan: one job per shop.
-        pulses = self.plan_pulses(now, skip | {t.retailer_id for t in probes})
+        # One job per shop. A shop with listings to check this minute is pulsed at the next plan, unless its
+        # pulse is late (PULSE_LATE): then the pulse goes first and the probe waits a minute, so a shop with
+        # so many listings due that it has a probe every minute is still looked at for pre-orders.
+        pulses = self.plan_pulses(now, skip)
+        late = [t for t in pulses if t.late]
+        probes = self.plan_probes(now, skip | {t.retailer_id for t in late})
+        probed = {t.retailer_id for t in probes}
+        pulses = late + [t for t in pulses if not t.late and t.retailer_id not in probed]
         return sorted(chosen + probes + pulses, key=lambda t: -t.priority)
 
     def plan_pulses(self, now, skip):
         """A look at the collection list of each Shopify shop due one (Retailer.pulse_due), in one query."""
         tasks = []
-        for pk, name, polled in Retailer.pulse_due(now).values_list("pk", "name", "collections_polled_at"):
+        for pk, name, polled, has_list in Retailer.pulse_due(now).values_list(
+            "pk", "name", "collections_polled_at", "collections_ok",
+        ):
             if pk in skip:
                 continue
             overdue = minutes(now - polled - Retailer.PULSE_EVERY) if polled else NEVER_READ_MINUTES
+            # A shop without a collection list is due weekly, so it is never late in this sense.
+            late = polled is None or (has_list is not False and now - polled - Retailer.PULSE_EVERY >= PULSE_LATE)
             tasks.append(Task(PULSE, pk, Retailer.Source.SHOPIFY, WEIGHTS[PULSE] * max(1.0, overdue),
-                              f"Pre-order pulse {name}"[:120]))
+                              f"Pre-order pulse {name}"[:120], late=late))
         return tasks
 
     def plan_probes(self, now, skip):

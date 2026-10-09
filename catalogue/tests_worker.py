@@ -903,7 +903,8 @@ class PulseTests(WorkerTestCase):
     def test_a_shop_due_a_pulse_is_planned_once_per_shop_after_reads_and_probes(self):
         due = self.pulse_shop("Pulse Shop")
         reading = self.pulse_shop("Read Shop", due=True)
-        probed = self.pulse_shop("Probe Shop")
+        # Due a pulse but not late: its probe goes first and the pulse waits for the next plan.
+        probed = self.pulse_shop("Probe Shop", collections_polled_at=self.clock() - timedelta(minutes=20), collections_ok=True)
         self.listing(self.product("hot-box", views=3), probed, 30)
         self.pulse_shop("Paused Shop", reading_paused=True)
         self.pulse_shop("Waiting Shop", backoff_until=self.clock() + timedelta(minutes=20))
@@ -915,6 +916,42 @@ class PulseTests(WorkerTestCase):
         ])
         self.assertEqual(tasks[2].priority, worker.WEIGHTS[worker.PULSE] * worker.NEVER_READ_MINUTES)
         self.assertEqual(worker.deadline_for(tasks[2]), timedelta(seconds=60))
+
+    def test_a_late_pulse_goes_before_the_probe_of_its_shop(self):
+        never = self.pulse_shop("Never Pulsed")
+        late = self.pulse_shop("Late Shop", collections_polled_at=self.clock() - timedelta(minutes=31), collections_ok=True)
+        weekly = self.pulse_shop("No List Shop", collections_polled_at=self.clock() - timedelta(days=8), collections_ok=False)
+        for shop in (never, late, weekly):
+            self.listing(self.product(f"hot-{shop.slug}", views=3), shop, 30)
+        tasks = self.make_worker().plan(self.clock())
+        self.assertEqual(sorted((t.retailer_id, t.kind) for t in tasks), sorted([
+            (never.pk, worker.PULSE), (late.pk, worker.PULSE), (weekly.pk, worker.PROBE),
+        ]))
+
+    def test_a_shop_with_a_probe_due_every_minute_is_still_pulsed(self):
+        shop = self.pulse_shop("Big Shop", collections_polled_at=self.clock() - timedelta(minutes=31), collections_ok=True)
+        base = shop.source_url.rstrip("/")
+        js = {}
+        for n in range(2 * worker.PROBE_BATCH):
+            listing = self.listing(self.product(f"box-{n}", views=3), shop, 30)
+            js[f"{listing.url}.js"] = js_answer(4000 + n)
+        seen = []
+        answer = self.collections(base, {})
+
+        def fetch(url, *args, **kwargs):
+            seen.append(url)
+            return js[url] if url in js else answer(url)
+
+        reader = self.make_worker(fetch=fetch)
+        reader.run_once()
+        self.assertEqual([url for url in seen if "/collections" in url], [f"{base}/collections.json?limit=250"])
+        self.assertFalse([url for url in seen if url.endswith(".js")])
+        # The probe waited one minute, no more.
+        seen.clear()
+        self.clock.advance(minutes=1)
+        reader.run_once()
+        self.assertTrue([url for url in seen if url.endswith(".js")])
+        self.assertFalse([url for url in seen if "/collections" in url])
 
     def test_a_pulse_finds_a_new_preorder_and_is_not_repeated_within_fifteen_minutes(self):
         shop = self.pulse_shop("Pulse Shop")
@@ -1286,8 +1323,10 @@ class SharedDatabaseTests(TestCase):
         with file_database() as path, tempfile.TemporaryDirectory() as folder:
             pset = make_set(make_game())
             read = make_retailer("Read Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://read-shop.example/")
+            # Its pre-order pulse has just looked, so the pass probes it rather than pulsing it.
             probed = make_retailer("Probe Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://probe-shop.example/",
-                                   next_read_at=timezone.now() + timedelta(hours=1))
+                                   next_read_at=timezone.now() + timedelta(hours=1),
+                                   collections_polled_at=timezone.now(), collections_ok=True)
             products, js = [], {}
             today = timezone.localdate()
             for n in range(300):

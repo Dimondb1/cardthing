@@ -1640,6 +1640,89 @@ class PreorderPulseTests(TestCase):
         self.assertEqual(poll_collections(self.shop, fetch=fetch, now=self.now + self.hour).read, [])
         self.assertEqual(len(asked), 1)
 
+    def test_a_changed_update_time_alone_reads_the_collection(self):
+        from .importers import poll_collections
+
+        self.remember("pre-orders", 4)
+        self.updated = "2026-10-09T09:30:00+01:00"   # same count, the shop changed the collection since
+        asked = []
+        pulse = poll_collections(self.shop, fetch=self.answers([("pre-orders", 4)], {"pre-orders": [self.box_json()]}, asked),
+                                 now=self.now)
+        self.assertEqual(pulse.read, ["pre-orders"])
+        self.assertIn("https://pulse.example/collections/pre-orders/products.json?limit=250&page=1", asked)
+        self.assertEqual(Listing.objects.get(product=self.box).availability, Listing.Availability.PREORDER)
+
+    def test_preorders_are_read_before_a_large_new_arrivals_collection_listed_first(self):
+        from .importers import poll_collections
+        from .models import RetailerCollection
+
+        def page(number):
+            return [{"handle": f"new-{number}-{n}", "title": f"Thing {n}", "tags": [], "variants": []} for n in range(250)]
+
+        asked = []
+        base = self.answers([("new-arrivals", 5000), ("pre-orders", 1)], {"pre-orders": [self.box_json()]}, asked)
+
+        def fetch(url, *args, **kwargs):
+            if "/collections/new-arrivals/" in url:
+                asked.append(url)
+                return shopify_page(page(url.rsplit("page=", 1)[1]))
+            return base(url)
+
+        # Time for about three requests of products.
+        pulse = poll_collections(self.shop, fetch=fetch, now=self.now,
+                                 stop=lambda: sum("/products.json" in url for url in asked) >= 3)
+        self.assertEqual(pulse.read, ["pre-orders", "new-arrivals"])
+        self.assertEqual(Listing.objects.get(product=self.box).availability, Listing.Availability.PREORDER)
+        # The new arrivals read part way counts as read, so the next look does not start it again.
+        self.assertEqual(RetailerCollection.objects.get(handle="new-arrivals").products_count, 5000)
+        asked.clear()
+        self.assertEqual(poll_collections(self.shop, fetch=fetch, now=self.now + self.hour).read, [])
+        self.assertEqual(asked, ["https://pulse.example/collections.json?limit=250"])
+
+    def test_one_collection_that_cannot_be_read_does_not_block_the_others(self):
+        from .importers import poll_collections
+        from .models import RetailerCollection
+
+        base = self.answers([("coming-soon", 1), ("pre-orders", 1)], {"pre-orders": [self.box_json()]})
+
+        def fetch(url, *args, **kwargs):
+            return b"<html>" if "/collections/coming-soon/" in url else base(url)
+
+        pulse = poll_collections(self.shop, fetch=fetch, now=self.now)
+        self.assertEqual(pulse.read, ["pre-orders"])
+        self.assertIn("coming-soon", pulse.error)
+        self.assertEqual(Listing.objects.get(product=self.box).availability, Listing.Availability.PREORDER)
+        self.assertIn("coming-soon", ImportRun.objects.get().error)
+        # The broken one is not remembered, so it is tried again at the next look.
+        self.assertEqual(list(RetailerCollection.objects.values_list("handle", flat=True)), ["pre-orders"])
+        # By hand, both what was read and what failed are said.
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        RetailerCollection.objects.all().delete()
+        out = StringIO()
+        with mock.patch("catalogue.importers.fetch", fetch):
+            call_command("poll_preorders", "--shop", "pulse-shop", stdout=out)
+        self.assertEqual(out.getvalue().strip(),
+                         "Pulse Shop: read pre-orders, 1 listings checked. https://pulse.example did not return Shopify JSON for coming-soon")
+
+    def test_a_shop_throttling_one_collection_ends_the_look(self):
+        from .importers import poll_collections
+
+        asked = []
+        base = self.answers([("coming-soon", 1), ("pre-orders", 1)], {"pre-orders": [self.box_json()]}, asked)
+
+        def fetch(url, *args, **kwargs):
+            if "/collections/coming-soon/" in url:
+                raise ImportError_(f"Could not fetch {url}: HTTP Error 429: Too Many Requests")
+            return base(url)
+
+        pulse = poll_collections(self.shop, fetch=fetch, now=self.now)
+        self.assertEqual((pulse.read, pulse.status), ([], 429))
+        self.assertFalse([url for url in asked if "/collections/pre-orders/" in url])
+
     def test_a_new_watched_collection_counts_as_a_change_and_a_gone_one_is_forgotten(self):
         from .importers import poll_collections
         from .models import RetailerCollection

@@ -161,6 +161,43 @@ class PreorderOpenTests(TestCase):
         self.assertIsNotNone(ebay.first_preorder_at)
         self.assertFalse(PreorderOpen.objects.exists())
 
+    def test_a_listing_already_on_preorder_is_not_stamped_late(self):
+        # A pre-order from before the stamp existed: a later price change must not time it from now.
+        listing = make_listing(self.product, self.shop, availability="preorder")
+        pricing.record_check(listing, price=Decimal("135.00"), delivery_cost=Decimal("2.99"), availability="preorder")
+        listing.refresh_from_db()
+        self.assertIsNone(listing.first_preorder_at)
+        # Going out of stock and back on pre-order is seen arriving, so it is stamped then.
+        at = timezone.now()
+        self.flip(listing, "out_of_stock", at - timedelta(minutes=5))
+        self.flip(listing, "preorder", at)
+        listing.refresh_from_db()
+        self.assertEqual(listing.first_preorder_at, at)
+
+    def test_a_probe_sees_a_shop_opening_preorders_as_an_opening_not_a_restock(self):
+        from .probe import probe_listing, record_probe
+
+        listing = make_listing(self.product, self.shop, availability="out_of_stock",
+                               url="https://shop.example/products/destined-rivals-booster-box")
+        answer = json.dumps({"title": "[Pre-Order] Destined Rivals Booster Box", "tags": ["Pre-Order"],
+                             "variants": [{"id": 1, "price": 13999, "available": True}]}).encode()
+        result = probe_listing(listing, fetch=lambda url, *a, **k: answer)
+        self.assertEqual(result, (Decimal("139.99"), "preorder"))
+        record_probe(listing, result)
+        self.assertEqual((PreorderOpen.objects.count(), Restock.objects.count()), (1, 0))
+        listing.refresh_from_db()
+        self.assertEqual(listing.availability, "preorder")
+        # Tags alone say so too, and a product that says nothing is stock.
+        tagged = json.dumps({"title": "Destined Rivals Booster Box", "tags": ["Pre-Orders-Live"],
+                             "variants": [{"id": 1, "price": 13999, "available": True}]}).encode()
+        self.assertEqual(probe_listing(listing, fetch=lambda url, *a, **k: tagged)[1], "preorder")
+        plain = json.dumps({"title": "Destined Rivals Booster Box", "tags": [],
+                            "variants": [{"id": 1, "price": 13999, "available": True}]}).encode()
+        out = make_listing(self.product, make_retailer("Other", source_type=Retailer.Source.SHOPIFY,
+                                                      source_url="https://other.example/"),
+                           availability="out_of_stock", url="https://other.example/products/destined-rivals-booster-box")
+        self.assertEqual(probe_listing(out, fetch=lambda url, *a, **k: plain)[1], "in_stock")
+
     def test_a_flicker_within_two_hours_counts_once(self):
         listing = make_listing(self.product, self.shop, availability="out_of_stock")
         start = timezone.now() - timedelta(hours=5)

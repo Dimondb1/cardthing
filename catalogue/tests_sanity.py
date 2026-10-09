@@ -59,6 +59,19 @@ class VerdictTests(Shops, TestCase):
         self.assertEqual(Product.objects.for_lists().get(pk=self.product.pk).lowest_price, Decimal("120.00"))
         self.assertEqual([row.price for row in DailyLowestPrice.objects.filter(product=self.product)], [Decimal("120.00")])
 
+    def test_a_price_kept_out_later_the_same_day_leaves_no_false_low_in_history(self):
+        first = self.shop(120)
+        odd = self.shop(130)
+        self.check(odd, "9.99")
+        today = DailyLowestPrice.objects.filter(product=self.product)
+        # Two shops cannot say which one is wrong, so the low is recorded while it is only doubtful.
+        self.assertEqual([row.price for row in today], [Decimal("9.99")])
+        # Two more shops arrive, as a price check that changes something (a new listing) would bring them.
+        self.check(self.shop(124), 125)
+        self.check(self.shop(129), 130)
+        self.assertEqual(self.verdicts(odd, first), [EXCLUDED, OK])
+        self.assertEqual([row.price for row in today.all()], [Decimal("120.00")])
+
     def test_two_shops_far_apart_are_both_doubtful_and_never_excluded(self):
         right = self.shop(120)
         wrong = self.shop(120)
@@ -335,7 +348,8 @@ class JudgeOnChangeTests(Shops, TestCase):
             result = sanity.judge_product(self.product.pk)
         changed = sum(1 for verdict in result.values() if verdict[0] != OK)
         self.assertEqual(changed, 1)
-        self.assertLessEqual(len(queries), 2 + changed)
+        # Plus two when a price is newly kept out: today's history is worked out again without it.
+        self.assertLessEqual(len(queries), 2 + changed + 2)
 
 
 class KeptOutTests(Shops, TestCase):

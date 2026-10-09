@@ -287,6 +287,24 @@ def update_daily_lowest(product, date=None):
     return record
 
 
+def correct_daily_lowest(product_id, date=None):
+    """Set the product's row for ``date`` to its current cheapest counted price, even when that is higher.
+
+    update_daily_lowest only ever lowers a day's price. When a price is kept out after it was recorded,
+    the day would keep a low that was never real, so the row is worked out again from what still counts,
+    and removed when nothing does.
+    """
+    date = date or timezone.localdate()
+    lowest = Listing.objects.filter(product_id=product_id, delivery_known=True).buyable().aggregate(
+        lowest=Min("delivered_price")
+    )["lowest"]
+    rows = DailyLowestPrice.objects.filter(product_id=product_id, date=date)
+    if lowest is None:
+        rows.delete()
+    else:
+        rows.exclude(price=lowest).update(price=lowest)
+
+
 def snapshot_all(date=None):
     """Record today's lowest price for every product. Run once a day."""
     date = date or timezone.localdate()

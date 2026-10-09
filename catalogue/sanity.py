@@ -345,7 +345,7 @@ def judge_product(product_id, now=None, repriced=()):
     if not rows:
         return {}
     result, lone = verdicts(rows, now, repriced=repriced)
-    changed = False
+    changed = newly_excluded = False
     stamp_ok, drop_trust = [], []
     for row in rows:
         sanity, reason, ratio = result[row["pk"]]
@@ -360,6 +360,7 @@ def judge_product(product_id, now=None, repriced=()):
                 update.update(trusted_price=None, trusted_at=None)
             Listing.objects.filter(pk=row["pk"]).update(**update)
             changed = True
+            newly_excluded = newly_excluded or (sanity == EXCLUDED and row["sanity"] != EXCLUDED)
             continue
         if sanity == OK and row["pk"] not in lone and row["last_ok_price"] != row["price"]:
             stamp_ok.append(row["pk"])
@@ -370,6 +371,11 @@ def judge_product(product_id, now=None, repriced=()):
         Listing.objects.filter(pk__in=stamp_ok).update(last_ok_price=F("price"))
     if drop_trust:
         Listing.objects.filter(pk__in=drop_trust).update(trusted_price=None, trusted_at=None)
+    if newly_excluded:
+        # Today's history may already hold the price just kept out; it was never a real low.
+        from .pricing import correct_daily_lowest
+
+        correct_daily_lowest(product_id, date=timezone.localdate(now))
     if changed:
         from .signals import clear_list_caches
 

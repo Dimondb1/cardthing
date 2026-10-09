@@ -13,7 +13,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from . import housekeeping, notify
-from .importers import UNMATCHED_KEPT, unmatched_text
+from .importers import unmatched_text
 from .management.commands.backup_db import backup_name
 from .models import ImportRun
 from .testing import make_retailer
@@ -67,12 +67,9 @@ class PruneRunsTests(TestCase):
         self.assertEqual(old.unmatched, "")
         self.assertIn("1 lists of unmatched products cleared", out.getvalue())
 
-    def test_a_run_keeps_at_most_three_thousand_unmatched_lines(self):
-        lines = [f"line {n}" for n in range(UNMATCHED_KEPT + 250)]
-        text = unmatched_text(lines)
-        self.assertEqual(text.count("\n"), UNMATCHED_KEPT)
-        self.assertTrue(text.endswith("... and 250 more not listed"))
-        self.assertEqual(unmatched_text(["a", "b"]), "a\nb")
+    def test_a_run_keeps_every_unmatched_line_for_the_stockist_finder(self):
+        lines = [f"line {n}" for n in range(5000)]
+        self.assertEqual(unmatched_text(lines).count("\n"), 4999)
 
 
 class CompactTests(TestCase):

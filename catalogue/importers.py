@@ -85,17 +85,10 @@ class ImportError_(Exception):
     pass
 
 
-# The unmatched products kept on one run, for the admin page and the stockist finder. A shop with
-# thousands would otherwise store every one of them on every read.
-UNMATCHED_KEPT = 3000
-
-
 def unmatched_text(lines):
-    """The unmatched lines a run keeps, with a note of how many more there were."""
-    text = "\n".join(lines[:UNMATCHED_KEPT])
-    if len(lines) > UNMATCHED_KEPT:
-        text += f"\n... and {len(lines) - UNMATCHED_KEPT} more not listed"
-    return text
+    """The unmatched lines a run keeps, every one: the stockist finder searches the latest list in full.
+    The list stays small on disk because only each shop's latest good read keeps it (housekeeping.prune_runs)."""
+    return "\n".join(lines)
 
 
 # Marketplaces allow a limited number of calls a day, so they are read this often, not hourly.

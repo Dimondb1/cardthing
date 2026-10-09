@@ -446,10 +446,41 @@ class AskingTests(Base):
         evidence = Ask.objects.get().evidence
         self.assertEqual(set(evidence), {
             "row", "kind", "ours", "shop", "shop_title", "price", "stock", "shop_url_path", "finder_score",
-            "title_reads_as", "set_codes_in_title", "price_band", "shop_titles_elsewhere",
+            "title_reads_as", "title_language", "set_codes_in_title", "price_band", "barcode", "shop_titles_elsewhere",
         })
         self.assertNotIn("someone@example.com", json.dumps(client.sent[0][1]))
         self.assertEqual(evidence["price_band"], "close to other shops")
+        self.assertEqual(evidence["barcode"], "not recorded")
+
+    def test_the_evidence_carries_the_barcode_in_words_never_the_numbers(self):
+        Product.objects.filter(pk=self.product.pk).update(ean="0820650851230")
+        self.product.refresh_from_db()
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box", ean="0820650851247")
+        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(51, product=other, title=other.name)
+        self.shop(100)
+        self.shop(104)
+        row = self.found(price="101.00")
+        ShopProduct.objects.filter(pk=row.pk).update(shop_ean="820650851230")
+        self.switch_on(may_act=False)
+        client, _ = self.ask()
+        said = {ask.kind: ask.evidence["barcode"] for ask in Ask.objects.all()}
+        self.assertEqual(said, {"found": "same", "pair": "only one has one"})
+        sent = json.dumps([params for _, params in client.sent])
+        self.assertNotIn("820650851230", sent)
+        self.assertNotIn("0820650851247", sent)
+
+    def test_a_moved_price_is_asked_again_within_the_ask_limit(self):
+        self.shop(100)
+        self.shop(104)
+        row = self.found(price="101.00")
+        self.switch_on(may_act=False)
+        for n in range(judge.ASK_LIMIT + 2):
+            ShopProduct.objects.filter(pk=row.pk).update(price=Decimal("101.00") + n)
+            ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+            self.ask()
+        self.assertEqual(Ask.objects.count(), judge.ASK_LIMIT)
 
 
 class CostTests(Base):
@@ -1718,3 +1749,22 @@ class ClearsTheQueueTests(Base):
         self.assertEqual(title, "Claude looked at 2: 0 sorted, 1 need you, 1 can wait")
         self.assertNotIn(chr(0x2014), title)
         self.assertNotIn("!", title)
+
+
+class PromptTests(Base):
+    def test_the_prompt_never_teaches_fairly_sure_for_a_price_alone_and_explains_the_new_fields(self):
+        self.assertNotIn("same, medium, [price]", judge.SYSTEM_PROMPT)
+        self.assertIn("same, high, [price]", judge.SYSTEM_PROMPT)
+        for field in ('"barcode"', '"title_language"', "sv2a"):
+            self.assertIn(field, judge.SYSTEM_PROMPT)
+        self.assertNotIn(chr(0x2014), judge.SYSTEM_PROMPT)
+        self.assertEqual(judge.PROMPT_VERSION, 4)
+
+    def test_the_evidence_says_both_languages(self):
+        self.shop(100)
+        self.shop(104)
+        row = self.found(title="Pokemon Surging Sparks sv8a Booster Box", price="101.00")
+        self.switch_on(may_act=False)
+        self.ask()
+        evidence = Ask.objects.get(row_key=f"found:{row.pk}").evidence
+        self.assertEqual((evidence["ours"]["language"], evidence["title_language"]), ("English", "Japanese"))

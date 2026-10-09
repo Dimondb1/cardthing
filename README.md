@@ -392,11 +392,17 @@ never counts a doubtful price on its own say-so.
   the wrong one). **Yes** when the names agree word for word both ways, the
   shop does not list the product already, and the price is within 0.75 to
   1.33 of the other shops' median. A likely name, or a page with no other
-  shop to compare, waits for you.
+  shop to compare, waits for you. A page whose barcode is not ours, or not
+  recorded yet while we hold one, is never linked on its name: the finder
+  sent it to you for that reason.
 - **Doubtful prices and wrong matches: Hide**, for the product's cheapest
   price or either price of a wrong match, when the shop's title plainly
   names another kind of product or another set's code. A dearer doubtful
   price is left alone: hiding it could leave a wrong price as the cheapest.
+  **Checked**, for a cheapest doubtful price whose shop gives our barcode
+  (never eBay or Amazon, whose barcode is our own copied in): the price stays
+  exactly as shown, with no saving claimed, and leaves your list until its
+  price or title changes.
 - **Announced sets: Add set**, with no date, when a community source names a
   set that products on the site already name, none of them is filed under
   another set, and the game has a publisher source that can give the date
@@ -428,17 +434,29 @@ or two of our products. It never supplies a price, a date, a barcode or a
 product, and never touches sets, release dates or delivery charges. The
 site's own rules decide whether its answer may act:
 
-- **Found at another shop:** Claude's "different" refuses the page; its
-  "same" links it only when the price is within 0.75 to 1.33 of the other
-  shops', the title does not plainly name another kind or set, the shop
-  does not list the product already, and the new price is judged OK
-  without making any other price doubtful.
-- **A shop's price** (the cheapest doubtful one, or a wrong match): "different"
-  hides it; for a wrong match only when Claude is sure the other price is
-  the product. "Same" never counts a price as right.
-- **Possible duplicates:** "different" keeps the pair apart. "Same" never
-  merges by itself: **Merge the pairs Claude is sure are the same** merges
-  them on your tap, each so it can be undone. The merged product is switched
+Claude acts alone only where visitors see nothing change, or where it only
+takes something away. It never counts a price as right and never merges.
+
+- **Found at another shop:** Claude's "different" refuses the page (a
+  "fairly sure" one too, when it names a plain difference: game, set, kind,
+  quantity, language or edition). Its "same" links the page only when the
+  price is within 0.75 to 1.33 of the other shops', the title does not
+  plainly name another kind or set, the shop's barcode is not another
+  product's (or unrecorded while we hold one), the shop does not list the
+  product already, the new price is judged OK without making any other
+  price doubtful, and the product page would claim no saving over 25%.
+- **A doubtful cheapest price:** "same" ticks it off as **Checked**: the
+  price stays exactly as shown, doubtful, with no saving claimed, so
+  visitors see no change, and it comes back if its price or title changes.
+  Never for an eBay or Amazon seller's title, a title that says deposit, or
+  a shop barcode that is not ours or not read yet. "Different" hides it.
+- **A wrong match:** "different" hides that price only when Claude is sure
+  the other price is the product. Both called the same stay with you.
+- **Possible duplicates:** "different" keeps the pair apart (a "fairly sure"
+  one too, for a plain difference). "Same" never merges by itself: **Merge
+  the pairs Claude is sure are the same** merges them on your tap, each so
+  it can be undone, and leaves out pairs whose barcodes differ or whose
+  shops' prices are far apart. The merged product is switched
   off, not deleted; its barcode, shop pages and linked shop rows move to the
   kept product so shop reads never price it; and Undo puts back its listings,
   history and address. A price that has not changed since the merge gets
@@ -467,6 +485,26 @@ act, every answer it leaves for you says why under its row ("Left for you:
 the price is far from what other shops charge.", "Claude was only fairly
 sure.", "Claude never merges by itself.", and so on). The run line says how
 many rows were sorted from earlier answers.
+
+Every act needs the exact price Claude saw. A fallback model's answer is
+shown but never acts, and the row is asked again at the next run. A row is
+asked again when its titles, price or barcode change, at most five times.
+Rows an answer can clear are asked first: doubtful prices a "same" would
+tick off and wrong matches, then duplicate pairs, then found pages a "same"
+would link, then the rest. An hourly run asks up to 25 rows; one you ask
+for with **Ask Claude now** up to 100, within the same $1 and 10 minute
+limits. At most 10 prices are hidden in one run; the rest are hidden from
+their answers at the next. If you undo three of Claude's acts in a week
+(counted from when you last tapped Let Claude act), it goes back to
+suggesting and tells you.
+
+What is left is split in two. **Need you**: prices that may be another
+product (Doubtful prices and Wrong matches). **Can wait**: found pages and
+duplicate pairs, where nothing on the site is wrong while they wait; those
+sections are folded away. The push after a run you asked for, and the daily
+one, say "N sorted, N need you, N can wait".
+`python manage.py judge_checks --dry-run` says what the answers already
+given would sort, at no cost, and what the next run would send.
 
 **Cost.** Each request is priced from Anthropic's usage figures at the
 model's rates and saved (Claude's answers are listed read-only in admin).
@@ -1278,11 +1316,10 @@ Products are filed under their set by the set's code (a whole word of the
 product name, with letters and digits, such as OP-18) or, failing that, by
 the longest set name whose words all appear in the product name. A name
 needs two words that are not filler: series names such as Scarlet &
-Violet or Mega Evolution never file anything alone. A product whose name
-names a language (Japanese, Korean, Chinese and so on) is filed only under a
-set whose name names the same language: those editions share the English
-set's code but come out on other dates, and every release source is an
-English one. This runs when a set is added, when an import creates a
+Violet or Mega Evolution never file anything alone. A product in another
+language (see Languages: a word, or a code such as sv11B) is filed only under
+a set of the same language: those editions share the English set's code but
+come out on other dates, and every release source is an English one. This runs when a set is added, when an import creates a
 product, and in `tidy_all`.
 
 `RIPRAPTOR_RELEASES=0` stops the background reader reading these sources.
@@ -1430,6 +1467,48 @@ one means adding its words there, its filter labels in
 `catalogue/types.py`, its eBay search word in `catalogue/ebay.py` and its
 prefix to `GAME_PREFIX` in `catalogue/matching.py`. Pick games several
 shops stock: one shop's price is a listing, not a comparison.
+
+## Languages
+
+Every product's language is read from its name, and failing that its set's
+name and code, by one set of rules (`catalogue/languages.py`), and stored on
+the product. The language filter (English, Japanese, Chinese, Korean, Other
+languages) uses it, the product page says it beside the product type and in
+its details, and search finds it ("japanese 151"). It is set when a product
+is saved, by `python manage.py set_languages` (the update runs it), and every
+hour by `tidy_all`. To correct one, put the language in the product's name,
+for example "(Japanese)".
+
+What counts, in order:
+
+- **Stated:** a language word in English or the language itself
+  (Japanese, Korean, Simplified Chinese, Deutsch, Japonais), a kind of
+  product named in another language (Top-Trainer-Box, Coffret Dresseur
+  d'Elite), a script (kana, Hangul, Thai, Cyrillic, Chinese characters), or
+  a seller's code where it cannot be a word: "[JP]", "(DE)", "- KR" at the
+  end, "JP Version", "JPN", "CHS". In shop and eBay titles an upper-case
+  "JP", "KR" or "KOR" on its own counts too. "It" in Wreck It Ralph, "De" in
+  Cruella De Vil, Magic's "Kor" and "Germany" never count.
+- **Implied, Pokémon:** a set code with a letter after the number, which
+  only Asian editions have (sv2a, sv5M, s12a, SM12a, M2a); a Simplified
+  Chinese code (CSV9C, CBB3C) or Gem Pack; a Japanese-only kind of product
+  (High Class Pack, Deck Build Box) or set name (Terastal Festival, VSTAR
+  Universe, Eevee Heroes). These mean Japanese unless the text states
+  another language, because Korean and Traditional Chinese reuse the codes;
+  a letter after the code names the edition ("s7D F" Traditional Chinese,
+  "SV8A-T" Thai). English numbering (SV3.5, SV08, SWSH12.5), bare codes
+  English shares (SV8, SM6) and set names English shares (Black Bolt, White
+  Flare, 151) say nothing.
+- **Implied, One Piece:** the Chinese and Korean set codes (OPC-01, OPK-01).
+- "English", "Asian English" or "(EN)" outweighs anything implied.
+
+A shop or eBay title in another language never matches a product by name,
+two products in different languages are never duplicates (so never merged),
+a product is filed only under a set of its own language, the autopilot says
+no to a found page or hides a price whose title is plainly in another
+language, and Claude is told both languages. New products from a shop title
+that gives only a code ("151 (sv2a) Booster Box") are named with the
+language in words ("... (Japanese)").
 
 ## Product types per game
 

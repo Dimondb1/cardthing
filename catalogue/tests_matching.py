@@ -120,6 +120,18 @@ class TidyListingsTests(TestCase):
             self.assertTrue(Listing.objects.filter(pk=listing.pk).exists(), listing.url)
         self.assertFalse(Listing.objects.filter(pk=wrong.pk).exists())
 
+    def test_a_box_address_that_says_36x_packs_is_kept_and_a_multi_buy_address_is_not(self):
+        pokemon = make_game(name="Pokemon", slug="pokemon", short_name="Pokemon")
+        box = make_product(make_set(pokemon, name="Destined Rivals", slug="dri"), name="Destined Rivals Booster Box",
+                           product_type="booster_box")
+        kept = make_listing(box, make_retailer("Card Vault"),
+                            url="https://cv.example/products/pokemon-tcg-destined-rivals-booster-box-36x-packs")
+        wrong = make_listing(box, make_retailer("Other"),
+                             url="https://o.example/products/pokemon-destined-rivals-booster-box-36x-packs-plus-6x-booster-packs")
+        call_command("tidy_listings", stdout=StringIO())
+        self.assertTrue(Listing.objects.filter(pk=kept.pk).exists())
+        self.assertFalse(Listing.objects.filter(pk=wrong.pk).exists())
+
     def test_listings_on_the_wrong_product_are_removed(self):
         magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
         box = make_product(make_set(magic, name="Invasion", slug="invasion"), name="Invasion Booster Box", product_type="booster_box")
@@ -160,3 +172,6 @@ class BoxContentsKeyTests(TestCase):
         self.assertEqual(match_key("Pokemon TCG: Scarlet & Violet - Destined Rivals Booster Box (36x Packs)"),
                          match_key("Destined Rivals Booster Box"))
         self.assertIn("#pack", match_key("Pokemon 3x Booster Packs"))
+        # Extra packs sold with the box keep their count and mark, so they never share the plain box's key.
+        self.assertNotEqual(match_key("Destined Rivals Booster Box (36x Packs) + 6x Booster Packs"),
+                            match_key("Destined Rivals Booster Box"))

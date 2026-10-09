@@ -53,7 +53,7 @@ from django.utils import timezone
 from . import crawl, importers
 from .classify import classify
 from .importers import Catalogue, ImportError_, apply_offers, ean_key, link_key, money, product_offers
-from .classify import TYPES
+from .classify import TYPES, label_kind
 from .matching import AUTO_LINK, SUGGEST, TYPE_WORDS, covers, key_words, shop_title
 from .models import (
     DailyPageView, ImportRun, Listing, OutboundClick, Product, Retailer, ShopPage, ShopProduct, StockAlert,
@@ -358,21 +358,6 @@ def variant_label(title, page_title):
     if page_title and title.startswith(f"{page_title} (") and title.endswith(")"):
         return title[len(page_title) + 2:-1]
     return ""
-
-
-def label_kind(label):
-    """The kind of product a variant label names ("1 Pack" is a booster pack), or None. A number of
-    packs above one names no kind: it is a count, not a pack."""
-    words = [word[:-1] if len(word) > 3 and word.endswith("s") else word
-             for word in re.findall(r"[a-z0-9']+", fold(label).lower())]
-    text = f" {' '.join(words)} "
-    counts = [int(word) for word in words if word.isdigit()]
-    for kind, phrases in TYPES:
-        if any(f" {phrase} " in text for phrase in phrases):
-            if kind == "booster_pack" and any(n > 1 for n in counts):
-                return None
-            return kind
-    return None
 
 
 def variant_cap(product, label):

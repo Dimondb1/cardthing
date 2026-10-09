@@ -19,7 +19,7 @@ from contextlib import nullcontext
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from catalogue.classify import NOT_SEALED, find_game
+from catalogue.classify import NOT_SEALED, box_contents, find_game
 from catalogue.ebay import EbayError, fill_titles, too_cheap_listings
 from catalogue.importers import slug_words
 from catalogue.matching import DIFFERENT, expand, match_key
@@ -46,7 +46,8 @@ def fits(listing):
     named = find_game(title)
     if named is not None and named != product.game.slug:
         return False
-    if NOT_SEALED.search(title) and not NOT_SEALED.search(product.name):
+    # "...-booster-box-36x-packs" says what is inside the box, the same rule classify uses.
+    if NOT_SEALED.search(box_contents(title)) and not NOT_SEALED.search(product.name):
         return False
     title_text = " " + expand(title) + " "
     name_text = " " + expand(product.name) + " "

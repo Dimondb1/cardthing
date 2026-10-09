@@ -333,6 +333,25 @@ class NameMatchingTests(TestCase):
         self.assertEqual((updated, unmatched), (1, []))
         self.assertEqual(Listing.objects.get(retailer=self.retailer).product, self.box)
 
+    def test_a_one_pack_variant_on_a_box_page_never_prices_the_box(self):
+        from .importers import apply_offers, product_offers
+
+        page = {"handle": "ssp-box", "title": "Pokemon TCG: Surging Sparks Booster Box (36x Packs)", "tags": [], "images": [],
+                "variants": [{"id": 1, "title": "1 Pack", "price": "5.50", "available": True, "barcode": ""},
+                             {"id": 2, "title": "Booster Box", "price": "154.25", "available": True, "barcode": ""}]}
+        found, updated, unmatched = apply_offers(self.retailer, product_offers("https://pc.example", page), complete=False)
+        listing = Listing.objects.get(retailer=self.retailer)
+        self.assertEqual((listing.product, listing.price, listing.url), (self.box, Decimal("154.25"), "https://pc.example/products/ssp-box?variant=2"))
+        self.assertTrue(any("a variant of another kind" in line for line in unmatched))
+
+    def test_a_box_sold_with_extra_packs_is_not_the_box(self):
+        from .importers import Offer, apply_offers
+
+        offer = Offer(title="Pokemon TCG: Surging Sparks Booster Box (36x Packs) + 6x Booster Packs", url="https://pc.example/products/ssp-bundle",
+                      price=Decimal("189.99"), availability=Listing.Availability.IN_STOCK)
+        apply_offers(self.retailer, [offer], complete=False)
+        self.assertFalse(Listing.objects.filter(retailer=self.retailer, product=self.box).exists())
+
     def test_import_links_confident_matches_and_queues_the_rest(self):
         page = shopify_page([
             {"handle": "pe-etb", "title": "Pokemon TCG Prismatic Evolutions Elite Trainer Box", "tags": [], "images": [{"src": "https://cdn.example/etb.jpg"}],

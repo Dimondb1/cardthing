@@ -10,6 +10,7 @@ land on one product page.
 
 import html
 import re
+import unicodedata
 from dataclasses import dataclass
 
 from .matching import expand
@@ -66,7 +67,7 @@ NOT_SEALED = re.compile(
     r"\(near mint\)|\bnear mint\b|\blightly played\b|\bmoderately played\b|\(nm\)|\bpromo pack\b|\bpromotion pack\b|\bpower pack\b|"
     r"\bborderless\b|\bextended art\b|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"
     r"\b(?:x|×)\s?\d+\b|\b\d+\s?(?:x|×)\b|\bpack of \d+\b|\bbundle of \d+\b|"
-    r"\bmystery booster(?: \d)?\s*$|\bdeck protectors?\b|\bprotectors?\b|\bholder\b|\bplay ?mat\b|\bgamegenic\b|\bultra[- ]pro\b|\bdragon shield\b|\bultimate guard\b|\bbastion\b|\bsidekick\b|\bsquire\b|\bwatchtower\b|\bsatin tower\b|\bzip-?up\b|\bart sleeves\b|\bcard holder\b|\bdeck holder\b|\bmatte sleeves\b|\bboxgods?\b|\bonline (?:deck )?code\b|\bprize pack\b|\bleague promo\b|\bnon-?holo\b|"
+    r"\bmystery booster(?: \d)?\s*$|\bmystery (?:box(?:es)?|bundles?|bags?|packs?)\b|\bdeck protectors?\b|\bprotectors?\b|\bholder\b|\bplay ?mat\b|\bgamegenic\b|\bultra[- ]pro\b|\bdragon shield\b|\bultimate guard\b|\bbastion\b|\bsidekick\b|\bsquire\b|\bwatchtower\b|\bsatin tower\b|\bzip-?up\b|\bart sleeves\b|\bcard holder\b|\bdeck holder\b|\bmatte sleeves\b|\bboxgods?\b|\bonline (?:deck )?code\b|\bprize pack\b|\bleague promo\b|\bnon-?holo\b|"
     r"\(planeswalker deck card\)|\bdeck card\b|\(borderless art\)|\bfull art\b(?!.*(?:box|tin|bundle|collection box))|"
     r"\btokens?\b|\bemblem\b|\bcode sheet\b|\bonline code\b|\bcard dividers?\b|\bdeck pods?\b|\(display commander\)|"
     r"\btheme booster card\b|\bbooster card\b|\bstickers?\b|\bmini album\b|\bcrates?\b|\bdeck box(?:es)?\b|\bcard case\b|"
@@ -74,17 +75,39 @@ NOT_SEALED = re.compile(
     re.I,
 )
 # "Booster Box (36x Packs)" says what is inside the box, not that it is a multi-buy, but NOT_SEALED's
-# "36x" rule would refuse it. A count of 6 to 36 packs in a title that names a box or display is
-# rewritten as "36 packs" first. "Booster Pack x3" and "3x Booster Packs" stay multi-buys.
-BOX_WORDS = re.compile(r"\b(?:box|boxes|display)\b", re.I)
-BOX_CONTENTS = re.compile(r"\b(\d{1,2})\s?[x×]\s*((?:sealed\s+)?(?:booster\s*)?packs?)\b", re.I)
+# "36x" rule would refuse it. Only a count of 6 to 36 packs written straight after the box itself
+# ("Booster Box (36x Packs)", "Display - 24x Packs") is rewritten, and only once. Any other count stays
+# and is refused: "Booster Box (36x Packs) + 6x Booster Packs", "2 Booster Boxes (36x Packs)",
+# "10x Booster Packs (Display Box)", "Mystery Box (10x Booster Packs)" are not one sealed box.
+BOX_CONTENTS = re.compile(
+    r"\b((?:booster\s+)?display(?:\s+box)?|booster\s+box|elite\s+trainer\s+box|etb)\b\s*[-–:]?\s*"
+    r"(\(?)\s*(\d{1,2})\s?[x×]\s*((?:sealed\s+)?(?:booster\s*)?packs?)\b\s*(\)?)",
+    re.I,
+)
 
 
 def box_contents(title):
-    """The title with a box's pack count written as a count, not a multi-buy."""
-    if not BOX_WORDS.search(title or ""):
-        return title
-    return BOX_CONTENTS.sub(lambda m: f"{m.group(1)} {m.group(2)}" if 6 <= int(m.group(1)) <= 36 else m.group(0), title)
+    """The title with a box's own pack count written as a count, not a multi-buy."""
+    def rewrite(m):
+        if not 6 <= int(m.group(3)) <= 36:
+            return m.group(0)
+        return f"{m.group(1)} {m.group(2)}{m.group(3)} {m.group(4)}{m.group(5)}"
+    return BOX_CONTENTS.sub(rewrite, title or "", count=1)
+
+
+def label_kind(label):
+    """The kind of product a variant label names ("1 Pack" is a booster pack), or None. A number of
+    packs above one names no kind: it is a count, not a pack."""
+    folded = unicodedata.normalize("NFKD", label or "").encode("ascii", "ignore").decode().lower()
+    words = [word[:-1] if len(word) > 3 and word.endswith("s") else word for word in re.findall(r"[a-z0-9']+", folded)]
+    text = f" {' '.join(words)} "
+    counts = [int(word) for word in words if word.isdigit()]
+    for kind, phrases in TYPES:
+        if any(f" {phrase} " in text for phrase in phrases):
+            if kind == "booster_pack" and any(n > 1 for n in counts):
+                return None
+            return kind
+    return None
 
 
 # Makers of merchandise and accessories, not cards. Nothing from them is a sealed TCG product.

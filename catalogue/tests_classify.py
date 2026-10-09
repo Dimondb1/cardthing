@@ -123,8 +123,18 @@ class ClassifyLeakTests(TestCase):
         for title in ["Pokemon 3x Booster Pack Bundle", "Pokemon Mega Evolution 6x Booster Packs",
                       "Pokemon Surging Sparks Booster Box x2", "Pokemon Surging Sparks Booster Box 2x",
                       "Pokemon Surging Sparks 3x Booster Box", "Pokemon Surging Sparks Booster Pack x 36",
-                      "Pokemon Surging Sparks Booster Box (4x Packs)", "Pokemon Surging Sparks Booster Box (48x Packs)"]:
+                      "Pokemon Surging Sparks Booster Box (4x Packs)", "Pokemon Surging Sparks Booster Box (48x Packs)",
+                      # Only the count straight after the box is its contents; any other count is a multi-buy or a bundle.
+                      "Pokemon TCG - Scarlet & Violet - Destined Rivals - Booster Box (36x Packs) + 6x Booster Packs",
+                      "One Piece OP-10 Booster Box (24x Packs) + 12x Booster Packs", "Destined Rivals 2 Booster Boxes (36x Packs)",
+                      "Pokemon TCG Mystery Box (10x Booster Packs)", "Pokemon Mystery Box (10 Booster Packs)",
+                      "Destined Rivals 10x Booster Packs (Display Box)", "Lorcana Fabled 24x Booster Packs (without display box)",
+                      "Pokemon 12x Booster Packs Gift Box", "Simplified Chinese Gem Pack Vol 3 Box (10x Packs)",
+                      "2x Booster Box (36x Packs)", "Pokemon Destined Rivals Booster Box (36x Packs) x2"]:
             self.assertIsNone(classify(title, price=100), title)
+        for title in ["Pokemon Surging Sparks Booster Pack Display (36x Packs)", "Disney Lorcana Fabled Sleeved Booster Display - 24x Packs",
+                      "Japanese Pokemon Terastal Festival Booster Box (30x Packs)"]:
+            self.assertEqual(classify(title, price=100).product_type, "booster_box", title)
 
     def test_a_word_repeated_by_the_shop_appears_once(self):
         self.assertEqual(classify("Yu-Gi-Oh! Justice Hunters Booster Booster Pack", price=3).name, "Justice Hunters Booster Pack")

@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db import connection
 
 from catalogue.pricing import snapshot_all
+from catalogue.sanity import rebuild_bands
 
 
 def checkpoint():
@@ -19,8 +20,8 @@ def checkpoint():
 
 class Command(BaseCommand):
     help = (
-        "Record today's cheapest delivered price for every product, then checkpoint the "
-        "write-ahead log. Run once a day, for example from cron, so price history has no gaps."
+        "Record today's cheapest delivered price for every product, checkpoint the write-ahead log, "
+        "then rebuild the price bands. Run once a day, for example from cron, so price history has no gaps."
     )
 
     def handle(self, *args, **options):
@@ -30,3 +31,6 @@ class Command(BaseCommand):
         if result and result[0]:
             # The first column is 1 when another connection kept the checkpoint from finishing.
             self.stderr.write("The write-ahead log could not be emptied: another process was busy. It is tried again tomorrow.")
+        # The usual price of each kind of product, for judging a price no other shop can.
+        bands = rebuild_bands()
+        self.stdout.write(f"Rebuilt {len(bands)} price bands.")

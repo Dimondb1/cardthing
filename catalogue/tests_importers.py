@@ -886,11 +886,12 @@ class WriteSkippingTests(TestCase):
         offers = [self.offer(0), self.offer(1, price="38.00"), self.offer(2)]
         checked_at = timezone.now()
         with mock.patch("catalogue.signals.clear_list_caches") as cleared:
-            # Four lookups (links, barcodes, catalogue, ignored), a fetch per offer, eight writes and reads for
-            # the one change (its save, its verdict read, its product, the day's lowest price; with no other
-            # shop its price is not stored as a last good price), one look for verdicts to heal and one stamp
-            # for the other two, and the out-of-stock sweep. Rewriting all three would cost about thirty.
-            with self.assertNumQueries(18):
+            # Four lookups (links, barcodes, catalogue, ignored), a fetch per offer, nine writes and reads for
+            # the one change (its save, its verdict read, its own history and band as it has no other shop,
+            # its product, the day's lowest price; with nothing to judge it, its price is not stored as a last
+            # good price), one look for verdicts to heal and one stamp for the other two, and the
+            # out-of-stock sweep. Rewriting all three would cost about thirty.
+            with self.assertNumQueries(19):
                 found, updated, unmatched = apply_offers(self.retailer, offers, checked_at=checked_at)
         self.assertEqual((found, updated, unmatched), (3, 3, []))
         self.assertEqual(cleared.call_count, 1)

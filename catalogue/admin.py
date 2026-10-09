@@ -3,7 +3,7 @@ from django.db.models import Count
 from django.utils.html import format_html
 
 from . import pricing, sanity
-from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Restock, Retailer, ShopProduct, StockAlert
+from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Restock, Retailer, ShopProduct, StockAlert, TypeBand
 
 
 @admin.register(Game)
@@ -237,6 +237,21 @@ class DailyLowestPriceAdmin(admin.ModelAdmin):
     search_fields = ("product__name",)
     list_select_related = ("product",)
     date_hierarchy = "date"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(TypeBand)
+class TypeBandAdmin(admin.ModelAdmin):
+    """Worked out each night by snapshot_daily_prices (or price_bands); nothing here is edited by hand."""
+
+    list_display = ("game", "product_type", "product_set", "n", "p10", "median", "p90", "computed_at")
+    list_filter = ("game", "product_type")
+    list_select_related = ("game", "product_set")
 
     def has_add_permission(self, request):
         return False

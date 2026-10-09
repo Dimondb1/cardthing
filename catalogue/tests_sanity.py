@@ -539,3 +539,251 @@ class ChecksPageSanityTests(Shops, TestCase):
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 302, getattr(response, "context", None) and response.context["adminform"].form.errors)
         self.assertEqual(self.verdicts(self.clearance), [OK])
+
+
+class Boxes(Shops):
+    """Shops plus eight or so other booster boxes of the same game and set, to make a band from."""
+
+    def boxes(self, prices, product_set=None, product_type="booster_box"):
+        made = []
+        for price in prices:
+            i = len(Product.objects.all())
+            product = make_product(product_set or self.set, name=f"Box {i}", slug=f"box-{i}", product_type=product_type)
+            made.append(self.shop(price, product))
+        return made
+
+    def band(self, product_set=None):
+        from .models import TypeBand
+
+        return TypeBand.objects.get(product_type="booster_box", product_set=product_set)
+
+
+EIGHT = (95, 100, 110, 115, 120, 130, 150, 150)
+
+
+class BandTests(Boxes, TestCase):
+    def test_eight_products_make_a_band_and_seven_do_not(self):
+        from .models import TypeBand
+
+        self.boxes(EIGHT[:7])
+        self.assertEqual(sanity.rebuild_bands(), [])
+        self.assertFalse(TypeBand.objects.exists())
+        self.boxes([EIGHT[7]])
+        sanity.rebuild_bands()
+        game, mine = self.band(), self.band(self.set)
+        for band in (game, mine):
+            self.assertEqual((band.n, band.p10, band.median, band.p90), (8, Decimal("95.00"), Decimal("115.00"), Decimal("150.00")))
+        self.assertIsNotNone(game.computed_at)
+
+    def test_a_band_that_falls_under_eight_is_deleted(self):
+        from .models import TypeBand
+
+        boxes = self.boxes(EIGHT)
+        sanity.rebuild_bands()
+        self.assertEqual(TypeBand.objects.count(), 2)
+        Listing.objects.filter(pk=boxes[0].pk).update(availability=Listing.Availability.OUT_OF_STOCK)
+        sanity.rebuild_bands()
+        self.assertFalse(TypeBand.objects.exists())
+
+    def test_doubtful_excluded_marketplace_and_unknown_delivery_prices_do_not_feed_bands(self):
+        self.boxes(EIGHT)
+        doubtful, excluded, unknown = self.boxes([5, 1, 2])
+        Listing.objects.filter(pk=doubtful.pk).update(sanity=DOUBTFUL)
+        Listing.objects.filter(pk=excluded.pk).update(sanity=EXCLUDED)
+        Listing.objects.filter(pk=unknown.pk).update(delivery_known=False)
+        marketplace = make_retailer("eBay", slug="ebay", source_type=Retailer.Source.EBAY)
+        product = make_product(self.set, name="Box on eBay", slug="box-ebay", product_type="booster_box")
+        make_listing(product, marketplace, price="3.00")
+        sanity.rebuild_bands()
+        band = self.band()
+        self.assertEqual((band.n, band.p10), (8, Decimal("95.00")))
+
+    def test_a_product_counts_in_its_set_band_and_its_game_band(self):
+        other = make_set(self.set.game, name="Stellar Crown", slug="stellar-crown")
+        self.boxes(EIGHT[:4])
+        self.boxes(EIGHT[4:], product_set=other)
+        sanity.rebuild_bands()
+        self.assertEqual(self.band().n, 8)
+        from .models import TypeBand
+
+        self.assertFalse(TypeBand.objects.exclude(product_set=None).exists())
+
+    def test_price_bands_dry_run_writes_nothing(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .models import TypeBand
+
+        self.boxes(EIGHT)
+        out = StringIO()
+        call_command("price_bands", "--dry-run", stdout=out)
+        self.assertFalse(TypeBand.objects.exists())
+        self.assertIn("Pokémon, Booster box, all sets: 8 products, £95.00 / £115.00 / £150.00", out.getvalue())
+        self.assertIn("Prismatic Evolutions: 8 products", out.getvalue())
+        self.assertIn("2 bands would be saved", out.getvalue())
+        call_command("price_bands", stdout=StringIO())
+        self.assertEqual(TypeBand.objects.count(), 2)
+        for text in (out.getvalue(), sanity.__doc__):
+            self.assertNotIn("\u2014", text)
+            self.assertNotIn("!", text)
+
+    def test_the_nightly_snapshot_rebuilds_the_bands(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .management.commands import snapshot_daily_prices
+
+        self.boxes(EIGHT)
+        out = StringIO()
+        # The checkpoint cannot run inside a test's transaction; CheckpointTests covers it.
+        with mock.patch.object(snapshot_daily_prices, "checkpoint", return_value=None):
+            call_command("snapshot_daily_prices", stdout=out)
+        self.assertEqual(self.band().p90, Decimal("150.00"))
+        self.assertIn("Rebuilt 2 price bands.", out.getvalue())
+
+    def test_admin_shows_bands_read_only(self):
+        from django.contrib.auth import get_user_model
+
+        self.boxes(EIGHT)
+        sanity.rebuild_bands()
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        page = self.client.get(reverse("admin:catalogue_typeband_changelist"))
+        self.assertContains(page, "95.00")
+        self.assertEqual(self.client.get(reverse("admin:catalogue_typeband_add")).status_code, 403)
+
+
+class LoneShopBandTests(Boxes, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.boxes(EIGHT)
+        sanity.rebuild_bands()
+        self.lone = self.shop(100)
+
+    def test_far_below_the_band_is_excluded(self):
+        self.check(self.lone, 12)
+        lone = Listing.objects.get(pk=self.lone.pk)
+        self.assertEqual((lone.sanity, lone.sanity_ratio), (EXCLUDED, Decimal("0.13")))
+        self.assertIn("far below every booster box in Pokémon, usually from £95.00", lone.sanity_reason)
+        self.assertNotIn("\u2014", lone.sanity_reason)
+        self.assertIsNone(Product.objects.for_lists().get(pk=self.product.pk).lowest_price)
+
+    def test_well_below_the_band_is_doubtful(self):
+        self.check(self.lone, 40)
+        lone = Listing.objects.get(pk=self.lone.pk)
+        self.assertEqual(lone.sanity, DOUBTFUL)
+        self.assertIn("under half the usual low of £95.00 for its type (booster box in Pokémon)", lone.sanity_reason)
+
+    def test_far_above_the_band_is_doubtful_and_never_excluded(self):
+        self.check(self.lone, 700)
+        lone = Listing.objects.get(pk=self.lone.pk)
+        self.assertEqual((lone.sanity, lone.sanity_ratio), (DOUBTFUL, Decimal("4.67")))
+        self.assertIn("over four times the usual high of £150.00 for its type", lone.sanity_reason)
+        self.check(self.lone, 590)
+        self.assertEqual(self.verdicts(self.lone), [OK])
+
+    def test_a_price_the_band_kept_out_comes_back_when_it_is_right_again(self):
+        self.check(self.lone, 12)
+        self.check(self.lone, 105)
+        lone = Listing.objects.get(pk=self.lone.pk)
+        # Judged by the band, an OK lone price is kept as the shop's last good price.
+        self.assertEqual((lone.sanity, lone.sanity_reason, lone.last_ok_price), (OK, "", Decimal("105.00")))
+
+    def test_the_set_band_wins_over_the_game_band(self):
+        from .models import TypeBand
+
+        TypeBand.objects.filter(product_set=None).update(p10=Decimal("20.00"), p90=Decimal("40.00"))
+        self.check(self.lone, 22)
+        self.assertEqual(self.verdicts(self.lone), [EXCLUDED])
+        # A product without a set, or in a set with no band, uses the game band.
+        loose = Product.objects.create(game=self.set.game, name="Mystery Booster Box", slug="mystery", product_type="booster_box")
+        other = make_product(make_set(self.set.game, name="Stellar Crown", slug="stellar-crown"),
+                             name="Stellar Crown Booster Box", slug="stellar", product_type="booster_box")
+        for product in (loose, other):
+            listing = self.shop(100, product)
+            self.check(listing, 22)
+            self.assertEqual(self.verdicts(listing), [OK])
+
+    def test_another_type_or_game_has_no_band(self):
+        tin = make_product(self.set, name="Surging Sparks Tin", slug="tin", product_type="tin")
+        listing = self.shop(100, tin)
+        self.check(listing, 2)
+        self.assertEqual(self.verdicts(listing), [OK])
+        magic = make_set(make_game(name="Magic", slug="magic-the-gathering"), name="Foundations", slug="foundations")
+        box = make_product(magic, name="Foundations Play Booster Box", slug="fdn", product_type="booster_box")
+        listing = self.shop(100, box)
+        self.check(listing, 2)
+        self.assertEqual(self.verdicts(listing), [OK])
+
+    def test_one_other_shop_still_leaves_the_band_to_judge(self):
+        other = self.shop(40)
+        self.check(self.lone, 40)
+        self.assertEqual(self.verdicts(self.lone, other), [DOUBTFUL, DOUBTFUL])
+
+    def test_two_other_shops_agreeing_are_all_that_is_asked(self):
+        others = [self.shop(40), self.shop(40)]
+        Listing.objects.filter(pk=self.lone.pk).update(last_ok_price=Decimal("120.00"))
+        for days in range(1, 11):
+            DailyLowestPrice.objects.create(product=self.product, date=timezone.localdate() - timedelta(days=days), price="150.00")
+        with mock.patch.object(sanity, "own_verdict", wraps=sanity.own_verdict) as own:
+            self.check(self.lone, 40)
+        own.assert_not_called()
+        self.assertEqual(self.verdicts(self.lone, *others), [OK, OK, OK])
+        with self.assertNumQueries(1):
+            sanity.judge_product(self.product.pk)
+
+    def test_a_lone_listing_costs_one_query_for_its_evidence(self):
+        sanity.judge_product(self.product.pk)
+        with self.assertNumQueries(2):
+            sanity.judge_product(self.product.pk)
+
+
+class LoneShopHistoryTests(Shops, TestCase):
+    def test_a_lone_shop_is_judged_against_its_last_good_price(self):
+        lone = self.shop(120)
+        other = self.shop(125)
+        sanity.judge_product(self.product.pk)
+        self.assertEqual(Listing.objects.get(pk=lone.pk).last_ok_price, Decimal("120.00"))
+        Listing.objects.filter(pk=other.pk).update(availability=Listing.Availability.OUT_OF_STOCK)
+        self.check(lone, 40)
+        lone.refresh_from_db()
+        self.assertEqual((lone.sanity, lone.sanity_ratio), (DOUBTFUL, Decimal("0.33")))
+        self.assertIn("was £120.00 last time at this shop", lone.sanity_reason)
+        self.check(lone, 118)
+        lone.refresh_from_db()
+        self.assertEqual((lone.sanity, lone.sanity_reason, lone.last_ok_price), (OK, "", Decimal("118.00")))
+        # Three times dearer is still a price the shop may have; over it is doubtful, never kept out.
+        self.check(lone, 400)
+        self.assertEqual(self.verdicts(lone), [DOUBTFUL])
+        self.check(lone, 5)
+        self.assertEqual(self.verdicts(lone), [DOUBTFUL])
+
+    def history(self, days, price="90.00"):
+        for day in range(1, days + 1):
+            DailyLowestPrice.objects.create(product=self.product, date=timezone.localdate() - timedelta(days=day),
+                                            price=Decimal(price) + day)
+
+    def test_far_under_the_ninety_day_low_is_doubtful_and_never_excluded(self):
+        self.history(10)
+        lone = self.shop(100)
+        self.check(lone, 20)
+        lone.refresh_from_db()
+        self.assertEqual((lone.sanity, lone.sanity_ratio), (DOUBTFUL, Decimal("0.22")))
+        self.assertIn("under a third of the lowest in 90 days, £91.00", lone.sanity_reason)
+        self.check(lone, 1)
+        self.assertEqual(self.verdicts(lone), [DOUBTFUL])
+
+    def test_too_little_history_judges_nothing(self):
+        self.history(3)
+        lone = self.shop(100)
+        self.check(lone, 20)
+        lone.refresh_from_db()
+        self.assertEqual((lone.sanity, lone.last_ok_price), (OK, None))
+
+    def test_only_the_ninety_days_before_today_count(self):
+        for day in (0, *range(91, 101)):
+            DailyLowestPrice.objects.create(product=self.product, date=timezone.localdate() - timedelta(days=day), price="90.00")
+        lone = self.shop(100)
+        self.check(lone, 20)
+        self.assertEqual(self.verdicts(lone), [OK])

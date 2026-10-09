@@ -546,6 +546,35 @@ class DailyLowestPrice(models.Model):
         return f"{self.product} on {self.date}: £{self.price}"
 
 
+class TypeBand(models.Model):
+    """The usual price range of one kind of product in one game, or in one set of it.
+
+    Worked out each night from the shops' counted prices (catalogue/sanity.py rebuild_bands), so a
+    price with no other shop to compare against can still be judged against products like it. A row
+    with no set is the band for the whole game.
+    """
+
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="type_bands")
+    product_type = models.CharField(max_length=30, choices=Product.Type.choices)
+    product_set = models.ForeignKey(
+        ProductSet, on_delete=models.CASCADE, null=True, blank=True, related_name="type_bands", verbose_name="set"
+    )
+    n = models.PositiveIntegerField("products")
+    p10 = models.DecimalField("cheapest tenth", max_digits=9, decimal_places=2)
+    median = models.DecimalField(max_digits=9, decimal_places=2)
+    p90 = models.DecimalField("dearest tenth", max_digits=9, decimal_places=2)
+    computed_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["game", "product_type", "product_set"]
+        unique_together = [("game", "product_type", "product_set")]
+        verbose_name = "price band"
+
+    def __str__(self):
+        where = self.product_set or self.game
+        return f"{self.get_product_type_display()} in {where}: £{self.p10} to £{self.p90}"
+
+
 class OutboundClick(models.Model):
     """A visit to a retailer from RipRaptor. No personal data is stored."""
 

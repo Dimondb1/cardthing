@@ -320,6 +320,23 @@ the next change, on every read while it is not OK, when a shop comes back
 from being out of date, when your confirmation runs out, when you hide a
 price, and when you save a listing in admin.
 
+A price with fewer than two other shops to compare against is also judged
+against its own evidence. Under 35% or over three times the shop's last good
+price, or under 30% of the product's lowest price in the 90 days before today
+(once there are 7 days of history), is doubtful, never excluded: old history
+can hold prices from listings since deleted. Each kind of product in each
+game, and in each set, has a usual price range once 8 or more products have
+an OK delivered shop price (Admin > Price bands). Under a quarter of the
+cheapest tenth is excluded, under half of it doubtful, and over four times
+the dearest tenth doubtful. A set's range is used before the game's.
+`snapshot_daily_prices` rebuilds the ranges every night. To look at them or
+rebuild them at once:
+
+```sh
+python manage.py price_bands            # rebuild now and print the table
+python manage.py price_bands --dry-run  # print without saving
+```
+
 All of this can be done from a phone, without the server console: admin
 has a **Things to check** page (`/admin/checks/`) that lists doubtful prices
 with "This price is right" (it then counts while it moves less than 10% for

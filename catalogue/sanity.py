@@ -10,19 +10,29 @@ Price verdicts: every checked price is judged against what the other shops charg
 Nothing is deleted. A verdict is worked out again on every change, and the owner can confirm a price
 with one tap, which holds while it moves less than TRUST_BAND for TRUST_DAYS.
 
-A listing with no other shop to compare against is OK, but that OK is never stored as the shop's last
-good price. An excluded price stays excluded while fewer than two other shops are left to judge it, or
-until the owner shows it: the shops that showed it was impossible selling out does not make it possible.
+A listing with fewer than two other shops to compare against is also judged against its own evidence:
+the shop's last good price, the product's lowest price over 90 days and the usual price range of
+products of the same kind (a TypeBand). History alone only ever makes a price doubtful, because old
+history may hold prices from listings since deleted; only the band can keep a price out. A lone OK
+that nothing judged is never stored as the shop's last good price.
+
+An excluded price stays excluded while fewer than two other shops are left to judge it, or until the
+owner shows it: the shops that showed it was impossible selling out does not make it possible. A price
+the band kept out is judged again on every change, since the band is still there to judge it.
 """
 
+from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
+from functools import cached_property
 from statistics import median
 
-from django.db.models import F
+from django.db import transaction
+from django.db.models import Count, F, Min, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from .models import Listing, Retailer, stale_cutoff
+from .models import DailyLowestPrice, Listing, Product, Retailer, TypeBand, stale_cutoff
+from .types import type_label
 
 # With two or more other shops, the price against their median: under PEER_EXCLUDE_LOW or over
 # PEER_EXCLUDE_HIGH is kept out; under PEER_DOUBT_LOW or over PEER_DOUBT_HIGH is doubtful. The floor
@@ -37,6 +47,21 @@ ONE_PEER_HIGH = Decimal("3.33")
 # An owner-confirmed price holds while the shop moves it by no more than this, for this long.
 TRUST_BAND = Decimal("0.10")
 TRUST_DAYS = 30
+# With fewer than two other shops, against the shop's own last good price: a real clearance can halve
+# a price, so only under HISTORY_LOW or over HISTORY_HIGH is doubtful.
+HISTORY_LOW = Decimal("0.35")
+HISTORY_HIGH = Decimal("3.0")
+# Against the product's lowest price over HISTORY_DAYS, once it has HISTORY_MIN_ROWS days of history.
+HISTORY_DAYS = 90
+HISTORY_MIN_ROWS = 7
+HISTORY_FLOOR = Decimal("0.30")
+# Against products of the same kind: a band needs BAND_MIN_PRODUCTS prices. The cheapest tenth is already
+# left below p10, so a quarter of it is only reached by a different product; a collection box can
+# honestly be dear, so a high price is only ever doubtful.
+BAND_MIN_PRODUCTS = 8
+BAND_EXCLUDE_LOW = Decimal("0.25")
+BAND_DOUBT_LOW = Decimal("0.5")
+BAND_DOUBT_HIGH = Decimal("4")
 
 # Marketplaces are many sellers, so they are judged against the shops but never judge anyone.
 MARKETPLACES = (Retailer.Source.AMAZON, Retailer.Source.EBAY)
@@ -46,10 +71,13 @@ SEVERITY = {OK: 0, DOUBTFUL: 1, EXCLUDED: 2}
 TRUSTED_REASON = "confirmed by owner"
 RATIO_MAX = Decimal("99999.99")
 FIELDS = (
-    "pk", "price", "delivered_price", "delivery_known", "availability", "last_checked",
+    "pk", "product_id", "price", "delivered_price", "delivery_known", "availability", "last_checked",
     "retailer__source_type", "sanity", "sanity_reason", "sanity_ratio", "last_ok_price",
     "trusted_price", "trusted_at",
 )
+# Every reason the band gives for keeping a price out starts with this. Such an exclusion is judged
+# again on every change, unlike one the other shops made.
+BAND_KEPT_OUT = "far below every "
 
 
 def figure(row):
@@ -128,6 +156,91 @@ def noted(reason, row, peers):
     return reason[:160]
 
 
+class Evidence:
+    """What a listing with fewer than two other shops is judged by besides them, loaded only when needed.
+
+    One query, whatever the number of listings: the product's lowest price and days recorded over the
+    HISTORY_DAYS before today (today is left out so a price recorded a moment ago cannot vouch for
+    itself), and its band, the set's for its type when there is one, else the game's.
+    """
+
+    def __init__(self, product_id, now):
+        self.product_id = product_id
+        self.today = timezone.localdate(now)
+
+    @cached_property
+    def facts(self):
+        history = DailyLowestPrice.objects.filter(
+            product=OuterRef("pk"), date__lt=self.today, date__gte=self.today - timedelta(days=HISTORY_DAYS),
+        ).order_by().values("product")
+        bands = TypeBand.objects.filter(
+            Q(product_set=OuterRef("product_set")) | Q(product_set__isnull=True),
+            game=OuterRef("game"), product_type=OuterRef("product_type"),
+        ).order_by(F("product_set").asc(nulls_last=True))
+        return Product.objects.filter(pk=self.product_id).values(
+            "product_type", "game__slug", "game__name",
+            low=Subquery(history.annotate(low=Min("price")).values("low")),
+            days=Subquery(history.annotate(days=Count("pk")).values("days")),
+            p10=Subquery(bands.values("p10")[:1]),
+            p90=Subquery(bands.values("p90")[:1]),
+        ).first() or {}
+
+    @property
+    def history(self):
+        """(lowest price, days recorded) over the HISTORY_DAYS before today."""
+        return self.facts.get("low"), self.facts.get("days") or 0
+
+    @property
+    def band(self):
+        """(p10, p90) of the product's band, or None."""
+        if self.facts.get("p10") is None:
+            return None
+        return self.facts["p10"], self.facts["p90"]
+
+    def kind(self):
+        """'booster box in Pokémon': the product type in the game's own words, lower case unless a name."""
+        label = type_label(self.facts["game__slug"], self.facts["product_type"])
+        if label == label.capitalize():
+            label = label.lower()
+        return f"{label} in {self.facts['game__name']}"
+
+
+def own_verdict(row, evidence):
+    """(verdict, judged) for a listing with fewer than two other shops, from its history and its band.
+
+    ``judged`` says some evidence was there to judge it, so an OK may be kept as its last good price.
+    """
+    verdict, judged = None, False
+    last = row["last_ok_price"]
+    if last and last > 0:
+        judged = True
+        r = row["price"] / last
+        if r < HISTORY_LOW or r > HISTORY_HIGH:
+            verdict = worse(verdict, (DOUBTFUL, noted(f"was {money(last)} last time at this shop", row, []), ratio_of(r)))
+    low, days = evidence.history
+    if days >= HISTORY_MIN_ROWS and low and low > 0:
+        judged = True
+        r = figure(row) / low
+        if r < HISTORY_FLOOR:
+            reason = f"under a third of the lowest in {HISTORY_DAYS} days, {money(low)}"
+            verdict = worse(verdict, (DOUBTFUL, noted(reason, row, []), ratio_of(r)))
+    band = evidence.band
+    if band is not None and band[0] > 0:
+        judged = True
+        p10, p90 = band
+        r = figure(row) / p10
+        if r < BAND_EXCLUDE_LOW:
+            reason = f"{BAND_KEPT_OUT}{evidence.kind()}, usually from {money(p10)}"
+            verdict = worse(verdict, (EXCLUDED, noted(reason, row, []), ratio_of(r)))
+        elif r < BAND_DOUBT_LOW:
+            reason = f"under half the usual low of {money(p10)} for its type ({evidence.kind()})"
+            verdict = worse(verdict, (DOUBTFUL, noted(reason, row, []), ratio_of(r)))
+        elif p90 > 0 and figure(row) > BAND_DOUBT_HIGH * p90:
+            reason = f"over four times the usual high of {money(p90)} for its type ({evidence.kind()})"
+            verdict = worse(verdict, (DOUBTFUL, noted(reason, row, []), ratio_of(figure(row) / p90)))
+    return verdict or (OK, "", None), judged
+
+
 def worse(current, new):
     """The more severe of two (sanity, reason, ratio) verdicts; on a tie the first stands."""
     if current is None or SEVERITY[new[0]] > SEVERITY[current[0]]:
@@ -135,12 +248,15 @@ def worse(current, new):
     return current
 
 
-def verdicts(rows, now):
-    """({pk: (sanity, reason, ratio)} for every row, {pks that had no other shop to compare against}).
+def verdicts(rows, now, evidence=None):
+    """({pk: (sanity, reason, ratio)} for every row, {pks with an OK that nothing was there to judge}).
 
     Two passes: the second leaves out of every comparison the prices the first kept out, so one wild
-    price cannot drag the median the others are judged by.
+    price cannot drag the median the others are judged by. A row with two or more other shops is judged
+    by them alone; a row with fewer is judged by them, if any, and by its own evidence, the worst winning.
     """
+    if evidence is None and rows:
+        evidence = Evidence(rows[0]["product_id"], now)
     cutoff = stale_cutoff(now)
     peers = [row for row in rows if is_peer(row, cutoff)]
     peer_pks = {row["pk"] for row in peers}
@@ -153,16 +269,22 @@ def verdicts(rows, now):
             if row["pk"] in trusted:
                 continue
             others = [p for p in peers if p["pk"] != row["pk"] and p["pk"] not in left_out]
-            if row["sanity"] == EXCLUDED and len(others) < 2:
+            if row["sanity"] == EXCLUDED and len(others) < 2 and not row["sanity_reason"].startswith(BAND_KEPT_OUT):
                 # Only two or more shops can keep a price out, so only two or more, or the owner, let it back in.
                 result[row["pk"]] = (EXCLUDED, row["sanity_reason"], row["sanity_ratio"])
                 continue
+            if len(others) >= 2:
+                sanity, reason, ratio, _ = peer_verdict(row, others)
+                result[row["pk"]] = worse(result.get(row["pk"]), (sanity, reason, ratio))
+                continue
+            own, judged = own_verdict(row, evidence)
             if not others:
-                lone.add(row["pk"])
-                result[row["pk"]] = worse(result.get(row["pk"]), (OK, "", None))
+                if not judged:
+                    lone.add(row["pk"])
+                result[row["pk"]] = worse(result.get(row["pk"]), own)
                 continue
             sanity, reason, ratio, both = peer_verdict(row, others)
-            result[row["pk"]] = worse(result.get(row["pk"]), (sanity, reason, ratio))
+            result[row["pk"]] = worse(result.get(row["pk"]), worse((sanity, reason, ratio), own))
             partner = others[0] if both else None
             # Only a peer still in the comparison, whose figure is above nothing, can make its one partner doubtful.
             if partner is not None and row["pk"] in peer_pks and row["pk"] not in left_out and partner["pk"] not in trusted:
@@ -222,3 +344,80 @@ def trust(listing, now=None):
     now = now or timezone.now()
     Listing.objects.filter(pk=listing.pk).update(trusted_price=listing.price, trusted_at=now)
     return judge_product(listing.product_id, now=now)
+
+
+def band_prices():
+    """(game id, product type, set id, price) for every product on the site with a price a band can use.
+
+    Each product's cheapest current, buyable, delivery-known shop price whose verdict is OK: a doubtful or
+    excluded price, an item price without its delivery and a marketplace never shape what is usual.
+    """
+    shops = [source for source in Retailer.Source.values if source not in MARKETPLACES]
+    usable = Q(
+        listings__is_active=True,
+        listings__retailer__is_active=True,
+        listings__retailer__source_type__in=shops,
+        listings__last_checked__gte=stale_cutoff(),
+        listings__availability__in=Listing.BUYABLE,
+        listings__sanity=OK,
+        listings__delivery_known=True,
+        listings__delivered_price__gt=0,
+    )
+    return (
+        Product.objects.active()
+        .annotate(band_price=Min("listings__delivered_price", filter=usable))
+        .filter(band_price__isnull=False)
+        .values_list("game_id", "product_type", "product_set_id", "band_price")
+    )
+
+
+def percentile(prices, percent):
+    """The sorted price at index floor(percent / 100 x (n - 1)): never interpolated, always a real price."""
+    return prices[percent * (len(prices) - 1) // 100]
+
+
+def bands_from(prices_by_group):
+    """{(game id, type, set id or None): (n, p10, median, p90)} for every group of BAND_MIN_PRODUCTS or more."""
+    bands = {}
+    for key, prices in prices_by_group.items():
+        if len(prices) < BAND_MIN_PRODUCTS:
+            continue
+        prices = sorted(price.quantize(Decimal("0.01")) for price in prices)
+        bands[key] = (len(prices), percentile(prices, 10), percentile(prices, 50), percentile(prices, 90))
+    return bands
+
+
+def rebuild_bands(dry_run=False, now=None):
+    """Work out every band again from today's prices and save them, deleting groups now too small.
+
+    A product counts in its set's band and in its game's band for its type. Returns the bands as a sorted
+    list of (game id, type, set id, n, p10, median, p90). With ``dry_run`` nothing is written.
+    """
+    now = now or timezone.now()
+    groups = defaultdict(list)
+    for game_id, product_type, set_id, price in band_prices():
+        groups[(game_id, product_type, None)].append(price)
+        if set_id is not None:
+            groups[(game_id, product_type, set_id)].append(price)
+    bands = bands_from(groups)
+    if not dry_run:
+        with transaction.atomic():
+            existing = {(b.game_id, b.product_type, b.product_set_id): b for b in TypeBand.objects.all()}
+            gone = [band.pk for key, band in existing.items() if key not in bands]
+            if gone:
+                TypeBand.objects.filter(pk__in=gone).delete()
+            changed, new = [], []
+            for key, (n, p10, mid, p90) in bands.items():
+                band = existing.get(key)
+                if band is None:
+                    new.append(TypeBand(game_id=key[0], product_type=key[1], product_set_id=key[2],
+                                        n=n, p10=p10, median=mid, p90=p90, computed_at=now))
+                    continue
+                band.n, band.p10, band.median, band.p90, band.computed_at = n, p10, mid, p90, now
+                changed.append(band)
+            TypeBand.objects.bulk_create(new)
+            TypeBand.objects.bulk_update(changed, ["n", "p10", "median", "p90", "computed_at"])
+    return sorted(
+        ((*key, *stats) for key, stats in bands.items()),
+        key=lambda band: (band[0], band[1], band[2] is not None, band[2] or 0),
+    )

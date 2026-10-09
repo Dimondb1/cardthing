@@ -15,6 +15,7 @@ from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect, Ht
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_POST
 
 from catalogue import alerts, insights, mail, offers, pricing
@@ -1366,6 +1367,7 @@ def posted_price_moved(request, listing):
 
 
 @staff_member_required
+@sensitive_post_parameters("claude_key")
 def checks_page(request):
     """Things to check: what the autopilot answered, with Undo, then doubtful and excluded prices, wrong
     matches, likely duplicates, products found at another shop and unknown delivery, each with a one-tap fix."""
@@ -1374,13 +1376,13 @@ def checks_page(request):
     from django.contrib import messages
     from django.db import transaction
 
-    from catalogue import autopilot, checks, sanity
+    from catalogue import autopilot, checks, judge, sanity
     from catalogue.management.commands.merge_duplicates import merge
     from catalogue.models import CheckAnswer
     from catalogue.signals import clear_list_caches
 
     if request.method == "POST":
-        action = request.POST.get("action")
+        action = request.POST.get("action", "")
         if action in ("hide", "trust", "show"):
             listing = get_object_or_404(Listing.objects.select_related("product", "retailer"), pk=request.POST.get("listing"))
             if posted_price_moved(request, listing):
@@ -1391,11 +1393,13 @@ def checks_page(request):
                 # never answers a price the owner hid.
                 autopilot.hide(listing)
                 autopilot.owner_hid(listing)
+                judge.note_owner(f"offer:{listing.pk}", "hid")
                 clear_list_caches(force=True)
                 messages.success(request, f"Hidden: {listing.product.name} at {listing.retailer.name}. "
                                           "Tick show on site on the listing to bring it back.")
             else:
                 sanity.trust(listing)
+                judge.note_owner(f"offer:{listing.pk}", "same")
                 clear_list_caches(force=True)
                 messages.success(request, f"Counted: £{listing.price} for {listing.product.name} at {listing.retailer.name}. "
                                           f"It stays counted while it moves less than {sanity.TRUST_BAND * 100:.0f}% "
@@ -1408,11 +1412,13 @@ def checks_page(request):
                 messages.warning(request, "That price has changed since the page loaded. Check it again below.")
             elif action == "link_found":
                 finder.link(row)
+                judge.note_owner(f"found:{row.pk}", "same")
                 clear_list_caches(force=True)
                 messages.success(request, f"Linked: {row.suggested.name} at {row.retailer.name}. "
                                           "The next read of the shop checks its price and stock.")
             else:
                 finder.ignore(row)
+                judge.note_owner(f"found:{row.pk}", "different")
                 messages.success(request, f"Noted: {row.retailer.name} is not asked about {row.suggested.name} again.")
         elif action in ("add_set", "not_a_set", "use_release_date", "keep_release_date"):
             release_tap(request, action)
@@ -1423,6 +1429,8 @@ def checks_page(request):
                 if (str(keep.pk), sorted(str(o.pk) for o in others)) == wanted:
                     with transaction.atomic():
                         merge(keep, others)
+                    for other in others:
+                        judge.note_owner(f"pair:{keep.pk}:{other.pk}", "same")
                     clear_list_caches(force=True)
                     messages.success(request, f"Merged into {keep.name}. The old addresses redirect to it.")
                     break
@@ -1437,6 +1445,7 @@ def checks_page(request):
                 messages.warning(request, "That group has changed since the page loaded. Check it again below.")
             else:
                 autopilot.owner_apart(*pair)
+                judge.note_owner(f"pair:{pair[0].pk}:{pair[1].pk}", "different")
                 messages.success(request, f"Noted: {pair[1].name} is not {pair[0].name}. They are not suggested together again.")
         elif action == "undo":
             pk = request.POST.get("answer", "")
@@ -1446,6 +1455,10 @@ def checks_page(request):
                 messages.success(request, message)
             else:
                 messages.warning(request, "That one can no longer be undone. Check it on its own page.")
+        elif action == "merge_sure":
+            merge_sure(request)
+        elif action.startswith("claude_"):
+            claude_tap(request, action)
         elif action == "autopilot_now":
             done = autopilot.run()
             if done:
@@ -1458,23 +1471,112 @@ def checks_page(request):
     doubtful_count = checks.doubtful_count()
     answers = checks.recent_answers(now)
     tally = Counter(answer.kind for answer in answers if answer.undone_at is None)
+    doubtful, wrong, duplicates = checks.doubtful_prices(now), checks.wrong_matches(), checks.duplicates()
+    found = checks.found_stockists(now)
+    # Claude's latest answer for each row on the page, in one query, shown under the row.
+    rows = ([(f"offer:{listing.pk}", listing) for listing in doubtful]
+            + [(f"offer:{offer.pk}", offer) for _, summary in wrong for offer in (summary.best, summary.second)]
+            + [(f"found:{row.pk}", row) for row in found]
+            + [(f"pair:{keep.pk}:{other.pk}", other) for keep, others in duplicates for other in others])
+    said = judge.latest_answers({row_key for row_key, _ in rows})
+    for row_key, item in rows:
+        item.claude = said.get(row_key)
     context = {
         **admin.site.each_context(request), "title": "Things to check",
         "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
         "tally": [(CheckAnswer.Kind(kind).label, n) for kind, n in tally.most_common()],
-        "doubtful": checks.doubtful_prices(now), "doubtful_count": doubtful_count,
+        "doubtful": doubtful, "doubtful_count": doubtful_count,
         "doubtful_left": max(0, counts["doubtful"] - doubtful_count),
         "excluded": checks.excluded_prices(), "counts": counts,
-        "wrong": checks.wrong_matches(),
-        "duplicates": checks.duplicates(), "shops": checks.unknown_delivery_shops(),
+        "wrong": wrong, "duplicates": duplicates, "sure_pairs": judge.sure_pairs(duplicates),
+        "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
-        "found": checks.found_stockists(now), "found_count": checks.found_waiting().count(),
+        "found": found, "found_count": checks.found_waiting().count(),
+        "claude": judge.page_status(now),
         "releases": checks.release_candidates(now), "disagreements": checks.release_disagreements(now),
         "stale_sources": checks.stale_release_sources(now),
     }
     # The owner reads a source's name, never its internal key (tcgdex_sets, shop:total-cards).
     checks.name_sources(context["releases"] + [row for group in context["disagreements"] for row in group["rows"]])
     return render(request, "admin/checks.html", context)
+
+
+def merge_sure(request):
+    """The owner's Merge the pairs Claude is sure are the same: each pair the page showed that Claude is
+    still sure of is merged so it can be undone, and listed under Sorted for you with Undo."""
+    from django.contrib import messages
+    from django.db import transaction
+
+    from catalogue import checks, judge
+    from catalogue.management.commands.merge_duplicates import merge_undoable
+    from catalogue.models import CheckAnswer
+    from catalogue.signals import clear_list_caches
+
+    wanted = set(request.POST.getlist("pair"))
+    merged = 0
+    for keep, other, ask in judge.sure_pairs(checks.duplicates()):
+        if f"{keep.pk}:{other.pk}" not in wanted or CheckAnswer.objects.filter(ask=ask).exists():
+            continue
+        with transaction.atomic():
+            note = merge_undoable(keep, [other])
+            CheckAnswer.objects.create(
+                kind=CheckAnswer.Kind.MERGE, what=f"Merged {other.name} into {keep.name}",
+                why=f"Claude: {ask.reason} You tapped Merge the pairs Claude is sure are the same.",
+                product=keep, other=other, ask=ask, undo_note=note,
+            )
+            judge.note_owner(ask.row_key, "same")
+        merged += 1
+    if merged:
+        clear_list_caches(force=True)
+        messages.success(request, f"Merged {merged} pair{'s' if merged != 1 else ''}. Each is listed under Sorted for you, "
+                                  "with Undo. The old addresses redirect.")
+    else:
+        messages.warning(request, "Those pairs have changed since the page loaded. Check them again below.")
+
+
+def claude_tap(request, action):
+    """The Claude box's buttons. Only Save key talks to Anthropic, with one free request."""
+    from django.contrib import messages
+
+    from catalogue import judge
+    from catalogue.models import ClaudeJudge
+
+    state = ClaudeJudge.load()
+    update = {}
+    if action == "claude_now":
+        update["asked_at"] = timezone.now()
+        messages.success(request, "Claude will look at the waiting rows within 5 minutes. Reload this page to see its answers.")
+    elif action in ("claude_on", "claude_off"):
+        update["enabled"] = action == "claude_on"
+        messages.success(request, "Claude is on. It starts in trial: it suggests and does not act." if update["enabled"] and not state.may_act
+                         else "Claude is on." if update["enabled"] else "Claude is off. Nothing is sent and nothing is spent.")
+    elif action in ("claude_act_on", "claude_act_off"):
+        update["may_act"] = action == "claude_act_on"
+        messages.success(request, "Claude now acts when it is sure and the site's checks agree. Each act is listed with Undo."
+                         if update["may_act"] else "Claude now only suggests. Its answers show under each row.")
+    elif action == "claude_settings":
+        model, effort = request.POST.get("model", ""), request.POST.get("effort", "")
+        try:
+            budget = Decimal(request.POST.get("budget", "")).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            budget = None
+        if model not in judge.MODELS or effort not in ClaudeJudge.Effort.values or budget is None \
+                or not 0 <= budget <= settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD:
+            messages.warning(request, f"Choose a model and effort, and a monthly limit from 0 to "
+                                      f"{settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD} dollars.")
+        else:
+            update.update(model=model, effort=effort, monthly_budget_usd=budget)
+            if state.problem == "model" and model != state.model:
+                update.update(problem="", problem_at=None)
+            messages.success(request, "Claude's settings are saved.")
+    elif action == "claude_key_save":
+        saved, message = judge.save_key(request.POST.get("claude_key", ""))
+        (messages.success if saved else messages.warning)(request, message)
+    elif action == "claude_key_forget":
+        judge.forget_key()
+        messages.success(request, "The key is forgotten. Claude sends nothing until a key is saved again.")
+    if update:
+        ClaudeJudge.objects.filter(pk=state.pk).update(**update)
 
 
 def release_tap(request, action):

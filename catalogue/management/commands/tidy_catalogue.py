@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Count, Min
 
 from catalogue.classify import find_type, MIN_PRICE, NOT_SEALED, is_generic, tidy_name
-from catalogue.models import Listing, Product
+from catalogue.models import Listing, Product, ProductAlias
 
 
 class Command(BaseCommand):
@@ -23,6 +23,9 @@ class Command(BaseCommand):
         removed = renamed = merged = 0
         rows = (
             Product.objects.filter(image="")
+            # A product an undoable merge switched off has no listings; deleting it would leave nothing
+            # for Undo to put back. Its own address is then an old address of the kept product.
+            .exclude(is_active=False, slug__in=ProductAlias.objects.values("slug"))
             .annotate(cheapest=Min("listings__price"), listing_count=Count("listings"))
             .order_by("pk")
         )

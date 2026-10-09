@@ -416,6 +416,76 @@ on it is left for the next run. `RIPRAPTOR_AUTOPILOT=0` stops the hourly
 run; the button still works. `python manage.py tidy_all --dry-run` lists
 what it would answer.
 
+### The Claude judge (paid)
+
+What the free checks leave, Claude can answer (`catalogue/judge.py`). It is
+a paid Anthropic service, so it does nothing until you save a key and
+switch it on in the **Claude** box at the top of Things to check.
+
+Claude only says whether two things the site already holds are the same
+product: a found shop page and our product, a shop's price and our product,
+or two of our products. It never supplies a price, a date, a barcode or a
+product, and never touches sets, release dates or delivery charges. The
+site's own rules decide whether its answer may act:
+
+- **Found at another shop:** Claude's "different" refuses the page; its
+  "same" links it only when the price is within 0.75 to 1.33 of the other
+  shops', the title does not plainly name another kind or set, the shop
+  does not list the product already, and the new price is judged OK
+  without making any other price doubtful.
+- **A shop's price** (the cheapest doubtful one, or a wrong match): "different"
+  hides it; for a wrong match only when Claude is sure the other price is
+  the product. "Same" never counts a price as right.
+- **Possible duplicates:** "different" keeps the pair apart. "Same" never
+  merges by itself: **Merge the pairs Claude is sure are the same** merges
+  them on your tap, each so it can be undone (the merged product is switched
+  off, not deleted, and Undo puts back its listings, history and address).
+
+It starts in **trial**: it only suggests, and its answer shows under each
+row ("Claude, 9 Oct: same product, sure. ..."). Once you agree with it, tap
+**Let Claude act**. It then acts only when it is sure, a "different" names
+something other than the price, the answer came from the model asked (not a
+fallback), and the row is still as Claude saw it. Each act is listed under
+Sorted for you with Claude's reason and an Undo. The box counts how often
+Claude agreed with your own taps.
+
+**Cost.** Each request is priced from Anthropic's usage figures at the
+model's rates and saved (Claude's answers are listed read-only in admin).
+Before a request is sent, the most it could cost is reserved, and nothing is
+sent that could take the month (a UTC month, as Anthropic counts) past your
+limit, or one run past $1. A row is asked again only when its titles or
+price band change, at most three times. Roughly, per answer at medium
+effort: Claude Opus 5.5 (the default) $0.023, Claude Sonnet 5.5 $0.012,
+Claude Haiku 5.5 under $0.001. The limit defaults to $10 a month, about 430
+answers on Opus. Low effort costs about half, high about twice.
+
+**Setting it up by phone.** Sign up at console.anthropic.com; under Billing
+buy credit; under Limits set a monthly spend limit (Anthropic then stops the
+account at that amount, whatever the site does); under API keys create a
+key. In Things to check open **Claude settings and key**, paste it and tap
+**Save key**: it is checked with Anthropic (free), saved in a file beside the
+database that only the site can read (never in the database or its backups),
+and never shown again. Then tap **Switch Claude on**. To stop: **Switch Claude
+off**, **Forget the key**, or delete the key in the Console.
+
+**When it runs.** Cron runs `judge_checks` every five minutes on its own lock.
+It does something only when you tapped **Ask Claude now**, or an hour after
+its last run when rows are waiting, and never while Pause all is on. Each
+run lets the free autopilot answer first, then asks Claude about up to 25
+rows, one per request: the cheapest doubtful prices, the wrong matches, the
+found pages (most wanted first), then the duplicates. A wrong key, no
+credit or a model the key cannot use stops it and tells you once a day by
+push and email; it starts again when you save a key, change the model or tap
+Ask Claude now, or after a day. A busy Anthropic only ends that run.
+`python manage.py judge_checks --dry-run` lists what would be sent and the
+most each request could cost, and sends nothing.
+
+**What is sent.** Our product's name, game, kind and set; the shop's name,
+title, price, stock and page address; up to five other shops' titles for the
+product; whether its price is close to or far from the other shops' (never
+their prices); the site's own note on the price. Never anything about
+visitors, alerts or messages.
+
 On the server the background reader (see "Background reader" below) asks
 shops about single products all day: the products people look at, save,
 click or wait for every ten minutes, the rest of the single-shop, pre-order
@@ -1309,6 +1379,10 @@ site's cache.
 | `RIPRAPTOR_FINDER`             | on      | The background reader looks for other shops selling products that one shop sells, or none (see "Stockist finder"). `RIPRAPTOR_FINDER=0` turns it off; `find_stockists` still runs by hand. |
 | `RIPRAPTOR_RELEASES`           | on      | The background reader reads free publisher and community sources for announced sets and release dates (see "Release radar"). `RIPRAPTOR_RELEASES=0` turns it off; `scan_releases` still runs by hand. |
 | `RIPRAPTOR_AUTOPILOT`          | on      | Every hour the site answers the Things to check rows its evidence settles, each listed with Undo (see "The autopilot"). `RIPRAPTOR_AUTOPILOT=0` stops the hourly run; Sort what you can now still runs it. |
+| `RIPRAPTOR_CLAUDE`             | on      | The Claude judge may run (see "The Claude judge"). It still sends nothing until a key is saved and it is switched on in Things to check. `RIPRAPTOR_CLAUDE=0` stops it whatever the page says. |
+| `RIPRAPTOR_CLAUDE_API_KEY`     |         | An Anthropic API key. Leave empty and save the key from Things to check instead; set here, it wins over the saved one. |
+| `RIPRAPTOR_CLAUDE_KEY_FILE`    | `claude-key` beside the database | Where a key saved from the page is kept, readable only by the site's user. Never in the database or its backups: save the key again after restoring onto a new server. |
+| `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` | `25` | The highest monthly limit the page accepts, in US dollars. |
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 

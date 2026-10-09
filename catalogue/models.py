@@ -1119,6 +1119,10 @@ class CheckAnswer(models.Model):
     release = models.ForeignKey(Release, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     # A set the answer created, so undoing it can take the set away again.
     product_set = models.ForeignKey(ProductSet, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # The Claude answer behind it, when Claude's judgement decided it.
+    ask = models.OneToOneField("ClaudeAsk", on_delete=models.SET_NULL, null=True, blank=True, related_name="answer")
+    # What a merge moved, so Undo can put it back (merge_duplicates.unmerge).
+    undo_note = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["-created_at", "-pk"]
@@ -1126,3 +1130,119 @@ class CheckAnswer(models.Model):
 
     def __str__(self):
         return self.what
+
+
+class ClaudeJudge(models.Model):
+    """The one row of settings and state for the Claude judge (catalogue/judge.py), set from Things to check.
+
+    The key itself is never stored here: it lives in a file only the site can read (judge.key_path), or in
+    RIPRAPTOR_CLAUDE_API_KEY. Only its last four characters are kept, so the page can say which key it is.
+    """
+
+    class Effort(models.TextChoices):
+        LOW = "low", "Low"
+        MEDIUM = "medium", "Medium"
+        HIGH = "high", "High"
+
+    enabled = models.BooleanField(default=False)
+    may_act = models.BooleanField("acts when sure", default=False)
+    model = models.CharField(max_length=40, default="claude-opus-5-5")
+    effort = models.CharField(max_length=8, choices=Effort.choices, default=Effort.MEDIUM)
+    monthly_budget_usd = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("10.00"))
+    asked_at = models.DateTimeField(null=True, blank=True, help_text="When the owner tapped Ask Claude now.")
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    last_run_note = models.CharField(max_length=200, blank=True)
+    problem = models.CharField(max_length=10, blank=True, help_text="key, credit, model, busy or bug.")
+    problem_at = models.DateTimeField(null=True, blank=True)
+    key_hint = models.CharField(max_length=4, blank=True)
+    key_saved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Claude judge"
+
+    def __str__(self):
+        return "Claude judge"
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    @classmethod
+    def current(cls):
+        """The row, or the defaults unsaved: a page that only shows it never writes."""
+        return cls.objects.filter(pk=1).first() or cls(pk=1)
+
+
+class ClaudeAsk(models.Model):
+    """One question put to Claude about one Things to check row, and its answer, cost and use.
+
+    ``evidence`` is exactly what was sent. A row is asked again only when its evidence changes, at most
+    three times. ``reserved_micros`` holds the most a request could cost until its real cost is known, so a
+    request cut short still counts against the month's limit.
+    """
+
+    class Kind(models.TextChoices):
+        FOUND = "found", "Found at another shop"
+        OFFER = "offer", "A shop's price"
+        PAIR = "pair", "Possible duplicates"
+
+    class Outcome(models.TextChoices):
+        SENT = "sent", "Sent"
+        ANSWERED = "answered", "Answered"
+        REFUSED = "refused", "Declined"
+        CUT_OFF = "cut_off", "Cut off"
+        INVALID = "invalid", "Not understood"
+        ERROR = "error", "Not sent"
+
+    class Action(models.TextChoices):
+        ACTED = "acted", "Acted"
+        SUGGESTED = "suggested", "Suggested"
+        STALE = "stale", "Row changed"
+        NONE = "none", "Nothing"
+
+    asked_at = models.DateTimeField(default=timezone.now, db_index=True)
+    kind = models.CharField(max_length=6, choices=Kind.choices)
+    row_key = models.CharField(max_length=60)
+    fingerprint = models.CharField(max_length=64)
+    model_asked = models.CharField(max_length=40)
+    model_answered = models.CharField(max_length=40, blank=True)
+    effort = models.CharField(max_length=8)
+    outcome = models.CharField(max_length=8, choices=Outcome.choices, default=Outcome.SENT)
+    refusal_category = models.CharField(max_length=40, blank=True)
+    verdict = models.CharField(max_length=10, blank=True)
+    confidence = models.CharField(max_length=6, blank=True)
+    differences = models.JSONField(default=list, blank=True)
+    reason = models.CharField(max_length=200, blank=True)
+    evidence = models.JSONField(default=dict, blank=True)
+    input_tokens = models.PositiveIntegerField(default=0)
+    cache_write_tokens = models.PositiveIntegerField(default=0)
+    cache_read_tokens = models.PositiveIntegerField(default=0)
+    output_tokens = models.PositiveIntegerField(default=0)
+    reserved_micros = models.PositiveBigIntegerField(default=0)
+    cost_micros = models.PositiveBigIntegerField(default=0, help_text="US dollars times a million.")
+    request_id = models.CharField(max_length=80, blank=True)
+    action = models.CharField(max_length=10, choices=Action.choices, default=Action.NONE)
+    owner_answer = models.CharField(max_length=10, blank=True, help_text="same, different or hid: what the owner did.")
+    shop_product = models.ForeignKey(ShopProduct, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    other = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        ordering = ["-asked_at", "-pk"]
+        indexes = [models.Index(fields=["row_key", "fingerprint"])]
+        verbose_name = "Claude answer"
+
+    def __str__(self):
+        return f"{self.row_key}: {self.verdict or self.get_outcome_display()}"
+
+    VERDICT_WORDS = {"same": "same product", "different": "a different product", "unsure": "cannot tell"}
+    CONFIDENCE_WORDS = {"high": "sure", "medium": "fairly sure", "low": "not sure"}
+
+    @property
+    def summary(self):
+        """"same product, sure", as the page shows Claude's answer under a row."""
+        verdict = self.VERDICT_WORDS.get(self.verdict, self.verdict)
+        if self.verdict == "unsure":
+            return verdict
+        return f"{verdict}, {self.CONFIDENCE_WORDS.get(self.confidence, self.confidence)}"

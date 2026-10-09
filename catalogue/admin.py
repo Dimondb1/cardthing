@@ -3,7 +3,7 @@ from django.db.models import Count
 from django.utils.html import format_html
 
 from . import pricing, sanity
-from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release, Restock, Retailer, ShopProduct, StockAlert, TypeBand
+from .models import ClaudeAsk, ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release, Restock, Retailer, ShopProduct, StockAlert, TypeBand
 
 
 @admin.register(Game)
@@ -341,3 +341,27 @@ class ProductAliasAdmin(admin.ModelAdmin):
     list_display = ("slug", "product", "created_at")
     search_fields = ("slug", "product__name")
     autocomplete_fields = ("product",)
+
+
+@admin.register(ClaudeAsk)
+class ClaudeAskAdmin(admin.ModelAdmin):
+    """What was asked of Claude, what it answered and what it cost. Read only: the judge writes it."""
+
+    list_display = ("asked_at", "row_key", "outcome", "verdict", "confidence", "action", "owner_answer", "cost")
+    list_filter = ("kind", "outcome", "verdict", "action")
+    date_hierarchy = "asked_at"
+
+    @admin.display(description="Cost")
+    def cost(self, obj):
+        from .judge import dollars
+
+        return dollars(obj.cost_micros + obj.reserved_micros)
+
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

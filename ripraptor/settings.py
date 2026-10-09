@@ -295,3 +295,15 @@ RIPRAPTOR_RELEASES = env_bool("RIPRAPTOR_RELEASES", default=True) and not TESTIN
 # The autopilot answers the Things to check rows the evidence settles, every hour in tidy_all
 # (catalogue/autopilot.py). Off in tests, which turn it on where they need it.
 RIPRAPTOR_AUTOPILOT = env_bool("RIPRAPTOR_AUTOPILOT", default=True) and not TESTING
+
+# The Claude judge (catalogue/judge.py) answers the Things to check rows the autopilot leaves, from cron
+# (judge_checks), once the owner saves a key and switches it on. It is a paid service: the owner sets the
+# monthly limit on the page, and it can never be set above RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD. The key is
+# saved from the page into a file only the site can read (RIPRAPTOR_CLAUDE_KEY_FILE, by default beside the
+# database), or given as RIPRAPTOR_CLAUDE_API_KEY, which wins. Off in tests.
+RIPRAPTOR_CLAUDE = env_bool("RIPRAPTOR_CLAUDE", default=True) and not TESTING
+RIPRAPTOR_CLAUDE_API_KEY = os.environ.get("RIPRAPTOR_CLAUDE_API_KEY", "").strip()
+RIPRAPTOR_CLAUDE_KEY_FILE = os.environ.get("RIPRAPTOR_CLAUDE_KEY_FILE", "").strip() or str(
+    Path(DATABASES["default"]["NAME"]).with_name("claude-key")
+)
+RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD = int(os.environ.get("RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD", "25") or 25)

@@ -24,10 +24,55 @@
   .chk .tally { margin: 0 0 12px; }
   .chk .names .row { margin-top: 2px; }
   .chk form + details { margin-top: 12px; }
+  .chk .claude { padding: 12px 14px; border: 1px solid var(--hairline-color); border-radius: 8px; }
+  .chk .claude p { margin: 0 0 8px; }
+  .chk .claude select, .chk .claude input[type=number], .chk .claude input[type=password] { min-height: 36px; width: 100%; box-sizing: border-box; }
+  .chk .said { display: block; margin-top: 4px; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Things to check</div>{% endblock %}
 {% block content %}
 <div class="chk">
+  <section class="claude">
+    <h2>Claude</h2>
+    <p><b>{{ claude.status }}</b></p>
+    {% if claude.has_key %}<p class="note">This month: {{ claude.spent }} of {{ claude.limit }} (estimated, US dollars). {{ claude.answers }} answer{{ claude.answers|pluralize }}{% if claude.each %}, about {{ claude.each }} each{% endif %}.</p>{% endif %}
+    {% if claude.state.last_run_note %}<p class="note">Last run {{ claude.state.last_run_at|date:"j M H:i" }}: {{ claude.state.last_run_note }}.</p>{% endif %}
+    {% if claude.agreement_total %}<p class="note">Agreed with you {{ claude.agreed }} of {{ claude.agreement_total }} time{{ claude.agreement_total|pluralize }}.</p>{% endif %}
+    {% if claude.asked %}<p class="note">You asked Claude to look. It starts within 5 minutes.</p>{% endif %}
+    {% if claude.has_key %}<div class="row">
+      {% if claude.state.enabled %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_now"><input type="submit" value="Ask Claude now"></form>
+      {% if claude.state.may_act %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_act_off"><input type="submit" value="Suggest only"></form>
+      {% else %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_act_on"><input type="submit" value="Let Claude act"></form>{% endif %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_off"><input type="submit" value="Switch Claude off"></form>
+      {% else %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_on"><input type="submit" value="Switch Claude on"></form>
+      {% endif %}
+    </div>{% endif %}
+    <p class="note">Claude reads the rows the free checks leave and says whether two things are the same product. In trial it only suggests: its answer shows under each row. Once you agree with its answers, tap Let Claude act. It then acts only when it is sure and the site's own checks agree, never counts a price as right and never merges by itself. Each act is listed under Sorted for you with Undo.</p>
+    <details{% if not claude.has_key %} open{% endif %}><summary>Claude settings and key</summary>
+      <form method="post" class="addset">{% csrf_token %}<input type="hidden" name="action" value="claude_settings">
+        <label>Model <select name="model">{% for code, label, cost in claude.models %}<option value="{{ code }}"{% if code == claude.state.model %} selected{% endif %}>{{ label }}, {{ cost }}</option>{% endfor %}</select></label>
+        <label>Effort <select name="effort">
+          <option value="low"{% if claude.state.effort == "low" %} selected{% endif %}>Low, about half the cost</option>
+          <option value="medium"{% if claude.state.effort == "medium" %} selected{% endif %}>Medium (recommended)</option>
+          <option value="high"{% if claude.state.effort == "high" %} selected{% endif %}>High, about twice the cost</option>
+        </select></label>
+        <label>Monthly limit in US dollars, up to {{ claude.max_monthly }} <input type="number" name="budget" min="0" max="{{ claude.max_monthly }}" step="0.01" value="{{ claude.state.monthly_budget_usd }}"></label>
+        <input type="submit" value="Save settings">
+      </form>
+      {% if claude.env_key %}<p class="note">The key is set in the server settings.</p>{% else %}
+      <form method="post" class="addset" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="claude_key_save">
+        <label>Anthropic API key <input type="password" name="claude_key" autocomplete="off" required></label>
+        {% if claude.state.key_hint %}<p class="note">Saved key ends in {{ claude.state.key_hint }}.</p>{% endif %}
+        <input type="submit" value="Save key">
+      </form>
+      {% if claude.state.key_hint %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_key_forget"><input type="submit" value="Forget the key"></form>{% endif %}
+      <p class="note">To get a key: sign up at console.anthropic.com, buy credit under Billing, set a monthly spend limit under Limits, then create a key under API keys and paste it here. Saving it checks it with Anthropic for free. It is kept in a file only the site can read and is never shown again.</p>
+      {% endif %}
+    </details>
+  </section>
+
   <section>
     <h2>Sorted for you ({{ answers_count }})</h2>
     <p class="note">Every hour the site answers the rows its evidence settles: a shop page whose name and price match, a shop page or cheapest price whose title plainly names another product, a set that products on the site already name. It answers each row once and never merges. Here is what it did in the last {{ answers_days }} days. If one is wrong, tap Undo and it is put back the other way, and the site leaves that row to you.</p>
@@ -54,6 +99,7 @@
       {% for listing in doubtful %}
       <li class="item"><b><a href="{{ listing.product.get_absolute_url }}" target="_blank" rel="noopener">{{ listing.product.name }}</a></b>
         <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer">£{{ listing.shown_price }} at {{ listing.retailer.name }}</a>: {{ listing.sanity_reason }}.
+        {% if listing.claude %}<span class="why said">Claude, {{ listing.claude.asked_at|date:"j M" }}: {{ listing.claude.summary }}. {{ listing.claude.reason }}</span>{% endif %}
         <div class="row">
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="trust"><input type="hidden" name="listing" value="{{ listing.pk }}"><input type="hidden" name="price" value="{{ listing.price }}"><input type="submit" value="This price is right"></form>
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ listing.pk }}"><input type="hidden" name="price" value="{{ listing.price }}"><input type="submit" value="Hide this one"></form>
@@ -87,9 +133,9 @@
       {% for product, summary in wrong %}
       <li class="item"><b><a href="{{ product.get_absolute_url }}" target="_blank" rel="noopener">{{ product.name }}</a></b>
         {% with a=summary.best b=summary.second %}
-        <div class="row"><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">£{{ a.delivered_price }} at {{ a.retailer.name }}</a>
+        <div class="row"><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">£{{ a.delivered_price }} at {{ a.retailer.name }}</a>{% if a.claude %}<span class="why said">Claude, {{ a.claude.asked_at|date:"j M" }}: {{ a.claude.summary }}. {{ a.claude.reason }}</span>{% endif %}
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ a.pk }}"><input type="submit" value="Hide this one"></form></div>
-        <div class="row"><a href="{{ b.url }}" target="_blank" rel="noopener noreferrer">£{{ b.delivered_price }} at {{ b.retailer.name }}</a>
+        <div class="row"><a href="{{ b.url }}" target="_blank" rel="noopener noreferrer">£{{ b.delivered_price }} at {{ b.retailer.name }}</a>{% if b.claude %}<span class="why said">Claude, {{ b.claude.asked_at|date:"j M" }}: {{ b.claude.summary }}. {{ b.claude.reason }}</span>{% endif %}
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ b.pk }}"><input type="submit" value="Hide this one"></form></div>
         {% endwith %}
       </li>
@@ -100,11 +146,13 @@
   <section>
     <h2>Possible duplicates ({{ duplicates|length }})</h2>
     <p class="note">These names differ only by words like Exclusive, English or the series name. Merge only when they are the same product. Merging keeps every price, the price history and the old addresses. If one is a different product, tap Not the same beside it and the two are not suggested together again.</p>
+    {% if sure_pairs %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge_sure">{% for keep, other, ask in sure_pairs %}<input type="hidden" name="pair" value="{{ keep.pk }}:{{ other.pk }}">{% endfor %}<input type="submit" value="Merge the {{ sure_pairs|length }} pair{{ sure_pairs|pluralize }} Claude is sure are the same"></form>
+    <p class="note">Each merge can be undone under Sorted for you.</p>{% endif %}
     {% if duplicates %}<ul>
       {% for keep, others in duplicates %}
       <li class="item"><b>Keep: <a href="{{ keep.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.name }}</a></b>
         Merge into it:
-        <ul class="names">{% for other in others %}<li><a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a>
+        <ul class="names">{% for other in others %}<li><a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a>{% if other.claude %}<span class="why said">Claude, {{ other.claude.asked_at|date:"j M" }}: {{ other.claude.summary }}. {{ other.claude.reason }}</span>{% endif %}
           <div class="row"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="apart"><input type="hidden" name="keep" value="{{ keep.pk }}"><input type="hidden" name="other" value="{{ other.pk }}"><input type="submit" value="Not the same"></form></div></li>{% endfor %}</ul>
         <form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="keep" value="{{ keep.pk }}">{% for other in others %}<input type="hidden" name="other" value="{{ other.pk }}">{% endfor %}<input type="submit" value="Merge these"></form>
       </li>
@@ -119,6 +167,7 @@
       {% for row in found %}
       <li class="item"><b><a href="{{ row.suggested.get_absolute_url }}" target="_blank" rel="noopener">{{ row.suggested.name }}</a></b>
         might be at {{ row.retailer.name }} as <a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">"{{ row.title }}"</a>{% if row.price %} for £{{ row.price }}{% endif %}.
+        {% if row.claude %}<span class="why said">Claude, {{ row.claude.asked_at|date:"j M" }}: {{ row.claude.summary }}. {{ row.claude.reason }}</span>{% endif %}
         <div class="row">
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="link_found"><input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="price" value="{{ row.price|default_if_none:'' }}"><input type="submit" value="Yes, link it"></form>
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="not_found"><input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="price" value="{{ row.price|default_if_none:'' }}"><input type="submit" value="No, not this"></form>

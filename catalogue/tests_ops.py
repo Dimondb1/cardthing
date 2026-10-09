@@ -44,6 +44,7 @@ TIMEOUTS = {
     "fetch_geoip": 1800,
     "check_worker": 600,
     "backup_db": 1800,
+    "judge_checks": 900,
 }
 
 
@@ -78,13 +79,13 @@ def file_cron():
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()
-        self.assertEqual(len(installed), 9)
+        self.assertEqual(len(installed), 10)
         self.assertEqual(installed, file_cron())
 
     def test_both_files_load_the_settings_before_every_command(self):
         for name, block in (("install.sh", install_block()), ("crontab", (DEPLOY / "crontab").read_text())):
             commands = [SCHEDULE.match(raw.strip()).group(2) for raw in block.splitlines() if "manage.py" in raw]
-            self.assertEqual(len(commands), 9, name)
+            self.assertEqual(len(commands), 10, name)
             for command in commands:
                 self.assertRegex(command, PREFIX, name)
 

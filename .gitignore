@@ -10,3 +10,6 @@ db.sqlite3-shm
 .env
 .DS_Store
 /.cache/
+
+# The Claude judge key, saved from Things to check (RIPRAPTOR_CLAUDE_KEY_FILE)
+claude-key

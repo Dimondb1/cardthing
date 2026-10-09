@@ -144,6 +144,41 @@ def owner_hid(listing):
     )
 
 
+def still_waiting(row):
+    if not ShopProduct.objects.filter(pk=row.pk, status=ShopProduct.Status.REVIEW).exists():
+        raise Stale
+
+
+def refuse_found(row):
+    """No: the stockist finder's row is not its product. Raises Stale when the row no longer waits."""
+    from . import finder
+
+    still_waiting(row)
+    finder.ignore(row)
+
+
+def link_found(row, keep_ok=False):
+    """Yes: link the stockist finder's row to its product. Raises Stale, so the caller's transaction rolls
+    back, when the row no longer waits or the shop lists the product already (linking would move that
+    listing). With ``keep_ok`` it also rolls back when the new price is not judged OK against the other
+    shops, or makes a price that was OK doubtful. Returns the fields for its CheckAnswer."""
+    from . import finder
+
+    still_waiting(row)
+    product = row.suggested
+    if Listing.objects.filter(product=product, retailer=row.retailer).exists():
+        raise Stale
+    before = dict(Listing.objects.filter(product=product).values_list("pk", "sanity"))
+    listing = finder.link(row)
+    if keep_ok:
+        after = dict(Listing.objects.filter(product=product, is_active=True).values_list("pk", "sanity"))
+        if listing is None or after.get(listing.pk) != OK:
+            raise Stale
+        if any(verdict == OK and after.get(pk, OK) != OK for pk, verdict in before.items()):
+            raise Stale
+    return {"listing": listing}
+
+
 def answered_listings():
     """Listings with any answer, the owner's or the autopilot's, undone or not: they are the owner's now."""
     return set(CheckAnswer.objects.filter(listing__isnull=False).values_list("listing_id", flat=True))
@@ -191,17 +226,11 @@ class Autopilot:
     # Found at another shop
 
     def found_rows(self):
-        from . import finder
-
         rows = list(checks.found_waiting().select_related("retailer", "suggested__game", "suggested__product_set"))
         rates = going_rates({row.suggested_id for row in rows})
         listed = set(
             Listing.objects.filter(product_id__in={row.suggested_id for row in rows}).values_list("product_id", "retailer_id")
         )
-
-        def still_waiting(row):
-            if not ShopProduct.objects.filter(pk=row.pk, status=ShopProduct.Status.REVIEW).exists():
-                raise Stale
 
         for row in rows:
             product, shop = row.suggested, row.retailer.name
@@ -212,29 +241,17 @@ class Autopilot:
             if not why and ratio is not None and len(others) >= REFUSE_PEERS and not REFUSE_LOW <= ratio <= REFUSE_HIGH:
                 why = f"{money(row.price)} is far from the {money(rate)} that {len(others)} other shops charge"
             if why:
-
-                def refuse(row=row):
-                    still_waiting(row)
-                    finder.ignore(row)
-
                 self.answer(Kind.REFUSE, f'"{row.title}" at {shop} is not {product.name}', why,
-                            act=refuse, shop_product=row, product=product, price=row.price)
+                            act=lambda row=row: refuse_found(row), shop_product=row, product=product, price=row.price)
                 continue
             # A shop that lists the product already is the owner's to sort: linking would move its listing.
             if (product.pk, row.retailer_id) in listed:
                 continue
             if row.confidence >= AUTO_LINK and ratio is not None and LINK_LOW <= ratio <= LINK_HIGH:
-
-                def link(row=row, product=product):
-                    still_waiting(row)
-                    if Listing.objects.filter(product=product, retailer=row.retailer).exists():
-                        raise Stale
-                    return {"listing": finder.link(row)}
-
                 who = "the other shop charges" if len(others) == 1 else f"that {len(others)} other shops charge"
                 self.answer(Kind.LINK, f"Linked {product.name} at {shop}, {money(row.price)}",
                             f"the names agree word for word and the price is close to the {money(rate)} {who}",
-                            act=link, shop_product=row, product=product, price=row.price)
+                            act=lambda row=row: link_found(row), shop_product=row, product=product, price=row.price)
 
     # Doubtful prices and wrong matches
 
@@ -327,7 +344,8 @@ def enabled():
 
 def undo(answer, now=None):
     """Put back what an answer did, the other way round where that is the owner's meaning. Returns a
-    message for the owner, or "" when it can no longer be undone (a merge, or the rows are gone)."""
+    message for the owner, or "" when it can no longer be undone (the rows are gone, or a set has
+    gained more since)."""
     from . import finder
     from .pricing import correct_daily_lowest
     from .signals import clear_list_caches
@@ -363,9 +381,22 @@ def undo(answer, now=None):
             message = undo_set(answer)
         elif answer.kind == Kind.APART:
             message = "Undone: the two products may be suggested as duplicates again."
+        elif answer.kind == Kind.MERGE and answer.undo_note:
+            from .management.commands.merge_duplicates import unmerge
+
+            restored = unmerge(answer.undo_note)
+            if restored:
+                names = ", ".join(product.name for product in restored)
+                message = f"Undone: {names} is its own product again, with its prices and its address."
         if message:
             answer.undone_at = now or timezone.now()
             answer.save(update_fields=["undone_at"])
+            if answer.ask_id:
+                # Undoing Claude's answer is the owner saying the opposite.
+                from .models import ClaudeAsk
+
+                opposite = "different" if answer.ask.verdict == "same" else "same"
+                ClaudeAsk.objects.filter(pk=answer.ask_id).update(owner_answer=opposite)
     if message:
         clear_list_caches(force=True)
     return message

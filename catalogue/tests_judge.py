@@ -1099,3 +1099,110 @@ class RecheckTests(Base):
             self.found(title=f"Surging Sparks Booster Display {n}")
         _, result = self.ask()
         self.assertEqual(result.left, 2)
+
+
+class FeedbackTests(Base):
+    """The owner can see that Claude is working, what it did, and what it cost."""
+
+    def setUp(self):
+        super().setUp()
+        self.shop(100)
+        self.shop(104)
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.url = reverse("checks")
+
+    def test_the_box_shows_progress_while_claude_is_looking(self):
+        self.switch_on(may_act=False)
+        for n in range(3):
+            self.found(title=f"Surging Sparks Booster Display {n}")
+        seen = []
+
+        def answer(key, params):
+            seen.append(judge.page_status()["now"])
+            return reply(key)
+
+        self.ask(answer)
+        self.assertTrue(seen[0].startswith("Claude is looking now: 0 of 3 asked so far (started "), seen[0])
+        self.assertIn("2 of 3 asked so far", seen[2])
+        self.assertIn("Next look about", judge.page_status()["now"])
+
+    def test_the_box_says_when_claude_will_start_and_warns_when_it_is_overdue(self):
+        self.switch_on(may_act=False)
+        ClaudeJudge.objects.filter(pk=1).update(asked_at=timezone.now())
+        self.assertIn("Claude starts within 5 minutes (you asked at", judge.page_status()["now"])
+        ClaudeJudge.objects.filter(pk=1).update(asked_at=timezone.now() - timedelta(minutes=20))
+        self.assertIn("The server's timer may have stopped", judge.page_status()["now"])
+        ClaudeJudge.objects.filter(pk=1).update(running_since=timezone.now() - timedelta(hours=1))
+        self.assertIn("was cut short", judge.page_status()["now"])
+
+    def test_the_box_says_anthropic_accepted_the_key(self):
+        self.switch_on(may_act=False)
+        self.assertEqual(judge.page_status()["key_line"], "The key is checked with Anthropic at Claude's first run.")
+        self.found()
+        self.ask()
+        self.assertIn("Anthropic accepted the key on", judge.page_status()["key_line"])
+        self.assertContains(self.client.get(self.url), "Anthropic accepted the key on")
+
+    def test_recent_runs_and_answers_are_listed_with_what_came_of_each(self):
+        self.switch_on(may_act=False)
+        row = self.found(title="Pokemon Surging Sparks Display")
+        self.ask(lambda key, params: reply(key, reason="The display is the booster box."))
+        page = self.client.get(self.url)
+        self.assertContains(page, "Recent runs (1)")
+        self.assertContains(page, "looked at 1, sorted 0, 1 for you to check, 0 not asked yet, $0.02")
+        self.assertContains(page, "Claude's last 1 answer")
+        self.assertContains(page, f"&quot;Pokemon Surging Sparks Display&quot; at {row.retailer.name} for {BOX}")
+        self.assertContains(page, "Same product, sure. The display is the booster box. Suggested, waiting for you.")
+        self.assertContains(page, reverse("admin:catalogue_claudeask_changelist"))
+
+    def test_each_section_says_how_far_claude_has_got(self):
+        self.switch_on(may_act=False)
+        self.found(title="Surging Sparks Booster Display A")
+        self.found(title="Surging Sparks Booster Display B")
+        self.ask(lambda key, params: reply(key, "unsure", "low") if key.endswith(str(ShopProduct.objects.order_by("pk").last().pk)) else reply(key))
+        self.found(title="Surging Sparks Booster Display C")
+        self.assertContains(self.client.get(self.url),
+                            "Claude so far: 1 the same, 0 different, 1 could not tell, 1 still to look at.")
+
+    def test_the_owner_hears_when_a_run_he_asked_for_finishes_and_once_a_day_otherwise(self):
+        self.switch_on(may_act=False)
+        self.found()
+        ClaudeJudge.objects.filter(pk=1).update(asked_at=timezone.now())
+        with mock.patch("catalogue.notify.owner", return_value=True) as told:
+            self.ask(now=timezone.now() + timedelta(seconds=1))
+        subject, title = told.call_args[0][:2]
+        self.assertEqual(subject, judge.FINISHED)
+        self.assertEqual(title, "Claude looked at 1: 0 sorted, 1 for you to check")
+        self.assertFalse(told.call_args.kwargs["once_a_day"])
+        self.found(title="Surging Sparks Booster Display Box")
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None, asked_at=None)
+        with mock.patch("catalogue.notify.owner", return_value=True) as told:
+            self.ask()
+        self.assertEqual(told.call_args[0][0], judge.DAILY)
+        self.assertEqual(told.call_args[0][1], "Claude today: 2 looked at, 0 sorted, 2 for you to check")
+
+    def test_a_run_that_dies_says_so_on_the_page(self):
+        self.switch_on(may_act=False)
+        self.found()
+        with mock.patch.object(judge, "waiting", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                call_command("judge_checks", stdout=open(os.devnull, "w"))
+        state = ClaudeJudge.objects.get()
+        self.assertEqual((state.problem, state.running_since), ("bug", None))
+        self.assertIn("fault in the site", judge.page_status()["status"])
+
+    def test_the_lists_cost_the_same_queries_however_many_answers(self):
+        self.switch_on(may_act=False)
+        for n in range(3):
+            Ask.objects.create(kind="found", row_key=f"found:{n}", fingerprint="x", model_asked="m", effort="low",
+                               outcome=Ask.Outcome.ANSWERED, verdict="same", confidence="high", reason="Match.",
+                               evidence={"ours": {"name": BOX}, "shop": "Shop", "shop_title": "Box"})
+        with CaptureQueriesContext(connection) as few:
+            self.client.get(self.url)
+        for n in range(3, 30):
+            Ask.objects.create(kind="found", row_key=f"found:{n}", fingerprint="x", model_asked="m", effort="low",
+                               outcome=Ask.Outcome.ANSWERED, verdict="same", confidence="high", reason="Match.",
+                               evidence={"ours": {"name": BOX}, "shop": "Shop", "shop_title": "Box"})
+        with CaptureQueriesContext(connection) as many:
+            self.client.get(self.url)
+        self.assertEqual(len(few), len(many))

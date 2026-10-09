@@ -489,6 +489,20 @@ Ask Claude now, or after a day. A busy Anthropic only ends that run.
 `python manage.py judge_checks --dry-run` lists what would be sent and the
 most each request could cost, and sends nothing.
 
+**Seeing what it does.** The Claude box says what Claude is doing now ("Claude
+is looking now: 7 of 25 asked so far", "Claude starts within 5 minutes", "Next
+look about 15:05") and warns when a run you asked for has not started after 15
+minutes, which means the server's timer has stopped. It says when Anthropic
+last accepted the key, lists the last few runs (what was looked at, sorted,
+left for you and spent) and Claude's last 20 answers with what came of each,
+and links to every answer in admin with its cost. Each section Claude reads
+says how far it has got ("Claude so far: 12 the same, 3 different, 1 could not
+tell, 30 still to look at"). When a run you asked for finishes, you get a push
+and an email with the counts; otherwise at most one a day sums up the last 24
+hours. Like every owner notice, they carry counts only, never a shop or a
+product. A run that fails outright says so in the box rather than leaving you
+waiting.
+
 **What is sent.** Our product's name, game, kind and set; the shop's name,
 title, price, stock and page address; up to five other shops' titles for the
 product; whether its price is close to or far from the other shops' (never

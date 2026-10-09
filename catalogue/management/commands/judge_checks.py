@@ -20,7 +20,13 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="Send nothing; list the rows and their evidence.")
 
     def handle(self, *args, dry_run=False, **options):
-        result = judge.run(dry_run=dry_run, force=dry_run)
+        try:
+            result = judge.run(dry_run=dry_run, force=dry_run)
+        except Exception:
+            # The page says so, rather than leave the owner waiting for a run that died.
+            if not dry_run:
+                judge.record_fault()
+            raise
         for line in result.lines:
             self.stdout.write(line)
         if result.asked or dry_run:

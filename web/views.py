@@ -1484,7 +1484,7 @@ def checks_page(request):
     doubtful, wrong, duplicates = checks.doubtful_prices(now), checks.wrong_matches(), checks.duplicates()
     found = checks.found_stockists(now)
     # Claude's latest answer for each row on the page, while the row is still as Claude saw it.
-    judge.attach_answers(doubtful, wrong, found, duplicates)
+    claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates)
     context = {
         **admin.site.each_context(request), "title": "Things to check",
         "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
@@ -1496,7 +1496,7 @@ def checks_page(request):
         "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
         "found": found, "found_count": checks.found_waiting().count(),
-        "claude": judge.page_status(now),
+        "claude": judge.page_status(now), "claude_counts": claude_counts,
         "releases": checks.release_candidates(now), "disagreements": checks.release_disagreements(now),
         "stale_sources": checks.stale_release_sources(now),
     }

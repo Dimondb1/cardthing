@@ -37,7 +37,7 @@ import re
 import tempfile
 import time
 from dataclasses import dataclass, field
-from datetime import timedelta, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from pathlib import Path
 from statistics import median
@@ -99,6 +99,15 @@ TYPICAL_EVIDENCE = 2500
 
 STOPPED = "Claude has stopped"
 AT_LIMIT = "Claude reached its monthly limit"
+FINISHED = "Claude finished looking"
+DAILY = "Claude today"
+# How many runs the page lists, and how many of Claude's answers.
+RUNS_KEPT = 10
+ANSWERS_SHOWN = 20
+# A run that started longer ago than this and never finished was cut short.
+RUN_CUT_SHORT = timedelta(seconds=RUN_SECONDS + 600)
+# Asked and still not started after this long: the server's timer may have stopped.
+START_OVERDUE = timedelta(minutes=15)
 
 PROBLEMS = {
     "key": "Anthropic did not accept the key. Make a new key in the Console and save it below.",
@@ -629,7 +638,7 @@ def check_key(client, state, previous_run):
     """Before the first request after a key is saved (or after it was refused), check it with Anthropic,
     which is free. Raises Stop when Anthropic refuses it."""
     saved_since = state.key_saved_at and (previous_run is None or state.key_saved_at > previous_run)
-    if not (saved_since or state.problem in ("key", "model")):
+    if not (saved_since or state.problem in ("key", "model") or state.key_checked_at is None):
         return
     import anthropic
 
@@ -646,6 +655,7 @@ def check_key(client, state, previous_run):
         if kind in ("busy", "rejected"):
             return
         raise Stop(kind, str(error)) from error
+    ClaudeJudge.objects.filter(pk=state.pk).update(key_checked_at=timezone.now())
 
 
 # Deciding ----------------------------------------------------------------------------------------
@@ -846,7 +856,8 @@ def run(client=None, now=None, dry_run=False, force=False):
     answers, trusted = {}, {}
     rejected, rejected_asks = 0, []
     previous_run = state.last_run_at
-    ClaudeJudge.objects.filter(pk=state.pk).update(last_run_at=now)
+    asked_by_owner = state.asked_at is not None and (previous_run is None or state.asked_at > previous_run)
+    ClaudeJudge.objects.filter(pk=state.pk).update(last_run_at=now, running_since=now, run_asked=0, run_total=len(rows))
     try:
         check_key(client, state, previous_run)
         from . import crawl
@@ -912,6 +923,7 @@ def run(client=None, now=None, dry_run=False, force=False):
             ask.refresh_from_db()
             result.asked += 1
             result.spent += cost
+            ClaudeJudge.objects.filter(pk=state.pk).update(run_asked=result.asked)
             # A fallback model's answer is shown, never acted on.
             answers[row.key] = answer
             trusted[row.key] = not from_fallback(message, state.model)
@@ -949,12 +961,50 @@ def run(client=None, now=None, dry_run=False, force=False):
     note = f"asked {result.asked}, sorted {result.acted}, {result.suggested} for you to check, {not_asked} not asked yet"
     if result.note:
         note += f". {result.note.rstrip('.')}"
-    ClaudeJudge.objects.filter(pk=state.pk).update(last_run_note=note[:200])
+    finish(state, now, result, note)
+    tell_owner(result, asked_by_owner, timezone.now())
     if result.acted:
         from .signals import clear_list_caches
 
         clear_list_caches(force=True)
     return result
+
+
+def finish(state, now, result, note):
+    """The run is over: say so, and keep it at the top of the page's list of runs."""
+    entry = {"at": now.isoformat(), "asked": result.asked, "sorted": result.acted, "suggested": result.suggested,
+             "left": result.left, "spent": result.spent, "note": result.note.rstrip(".")}
+    runs = [entry, *(ClaudeJudge.objects.filter(pk=state.pk).values_list("runs", flat=True).first() or [])][:RUNS_KEPT]
+    ClaudeJudge.objects.filter(pk=state.pk).update(last_run_note=note[:200], running_since=None, runs=runs)
+
+
+def tell_owner(result, asked_by_owner, now):
+    """A push and email when a run the owner asked for has answered something, and otherwise at most one a
+    day saying what Claude did in the last 24 hours. Counts only: never a shop's or a product's name."""
+    from . import notify
+
+    if not result.asked:
+        return
+    if asked_by_owner:
+        title = f"Claude looked at {result.asked}: {result.acted} sorted, {result.suggested} for you to check"
+        notify.owner(FINISHED, title, notify.CHECKS_PATH, f"{title}. It cost about {dollars(result.spent)}.",
+                     now=now, once_a_day=False)
+        return
+    day = Ask.objects.filter(asked_at__gte=now - timedelta(hours=24)).exclude(outcome=Ask.Outcome.ERROR).aggregate(
+        asked=Count("pk"), acted=Count("pk", filter=Q(action=Ask.Action.ACTED)),
+        suggested=Count("pk", filter=Q(action=Ask.Action.SUGGESTED)), spent=Sum("cost_micros"),
+    )
+    title = f"Claude today: {day['asked']} looked at, {day['acted']} sorted, {day['suggested']} for you to check"
+    notify.owner(DAILY, title, notify.CHECKS_PATH, f"{title}. It cost about {dollars(day['spent'] or 0)}.", now=now)
+
+
+def record_fault(now=None):
+    """A run that failed outside its own error handling: say so on the page, and stop until tomorrow."""
+    now = now or timezone.now()
+    ClaudeJudge.objects.filter(pk=1).update(
+        running_since=None, problem="bug", problem_at=now,
+        last_run_note="Claude stopped because of a fault in the site. It tries again tomorrow",
+    )
 
 
 def problem_text(kind):
@@ -985,21 +1035,30 @@ def latest_answers(keys):
 
 def attach_answers(doubtful, wrong, found, duplicates):
     """Give each row the page shows a ``claude`` attribute: Claude's latest answer about it while the row is
-    still what Claude was asked about and the owner has not answered it since, else None. Three queries."""
+    still what Claude was asked about and the owner has not answered it since, else None. Returns, for each
+    section, how many rows Claude called the same, different or could not tell, and how many it has not
+    answered. Three queries."""
     ids = ({listing.product_id for listing in doubtful} | {product.pk for product, _ in wrong}
            | {row.suggested_id for row in found} | {p.pk for keep, others in duplicates for p in [keep, *others]})
     build = Evidence(ids)
     rows = [(build.offer(listing), listing) for listing in doubtful]
     for product, summary in wrong:
-        for offer in (summary.best, summary.second):
-            offer.product = product
-            rows.append((build.offer(offer), offer))
+        best, second = summary.best, summary.second
+        best.product = second.product = product
+        rows += [(build.offer(best, partner=f"offer:{second.pk}"), best),
+                 (build.offer(second, partner=f"offer:{best.pk}"), second)]
     rows += [(build.found(row), row) for row in found]
     rows += [(build.pair(keep, other), other) for keep, others in duplicates for other in others]
     latest = latest_answers({row.key for row, _ in rows})
+    counts = {}
     for row, item in rows:
         ask = latest.get(row.key)
         item.claude = ask if ask is not None and ask.fingerprint == row.fingerprint and not ask.owner_answer else None
+        section = "pairs" if row.kind == "pair" else "found" if row.kind == "found" else "wrong" if row.partner else "doubtful"
+        tally = counts.setdefault(section, {"same": 0, "different": 0, "unsure": 0, "none": 0, "total": 0})
+        tally[item.claude.verdict if item.claude is not None else "none"] += 1
+        tally["total"] += 1
+    return counts
 
 
 def page_status(now=None):
@@ -1037,7 +1096,18 @@ def page_status(now=None):
     else:
         status = "Claude is on, in trial. It suggests and does not act. Tap Let Claude act once you agree with it."
     asked = state.asked_at is not None and (state.last_run_at is None or state.asked_at > state.last_run_at)
+    runs = []
+    for entry in (state.runs or [])[:5]:
+        try:
+            at = datetime.fromisoformat(entry["at"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        runs.append({**entry, "at": at, "spent": dollars(entry.get("spent") or 0)})
     return {
+        "now": now_line(state, now, has_key, stopped, asked),
+        "key_line": key_line(state, has_key),
+        "runs": runs,
+        "recent": list(Ask.objects.order_by("-pk")[:ANSWERS_SHOWN]),
         "state": state, "status": status, "has_key": has_key, "server_on": settings.RIPRAPTOR_CLAUDE,
         "env_key": bool(settings.RIPRAPTOR_CLAUDE_API_KEY),
         "spent": dollars(spent), "limit": dollars(limit), "answers": answers,
@@ -1048,6 +1118,44 @@ def page_status(now=None):
         "asked": asked and settings.RIPRAPTOR_CLAUDE and due(state, now) == "",
         "open_settings": not has_key or state.problem in ("key", "model"),
     }
+
+
+def clock(moment):
+    return timezone.localtime(moment).strftime("%H:%M")
+
+
+def now_line(state, now, has_key, stopped, asked):
+    """What Claude is doing now, or will do next, in one line, or ""."""
+    from . import crawl
+
+    if not (settings.RIPRAPTOR_CLAUDE and has_key and state.enabled) or stopped or crawl.all_paused():
+        return ""
+    if state.running_since is not None:
+        if now - state.running_since < RUN_CUT_SHORT:
+            return (f"Claude is looking now: {state.run_asked} of {state.run_total} asked so far (started "
+                    f"{clock(state.running_since)}). Reload to see more.")
+        cut = f"The run that started at {clock(state.running_since)} was cut short. "
+    else:
+        cut = ""
+    if asked:
+        if now - state.asked_at > START_OVERDUE:
+            return (f"{cut}Claude has not started since you asked at {clock(state.asked_at)}. The server's timer may "
+                    "have stopped: check Crawl health, or run the update again.")
+        return f"{cut}Claude starts within 5 minutes (you asked at {clock(state.asked_at)}). Reload to see it working."
+    if state.last_run_at is None:
+        return f"{cut}Claude has not looked yet. Tap Ask Claude now to start."
+    upcoming = state.last_run_at + RUN_EVERY
+    when = "within 5 minutes" if upcoming <= now else f"about {clock(upcoming)}"
+    return f"{cut}Next look {when}, if anything is waiting. Tap Ask Claude now to look sooner."
+
+
+def key_line(state, has_key):
+    if not has_key:
+        return ""
+    if state.key_checked_at and (state.key_saved_at is None or state.key_checked_at >= state.key_saved_at):
+        local = timezone.localtime(state.key_checked_at)
+        return f"Anthropic accepted the key on {local:%-d %b} at {local:%H:%M}."
+    return "The key is checked with Anthropic at Claude's first run."
 
 
 def sure_pairs(groups):

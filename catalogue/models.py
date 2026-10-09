@@ -1156,6 +1156,13 @@ class ClaudeJudge(models.Model):
     problem_at = models.DateTimeField(null=True, blank=True)
     key_hint = models.CharField(max_length=4, blank=True)
     key_saved_at = models.DateTimeField(null=True, blank=True)
+    key_checked_at = models.DateTimeField(null=True, blank=True, help_text="When Anthropic last accepted the key.")
+    # The run going now, so the page can say how far it has got.
+    running_since = models.DateTimeField(null=True, blank=True)
+    run_asked = models.PositiveIntegerField(default=0)
+    run_total = models.PositiveIntegerField(default=0)
+    # The last few runs, newest first: {"at", "asked", "sorted", "suggested", "left", "spent", "note"}.
+    runs = models.JSONField(default=list, blank=True)
 
     class Meta:
         verbose_name = "Claude judge"
@@ -1236,6 +1243,31 @@ class ClaudeAsk(models.Model):
 
     def __str__(self):
         return f"{self.row_key}: {self.verdict or self.get_outcome_display()}"
+
+    RESULT_WORDS = {
+        Action.ACTED: "acted, listed under Sorted for you", Action.SUGGESTED: "suggested, waiting for you",
+        Action.STALE: "the row changed meanwhile, so it was left", Outcome.REFUSED: "Claude declined to answer",
+        Outcome.CUT_OFF: "the answer was cut off", Outcome.INVALID: "the answer was not understood",
+        Outcome.REJECTED: "Anthropic refused the request", Outcome.ERROR: "not sent", Outcome.SENT: "no reply came back",
+    }
+
+    @property
+    def subject(self):
+        """What the question was about, in the owner's words, from what was sent: no extra query."""
+        e = self.evidence or {}
+        if self.kind == self.Kind.PAIR:
+            return f"{(e.get('first') or {}).get('name', '')} and {(e.get('second') or {}).get('name', '')}"
+        ours = (e.get("ours") or {}).get("name", "")
+        if self.kind == self.Kind.FOUND:
+            return f'"{e.get("shop_title", "")}" at {e.get("shop", "")} for {ours}'
+        return f"{ours} at {e.get('shop', '')}, £{e.get('price', '')}"
+
+    @property
+    def result(self):
+        """What came of it."""
+        if self.outcome == self.Outcome.ANSWERED:
+            return self.RESULT_WORDS.get(self.action, "answered")
+        return self.RESULT_WORDS.get(self.outcome, self.get_outcome_display())
 
     VERDICT_WORDS = {"same": "same product", "different": "a different product", "unsure": "cannot tell"}
     CONFIDENCE_WORDS = {"high": "sure", "medium": "fairly sure", "low": "not sure"}

@@ -28,6 +28,8 @@
   .chk .claude p { margin: 0 0 8px; }
   .chk .claude select, .chk .claude input[type=number], .chk .claude input[type=password] { min-height: 36px; width: 100%; box-sizing: border-box; }
   .chk .said { display: block; margin-top: 4px; }
+  .chk .claude .now { font-weight: 600; }
+  .chk .claude details { margin-top: 8px; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Things to check</div>{% endblock %}
 {% block content %}
@@ -35,10 +37,11 @@
   <section class="claude">
     <h2>Claude</h2>
     <p><b>{{ claude.status }}</b></p>
+    {% if claude.now %}<p class="now">{{ claude.now }}</p>{% endif %}
+    {% if claude.key_line %}<p class="note">{{ claude.key_line }}</p>{% endif %}
     {% if claude.has_key %}<p class="note">This month: {{ claude.spent }} of {{ claude.limit }} (estimated, US dollars). {{ claude.answers }} answer{{ claude.answers|pluralize }}{% if claude.each %}, about {{ claude.each }} each{% endif %}.</p>{% endif %}
     {% if claude.state.last_run_note %}<p class="note">Last run {{ claude.state.last_run_at|date:"j M H:i" }}: {{ claude.state.last_run_note }}.</p>{% endif %}
     {% if claude.agreement_total %}<p class="note">Agreed with you {{ claude.agreed }} of {{ claude.agreement_total }} time{{ claude.agreement_total|pluralize }}.</p>{% endif %}
-    {% if claude.asked %}<p class="note">You asked Claude to look. It starts within 5 minutes.</p>{% endif %}
     {% if claude.has_key and claude.server_on %}<div class="row">
       {% if claude.state.enabled %}
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_now"><input type="submit" value="Ask Claude now"></form>
@@ -50,6 +53,16 @@
       {% endif %}
     </div>{% endif %}
     <p class="note">Claude reads the rows the free checks leave and says whether two things are the same product. In trial it only suggests: its answer shows under each row. Once you agree with its answers, tap Let Claude act. It then acts only when it is sure and the site's own checks agree, never counts a price as right and never merges by itself. Each act is listed under Sorted for you with Undo.</p>
+    {% if claude.runs %}<details><summary>Recent runs ({{ claude.runs|length }})</summary>
+      <ul class="names">{% for run in claude.runs %}<li>{{ run.at|date:"j M H:i" }}: looked at {{ run.asked }}, sorted {{ run.sorted }}, {{ run.suggested }} for you to check, {{ run.left }} not asked yet, {{ run.spent }}{% if run.note %}. {{ run.note }}{% endif %}.</li>{% endfor %}</ul>
+    </details>{% endif %}
+    {% if claude.recent %}<details><summary>Claude's last {{ claude.recent|length }} answer{{ claude.recent|length|pluralize }}</summary>
+      <ul>{% for ask in claude.recent %}
+        <li class="item"><b>{{ ask.subject }}</b>
+          <span class="why">{% if ask.verdict %}{{ ask.summary|capfirst }}. {{ ask.reason }} {% endif %}{{ ask.result|capfirst }}. {{ ask.asked_at|date:"j M H:i" }}.</span></li>
+      {% endfor %}</ul>
+      <p class="note"><a href="{% url 'admin:catalogue_claudeask_changelist' %}">Every answer, with what each cost</a></p>
+    </details>{% endif %}
     <details{% if claude.open_settings %} open{% endif %}><summary>Claude settings and key</summary>
       {% if claude.env_key %}<p class="note">The key is set in the server settings.</p>{% else %}
       <form method="post" class="addset" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="claude_key_save">
@@ -94,6 +107,7 @@
 
   <section>
     <h2>Doubtful prices ({{ doubtful_count }})</h2>
+    {% include "admin/_claude_counts.html" with c=claude_counts.doubtful %}
     <p class="note">These are the cheapest price for their product but far from what the other shops charge, so the site shows them but claims no saving, badge or price drop. Open the link. If the price is right, tap This price is right and it counts while it moves less than 10% for 30 days. If it is a different product, hide it.{% if doubtful_left %} {{ doubtful_left }} other doubtful price{{ doubtful_left|pluralize }} {{ doubtful_left|pluralize:"is,are" }} dearer than another shop or out of stock, so never shown as the cheapest, and {{ doubtful_left|pluralize:"is,are" }} left as {{ doubtful_left|pluralize:"it is,they are" }}.{% endif %}</p>
     {% if doubtful %}<ul>
       {% for listing in doubtful %}
@@ -128,6 +142,7 @@
 
   <section>
     <h2>Wrong matches ({{ wrong|length }})</h2>
+    {% include "admin/_claude_counts.html" with c=claude_counts.wrong %}
     <p class="note">The cheapest price is over {{ max_percent }}% under the next shop, which usually means a different product was matched (a pack against a box). The site already hides the saving. Open both links, then hide the one that is not this product.</p>
     {% if wrong %}<ul>
       {% for product, summary in wrong %}
@@ -145,6 +160,7 @@
 
   <section>
     <h2>Possible duplicates ({{ duplicates|length }})</h2>
+    {% include "admin/_claude_counts.html" with c=claude_counts.pairs %}
     <p class="note">These names differ only by words like Exclusive, English or the series name. Merge only when they are the same product. Merging keeps every price, the price history and the old addresses. Merge these cannot be undone; a merge from the Claude button can, under Sorted for you. If one is a different product, tap Not the same beside it and the two are not suggested together again.</p>
     {% if sure_pairs %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge_sure">{% for keep, other, ask in sure_pairs %}<input type="hidden" name="pair" value="{{ keep.pk }}:{{ other.pk }}">{% endfor %}<input type="submit" value="Merge the {{ sure_pairs|length }} pair{{ sure_pairs|pluralize }} Claude is sure are the same"></form>
     <p class="note">Each merge can be undone under Sorted for you.</p>{% endif %}
@@ -162,6 +178,7 @@
 
   <section>
     <h2>Found at another shop ({{ found_count }})</h2>
+    {% include "admin/_claude_counts.html" with c=claude_counts.found %}
     <p class="note">Products one shop sells, or none, are looked for at your other shops. These look like the same product but are not certain, and the ones visitors want most come first. Open the link. If it is the same product, tap Yes and the shop's price is checked at its next read. If not, tap No and that shop is not asked about it again.</p>
     {% if found %}<ul>
       {% for row in found %}

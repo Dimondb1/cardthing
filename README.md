@@ -973,22 +973,33 @@ price is judged against the other shops and its history starts. A
 different barcode never links. A likely match (60 to 99, or a sure name
 with a barcode on one side only) is listed on Things to check as
 "<our product> might be at <shop> as "<the shop's title>" for £<price>"
-with "Yes, link it" (the listing is added and the shop's next read checks
-its price and stock) and "No, not this" (that shop is never asked about
-it again). A title must carry at least half of the words that name our
-product beyond its kind, so another set's Elite Trainer Box is never
-offered for ours.
+with "Yes, link it" and "No, not this". Yes adds the listing with the
+price and stock the finder saw, dated when it saw them, and the shop's
+next read checks both; a row that did not record its stock is added as
+out of stock until that read. No means that shop is never asked about that
+product again; the No is about that product only, so the same page can
+still be matched to another of our products by a shop read or the finder.
+A title must carry at least half of the words that name our product beyond
+its kind, so another set's Elite Trainer Box is never offered for ours. A
+variant of another kind on the page ("1 Pack" on a booster box page) is
+never offered, and one with a count our name does not carry ("3 Packs")
+only ever waits for a tap.
 
 A shop is not asked about the same product again for 14 days (7 when it
 has 10 or more interest points), the next day after a request failed, and
 never after a No. The finder makes at most 20 requests to one shop and 200
 in all each hour, one second apart at one shop, and never more than a
 fifth of the background reader's requests, so whole-shop reads come
-first. A shop whose search answers 404 or not with JSON is not searched
-for a week (its last read is still looked at); one that answers 429 waits
-30 minutes like a failed read. Every product looked for is stamped, found
-or not. A batch has two minutes and starts nothing new after 90 seconds,
-and it leaves one of the reader's threads free for single-product checks.
+first. The caps hold across processes: the background reader and a
+hand-run `find_stockists` count every request under one lock
+(`/tmp/ripraptor-finder.lock`) in the shared cache. A shop whose search
+answers 404, 429 (a bot check) or not with JSON is not searched for a
+week (its last read is still looked at), and a shop that answers 429 to
+any finder request is not asked again in that batch. The finder never
+touches a shop's read back-off, so its errors cannot hold back the
+shop's whole reads. Every product looked for is stamped, found or not. A
+batch has two minutes and starts no new request after 90 seconds, and it
+leaves one of the reader's threads free for single-product checks.
 
 On Insights, each "Popular with only one shop" row says how many shops
 were searched and when, with a "Search other shops now" button: the

@@ -199,7 +199,7 @@ class ShopProductAdmin(admin.ModelAdmin):
     search_fields = ("title", "suggested__name")
     autocomplete_fields = ("suggested",)
     list_select_related = ("retailer", "suggested")
-    readonly_fields = ("retailer", "title", "url", "price", "image_url", "confidence", "source", "product", "first_seen",
+    readonly_fields = ("retailer", "title", "url", "price", "availability", "image_url", "confidence", "source", "product", "first_seen",
                        "last_seen")
     actions = ["link_to_suggested", "mark_ignored", "mark_review"]
     list_per_page = 50

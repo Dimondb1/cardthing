@@ -1104,9 +1104,16 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     seen_products = set()
     images_by_product = {}
     catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
-    ignored = set(
-        ShopProduct.objects.filter(retailer=retailer, status=ShopProduct.Status.IGNORED).values_list("url", flat=True)
-    )
+    # A page the owner said is not one of ours is never matched by name. A No to the stockist finder is
+    # about one product only: the page can still be matched by name to any other.
+    ignored, refused = set(), {}
+    for url, source, suggested_pk, looked_for_pk in ShopProduct.objects.filter(
+        retailer=retailer, status=ShopProduct.Status.IGNORED
+    ).values_list("url", "source", "suggested_id", "product_id"):
+        if source == ShopProduct.Source.FINDER:
+            refused[url] = {suggested_pk, looked_for_pk} - {None}
+        else:
+            ignored.add(url)
 
     to_stamp = []
     # Product pk -> (first offer without a price, whether every such offer said out of stock).
@@ -1134,6 +1141,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url}")
                     continue
                 match, value = catalogue.best_match(offer.title, game=sealed.game)
+                if match is not None and match[0] in refused.get(offer.url, ()):
+                    # The owner said this page is not that product.
+                    unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url}")
+                    continue
                 if (match is None or value < AUTO_LINK) and getattr(settings, "RIPRAPTOR_AUTO_CATALOGUE", True):
                     created_pk = create_from_offer(offer, catalogue, sealed=sealed)
                     if created_pk is not None:
@@ -1144,15 +1155,16 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     product_pk = match[0]
                     ShopProduct.objects.update_or_create(
                         retailer=retailer, url=offer.url,
-                        defaults={"title": offer.title, "price": offer.price, "image_url": offer.image,
-                                  "suggested_id": product_pk, "confidence": value,
+                        defaults={"title": offer.title, "price": offer.price, "availability": offer.availability,
+                                  "image_url": offer.image, "suggested_id": product_pk, "confidence": value,
                                   "status": ShopProduct.Status.LINKED, "last_seen": checked_at},
                     )
                 elif match and value >= SUGGEST:
                     ShopProduct.objects.update_or_create(
                         retailer=retailer, url=offer.url,
-                        defaults={"title": offer.title, "price": offer.price, "image_url": offer.image,
-                                  "suggested_id": match[0], "confidence": value, "last_seen": checked_at},
+                        defaults={"title": offer.title, "price": offer.price, "availability": offer.availability,
+                                  "image_url": offer.image, "suggested_id": match[0], "confidence": value,
+                                  "last_seen": checked_at},
                     )
                     unmatched.append(f"{offer.title} -> maybe {match[1]} ({value}%)")
                     continue

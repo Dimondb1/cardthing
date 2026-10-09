@@ -651,6 +651,10 @@ class ShopProduct(models.Model):
     title = models.CharField(max_length=300)
     url = models.URLField(max_length=1000)
     price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    availability = models.CharField(
+        "stock when seen", max_length=12, choices=Listing.Availability.choices, blank=True,
+        help_text="What the shop said about stock when this row was written. Blank when it was not recorded.",
+    )
     image_url = models.URLField(max_length=1000, blank=True)
     suggested = models.ForeignKey(
         Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",

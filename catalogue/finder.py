@@ -24,12 +24,18 @@ The best page found is read once (/products/<handle>.js) for its barcode, price 
 A shop is not asked about the same product again for 14 days, 7 when people want it, and never after
 the owner said No. Requests are capped at 20 per shop and 200 in all each hour, one second apart at one
 shop, and inside the background reader at a fifth of its requests, so whole-shop reads always come first.
+The caps hold across processes. A shop's 429 stops the finder asking it for the rest of the batch (and
+its search for a week) but never touches the shop's read back-off.
 """
 
+import fcntl
 import json
+import logging
+import os
 import re
 import time
 import unicodedata
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from decimal import Decimal
@@ -82,6 +88,11 @@ BATCH = 30
 CHUNK = 200
 MARKETPLACES = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
 UNMATCHED_LINE = re.compile(r"^(?P<title>.+) \[[^\]]*\] (?P<url>https?://\S+)$")
+# Held while a request is counted against the caps, so the background reader and a hand-run
+# find_stockists never both take the last place in an hour.
+BUDGET_LOCK = "/tmp/ripraptor-finder.lock"
+
+logger = logging.getLogger("ripraptor")
 
 
 # Interest ---------------------------------------------------------------------------------------
@@ -294,6 +305,47 @@ def judge(product, title, sealed=None):
     return value
 
 
+# What a variant's own label can say about it beyond the page's title: "(1 Pack)" on a booster box page.
+COUNT = re.compile(r"\d+")
+
+
+def variant_label(title, page_title):
+    """The variant's own label in an offer title written "<page title> (<variant>)", or ""."""
+    if page_title and title.startswith(f"{page_title} (") and title.endswith(")"):
+        return title[len(page_title) + 2:-1]
+    return ""
+
+
+def label_kind(label):
+    """The kind of product a variant label names ("1 Pack" is a booster pack), or None. A number of
+    packs above one names no kind: it is a count, not a pack."""
+    words = [word[:-1] if len(word) > 3 and word.endswith("s") else word
+             for word in re.findall(r"[a-z0-9']+", fold(label).lower())]
+    text = f" {' '.join(words)} "
+    counts = [int(word) for word in words if word.isdigit()]
+    for kind, phrases in TYPES:
+        if any(f" {phrase} " in text for phrase in phrases):
+            if kind == "booster_pack" and any(n > 1 for n in counts):
+                return None
+            return kind
+    return None
+
+
+def variant_cap(product, label):
+    """The highest score a variant with this label can have for our product. A variant of another kind
+    ("1 Pack" on a booster box page) is a different product: not even likely. A variant with a count our
+    name does not carry ("3 Packs") may be a different amount: it waits for the owner, never links."""
+    if not label:
+        return 100
+    kind = label_kind(label)
+    if kind is not None and kind != product.product_type:
+        return SUGGEST - 1
+    ours = set(COUNT.findall(product.name))
+    if any(count not in ours for count in COUNT.findall(label)):
+        return AUTO_LINK - 1
+    return 100
+
+
 def fold(text):
     """Accents dropped, so "Pokémon" finds a shop that writes "Pokemon"."""
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
@@ -363,36 +415,68 @@ class AskFailed(Exception):
         self.status = status
 
 
-class Budget:
-    """The finder's requests in the last hour, kept in the cache every process shares."""
+@contextmanager
+def budget_lock(path=None):
+    """Held across processes while the request log is read, checked and written. A lock that cannot be
+    taken means no request: the caps are hard caps."""
+    try:
+        fd = os.open(path or BUDGET_LOCK, os.O_RDONLY | os.O_CREAT, 0o644)
+    except OSError as exc:
+        logger.warning("Stockist finder: the request lock %s cannot be opened (%s), so no shop is asked.",
+                       path or BUDGET_LOCK, exc)
+        raise NoBudget(True) from exc
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)   # closing releases the lock
 
-    def __init__(self, now, requests=None, worker_requests=None):
+
+class Budget:
+    """The finder's requests in the last hour, kept in the cache every process shares.
+
+    Every request is taken under one lock: the log is read afresh, checked against the caps and written
+    back with the new request in it, so the background reader and a hand-run find_stockists count each
+    other's requests. The one-second gap at a shop is kept the same way: a request takes the shop's next
+    free second, and the caller waits for it.
+    """
+
+    def __init__(self, requests=None, worker_requests=None, lock=None):
         self.limit = requests
         self.used = 0
         self.worker_requests = worker_requests
-        self.log = self.recent(cache.get(LOG_KEY) or [], now)
+        self.lock = lock
 
     @staticmethod
     def recent(log, now):
         since = now.timestamp() - 3600
         return [(at, shop) for at, shop in log if at > since]
 
-    def check(self, shop_id, now):
-        """Raise NoBudget when a request to this shop now would go over a cap."""
-        self.log = self.recent(self.log, now)
+    def log(self, now):
+        return self.recent(cache.get(LOG_KEY) or [], now)
+
+    def check(self, log, shop_id):
+        """Raise NoBudget when one more request to this shop would go over a cap."""
         if self.limit is not None and self.used >= self.limit:
             raise NoBudget(True)
-        if len(self.log) >= OVERALL_HOURLY:
+        if len(log) >= OVERALL_HOURLY:
             raise NoBudget(True)
-        if self.worker_requests is not None and len(self.log) + 1 > WORKER_SHARE * (self.worker_requests() + 1):
+        if self.worker_requests is not None and len(log) + 1 > WORKER_SHARE * (self.worker_requests() + 1):
             raise NoBudget(True)
-        if sum(1 for _at, shop in self.log if shop == shop_id) >= SHOP_HOURLY:
+        if sum(1 for _at, shop in log if shop == shop_id) >= SHOP_HOURLY:
             raise NoBudget(False)
 
-    def spend(self, shop_id, now):
+    def take(self, shop_id, now):
+        """Count one request to this shop, or raise NoBudget. Returns the seconds to wait before sending it."""
+        with budget_lock(self.lock):
+            log = self.log(now)
+            self.check(log, shop_id)
+            last = max((at for at, shop in log if shop == shop_id), default=None)
+            at = now.timestamp() if last is None else max(now.timestamp(), last + SHOP_GAP)
+            log.append((at, shop_id))
+            cache.set(LOG_KEY, log, 3600)
         self.used += 1
-        self.log.append((now.timestamp(), shop_id))
-        cache.set(LOG_KEY, self.log, 3600)
+        return at - now.timestamp()
 
 
 # The search -------------------------------------------------------------------------------------
@@ -434,7 +518,7 @@ class Finder:
         self.fetch_for = fetch_for or plain_fetch
         self.clock = clock or timezone.now
         self.sleep = sleep or time.sleep
-        self.budget = budget or Budget(self.clock(), requests=requests, worker_requests=worker_requests)
+        self.budget = budget or Budget(requests=requests, worker_requests=worker_requests)
         self.busy = busy or (lambda: ())
         self.stop = stop or (lambda: False)
         self.fetches = {}
@@ -443,7 +527,6 @@ class Finder:
         self.ignored = {}
         self.blocked = set()
         self.errors = {}
-        self.last_asked = {}
         self.out = False
 
     # Batch
@@ -509,15 +592,13 @@ class Finder:
     # Requests
 
     def ask(self, shop, url):
-        self.budget.check(shop.pk, self.clock())
-        last = self.last_asked.get(shop.pk)
-        if last is not None:
-            wait = SHOP_GAP - (self.clock() - last).total_seconds()
-            if wait > 0:
-                self.sleep(wait)
-        now = self.clock()
-        self.last_asked[shop.pk] = now
-        self.budget.spend(shop.pk, now)
+        # Each request can take seconds, so the batch's time is checked before every one, not only
+        # before every search: a search begun just inside the time must not run past the deadline.
+        if self.stop():
+            raise NoBudget(True)
+        wait = self.budget.take(shop.pk, self.clock())
+        if wait > 0:
+            self.sleep(wait)
         if shop.pk not in self.fetches:
             self.fetches[shop.pk] = self.fetch_for(shop)
         try:
@@ -525,11 +606,9 @@ class Finder:
         except ImportError_ as exc:
             status = crawl.http_status(str(exc))
             self.errors[shop.pk] = self.errors.get(shop.pk, 0) + 1
-            if status == 429:
-                # The shop says it is being asked too often: it waits like a failed read.
-                shop.read_failed(self.clock(), 429, f"Looking for stockists: {exc}")
-                self.blocked.add(shop.pk)
-            elif self.errors[shop.pk] >= ERRORS_IN_A_ROW:
+            if status == 429 or self.errors[shop.pk] >= ERRORS_IN_A_ROW:
+                # Not asked again in this batch. The finder never touches the shop's read back-off: a
+                # search behind a bot check must not hold back the shop's whole reads.
                 self.blocked.add(shop.pk)
             raise AskFailed(status, str(exc)) from exc
         self.errors[shop.pk] = 0
@@ -582,7 +661,8 @@ class Finder:
             try:
                 raw = self.ask(shop, suggest_url(base, query))
             except AskFailed as exc:
-                if exc.status == 404:
+                if exc.status in (404, 429):
+                    # No search, or one behind a bot check: only the shop's last read is used for a week.
                     self.suggest_failed(shop)
                 raise
             try:
@@ -636,10 +716,12 @@ class Finder:
         if same:
             return self.link(product, shop, min(same, key=lambda o: (o.availability == out, o.price)), AUTO_LINK)
         judged = []
+        page_title = data.get("title") or ""
         for offer in offers:
             sealed = classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price)
             if sealed is not None and sealed.game == product.game.slug:
-                judged.append((judge(product, offer.title, sealed), offer))
+                value = judge(product, offer.title, sealed)
+                judged.append((min(value, variant_cap(product, variant_label(offer.title, page_title))), offer))
         if not judged:
             return self.note(product, shop, StockistSearch.Outcome.NONE)
         value, offer = max(judged, key=lambda item: (item[0], item[1].availability != out, -item[1].price))
@@ -652,18 +734,27 @@ class Finder:
         return self.note(product, shop, StockistSearch.Outcome.NONE, offer.url, value)
 
     def is_taken(self, shop, url, product):
-        """The page is another product's listing at this shop, or one the owner said is not ours."""
+        """The page is another product's listing at this shop, one the owner said is not one of ours, or
+        one the owner said is not this product."""
         if shop.pk not in self.taken:
             self.taken[shop.pk] = {
                 link_key(u): pk for u, pk in Listing.objects.filter(retailer=shop).values_list("url", "product_id")
             }
-            self.ignored[shop.pk] = {
-                link_key(u) for u in ShopProduct.objects.filter(retailer=shop, status=ShopProduct.Status.IGNORED)
-                .values_list("url", flat=True)
-            }
+            refused = {}
+            for u, source, suggested_pk, looked_for_pk in ShopProduct.objects.filter(
+                retailer=shop, status=ShopProduct.Status.IGNORED
+            ).values_list("url", "source", "suggested_id", "product_id"):
+                # None: not one of ours at all. A finder No names only the product it was about.
+                refused[link_key(u)] = ({suggested_pk, looked_for_pk} - {None}) if source == ShopProduct.Source.FINDER else None
+            self.ignored[shop.pk] = refused
         key = link_key(url)
         owner = self.taken[shop.pk].get(key)
-        return key in self.ignored[shop.pk] or (owner is not None and owner != product.pk)
+        if owner is not None and owner != product.pk:
+            return True
+        if key not in self.ignored[shop.pk]:
+            return False
+        refused = self.ignored[shop.pk][key]
+        return refused is None or product.pk in refused
 
     def link(self, product, shop, offer, value):
         apply_offers(shop, [replace(offer, product_pk=product.pk)], checked_at=self.clock(), complete=False)
@@ -675,7 +766,8 @@ class Finder:
     def review(self, product, shop, offer, value):
         ShopProduct.objects.update_or_create(
             retailer=shop, url=offer.url,
-            defaults={"title": offer.title[:300], "price": offer.price, "image_url": (offer.image or "")[:1000],
+            defaults={"title": offer.title[:300], "price": offer.price, "availability": offer.availability,
+                      "image_url": (offer.image or "")[:1000],
                       "suggested": product, "product": product, "confidence": value,
                       "status": ShopProduct.Status.REVIEW, "source": ShopProduct.Source.FINDER,
                       "last_seen": self.clock()},
@@ -699,14 +791,20 @@ def find(limit=BATCH, **kwargs):
 
 def link(row):
     """Yes: add the listing for the row's product at its shop. The next read or check of the shop prices
-    it. Returns the listing, or None when the row names no product."""
+    it. Returns the listing, or None when the row names no product.
+
+    The listing says what the row saw, when it saw it: its price and stock as at last_seen. A row that
+    did not record the stock is linked as out of stock, so nothing is offered as buyable on a guess;
+    the next read of the shop sets the real stock.
+    """
     product = row.suggested
     if product is None:
         return None
     listing, created = Listing.objects.get_or_create(
         product=product, retailer=row.retailer,
-        defaults={"url": row.url, "price": row.price or 0, "availability": Listing.Availability.IN_STOCK,
-                  # The price was seen then, not now.
+        defaults={"url": row.url, "price": row.price or 0,
+                  "availability": row.availability or Listing.Availability.OUT_OF_STOCK,
+                  # The price and stock were seen then, not now.
                   "last_checked": min(row.last_seen, timezone.now())},
     )
     if listing.url != row.url:
@@ -732,7 +830,9 @@ def link(row):
 
 
 def ignore(row):
-    """No: the row is not this product. A row the finder found is never asked about at that shop again."""
+    """No: the row is not this product. A row the finder found is never asked about at that shop again,
+    and the No is about that product only: imports and the finder can still match the page to another.
+    A row an import found is not one of ours at all, so its page is never matched by name again."""
     row.status = ShopProduct.Status.IGNORED
     row.save(update_fields=["status"])
     if row.source == ShopProduct.Source.FINDER and row.product_id:

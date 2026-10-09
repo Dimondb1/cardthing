@@ -113,7 +113,11 @@ class FinderCase(TestCase):
 
     def find(self, shop, limit=finder.BATCH, **kwargs):
         kwargs.setdefault("clock", self.clock)
-        return finder.find(limit, fetch_for=lambda retailer: shop, sleep=self.sleeps.append, **kwargs)
+        return finder.find(limit, fetch_for=lambda retailer: shop, sleep=self.sleep, **kwargs)
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.clock.sleep(seconds)
 
     def unmatched_read(self, retailer, *lines):
         return ImportRun.objects.create(retailer=retailer, finished_at=timezone.now(), unmatched="\n".join(lines))
@@ -160,6 +164,22 @@ class CandidateTests(FinderCase):
         StockistSearch.objects.filter(product=self.quiet, retailer=self.third).update(
             outcome=StockistSearch.Outcome.IGNORED, searched_at=now - timedelta(days=400))
         self.assertNotIn(self.quiet, self.order())
+
+    def test_with_equal_interest_pre_orders_and_new_products_come_first(self):
+        Product.objects.filter(pk__in=[self.quiet.pk, self.clicked.pk]).update(created_at=self.clock() - timedelta(days=30))
+        self.assertEqual(self.order(scores={}), [self.quiet, self.clicked])
+        Listing.objects.filter(product=self.clicked).update(availability=Listing.Availability.PREORDER)
+        self.assertEqual(self.order(scores={}), [self.clicked, self.quiet])
+        Listing.objects.filter(product=self.clicked).update(availability=Listing.Availability.IN_STOCK)
+        Product.objects.filter(pk=self.clicked.pk).update(created_at=self.clock() - timedelta(days=2))
+        self.assertEqual(self.order(scores={}), [self.clicked, self.quiet])
+
+    def test_then_a_product_never_looked_for_and_then_the_one_looked_for_longest_ago(self):
+        Product.objects.filter(pk__in=[self.quiet.pk, self.clicked.pk]).update(created_at=self.clock() - timedelta(days=30))
+        Product.objects.filter(pk=self.quiet.pk).update(finder_checked_at=self.clock() - timedelta(days=1))
+        self.assertEqual(self.order(scores={}), [self.clicked, self.quiet])
+        Product.objects.filter(pk=self.clicked.pk).update(finder_checked_at=self.clock() - timedelta(hours=2))
+        self.assertEqual(self.order(scores={}), [self.quiet, self.clicked])
 
     def test_a_shop_that_could_not_be_asked_is_asked_again_the_next_day(self):
         StockistSearch.objects.create(product=self.quiet, retailer=self.gg, searched_at=self.clock() - timedelta(hours=25),
@@ -219,6 +239,18 @@ class LastReadTests(FinderCase):
         self.assertEqual((listing.price, listing.availability), (Decimal("149.99"), Listing.Availability.IN_STOCK))
         self.assertEqual(self.search(self.etb, self.gg).outcome, StockistSearch.Outcome.LINKED)
         self.assertEqual((result.products, result.linked, result.review), (1, 1, 0))
+
+    def test_a_line_from_another_game_is_never_a_candidate(self):
+        origins = make_product(self.set, name="Origins Booster Box", slug="origins-box", product_type="booster_box")
+        make_listing(origins, self.home, price="100.00")
+        # Word for word the same name, but Magic, not Pokemon.
+        title = "Magic The Gathering Origins Booster Box"
+        self.assertEqual(finder.judge(origins, title), 100)
+        self.unmatched_read(self.gg, f"{title} [no barcode] {GG}/products/mtg-origins-booster-box")
+        shop = Shop({"suggest.json": recorded("empty_suggest.json")})
+        self.find(shop)
+        self.assertEqual(shop.asked("/products/"), [])
+        self.assertEqual(self.search(origins, self.gg).outcome, StockistSearch.Outcome.NONE)
 
     def test_a_single_card_line_is_never_a_candidate(self):
         self.unmatched_read(self.gg, f"Pokemon Prismatic Evolutions Umbreon ex 161/131 Special Illustration Rare [no barcode] {GG}/products/umbreon")
@@ -305,6 +337,72 @@ class SuggestTests(FinderCase):
         rivals = make_product(self.set, name="Destined Rivals Booster Box", slug="dr-box", product_type="booster_box")
         self.assertIsNone(finder.Finder().best_result(rivals, self.gg, GG, found))
 
+    def test_a_result_from_another_game_is_passed_over_however_well_it_reads(self):
+        origins = make_product(self.set, name="Origins Booster Box", slug="origins-box", product_type="booster_box")
+        found = suggest_with("Magic The Gathering Origins Booster Box", "Star Wars Unlimited Origins Booster Box")
+        for item in found["resources"]["results"]["products"]:
+            item.update(vendor="", type="Trading Cards", tags=[])
+            self.assertEqual(finder.judge(origins, item["title"]), 100)
+        self.assertIsNone(finder.Finder().best_result(origins, self.gg, GG, found["resources"]["results"]["products"]))
+
+    def test_a_page_from_another_game_is_not_linked_however_well_it_reads(self):
+        origins = make_product(self.set, name="Origins Booster Box", slug="origins-box", product_type="booster_box")
+        page = {"title": "Magic The Gathering Origins Booster Box", "handle": "mtg-origins", "vendor": "", "type": "",
+                "tags": [], "variants": [{"id": 1, "title": "Default Title", "available": True, "price": 9999, "barcode": ""}]}
+        found = finder.Finder(fetch_for=lambda retailer: Shop({".js": page}), clock=self.clock, sleep=self.sleep)
+        self.assertEqual(found.decide(origins, self.gg, finder.Hit("mtg-origins", 100)), StockistSearch.Outcome.NONE)
+        self.assertFalse(Listing.objects.filter(retailer=self.gg).exists())
+
+    def test_a_page_already_listed_for_another_product_is_never_offered(self):
+        bundle = make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pe-bundle", product_type="bundle")
+        make_listing(bundle, self.gg, url=f"{GG}/products/{PE_HANDLE}")
+        shop = self.shop()
+        self.find(shop)
+        self.assertEqual(shop.asked(f"{GG}/products/"), [])
+        self.assertEqual(self.search(self.etb, self.gg).outcome, StockistSearch.Outcome.NONE)
+        self.assertEqual(Listing.objects.get(retailer=self.gg).product, bundle)
+
+    def test_a_name_must_agree_both_ways_and_be_the_same_kind_to_score_100(self):
+        dragon = make_product(self.set, name="Dragon Origins Booster Box", slug="dragon-origins", product_type="booster_box")
+        # Every word of the shop's title is in our name, but "Dragon Ball" is not our "Dragon".
+        self.assertEqual(finder.judge(dragon, "Pokemon Dragon Ball Origins Booster Box"), finder.AUTO_LINK - 1)
+        # The same words, but the shop sells it as another kind of product.
+        self.assertEqual(finder.judge(self.etb, PE_TITLE), 100)
+        bundle = finder.classify("Pokemon Prismatic Evolutions Booster Bundle")
+        self.assertEqual(finder.judge(self.etb, PE_TITLE, bundle), finder.AUTO_LINK - 1)
+
+    def test_a_pack_variant_on_a_box_page_is_never_linked_to_the_box(self):
+        box = make_product(self.set, name="Prismatic Evolutions Booster Box", slug="pe-box", product_type="booster_box")
+        page = {"title": "Pokemon Prismatic Evolutions Booster Box", "handle": "found-0", "vendor": "Pokemon",
+                "type": "Trading Cards", "tags": [], "variants": [
+                    {"id": 100, "title": "1 Pack", "available": True, "price": 499, "barcode": ""},
+                    {"id": 101, "title": "Booster Box", "available": True, "price": 15000, "barcode": ""}]}
+        self.find(self.shop(page=page, suggest=suggest_with("Pokemon Prismatic Evolutions Booster Box")))
+        self.assertFalse(Listing.objects.filter(retailer=self.gg, price=Decimal("4.99")).exists())
+        listing = Listing.objects.get(product=box, retailer=self.gg)
+        self.assertEqual((listing.price, listing.url), (Decimal("150.00"), f"{GG}/products/found-0?variant=101"))
+        # Packs alone on the page: never even a likely match for the box.
+        Listing.objects.filter(retailer=self.gg).delete()
+        StockistSearch.objects.all().delete()
+        page["variants"] = page["variants"][:1]
+        self.find(self.shop(page=page, suggest=suggest_with("Pokemon Prismatic Evolutions Booster Box")))
+        self.assertFalse(Listing.objects.filter(retailer=self.gg).exists())
+        self.assertFalse(ShopProduct.objects.filter(retailer=self.gg).exists())
+        self.assertEqual(self.search(box, self.gg).outcome, StockistSearch.Outcome.NONE)
+
+    def test_a_variant_label_caps_what_it_can_score(self):
+        box = make_product(self.set, name="Prismatic Evolutions Booster Box", slug="pe-box", product_type="booster_box")
+        pack = make_product(self.set, name="Prismatic Evolutions Booster Pack", slug="pe-pack", product_type="booster_pack")
+        cases = [(box, "", 100), (box, "English", 100), (box, "Booster Box", 100), (box, "1 Pack", finder.SUGGEST - 1),
+                 (box, "Single Packs", finder.SUGGEST - 1), (box, "36 Packs", finder.AUTO_LINK - 1),
+                 (box, "Booster Bundle", finder.SUGGEST - 1), (pack, "Single Pack", 100), (pack, "3 Packs", finder.AUTO_LINK - 1),
+                 (pack, "Booster Box", finder.SUGGEST - 1)]
+        for product, label, cap in cases:
+            with self.subTest(product=product.name, label=label):
+                self.assertEqual(finder.variant_cap(product, label), cap)
+        self.assertEqual(finder.variant_label("Box (1 Pack)", "Box"), "1 Pack")
+        self.assertEqual(finder.variant_label("Box", "Box"), "")
+
     def test_every_candidate_is_stamped_even_when_nothing_is_found(self):
         self.find(Shop({"suggest.json": recorded("empty_suggest.json")}))
         self.etb.refresh_from_db()
@@ -351,16 +449,49 @@ class BudgetTests(FinderCase):
 
     def test_one_second_between_requests_to_one_shop(self):
         self.find(self.empty())
-        self.assertEqual(self.sleeps, [finder.SHOP_GAP] * 3)   # four requests to one shop, the clock standing still
+        self.assertEqual(self.sleeps, [finder.SHOP_GAP] * 3)   # four requests to one shop, each waiting its second
 
     def test_the_finder_stays_under_a_fifth_of_the_readers_requests(self):
-        budget = finder.Budget(self.clock(), worker_requests=lambda: 10)
-        budget.check(self.gg.pk, self.clock())
-        budget.spend(self.gg.pk, self.clock())
-        budget.check(self.gg.pk, self.clock())
-        budget.spend(self.gg.pk, self.clock())
+        budget = finder.Budget(worker_requests=lambda: 10)
+        budget.take(self.gg.pk, self.clock())
+        budget.take(self.gg.pk, self.clock())
         with self.assertRaises(finder.NoBudget):
-            budget.check(self.gg.pk, self.clock())
+            budget.take(self.gg.pk, self.clock())
+
+    def test_the_caps_hold_when_two_processes_ask_at_once(self):
+        # Two budgets made at the same moment stand in for the background reader and a hand-run find_stockists.
+        reader, by_hand = finder.Budget(), finder.Budget()
+        taken = 0
+        for n in range(150):
+            for budget in (reader, by_hand):
+                try:
+                    budget.take(1000 + n % 20, self.clock())
+                    taken += 1
+                except finder.NoBudget:
+                    pass
+        self.assertEqual(taken, finder.OVERALL_HOURLY)
+        self.assertEqual(len(cache.get(finder.LOG_KEY)), finder.OVERALL_HOURLY)
+        # The per-shop cap and the gap at a shop count the other process's requests too.
+        cache.clear()
+        reader, by_hand = finder.Budget(), finder.Budget()
+        waits = [budget.take(self.gg.pk, self.clock()) for budget in (reader, by_hand) * 10]
+        self.assertEqual(waits, [n * finder.SHOP_GAP for n in range(finder.SHOP_HOURLY)])
+        with self.assertRaises(finder.NoBudget):
+            by_hand.take(self.gg.pk, self.clock())
+
+    def test_no_request_is_counted_when_the_lock_cannot_be_taken(self):
+        budget = finder.Budget(lock="/nonexistent-folder/finder.lock")
+        with self.assertLogs("ripraptor", "WARNING"), self.assertRaises(finder.NoBudget):
+            budget.take(self.gg.pk, self.clock())
+        self.assertIsNone(cache.get(finder.LOG_KEY))
+
+    def test_no_new_request_starts_once_the_batch_time_is_up(self):
+        # The batch's time runs out after the first request of a search: the page is not read.
+        shop = Shop({"suggest.json": recorded("gathering_games_suggest.json"), ".js": product_page()})
+        result = self.find(shop, stop=lambda: len(shop.calls) >= 1)
+        self.assertEqual(len(shop.calls), 1)
+        self.assertFalse(StockistSearch.objects.exists())
+        self.assertEqual(result.products, 0)
 
     def test_a_404_on_the_search_marks_the_shop_unsearchable_for_a_week(self):
         shop = Shop({"suggest.json": ImportError_(f"Could not fetch {GG}/search: HTTP Error 404: Not Found")})
@@ -385,13 +516,33 @@ class BudgetTests(FinderCase):
         self.assertFalse(self.gg.suggest_ok)
         self.assertEqual(self.search(self.etb, self.gg).outcome, StockistSearch.Outcome.ERROR)
 
-    def test_a_shop_saying_too_many_backs_off_and_is_not_asked_again(self):
-        shop = Shop({"suggest.json": ImportError_(f"Could not fetch {GG}/search: HTTP Error 429: Too Many Requests")})
+    def test_a_search_saying_too_many_is_left_for_a_week_and_never_holds_back_whole_reads(self):
+        Retailer.objects.filter(pk=self.gg.pk).update(next_read_at=self.clock() + timedelta(minutes=60))
+        too_many = ImportError_(f"Could not fetch {GG}/search: HTTP Error 429: Too Many Requests")
+        shop = Shop({"suggest.json": too_many})
+        self.find(shop)
+        self.assertEqual(len(shop.calls), 1)   # not asked again in this batch
+        self.gg.refresh_from_db()
+        self.assertFalse(self.gg.suggest_ok)
+        self.assertEqual(self.search(self.etb, self.gg).outcome, StockistSearch.Outcome.ERROR)
+        # The shop's reads are untouched: no back-off, no error streak, no error shown on Crawl health.
+        self.assertEqual((self.gg.backoff_until, self.gg.error_streak, self.gg.failing_since, self.gg.last_error),
+                         (None, 0, None, ""))
+        self.assertIn(self.gg, Retailer.due(self.clock() + timedelta(minutes=61)))
+        # Later batches use only the shop's last read until the week is up.
+        self.clock.now += timedelta(hours=2)
+        StockistSearch.objects.all().delete()
         self.find(shop)
         self.assertEqual(len(shop.calls), 1)
+
+    def test_a_page_read_saying_too_many_stops_the_shop_for_the_batch_only(self):
+        too_many = ImportError_(f"Could not fetch {GG}/products/x.js: HTTP Error 429: Too Many Requests")
+        shop = Shop({"suggest.json": recorded("gathering_games_suggest.json"), ".js": too_many})
+        self.find(shop)
+        self.assertEqual(len(shop.calls), 2)   # the search, then the page; nothing more this batch
         self.gg.refresh_from_db()
-        self.assertGreaterEqual(self.gg.backoff_until, self.clock() + Retailer.BACKOFF_TOO_MANY)
         self.assertTrue(self.gg.suggest_ok)
+        self.assertEqual((self.gg.backoff_until, self.gg.error_streak), (None, 0))
 
     def test_nothing_is_ever_sent_to_an_inactive_paused_or_waiting_shop_or_under_pause_all(self):
         shop = self.empty()
@@ -523,6 +674,47 @@ class OwnerTests(FinderCase):
         self.clock.now += timedelta(days=400)
         self.assertEqual(finder.candidates(now=self.clock()), [])
 
+    def test_no_is_about_that_product_only(self):
+        self.client.post(self.url, {"action": "not_found", "row": self.row.pk, "price": "149.99"})
+        # The page is the plain Elite Trainer Box, which is added later: a shop read links the page to it.
+        plain = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", slug="pe-etb-plain")
+        # The finder may offer the page for another product, but never again for the one the owner said No to.
+        looking = finder.Finder(clock=self.clock, sleep=self.sleep)
+        self.assertFalse(looking.is_taken(self.gg, self.row.url, plain))
+        self.assertTrue(looking.is_taken(self.gg, self.row.url, self.etb))
+        page = {"products": [{"handle": PE_HANDLE, "title": PE_TITLE, "tags": [],
+                              "variants": [{"price": "139.99", "available": True, "barcode": ""}]}]}
+
+        def read(url):
+            return answer(page if url.startswith(f"{GG}/products.json") and "page=1" in url else {"products": []})
+
+        run_import(self.gg, fetch=read)
+        self.assertEqual(Listing.objects.get(retailer=self.gg).product, plain)
+        self.assertFalse(Listing.objects.filter(product=self.etb, retailer=self.gg).exists())
+        self.assertEqual(self.search(self.etb, self.gg).outcome, StockistSearch.Outcome.IGNORED)
+
+    def test_a_shop_read_never_links_a_page_to_the_product_the_owner_said_no_to(self):
+        self.client.post(self.url, {"action": "not_found", "row": self.row.pk, "price": "149.99"})
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Elite Trainer Box")
+        page = {"products": [{"handle": PE_HANDLE, "title": PE_TITLE, "tags": [],
+                              "variants": [{"price": "139.99", "available": True, "barcode": ""}]}]}
+
+        def read(url):
+            return answer(page if url.startswith(f"{GG}/products.json") and "page=1" in url else {"products": []})
+
+        with override_settings(RIPRAPTOR_AUTO_CATALOGUE=False):
+            run = run_import(self.gg, fetch=read)
+        self.assertFalse(Listing.objects.filter(retailer=self.gg).exists())
+        self.assertIn(self.row.url, run.unmatched)
+        self.row.refresh_from_db()
+        self.assertEqual(self.row.status, ShopProduct.Status.IGNORED)
+
+    def test_an_import_no_still_hides_the_page_from_every_product(self):
+        row = ShopProduct.objects.create(retailer=self.gg, title="Mystery", url=f"{GG}/products/mystery",
+                                         status=ShopProduct.Status.IGNORED)
+        looking = finder.Finder(clock=self.clock, sleep=self.sleep)
+        self.assertTrue(looking.is_taken(self.gg, row.url, self.etb))
+
     def test_a_price_that_moved_since_the_page_loaded_is_not_acted_on(self):
         ShopProduct.objects.filter(pk=self.row.pk).update(price=Decimal("120.00"))
         page = self.client.post(self.url, {"action": "link_found", "row": self.row.pk, "price": "149.99"}, follow=True)
@@ -533,6 +725,64 @@ class OwnerTests(FinderCase):
         self.client.post(reverse("admin:catalogue_shopproduct_changelist"),
                          {"action": "mark_ignored", "_selected_action": [self.row.pk]})
         self.assertEqual(self.search(self.etb, self.gg).outcome, StockistSearch.Outcome.IGNORED)
+
+
+class YesStockTests(FinderCase):
+    """Yes says only what the finder saw: the stock and price as at the moment it read the page."""
+
+    def setUp(self):
+        super().setUp()
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        self.etb.refresh_from_db()
+        Listing.objects.filter(product=self.etb, retailer=self.home).update(price=Decimal("40.00"))
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+
+    def found(self, available):
+        self.find(Shop({"suggest.json": recorded("gathering_games_suggest.json"),
+                        ".js": product_page(available=available, barcode="")}))
+        return ShopProduct.objects.get(retailer=self.gg)
+
+    def yes(self, row):
+        self.client.post(reverse("checks"), {"action": "link_found", "row": row.pk, "price": f"{row.price}"})
+        return Listing.objects.get(product=self.etb, retailer=self.gg)
+
+    def test_a_page_seen_sold_out_is_linked_as_sold_out_and_never_ranked(self):
+        row = self.found(available=False)
+        self.assertEqual(row.availability, Listing.Availability.OUT_OF_STOCK)
+        listing = self.yes(row)
+        self.assertEqual(listing.availability, Listing.Availability.OUT_OF_STOCK)
+        page = self.client.get(self.etb.get_absolute_url())
+        self.assertNotContains(page, 'rank__name">Gathering Games')
+        self.assertContains(page, "1 retailer has this in stock.")
+
+    def test_a_page_seen_in_stock_is_linked_with_the_time_it_was_seen_and_judged_at_once(self):
+        row = self.found(available=True)
+        ShopProduct.objects.filter(pk=row.pk).update(last_seen=timezone.now() - timedelta(hours=3))
+        row.refresh_from_db()
+        listing = self.yes(row)
+        self.assertEqual((listing.price, listing.availability), (Decimal("149.99"), Listing.Availability.IN_STOCK))
+        self.assertEqual(listing.last_checked, row.last_seen)
+        # £149.99 against £40 at the only other shop: judged as a shop read would judge it.
+        self.assertEqual(listing.sanity, Listing.Sanity.DOUBTFUL)
+
+    def test_a_likely_match_from_a_shop_read_records_its_stock_too(self):
+        page = {"products": [{"handle": PE_HANDLE, "title": PE_TITLE, "tags": [],
+                              "variants": [{"price": "139.99", "available": False, "barcode": ""}]}]}
+
+        def read(url):
+            return answer(page if url.startswith(f"{GG}/products.json") and "page=1" in url else {"products": []})
+
+        with override_settings(RIPRAPTOR_AUTO_CATALOGUE=False):
+            run_import(self.gg, fetch=read)
+        row = ShopProduct.objects.get(retailer=self.gg)
+        self.assertEqual((row.source, row.status, row.availability),
+                         (ShopProduct.Source.IMPORT, ShopProduct.Status.REVIEW, Listing.Availability.OUT_OF_STOCK))
+        self.assertEqual(finder.link(row).availability, Listing.Availability.OUT_OF_STOCK)
+
+    def test_a_row_that_did_not_record_its_stock_is_linked_as_out_of_stock(self):
+        row = ShopProduct.objects.create(retailer=self.gg, title=PE_TITLE, url=f"{GG}/products/{PE_HANDLE}",
+                                         price=Decimal("149.99"), suggested=self.etb, confidence=70)
+        self.assertEqual(finder.link(row).availability, Listing.Availability.OUT_OF_STOCK)
 
 
 class InsightsTests(FinderCase):

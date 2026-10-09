@@ -605,12 +605,12 @@ class PageTests(Base):
     def test_the_buttons_switch_claude_on_into_trial_and_ask_it_to_look(self):
         judge.write_key(KEY)
         response = self.client.post(self.url, {"action": "claude_on"}, follow=True)
-        self.assertContains(response, "Claude is on, in trial. It suggests and does not act.")
+        self.assertContains(response, "Claude is on, in trial: it only suggests.")
         response = self.client.post(self.url, {"action": "claude_now"}, follow=True)
-        self.assertContains(response, "within 5 minutes")
+        self.assertContains(response, "Claude is looking now.")
         self.assertIsNotNone(ClaudeJudge.objects.get().asked_at)
         response = self.client.post(self.url, {"action": "claude_act_on"}, follow=True)
-        self.assertContains(response, "Claude is on. It acts only when it is sure")
+        self.assertContains(response, "Claude is on and sorts what it is sure of.")
         response = self.client.post(self.url, {"action": "claude_settings", "model": "claude-haiku-5-5",
                                                "effort": "low", "budget": "99"}, follow=True)
         self.assertContains(response, "a monthly limit from 0 to 25 dollars")
@@ -1170,9 +1170,9 @@ class FeedbackTests(Base):
     def test_the_box_says_when_claude_will_start_and_warns_when_it_is_overdue(self):
         self.switch_on(may_act=False)
         ClaudeJudge.objects.filter(pk=1).update(asked_at=timezone.now())
-        self.assertIn("Claude starts within 5 minutes (you asked at", judge.page_status()["now"])
+        self.assertIn("Claude is starting.", judge.page_status()["now"])
         ClaudeJudge.objects.filter(pk=1).update(asked_at=timezone.now() - timedelta(minutes=20))
-        self.assertIn("The server's timer may have stopped", judge.page_status()["now"])
+        self.assertIn("Claude has not started since", judge.page_status()["now"])
         ClaudeJudge.objects.filter(pk=1).update(running_since=timezone.now() - timedelta(hours=1))
         self.assertIn("was cut short", judge.page_status()["now"])
 
@@ -1189,8 +1189,8 @@ class FeedbackTests(Base):
         row = self.found(title="Pokemon Surging Sparks Display")
         self.ask(lambda key, params: reply(key, reason="The display is the booster box."))
         page = self.client.get(self.url)
-        self.assertContains(page, "Recent runs (1)")
-        self.assertContains(page, "looked at 1, sorted 0, 0 need you, 1 can wait, 0 not asked yet, $0.02")
+        self.assertContains(page, "Recent runs")
+        self.assertContains(page, "looked at 1, sorted 0, 1 left for you, $0.02")
         self.assertContains(page, "Claude's last 1 answer")
         self.assertContains(page, f"&quot;Pokemon Surging Sparks Display&quot; at {row.retailer.name} for {BOX}")
         self.assertContains(page, "Same product, sure. The display is the booster box. Suggested, waiting for you.")
@@ -1202,8 +1202,8 @@ class FeedbackTests(Base):
         self.found(title="Surging Sparks Booster Display B")
         self.ask(lambda key, params: reply(key, "unsure", "low") if key.endswith(str(ShopProduct.objects.order_by("pk").last().pk)) else reply(key))
         self.found(title="Surging Sparks Booster Display C")
-        self.assertContains(self.client.get(self.url),
-                            "Claude so far: 1 the same, 0 different, 1 could not tell, 1 still to look at.")
+        # Each answered row shows Claude's answer under it; the one not asked yet shows none.
+        self.assertContains(self.client.get(self.url), "Claude, ", count=2)
 
     def test_the_owner_hears_when_a_run_he_asked_for_finishes_and_once_a_day_otherwise(self):
         self.switch_on(may_act=False)
@@ -1213,14 +1213,14 @@ class FeedbackTests(Base):
             self.ask(now=timezone.now() + timedelta(seconds=1))
         subject, title = told.call_args[0][:2]
         self.assertEqual(subject, judge.FINISHED)
-        self.assertEqual(title, "Claude looked at 1: 0 sorted, 0 need you, 1 can wait")
+        self.assertEqual(title, "Claude looked at 1: 0 sorted, 1 left for you")
         self.assertFalse(told.call_args.kwargs["once_a_day"])
         self.found(title="Surging Sparks Booster Display Box")
         ClaudeJudge.objects.filter(pk=1).update(last_run_at=None, asked_at=None)
         with mock.patch("catalogue.notify.owner", return_value=True) as told:
             self.ask()
         self.assertEqual(told.call_args[0][0], judge.DAILY)
-        self.assertEqual(told.call_args[0][1], "Claude today: 2 looked at, 0 sorted, 0 need you, 2 can wait")
+        self.assertEqual(told.call_args[0][1], "Claude today: 2 looked at, 0 sorted, 2 left for you")
 
     def test_a_run_that_dies_says_so_on_the_page(self):
         self.switch_on(may_act=False)
@@ -1289,7 +1289,7 @@ class EarlierAnswerTests(Base):
         self.trial()
         ClaudeJudge.objects.filter(pk=1).update(may_act=False)
         response = self.client.post(self.url, {"action": "claude_act_on"}, follow=True)
-        self.assertContains(response, "It sorted 1 row from answers it had already given.")
+        self.assertContains(response, "Claude sorted 1 row from answers it had already given.")
         self.assertEqual(self.answers()[0].kind, CheckAnswer.Kind.LINK)
         self.assertContains(response, "Linked " + BOX)
         response = self.client.post(self.url, {"action": "claude_act_off"}, follow=True)
@@ -1370,7 +1370,7 @@ class EarlierAnswerTests(Base):
         page = self.client.get(self.url).content.decode()
         self.assertIn("Left for you: Claude was only fairly sure.", page)
         self.assertIn("Left for you: the price is far from what other shops charge.", page)
-        self.assertIn("Left for you: Claude never merges by itself.", page)
+        self.assertIn("Left for you: Claude merges only with Sort everything on.", page)
         self.assertIn("Left for you: the shop&#x27;s barcode is not recorded yet. Its next read records it.", page)
         self.assertEqual(judge.act_on_earlier(), 0)
         self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
@@ -1455,7 +1455,7 @@ class EarlierAnswerTests(Base):
         ClaudeJudge.objects.filter(pk=1).update(may_act=False)
         crawl.pause_all()
         response = self.client.post(self.url, {"action": "claude_act_on"}, follow=True)
-        self.assertContains(response, "It starts once Pause all is off.")
+        self.assertContains(response, "Claude starts once Pause all is off.")
         self.assertEqual(self.answers(), [])
 
 
@@ -1493,7 +1493,7 @@ class ClearsTheQueueTests(Base):
         self.assertEqual(self.client.get(self.bundle.get_absolute_url()).content, before)
         self.assertEqual((checks.doubtful_count(), checks.checked_count()), (0, 1))
         self.assertEqual(judge.open_rows(), [])
-        self.assertContains(self.client.get(self.url), "1 more is checked: the right product, shown with no saving claimed.")
+        self.assertContains(self.client.get(self.url), "1 more is checked as the right product.")
 
     def test_a_checked_price_comes_back_when_its_title_changes_and_can_then_be_hidden(self):
         cheap = self.doubtful()
@@ -1746,7 +1746,7 @@ class ClearsTheQueueTests(Base):
         with mock.patch("catalogue.notify.owner", return_value=True) as told:
             self.ask()
         title = told.call_args[0][1]
-        self.assertEqual(title, "Claude looked at 2: 0 sorted, 1 need you, 1 can wait")
+        self.assertEqual(title, "Claude looked at 2: 0 sorted, 2 left for you")
         self.assertNotIn(chr(0x2014), title)
         self.assertNotIn("!", title)
 
@@ -1768,3 +1768,104 @@ class PromptTests(Base):
         self.ask()
         evidence = Ask.objects.get(row_key=f"found:{row.pk}").evidence
         self.assertEqual((evidence["ours"]["language"], evidence["title_language"]), ("English", "Japanese"))
+
+
+class SortEverythingTests(Base):
+    """With Sort everything on, Claude works through every row, merges pairs and links pages it is sure
+    of, takes a second look at what it was unsure of, and keeps going until the list is done."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.url = reverse("checks")
+
+    def pair(self, ean=""):
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box", ean="0820650851230")
+        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box", ean=ean)
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(51, product=other, title=other.name)
+        return keep, other
+
+    def test_a_sure_pair_is_merged_and_undo_puts_both_back(self):
+        keep, other = self.pair()
+        self.switch_on(sort_all=True)
+        self.ask()
+        self.assertFalse(Product.objects.get(pk=other.pk).is_active)
+        [answer] = self.answers()
+        self.assertEqual((answer.kind, answer.ask.action), (CheckAnswer.Kind.MERGE, Ask.Action.ACTED))
+        self.assertIn("is its own product again", autopilot.undo(answer))
+        self.assertTrue(Product.objects.get(pk=other.pk).is_active)
+
+    def test_never_a_merge_without_sort_everything_or_when_barcodes_differ(self):
+        keep, other = self.pair()
+        self.switch_on()
+        self.ask()
+        self.assertTrue(Product.objects.get(pk=other.pk).is_active)
+        Ask.objects.all().delete()
+        Product.objects.filter(pk=other.pk).update(ean="5099999999999")
+        ClaudeJudge.objects.filter(pk=1).update(sort_all=True, last_run_at=None)
+        self.ask()
+        self.assertTrue(Product.objects.get(pk=other.pk).is_active)
+        self.assertEqual(self.answers(), [])
+
+    def test_a_sure_page_is_linked_whatever_its_price_and_the_site_judges_it(self):
+        lone = make_product(self.set, name="Surging Sparks Tin", product_type="tin")
+        row = self.found(title="Surging Sparks Tin", product=lone, price="12.00")
+        self.switch_on(sort_all=True)
+        self.ask()
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.LINKED)
+        self.assertEqual(self.answers()[0].kind, CheckAnswer.Kind.LINK)
+
+    def test_an_unsure_answer_gets_one_more_careful_look(self):
+        self.shop(100)
+        self.shop(104)
+        self.found(price="101.00")
+        self.switch_on(may_act=False, sort_all=True)
+        client, _ = self.ask(lambda key, params: reply(key, confidence="medium"))
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        client, _ = self.ask()
+        self.assertEqual([params["output_config"]["effort"] for _, params in client.sent], ["high"])
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        client, _ = self.ask()
+        self.assertEqual(client.sent, [])
+
+    def test_runs_keep_going_until_the_list_is_done(self):
+        self.switch_on(sort_all=True, last_run_at=timezone.now(),
+                       runs=[{"at": timezone.now().isoformat(), "asked": 40, "sorted": 30, "left": 12, "note": "Stopped for time"}])
+        self.assertEqual(judge.due(ClaudeJudge.objects.get(), timezone.now()), "")
+        ClaudeJudge.objects.filter(pk=1).update(runs=[{"asked": 12, "sorted": 9, "left": 0, "note": ""}])
+        self.assertEqual(judge.due(ClaudeJudge.objects.get(), timezone.now()), "Claude ran less than an hour ago.")
+        ClaudeJudge.objects.filter(pk=1).update(running_since=timezone.now())
+        self.assertEqual(judge.due(ClaudeJudge.objects.get(), timezone.now()), "Claude is looking already.")
+
+    def test_the_buttons_start_claude_at_once_and_switch_sorting_everything(self):
+        self.switch_on(may_act=False)
+        with mock.patch.object(judge, "start_now") as started:
+            response = self.client.post(self.url, {"action": "claude_sort_on"}, follow=True)
+        started.assert_called_once()
+        state = ClaudeJudge.objects.get()
+        self.assertEqual((state.sort_all, state.may_act), (True, True))
+        self.assertContains(response, "Claude is on and sorting everything.")
+        with mock.patch.object(judge, "start_now") as started:
+            response = self.client.post(self.url, {"action": "claude_now"}, follow=True)
+        started.assert_called_once()
+        self.assertContains(response, "Claude is looking now.")
+        self.assertNotContains(response, "5 minutes")
+        self.client.post(self.url, {"action": "claude_sort_off"})
+        self.assertFalse(ClaudeJudge.objects.get().sort_all)
+
+    def test_two_runs_never_overlap(self):
+        import fcntl
+
+        from django.conf import settings as django_settings
+
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(folder, ignore_errors=True))
+        with override_settings(RIPRAPTOR_CACHE_DIR=str(folder)):
+            with open(folder / "judge.lock", "w") as held:
+                fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with mock.patch.object(judge, "run") as ran:
+                    call_command("judge_checks", stdout=open(os.devnull, "w"))
+                ran.assert_not_called()
+            self.assertEqual(django_settings.RIPRAPTOR_CACHE_DIR, str(folder))

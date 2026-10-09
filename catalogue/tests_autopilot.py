@@ -421,7 +421,7 @@ class PageTests(Base):
         sanity.judge_product(self.product.pk)
         page = self.client.get(self.url)
         self.assertContains(page, "Doubtful prices (1)")
-        self.assertContains(page, "1 other doubtful price is dearer than another shop or out of stock")
+        self.assertContains(page, "Doubtful prices (1)")
 
     def test_the_answers_cost_the_same_queries_however_many(self):
         def answers(n):

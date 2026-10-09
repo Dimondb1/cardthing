@@ -1486,8 +1486,9 @@ def checks_page(request):
     found = checks.found_stockists(now)
     # Claude's latest answer for each row on the page, while the row is still as Claude saw it.
     claude = judge.page_status(now)
-    claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates,
-                                         may_act=bool(claude["state"] and claude["state"].may_act))
+    state = claude["state"]
+    claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates, may_act=bool(state and state.may_act),
+                                         sort_all=bool(state and state.sort_all))
     context = {
         **admin.site.each_context(request), "title": "Things to check",
         "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
@@ -1552,7 +1553,15 @@ def claude_tap(request, action):
     update = {}
     if action == "claude_now":
         update["asked_at"] = timezone.now()
-        messages.success(request, "Claude will look at the waiting rows within 5 minutes. Reload this page to see its answers.")
+        messages.success(request, "Claude is looking now. Reload this page to see its answers.")
+    elif action in ("claude_sort_on", "claude_sort_off"):
+        update["sort_all"] = action == "claude_sort_on"
+        if update["sort_all"]:
+            # Sorting everything means acting: Let Claude act comes with it, and starts a fresh count of undos.
+            update.update(may_act=True, acting_since=timezone.now(), asked_at=timezone.now())
+            messages.success(request, "Claude now sorts everything, run after run, starting now. Each act has Undo.")
+        else:
+            messages.success(request, "Claude now sorts only what it is sure of, and never merges by itself.")
     elif action in ("claude_on", "claude_off"):
         update["enabled"] = action == "claude_on"
         if not update["enabled"]:
@@ -1591,20 +1600,19 @@ def claude_tap(request, action):
             messages.warning(request, "The server could not delete the key file. Switch Claude off, and delete the key in the Console.")
     if update:
         ClaudeJudge.objects.filter(pk=state.pk).update(**update)
-    if action in ("claude_act_on", "claude_now"):
+    if action in ("claude_act_on", "claude_now", "claude_sort_on"):
         # What Claude has already answered, it may act on at once: nothing is sent and nothing is spent.
         earlier = judge.act_on_earlier()
-        start = ("Claude now acts when it is sure and the site's checks agree. " if action == "claude_act_on"
-                 else "")
         if earlier:
-            messages.success(request, f"{start}It sorted {earlier} row{'s' if earlier != 1 else ''} from answers it "
-                                      "had already given. Each is under Sorted for you with Undo. Every answer left "
-                                      "for you says why under its row.")
+            messages.success(request, f"Claude sorted {earlier} row{'s' if earlier != 1 else ''} from answers it had "
+                                      "already given. Each is under Sorted for you with Undo.")
         elif action == "claude_act_on":
             from catalogue import crawl
 
-            messages.success(request, f"{start}It starts once Pause all is off." if crawl.all_paused() else
-                             f"{start}None of its answers so far can act. Each one left for you says why under its row.")
+            messages.success(request, "Claude starts once Pause all is off." if crawl.all_paused() else
+                             "Claude now sorts what it is sure of.")
+    if action in ("claude_now", "claude_sort_on"):
+        judge.start_now()
 
 
 def release_tap(request, action):

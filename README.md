@@ -452,7 +452,8 @@ takes something away. It never counts a price as right and never merges.
   a shop barcode that is not ours or not read yet. "Different" hides it.
 - **A wrong match:** "different" hides that price only when Claude is sure
   the other price is the product. Both called the same stay with you.
-- **Possible duplicates:** "different" keeps the pair apart (a "fairly sure"
+- **Possible duplicates:** "different" keeps the pair apart (with Sort
+  everything on, "same" merges it; see below) (a "fairly sure"
   one too, for a plain difference). "Same" never merges by itself: **Merge
   the pairs Claude is sure are the same** merges them on your tap, each so
   it can be undone, and leaves out pairs whose barcodes differ or whose
@@ -493,18 +494,30 @@ Rows an answer can clear are asked first: doubtful prices a "same" would
 tick off and wrong matches, then duplicate pairs, then found pages a "same"
 would link, then the rest. An hourly run asks up to 25 rows; one you ask
 for with **Ask Claude now** up to 100, within the same $1 and 10 minute
-limits. At most 10 prices are hidden in one run; the rest are hidden from
+limits. **Ask Claude now** starts the run at once in its own process
+(`judge_checks` holds a lock file in the cache directory, so two runs never
+overlap). At most 10 prices are hidden in one run; the rest are hidden from
 their answers at the next. If you undo three of Claude's acts in a week
 (counted from when you last tapped Let Claude act), it goes back to
 suggesting and tells you.
 
-What is left is split in two. **Need you**: prices that may be another
-product (Doubtful prices and Wrong matches). **Can wait**: found pages and
-duplicate pairs, where nothing on the site is wrong while they wait; those
-sections are folded away. The push after a run you asked for, and the daily
-one, say "N sorted, N need you, N can wait".
-`python manage.py judge_checks --dry-run` says what the answers already
-given would sort, at no cost, and what the next run would send.
+**Sort everything** (a button in the Claude box, off by default) lets Claude
+clear the whole list. It turns on Let Claude act and starts a run at once;
+each run then asks about every waiting row within its $1 and 10 minutes,
+and while rows are left the next run starts at the next five-minute tick
+instead of an hour later. On top of the rules above, a sure "same" links a
+found page whatever its price (the site judges the new price like any other,
+and the link still rolls back if it would turn another shop's good price
+doubtful or claim a saving over 25%), and merges a duplicate pair unless
+their barcodes differ, their shops charge far apart, a shop lists both or
+they are in different languages. Each merge is the undoable kind. An answer
+Claude was only fairly sure of, or could not tell, is asked once more at
+high effort. The monthly limit still holds.
+
+The push after a run you asked for, and the daily one, say "N sorted, N
+left for you". `python manage.py judge_checks --dry-run` says what the
+answers already given would sort, at no cost, and what the next run would
+send.
 
 **Cost.** Each request is priced from Anthropic's usage figures at the
 model's rates and saved (Claude's answers are listed read-only in admin).

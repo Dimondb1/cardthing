@@ -412,6 +412,7 @@ class Row:
     partner: str = ""          # the other offer of a wrong match, asked back to back
     rate: object = None
     others: list = field(default_factory=list)
+    effort: str = ""           # set for a second, more careful look; the owner's setting otherwise
 
     @property
     def fingerprint(self):
@@ -482,7 +483,12 @@ class Evidence:
             "barcode": ("same" if codes[0] == codes[1] else "different") if all(codes)
             else "only one has one" if any(codes) else "neither has one",
         }
-        return Row("pair", key, evidence, product=keep, other=other)
+
+        def going(product):
+            prices = self.peers(product.pk, None)
+            return median(prices) if prices else None
+
+        return Row("pair", key, evidence, product=keep, other=other, others=[going(keep), going(other)])
 
 
 def asked_before():
@@ -563,21 +569,31 @@ def worth(row):
     return 2 if ruling(row, SURE_SAME)[0] else 3
 
 
-def waiting(now=None):
+def waiting(now=None, sort_all=False):
     """The open rows to ask about, in the order of worth (each group keeps open_rows' order). Left out as
     well: rows the owner answered after Claude, unchanged rows already asked, and rows asked ASK_LIMIT
-    times."""
+    times. With Sort everything, an unchanged row Claude was only fairly sure of, or could not tell, is
+    asked once more at high effort, after the rest."""
     rows = open_rows(now)
     owner_said = set(Ask.objects.exclude(owner_answer="").values_list("row_key", flat=True))
     before = asked_before()
-    keep, seen_keys = [], set()
+    latest = latest_answers({row.key for row in rows}) if sort_all else {}
+    keep, again, seen_keys = [], [], set()
     for row in rows:
         n, seen = before.get(row.key, (0, set()))
-        if row.key in seen_keys or row.key in owner_said or n >= ASK_LIMIT or row.fingerprint in seen:
+        if row.key in seen_keys or row.key in owner_said or n >= ASK_LIMIT:
+            continue
+        if row.fingerprint in seen:
+            ask = latest.get(row.key)
+            if (ask is not None and ask.fingerprint == row.fingerprint and own_answer(ask) and ask.effort != "high"
+                    and (ask.verdict == "unsure" or ask.confidence != "high")):
+                row.effort = "high"
+                seen_keys.add(row.key)
+                again.append(row)
             continue
         seen_keys.add(row.key)
         keep.append(row)
-    return sorted(keep, key=worth)
+    return sorted(keep, key=worth) + again
 
 
 # Asking ------------------------------------------------------------------------------------------
@@ -594,7 +610,7 @@ def request_params(state, row, cache):
         "max_tokens": MAX_TOKENS,
         "system": [system],
         "messages": [{"role": "user", "content": content}],
-        "output_config": {"effort": state.effort, "format": {"type": "json_schema", "schema": SCHEMA}},
+        "output_config": {"effort": row.effort or state.effort, "format": {"type": "json_schema", "schema": SCHEMA}},
     }
 
 
@@ -727,25 +743,28 @@ def sure(answer, verdict):
     return verdict != "different" or any(item != "price" for item in answer["differences"])
 
 
-def decide(row, answer, may_act, partner=None):
-    """What a row's answer may do: "link", "refuse", "hide", "apart", or None for a suggestion.
+def decide(row, answer, may_act, partner=None, sort_all=False):
+    """What a row's answer may do: "link", "refuse", "hide", "apart", "check", "merge", or None for a
+    suggestion.
 
     A pure function of Claude's answer and the site's rules, apart from the checks made again inside the
     transaction that acts (still waiting, unchanged, the new price judged OK).
     """
     if not may_act or answer is None:
         return None
-    return ruling(row, answer, partner)[0]
+    return ruling(row, answer, partner, sort_all)[0]
 
 
-def ruling(row, answer, partner=None):
+def ruling(row, answer, partner=None, sort_all=False):
     """(action, "") when the answer may act once Claude is let act, else (None, why it is left for the
     owner, in a few words).
 
     Claude acts alone only where visitors see nothing change, or where it only takes something away. A
     "check" ticks a doubtful price off as the right product and leaves it exactly as shown, with no saving
     claimed. A link adds a price, so it also needs the site's own checks: the price band, the barcode,
-    and no big saving once linked (act). Claude never counts a price and never merges.
+    and no big saving once linked (act). Claude never counts a price. With Sort everything, the owner's
+    setting, a sure same also links a page whatever its price (the site judges it like any other) and
+    merges a pair whose barcodes and prices agree; each has Undo.
     """
     verdict, confidence = answer["verdict"], answer["confidence"]
     if verdict == "unsure":
@@ -764,16 +783,18 @@ def ruling(row, answer, partner=None):
     if row.kind == "found":
         if verdict == "different":
             return "refuse", ""
-        price = row.shop_product.price
-        if not price or price <= 0:
-            return None, "the shop shows no price"
-        if not row.others:
-            return None, "no other shop sells it, so there is no price to compare"
         if autopilot.contradiction(row.product, row.shop_product.title):
             return None, "the shop's title names another kind of product"
         barred = autopilot.barcode_bars_link(row.product, row.shop_product)
         if barred:
             return None, barred
+        if sort_all:
+            return "link", ""
+        price = row.shop_product.price
+        if not price or price <= 0:
+            return None, "the shop shows no price"
+        if not row.others:
+            return None, "no other shop sells it, so there is no price to compare"
         if not autopilot.LINK_LOW <= price / row.rate <= autopilot.LINK_HIGH:
             return None, "the price is far from what other shops charge"
         return "link", ""
@@ -795,9 +816,25 @@ def ruling(row, answer, partner=None):
         return "hide", ""
     if row.kind == "pair":
         if verdict == "same":
-            return None, "Claude never merges by itself. The Merge button above the pairs merges every pair it is sure of"
+            if not sort_all:
+                return None, "Claude merges only with Sort everything on. The Merge button merges every pair it is sure of"
+            why = pair_disagrees(row)
+            return (None, why) if why else ("merge", "")
         return "apart", ""
     return None, ""
+
+
+def pair_disagrees(row):
+    """Why two products Claude calls the same may not be merged, or "": their barcodes differ, or their
+    shops charge far apart."""
+    keep, other = row.product, row.other
+    codes = ean_key(keep.ean), ean_key(other.ean)
+    if all(codes) and codes[0] != codes[1]:
+        return "their barcodes differ, so only you can say"
+    a, b = (list(row.others) + [None, None])[:2]
+    if a and b and not autopilot.LINK_LOW <= a / b <= autopilot.LINK_HIGH:
+        return "their shops charge very different prices, so only you can say"
+    return ""
 
 
 def as_answer(ask):
@@ -838,17 +875,21 @@ def act(row, ask, action, now):
             if (fresh.price, fresh.availability, fresh.last_seen, fresh.suggested_id) != (
                     shop_row.price, shop_row.availability, shop_row.last_seen, shop_row.suggested_id):
                 raise autopilot.Stale
-            linked = autopilot.link_found(fresh, keep_ok=True)
+            # Close to other shops' price, it must be judged OK too; otherwise (Sort everything) the site
+            # judges it like any other price. Either way no other shop's good price may turn doubtful.
+            in_band = bool(row.others and row.rate and fresh.price and fresh.price > 0
+                           and autopilot.LINK_LOW <= fresh.price / row.rate <= autopilot.LINK_HIGH)
+            linked = autopilot.link_found(fresh, keep_ok=in_band, keep_others=True)
             # Nor a link that would put a big saving on the product page: a wrong product beside the
             # cheapest price, or as it, would claim one.
             if big_saving(product.pk, linked["listing"]):
                 raise autopilot.Stale
             return linked
 
-        pilot.answer(Kind.LINK, f"Linked {product.name} at {shop_row.retailer.name}, {sanity.money(shop_row.price)}",
-                     f"{why} Checked: the price is close to the {sanity.money(row.rate)} other shops charge, is "
-                     "judged OK beside them and claims no big saving", act=link, shop_product=shop_row,
-                     product=product, price=shop_row.price, **refs)
+        price = sanity.money(shop_row.price) if shop_row.price else "priced at its next read"
+        pilot.answer(Kind.LINK, f"Linked {product.name} at {shop_row.retailer.name}, {price}",
+                     f"{why} Checked: no other shop's good price turns doubtful and no big saving is claimed",
+                     act=link, shop_product=shop_row, product=product, price=shop_row.price, **refs)
     elif action == "hide":
         listing = row.listing
 
@@ -875,6 +916,18 @@ def act(row, ask, action, now):
                      f"{listing.retailer.name}", f"{why} It stays on the site with no saving claimed, and comes back "
                      "if its price or title changes", act=check, listing=listing, product=listing.product,
                      price=listing.price, **refs)
+    elif action == "merge":
+        keep, other = row.product, row.other
+
+        def merge():
+            still_duplicates(keep, other)
+            from .management.commands.merge_duplicates import merge_undoable
+
+            return {"undo_note": merge_undoable(keep, [other])}
+
+        pilot.answer(Kind.MERGE, f"Merged {other.name} into {keep.name}",
+                     f"{why} Checked: still suggested as duplicates, and no barcode or price says otherwise",
+                     act=merge, product=keep, other=other, **refs)
     elif action == "apart":
         keep, other = row.product, row.other
 
@@ -885,6 +938,21 @@ def act(row, ask, action, now):
         pilot.answer(Kind.APART, f"{other.name} is not {keep.name}", f"{why} Checked: still suggested as duplicates",
                      act=apart, product=keep, other=other, **refs)
     return bool(pilot.done)
+
+
+def still_duplicates(keep, other):
+    """Raise Stale unless the two are still a pair to merge: both shown, nobody has answered the pair, no
+    shop lists both (a shop selling both sells two products) and they are in one language."""
+    if Product.objects.filter(pk__in=[keep.pk, other.pk], is_active=True).count() != 2:
+        raise autopilot.Stale
+    if CheckAnswer.objects.filter(kind__in=[Kind.APART, Kind.MERGE], product__in=[keep, other],
+                                  other__in=[keep, other]).exists():
+        raise autopilot.Stale
+    shops = set(Listing.objects.filter(product=keep).values_list("retailer_id", flat=True))
+    if Listing.objects.filter(product=other, retailer_id__in=shops).exists():
+        raise autopilot.Stale
+    if not languages.same(languages.product_language(keep), languages.product_language(other)):
+        raise autopilot.Stale
 
 
 def big_saving(product_id, listing):
@@ -951,7 +1019,8 @@ def act_on_earlier(now=None, hides=None, dry_run=False):
             # A wrong match is decided only with both prices answered.
             if ask is None or (row.partner and row.partner not in usable):
                 continue
-            action = decide(row, as_answer(ask), True, partner=as_answer(usable.get(row.partner)))
+            action = decide(row, as_answer(ask), True, partner=as_answer(usable.get(row.partner)),
+                            sort_all=bool(state and state.sort_all))
             if action is None or (ask.evidence or {}).get("price") != row.evidence.get("price"):
                 continue
             if dry_run:
@@ -978,6 +1047,12 @@ def act_on_earlier(now=None, hides=None, dry_run=False):
     return acted
 
 
+def claudes_acts():
+    """The answers Claude acted on by itself: not a merge the owner tapped from the Merge button."""
+    return CheckAnswer.objects.filter(ask__isnull=False, by_owner=False).exclude(
+        Q(kind=Kind.MERGE) & ~Q(ask__action=Ask.Action.ACTED))
+
+
 def too_many_undone(now):
     """After the owner undoes one of Claude's acts: once he has undone UNDONE_LIMIT in a week (counted from
     when he last let it act, if later), Claude goes back to suggesting and he hears why. Returns whether
@@ -990,8 +1065,7 @@ def too_many_undone(now):
     since = now - timedelta(days=7)
     if state.acting_since and state.acting_since > since:
         since = state.acting_since
-    undone = CheckAnswer.objects.filter(ask__isnull=False, by_owner=False, undone_at__gte=since).exclude(
-        kind__in=[Kind.CHECKED, Kind.MERGE]).count()
+    undone = claudes_acts().filter(undone_at__gte=since).exclude(kind=Kind.CHECKED).count()
     if undone < UNDONE_LIMIT:
         return False
     ClaudeJudge.objects.filter(pk=state.pk).update(may_act=False)
@@ -1013,15 +1087,25 @@ def due(state, now):
         return "Claude is off."
     if crawl.all_paused():
         return "Pause all is on."
+    if state.running_since is not None and now - state.running_since < RUN_CUT_SHORT:
+        return "Claude is looking already."
     asked = state.asked_at is not None and (state.last_run_at is None or state.asked_at > state.last_run_at)
     if state.problem in STOPPING and state.problem_at and now - state.problem_at < STOPPED_FOR:
         if not (asked and state.asked_at > state.problem_at):
             return "Claude has stopped."
-    if asked:
+    if asked or keep_going(state):
         return ""
     if state.last_run_at is not None and now - state.last_run_at < RUN_EVERY:
         return "Claude ran less than an hour ago."
     return ""
+
+
+def keep_going(state):
+    """With Sort everything on, whether the last run left rows unasked while still getting somewhere: the
+    next run then starts at once, so the whole list is worked through run after run."""
+    last = (state.runs or [{}])[0]
+    return bool(state.sort_all and last.get("left") and (last.get("asked") or last.get("sorted"))
+                and last.get("note", "") in ("", "Stopped for time", "Reached the limit for one run"))
 
 
 def stop(state, kind, now):
@@ -1069,9 +1153,11 @@ def run(client=None, now=None, dry_run=False, force=False):
     if not dry_run:
         # Answers given in trial, or before the row's other checks agreed, are free to act on now.
         result.earlier = result.acted = act_on_earlier(now, hides)
-    rows = waiting(now)
+    rows = waiting(now, sort_all=state.sort_all)
     total = len(rows)
-    rows = rows[:OWNER_ROWS_PER_RUN if asked_by_owner else ROWS_PER_RUN]
+    # Sort everything asks about every row, within the run's time and money; the next run goes on at once.
+    if not state.sort_all:
+        rows = rows[:OWNER_ROWS_PER_RUN if asked_by_owner else ROWS_PER_RUN]
     if dry_run:
         would = act_on_earlier(now, dry_run=True)
         result.lines.append("From answers already given, at no cost: " + (
@@ -1115,7 +1201,7 @@ def run(client=None, now=None, dry_run=False, force=False):
                 break
             ask = Ask.objects.create(
                 kind=row.kind, row_key=row.key, fingerprint=row.fingerprint, model_asked=state.model,
-                effort=state.effort, evidence=row.evidence, reserved_micros=worst, asked_at=moment,
+                effort=row.effort or state.effort, evidence=row.evidence, reserved_micros=worst, asked_at=moment,
                 shop_product=row.shop_product, listing=row.listing, product=row.product, other=row.other,
             )
             try:
@@ -1167,7 +1253,7 @@ def run(client=None, now=None, dry_run=False, force=False):
                 todo_answer = answers.get(todo.key)
                 may_act = allowed and trusted.get(todo.key, False) and (
                     not todo.partner or trusted.get(todo.partner, False))
-                action = decide(todo, todo_answer, may_act, partner=answers.get(todo.partner))
+                action = decide(todo, todo_answer, may_act, partner=answers.get(todo.partner), sort_all=fresh.sort_all)
                 if action == "hide" and hides["left"] <= 0:
                     # Over the run's hides: left as a suggestion, sorted from the answer at the next run.
                     action = None
@@ -1199,8 +1285,9 @@ def run(client=None, now=None, dry_run=False, force=False):
         ClaudeJudge.objects.filter(pk=state.pk).update(problem="", problem_at=None)
     not_asked = result.left = max(0, total - result.asked)
     earlier = f" ({result.earlier} from earlier answers)" if result.earlier else ""
-    note = (f"asked {result.asked}, sorted {result.acted}{earlier}, {result.need_you} need you, "
-            f"{result.can_wait} can wait, {not_asked} not asked yet")
+    note = f"looked at {result.asked}, sorted {result.acted}{earlier}, {result.suggested} left for you"
+    if not_asked:
+        note += f", {not_asked} still to look at"
     if result.note:
         note += f". {result.note.rstrip('.')}"
     finish(state, now, result, note)
@@ -1230,8 +1317,7 @@ def tell_owner(result, asked_by_owner, now):
     if not (result.asked or result.earlier):
         return
     if asked_by_owner:
-        title = (f"Claude looked at {result.asked}: {result.acted} sorted, {result.need_you} need you, "
-                 f"{result.can_wait} can wait")
+        title = f"Claude looked at {result.asked}: {result.acted} sorted, {result.suggested} left for you"
         notify.owner(FINISHED, title, notify.CHECKS_PATH, f"{title}. It cost about {dollars(result.spent)}.",
                      now=now, once_a_day=False)
         return
@@ -1241,12 +1327,29 @@ def tell_owner(result, asked_by_owner, now):
         need_you=Count("pk", filter=Q(action=Ask.Action.SUGGESTED, kind=Ask.Kind.OFFER)),
         can_wait=Count("pk", filter=Q(action=Ask.Action.SUGGESTED) & ~Q(kind=Ask.Kind.OFFER)),
     )
-    # Sorted counts every act of the day, those from earlier answers included; a merge is always the owner's.
-    acted = CheckAnswer.objects.filter(ask__isnull=False, by_owner=False, created_at__gte=since).exclude(
-        kind=Kind.MERGE).count()
-    title = (f"Claude today: {day['asked']} looked at, {acted} sorted, {day['need_you']} need you, "
-             f"{day['can_wait']} can wait")
+    # Sorted counts every act of the day, those from earlier answers included.
+    acted = claudes_acts().filter(created_at__gte=since).count()
+    title = f"Claude today: {day['asked']} looked at, {acted} sorted, {day['need_you'] + day['can_wait']} left for you"
     notify.owner(DAILY, title, notify.CHECKS_PATH, f"{title}. It cost about {dollars(day['spent'] or 0)}.", now=now)
+
+
+def start_now():
+    """Start a run at once in its own process, so Ask Claude now does not wait for the five-minute timer and
+    the page returns straight away. judge_checks takes a lock, so a run never starts twice. Never in tests."""
+    import subprocess
+    import sys
+
+    if getattr(settings, "TESTING", False) or not settings.RIPRAPTOR_CLAUDE:
+        return False
+    try:
+        subprocess.Popen(
+            [sys.executable, str(Path(settings.BASE_DIR) / "manage.py"), "judge_checks"], cwd=settings.BASE_DIR,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+        )
+    except OSError:
+        logger.warning("Claude judge: could not start a run now; the timer starts it within five minutes.", exc_info=True)
+        return False
+    return True
 
 
 def record_fault(now=None):
@@ -1284,7 +1387,7 @@ def latest_answers(keys):
     return found
 
 
-def attach_answers(doubtful, wrong, found, duplicates, may_act=False):
+def attach_answers(doubtful, wrong, found, duplicates, may_act=False, sort_all=False):
     """Give each row the page shows a ``claude`` attribute: Claude's latest answer about it while the row is
     still what Claude was asked about and the owner has not answered it since, else None. While Claude may
     act, each answer also says why it was left for the owner. Returns, for each section, how many rows
@@ -1309,7 +1412,8 @@ def attach_answers(doubtful, wrong, found, duplicates, may_act=False):
     for row, item in rows:
         item.claude = current.get(row.key)
         if item.claude is not None and may_act:
-            item.claude.left_because = left_because(row, item.claude, current.get(row.partner), row.key in before)
+            item.claude.left_because = left_because(row, item.claude, current.get(row.partner), row.key in before,
+                                                    sort_all)
         section = "pairs" if row.kind == "pair" else "found" if row.kind == "found" else "wrong" if row.partner else "doubtful"
         tally = counts.setdefault(section, {"same": 0, "different": 0, "unsure": 0, "none": 0, "total": 0})
         tally[item.claude.verdict if item.claude is not None else "none"] += 1
@@ -1339,7 +1443,7 @@ def answered_before(rows):
     return keys
 
 
-def left_because(row, ask, partner_ask=None, answered=False):
+def left_because(row, ask, partner_ask=None, answered=False, sort_all=False):
     """Why an answer on the page has not acted, in a few words."""
     if answered:
         return "the row was answered before, so it stays with you"
@@ -1347,7 +1451,7 @@ def left_because(row, ask, partner_ask=None, answered=False):
         return "another model answered while Claude was busy. Claude asks again at its next look"
     if partner_ask is not None and not own_answer(partner_ask):
         partner_ask = None
-    action, why = ruling(row, as_answer(ask), as_answer(partner_ask))
+    action, why = ruling(row, as_answer(ask), as_answer(partner_ask), sort_all)
     return why if action is None else "Claude sorts this at its next look"
 
 
@@ -1374,17 +1478,18 @@ def page_status(now=None):
     elif stopped:
         status = f"Claude has stopped. {problem_text(state.problem)}"
     elif not state.enabled:
-        status = "Claude is off. Tap Switch Claude on to start it in trial."
+        status = "Claude is off."
     elif crawl.all_paused():
         status = "Pause all is on, so Claude waits."
     elif spent + typical_worst(state.model) > limit:
         next_month = (month_start(now) + timedelta(days=32)).replace(day=1)
-        status = (f"Claude reached this month's limit. It starts again on {next_month:%-d %B}, or when you raise "
-                  "the limit below.")
+        status = f"Claude reached this month's limit. It starts again on {next_month:%-d %B}, or raise the limit below."
+    elif state.may_act and state.sort_all:
+        status = "Claude is on and sorting everything."
     elif state.may_act:
-        status = "Claude is on. It acts only when it is sure and the site's checks agree. Each act is listed with Undo."
+        status = "Claude is on and sorts what it is sure of."
     else:
-        status = "Claude is on, in trial. It suggests and does not act. Tap Let Claude act once you agree with it."
+        status = "Claude is on, in trial: it only suggests."
     asked = state.asked_at is not None and (state.last_run_at is None or state.asked_at > state.last_run_at)
     runs = []
     for entry in (state.runs or [])[:5]:
@@ -1430,14 +1535,14 @@ def now_line(state, now, has_key, stopped, asked):
         cut = ""
     if asked:
         if now - state.asked_at > START_OVERDUE:
-            return (f"{cut}Claude has not started since you asked at {clock(state.asked_at)}. The server's timer may "
-                    "have stopped: check Crawl health, or run the update again.")
-        return f"{cut}Claude starts within 5 minutes (you asked at {clock(state.asked_at)}). Reload to see it working."
+            return f"{cut}Claude has not started since {clock(state.asked_at)}. Check Crawl health."
+        return f"{cut}Claude is starting. Reload to see it working."
     if state.last_run_at is None:
-        return f"{cut}Claude has not looked yet. Tap Ask Claude now to start."
+        return f"{cut}Claude has not looked yet."
+    if keep_going(state):
+        return f"{cut}Claude carries on in a moment."
     upcoming = state.last_run_at + RUN_EVERY
-    when = "within 5 minutes" if upcoming <= now else f"about {clock(upcoming)}"
-    return f"{cut}Next look {when}, if anything is waiting. Tap Ask Claude now to look sooner."
+    return f"{cut}Next look {'soon' if upcoming <= now else 'about ' + clock(upcoming)}."
 
 
 def key_line(state, has_key):

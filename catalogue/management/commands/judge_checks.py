@@ -5,10 +5,15 @@ Let Claude answer the Things to check rows the autopilot leaves (catalogue/judge
     python manage.py judge_checks --dry-run  # what the answers already given would sort, the rows, what
                                              # would be sent and the most each could cost
 
-Run by cron every five minutes on its own lock. It does nothing until the owner saves a key and switches
+Run by cron every five minutes, and at once when the owner taps Ask Claude now. A lock file in the cache
+directory keeps two runs from overlapping. It does nothing until the owner saves a key and switches
 Claude on in Things to check, and nothing while Pause all is on.
 """
 
+import fcntl
+from pathlib import Path
+
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from catalogue import judge
@@ -21,6 +26,18 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="Send nothing; list the rows and their evidence.")
 
     def handle(self, *args, dry_run=False, **options):
+        if dry_run:
+            return self.go(dry_run)
+        folder = Path(settings.RIPRAPTOR_CACHE_DIR)
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / "judge.lock", "w") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return None   # a run is going already
+            return self.go(dry_run)
+
+    def go(self, dry_run):
         try:
             result = judge.run(dry_run=dry_run, force=dry_run)
         except Exception:
@@ -33,5 +50,7 @@ class Command(BaseCommand):
         if result.asked or dry_run:
             self.stdout.write(f"Claude: asked {result.asked}, sorted {result.acted}, {result.suggested} suggested, "
                               f"{result.left} left, {judge.dollars(result.spent)} spent. {result.note}".strip())
-        elif result.note and result.note not in ("Claude is off.", "Claude needs a key.", "Claude ran less than an hour ago."):
+        elif result.note and result.note not in ("Claude is off.", "Claude needs a key.", "Claude ran less than an hour ago.",
+                                                 "Claude is looking already."):
             self.stdout.write(f"Claude: {result.note}")
+        return None

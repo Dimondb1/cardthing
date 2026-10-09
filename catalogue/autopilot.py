@@ -206,24 +206,26 @@ def refuse_found(row):
     finder.ignore(row)
 
 
-def link_found(row, keep_ok=False):
+def link_found(row, keep_ok=False, keep_others=None):
     """Yes: link the stockist finder's row to its product. Raises Stale, so the caller's transaction rolls
     back, when the row no longer waits or the shop lists the product already (linking would move that
     listing). With ``keep_ok`` it also rolls back when the new price is not judged OK against the other
-    shops, or makes a price that was OK doubtful. Returns the fields for its CheckAnswer."""
+    shops; with ``keep_others`` (as keep_ok unless given) when it makes a price that was OK doubtful.
+    Returns the fields for its CheckAnswer."""
     from . import finder
 
+    keep_others = keep_ok if keep_others is None else keep_others
     still_waiting(row)
     product = row.suggested
     if Listing.objects.filter(product=product, retailer=row.retailer).exists():
         raise Stale
     before = dict(Listing.objects.filter(product=product).values_list("pk", "sanity"))
     listing = finder.link(row)
-    if keep_ok:
+    if keep_ok or keep_others:
         after = dict(Listing.objects.filter(product=product, is_active=True).values_list("pk", "sanity"))
-        if listing is None or after.get(listing.pk) != OK:
+        if keep_ok and (listing is None or after.get(listing.pk) != OK):
             raise Stale
-        if any(verdict == OK and after.get(pk, OK) != OK for pk, verdict in before.items()):
+        if keep_others and any(verdict == OK and after.get(pk, OK) != OK for pk, verdict in before.items()):
             raise Stale
     return {"listing": listing}
 
@@ -514,7 +516,7 @@ def undo(answer, now=None):
                 opposite = "look" if answer.kind == Kind.CHECKED else (
                     "different" if answer.ask.verdict == "same" else "same")
                 ClaudeAsk.objects.filter(pk=answer.ask_id).update(owner_answer=opposite)
-    if message and answer.ask_id and answer.kind not in (Kind.CHECKED, Kind.MERGE):
+    if message and answer.ask_id and answer.kind != Kind.CHECKED:
         # Outside the transaction: it may send the owner a message.
         from . import judge
 

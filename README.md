@@ -1068,8 +1068,16 @@ a time when its turn comes; `scan_releases` does the same by hand.
 | Flesh and Blood coming soon | Flesh and Blood | official | 6 hours | page 1, asked with a browser User-Agent because the site refuses any other |
 
 Web pages are fetched a second apart and no more than 25 a day across all
-of them; a source that would go over waits for the next day. Sets released
+of them, dry runs included; each page is counted as it is fetched, so the
+background reader and `scan_releases` run at the same time cannot go over
+together. A source that would go over waits for the next day. Sets released
 more than 180 days ago are recorded but change nothing.
+
+pokemon.com articles are read only when their heading names an expansion
+and nothing else: an article about one product of it (a Booster Bundle,
+Mini Tins, a Premium Collection) gives that product's date, so it is never
+opened. Once an expansion has a date from one article, other articles about
+it are not opened either.
 
 What is published, and when:
 
@@ -1081,17 +1089,23 @@ What is published, and when:
 - A lone community source waits on Things to check under "Announced sets
   to check", with Add set (a small form with the name and date filled in
   where known) and Not a set. Not a set is final for that game, name and
-  source.
+  source. A full date for a set the site already has without a date waits
+  there too, and Add set gives that set the date.
 - Shops add evidence too: a pre-order whose title carries a set code no set
-  of that game has (OP-18, EB-05, FB11, VGE-DZ-BT16, SV9, ME03, Set 6), and
+  of that game has (OP-18, EB-05, FB11, VGE-DZ-BT16, SV9, ME03, Set 6, each
+  counted only for its own game, and never "Gift Set 2" or "Starter Set 3"), and
   any "Pre-Release Event" ticket, waits under "Announced sets to check"
   with the shop's title. A ticket is never a product.
 - A date you type on a set in admin is yours: no source changes it. A
   source may move a date it set itself, and a publisher may replace a
   community source's date.
 - When sources are more than a day apart on a set, "Release dates to
-  confirm" lists each source's date with Use this date. Your choice is
-  final.
+  confirm" lists each source's date with Use this date. A date the set had
+  before any source was read (typed in admin or imported) is one of the
+  dates too, with Keep this date, so a publisher that disagrees with it is
+  shown rather than ignored. Your choice is final. A button acts only if the
+  date it showed is still the date, so a source moving it in the meantime
+  saves nothing.
 - A source with no good read for 14 days is listed under "Release sources
   not answering". Insights has a "Release sources" table with each
   source's last read, sets found and last error.
@@ -1102,15 +1116,19 @@ Products are filed under their set by the set's code (a whole word of the
 product name, with letters and digits, such as OP-18) or, failing that, by
 the longest set name whose words all appear in the product name. A name
 needs two words that are not filler: series names such as Scarlet &
-Violet or Mega Evolution never file anything alone. This runs when a set is
-added, when an import creates a product, and in `tidy_all`.
+Violet or Mega Evolution never file anything alone. A product whose name
+names a language (Japanese, Korean, Chinese and so on) is filed only under a
+set whose name names the same language: those editions share the English
+set's code but come out on other dates, and every release source is an
+English one. This runs when a set is added, when an import creates a
+product, and in `tidy_all`.
 
 `RIPRAPTOR_RELEASES=0` stops the background reader reading these sources.
 
 ```sh
 python manage.py scan_releases                         # every source that is due
 python manage.py scan_releases --source scryfall_sets  # one source, when it is due
-python manage.py scan_releases --dry-run               # what the due sources say; writes nothing
+python manage.py scan_releases --dry-run               # what the due sources say; writes nothing but the pages it used
 ```
 
 The parsers are tested against trimmed copies of each source's real

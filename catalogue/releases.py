@@ -40,7 +40,8 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 from django.utils.text import slugify
 
-from .classify import find_game
+from .checks import DATE_GAP_DAYS
+from .classify import find_game, language_of
 from .models import Game, Listing, Product, ProductSet, Release, ReleaseSourceState
 
 logger = logging.getLogger(__name__)
@@ -323,8 +324,16 @@ POKEMON_SERIES_SLUG = re.compile(
 )
 POKEMON_EXPANSION = re.compile(
     r"Pok[e\u00e9]mon TCG:\s*([^\u2014\u2013:]+?)\s*[\u2014\u2013]\s*(.+?)"
-    r"(?:\s+(?:Prerelease Events?|Prerelease|Pre-Release Events?|Expansion|Elite Trainer Box|Build & Battle.*|"
-    r"Booster.*|Arrives.*|Is Coming.*|Coming.*|Now Available.*))?\s*$",
+    r"(?:\s+(?:Prerelease Events?|Prerelease|Pre-Release Events?|Expansion|Arrives.*|Is Coming.*|Coming.*|"
+    r"Now Available.*))?\s*$",
+    re.I,
+)
+# An article about one product of an expansion ('Delta Reign Booster Bundle', '... Mini Tins') names the
+# expansion too, but its Release Date is that product's, and the rest of its heading is not a set.
+POKEMON_PRODUCT = re.compile(
+    r"\b(?:boosters?|bundles?|box(?:es)?|tins?|collections?|elite trainer|build (?:&|and) battle|decks?|"
+    r"blisters?|binders?|packs?|premium|surprise|posters?|figures?|pins?|cases?|sleeves?|kits?|stadiums?|"
+    r"displays?|accessor(?:y|ies)|portfolios?|calendars?)\b",
     re.I,
 )
 POKEMON_RELEASE_DATE = re.compile(r"Release Date\s*:?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\.?\s+\d{4})", re.I)
@@ -343,9 +352,21 @@ def parse_pokemon_index(body):
         if url in seen:
             continue
         seen.add(url)
+        if POKEMON_PRODUCT.search(slug.replace("-", " ")) or POKEMON_PRODUCT.search(title):
+            continue
         if POKEMON_SERIES_SLUG.search(slug) or POKEMON_EXPANSION.search(title):
             found.append((url, title))
     return found
+
+
+def pokemon_expansion(heading):
+    """'Delta Reign' from 'Pokémon TCG: Mega Evolution, then a long dash, Delta Reign Prerelease Event'; '' for any heading
+    that names no expansion, or names one of its products."""
+    match = POKEMON_EXPANSION.search(clean(heading))
+    if match is None:
+        return ""
+    name = match.group(2).strip(" -:")
+    return "" if POKEMON_PRODUCT.search(name) else name
 
 
 def parse_pokemon_article(body, url=""):
@@ -354,8 +375,8 @@ def parse_pokemon_article(body, url=""):
     heading = re.search(r"<h1\b[^>]*>(.*?)</h1>", text, re.I | re.S)
     if heading is None:
         raise NothingFound("A pokemon.com article had no heading.")
-    match = POKEMON_EXPANSION.search(clean(heading.group(1)))
-    if match is None:
+    name = pokemon_expansion(heading.group(1))
+    if not name:
         return []
     when = POKEMON_RELEASE_DATE.search(clean(text))
     if when is None:
@@ -363,7 +384,7 @@ def parse_pokemon_article(body, url=""):
     released, precision = parse_date(when.group(1))
     if precision != DAY:
         return []
-    return [ReleaseSignal("pokemon", match.group(2).strip(" -:"), "", released, DAY, url)]
+    return [ReleaseSignal("pokemon", name, "", released, DAY, url)]
 
 
 def parse_ygoprodeck(body, since=None):
@@ -541,20 +562,41 @@ def fetch_url(url, headers=None, timeout=TIMEOUT):
         raise SourceError(f"Could not reach {url}: {exc}") from exc
 
 
-class Reader:
-    """Every request one scan makes: its headers, the pause between requests and the page allowance."""
+def take_page(name, now):
+    """Count one web page from source ``name`` against today's allowance, or raise OutOfPages.
 
-    def __init__(self, source, fetch, sleep, pages_left=None, stop=None):
+    The check and the count are one transaction, and the database takes its write lock when the
+    transaction begins (transaction_mode IMMEDIATE), so the background reader and a scan_releases run by
+    hand at the same moment cannot both spend the last page.
+    """
+    today = local_today(now)
+    with transaction.atomic():
+        state = ReleaseSourceState.objects.get_or_create(name=name)[0]
+        if pages_left(now) <= 0:
+            raise OutOfPages()
+        if state.pages_day != today:
+            state.pages_day, state.pages_today = today, 0
+        state.pages_today += 1
+        state.save(update_fields=["pages_day", "pages_today"])
+
+
+class Reader:
+    """Every request one scan makes: its headers, the pause between requests and the page allowance.
+
+    Each web page is counted before it is fetched, by ``take_page`` (raising OutOfPages when the day's
+    pages are spent), dry runs included: they fetch the same pages.
+    """
+
+    def __init__(self, source, fetch, sleep, take_page=None, stop=None):
         self.source, self.fetch, self.sleep = source, fetch, sleep
-        self.pages_left = pages_left
+        self.take_page = take_page or (lambda: None)
         self.stop = stop or (lambda: False)
         self.requests = 0
         self.pages = 0
 
     def get(self, url):
         if self.source.kind == HTML:
-            if self.pages_left is not None and self.pages >= self.pages_left:
-                raise OutOfPages()
+            self.take_page()
             self.pages += 1
         if self.requests:
             self.sleep(self.source.pause)
@@ -568,15 +610,17 @@ class Known:
 
     dated_codes: set = field(default_factory=set)
     dated_urls: set = field(default_factory=set)
+    dated_names: set = field(default_factory=set)
 
     @classmethod
     def load(cls, source_name):
         known = cls()
-        for code, url, released in Release.objects.filter(source=source_name).values_list("code", "source_url",
-                                                                                           "release_date"):
+        for code, url, name, released in Release.objects.filter(source=source_name).values_list(
+                "code", "source_url", "name", "release_date"):
             if released is not None:
                 known.dated_codes.add(code)
                 known.dated_urls.add(url)
+                known.dated_names.add(name_key(name))
         return known
 
 
@@ -593,15 +637,26 @@ def read_tcgdex(source, reader, since, known):
 
 
 def read_pokemon(source, reader, since, known):
+    """The expansions in the newest articles. An expansion already dated from one article is not read
+    again from another (a prerelease article and an announcement), so its date cannot swap between them."""
     signals = []
-    articles = [a for a in parse_pokemon_index(reader.get(source.url)) if a[0] not in known.dated_urls]
-    for url, _title in articles[:POKEMON_ARTICLES]:
+    done = set(known.dated_names)
+    articles = []
+    for url, title in parse_pokemon_index(reader.get(source.url)):
+        key = name_key(pokemon_expansion(title))
+        if url not in known.dated_urls and not (key and key in done):
+            articles.append(url)
+    for url in articles[:POKEMON_ARTICLES]:
         if reader.stop():
             break
         try:
-            signals += parse_pokemon_article(reader.get(url), url)
+            found = parse_pokemon_article(reader.get(url), url)
         except OutOfPages:
             break
+        for signal in found:
+            if name_key(signal.name) not in done:
+                done.add(name_key(signal.name))
+                signals.append(signal)
     return signals
 
 
@@ -693,7 +748,9 @@ def due_sources(now):
 
 
 def scan(name, fetch=None, now=None, sleep=None, dry_run=False, stop=None):
-    """Read one source if it is due, and record what it says. A dry run records nothing.
+    """Read one source if it is due, and record what it says. A dry run records nothing but the web
+    pages it fetched, which count against the day's allowance like any others, and it does not move the
+    source's next read.
 
     A parser that raises, or finds nothing it recognises, leaves its error on the source and writes no rows.
     """
@@ -721,7 +778,7 @@ def scan(name, fetch=None, now=None, sleep=None, dry_run=False, stop=None):
         # Stamped before the fetch, so a read that fails or hangs is not tried again at once.
         state.next_at = now + timedelta(hours=source.every_hours)
         state.save(update_fields=["next_at"])
-    reader = Reader(source, fetch, sleep, pages_left=allowance, stop=stop)
+    reader = Reader(source, fetch, sleep, take_page=lambda: take_page(name, now), stop=stop)
     try:
         signals = READERS[name](source, reader, recent_cutoff(today), Known.load(name))
     except OutOfPages:
@@ -734,12 +791,8 @@ def scan(name, fetch=None, now=None, sleep=None, dry_run=False, stop=None):
     if dry_run:
         result.signals = signals or []
         return result
+    # Pages were counted as they were fetched (take_page), so they are not saved from here.
     fields = ["last_error"]
-    if reader.pages:
-        if state.pages_day != today:
-            state.pages_day, state.pages_today = today, 0
-        state.pages_today += reader.pages
-        fields += ["pages_day", "pages_today"]
     if signals is None:
         state.last_error = result.error
         logger.warning("Release source %s: %s", name, result.error)
@@ -770,12 +823,16 @@ def usable_code(code):
 
 
 def find_set(game, name, code=""):
-    """The game's set with this code, or with this name's address, or None."""
+    """The game's set with this code, or with this name's address, or None.
+
+    Every source is an English one, so a set whose name carries another language ('... (Japanese)'),
+    which shares the English set's code but not its date, is never the one a source speaks about.
+    """
     sets = ProductSet.objects.filter(game=game)
     compact = compact_code(code)
     if compact:
         for product_set in sets.exclude(code=""):
-            if compact_code(product_set.code) == compact:
+            if compact_code(product_set.code) == compact and not language_of(product_set.name):
                 return product_set
     return sets.filter(slug=name_key(name)).first()
 
@@ -862,6 +919,16 @@ def decide(row, today, stats):
     created = product_set.pk is not None and row.product_set_id is None
     if write_date(product_set, released, row.source):
         stats["dates written"] += 1
+    if released is not None and product_set.release_date is not None and \
+            abs((product_set.release_date - released).days) > DATE_GAP_DAYS:
+        # The set keeps a date this source may not change (typed by hand, or another publisher's), and
+        # this source says otherwise: the row waits, filed under the set, and the two dates go to the
+        # owner under Release dates to confirm.
+        if row.product_set_id != product_set.pk:
+            row.product_set = product_set
+            row.save(update_fields=["product_set"])
+        stats["dates to confirm"] += 1
+        return product_set
     for other in [row, *others]:
         if other.product_set_id != product_set.pk or other.status != Release.Status.ACCEPTED:
             other.product_set = product_set
@@ -929,6 +996,24 @@ SHOP_CODE = re.compile(
     r"(?<![A-Za-z0-9-])(OP-\d\d|EB-\d\d|FB\d\d|VGE-[A-Z]{2}-BT\d\d|SV\d+(?:\.\d)?|ME\d\d|Set \d+)(?![A-Za-z0-9])"
 )
 PRERELEASE_EVENT = re.compile(r"\bpre-?release event", re.I)
+# Each code pattern belongs to one game, so another game's title (a 'Set 2' of anything) never raises it.
+CODE_GAMES = (("OP-", "one-piece"), ("EB-", "one-piece"), ("FB", "dragon-ball"), ("VGE-", "cardfight-vanguard"),
+              ("SV", "pokemon"), ("ME", "pokemon"), ("Set ", "lorcana"))
+# 'Gift Set 2' or 'Starter Set 3' is a product, not Lorcana's sixth set.
+NOT_SET_NUMBER = re.compile(r"\b(?:gift|starter|collector'?s?|trove|deck|bundle|box)\s+$", re.I)
+
+
+def shop_code(title, game_slug):
+    """The first set code in a shop title that belongs to ``game_slug``, or ''."""
+    for match in SHOP_CODE.finditer(title):
+        code = match.group(1)
+        game = next(slug for prefix, slug in CODE_GAMES if code.startswith(prefix))
+        if game != game_slug:
+            continue
+        if code.startswith("Set ") and NOT_SET_NUMBER.search(title[:match.start()]):
+            continue
+        return code
+    return ""
 
 
 def event_set_name(title):
@@ -977,8 +1062,7 @@ class ShopSignals:
         event = PRERELEASE_EVENT.search(title)
         if not event and offer.availability != Listing.Availability.PREORDER:
             return None
-        code_match = SHOP_CODE.search(title)
-        if code_match is None and not event:
+        if not event and SHOP_CODE.search(title) is None:
             return None
         if not self.loaded:
             self.load()
@@ -986,10 +1070,13 @@ class ShopSignals:
         game_id = self.games.get(slug)
         if game_id is None:
             return None
-        if code_match is not None:
-            code = name = code_match.group(1)
+        code = shop_code(title, slug)
+        if code:
+            name = code
             if (game_id, compact_code(code)) in self.codes:
                 return None
+        elif not event:
+            return None
         else:
             code, name = "", event_set_name(title)
             if not name or (game_id, name_key(name)) in self.slugs:
@@ -1041,23 +1128,28 @@ CODE_TOKEN = re.compile(r"[a-z0-9]+(?:[-.][a-z0-9]+)*")
 
 
 def set_rules(game_slug, sets):
-    """[(set pk, code or '', name words, name length)] for the sets that can file a product."""
+    """[(set pk, code or '', name words, name length, language)] for the sets that can file a product."""
     filler = filler_words(game_slug)
     rules = []
     for pk, name, code in sets:
         code = compact_code(code) if usable_code(code) else ""
-        name_words = {w for w in words_of(name) if w not in filler}
-        rules.append((pk, code, name_words, len(name)))
+        language = language_of(name).lower()
+        name_words = {w for w in words_of(name) if w not in filler and w not in language.split()}
+        rules.append((pk, code, name_words, len(name), language))
     return rules
 
 
 def choose_set(product_name, rules):
     """The set a product name belongs to, or None.
 
-    A set whose code is a whole token of the name wins. Otherwise the set with the most words, all of
-    them in the name, wins; a set needs two such words, so one word or series words alone never file
-    anything ('Scarlet & Violet' never takes 'Scarlet & Violet Surging Sparks ETB').
+    Only a set of the product's own language can take it: a Japanese box shares the English set's code
+    and name but comes out months earlier, so it never takes the English set's date. A set whose code is
+    a whole token of the name wins. Otherwise the set with the most words, all of them in the name, wins;
+    a set needs two such words, so one word or series words alone never file anything ('Scarlet & Violet'
+    never takes 'Scarlet & Violet Surging Sparks ETB').
     """
+    language = language_of(product_name or "").lower()
+    rules = [rule for rule in rules if rule[4] == language]
     lowered = (product_name or "").lower()
     tokens = {compact_code(t) for t in CODE_TOKEN.findall(lowered)}
     by_code = [rule for rule in rules if rule[1] and rule[1] in tokens]
@@ -1104,7 +1196,14 @@ def add_set(row, name, released=None):
     """The owner's Add set: the set is created or updated, with the date if one was given, and products
     with its name or code are filed under it."""
     name = " ".join((name or "").split())[:120]
-    product_set = set_for(row.game, name, row.code if row.code and name != row.code else "")
+    if row.product_set_id is not None:
+        # A set that is already there, with no date yet: the owner may correct its name, never its address.
+        product_set = row.product_set
+        if name and product_set.name != name:
+            product_set.name = name
+            product_set.save(update_fields=["name"])
+    else:
+        product_set = set_for(row.game, name, row.code if row.code and name != row.code else "")
     if released is not None:
         given = row.precision == DAY and row.release_date == released and not row.source.startswith(SHOP_PREFIX)
         product_set.release_date = released
@@ -1135,6 +1234,14 @@ def use_date(row):
     row.save(update_fields=["product_set", "status"])
     link_rows(product_set, row.game, row.name)
     attach_sets(row.game)
+    return product_set
+
+
+def keep_date(product_set):
+    """The owner's Keep this date: the date the set already shows becomes the owner's, so no source
+    changes it and it is not asked about again."""
+    product_set.release_date_source = OWNER
+    product_set.save(update_fields=["release_date_source"])
     return product_set
 
 

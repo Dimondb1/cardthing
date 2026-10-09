@@ -106,13 +106,14 @@
 
   <section>
     <h2>Announced sets to check ({{ releases|length }})</h2>
-    <p class="note">A community list or a shop's title names a set the site does not have yet. Nothing is published until you tap. Tap Add set to check the name and date and add it: products with its name or code are filed under it. Tap Not a set and this source is not asked about it again.</p>
+    <p class="note">A community list or a shop's title names a set the site does not have yet, or gives a date for a set that has none. Nothing is published until you tap. Tap Add set to check the name and date and add it: products with its name or code are filed under it. Tap Not a set and this source is not asked about it again.</p>
     {% if releases %}<ul>
       {% for row in releases %}
       <li class="item"><b>{{ row.name }}{% if row.code and row.code != row.name %} ({{ row.code }}){% endif %}</b>
         {{ row.game.name }}, from {% if row.source_url %}<a href="{{ row.source_url }}" target="_blank" rel="noopener noreferrer">{{ row.source }}</a>{% else %}{{ row.source }}{% endif %}.
         {% if row.precision == "day" %}Out {{ row.release_date|date:"j F Y" }}.{% elif row.precision == "month" %}Out in {{ row.release_date|date:"F Y" }}, day not given.{% else %}No date given.{% endif %}
         {% if row.note %}Shop title: "{{ row.note }}".{% endif %}
+        {% if row.product_set %}The site has this set, as {{ row.product_set.name }}, with no date yet.{% endif %}
         <div class="row">
           <details><summary>Add set</summary>
             <form method="post" class="addset">{% csrf_token %}<input type="hidden" name="action" value="add_set"><input type="hidden" name="release" value="{{ row.pk }}">
@@ -130,15 +131,19 @@
 
   <section>
     <h2>Release dates to confirm ({{ disagreements|length }})</h2>
-    <p class="note">These sources give the same set dates more than a day apart. Open the links, then tap Use this date on the right one. Your choice is never changed by a source.</p>
+    <p class="note">These sources give the same set dates more than a day apart, or differ from the date the set already had. Open the links, then tap Use this date on the right one, or Keep this date when the date already shown is right. Your choice is never changed by a source.</p>
     {% if disagreements %}<ul>
       {% for group in disagreements %}
       <li class="item"><b>{% if group.set %}<a href="{{ group.set.get_absolute_url }}" target="_blank" rel="noopener">{{ group.name }}</a>{% else %}{{ group.name }}{% endif %}</b>
         {{ group.game.name }}{% if group.set and group.set.release_date %}, shown as out {{ group.set.release_date|date:"j F Y" }}{% endif %}.
         {% for row in group.rows %}
         <div class="row">{% if row.source_url %}<a href="{{ row.source_url }}" target="_blank" rel="noopener noreferrer">{{ row.source }}</a>{% else %}{{ row.source }}{% endif %}: {{ row.release_date|date:"j F Y" }}
-          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="use_release_date"><input type="hidden" name="release" value="{{ row.pk }}"><input type="submit" value="Use this date"></form></div>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="use_release_date"><input type="hidden" name="release" value="{{ row.pk }}"><input type="hidden" name="date" value="{{ row.release_date|date:'Y-m-d' }}"><input type="submit" value="Use this date"></form></div>
         {% endfor %}
+        {% if group.hand_date %}
+        <div class="row">Already on the site, with no source: {{ group.hand_date|date:"j F Y" }}
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="keep_release_date"><input type="hidden" name="set" value="{{ group.set.pk }}"><input type="hidden" name="date" value="{{ group.hand_date|date:'Y-m-d' }}"><input type="submit" value="Keep this date"></form></div>
+        {% endif %}
       </li>
       {% endfor %}
     </ul>{% else %}<p class="none">Every source agrees.</p>{% endif %}

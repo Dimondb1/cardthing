@@ -1318,7 +1318,7 @@ def checks_page(request):
             else:
                 finder.ignore(row)
                 messages.success(request, f"Noted: {row.retailer.name} is not asked about {row.suggested.name} again.")
-        elif action in ("add_set", "not_a_set", "use_release_date"):
+        elif action in ("add_set", "not_a_set", "use_release_date", "keep_release_date"):
             release_tap(request, action)
         elif action == "merge":
             # Only a group the page offered, exactly as it stands now, is merged.
@@ -1350,9 +1350,10 @@ def checks_page(request):
 
 
 def release_tap(request, action):
-    """The Things to check buttons for announced sets: Add set, Not a set and Use this date.
+    """The Things to check buttons for announced sets: Add set, Not a set, Use this date and Keep this date.
 
-    Only a row the page offered, still in the state the page showed, is acted on.
+    Only a row the page offered, still in the state the page showed, is acted on: Use this date and Keep
+    this date post the date the page showed, and nothing is saved when it has changed since.
     """
     from django.contrib import messages
     from django.db import transaction
@@ -1360,15 +1361,32 @@ def release_tap(request, action):
     from catalogue import checks, releases
     from catalogue.signals import clear_list_caches
 
+    changed = "That row has changed since the page loaded. Check it again below."
+    shown = releases.parse_owner_date(request.POST.get("date", ""))
+    if action == "keep_release_date":
+        pk = request.POST.get("set", "")
+        if not pk.isdigit():
+            raise Http404("No such set.")
+        group = next((g for g in checks.release_disagreements() if g["set"] is not None and g["set"].pk == int(pk)),
+                     None)
+        if group is None or group["hand_date"] is None or group["hand_date"] != shown:
+            messages.warning(request, changed)
+            return
+        product_set = releases.keep_date(group["set"])
+        messages.success(request, f"Kept: {product_set.name} comes out on {product_set.release_date:%-d %B %Y}. "
+                                  "No source changes it.")
+        return
     pk = request.POST.get("release", "")
     if not pk.isdigit():
         raise Http404("No such announced set.")
     if action == "use_release_date":
         row = next((r for group in checks.release_disagreements() for r in group["rows"] if r.pk == int(pk)), None)
+        if row is not None and row.release_date != shown:
+            row = None
     else:
         row = next((r for r in checks.release_candidates() if r.pk == int(pk)), None)
     if row is None:
-        messages.warning(request, "That row has changed since the page loaded. Check it again below.")
+        messages.warning(request, changed)
         return
     if action == "not_a_set":
         releases.dismiss(row)

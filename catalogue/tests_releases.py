@@ -406,7 +406,7 @@ class AttachSetsTests(TestCase):
     def test_a_whole_token_code_files_the_product(self):
         op = make_game(name="One Piece Card Game", slug="one-piece")
         dominance = make_set(op, name="The Dominance of God", slug="the-dominance-of-god", code="OP-18")
-        box = self.product(op, "OP-18 Divine Rule Japanese Booster Box")
+        box = self.product(op, "OP-18 Divine Rule Booster Box")
         other = self.product(op, "OP-180 Booster Box")
         releases.attach_sets(op)
         box.refresh_from_db()
@@ -553,7 +553,8 @@ class ChecksPageTests(TestCase):
         self.assertContains(response, "Release dates to confirm (1)")
         self.assertContains(response, 'value="Use this date"', count=2)
         later = Release.objects.get(source="tcgdex_sets")
-        self.client.post(reverse("checks"), {"action": "use_release_date", "release": later.pk})
+        self.client.post(reverse("checks"), {"action": "use_release_date", "release": later.pk,
+                                             "date": later.release_date.isoformat()})
         product_set.refresh_from_db()
         self.assertEqual((product_set.release_date, product_set.release_date_source), (later.release_date, "owner"))
         self.assertContains(self.client.get(reverse("checks")), "Release dates to confirm (0)")
@@ -673,3 +674,294 @@ class ProductPagesTests(TestCase):
         self.assertEqual(self.client.get(product_set.get_absolute_url()).status_code, 200)
         self.assertEqual(product_set.game, game)
         self.assertNotIn(EM_DASH, product_set.name)
+
+
+POKEMON_INDEX = "https://www.pokemon.com/uk/news/"
+
+
+def pokemon_link(slug, title):
+    return f'<li><a href="/uk/news/{slug}"><h3>{title}</h3></a></li>'
+
+
+def pokemon_article(heading, day):
+    return (f"<html><body><h1>{heading}</h1><div class=\"product-info\"><p><strong>Release Date</strong></p>"
+            f"<p>{day}</p></div></body></html>").encode()
+
+
+PTCG = "Pok&eacute;mon TCG: Mega Evolution&#8212;Delta Reign"
+EXPANSION = ("pokemon-tcg-mega-evolution-delta-reign-expansion", PTCG)
+BUNDLE = ("pokemon-tcg-mega-evolution-delta-reign-booster-bundle", f"{PTCG} Booster Bundle")
+TINS = ("pokemon-tcg-mega-evolution-delta-reign-mini-tins", f"{PTCG} Mini Tins")
+PRERELEASE = ("play-at-a-pokemon-tcg-mega-evolution-delta-reign-prerelease-event", f"Play at a {PTCG} Prerelease Event")
+
+
+class PokemonArticleTests(TestCase):
+    """An article about one product of an expansion names the expansion too, but is not about the set."""
+
+    def setUp(self):
+        self.pokemon = make_game()
+
+    def test_product_articles_give_nothing_and_are_not_opened(self):
+        for heading in (f"{PTCG} Booster Bundle", f"{PTCG} Mini Tins", f"{PTCG} Elite Trainer Box",
+                        "Pok&eacute;mon TCG: Scarlet &amp; Violet&#8212;Prismatic Evolutions Surprise Box",
+                        f"{PTCG} Premium Collection"):
+            self.assertEqual(releases.parse_pokemon_article(pokemon_article(heading, "4 Dec 2026"), "x"), [], heading)
+        index = f"<ul>{pokemon_link(*BUNDLE)}{pokemon_link(*TINS)}{pokemon_link(*EXPANSION)}</ul>".encode()
+        self.assertEqual([url for url, _t in releases.parse_pokemon_index(index)], [POKEMON_INDEX + EXPANSION[0]])
+        self.assertEqual(releases.parse_pokemon_article(pokemon_article(PTCG, "6 Nov 2026"), "x")[0].name, "Delta Reign")
+
+    def scan(self, answers, hours):
+        fetch = FakeFetch(answers)
+        releases.scan("pokemon_uk_news", fetch=fetch, now=NOW + timedelta(hours=hours), sleep=lambda s: None)
+        return fetch
+
+    def test_the_set_date_never_swaps_between_articles(self):
+        index = f"<ul>{pokemon_link(*BUNDLE)}{pokemon_link(*TINS)}{pokemon_link(*PRERELEASE)}{pokemon_link(*EXPANSION)}</ul>"
+        answers = {
+            BUNDLE[0]: pokemon_article(BUNDLE[1], "4 Dec 2026"),
+            TINS[0]: pokemon_article(TINS[1], "15 Jan 2027"),
+            PRERELEASE[0]: pokemon_article(PRERELEASE[1], "6 Nov 2026"),
+            EXPANSION[0]: pokemon_article(EXPANSION[1], "7 Nov 2026"),
+            "/uk/news/": index.encode(),
+        }
+        dates = []
+        for read in range(4):
+            fetch = self.scan(answers, hours=7 * read)
+            dates.append(ProductSet.objects.get().release_date)
+            if read:
+                # Once the expansion is dated, no other article about it is opened.
+                self.assertEqual(len(fetch.calls), 1)
+        self.assertEqual(dates, [date(2026, 11, 6)] * 4)
+        self.assertEqual(list(ProductSet.objects.values_list("name", flat=True)), ["Delta Reign"])
+        self.assertEqual(list(Release.objects.values_list("name", flat=True)), ["Delta Reign"])
+
+
+class PageAllowanceTests(TestCase):
+    def setUp(self):
+        self.pokemon = make_game()
+        self.answers = {PRERELEASE[0]: pokemon_article(PRERELEASE[1], "6 Nov 2026"),
+                        "/uk/news/": f"<ul>{pokemon_link(*PRERELEASE)}</ul>".encode()}
+
+    def test_dry_runs_count_their_pages_and_leave_the_next_read_alone(self):
+        fetch = FakeFetch(self.answers)
+        for _ in range(15):
+            releases.scan("pokemon_uk_news", fetch=fetch, now=NOW, sleep=lambda s: None, dry_run=True)
+        self.assertEqual(len(fetch.calls), releases.HTML_PAGES_PER_DAY)
+        self.assertEqual(releases.pages_left(NOW), 0)
+        self.assertFalse(Release.objects.exists())
+        self.assertIsNone(ReleaseSourceState.objects.get(name="pokemon_uk_news").next_at)
+
+    def test_pages_another_process_spends_mid_read_are_respected(self):
+        today = timezone.localtime(NOW).date()
+        fetch = FakeFetch(self.answers)
+
+        def fetch_while_another_reads(url, headers=None):
+            # Another process spends what is left of the day while this read is under way.
+            ReleaseSourceState.objects.update_or_create(name="bushiroad_ws", defaults={
+                "pages_day": today, "pages_today": releases.HTML_PAGES_PER_DAY - 1})
+            return fetch(url, headers=headers)
+
+        result = releases.scan("pokemon_uk_news", fetch=fetch_while_another_reads, now=NOW, sleep=lambda s: None)
+        self.assertEqual(len(fetch.calls), 1)   # the article waits for tomorrow
+        self.assertTrue(result.ok)
+        self.assertEqual(releases.pages_left(NOW), 0)
+        self.assertEqual(ReleaseSourceState.objects.get(name="pokemon_uk_news").pages_today, 1)
+
+
+class DateRuleTests(TestCase):
+    """Which source may replace which date, and what happens to a date a source may not replace."""
+
+    def setUp(self):
+        self.pokemon = make_game()
+        self.op = make_game(name="One Piece Card Game", slug="one-piece")
+        self.ygo = make_game(name="Yu-Gi-Oh!", slug="yu-gi-oh")
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+
+    def test_two_agreeing_community_sources_never_replace_a_publishers_date(self):
+        releases.accept(source("pokemon_uk_news"), [signal("pokemon", "Delta Reign", date(2026, 11, 6))], now=NOW)
+        releases.accept(source("tcgdex_sets"), [signal("pokemon", "Delta Reign", date(2026, 11, 13))], now=NOW)
+        releases.accept(source("swudb_sets"), [signal("pokemon", "Delta Reign", date(2026, 11, 13))], now=NOW)
+        product_set = ProductSet.objects.get()
+        self.assertEqual((product_set.release_date, product_set.release_date_source), (date(2026, 11, 6), "pokemon_uk_news"))
+
+    def test_a_publisher_replaces_a_community_date(self):
+        releases.accept(source("tcgdex_sets"), [signal("pokemon", "Delta Reign", date(2026, 11, 13))], now=NOW)
+        releases.accept(source("swudb_sets"), [signal("pokemon", "Delta Reign", date(2026, 11, 13))], now=NOW)
+        self.assertEqual(ProductSet.objects.get().release_date_source, "swudb_sets")
+        releases.accept(source("pokemon_uk_news"), [signal("pokemon", "Delta Reign", date(2026, 11, 6))], now=NOW)
+        product_set = ProductSet.objects.get()
+        self.assertEqual((product_set.release_date, product_set.release_date_source), (date(2026, 11, 6), "pokemon_uk_news"))
+
+    def test_a_community_source_never_replaces_another_community_sources_date(self):
+        releases.accept(source("tcgdex_sets"), [signal("pokemon", "Delta Reign", date(2026, 11, 13))], now=NOW)
+        releases.accept(source("swudb_sets"), [signal("pokemon", "Delta Reign", date(2026, 11, 13))], now=NOW)
+        releases.accept(source("lorcast_sets"), [signal("pokemon", "Delta Reign", date(2026, 11, 20))], now=NOW)
+        releases.accept(source("ygoprodeck_sets"), [signal("pokemon", "Delta Reign", date(2026, 11, 20))], now=NOW)
+        self.assertEqual(ProductSet.objects.get().release_date, date(2026, 11, 13))
+
+    def test_a_publishers_date_against_a_date_set_by_hand_goes_to_the_owner(self):
+        held = make_set(self.op, name="The Dominance of God", slug="the-dominance-of-god", code="OP-18",
+                        release_date=date(2026, 12, 18))
+        releases.accept(source("bandai_onepiece"), [signal("one-piece", "The Dominance of God", date(2026, 11, 20), code="OP-18")], now=NOW)
+        held.refresh_from_db()
+        row = Release.objects.get()
+        self.assertEqual(held.release_date, date(2026, 12, 18))
+        self.assertEqual((row.status, row.product_set), (Release.Status.PENDING, held))
+        [group] = releases_checks().release_disagreements(now=NOW)
+        self.assertEqual((group["set"], group["hand_date"], group["rows"]), (held, date(2026, 12, 18), [row]))
+        page = self.client.get(reverse("checks"))
+        self.assertContains(page, "Release dates to confirm (1)")
+        self.assertContains(page, 'value="Keep this date"')
+        # Keep this date: the date shown becomes the owner's, and the question goes away.
+        self.client.post(reverse("checks"), {"action": "keep_release_date", "set": held.pk, "date": "2026-12-18"})
+        held.refresh_from_db()
+        self.assertEqual((held.release_date, held.release_date_source), (date(2026, 12, 18), "owner"))
+        self.assertEqual(releases_checks().release_disagreements(now=NOW), [])
+
+    def test_use_this_date_replaces_a_date_set_by_hand(self):
+        held = make_set(self.op, name="The Dominance of God", slug="the-dominance-of-god", code="OP-18",
+                        release_date=timezone.localdate() + timedelta(days=60))
+        when = timezone.localdate() + timedelta(days=50)
+        releases.accept(source("bandai_onepiece"), [signal("one-piece", "The Dominance of God", when, code="OP-18")])
+        row = Release.objects.get()
+        self.client.post(reverse("checks"), {"action": "use_release_date", "release": row.pk, "date": when.isoformat()})
+        held.refresh_from_db()
+        self.assertEqual((held.release_date, held.release_date_source), (when, "owner"))
+
+    def test_keep_this_date_is_refused_when_the_set_date_changed(self):
+        held = make_set(self.op, name="The Dominance of God", slug="the-dominance-of-god", code="OP-18",
+                        release_date=date(2026, 12, 18))
+        releases.accept(source("bandai_onepiece"), [signal("one-piece", "The Dominance of God", date(2026, 11, 20), code="OP-18")], now=NOW)
+        response = self.client.post(reverse("checks"), {"action": "keep_release_date", "set": held.pk, "date": "2026-12-19"},
+                                    follow=True)
+        self.assertContains(response, "That row has changed since the page loaded")
+        held.refresh_from_db()
+        self.assertEqual(held.release_date_source, "")
+
+    def test_a_lone_community_date_for_an_undated_set_waits_to_be_added(self):
+        maestros = make_set(self.ygo, name="Magnificent Maestros", slug="magnificent-maestros", code="")
+        when = timezone.localdate() + timedelta(days=34)
+        releases.accept(source("ygoprodeck_sets"), [signal("yu-gi-oh", "Magnificent Maestros", when, code="MAMS")])
+        [row] = releases_checks().release_candidates()
+        self.assertEqual((row.status, row.product_set), (Release.Status.PENDING, maestros))
+        page = self.client.get(reverse("checks"))
+        self.assertContains(page, "Announced sets to check (1)")
+        self.assertContains(page, "with no date yet")
+        self.client.post(reverse("checks"), {"action": "add_set", "release": row.pk, "name": "Magnificent Maestros",
+                                             "date": when.isoformat()})
+        maestros.refresh_from_db()
+        self.assertEqual(ProductSet.objects.count(), 1)
+        self.assertEqual((maestros.release_date, maestros.release_date_source, maestros.slug),
+                         (when, "ygoprodeck_sets", "magnificent-maestros"))
+        self.assertEqual(releases_checks().release_candidates(), [])
+
+    def test_a_row_for_a_set_with_a_date_is_not_a_candidate(self):
+        make_set(self.ygo, name="Magnificent Maestros", slug="magnificent-maestros", code="",
+                 release_date=timezone.localdate() + timedelta(days=34))
+        releases.accept(source("ygoprodeck_sets"), [signal("yu-gi-oh", "Magnificent Maestros",
+                                                           timezone.localdate() + timedelta(days=34))])
+        self.assertEqual(releases_checks().release_candidates(), [])
+
+    def test_use_this_date_is_refused_when_the_source_moved_since_the_page_loaded(self):
+        day = timezone.localdate() + timedelta(days=30)
+        releases.accept(source("pokemon_uk_news"), [signal("pokemon", "Delta Reign", day)])
+        releases.accept(source("tcgdex_sets"), [signal("pokemon", "Delta Reign", day + timedelta(days=5))])
+        later = Release.objects.get(source="tcgdex_sets")
+        shown = later.release_date
+        releases.accept(source("tcgdex_sets"), [signal("pokemon", "Delta Reign", day + timedelta(days=9))])
+        response = self.client.post(reverse("checks"), {"action": "use_release_date", "release": later.pk,
+                                                        "date": shown.isoformat()}, follow=True)
+        self.assertContains(response, "That row has changed since the page loaded")
+        product_set = ProductSet.objects.get()
+        self.assertEqual((product_set.release_date, product_set.release_date_source), (day, "pokemon_uk_news"))
+
+
+class LanguageTests(TestCase):
+    """Japanese and other editions share the English set's code but not its date."""
+
+    def setUp(self):
+        self.op = make_game(name="One Piece Card Game", slug="one-piece")
+        releases.accept(source("bandai_onepiece"), [signal("one-piece", "The Dominance of God", date(2026, 11, 20), code="OP-18")], now=NOW)
+        self.english = ProductSet.objects.get()
+
+    def product(self, name):
+        return Product.objects.create(game=self.op, name=name, product_type=Product.Type.BOOSTER_BOX)
+
+    def test_a_japanese_product_never_takes_the_english_set(self):
+        coded = self.product("One Piece OP-18 The Dominance of God Booster Box Japanese")
+        named = self.product("The Dominance of God Booster Box (Japanese)")
+        english = self.product("One Piece OP-18 The Dominance of God Booster Box")
+        releases.attach_sets(self.op)
+        for product in (coded, named, english):
+            product.refresh_from_db()
+        self.assertIsNone(coded.product_set)
+        self.assertIsNone(named.product_set)
+        self.assertEqual(english.product_set, self.english)
+        # So the Japanese box shows no date at all rather than the English one.
+        self.assertIsNone(coded.effective_release_date)
+        self.assertEqual(english.effective_release_date, date(2026, 11, 20))
+        self.assertEqual(self.client.get(coded.get_absolute_url()).status_code, 200)
+
+    def test_a_japanese_set_takes_japanese_products_and_is_never_a_sources_set(self):
+        japanese = make_set(self.op, name="The Dominance of God (Japanese)", slug="the-dominance-of-god-japanese",
+                            code="OP-18")
+        box = self.product("OP-18 Booster Box Japanese")
+        releases.attach_sets(self.op)
+        box.refresh_from_db()
+        self.assertEqual(box.product_set, japanese)
+        self.assertEqual(releases.find_set(self.op, "Something Else", "OP-18"), self.english)
+        self.english.delete()
+        self.assertIsNone(releases.find_set(self.op, "The Dominance of God", "OP-18"))
+
+
+class ShopCodeTests(TestCase):
+    def test_a_code_counts_only_for_its_own_game(self):
+        self.assertEqual(releases.shop_code("Disney Lorcana Set 9 Booster Box", "lorcana"), "Set 9")
+        self.assertEqual(releases.shop_code("Disney Lorcana Gift Set 2", "lorcana"), "")
+        self.assertEqual(releases.shop_code("Pokemon Collector Set 2", "pokemon"), "")
+        self.assertEqual(releases.shop_code("One Piece OP-18 Booster Box", "one-piece"), "OP-18")
+        self.assertEqual(releases.shop_code("One Piece OP-18 Booster Box", "pokemon"), "")
+        self.assertEqual(releases.shop_code("Pokemon SV10 Booster Box", "pokemon"), "SV10")
+
+    def test_a_gift_set_preorder_writes_nothing(self):
+        from .importers import Offer, apply_offers
+        from .models import Listing
+
+        make_game(name="Disney Lorcana", slug="lorcana")
+        make_game()
+        shop = make_retailer("Total Example", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+        offers = [Offer(title=title, url="https://shop.example/p", price=40, availability=Listing.Availability.PREORDER)
+                  for title in ("Disney Lorcana Gift Set 2", "Pokemon Collector Set 2", "Disney Lorcana Set 9 Booster Box")]
+        apply_offers(shop, offers, complete=False)
+        self.assertEqual(list(Release.objects.values_list("name", flat=True)), ["Set 9"])
+
+
+class ChecksPageQueryTests(TestCase):
+    def setUp(self):
+        self.pokemon = make_game()
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.day = timezone.localdate() + timedelta(days=30)
+
+    def groups(self, start, count):
+        for n in range(start, start + count):
+            product_set = make_set(self.pokemon, name=f"Example Set {n}", slug=f"example-set-{n}", code="")
+            for source_name, offset in (("pokemon_uk_news", 0), ("tcgdex_sets", 5)):
+                Release.objects.create(game=self.pokemon, name=product_set.name, source=source_name, precision=DAY,
+                                       release_date=self.day + timedelta(days=offset), product_set=product_set)
+
+    def queries(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(reverse("checks"))
+        return response, len(captured)
+
+    def test_the_page_costs_the_same_however_many_dates_to_confirm(self):
+        self.groups(0, 1)
+        response, one = self.queries()
+        self.assertContains(response, "Release dates to confirm (1)")
+        self.groups(1, 5)
+        response, six = self.queries()
+        self.assertContains(response, "Release dates to confirm (6)")
+        self.assertEqual(one, six)

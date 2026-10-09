@@ -4,6 +4,8 @@ Read the release sources that are due: publishers' and community lists of announ
     python manage.py scan_releases                         # every source that is due
     python manage.py scan_releases --source scryfall_sets  # one source, when it is due
     python manage.py scan_releases --dry-run               # show what the due sources say, write nothing
+                                                           # but the web pages it used (they count
+                                                           # against the 25 a day)
 
 The background reader does this on its own every few hours; this is for a first look on a new server.
 A source is read only when its turn has come (Scryfall once a day, the rest every 6 hours), so running
@@ -21,7 +23,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--source", choices=sorted(releases.BY_NAME), help="Read only this source.")
-        parser.add_argument("--dry-run", action="store_true", help="Show what each source says and write nothing.")
+        parser.add_argument("--dry-run", action="store_true", help="Show what each source says and write nothing but the web pages used, "
+                                                                    "which count against the day's allowance.")
 
     def handle(self, *args, source=None, dry_run=False, **options):
         names = [source] if source else [s.name for s in releases.SOURCES]

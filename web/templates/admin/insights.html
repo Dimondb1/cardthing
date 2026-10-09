@@ -20,6 +20,9 @@
   .ins .ok { color: var(--message-success-fg, #2a7a2a); }
   .ins .quiet { display: block; color: var(--body-quiet-color); margin: 2px 0 6px; }
   .ins td form input[type=submit] { min-height: 40px; }
+  .ins__rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; overflow-wrap: anywhere; }
+  .ins__rows li { padding: 0; }
+  .ins__rows .bad { display: block; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Insights</div>{% endblock %}
 {% block content %}
@@ -175,10 +178,9 @@
   <div class="module">
     <h2>Release sources</h2>
     <p>Free publisher and community lists of announced sets. Official sources add sets on their own; the rest wait on Things to check.</p>
-    <table>
-      <thead><tr><th>Source</th><th>Last read</th><th>Sets</th><th>Next read</th><th>Last error</th></tr></thead>
-      <tbody>{% for r in release_sources %}<tr><td>{{ r.label }}{% if r.official %} (official){% endif %}</td><td>{% if r.last_ok %}{{ r.last_ok|date:"j M H:i" }}{% else %}never{% endif %}</td><td class="n">{{ r.signals }}</td><td>{% if r.next %}{{ r.next|date:"j M H:i" }}{% else %}due{% endif %}</td><td class="wrap">{% if r.error %}<span class="bad">{{ r.error }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
-    </table>
+    <ul class="ins__rows">{% for r in release_sources %}
+      <li><b>{{ r.label }}</b>{% if r.official %} (official){% endif %}. Last read {% if r.last_ok %}{{ r.last_ok|date:"j M H:i" }}{% else %}never{% endif %}, {{ r.signals }} set{{ r.signals|pluralize }}, next read {% if r.next %}{{ r.next|date:"j M H:i" }}{% else %}due now{% endif %}.{% if r.error %} <span class="bad">Last error: {{ r.error }}</span>{% endif %}</li>{% endfor %}
+    </ul>
   </div>
 
   <div class="module">

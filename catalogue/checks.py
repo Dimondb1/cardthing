@@ -121,24 +121,30 @@ def found_stockists():
 def release_candidates(now=None):
     """Announced sets no rule could add, waiting for Add set or Not a set, newest first, in one query.
 
-    A row already filed under a set is not listed: if its date differs, it is under release dates to confirm.
-    Rows about sets released long ago are recorded but never listed.
+    A row about a set the site has is listed only when it gives a full date and the set has none (a lone
+    community source's date for a set added by hand, say): otherwise it has nothing to add, and a date
+    that differs from the set's is under release dates to confirm. Rows about sets released long ago are
+    recorded but never listed.
     """
     from .releases import local_today, recent_cutoff
 
     cutoff = recent_cutoff(local_today(now or timezone.now()))
+    undated_set = Q(product_set__release_date__isnull=True, precision=Release.Precision.DAY)
     return list(
-        Release.objects.filter(status=Release.Status.PENDING, product_set__isnull=True, game__is_active=True)
+        Release.objects.filter(status=Release.Status.PENDING, game__is_active=True)
+        .filter(Q(product_set__isnull=True) | undated_set)
         .filter(Q(release_date__isnull=True) | Q(release_date__gte=cutoff))
-        .select_related("game").order_by("-first_seen_at", "-pk")[:RELEASE_ROWS]
+        .select_related("game", "product_set").order_by("-first_seen_at", "-pk")[:RELEASE_ROWS]
     )
 
 
 def release_disagreements(now=None):
-    """[{'game', 'name', 'set', 'rows'}] where sources give one set dates more than a day apart.
+    """[{'game', 'name', 'set', 'rows', 'hand_date'}] where sources give one set dates more than a day apart.
 
-    Each row is a source's date with its own Use this date button. A set whose date the owner chose is
-    left alone: the owner's answer stands. One query.
+    Each row is a source's date with its own Use this date button. A date the set had before any source
+    was read (typed in admin or imported, with no source recorded) counts as one of the dates, as
+    'hand_date' with a Keep this date button, so a lone source that contradicts it is shown too. A set
+    whose date the owner chose is left alone: the owner's answer stands. One query.
     """
     from .releases import SHOP_PREFIX, local_today, name_key, recent_cutoff
 
@@ -146,7 +152,7 @@ def release_disagreements(now=None):
     rows = (
         Release.objects.filter(precision=Release.Precision.DAY, release_date__gte=cutoff, game__is_active=True)
         .exclude(status=Release.Status.DISMISSED).exclude(source__startswith=SHOP_PREFIX)
-        .select_related("game", "product_set").order_by("game__name", "release_date", "source")
+        .select_related("game", "product_set__game").order_by("game__name", "release_date", "source")
     )
     groups = {}
     for row in rows:
@@ -154,14 +160,17 @@ def release_disagreements(now=None):
         groups.setdefault(key, []).append(row)
     found = []
     for members in groups.values():
-        dates = [r.release_date for r in members]
-        if (max(dates) - min(dates)).days <= DATE_GAP_DAYS:
-            continue
         product_set = next((r.product_set for r in members if r.product_set_id), None)
         if product_set is not None and product_set.release_date_source == "owner":
             continue
+        hand_date = None
+        if product_set is not None and product_set.release_date and not product_set.release_date_source:
+            hand_date = product_set.release_date
+        dates = [r.release_date for r in members] + ([hand_date] if hand_date else [])
+        if (max(dates) - min(dates)).days <= DATE_GAP_DAYS:
+            continue
         found.append({"game": members[0].game, "name": product_set.name if product_set else members[0].name,
-                      "set": product_set, "rows": members})
+                      "set": product_set, "rows": members, "hand_date": hand_date})
     return found[:RELEASE_ROWS]
 
 

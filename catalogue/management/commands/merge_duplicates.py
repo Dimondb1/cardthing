@@ -110,13 +110,22 @@ def merge_undoable(keep, others):
     than moved, and everything moved is noted, so ``unmerge`` can put it all back. The other product's old
     address redirects to the kept one, as after a merge. Returns the note, plain JSON.
 
-    A listing at a shop the kept product is already listed at stays on the switched-off product, where
-    nobody sees it, rather than being deleted.
+    A switched-off product must be invisible to shop reads, or they would put a live price on it: its
+    barcode moves to the kept product (or is cleared), its shop pages point at the kept product, and its
+    address is an old address of the kept one, which is how reads and tidy_catalogue know to pass it by.
+    The kept product is judged again at once, so a price moved onto it never claims a saving it should
+    not. A listing at a shop the kept product is already listed at stays on the switched-off product,
+    where nobody sees it, rather than being deleted.
     """
-    note = {"keep": keep.pk, "others": [], "image_url": None, "ean": None}
+    from django.utils import timezone
+
+    from catalogue import sanity
+    from catalogue.models import ShopPage
+
+    note = {"keep": keep.pk, "others": [], "image_url": None, "ean": None, "at": timezone.localdate().isoformat()}
     for other in others:
         entry = {"pk": other.pk, "listings": [], "restocks": [], "clicks": [], "alerts": [], "aliases": [],
-                 "lows_added": [], "lows_lowered": [], "alias": None}
+                 "pages": [], "lows_added": [], "lows_lowered": [], "alias": None, "alias_was": None, "ean": other.ean}
         shops = set(keep.listings.values_list("retailer_id", flat=True))
         for listing in other.listings.all():
             if listing.retailer_id not in shops:
@@ -131,7 +140,7 @@ def merge_undoable(keep, others):
                 DailyLowestPrice.objects.filter(product=keep, date=day).update(price=price)
                 entry["lows_lowered"].append([day.isoformat(), str(lows[day]), str(price)])
                 lows[day] = price
-        for model, key in ((Restock, "restocks"), (OutboundClick, "clicks")):
+        for model, key in ((Restock, "restocks"), (OutboundClick, "clicks"), (ShopPage, "pages")):
             rows = model.objects.filter(product=other)
             entry[key] = list(rows.values_list("pk", flat=True))
             rows.update(product=keep)
@@ -150,15 +159,29 @@ def merge_undoable(keep, others):
         aliases = ProductAlias.objects.filter(product=other)
         entry["aliases"] = list(aliases.values_list("pk", flat=True))
         aliases.update(product=keep)
-        Product.objects.filter(pk=other.pk).update(is_active=False)
-        entry["alias"] = ProductAlias.objects.create(slug=other.slug, product=keep).pk
+        Product.objects.filter(pk=other.pk).update(is_active=False, ean="")
+        taken = ProductAlias.objects.filter(slug=other.slug).first()
+        if taken is not None:
+            # An old address of some product already has this slug: it now leads to the kept product.
+            entry["alias"], entry["alias_was"] = taken.pk, taken.product_id
+            ProductAlias.objects.filter(pk=taken.pk).update(product=keep)
+        else:
+            entry["alias"] = ProductAlias.objects.create(slug=other.slug, product=keep).pk
         note["others"].append(entry)
+    sanity.judge_product(keep.pk)
     return note
 
 
 def unmerge(note):
     """Put back what ``merge_undoable`` did. Rows gone since are skipped; a day's low the kept product has
-    recorded lower since is left as it is. Returns the products switched back on."""
+    recorded lower since is left as it is. Both products' prices are judged afresh, and the days the kept
+    product recorded while merged are worked out again, since they held the other product's prices.
+    Returns the products switched back on."""
+    from datetime import date
+
+    from catalogue import pricing, sanity
+    from catalogue.models import ShopPage
+
     keep = Product.objects.filter(pk=note["keep"]).first()
     restored = []
     for entry in note["others"]:
@@ -168,20 +191,33 @@ def unmerge(note):
         Listing.objects.filter(pk__in=entry["listings"]).exclude(retailer__listings__product=other).update(product=other)
         Restock.objects.filter(pk__in=entry["restocks"]).update(product=other)
         OutboundClick.objects.filter(pk__in=entry["clicks"]).update(product=other)
+        ShopPage.objects.filter(pk__in=entry.get("pages", [])).update(product=other)
         StockAlert.objects.filter(pk__in=entry["alerts"]).update(product=other)
         DailyLowestPrice.objects.filter(pk__in=entry["lows_added"]).delete()
         if keep is not None:
             for day, before, after in entry["lows_lowered"]:
                 DailyLowestPrice.objects.filter(product=keep, date=day, price=after).update(price=before)
-        ProductAlias.objects.filter(pk=entry["alias"]).delete()
+        if entry.get("alias_was"):
+            ProductAlias.objects.filter(pk=entry["alias"]).update(product_id=entry["alias_was"])
+        else:
+            ProductAlias.objects.filter(pk=entry["alias"]).delete()
         ProductAlias.objects.filter(pk__in=entry["aliases"]).update(product=other)
-        Product.objects.filter(pk=other.pk).update(is_active=True)
+        Product.objects.filter(pk=other.pk).update(is_active=True, ean=entry.get("ean", "") or other.ean)
         restored.append(other)
     if keep is not None:
         if note.get("image_url") and keep.image_url == note["image_url"]:
             Product.objects.filter(pk=keep.pk).update(image_url="")
         if note.get("ean") and keep.ean == note["ean"]:
             Product.objects.filter(pk=keep.pk).update(ean="")
+        if note.get("at"):
+            DailyLowestPrice.objects.filter(product=keep, date__gte=date.fromisoformat(note["at"])).delete()
+    # Verdicts given while merged compared one product's prices with the other's: start both afresh.
+    products = [p for p in [keep, *restored] if p is not None]
+    Listing.objects.filter(product__in=products, sanity__in=[Listing.Sanity.DOUBTFUL, Listing.Sanity.EXCLUDED]) \
+        .exclude(sanity_reason=sanity.TRUSTED_REASON).update(sanity=Listing.Sanity.OK, sanity_reason="", sanity_ratio=None)
+    for product in products:
+        sanity.judge_product(product.pk)
+        pricing.update_daily_lowest(product)
     return restored
 
 
@@ -189,7 +225,7 @@ def duplicate_groups(loose=False):
     """[(keep, [others])] for every group of products that name the same thing, the one to keep first:
     most listings, then one with an image, then the shortest name."""
     groups = defaultdict(list)
-    for product in Product.objects.filter(is_active=True).select_related("game").order_by("pk"):
+    for product in Product.objects.filter(is_active=True).select_related("game", "product_set").order_by("pk"):
         key = loose_key(product.name, product.game.slug) if loose else merge_key(product.name)
         if key:
             groups[(product.game_id, product.product_type, key)].append(product)

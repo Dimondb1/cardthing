@@ -1192,6 +1192,7 @@ class ClaudeAsk(models.Model):
         REFUSED = "refused", "Declined"
         CUT_OFF = "cut_off", "Cut off"
         INVALID = "invalid", "Not understood"
+        REJECTED = "rejected", "Refused by Anthropic"
         ERROR = "error", "Not sent"
 
     class Action(models.TextChoices):

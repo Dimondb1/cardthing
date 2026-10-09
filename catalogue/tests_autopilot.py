@@ -498,9 +498,12 @@ class UndoableMergeTests(Base):
         self.assertFalse(ProductAlias.objects.filter(slug=other.slug).exists())
         self.assertEqual(ProductAlias.objects.get(pk=old_address.pk).product, other)
         lows = dict(DailyLowestPrice.objects.filter(product=keep).values_list("date", "price"))
-        self.assertEqual(lows, {today - days(1): Decimal("50.00")})
+        # Yesterday as it was; today worked out again from the kept product's own price.
+        self.assertEqual(lows, {today - days(1): Decimal("50.00"), today: Decimal("45.00")})
         self.assertEqual((keep.image_url, keep.ean), ("", ""))
-        self.assertEqual(DailyLowestPrice.objects.filter(product=other).count(), 2)
+        # Its own two days, and today from its restored price.
+        self.assertEqual(dict(DailyLowestPrice.objects.filter(product=other).values_list("date", "price")),
+                         {today - days(1): Decimal("44.00"), today - days(2): Decimal("47.00"), today: Decimal("44.00")})
 
     def test_a_merged_product_leaves_every_list_and_its_address_redirects(self):
         from .management.commands.merge_duplicates import merge_undoable

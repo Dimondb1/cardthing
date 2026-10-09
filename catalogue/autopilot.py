@@ -272,7 +272,8 @@ class Autopilot:
     def hide(self, listing, why, **unchanged):
         def act():
             # Only the price the autopilot looked at is hidden, as with the owner's Hide.
-            if not Listing.objects.filter(pk=listing.pk, is_active=True, price=listing.price, **unchanged).exists():
+            if not Listing.objects.filter(pk=listing.pk, is_active=True, price=listing.price, trusted_price__isnull=True,
+                                          **unchanged).exists():
                 raise Stale
             hide(listing)
 

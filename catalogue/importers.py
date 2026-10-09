@@ -41,7 +41,7 @@ from . import pricing
 from .classify import GAMES, classify, find_game, variant_differs
 from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
 from .models import (
-    Game, ImportRun, Listing, Product, Retailer, RetailerCollection, ShopPage, ShopProduct, stale_cutoff,
+    Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, stale_cutoff,
 )
 from .sanity import judge_product, trust_expiry
 
@@ -1391,6 +1391,11 @@ def create_from_offer(offer, catalogue, sealed=None):
 
     slug = slugify(sealed.name)[:220]
     existing = Product.objects.filter(slug=slug).first()
+    if existing is not None and not existing.is_active:
+        # A product merged into another: its address now leads to the kept one, and so does the offer.
+        alias = ProductAlias.objects.filter(slug=slug, product__is_active=True).select_related("product").first()
+        if alias is not None:
+            existing = alias.product
     if existing is not None and existing.game_id == game.pk:
         catalogue.append((existing.pk, existing.name, game.slug))
         return existing.pk

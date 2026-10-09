@@ -39,7 +39,7 @@
     {% if claude.state.last_run_note %}<p class="note">Last run {{ claude.state.last_run_at|date:"j M H:i" }}: {{ claude.state.last_run_note }}.</p>{% endif %}
     {% if claude.agreement_total %}<p class="note">Agreed with you {{ claude.agreed }} of {{ claude.agreement_total }} time{{ claude.agreement_total|pluralize }}.</p>{% endif %}
     {% if claude.asked %}<p class="note">You asked Claude to look. It starts within 5 minutes.</p>{% endif %}
-    {% if claude.has_key %}<div class="row">
+    {% if claude.has_key and claude.server_on %}<div class="row">
       {% if claude.state.enabled %}
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_now"><input type="submit" value="Ask Claude now"></form>
       {% if claude.state.may_act %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_act_off"><input type="submit" value="Suggest only"></form>
@@ -50,7 +50,7 @@
       {% endif %}
     </div>{% endif %}
     <p class="note">Claude reads the rows the free checks leave and says whether two things are the same product. In trial it only suggests: its answer shows under each row. Once you agree with its answers, tap Let Claude act. It then acts only when it is sure and the site's own checks agree, never counts a price as right and never merges by itself. Each act is listed under Sorted for you with Undo.</p>
-    <details{% if not claude.has_key %} open{% endif %}><summary>Claude settings and key</summary>
+    <details{% if claude.open_settings %} open{% endif %}><summary>Claude settings and key</summary>
       {% if claude.env_key %}<p class="note">The key is set in the server settings.</p>{% else %}
       <form method="post" class="addset" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="claude_key_save">
         <label>Anthropic API key <input type="password" name="claude_key" autocomplete="off" required></label>
@@ -58,7 +58,7 @@
         <input type="submit" value="Save key">
       </form>
       {% if claude.state.key_hint %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_key_forget"><input type="submit" value="Forget the key"></form>{% endif %}
-      <p class="note">To get a key: sign up at console.anthropic.com, buy credit under Billing, set a monthly spend limit under Limits, then create a key under API keys and paste it here. Saving it checks it with Anthropic for free. It is kept in a file only the site can read and is never shown again.</p>
+      <p class="note">To get a key: sign up at console.anthropic.com, buy credit under Billing, set a monthly spend limit under Limits, then create a key under API keys and paste it here. Claude's first run checks it with Anthropic, which is free. It is kept in a file only the site can read and is never shown again.</p>
       {% endif %}
       <form method="post" class="addset">{% csrf_token %}<input type="hidden" name="action" value="claude_settings">
         <label>Model <select name="model">{% for code, label, cost in claude.models %}<option value="{{ code }}"{% if code == claude.state.model %} selected{% endif %}>{{ label }}, {{ cost }}</option>{% endfor %}</select></label>
@@ -84,7 +84,7 @@
         {% for answer in answers %}
         <li class="item"><b>{{ answer.what }}</b>
           <span class="why">{{ answer.why|capfirst }}. {{ answer.created_at|date:"j M H:i" }}.</span>
-          <div class="row">{% if answer.undone_at %}<span class="none">Undone {{ answer.undone_at|date:"j M H:i" }}.</span>{% elif answer.kind == "merge" %}<span class="none">A merge cannot be undone.</span>{% else %}
+          <div class="row">{% if answer.undone_at %}<span class="none">Undone {{ answer.undone_at|date:"j M H:i" }}.</span>{% elif answer.kind == "merge" and not answer.undo_note %}<span class="none">A merge cannot be undone.</span>{% else %}
             <form method="post">{% csrf_token %}<input type="hidden" name="action" value="undo"><input type="hidden" name="answer" value="{{ answer.pk }}"><input type="submit" value="Undo"></form>{% endif %}</div>
         </li>
         {% endfor %}
@@ -145,7 +145,7 @@
 
   <section>
     <h2>Possible duplicates ({{ duplicates|length }})</h2>
-    <p class="note">These names differ only by words like Exclusive, English or the series name. Merge only when they are the same product. Merging keeps every price, the price history and the old addresses. If one is a different product, tap Not the same beside it and the two are not suggested together again.</p>
+    <p class="note">These names differ only by words like Exclusive, English or the series name. Merge only when they are the same product. Merging keeps every price, the price history and the old addresses. Merge these cannot be undone; a merge from the Claude button can, under Sorted for you. If one is a different product, tap Not the same beside it and the two are not suggested together again.</p>
     {% if sure_pairs %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge_sure">{% for keep, other, ask in sure_pairs %}<input type="hidden" name="pair" value="{{ keep.pk }}:{{ other.pk }}">{% endfor %}<input type="submit" value="Merge the {{ sure_pairs|length }} pair{{ sure_pairs|pluralize }} Claude is sure are the same"></form>
     <p class="note">Each merge can be undone under Sorted for you.</p>{% endif %}
     {% if duplicates %}<ul>

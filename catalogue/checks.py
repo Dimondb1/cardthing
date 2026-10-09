@@ -84,7 +84,7 @@ def doubtful_prices(now=None):
     return list(
         doubtful_waiting()
         .annotate(clicks=Coalesce(Subquery(clicks, output_field=IntegerField()), Value(0)))
-        .select_related("product", "retailer")
+        .select_related("product__game", "product__product_set", "retailer")
         .order_by("-clicks", "sanity_at", "pk")[:SANITY_ROWS]
     )
 
@@ -149,7 +149,8 @@ def duplicates():
     apart = kept_apart()
     pks = {p.pk for keep, others in groups for p in [keep, *others]}
     shops = {}
-    for product_id, retailer_id in Listing.objects.filter(product_id__in=pks, is_active=True).values_list(
+    # Hidden listings count too: a merge cannot move a shop's live price onto a product that shop already lists.
+    for product_id, retailer_id in Listing.objects.filter(product_id__in=pks).values_list(
         "product_id", "retailer_id"
     ):
         shops.setdefault(product_id, set()).add(retailer_id)
@@ -194,7 +195,8 @@ def found_stockists(now=None):
     """
     from .finder import interest_scores
 
-    rows = list(found_waiting().select_related("retailer", "suggested").order_by("-last_seen", "-pk"))
+    rows = list(found_waiting().select_related("retailer", "suggested__game", "suggested__product_set")
+                .order_by("-last_seen", "-pk"))
     if len(rows) > 1:
         scores = interest_scores(now, visitors_only=True)
         rows.sort(key=lambda row: -scores.get(row.suggested_id, 0))

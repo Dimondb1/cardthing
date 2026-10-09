@@ -50,13 +50,13 @@ from django.utils import timezone
 
 from . import autopilot, checks, sanity
 from .classify import box_contents, find_type
-from .models import CheckAnswer, ClaudeAsk, ClaudeJudge, Listing
+from .models import CheckAnswer, ClaudeAsk, ClaudeJudge, Listing, ShopProduct
 from .types import type_label
 
 logger = logging.getLogger(__name__)
 
 Ask, Kind = ClaudeAsk, CheckAnswer.Kind
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 
 # The models the owner can choose, with what each answer usually costs at medium effort.
 MODELS = {
@@ -92,19 +92,26 @@ TIMEOUT_SECONDS, CONNECT_SECONDS = 180.0, 10.0
 KEY_PATTERN = re.compile(r"^sk-ant-[A-Za-z0-9_-]{20,300}$")
 TITLES_ELSEWHERE = 5
 REASON_LENGTH = 200
+# Anthropic refusing this many requests in a row (a 400 for each) is a fault in the site: Claude stops.
+REJECTED_IN_A_ROW = 3
+# Evidence characters a typical request carries, for the most a request could cost before one is built.
+TYPICAL_EVIDENCE = 2500
 
 STOPPED = "Claude has stopped"
 AT_LIMIT = "Claude reached its monthly limit"
 
 PROBLEMS = {
     "key": "Anthropic did not accept the key. Make a new key in the Console and save it below.",
-    "credit": "Your Anthropic credit has run out or reached its limit. Add credit, then tap Ask Claude now.",
-    "model": "This key cannot use the chosen model. Choose another model below.",
+    "credit": "Your Anthropic credit has run out or reached the limit set in the Console. Add credit or raise "
+              "that limit, then tap Ask Claude now.",
+    "model": "This key cannot use the chosen model. Choose another model below, or check the key's workspace "
+             "in the Console.",
     "busy": "Anthropic was busy. Claude tries again at the next run.",
     "bug": "Claude stopped because of a fault in the site. It tries again tomorrow.",
 }
 # The problems that stop the runs until the owner acts or a day passes. A busy Anthropic ends one run only.
 STOPPING = {"key", "credit", "model", "bug"}
+ENV_KEY_REFUSED = "Anthropic did not accept the key in the server settings."
 
 SCHEMA = {
     "type": "object",
@@ -182,7 +189,7 @@ def write_key(text):
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, temp = tempfile.mkstemp(dir=path.parent, prefix=".claude-key-")
     try:
-        os.fchmod(handle, 0o600)
+        os.chmod(temp, 0o600)
         os.write(handle, text.encode())
         os.fsync(handle)
         os.close(handle)
@@ -197,38 +204,43 @@ def write_key(text):
         raise
 
 
-def save_key(text, client_factory=None, now=None):
-    """Check a key with Anthropic (a free request) and save it. Returns (saved, message for the owner)."""
-    import anthropic
+def save_key(text, now=None):
+    """Save a key. Returns (saved, message for the owner).
 
+    Only its shape is checked here, so the web app never loads the Anthropic library: the next run checks
+    it with Anthropic (free) before anything else, and the Claude box says so if Anthropic refuses it.
+    """
     text = (text or "").strip()
     if not KEY_PATTERN.match(text):
         return False, "That does not look like an Anthropic key. It starts sk-ant-. Copy it again from the Console."
-    state = ClaudeJudge.load()
-    client = (client_factory or make_client)(text, 10.0)
-    note = ""
     try:
-        client.models.retrieve(state.model)
-    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError):
-        return False, "Anthropic did not accept that key. Make a new key in the Console and try again."
-    except anthropic.NotFoundError:
-        note = " This key cannot use the chosen model, so choose another model below."
-    except anthropic.APIError:
-        note = " Anthropic could not be reached to check it, so the first run will tell you if it is wrong."
-    write_key(text)
+        write_key(text)
+    except OSError:
+        logger.exception("Claude judge: the key file could not be written")
+        return False, "The server could not save the key, so nothing was saved. The folder beside the database is not writable."
     now = now or timezone.now()
+    state = ClaudeJudge.load()
     ClaudeJudge.objects.filter(pk=state.pk).update(
-        key_hint=text[-4:], key_saved_at=now, problem="", problem_at=None,
+        key_hint=text[-4:], key_saved_at=now, asked_at=now, problem="", problem_at=None,
     )
-    return True, f"Key saved. It ends in {text[-4:]} and is never shown again.{note}"
+    if state.enabled:
+        follow = "Claude checks it with Anthropic within 5 minutes."
+    else:
+        follow = "Next, tap Switch Claude on: its first run checks the key with Anthropic."
+    return True, f"Key saved. It ends in {text[-4:]} and is never shown again. {follow}"
 
 
 def forget_key():
+    """Delete the saved key. Returns whether it is gone."""
     try:
         key_path().unlink()
     except FileNotFoundError:
         pass
-    ClaudeJudge.objects.filter(pk=ClaudeJudge.load().pk).update(key_hint="", key_saved_at=None)
+    except OSError:
+        logger.exception("Claude judge: the key file could not be deleted")
+        return False
+    ClaudeJudge.objects.filter(pk=ClaudeJudge.load().pk).update(key_hint="", key_saved_at=None, asked_at=None)
+    return True
 
 
 # Cost --------------------------------------------------------------------------------------------
@@ -260,12 +272,21 @@ def worst_case_micros(params, model):
     """The most one request could cost: its whole prompt written to the cache and every output token,
     and the same again at the dearest rates when a fallback could run it a second time."""
     characters = len(params["system"][0]["text"]) + sum(len(m["content"]) for m in params["messages"])
+    return worst_from_characters(characters, model)
+
+
+def worst_from_characters(characters, model):
     tokens = math.ceil(characters / 3)
     _, write, _, out = rates(model)
     worst = tokens * write + MAX_TOKENS * out
     if model in FALLBACK_MODELS:
         worst += tokens * DEAREST[1] + MAX_TOKENS * DEAREST[3]
     return math.ceil(worst)
+
+
+def typical_worst(model):
+    """The most a typical request could cost, for saying whether this month's limit is reached."""
+    return worst_from_characters(len(SYSTEM_PROMPT) + TYPICAL_EVIDENCE, model)
 
 
 def month_start(now):
@@ -331,6 +352,12 @@ def url_path(url):
     return urlsplit(url or "").path[:200]
 
 
+def pair_key(first, second):
+    """One key for a pair, whichever of the two is kept."""
+    low, high = sorted((first.pk, second.pk))
+    return f"pair:{low}:{high}"
+
+
 def fingerprint(evidence):
     """What decides whether a row is asked again: the row and its titles, never other shops' prices,
     the model or the effort."""
@@ -383,7 +410,7 @@ class Evidence:
         evidence = {
             "row": key, "kind": "found", "ours": ours(product),
             "shop": row.retailer.name, "shop_title": row.title, "price": str(row.price) if row.price else "none",
-            "stock": row.get_availability_display() or "not recorded", "url_path": url_path(row.url),
+            "stock": row.get_availability_display() or "not recorded", "shop_url_path": url_path(row.url),
             "finder_score": row.confidence, "title_reads_as": reads_as(product, row.title),
             "set_codes_in_title": codes_in(row.title), "price_band": price_band(row.price, others),
             "shop_titles_elsewhere": self.elsewhere(product.pk, row.retailer_id),
@@ -399,7 +426,7 @@ class Evidence:
             "row": key, "kind": "offer", "ours": ours(product),
             "shop": listing.retailer.name, "shop_title": listing.title, "price": str(listing.shown_price),
             "delivery_known": listing.delivery_known, "stock": listing.get_availability_display(),
-            "url_path": url_path(listing.url), "site_note": listing.sanity_reason,
+            "shop_url_path": url_path(listing.url), "site_note": listing.sanity_reason,
             "title_reads_as": reads_as(product, listing.title), "set_codes_in_title": codes_in(listing.title),
             "price_band": price_band(listing.price, others),
             "shop_titles_elsewhere": self.elsewhere(product.pk, listing.retailer_id),
@@ -410,7 +437,7 @@ class Evidence:
         def side(product):
             return {**ours(product), "shop_titles": self.elsewhere(product.pk, None)}
 
-        key = f"pair:{keep.pk}:{other.pk}"
+        key = pair_key(keep, other)
         evidence = {
             "row": key, "kind": "pair", "first": side(keep), "second": side(other),
             "same_barcode": bool(keep.ean) and keep.ean == other.ean,
@@ -419,31 +446,46 @@ class Evidence:
 
 
 def asked_before():
-    """{row key: (number of asks, {fingerprints answered or given up on})} for every row asked."""
+    """{row key: (asks that count, {fingerprints settled})} for every row asked.
+
+    A request that never reached Anthropic, or met a busy Anthropic, does not count. One that timed out
+    counts (it may have been paid for) but settles nothing, so the row is asked again. An answer, a
+    refusal, a cut-off or Anthropic refusing the request settles that row as it was.
+    """
     counts = {}
     for row_key, fp, outcome in Ask.objects.values_list("row_key", "fingerprint", "outcome"):
         n, seen = counts.get(row_key, (0, set()))
         if outcome != Ask.Outcome.ERROR:
+            n += 1
+        if outcome not in (Ask.Outcome.ERROR, Ask.Outcome.SENT):
             seen.add(fp)
-        counts[row_key] = (n + 1, seen)
+        counts[row_key] = (n, seen)
     return counts
 
 
 def waiting(now=None):
     """The rows to ask about, in order: the cheapest doubtful prices (most clicked first), the wrong
     matches (both prices together), the pages found at another shop (most wanted first), the possible
-    duplicates. Rows already answered by anyone, untitled rows, unchanged rows already asked, and rows
-    asked ASK_LIMIT times are left out."""
+    duplicates. Left out: rows anyone has answered (an undone answer included), prices the owner
+    counted, untitled rows, rows the owner answered after Claude, unchanged rows already asked, and rows
+    asked ASK_LIMIT times."""
     from .finder import interest_scores
 
     answered = autopilot.answered_listings()
     answered_rows = set(CheckAnswer.objects.filter(shop_product__isnull=False).values_list("shop_product_id", flat=True))
-    doubtful = [listing for listing in checks.doubtful_prices(now) if listing.title and listing.pk not in answered]
+    settled = {frozenset(pair) for pair in CheckAnswer.objects.filter(
+        kind__in=[Kind.APART, Kind.MERGE], product__isnull=False, other__isnull=False).values_list("product_id", "other_id")}
+    owner_said = set(Ask.objects.exclude(owner_answer="").values_list("row_key", flat=True))
+
+    def open_offer(listing):
+        return bool(listing.title) and listing.pk not in answered and listing.trusted_price is None
+
+    doubtful = [listing for listing in checks.doubtful_prices(now) if open_offer(listing)]
     wrong = [(product, summary) for product, summary in checks.wrong_matches()
-             if summary.best.title and summary.second.title
-             and summary.best.pk not in answered and summary.second.pk not in answered]
+             if open_offer(summary.best) and open_offer(summary.second)]
     found = [row for row in checks.found_stockists(now) if row.title and row.pk not in answered_rows]
-    pairs = [(keep, other) for keep, others in checks.duplicates() for other in others]
+    pairs = [(keep, other) for keep, others in checks.duplicates() for other in others
+             if frozenset((keep.pk, other.pk)) not in settled]
     ids = ({listing.product_id for listing in doubtful} | {product.pk for product, _ in wrong}
            | {row.suggested_id for row in found} | {p.pk for pair in pairs for p in pair})
     build = Evidence(ids)
@@ -461,7 +503,7 @@ def waiting(now=None):
     keep, seen_keys = [], set()
     for row in rows:
         n, seen = before.get(row.key, (0, set()))
-        if row.key in seen_keys or n >= ASK_LIMIT or row.fingerprint in seen:
+        if row.key in seen_keys or row.key in owner_said or n >= ASK_LIMIT or row.fingerprint in seen:
             continue
         seen_keys.add(row.key)
         keep.append(row)
@@ -474,7 +516,9 @@ def request_params(state, row, cache):
     system = {"type": "text", "text": SYSTEM_PROMPT}
     if cache:
         system["cache_control"] = {"type": "ephemeral"}
-    content = "<evidence>" + json.dumps(row.evidence, sort_keys=True, ensure_ascii=False) + "</evidence>"
+    # No shop's text can close the evidence tag: angle brackets are written as JSON escapes.
+    data = json.dumps(row.evidence, sort_keys=True, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
+    content = "<evidence>" + data + "</evidence>"
     return {
         "model": state.model,
         "max_tokens": MAX_TOKENS,
@@ -533,22 +577,61 @@ def from_fallback(message, model):
 
 
 def problem_of(error):
-    """The PROBLEMS kind for an Anthropic error."""
+    """The PROBLEMS kind for an Anthropic error, or "rejected" when Anthropic refused that one request."""
     import anthropic
 
-    if isinstance(error, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+    if isinstance(error, anthropic.AuthenticationError):
         return "key"
-    if isinstance(error, anthropic.NotFoundError):
+    if isinstance(error, (anthropic.PermissionDeniedError, anthropic.NotFoundError)):
         return "model"
-    if isinstance(error, (anthropic.RateLimitError, anthropic.APITimeoutError, anthropic.APIConnectionError)):
+    if isinstance(error, (anthropic.RateLimitError, anthropic.APIConnectionError)):
         return "busy"
     if isinstance(error, anthropic.APIStatusError):
         message = str(getattr(error, "message", "") or error).lower()
-        if error.status_code == 402 or getattr(error, "type", "") == "billing_error" or "credit balance" in message:
+        if error.status_code == 402 or getattr(error, "type", "") == "billing_error" \
+                or "credit balance" in message or "usage limit" in message:
             return "credit"
-        if error.status_code >= 500:
+        if error.status_code >= 500 or getattr(error, "type", "") == "overloaded_error":
             return "busy"
+        if 400 <= error.status_code < 500:
+            return "rejected"
     return "bug"
+
+
+def settle_failed(ask, error, kind, worst):
+    """Record a request that got no answer. A timeout may have been paid for, so its worst case stays
+    counted; a request Anthropic refused, or one that never reached it, cost nothing."""
+    import anthropic
+
+    timed_out = isinstance(error, anthropic.APITimeoutError)
+    status = getattr(error, "status_code", None)
+    detail = str(getattr(error, "message", "") or error)
+    outcome = Ask.Outcome.SENT if timed_out else Ask.Outcome.REJECTED if kind == "rejected" else Ask.Outcome.ERROR
+    Ask.objects.filter(pk=ask.pk).update(
+        outcome=outcome, reserved_micros=worst if timed_out else 0,
+        reason=clean(f"Anthropic {status or 'connection'}: {detail}"),
+        request_id=(getattr(error, "request_id", None) or "")[:80],
+    )
+    if kind == "bug" and status is None and not isinstance(error, anthropic.APIError):
+        logger.exception("Claude judge fault", exc_info=error)
+    elif kind != "busy":
+        logger.warning("Claude judge: Anthropic %s %s %s (request %s)", status, getattr(error, "type", ""),
+                       detail[:300], getattr(error, "request_id", ""))
+
+
+def check_key(client, state, previous_run):
+    """Before the first request after a key is saved (or after it was refused), check it with Anthropic,
+    which is free. Raises Stop when Anthropic refuses it."""
+    saved_since = state.key_saved_at and (previous_run is None or state.key_saved_at > previous_run)
+    if not (saved_since or state.problem in ("key", "model")):
+        return
+    try:
+        client.models.retrieve(state.model)
+    except Exception as error:
+        kind = problem_of(error)
+        if kind in ("busy", "rejected"):
+            return
+        raise Stop(kind, str(error)) from error
 
 
 # Deciding ----------------------------------------------------------------------------------------
@@ -608,30 +691,38 @@ def act(row, ask, action, now):
             autopilot.refuse_found(shop_row)
 
         pilot.answer(Kind.REFUSE, f'"{shop_row.title}" at {shop_row.retailer.name} is not {product.name}',
-                     f"{why} Checked: the row is still as Claude saw it.",
+                     f"{why} Checked: the row is still as Claude saw it",
                      act=refuse, shop_product=shop_row, product=product, price=shop_row.price, **refs)
     elif action == "link":
         shop_row, product = row.shop_product, row.product
 
         def link():
             unchanged(row)
-            return autopilot.link_found(shop_row, keep_ok=True)
+            # The shop's price and stock as Claude saw them: a read since then leaves it for the next run.
+            fresh = ShopProduct.objects.select_related("retailer", "suggested").get(pk=shop_row.pk)
+            if (fresh.price, fresh.availability, fresh.last_seen, fresh.suggested_id) != (
+                    shop_row.price, shop_row.availability, shop_row.last_seen, shop_row.suggested_id):
+                raise autopilot.Stale
+            return autopilot.link_found(fresh, keep_ok=True)
 
         pilot.answer(Kind.LINK, f"Linked {product.name} at {shop_row.retailer.name}, {sanity.money(shop_row.price)}",
                      f"{why} Checked: the price is close to the {sanity.money(row.rate)} other shops charge and "
-                     "is judged OK beside them.", act=link, shop_product=shop_row, product=product,
+                     "is judged OK beside them", act=link, shop_product=shop_row, product=product,
                      price=shop_row.price, **refs)
     elif action == "hide":
         listing = row.listing
 
         def hide():
             unchanged(row)
-            if not Listing.objects.filter(pk=listing.pk, is_active=True, price=listing.price).exists():
+            # Never a price the owner counted, hid or showed, nor one whose verdict has changed.
+            current = Listing.objects.filter(pk=listing.pk, is_active=True, price=listing.price, sanity=listing.sanity,
+                                             trusted_price__isnull=True)
+            if not current.exists() or CheckAnswer.objects.filter(listing_id=listing.pk).exists():
                 raise autopilot.Stale
             autopilot.hide(listing)
 
         pilot.answer(Kind.HIDE, f"Hid {sanity.money(listing.shown_price)} for {listing.product.name} at "
-                     f"{listing.retailer.name}", f"{why} Checked: the price is still the one Claude saw.",
+                     f"{listing.retailer.name}", f"{why} Checked: the price is still the one Claude saw",
                      act=hide, listing=listing, product=listing.product, price=listing.price, **refs)
     elif action == "apart":
         keep, other = row.product, row.other
@@ -640,7 +731,7 @@ def act(row, ask, action, now):
             if not any(k.pk == keep.pk and any(o.pk == other.pk for o in others) for k, others in checks.duplicates()):
                 raise autopilot.Stale
 
-        pilot.answer(Kind.APART, f"{other.name} is not {keep.name}", f"{why} Checked: still suggested as duplicates.",
+        pilot.answer(Kind.APART, f"{other.name} is not {keep.name}", f"{why} Checked: still suggested as duplicates",
                      act=apart, product=keep, other=other, **refs)
     return bool(pilot.done)
 
@@ -710,7 +801,11 @@ class Result:
 
 
 def run(client=None, now=None, dry_run=False, force=False):
-    """One run: the free autopilot first, then Claude on what is left. Returns a Result."""
+    """One run: the free autopilot first (when it is on), then Claude on what is left. Returns a Result.
+
+    The settings are read again before every request, so Switch Claude off, Suggest only, Forget the key
+    and a lower limit take effect at once, even in the middle of a run.
+    """
     from . import notify
 
     now = now or timezone.now()
@@ -720,55 +815,62 @@ def run(client=None, now=None, dry_run=False, force=False):
     if why_not:
         result.note = why_not
         return result
-    if not dry_run:
+    if not dry_run and autopilot.enabled():
         autopilot.run(now=now)
     rows = waiting(now)
-    result.left = len(rows)
+    total = len(rows)
     rows = rows[:ROWS_PER_RUN]
     if dry_run:
         for row in rows:
             params = request_params(state, row, cache=len(rows) > 1)
             result.lines.append(f"{row.key}: worst case {dollars(worst_case_micros(params, state.model))}")
             result.lines.append(json.dumps(row.evidence, sort_keys=True, ensure_ascii=False))
-        result.note = f"Would ask about {len(rows)} rows."
+        result.note = f"Would ask about {len(rows)} rows"
         return result
-    limit = monthly_limit_micros(state)
     started = time.monotonic()
     client = client or make_client(key())
     answers, trusted = {}, {}
+    rejected = 0
+    previous_run = state.last_run_at
     ClaudeJudge.objects.filter(pk=state.pk).update(last_run_at=now)
     try:
+        check_key(client, state, previous_run)
         for row in rows:
+            state = ClaudeJudge.load()
+            if not state.enabled or not key():
+                result.note = "Claude was switched off"
+                break
             if time.monotonic() - started > RUN_SECONDS:
-                result.note = "Stopped for time."
+                result.note = "Stopped for time"
                 break
             params = request_params(state, row, cache=len(rows) > 1)
             worst = worst_case_micros(params, state.model)
-            if spent_this_month(now) + worst > limit:
-                notify.owner(AT_LIMIT, AT_LIMIT, notify.CHECKS_PATH, "Claude stops until next month or a higher limit.", now=now)
-                result.note = "Reached the monthly limit."
+            moment = timezone.now()
+            if spent_this_month(moment) + worst > monthly_limit_micros(state):
+                notify.owner(AT_LIMIT, AT_LIMIT, notify.CHECKS_PATH,
+                             "Claude waits until next month, or until you raise its monthly limit.", now=moment)
+                result.note = "Reached the monthly limit"
                 break
             if result.spent + worst > RUN_BUDGET_USD * 1_000_000:
-                result.note = "Reached the limit for one run."
+                result.note = "Reached the limit for one run"
                 break
             ask = Ask.objects.create(
                 kind=row.kind, row_key=row.key, fingerprint=row.fingerprint, model_asked=state.model,
-                effort=state.effort, evidence=row.evidence, reserved_micros=worst, asked_at=now,
+                effort=state.effort, evidence=row.evidence, reserved_micros=worst, asked_at=moment,
                 shop_product=row.shop_product, listing=row.listing, product=row.product, other=row.other,
             )
             try:
                 message = send(client, params)
             except Exception as error:
                 kind = problem_of(error)
-                # Nothing is known about what a cut connection used: its reservation stays counted.
-                cut = kind == "busy" and not hasattr(error, "status_code")
-                Ask.objects.filter(pk=ask.pk).update(
-                    outcome=Ask.Outcome.ERROR if not cut else Ask.Outcome.SENT,
-                    reserved_micros=worst if cut else 0,
-                )
-                if kind == "bug" and not hasattr(error, "status_code"):
-                    logger.exception("Claude judge fault")
+                settle_failed(ask, error, kind, worst)
+                if kind == "rejected":
+                    rejected += 1
+                    if rejected >= REJECTED_IN_A_ROW:
+                        raise Stop("bug", str(error)) from error
+                    continue
                 raise Stop(kind, str(error)) from error
+            rejected = 0
             outcome, answer, category = read_answer(message, row)
             cost = cost_micros(message, state.model)
             usage = message.usage
@@ -792,9 +894,8 @@ def run(client=None, now=None, dry_run=False, force=False):
             answers[row.key] = answer
             trusted[row.key] = not from_fallback(message, state.model)
             # A wrong match is decided once both prices are answered.
-            if row.partner and row.partner not in answers:
-                if any(r.key == row.partner for r in rows):
-                    continue
+            if row.partner and row.partner not in answers and any(r.key == row.partner for r in rows):
+                continue
             for todo in ([row] if not row.partner else [r for r in rows if r.key in (row.key, row.partner)]):
                 todo_ask = ask if todo.key == row.key else Ask.objects.filter(row_key=todo.key).order_by("-pk").first()
                 todo_answer = answers.get(todo.key)
@@ -813,23 +914,28 @@ def run(client=None, now=None, dry_run=False, force=False):
                     Ask.objects.filter(pk=todo_ask.pk).update(action=Ask.Action.STALE)
     except Stop as stopped:
         stop(state, stopped.kind, now)
-        result.note = PROBLEMS[stopped.kind]
+        result.note = problem_text(stopped.kind)
     except DatabaseError:
         logger.warning("Claude judge: the database was busy; the run ends here.", exc_info=True)
-        result.note = "The database was busy."
+        result.note = "The database was busy"
     else:
         ClaudeJudge.objects.filter(pk=state.pk).update(problem="", problem_at=None)
-    result.left = max(0, result.left - result.asked)
-    note = (f"asked {result.asked}, sorted {result.acted}, {result.suggested} suggestion"
-            f"{'s' if result.suggested != 1 else ''}, {result.left} left for you")
+    not_asked = max(0, total - result.asked)
+    note = f"asked {result.asked}, sorted {result.acted}, {result.suggested} for you to check, {not_asked} not asked yet"
     if result.note:
-        note += f". {result.note}"
+        note += f". {result.note.rstrip('.')}"
     ClaudeJudge.objects.filter(pk=state.pk).update(last_run_note=note[:200])
     if result.acted:
         from .signals import clear_list_caches
 
         clear_list_caches(force=True)
     return result
+
+
+def problem_text(kind):
+    if kind == "key" and settings.RIPRAPTOR_CLAUDE_API_KEY:
+        return ENV_KEY_REFUSED
+    return PROBLEMS[kind]
 
 
 # The owner's side --------------------------------------------------------------------------------
@@ -843,7 +949,7 @@ def note_owner(row_key, answer):
 
 
 def latest_answers(keys):
-    """{row key: the latest answered ClaudeAsk} for the rows on the page, in one query."""
+    """{row key: the latest answered ClaudeAsk} for these rows, in one query."""
     found = {}
     if not keys:
         return found
@@ -852,8 +958,29 @@ def latest_answers(keys):
     return found
 
 
+def attach_answers(doubtful, wrong, found, duplicates):
+    """Give each row the page shows a ``claude`` attribute: Claude's latest answer about it while the row is
+    still what Claude was asked about and the owner has not answered it since, else None. Three queries."""
+    ids = ({listing.product_id for listing in doubtful} | {product.pk for product, _ in wrong}
+           | {row.suggested_id for row in found} | {p.pk for keep, others in duplicates for p in [keep, *others]})
+    build = Evidence(ids)
+    rows = [(build.offer(listing), listing) for listing in doubtful]
+    for product, summary in wrong:
+        for offer in (summary.best, summary.second):
+            offer.product = product
+            rows.append((build.offer(offer), offer))
+    rows += [(build.found(row), row) for row in found]
+    rows += [(build.pair(keep, other), other) for keep, others in duplicates for other in others]
+    latest = latest_answers({row.key for row, _ in rows})
+    for row, item in rows:
+        ask = latest.get(row.key)
+        item.claude = ask if ask is not None and ask.fingerprint == row.fingerprint and not ask.owner_answer else None
+
+
 def page_status(now=None):
-    """What the Claude box on Things to check shows. A few queries, whatever the number of asks."""
+    """What the Claude box on Things to check shows. A few queries, whatever the number of asks. Never writes."""
+    from . import crawl
+
     now = now or timezone.now()
     state = ClaudeJudge.current()
     spent = spent_this_month(now)
@@ -865,46 +992,56 @@ def page_status(now=None):
     )
     has_key = bool(key())
     limit = monthly_limit_micros(state)
+    stopped = state.problem in STOPPING and state.problem_at and now - state.problem_at < STOPPED_FOR
     if not settings.RIPRAPTOR_CLAUDE:
         status = "Claude is switched off in the server settings."
     elif not has_key:
         status = "Claude needs a key. Paste it below and tap Save key."
-    elif state.problem in STOPPING and state.problem_at and now - state.problem_at < STOPPED_FOR:
-        status = f"Claude has stopped. {PROBLEMS[state.problem]}"
+    elif stopped:
+        status = f"Claude has stopped. {problem_text(state.problem)}"
     elif not state.enabled:
-        status = "Claude is off."
-    elif spent >= limit:
+        status = "Claude is off. Tap Switch Claude on to start it in trial."
+    elif crawl.all_paused():
+        status = "Pause all is on, so Claude waits."
+    elif spent + typical_worst(state.model) > limit:
         next_month = (month_start(now) + timedelta(days=32)).replace(day=1)
-        status = f"Claude reached this month's limit. It starts again on {next_month:%-d %B}."
+        status = (f"Claude reached this month's limit. It starts again on {next_month:%-d %B}, or when you raise "
+                  "the limit below.")
     elif state.may_act:
         status = "Claude is on. It acts only when it is sure and the site's checks agree. Each act is listed with Undo."
     else:
-        status = "Claude is on, in trial. It suggests and does not act."
+        status = "Claude is on, in trial. It suggests and does not act. Tap Let Claude act once you agree with it."
+    asked = state.asked_at is not None and (state.last_run_at is None or state.asked_at > state.last_run_at)
     return {
-        "state": state, "status": status, "has_key": has_key,
+        "state": state, "status": status, "has_key": has_key, "server_on": settings.RIPRAPTOR_CLAUDE,
         "env_key": bool(settings.RIPRAPTOR_CLAUDE_API_KEY),
         "spent": dollars(spent), "limit": dollars(limit), "answers": answers,
         "each": dollars(spent // answers) if answers else "",
         "agreed": agreement["agreed"], "agreement_total": agreement["total"],
         "models": [(code, label, cost) for code, (label, cost) in MODELS.items()],
         "max_monthly": settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD,
-        "asked": state.asked_at is not None and (state.last_run_at is None or state.asked_at > state.last_run_at),
+        "asked": asked and settings.RIPRAPTOR_CLAUDE and due(state, now) == "",
+        "open_settings": not has_key or state.problem in ("key", "model"),
     }
 
 
 def sure_pairs(groups):
-    """[(keep, other, ask)] for the duplicate pairs on the page Claude is sure are the same product, as
-    the page shows them now."""
+    """[(keep, other, ask)] for the duplicate pairs on the page Claude is sure are the same product, as the
+    page shows them now: never one already merged or undone, one the owner answered, or a fallback's."""
     builder = Evidence({p.pk for keep, others in groups for p in [keep, *others]})
-    keys = {f"pair:{keep.pk}:{other.pk}": (keep, other) for keep, others in groups for other in others}
-    latest = latest_answers(keys)
+    pairs = {pair_key(keep, other): (keep, other) for keep, others in groups for other in others}
+    latest = latest_answers(pairs)
+    used = set(CheckAnswer.objects.filter(ask__in=[ask.pk for ask in latest.values()]).values_list("ask_id", flat=True))
     found = []
-    for row_key, (keep, other) in keys.items():
+    for row_key, (keep, other) in pairs.items():
         ask = latest.get(row_key)
-        if ask is None or not sure({"verdict": ask.verdict, "confidence": ask.confidence,
-                                    "differences": ask.differences}, "same"):
+        if ask is None or ask.pk in used or ask.owner_answer or ask.model_answered != ask.model_asked:
+            continue
+        if not sure({"verdict": ask.verdict, "confidence": ask.confidence, "differences": ask.differences}, "same"):
             continue
         if ask.fingerprint != builder.pair(keep, other).fingerprint:
             continue
         found.append((keep, other, ask))
     return found
+
+

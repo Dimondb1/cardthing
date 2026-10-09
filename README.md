@@ -463,9 +463,9 @@ answers on Opus. Low effort costs about half, high about twice.
 buy credit; under Limits set a monthly spend limit (Anthropic then stops the
 account at that amount, whatever the site does); under API keys create a
 key. In Things to check open **Claude settings and key**, paste it and tap
-**Save key**: it is checked with Anthropic (free), saved in a file beside the
-database that only the site can read (never in the database or its backups),
-and never shown again. Then tap **Switch Claude on**. To stop: **Switch Claude
+**Save key**: it is saved in a file beside the database that only the site
+can read (never in the database or its backups) and never shown again, and
+Claude's first run checks it with Anthropic, which is free. Then tap **Switch Claude on**. To stop: **Switch Claude
 off**, **Forget the key**, or delete the key in the Console.
 
 **When it runs.** Cron runs `judge_checks` every five minutes on its own lock.

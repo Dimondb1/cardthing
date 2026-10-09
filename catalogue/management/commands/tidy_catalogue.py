@@ -70,7 +70,10 @@ class Command(BaseCommand):
                 product.product_type = kind
                 product.save(update_fields=["product_type"])
         if name != product.name:
-            other = Product.objects.filter(game=product.game, name=name).exclude(pk=product.pk).first()
+            other = (
+                Product.objects.filter(game=product.game, name=name).exclude(pk=product.pk)
+                .exclude(is_active=False, slug__in=ProductAlias.objects.values("slug")).first()
+            )
             if other is not None:
                 self.stdout.write(f"{'would merge' if dry_run else 'merged'}: {product.name} -> {other.name}")
                 if not dry_run:

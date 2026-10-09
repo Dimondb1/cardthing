@@ -1427,10 +1427,12 @@ def checks_page(request):
             wanted = request.POST.get("keep", ""), sorted(request.POST.getlist("other"))
             for keep, others in checks.duplicates():
                 if (str(keep.pk), sorted(str(o.pk) for o in others)) == wanted:
+                    # Keys first: a merge deletes the others.
+                    keys = [judge.pair_key(keep, other) for other in others]
                     with transaction.atomic():
                         merge(keep, others)
-                    for other in others:
-                        judge.note_owner(f"pair:{keep.pk}:{other.pk}", "same")
+                    for row_key in keys:
+                        judge.note_owner(row_key, "same")
                     clear_list_caches(force=True)
                     messages.success(request, f"Merged into {keep.name}. The old addresses redirect to it.")
                     break
@@ -1445,7 +1447,7 @@ def checks_page(request):
                 messages.warning(request, "That group has changed since the page loaded. Check it again below.")
             else:
                 autopilot.owner_apart(*pair)
-                judge.note_owner(f"pair:{pair[0].pk}:{pair[1].pk}", "different")
+                judge.note_owner(judge.pair_key(*pair), "different")
                 messages.success(request, f"Noted: {pair[1].name} is not {pair[0].name}. They are not suggested together again.")
         elif action == "undo":
             pk = request.POST.get("answer", "")
@@ -1473,14 +1475,8 @@ def checks_page(request):
     tally = Counter(answer.kind for answer in answers if answer.undone_at is None)
     doubtful, wrong, duplicates = checks.doubtful_prices(now), checks.wrong_matches(), checks.duplicates()
     found = checks.found_stockists(now)
-    # Claude's latest answer for each row on the page, in one query, shown under the row.
-    rows = ([(f"offer:{listing.pk}", listing) for listing in doubtful]
-            + [(f"offer:{offer.pk}", offer) for _, summary in wrong for offer in (summary.best, summary.second)]
-            + [(f"found:{row.pk}", row) for row in found]
-            + [(f"pair:{keep.pk}:{other.pk}", other) for keep, others in duplicates for other in others])
-    said = judge.latest_answers({row_key for row_key, _ in rows})
-    for row_key, item in rows:
-        item.claude = said.get(row_key)
+    # Claude's latest answer for each row on the page, while the row is still as Claude saw it.
+    judge.attach_answers(doubtful, wrong, found, duplicates)
     context = {
         **admin.site.each_context(request), "title": "Things to check",
         "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
@@ -1521,7 +1517,7 @@ def merge_sure(request):
             note = merge_undoable(keep, [other])
             CheckAnswer.objects.create(
                 kind=CheckAnswer.Kind.MERGE, what=f"Merged {other.name} into {keep.name}",
-                why=f"Claude: {ask.reason} You tapped Merge the pairs Claude is sure are the same.",
+                why=f"Claude: {ask.reason} You tapped Merge the pairs Claude is sure are the same",
                 product=keep, other=other, ask=ask, undo_note=note,
             )
             judge.note_owner(ask.row_key, "same")
@@ -1548,6 +1544,8 @@ def claude_tap(request, action):
         messages.success(request, "Claude will look at the waiting rows within 5 minutes. Reload this page to see its answers.")
     elif action in ("claude_on", "claude_off"):
         update["enabled"] = action == "claude_on"
+        if not update["enabled"]:
+            update["asked_at"] = None
         messages.success(request, "Claude is on. It starts in trial: it suggests and does not act." if update["enabled"] and not state.may_act
                          else "Claude is on." if update["enabled"] else "Claude is off. Nothing is sent and nothing is spent.")
     elif action in ("claude_act_on", "claude_act_off"):
@@ -1561,7 +1559,7 @@ def claude_tap(request, action):
         except (InvalidOperation, ValueError):
             budget = None
         if model not in judge.MODELS or effort not in ClaudeJudge.Effort.values or budget is None \
-                or not 0 <= budget <= settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD:
+                or not budget.is_finite() or not 0 <= budget <= settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD:
             messages.warning(request, f"Choose a model and effort, and a monthly limit from 0 to "
                                       f"{settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD} dollars.")
         else:
@@ -1573,8 +1571,10 @@ def claude_tap(request, action):
         saved, message = judge.save_key(request.POST.get("claude_key", ""))
         (messages.success if saved else messages.warning)(request, message)
     elif action == "claude_key_forget":
-        judge.forget_key()
-        messages.success(request, "The key is forgotten. Claude sends nothing until a key is saved again.")
+        if judge.forget_key():
+            messages.success(request, "The key is forgotten. Claude sends nothing until a key is saved again.")
+        else:
+            messages.warning(request, "The server could not delete the key file. Switch Claude off, and delete the key in the Console.")
     if update:
         ClaudeJudge.objects.filter(pk=state.pk).update(**update)
 

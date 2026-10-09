@@ -306,9 +306,21 @@ python manage.py suspect_savings
 lists those products with both links, so you can untick "show on site" on
 whichever listing is the wrong product.
 
+Every price check that changes a price or its stock is also judged against
+the other shops' prices for the same product (`catalogue/sanity.py`). A
+price under a third of, or over four times, what two or more other shops
+charge is kept out of every comparison and shown on the product page as not
+counted. A price well under or over twice the others, or two shops that are
+far apart, is doubtful: still shown, but never claimed as a saving, a badge
+or a price drop, and listed for you to look at. Marketplaces are judged but
+never judge anyone. Nothing is deleted, and the verdict is worked out again
+on the next change.
+
 All of this can be done from a phone, without the server console: admin
-has a **Things to check** page (`/admin/checks/`) that lists the wrong
-matches with a Hide button under each price, the possible duplicates the
+has a **Things to check** page (`/admin/checks/`) that lists doubtful prices
+with "This price is right" (it then counts while it moves less than 10% for
+30 days) and "Hide this one", the prices excluded automatically with "Show it
+anyway", the wrong matches with a Hide button under each price, the possible duplicates the
 `--loose` rule finds with a Merge button for each group (only the group
 exactly as shown is merged), and the shops whose delivery charge is not
 known with a link to fill it in.

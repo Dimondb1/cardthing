@@ -886,10 +886,11 @@ class WriteSkippingTests(TestCase):
         offers = [self.offer(0), self.offer(1, price="38.00"), self.offer(2)]
         checked_at = timezone.now()
         with mock.patch("catalogue.signals.clear_list_caches") as cleared:
-            # Four lookups (links, barcodes, catalogue, ignored), a fetch per offer, seven writes and reads for
-            # the one change (its save, its product, the day's lowest price), one stamp for the other two
-            # and the out-of-stock sweep. Rewriting all three would cost about thirty.
-            with self.assertNumQueries(16):
+            # Four lookups (links, barcodes, catalogue, ignored), a fetch per offer, nine writes and reads for
+            # the one change (its save, its verdict read and last good price, its product, the day's lowest
+            # price), one stamp for the other two with one look for verdicts to heal, and the out-of-stock
+            # sweep. Rewriting all three would cost about thirty.
+            with self.assertNumQueries(19):
                 found, updated, unmatched = apply_offers(self.retailer, offers, checked_at=checked_at)
         self.assertEqual((found, updated, unmatched), (3, 3, []))
         self.assertEqual(cleared.call_count, 1)
@@ -958,7 +959,8 @@ class WriteSkippingTests(TestCase):
 
         from . import importers
 
-        with mock.patch.object(importers, "STAMP_CHUNK", 2), self.assertNumQueries(2):
+        # Per chunk: the stamp and one look for listings whose verdict needs judging again.
+        with mock.patch.object(importers, "STAMP_CHUNK", 2), self.assertNumQueries(4):
             importers.stamp_checked([l.pk for l in self.listings], timezone.now())
 
     def test_a_changed_availability_still_records_a_restock(self):

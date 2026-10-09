@@ -14,10 +14,10 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import OperationalError
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, FloatField, Min, OuterRef, Subquery
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, FloatField, Min, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from .models import DailyLowestPrice, Listing, OutboundClick, Product, Restock, Retailer
+from .models import DailyLowestPrice, Listing, OutboundClick, Product, Restock, Retailer, stale_cutoff
 from .offers import MAX_REAL_PERCENT
 
 # A listing that flips out and back within this long is one restock, not two.
@@ -72,7 +72,7 @@ def drop_if_locked(what):
         logger.warning("%s not counted: %s", what, exc)
 
 
-def record_check(listing, *, price, delivery_cost, availability, checked_at=None):
+def record_check(listing, *, price, delivery_cost, availability, checked_at=None, new=False):
     """Save one check of a listing. ``delivery_cost`` None means the charge is not known: it is stored as
     unknown, never as free.
 
@@ -82,14 +82,29 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     saved, its price stays, with no restock and no history. It never makes a listing buyable or marks its
     old price as freshly checked, so that price ages out as it would without the check. A new listing is
     not created. Returns None in every case.
+
+    The price is judged against the other shops (sanity.judge_product) when it, its delivery or the
+    stock changed, when the listing is new (``new``, for one just created by the caller) or when its
+    last verdict was not OK, so an unchanged price costs no extra queries.
     """
     checked_at = checked_at or timezone.now()
+    new = new or not listing.pk or listing._state.adding
     if price is None or price <= 0:
         if listing.pk and not listing._state.adding and availability == Listing.Availability.OUT_OF_STOCK:
+            moved = listing.availability != availability
             listing.availability = availability
             listing.last_checked = checked_at
             listing.save(update_fields=["availability", "last_checked"])
+            if moved:
+                # No longer a price the other shops are judged against.
+                judge(listing, checked_at)
         return None
+    cost = delivery_cost if delivery_cost is not None else Decimal("0.00")
+    changed = new or (
+        listing.price != price or listing.availability != availability
+        or listing.delivery_known != (delivery_cost is not None) or listing.delivery_cost != cost
+        or listing.sanity != Listing.Sanity.OK
+    )
     fields = ["price", "delivery_cost", "delivery_known", "availability", "last_checked"]
     was_in_stock = listing.availability == Listing.Availability.IN_STOCK
     restocked = availability == Listing.Availability.IN_STOCK and not was_in_stock and listing.pk and not listing._state.adding
@@ -98,13 +113,24 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
         fields.append("back_in_stock_at")
     listing.price = price
     listing.delivery_known = delivery_cost is not None
-    listing.delivery_cost = delivery_cost if delivery_cost is not None else Decimal("0.00")
+    listing.delivery_cost = cost
     listing.availability = availability
     listing.last_checked = checked_at
     listing.save(update_fields=fields)
     if restocked:
         record_restock(listing, checked_at)
+    if changed:
+        judge(listing, checked_at)
     return update_daily_lowest(listing.product, date=timezone.localdate(checked_at))
+
+
+def judge(listing, now):
+    """Judge the listing's product and copy the listing's own new verdict onto the instance."""
+    from .sanity import judge_product
+
+    verdict = judge_product(listing.product_id, now=now).get(listing.pk)
+    if verdict is not None:
+        listing.sanity, listing.sanity_reason, listing.sanity_ratio = verdict
 
 
 def apply_delivery_rules(retailer):
@@ -279,11 +305,21 @@ def price_drops(limit=6, days=None, today=None, game=None):
     products = Product.objects.for_lists()
     if game is not None:
         products = products.filter(game=game)
+    doubtful = Q(
+        listings__is_active=True, listings__retailer__is_active=True, listings__last_checked__gte=stale_cutoff(),
+        listings__availability__in=Listing.BUYABLE, listings__delivery_known=True,
+        listings__sanity=Listing.Sanity.DOUBTFUL,
+    )
     return (
         products
-        .annotate(previous_price=Subquery(previous, output_field=money))
+        .annotate(
+            previous_price=Subquery(previous, output_field=money),
+            doubtful_low=Min("listings__delivered_price", filter=doubtful),
+        )
         # Drops are measured on confirmed delivered prices only, like the history they come from.
         .filter(lowest_known__isnull=False, lowest_known=F("lowest_price"), lowest_price__lt=F("previous_price"))
+        # A doubtful cheapest price is not news until it is confirmed.
+        .filter(Q(doubtful_low__isnull=True) | Q(doubtful_low__gt=F("lowest_known")))
         .annotate(
             drop=ExpressionWrapper(F("previous_price") - F("lowest_price"), output_field=money),
             drop_ratio=ExpressionWrapper(

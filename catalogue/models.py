@@ -86,6 +86,7 @@ class ProductQuerySet(models.QuerySet):
         buyable = live & Q(
             listings__last_checked__gte=cutoff,
             listings__availability__in=Listing.BUYABLE,
+            listings__sanity__in=Listing.COUNTED,
         )
         known = Q(listings__delivery_known=True)
         return self.annotate(
@@ -357,7 +358,8 @@ class ListingQuerySet(models.QuerySet):
         return self.live().filter(last_checked__gte=stale_cutoff())
 
     def buyable(self):
-        return self.current().filter(availability__in=Listing.BUYABLE)
+        """Current, in stock or on pre-order, and not kept out of the comparison as impossible."""
+        return self.current().filter(availability__in=Listing.BUYABLE).exclude(sanity=Listing.Sanity.EXCLUDED)
 
 
 class Listing(models.Model):
@@ -369,6 +371,14 @@ class Listing(models.Model):
         OUT_OF_STOCK = "out_of_stock", "Out of stock"
 
     BUYABLE = [Availability.IN_STOCK, Availability.PREORDER]
+
+    class Sanity(models.TextChoices):
+        OK = "ok", "OK"
+        DOUBTFUL = "doubtful", "Doubtful"
+        EXCLUDED = "excluded", "Excluded"
+
+    # Verdicts that still count in the comparison; an excluded price is kept out of it.
+    COUNTED = [Sanity.OK, Sanity.DOUBTFUL]
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="listings")
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="listings")
@@ -400,6 +410,23 @@ class Listing(models.Model):
         help_text="When this shop last went from not having it to having it in stock.",
     )
     is_active = models.BooleanField("show on site", default=True)
+    # The verdict from the other shops' prices (catalogue/sanity.py). Written only when it changes.
+    sanity = models.CharField(
+        "price verdict", max_length=10, choices=Sanity.choices, default=Sanity.OK, db_index=True,
+        help_text="Excluded prices are kept out of the comparison; doubtful ones are listed under Things to check.",
+    )
+    sanity_reason = models.CharField("verdict reason", max_length=160, blank=True)
+    sanity_ratio = models.DecimalField(
+        "price against the others", max_digits=7, decimal_places=2, null=True, blank=True,
+        help_text="This price divided by what the other shops charge.",
+    )
+    sanity_at = models.DateTimeField("verdict changed", null=True, blank=True)
+    last_ok_price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    trusted_price = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text="A price the owner confirmed on Things to check. It counts while it moves less than 10% for 30 days.",
+    )
+    trusted_at = models.DateTimeField(null=True, blank=True)
 
     objects = ListingQuerySet.as_manager()
 
@@ -431,6 +458,7 @@ class Listing(models.Model):
             and self.retailer.is_active
             and not self.is_stale
             and self.availability in self.BUYABLE
+            and self.sanity != self.Sanity.EXCLUDED
         )
 
     def get_outbound_url(self):

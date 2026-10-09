@@ -793,6 +793,11 @@ ENTRIES = [
         placeholders=("time",),
     ),
     Entry(
+        "product.price.kept_out", T, "Price kept out of the comparison",
+        "Not counted: far from the other shops' prices.",
+        "Shown on a row whose price is so far from the other shops' prices that it is left out of the comparison.",
+    ),
+    Entry(
         "product.compare.stale", T, "Not checked recently",
         "Not checked since {date}",
         "Shown on a row when we have not been able to check that retailer recently.",

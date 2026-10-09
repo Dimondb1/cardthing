@@ -39,6 +39,7 @@ from . import pricing
 from .classify import GAMES, classify, find_game
 from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
 from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
+from .sanity import judge_product
 
 logger = logging.getLogger(__name__)
 
@@ -627,9 +628,20 @@ def unchanged(listing, offer, delivery):
 
 
 def stamp_checked(pks, checked_at):
-    """Mark listings as checked at ``checked_at`` without rewriting anything else, then empty ``pks``."""
+    """Mark listings as checked at ``checked_at`` without rewriting anything else, then empty ``pks``.
+
+    A listing whose last verdict was not OK is judged again although its price is the same, because the
+    other shops may have corrected theirs since: one query per chunk finds them.
+    """
     for start in range(0, len(pks), STAMP_CHUNK):
-        Listing.objects.filter(pk__in=pks[start:start + STAMP_CHUNK]).update(last_checked=checked_at)
+        chunk = pks[start:start + STAMP_CHUNK]
+        Listing.objects.filter(pk__in=chunk).update(last_checked=checked_at)
+        products = (
+            Listing.objects.filter(pk__in=chunk).exclude(sanity=Listing.Sanity.OK)
+            .order_by().values_list("product_id", flat=True).distinct()
+        )
+        for product_id in list(products):
+            judge_product(product_id, now=checked_at)
     pks.clear()
 
 
@@ -754,6 +766,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 delivery_cost=delivery,
                 availability=offer.availability,
                 checked_at=checked_at,
+                new=created,
             )
     except BaseException:
         # The listings seen so far were checked: keep that, unless the database cannot take it either.

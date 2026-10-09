@@ -1,23 +1,62 @@
 """
-What the owner should look at, for the Things to check page in admin: wrong
-matches behind impossible savings, products that look like duplicates, and
-shops whose delivery charge is not known. Each comes with its fix.
+What the owner should look at, for the Things to check page in admin: prices
+the other shops make doubtful or impossible, wrong matches behind impossible
+savings, products that look like duplicates, and shops whose delivery charge
+is not known. Each comes with its fix.
 """
 
-from django.db.models import Count, Q
+from datetime import timedelta
+
+from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 from . import offers
-from .models import Product, Retailer
+from .models import Listing, OutboundClick, Product, Retailer
 from .pricing import MARKETPLACES
+
+# How many doubtful or excluded prices the page lists at once.
+SANITY_ROWS = 50
+# Doubtful prices of the products people clicked through for in this many days come first.
+CLICK_DAYS = 7
+
+
+def doubtful_prices(now=None):
+    """Listings whose price the other shops make doubtful, most clicked products first, then oldest verdict."""
+    since = (now or timezone.now()) - timedelta(days=CLICK_DAYS)
+    clicks = (
+        OutboundClick.objects.filter(product=OuterRef("product_id"), created_at__gte=since)
+        .order_by().values("product").annotate(n=Count("id")).values("n")
+    )
+    return list(
+        Listing.objects.filter(sanity=Listing.Sanity.DOUBTFUL, is_active=True)
+        .annotate(clicks=Coalesce(Subquery(clicks, output_field=IntegerField()), Value(0)))
+        .select_related("product", "retailer")
+        .order_by("-clicks", "sanity_at", "pk")[:SANITY_ROWS]
+    )
+
+
+def excluded_prices():
+    """Listings kept out of the comparison because they are far from every other shop, newest verdict first."""
+    return list(
+        Listing.objects.filter(sanity=Listing.Sanity.EXCLUDED, is_active=True)
+        .select_related("product", "retailer")
+        .order_by("-sanity_at", "pk")[:SANITY_ROWS]
+    )
 
 
 def wrong_matches():
-    """[(product, summary)] where the cheapest price is too far under the next to be the same thing."""
+    """[(product, summary)] where the cheapest price is doubtful or too far under the next to be the same thing.
+
+    Products with a doubtful price come from doubtful_prices; the saving cap still catches a gap between
+    prices that have not been judged yet.
+    """
+    doubtful = {listing.product_id for listing in doubtful_prices()}
     products = Product.objects.for_lists().filter(lowest_price__isnull=False).prefetch_related(offers.buyable_prefetch())
     rows = []
     for product in products.order_by("name"):
         summary = offers.summarise(product)
-        if summary.suspect:
+        if (summary.suspect or product.pk in doubtful) and summary.best and summary.second:
             rows.append((product, summary))
     return rows
 

@@ -1,5 +1,6 @@
 import json
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
 from django import forms
@@ -302,6 +303,7 @@ def latest_drops_queryset():
         Listing.objects.filter(
             product=OuterRef("pk"), is_active=True, retailer__is_active=True,
             last_checked__gte=stale_cutoff(), availability=Listing.Availability.PREORDER,
+            sanity__in=Listing.COUNTED,
         )
     )
     upcoming = Q(release__gt=today) | Q(on_preorder=True)
@@ -638,9 +640,10 @@ def product_detail(request, slug):
             "offerCount": len(current),
             "availability": "https://schema.org/InStock" if in_stock_count else "https://schema.org/PreOrder",
         }
-    elif unavailable:
+    elif any(listing.sanity != Listing.Sanity.EXCLUDED for listing in unavailable):
         # Sold out everywhere: Google still needs offers, so give the shops' last prices, marked out of stock.
-        prices = sorted(listing.delivered_price for listing in unavailable)
+        # A price kept out of the comparison is not one of them.
+        prices = sorted(listing.delivered_price for listing in unavailable if listing.sanity != Listing.Sanity.EXCLUDED)
         structured["offers"] = {
             "@type": "AggregateOffer",
             "priceCurrency": "GBP",
@@ -1258,24 +1261,45 @@ def insights_page(request):
     return render(request, "admin/insights.html", context)
 
 
+def posted_price_moved(request, listing):
+    """True when the form posted a price and the listing's price is no longer that price."""
+    if "price" not in request.POST:
+        return False
+    try:
+        return Decimal(request.POST["price"]) != listing.price
+    except (InvalidOperation, ValueError):
+        return True
+
+
 @staff_member_required
 def checks_page(request):
-    """Things to check: wrong matches, likely duplicates and unknown delivery, each with a one-tap fix."""
+    """Things to check: doubtful and excluded prices, wrong matches, likely duplicates and unknown delivery,
+    each with a one-tap fix."""
     from django.contrib import messages
     from django.db import transaction
 
-    from catalogue import checks
+    from catalogue import checks, sanity
     from catalogue.management.commands.merge_duplicates import merge
     from catalogue.signals import clear_list_caches
 
     if request.method == "POST":
         action = request.POST.get("action")
-        if action == "hide":
+        if action in ("hide", "trust", "show"):
             listing = get_object_or_404(Listing.objects.select_related("product", "retailer"), pk=request.POST.get("listing"))
-            Listing.objects.filter(pk=listing.pk).update(is_active=False)
-            clear_list_caches(force=True)
-            messages.success(request, f"Hidden: {listing.product.name} at {listing.retailer.name}. "
-                                      "Tick show on site on the listing to bring it back.")
+            if posted_price_moved(request, listing):
+                # Only the price the owner looked at is acted on, as with a merge.
+                messages.warning(request, "That price has changed since the page loaded. Check it again below.")
+            elif action == "hide":
+                Listing.objects.filter(pk=listing.pk).update(is_active=False)
+                clear_list_caches(force=True)
+                messages.success(request, f"Hidden: {listing.product.name} at {listing.retailer.name}. "
+                                          "Tick show on site on the listing to bring it back.")
+            else:
+                sanity.trust(listing)
+                clear_list_caches(force=True)
+                messages.success(request, f"Counted: £{listing.price} for {listing.product.name} at {listing.retailer.name}. "
+                                          f"It stays counted while it moves less than {sanity.TRUST_BAND * 100:.0f}% "
+                                          f"for {sanity.TRUST_DAYS} days.")
         elif action == "merge":
             # Only a group the page offered, exactly as it stands now, is merged.
             wanted = request.POST.get("keep", ""), sorted(request.POST.getlist("other"))
@@ -1289,9 +1313,14 @@ def checks_page(request):
             else:
                 messages.warning(request, "That group has changed since the page loaded. Check it again below.")
         return HttpResponseRedirect(reverse("checks"))
+    doubtful = checks.doubtful_prices()
+    listed = {listing.product_id for listing in doubtful}
     context = {
         **admin.site.each_context(request), "title": "Things to check",
-        "wrong": checks.wrong_matches(), "duplicates": checks.duplicates(), "shops": checks.unknown_delivery_shops(),
+        "doubtful": doubtful, "excluded": checks.excluded_prices(),
+        # A product already listed under doubtful prices is not listed twice.
+        "wrong": [row for row in checks.wrong_matches() if row[0].pk not in listed],
+        "duplicates": checks.duplicates(), "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
     }
     return render(request, "admin/checks.html", context)

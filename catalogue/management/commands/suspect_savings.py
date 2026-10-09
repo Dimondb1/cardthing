@@ -1,6 +1,7 @@
 """
-List products whose cheapest offer is far under the next one: usually two
-different things matched as one (a pack against a box), not a bargain.
+List products whose cheapest offer is far under the next one, or whose price
+the other shops make doubtful: usually two different things matched as one
+(a pack against a box), not a bargain.
 
     python manage.py suspect_savings
 

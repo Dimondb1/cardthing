@@ -14,10 +14,46 @@
   .chk .names li { margin: 2px 0; }
   .chk .none { color: var(--body-quiet-color); }
   .chk input[type=submit] { min-height: 40px; }
+  .chk summary { cursor: pointer; }
+  .chk summary h2 { display: inline; }
+  .chk details > p.note { margin-top: 4px; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Things to check</div>{% endblock %}
 {% block content %}
 <div class="chk">
+  <section>
+    <h2>Doubtful prices ({{ doubtful|length }})</h2>
+    <p class="note">These prices are far from what the other shops charge, so the site shows them but claims no saving, badge or price drop. Open the link. If the price is right, tap This price is right and it counts while it moves less than 10% for 30 days. If it is a different product, hide it.</p>
+    {% if doubtful %}<ul>
+      {% for listing in doubtful %}
+      <li class="item"><b><a href="{{ listing.product.get_absolute_url }}" target="_blank" rel="noopener">{{ listing.product.name }}</a></b>
+        <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer">£{{ listing.shown_price }} at {{ listing.retailer.name }}</a>: {{ listing.sanity_reason }}.
+        <div class="row">
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="trust"><input type="hidden" name="listing" value="{{ listing.pk }}"><input type="hidden" name="price" value="{{ listing.price }}"><input type="submit" value="This price is right"></form>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ listing.pk }}"><input type="hidden" name="price" value="{{ listing.price }}"><input type="submit" value="Hide this one"></form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
+  </section>
+
+  <section>
+    <details>
+      <summary><h2>Excluded automatically ({{ excluded|length }})</h2></summary>
+      <p class="note">These prices are so far from at least two other shops that they cannot be this product. They are left out of every comparison and the product page shows them as not counted. Nothing needs doing unless one is right.</p>
+      {% if excluded %}<ul>
+        {% for listing in excluded %}
+        <li class="item"><b><a href="{{ listing.product.get_absolute_url }}" target="_blank" rel="noopener">{{ listing.product.name }}</a></b>
+          <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer">£{{ listing.shown_price }} at {{ listing.retailer.name }}</a>: {{ listing.sanity_reason }}.
+          <div class="row">
+            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="show"><input type="hidden" name="listing" value="{{ listing.pk }}"><input type="hidden" name="price" value="{{ listing.price }}"><input type="submit" value="Show it anyway"></form>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>{% else %}<p class="none">Nothing excluded.</p>{% endif %}
+    </details>
+  </section>
+
   <section>
     <h2>Wrong matches ({{ wrong|length }})</h2>
     <p class="note">The cheapest price is over {{ max_percent }}% under the next shop, which usually means a different product was matched (a pack against a box). The site already hides the saving. Open both links, then hide the one that is not this product.</p>

@@ -69,7 +69,7 @@ def order_products(products, sort, first=None):
     elif sort == "saving":
         buyable = Listing.objects.filter(
             product=OuterRef("pk"), is_active=True, retailer__is_active=True,
-            last_checked__gte=stale_cutoff(), availability__in=Listing.BUYABLE,
+            last_checked__gte=stale_cutoff(), availability__in=Listing.BUYABLE, sanity__in=Listing.COUNTED,
         ).order_by("delivered_price").values("delivered_price")
         money = DecimalField(max_digits=9, decimal_places=2)
         products = products.annotate(

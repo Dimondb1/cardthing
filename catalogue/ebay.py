@@ -25,7 +25,7 @@ import urllib.request
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
-from django.db.models import Count, F, Min
+from django.db.models import Count, F, Min, Q
 from django.utils import timezone
 
 from .classify import LANGUAGE, find_type
@@ -170,15 +170,23 @@ MARKETPLACES = ("ebay", "amazon")
 MIN_LOOSE_WORDS = 2
 
 def shop_prices():
-    """{product pk: the cheapest delivered price any shop last showed}, in stock or not."""
-    return dict(
+    """{product pk: the cheapest delivered price any shop last showed}, in stock or not.
+
+    Only prices the other shops agree with count. A doubtful price is used only for a product with no
+    OK one, and an excluded price never: an impossible shop price must not set the eBay floor.
+    """
+    rows = (
         Listing.objects.filter(is_active=True, product__is_active=True)
         .exclude(retailer__source_type__in=MARKETPLACES)
         .order_by()
         .values("product")
-        .annotate(cheapest=Min("delivered_price"))
-        .values_list("product", "cheapest")
+        .annotate(
+            ok=Min("delivered_price", filter=Q(sanity=Listing.Sanity.OK)),
+            doubtful=Min("delivered_price", filter=Q(sanity=Listing.Sanity.DOUBTFUL)),
+        )
+        .values_list("product", "ok", "doubtful")
     )
+    return {pk: ok if ok is not None else doubtful for pk, ok, doubtful in rows if ok is not None or doubtful is not None}
 
 
 def too_cheap_listings():

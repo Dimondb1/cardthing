@@ -143,12 +143,14 @@ class RetailerAdmin(admin.ModelAdmin):
 
 @admin.register(Listing)
 class ListingAdmin(admin.ModelAdmin):
-    list_display = ("product", "retailer", "price", "delivery_cost", "delivery_known", "delivered_price", "availability", "last_checked", "is_active")
-    list_filter = ("availability", "retailer", "is_active")
+    list_display = ("product", "retailer", "price", "delivery_cost", "delivery_known", "delivered_price", "availability", "sanity", "last_checked", "is_active")
+    list_filter = ("availability", "sanity", "retailer", "is_active")
     search_fields = ("product__name", "retailer__name", "url")
     autocomplete_fields = ("product", "retailer")
     list_select_related = ("product", "retailer")
     date_hierarchy = "last_checked"
+    # Verdicts are worked out from the other shops' prices; the owner acts on them from Things to check.
+    readonly_fields = ("sanity", "sanity_reason", "sanity_ratio", "sanity_at", "last_ok_price", "trusted_price", "trusted_at")
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

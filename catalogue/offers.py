@@ -26,6 +26,7 @@ def buyable_prefetch():
             last_checked__gte=stale_cutoff(),
             availability__in=Listing.BUYABLE,
         )
+        .exclude(sanity=Listing.Sanity.EXCLUDED)
         .select_related("retailer")
         # Confirmed delivered prices first, cheapest first; shops whose delivery is unknown after them.
         .order_by("-delivery_known", "delivered_price", "retailer__name"),
@@ -40,6 +41,7 @@ def offer_order(listing):
 
 # A saving above this share of the runner-up's price is a wrong product link (a pack against a box,
 # a part against the whole), not a bargain. It is never shown, and suspect_savings lists it for checking.
+# The price verdicts (catalogue/sanity.py) catch these first; this cap stays as a second guard.
 MAX_REAL_PERCENT = 70
 
 
@@ -61,9 +63,10 @@ def summarise(product, week_lows=None):
     best = offers[0] if offers else None
     second = offers[1] if len(offers) > 1 else None
     saving = percent = None
-    suspect = False
+    # A doubtful price is shown but never claimed as a saving or a low: it may not be this product.
+    suspect = any(offer is not None and offer.sanity == Listing.Sanity.DOUBTFUL for offer in (best, second))
     # A saving is only claimed between two confirmed delivered prices.
-    comparable = best and second and best.delivery_known and second.delivery_known
+    comparable = not suspect and best and second and best.delivery_known and second.delivery_known
     if comparable and second.delivered_price > best.delivered_price:
         saving = second.delivered_price - best.delivered_price
         percent = int((saving / second.delivered_price * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))

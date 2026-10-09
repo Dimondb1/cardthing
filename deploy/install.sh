@@ -67,6 +67,10 @@ cp deploy/ripraptor.service /etc/systemd/system/ripraptor.service
 systemctl daemon-reload
 systemctl enable -q --now ripraptor
 systemctl restart ripraptor
+# The cache folder outlives a restart, so the new code would read lists the old code pickled for up
+# to five minutes: a query per row for a field a migration added, or an error for one it now sets.
+# Empty it once the old workers have stopped; clearing before the restart would let them refill it.
+sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py shell -c 'from django.core.cache import cache; cache.clear()'"
 
 cat > /etc/caddy/Caddyfile <<CADDY
 $DOMAIN, www.$DOMAIN {

@@ -144,6 +144,30 @@ class CronTests(TestCase):
         self.assertIn("manage.py backup_db --keep 5", text)
         self.assertNotRegex(text, r"\bcp\b[^\n]*db\.sqlite3")
 
+    def test_install_empties_the_shared_cache_after_migrate_and_the_restart(self):
+        """The cache folder outlives a restart, so the new code must not read lists the old code pickled."""
+        from django.core.cache import cache
+        from django.core.cache.backends.filebased import FileBasedCache
+
+        text = (DEPLOY / "install.sh").read_text()
+        found = re.search(r"sudo -u ripraptor bash -c \"cd \$DIR && set -a && \. \./\.env && set \+a && "
+                          r"\.venv/bin/python manage\.py shell -c '([^']+)'\"", text)
+        self.assertIsNotNone(found, "install.sh does not empty the cache")
+        self.assertGreater(found.start(), text.index("manage.py migrate"))
+        self.assertGreater(found.start(), text.index("systemctl restart ripraptor"))
+
+        # The command it runs empties a file cache that another process filled.
+        folder = tempfile.mkdtemp(prefix="ripraptor-cache-test-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        old_worker = FileBasedCache(folder, {})
+        old_worker.set("web:home-lists:v4", "lists pickled by the old code", 300)
+        with override_settings(CACHES={"default": {
+            "BACKEND": "django.core.cache.backends.filebased.FileBasedCache", "LOCATION": folder,
+        }}):
+            self.assertEqual(cache.get("web:home-lists:v4"), "lists pickled by the old code")
+            call_command("shell", command=found.group(1), stdout=StringIO())
+        self.assertIsNone(FileBasedCache(folder, {}).get("web:home-lists:v4"))
+
 
 class BackupTests(TestCase):
     def test_backup_db_writes_a_file_that_opens_with_the_same_product_count(self):

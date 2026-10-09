@@ -1,7 +1,10 @@
+import math
 import time
+from functools import partial
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
@@ -19,25 +22,49 @@ LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, FOOTBALL_CACHE_KEY, NEW_CACH
 _last_clear = None
 
 
+def cached_list_keys():
+    """Every key clear_list_caches drops: the home, deals and new lists and each feed."""
+    from web.feeds import feed_cache_keys
+
+    return [*LIST_CACHE_KEYS, *feed_cache_keys()]
+
+
 def clear_list_caches(force=False):
     """
-    Drop the cached home, deals and new lists and every feed, in the cache every process shares.
+    Drop the cached home, deals and new lists and every feed once the current transaction commits.
+
+    Another process shares the cache, so a clear before the commit would let it refill the lists from
+    the rows as they were. Outside a transaction the clear runs at once. The tests, which never
+    commit, clear at once (RIPRAPTOR_CLEAR_AFTER_COMMIT) and get clear_list_caches_now's answer.
+    """
+    if not settings.RIPRAPTOR_CLEAR_AFTER_COMMIT:
+        return clear_list_caches_now(force)
+    transaction.on_commit(partial(clear_list_caches_now, force))
+    return None
+
+
+def clear_list_caches_now(force=False):
+    """
+    Drop the cached lists and feeds now, in the cache every process shares.
 
     A save fires this for each changed listing, so without force a clear within
-    RIPRAPTOR_CACHE_CLEAR_SECONDS of this process's last one is skipped. The end of
-    an import, a restock found by the stock watcher and the owner's fixes pass
-    force=True so what they wrote shows at once. Returns whether it cleared.
+    RIPRAPTOR_CACHE_CLEAR_SECONDS of this process's last one is skipped. A skipped
+    clear makes whatever is cached expire when that window closes instead, so a
+    change is never hidden for longer than the window. The end of an import, a
+    restock found by the stock watcher and the owner's fixes pass force=True so
+    what they wrote shows at once. Returns whether it cleared.
     """
     global _last_clear
-    from web.feeds import clear_feed_caches
 
     now = time.monotonic()
     wait = settings.RIPRAPTOR_CACHE_CLEAR_SECONDS
     if not force and _last_clear is not None and now - _last_clear < wait:
+        left = max(1, math.ceil(wait - (now - _last_clear)))
+        for key in cached_list_keys():
+            cache.touch(key, left)
         return False
     _last_clear = now
-    cache.delete_many(LIST_CACHE_KEYS)
-    clear_feed_caches()
+    cache.delete_many(cached_list_keys())
     return True
 
 

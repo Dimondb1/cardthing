@@ -291,6 +291,18 @@ class ChecksPageTests(TestCase):
         self.assertRedirects(self.client.get("/products/pb-b/"), self.a.get_absolute_url(), status_code=301)
 
 
+    def test_hide_and_merge_clear_the_lists_inside_the_window(self):
+        from .signals import HOME_CACHE_KEY
+        from .testing import inside_the_cache_window
+
+        inside_the_cache_window(self)
+        for action in ({"action": "hide", "listing": self.dear.pk},
+                       {"action": "merge", "keep": self.a.pk, "other": [self.b.pk]}):
+            cache.set(HOME_CACHE_KEY, "lists", 300)
+            self.client.post(self.url, action)
+            self.assertIsNone(cache.get(HOME_CACHE_KEY), action["action"])
+        self.assertFalse(Product.objects.filter(pk=self.b.pk).exists())
+
 class UnpricedTests(TestCase):
     """A price of nothing is not a price: it never becomes a product's lowest price."""
 

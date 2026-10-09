@@ -122,8 +122,14 @@ CACHES = {"default": dict(MEMORY_CACHE)} if TESTING else shared_caches(RIPRAPTOR
 # cleared them less than this many seconds ago; the end of an import, a restock
 # found by the stock watcher and the owner's fixes always clear. A shop read
 # changes a few dozen listings, so this bounds the clears without leaving lists
-# stale for the whole cache lifetime. Tests clear on every save.
+# stale for the whole cache lifetime: a skipped clear makes the cached lists
+# expire when the window closes. Tests clear on every save.
 RIPRAPTOR_CACHE_CLEAR_SECONDS = 0 if TESTING else 30
+
+# A clear waits for the transaction that changed the rows to commit: another
+# worker could otherwise refill the lists from the rows as they were. Django's
+# test cases never commit, so the tests clear at once unless a test turns this on.
+RIPRAPTOR_CLEAR_AFTER_COMMIT = not TESTING
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

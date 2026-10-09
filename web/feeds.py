@@ -127,9 +127,10 @@ def build_feed(slug, store, now=None):
     return FeedPage(slug=slug, title=title, description=description, url=url, entries=entries[:FEED_LIMIT])
 
 
-def clear_feed_caches():
+def feed_cache_keys():
+    """The cache key of the site-wide feed and of each active game's feed."""
     slugs = ["deals", *Game.objects.filter(is_active=True).values_list("slug", flat=True)]
-    cache.delete_many([feed_cache_key(slug) for slug in slugs])
+    return [feed_cache_key(slug) for slug in slugs]
 
 
 class DealsFeed(Feed):

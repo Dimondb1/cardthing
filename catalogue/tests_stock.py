@@ -139,6 +139,22 @@ class WatchStockTests(TestCase):
         self.assertIsNotNone(listing.back_in_stock_at)
         self.assertIn("1 back in stock", out.getvalue())
 
+    def test_a_restock_clears_the_lists_inside_the_window(self):
+        from django.core.cache import cache
+
+        from .signals import HOME_CACHE_KEY
+        from .testing import inside_the_cache_window
+
+        product = make_product(make_set(make_game()))
+        shop = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+        make_listing(product, shop, availability="out_of_stock", url="https://shop.example/products/etb", hours_ago=5)
+        inside_the_cache_window(self)
+        cache.set(HOME_CACHE_KEY, "lists", 300)
+        payload = json.dumps({"variants": [{"price": 4999, "available": True}]}).encode()
+        with mock.patch("catalogue.importers.fetch", lambda url: payload):
+            call_command("watch_stock", "--pause", "0", stdout=StringIO())
+        self.assertIsNone(cache.get(HOME_CACHE_KEY))
+
     def test_a_variant_without_a_price_is_not_reported_back_in_stock(self):
         product = make_product(make_set(make_game()))
         shop = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")

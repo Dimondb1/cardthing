@@ -1083,17 +1083,9 @@ class SharedCacheTests(PageTestCase):
 
     def inside_the_window(self):
         """This process cleared a moment ago, so an unforced clear is skipped for the next 30 seconds."""
-        import time
-        from unittest import mock
+        from catalogue.testing import inside_the_cache_window
 
-        from django.test import override_settings
-
-        overrides = override_settings(RIPRAPTOR_CACHE_CLEAR_SECONDS=30)
-        overrides.enable()
-        self.addCleanup(overrides.disable)
-        patcher = mock.patch("catalogue.signals._last_clear", time.monotonic())
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        inside_the_cache_window(self)
 
     def test_two_cache_instances_on_one_directory_share_a_clear(self):
         from django.core.cache.backends.filebased import FileBasedCache
@@ -1149,6 +1141,78 @@ class SharedCacheTests(PageTestCase):
             clock.return_value = 1040.0
             self.cheap.save()
             self.assertIsNone(cache.get(signals.HOME_CACHE_KEY))
+
+    def test_a_skipped_clear_makes_the_lists_expire_when_the_window_closes(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from django.core.cache import cache
+        from django.test import override_settings
+
+        from catalogue import signals
+        from web.feeds import feed_cache_key
+
+        clock = mock.Mock(return_value=1000.0)  # time.monotonic, for the debounce
+        wall = [5000.0]  # time.time, for the cache's own expiry
+        wall_clock = SimpleNamespace(time=lambda: wall[0])
+        with override_settings(RIPRAPTOR_CACHE_CLEAR_SECONDS=30), \
+                mock.patch.object(signals, "_last_clear", None), mock.patch("catalogue.signals.time.monotonic", clock), \
+                mock.patch("django.core.cache.backends.base.time", wall_clock), \
+                mock.patch("django.core.cache.backends.locmem.time", wall_clock):
+            self.cheap.save()  # clears and opens the window at 1000
+            self.client.get(reverse("web:home"))  # a visitor refills the lists
+            self.assertContains(self.client.get(reverse("web:home")), "Harbour Games")
+            cache.set(feed_cache_key("deals"), "feed", 300)
+
+            clock.return_value, wall[0] = 1010.0, 5010.0
+            self.cheap.is_active = False
+            self.cheap.save()  # skipped: the lists still show the hidden price for now
+            self.assertIsNotNone(cache.get(signals.HOME_CACHE_KEY))
+
+            # Another visitor refills inside the window, then a second skipped save lands.
+            cache.set(signals.DEALS_CACHE_KEY, "deals", 300)
+            clock.return_value, wall[0] = 1020.0, 5020.0
+            self.cheap.save()
+            self.assertEqual(cache.get(signals.DEALS_CACHE_KEY), "deals")
+
+            # The window closes at 1030: nothing cached before it outlives it.
+            clock.return_value, wall[0] = 1030.0, 5030.0
+            for key in (signals.HOME_CACHE_KEY, signals.DEALS_CACHE_KEY, feed_cache_key("deals")):
+                self.assertIsNone(cache.get(key), key)
+            self.assertNotContains(self.client.get(reverse("web:home")), "Harbour Games")
+
+    def test_a_clear_waits_for_the_commit_and_a_rollback_never_clears(self):
+        from django.core.cache import cache
+        from django.db import transaction
+        from django.test import override_settings
+
+        from catalogue import pricing
+        from catalogue.signals import HOME_CACHE_KEY
+
+        cache.set(HOME_CACHE_KEY, "lists", 300)
+        with override_settings(RIPRAPTOR_CLEAR_AFTER_COMMIT=True):
+            # Django Admin saves a retailer inside a transaction: another worker must not refill the
+            # lists from the old delivery costs between the clear and the commit.
+            with self.captureOnCommitCallbacks() as callbacks:
+                with transaction.atomic():
+                    pricing.apply_delivery_rules(self.harbour)
+                    self.cheap.save()
+                self.assertEqual(cache.get(HOME_CACHE_KEY), "lists")
+            self.assertEqual(len(callbacks), 2)
+            for callback in callbacks:
+                callback()  # the commit
+            self.assertIsNone(cache.get(HOME_CACHE_KEY))
+
+            cache.set(HOME_CACHE_KEY, "lists", 300)
+            with self.captureOnCommitCallbacks() as callbacks:
+                try:
+                    with transaction.atomic():
+                        pricing.apply_delivery_rules(self.harbour)
+                        raise ValueError("the save failed")
+                except ValueError:
+                    pass
+            self.assertEqual(callbacks, [])
+            self.assertEqual(cache.get(HOME_CACHE_KEY), "lists")
 
     def test_owner_fixes_and_delivery_rules_clear_inside_the_window(self):
         from django.contrib.auth import get_user_model

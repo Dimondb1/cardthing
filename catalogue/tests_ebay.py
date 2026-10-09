@@ -589,6 +589,22 @@ class FallbackSearchTests(TestCase):
         self.assertEqual(cheap.availability, Listing.Availability.OUT_OF_STOCK)
         self.assertEqual(kept.availability, Listing.Availability.IN_STOCK)
 
+    def test_tidy_hiding_an_ebay_price_clears_the_lists_inside_the_window(self):
+        from django.core.cache import cache
+
+        from .signals import HOME_CACHE_KEY
+        from .testing import inside_the_cache_window, make_retailer
+
+        pack = make_product(self.set, name="Darkness Ablaze Booster Pack", slug="da-pack", product_type="booster_pack")
+        make_listing(pack, make_retailer("Shop"), price="3.95", delivery="3.95",
+                     availability=Listing.Availability.OUT_OF_STOCK)
+        make_listing(pack, self.retailer, price="1.36", url="https://www.ebay.co.uk/itm/1?campid=1")
+        inside_the_cache_window(self)
+        cache.set(HOME_CACHE_KEY, "lists", 300)
+        with mock.patch.object(ebay, "http", FakeApi([])), mock.patch.object(ebay, "PAUSE", 0):
+            call_command("tidy_listings", stdout=StringIO())
+        self.assertIsNone(cache.get(HOME_CACHE_KEY))
+
     def test_check_command_shows_the_pick_and_why_others_were_refused(self):
         from io import StringIO
 

@@ -683,7 +683,9 @@ stock watcher finds a restock or a new pre-order, the site shows it on the
 next page load rather than up to five minutes later. On a server the folder
 is `/var/lib/ripraptor/cache` (`install.sh` creates it, owned by
 `ripraptor`); on your own computer it is `.cache` beside the code. Deleting
-its contents is always safe.
+its contents is always safe. The folder outlives a restart, so `install.sh`
+empties it once the site has restarted on the new code: lists saved by the
+old code can lack a field a migration added.
 
 If the folder cannot be created or written, the site still runs: it logs
 "Cache folder ... cannot be used" and each process keeps its own cache, as
@@ -693,10 +695,14 @@ folder's owner and restart the site.
 Every saved listing or product clears the cached lists, but a process that
 cleared them less than 30 seconds ago skips the next clear, so a shop read
 that changes a few dozen prices clears a handful of times rather than once
-per price. The end of every import, a restock found by the stock watcher,
-`tidy_listings` hiding eBay prices, a delivery rule change and the fixes on
-Things to check always clear at once. The tests keep a memory cache of
-their own, so they never read or clear your development site's cache.
+per price. A skipped clear makes the cached lists expire when those 30
+seconds are up instead, so no change stays hidden for longer. The end of
+every import, a restock found by the stock watcher, `tidy_listings` hiding
+eBay prices, a delivery rule change and the fixes on Things to check always
+clear at once. A clear waits until the change is committed, so the other
+worker cannot refill the lists from the rows as they were. The tests keep a
+memory cache of their own, so they never read or clear your development
+site's cache.
 
 ## Settings
 

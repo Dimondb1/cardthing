@@ -42,3 +42,23 @@ def make_listing(product, retailer, price="50.00", delivery="0.00", hours_ago=1,
         last_checked=timezone.now() - timedelta(hours=hours_ago),
         **kwargs,
     )
+
+
+def inside_the_cache_window(test):
+    """
+    Act as if this process cleared the list caches a moment ago, for the rest of the test.
+
+    An unforced clear (a save) is then skipped for 30 seconds, so a clear the test sees can only be
+    a forced one.
+    """
+    import time
+    from unittest import mock
+
+    from django.test import override_settings
+
+    overrides = override_settings(RIPRAPTOR_CACHE_CLEAR_SECONDS=30)
+    overrides.enable()
+    test.addCleanup(overrides.disable)
+    patcher = mock.patch("catalogue.signals._last_clear", time.monotonic())
+    patcher.start()
+    test.addCleanup(patcher.stop)

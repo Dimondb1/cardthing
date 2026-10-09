@@ -291,3 +291,7 @@ RIPRAPTOR_FINDER = env_bool("RIPRAPTOR_FINDER", default=True) and not TESTING
 # The background reader reads free publisher and community sources for announced sets and release dates
 # (catalogue/releases.py). Off in tests, which turn it on where they need it.
 RIPRAPTOR_RELEASES = env_bool("RIPRAPTOR_RELEASES", default=True) and not TESTING
+
+# The autopilot answers the Things to check rows the evidence settles, every hour in tidy_all
+# (catalogue/autopilot.py). Off in tests, which turn it on where they need it.
+RIPRAPTOR_AUTOPILOT = env_bool("RIPRAPTOR_AUTOPILOT", default=True) and not TESTING

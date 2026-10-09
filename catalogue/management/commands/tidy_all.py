@@ -7,8 +7,9 @@ tidy_listings (a shop item linked to the wrong product), merge_duplicates
 (one product under two names), tidy_catalogue (products that no longer pass
 the rules), then files products without a set under the set their name or
 code names (catalogue/releases.py attach_sets) and forgets website shop pages
-no sitemap has listed for 30 days, and clears old import records (catalogue/housekeeping.py) so
-the database stays small. Run by start.bat, update_prices and the server's hourly import,
+no sitemap has listed for 30 days, clears old import records (catalogue/housekeeping.py) so
+the database stays small, and lets the autopilot answer the Things to check rows the evidence
+settles (catalogue/autopilot.py). Run by start.bat, update_prices and the server's hourly import,
 so a rule added in code is applied to data already in the database.
 """
 
@@ -55,3 +56,12 @@ class Command(BaseCommand):
 
             cleared, deleted = prune_runs()
             self.stdout.write(f"{cleared} lists of unmatched products cleared, {deleted} old runs deleted.")
+
+        from catalogue import autopilot
+
+        if autopilot.enabled():
+            self.stdout.write("== autopilot")
+            done = autopilot.run(dry_run=dry_run)
+            for kind, what, why in done:
+                self.stdout.write(f"{what}: {why}.")
+            self.stdout.write(f"{len(done)} things to check {'would be answered' if dry_run else 'answered'}.")

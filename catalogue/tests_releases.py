@@ -13,7 +13,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from . import releases, worker
+from . import checks, releases, worker
 from .importers import run_import
 from .models import Product, ProductSet, Release, ReleaseSourceState, Retailer
 from .releases import DAY, MONTH, ReleaseSignal
@@ -544,14 +544,24 @@ class ChecksPageTests(TestCase):
         self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
         self.day = timezone.localdate() + timedelta(days=30)
 
-    def test_a_two_day_disagreement_is_shown_and_use_this_date_applies_one(self):
+    def test_the_publishers_date_stands_over_a_community_date_without_asking(self):
         releases.accept(source("pokemon_uk_news"), [signal("pokemon", "Delta Reign", self.day)])
         releases.accept(source("tcgdex_sets"), [signal("pokemon", "Delta Reign", self.day + timedelta(days=2))])
         product_set = ProductSet.objects.get()
+        self.assertEqual((product_set.release_date, product_set.release_date_source), (self.day, "pokemon_uk_news"))
+        self.assertEqual(checks.release_disagreements(), [])
+
+    def test_a_two_day_disagreement_is_shown_and_use_this_date_applies_one(self):
+        product_set = ProductSet.objects.create(game=self.pokemon, name="Delta Reign", slug="delta-reign",
+                                                release_date=self.day)
+        releases.accept(source("pokemon_uk_news"), [signal("pokemon", "Delta Reign", self.day + timedelta(days=2))])
+        releases.accept(source("tcgdex_sets"), [signal("pokemon", "Delta Reign", self.day + timedelta(days=2))])
+        product_set.refresh_from_db()
         self.assertEqual(product_set.release_date, self.day)
         response = self.client.get(reverse("checks"))
         self.assertContains(response, "Release dates to confirm (1)")
         self.assertContains(response, 'value="Use this date"', count=2)
+        self.assertContains(response, 'value="Keep this date"', count=1)
         later = Release.objects.get(source="tcgdex_sets")
         self.client.post(reverse("checks"), {"action": "use_release_date", "release": later.pk,
                                              "date": later.release_date.isoformat()})

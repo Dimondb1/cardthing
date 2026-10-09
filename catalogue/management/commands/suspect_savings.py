@@ -20,7 +20,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         found = 0
-        for product, summary in wrong_matches():
+        for product, summary in wrong_matches(doubtful_too=True):
             found += 1
             best, second = summary.best, summary.second
             self.stdout.write(

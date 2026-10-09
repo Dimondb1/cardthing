@@ -1367,13 +1367,16 @@ def posted_price_moved(request, listing):
 
 @staff_member_required
 def checks_page(request):
-    """Things to check: doubtful and excluded prices, wrong matches, likely duplicates, products found at
-    another shop and unknown delivery, each with a one-tap fix."""
+    """Things to check: what the autopilot answered, with Undo, then doubtful and excluded prices, wrong
+    matches, likely duplicates, products found at another shop and unknown delivery, each with a one-tap fix."""
+    from collections import Counter
+
     from django.contrib import messages
     from django.db import transaction
 
-    from catalogue import checks, sanity
+    from catalogue import autopilot, checks, sanity
     from catalogue.management.commands.merge_duplicates import merge
+    from catalogue.models import CheckAnswer
     from catalogue.signals import clear_list_caches
 
     if request.method == "POST":
@@ -1384,9 +1387,8 @@ def checks_page(request):
                 # Only the price the owner looked at is acted on, as with a merge.
                 messages.warning(request, "That price has changed since the page loaded. Check it again below.")
             elif action == "hide":
-                Listing.objects.filter(pk=listing.pk).update(is_active=False)
                 # The other shops were judged against this price: without it they may be fine.
-                sanity.judge_product(listing.product_id)
+                autopilot.hide(listing)
                 clear_list_caches(force=True)
                 messages.success(request, f"Hidden: {listing.product.name} at {listing.retailer.name}. "
                                           "Tick show on site on the listing to bring it back.")
@@ -1424,19 +1426,49 @@ def checks_page(request):
                     break
             else:
                 messages.warning(request, "That group has changed since the page loaded. Check it again below.")
+        elif action == "apart":
+            # Only a pair the page offered is kept apart.
+            wanted = request.POST.get("keep", ""), request.POST.get("other", "")
+            pair = next(((keep, other) for keep, others in checks.duplicates() for other in others
+                         if (str(keep.pk), str(other.pk)) == wanted), None)
+            if pair is None:
+                messages.warning(request, "That group has changed since the page loaded. Check it again below.")
+            else:
+                autopilot.owner_apart(*pair)
+                messages.success(request, f"Noted: {pair[1].name} is not {pair[0].name}. They are not suggested together again.")
+        elif action == "undo":
+            pk = request.POST.get("answer", "")
+            answer = CheckAnswer.objects.filter(pk=pk, by_owner=False).first() if pk.isdigit() else None
+            message = autopilot.undo(answer) if answer is not None else ""
+            if message:
+                messages.success(request, message)
+            else:
+                messages.warning(request, "That one can no longer be undone. Check it on its own page.")
+        elif action == "autopilot_now":
+            done = autopilot.run()
+            if done:
+                messages.success(request, f"Sorted {len(done)} thing{'s' if len(done) != 1 else ''}. Each is listed under Sorted for you, with Undo.")
+            else:
+                messages.success(request, "Nothing more can be sorted without you. What is left below needs your eye.")
         return HttpResponseRedirect(reverse("checks"))
-    doubtful = checks.doubtful_prices()
-    listed = {listing.product_id for listing in doubtful}
+    now = timezone.now()
+    counts = checks.sanity_counts()
+    doubtful_count = checks.doubtful_count()
+    answers = checks.recent_answers(now)
+    tally = Counter(answer.kind for answer in answers if answer.undone_at is None)
     context = {
         **admin.site.each_context(request), "title": "Things to check",
-        "doubtful": doubtful, "excluded": checks.excluded_prices(), "counts": checks.sanity_counts(),
-        # A product already listed under doubtful prices is not listed twice.
-        "wrong": [row for row in checks.wrong_matches() if row[0].pk not in listed],
+        "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
+        "tally": [(CheckAnswer.Kind(kind).label, n) for kind, n in tally.most_common()],
+        "doubtful": checks.doubtful_prices(now), "doubtful_count": doubtful_count,
+        "doubtful_left": max(0, counts["doubtful"] - doubtful_count),
+        "excluded": checks.excluded_prices(), "counts": counts,
+        "wrong": checks.wrong_matches(),
         "duplicates": checks.duplicates(), "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
-        "found": checks.found_stockists(), "found_count": checks.found_waiting().count(),
-        "releases": checks.release_candidates(), "disagreements": checks.release_disagreements(),
-        "stale_sources": checks.stale_release_sources(),
+        "found": checks.found_stockists(now), "found_count": checks.found_waiting().count(),
+        "releases": checks.release_candidates(now), "disagreements": checks.release_disagreements(now),
+        "stale_sources": checks.stale_release_sources(now),
     }
     # The owner reads a source's name, never its internal key (tcgdex_sets, shop:total-cards).
     checks.name_sources(context["releases"] + [row for group in context["disagreements"] for row in group["rows"]])

@@ -1089,3 +1089,40 @@ class WorkerState(models.Model):
         """True when the worker's heartbeat is younger than ``minutes``: the cron fallback then stands aside."""
         now = now or timezone.now()
         return cls.objects.filter(pk=1, heartbeat_at__gt=now - timedelta(minutes=minutes)).exists()
+
+
+class CheckAnswer(models.Model):
+    """An answer to a Things to check row that the autopilot gave (catalogue/autopilot.py), or the owner's
+    Not the same for products the loose duplicate rule pairs. Kept so the page can say what was done and
+    why, and so the owner can undo it with one tap."""
+
+    class Kind(models.TextChoices):
+        LINK = "link", "Linked a shop's page"
+        REFUSE = "refuse", "Not this product"
+        HIDE = "hide", "Hid a price"
+        TRUST = "trust", "Counted a doubtful price"
+        MERGE = "merge", "Merged duplicates"
+        APART = "apart", "Not the same product"
+        ADD_SET = "add_set", "Added an announced set"
+
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    by_owner = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    undone_at = models.DateTimeField(null=True, blank=True)
+    what = models.CharField(max_length=300)
+    why = models.CharField(max_length=300, blank=True)
+    price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    other = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    shop_product = models.ForeignKey(ShopProduct, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    release = models.ForeignKey(Release, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # A set the answer created, so undoing it can take the set away again.
+    product_set = models.ForeignKey(ProductSet, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "check answer"
+
+    def __str__(self):
+        return self.what

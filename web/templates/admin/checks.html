@@ -20,13 +20,36 @@
   .chk .addset { display: grid; gap: 8px; margin-top: 8px; max-width: 24rem; }
   .chk .addset label { display: grid; gap: 4px; }
   .chk .addset input[type=text], .chk .addset input[type=date] { min-height: 36px; width: 100%; box-sizing: border-box; }
+  .chk .why { display: block; margin-top: 4px; color: var(--body-quiet-color); }
+  .chk .tally { margin: 0 0 12px; }
+  .chk .names .row { margin-top: 2px; }
+  .chk form + details { margin-top: 12px; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Things to check</div>{% endblock %}
 {% block content %}
 <div class="chk">
   <section>
-    <h2>Doubtful prices ({{ counts.doubtful }})</h2>
-    <p class="note">These prices are far from what the other shops charge, so the site shows them but claims no saving, badge or price drop. Open the link. If the price is right, tap This price is right and it counts while it moves less than 10% for 30 days. If it is a different product, hide it.</p>
+    <h2>Sorted for you ({{ answers_count }})</h2>
+    <p class="note">Every hour the site answers the rows its evidence settles: a shop page whose name and price match, a price whose shop title names another product, a price in line with what this product has always cost, products with the same barcode. Here is what it did in the last {{ answers_days }} days. If one is wrong, tap Undo and it is put back the other way.</p>
+    {% if tally %}<p class="tally">{% for label, n in tally %}{{ label }}: {{ n }}{% if not forloop.last %}. {% endif %}{% endfor %}.</p>{% endif %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="autopilot_now"><input type="submit" value="Sort what you can now"></form>
+    {% if answers %}<details>
+      <summary>Show what was done</summary>
+      <ul>
+        {% for answer in answers %}
+        <li class="item"><b>{{ answer.what }}</b>
+          <span class="why">{{ answer.why|capfirst }}. {{ answer.created_at|date:"j M H:i" }}.</span>
+          <div class="row">{% if answer.undone_at %}<span class="none">Undone {{ answer.undone_at|date:"j M H:i" }}.</span>{% elif answer.kind == "merge" %}<span class="none">A merge cannot be undone.</span>{% else %}
+            <form method="post">{% csrf_token %}<input type="hidden" name="action" value="undo"><input type="hidden" name="answer" value="{{ answer.pk }}"><input type="submit" value="Undo"></form>{% endif %}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    </details>{% else %}<p class="none">Nothing yet.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Doubtful prices ({{ doubtful_count }})</h2>
+    <p class="note">These are the cheapest price for their product but far from what the other shops charge, so the site shows them but claims no saving, badge or price drop. Open the link. If the price is right, tap This price is right and it counts while it moves less than 10% for 30 days. If it is a different product, hide it.{% if doubtful_left %} {{ doubtful_left }} other doubtful price{{ doubtful_left|pluralize }} {{ doubtful_left|pluralize:"is,are" }} dearer than another shop or out of stock, so never shown as the cheapest, and {{ doubtful_left|pluralize:"is,are" }} left as {{ doubtful_left|pluralize:"it is,they are" }}.{% endif %}</p>
     {% if doubtful %}<ul>
       {% for listing in doubtful %}
       <li class="item"><b><a href="{{ listing.product.get_absolute_url }}" target="_blank" rel="noopener">{{ listing.product.name }}</a></b>
@@ -76,12 +99,13 @@
 
   <section>
     <h2>Possible duplicates ({{ duplicates|length }})</h2>
-    <p class="note">These names differ only by words like Exclusive, English or the series name. Merge only when they are the same product. Merging keeps every price, the price history and the old addresses. If a group is two different products, leave it.</p>
+    <p class="note">These names differ only by words like Exclusive, English or the series name. Merge only when they are the same product. Merging keeps every price, the price history and the old addresses. If one is a different product, tap Not the same beside it and the two are not suggested together again.</p>
     {% if duplicates %}<ul>
       {% for keep, others in duplicates %}
       <li class="item"><b>Keep: <a href="{{ keep.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.name }}</a></b>
         Merge into it:
-        <ul class="names">{% for other in others %}<li><a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a></li>{% endfor %}</ul>
+        <ul class="names">{% for other in others %}<li><a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a>
+          <div class="row"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="apart"><input type="hidden" name="keep" value="{{ keep.pk }}"><input type="hidden" name="other" value="{{ other.pk }}"><input type="submit" value="Not the same"></form></div></li>{% endfor %}</ul>
         <form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="keep" value="{{ keep.pk }}">{% for other in others %}<input type="hidden" name="other" value="{{ other.pk }}">{% endfor %}<input type="submit" value="Merge these"></form>
       </li>
       {% endfor %}
@@ -90,7 +114,7 @@
 
   <section>
     <h2>Found at another shop ({{ found_count }})</h2>
-    <p class="note">Products one shop sells, or none, are looked for at your other shops. These look like the same product but are not certain. Open the link. If it is the same product, tap Yes and the shop's price is checked at its next read. If not, tap No and that shop is not asked about it again.</p>
+    <p class="note">Products one shop sells, or none, are looked for at your other shops. These look like the same product but are not certain, and the ones visitors want most come first. Open the link. If it is the same product, tap Yes and the shop's price is checked at its next read. If not, tap No and that shop is not asked about it again.</p>
     {% if found %}<ul>
       {% for row in found %}
       <li class="item"><b><a href="{{ row.suggested.get_absolute_url }}" target="_blank" rel="noopener">{{ row.suggested.name }}</a></b>

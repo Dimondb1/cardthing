@@ -5,16 +5,21 @@ savings, products that look like duplicates, products the stockist finder
 may have found at another shop, shops whose delivery charge is not known,
 announced sets waiting for a tap, release dates the sources disagree on and
 release sources that have stopped answering. Each comes with its fix.
+
+Only rows that change what a visitor sees are listed: a doubtful price that is
+dearer than another shop's, or out of stock, never shows as the cheapest, so it
+is left as it is. The autopilot (catalogue/autopilot.py) answers the rows the
+evidence settles before the owner sees them.
 """
 
 from datetime import timedelta
 
-from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from . import offers
-from .models import Listing, OutboundClick, Product, Release, ReleaseSourceState, Retailer, ShopProduct
+from .models import CheckAnswer, Listing, OutboundClick, Product, Release, ReleaseSourceState, Retailer, ShopProduct
 from .pricing import MARKETPLACES
 
 # How many doubtful or excluded prices the page lists at once.
@@ -27,6 +32,9 @@ FOUND_ROWS = 50
 RELEASE_ROWS = 50
 # Sources further apart than this on a set's date go to the owner.
 DATE_GAP_DAYS = 1
+# The autopilot's answers are listed at the top of the page, with Undo, for this long, this many at once.
+ANSWERS_DAYS = 7
+ANSWER_ROWS = 100
 
 
 def judged():
@@ -42,20 +50,35 @@ def sanity_counts():
     )
 
 
+def doubtful_waiting():
+    """Doubtful prices a visitor sees as the product's cheapest: buyable, and no buyable price is lower.
+
+    A doubtful price that is dearer than another shop's, or out of stock, never shows as the cheapest and
+    claims no saving, so it waits for nobody. It is listed again if it becomes the cheapest.
+    """
+    cheaper = Listing.objects.buyable().filter(
+        product=OuterRef("product_id"), delivered_price__lt=OuterRef("delivered_price"),
+    )
+    return (
+        Listing.objects.buyable().filter(product__is_active=True, sanity=Listing.Sanity.DOUBTFUL)
+        .exclude(Exists(cheaper))
+    )
+
+
 def doubtful_count():
     """How many doubtful prices wait for the owner, counted as the page counts them."""
-    return judged().filter(sanity=Listing.Sanity.DOUBTFUL).count()
+    return doubtful_waiting().count()
 
 
 def doubtful_prices(now=None):
-    """Listings whose price the other shops make doubtful, most clicked products first, then oldest verdict."""
+    """Doubtful prices that wait for the owner, most clicked products first, then oldest verdict."""
     since = (now or timezone.now()) - timedelta(days=CLICK_DAYS)
     clicks = (
         OutboundClick.objects.filter(product=OuterRef("product_id"), created_at__gte=since)
         .order_by().values("product").annotate(n=Count("id")).values("n")
     )
     return list(
-        judged().filter(sanity=Listing.Sanity.DOUBTFUL)
+        doubtful_waiting()
         .annotate(clicks=Coalesce(Subquery(clicks, output_field=IntegerField()), Value(0)))
         .select_related("product", "retailer")
         .order_by("-clicks", "sanity_at", "pk")[:SANITY_ROWS]
@@ -71,27 +94,67 @@ def excluded_prices():
     )
 
 
-def wrong_matches():
-    """[(product, summary)] where the cheapest price is doubtful or too far under the next to be the same thing.
+def wrong_matches(doubtful_too=False):
+    """[(product, summary)] where the cheapest confirmed delivered price is more than MAX_REAL_PERCENT under
+    the next one: usually a different product matched (a pack against a box). The site already claims no
+    saving for these. A product whose cheapest price is doubtful is listed under doubtful prices instead.
 
-    Products with a doubtful price come from doubtful_prices; the saving cap still catches a gap between
-    prices that have not been judged yet.
+    ``doubtful_too`` also lists every product whose cheapest or next price is doubtful, for the
+    suspect_savings command, which lists every saving the site holds back.
     """
-    doubtful = {listing.product_id for listing in doubtful_prices()}
     products = Product.objects.for_lists().filter(lowest_price__isnull=False).prefetch_related(offers.buyable_prefetch())
     rows = []
     for product in products.order_by("name"):
         summary = offers.summarise(product)
-        if (summary.suspect or product.pk in doubtful) and summary.best and summary.second:
+        best, second = summary.best, summary.second
+        if doubtful_too:
+            if summary.suspect and best and second:
+                rows.append((product, summary))
+            continue
+        if not (best and second and best.delivery_known and second.delivery_known) or second.delivered_price <= 0:
+            continue
+        if best.sanity == Listing.Sanity.DOUBTFUL:
+            continue
+        gap = (second.delivered_price - best.delivered_price) / second.delivered_price * 100
+        if gap > offers.MAX_REAL_PERCENT:
             rows.append((product, summary))
     return rows
 
 
+def kept_apart():
+    """{frozenset of two product pks} the owner said are not the same product, still standing."""
+    return {
+        frozenset(pair) for pair in CheckAnswer.objects.filter(
+            kind=CheckAnswer.Kind.APART, undone_at__isnull=True, product__isnull=False, other__isnull=False,
+        ).values_list("product_id", "other_id")
+    }
+
+
 def duplicates():
-    """[(keep, [others])] that the loose rule would merge. Strict duplicates are merged every hour already."""
+    """[(keep, [others])] that the loose rule would merge. Strict duplicates are merged every hour already.
+
+    A product the owner said is not the same as the one kept is left out, and so is one a shop sells
+    beside it: a shop that lists both under their own names sells two products.
+    """
     from .management.commands.merge_duplicates import duplicate_groups
 
-    return duplicate_groups(loose=True)
+    groups = duplicate_groups(loose=True)
+    if not groups:
+        return []
+    apart = kept_apart()
+    pks = {p.pk for keep, others in groups for p in [keep, *others]}
+    shops = {}
+    for product_id, retailer_id in Listing.objects.filter(product_id__in=pks, is_active=True).values_list(
+        "product_id", "retailer_id"
+    ):
+        shops.setdefault(product_id, set()).add(retailer_id)
+    found = []
+    for keep, others in groups:
+        mine = shops.get(keep.pk, set())
+        others = [o for o in others if frozenset((keep.pk, o.pk)) not in apart and not (mine & shops.get(o.pk, set()))]
+        if others:
+            found.append((keep, others))
+    return found
 
 
 def unknown_delivery_shops():
@@ -113,12 +176,21 @@ def found_waiting():
     )
 
 
-def found_stockists():
-    """Products the finder may have found at another shop, newest first, in one query."""
-    return list(found_waiting().select_related("retailer", "suggested").order_by("-last_seen", "-pk")[:FOUND_ROWS])
+def found_stockists(now=None):
+    """Products the finder may have found at another shop, the ones visitors want most first, then newest.
+
+    One query for the rows and the finder's interest queries for the order.
+    """
+    from .finder import interest_scores
+
+    rows = list(found_waiting().select_related("retailer", "suggested").order_by("-last_seen", "-pk"))
+    if len(rows) > 1:
+        scores = interest_scores(now, visitors_only=True)
+        rows.sort(key=lambda row: -scores.get(row.suggested_id, 0))
+    return rows[:FOUND_ROWS]
 
 
-def release_candidates(now=None):
+def release_candidates(now=None, limit=RELEASE_ROWS):
     """Announced sets no rule could add, waiting for Add set or Not a set, newest first, in one query.
 
     A row about a set the site has is listed only when it gives a full date and the set has none (a lone
@@ -134,7 +206,7 @@ def release_candidates(now=None):
         Release.objects.filter(status=Release.Status.PENDING, game__is_active=True)
         .filter(Q(product_set__isnull=True) | undated_set)
         .filter(Q(release_date__isnull=True) | Q(release_date__gte=cutoff))
-        .select_related("game", "product_set").order_by("-first_seen_at", "-pk")[:RELEASE_ROWS]
+        .select_related("game", "product_set").order_by("-first_seen_at", "-pk")[:limit]
     )
 
 
@@ -144,9 +216,11 @@ def release_disagreements(now=None):
     Each row is a source's date with its own Use this date button. A date the set had before any source
     was read (typed in admin or imported, with no source recorded) counts as one of the dates, as
     'hand_date' with a Keep this date button, so a lone source that contradicts it is shown too. A set
-    whose date the owner chose is left alone: the owner's answer stands. One query.
+    whose date the owner chose is left alone: the owner's answer stands. So is a set showing the
+    publisher's date that only community sources contradict: the rules keep the publisher's date, and it
+    would win anyway. One query.
     """
-    from .releases import SHOP_PREFIX, local_today, name_key, recent_cutoff
+    from .releases import SHOP_PREFIX, is_official, local_today, name_key, recent_cutoff
 
     cutoff = recent_cutoff(local_today(now or timezone.now()))
     rows = (
@@ -163,6 +237,10 @@ def release_disagreements(now=None):
         product_set = next((r.product_set for r in members if r.product_set_id), None)
         if product_set is not None and product_set.release_date_source == "owner":
             continue
+        if product_set is not None and product_set.release_date and is_official(product_set.release_date_source):
+            shown = product_set.release_date
+            if not any(r.official for r in members if abs((r.release_date - shown).days) > DATE_GAP_DAYS):
+                continue
         hand_date = None
         if product_set is not None and product_set.release_date and not product_set.release_date_source:
             hand_date = product_set.release_date
@@ -202,3 +280,13 @@ def stale_release_sources(now=None):
         Q(last_ok_at__lt=cutoff) | Q(last_ok_at__isnull=True, created_at__lt=cutoff)
     ).order_by("name")
     return [{"state": state, "source": BY_NAME[state.name]} for state in states]
+
+
+def recent_answers(now=None):
+    """What the autopilot answered in the last ANSWERS_DAYS days, newest first, in one query."""
+    since = (now or timezone.now()) - timedelta(days=ANSWERS_DAYS)
+    return list(
+        CheckAnswer.objects.filter(by_owner=False, created_at__gte=since)
+        .select_related("listing", "shop_product", "product", "release")
+        .order_by("-created_at", "-pk")
+    )

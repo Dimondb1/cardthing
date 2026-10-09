@@ -361,10 +361,53 @@ with "This price is right" (it then counts while it moves less than 10% for
 30 days) and "Hide this one", the prices excluded automatically with "Show it
 anyway", the wrong matches with a Hide button under each price, the possible duplicates the
 `--loose` rule finds with a Merge button for each group (only the group
-exactly as shown is merged), the products the stockist finder may have
+exactly as shown is merged) and "Not the same" beside each product (the
+pair is never suggested again), the products the stockist finder may have
 found at another shop with "Yes, link it" and "No, not this" (see
-"Stockist finder" below), and the shops whose delivery charge is not
-known with a link to fill it in.
+"Stockist finder" below), the ones visitors want most first, and the shops
+whose delivery charge is not known with a link to fill it in.
+
+Only rows that change what a visitor sees are listed. A doubtful price is
+listed only while it is the product's cheapest buyable price: one that is
+dearer than another shop, or out of stock, never shows as the cheapest and
+is left as it is (the page says how many). A product whose second price is
+doubtful is not a wrong match. Two products a shop sells side by side are
+never suggested as duplicates. A set showing its publisher's date is not
+listed because a community source says otherwise.
+
+### The autopilot
+
+Every hour (`tidy_all`), and when you tap **Sort what you can now**, the
+autopilot (`catalogue/autopilot.py`) answers the rows the evidence settles.
+It uses only what the site already holds: the shop's own title, the prices
+the other shops charge, the product's price history and barcodes.
+
+- **Found at another shop: No** when the shop's title names another kind of
+  product (a pack against a box; a bare "Booster" is not taken for a pack)
+  or only another set's code (OP-10 against OP-09, also EB, PRB, ST, FB and
+  BT codes), or its price is under 0.3 or over 3.33 times the median of the
+  other shops' prices. **Yes** when the names agree word for word both ways
+  and the price is within 0.75 to 1.33 of that median. A likely name, or a
+  page with no other shop to compare, waits for you.
+- **Doubtful prices and wrong matches: Hide** when the shop's title names
+  another kind of product or another set's code. **This price is right**,
+  for the cheapest price only, when the names agree word for word, the
+  delivery charge is known and the price is within 15% of the median of the
+  product's daily lows over the 90 days before it became doubtful (at least
+  7 days of them).
+- **Possible duplicates: Merge** when the products carry the same barcode.
+- **Announced sets: Add set**, with no date, when a community source names a
+  set that products on the site already name and none of them is filed
+  under another set. Its date still needs the publisher or a second source.
+
+Each answer is listed at the top of the page under **Sorted for you** for 7
+days, with what was done, why, and an **Undo** button. Undo puts it back the
+other way: a linked page is unlinked and that shop is not asked about it
+again; a refused page is linked; a hidden price is shown; a counted price is
+judged again; an added set is taken away and the source is not asked about
+it again. A merge cannot be undone, which is why only a shared barcode
+merges. `RIPRAPTOR_AUTOPILOT=0` stops the hourly run; the button still works.
+`python manage.py tidy_all --dry-run` lists what it would answer.
 
 On the server the background reader (see "Background reader" below) asks
 shops about single products all day: the products people look at, save,
@@ -1258,7 +1301,8 @@ site's cache.
 | `RIPRAPTOR_AUTO_CATALOGUE`     | on      | Shop reads add sealed products they find that the catalogue does not have yet. `RIPRAPTOR_AUTO_CATALOGUE=0` adds none: a close match waits under Shop products to review and the rest are listed as unmatched on the run. |
 | `RIPRAPTOR_FINDER`             | on      | The background reader looks for other shops selling products that one shop sells, or none (see "Stockist finder"). `RIPRAPTOR_FINDER=0` turns it off; `find_stockists` still runs by hand. |
 | `RIPRAPTOR_RELEASES`           | on      | The background reader reads free publisher and community sources for announced sets and release dates (see "Release radar"). `RIPRAPTOR_RELEASES=0` turns it off; `scan_releases` still runs by hand. |
-| `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
+| `RIPRAPTOR_AUTOPILOT`          | on      | Every hour the site answers the Things to check rows its evidence settles, each listed with Undo (see "The autopilot"). `RIPRAPTOR_AUTOPILOT=0` stops the hourly run; Sort what you can now still runs it. |
+| `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
 ## Games

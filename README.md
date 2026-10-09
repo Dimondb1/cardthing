@@ -724,11 +724,15 @@ last fetched and, once a price from it is linked, the product it sells.
 Each read fetches at most 600 pages, in this order:
 
 1. pages never fetched;
-2. pages the sitemap dates after their last fetch, longest unread first;
-3. the rest, longest unread first. A page the sitemap dates before its last
-   fetch is left for a day, then read again, so its price never nears the
-   72 hour stale cutoff and a stock change the shop does not date is still
-   caught.
+2. pages not fetched for a day, longest unread first, so no price nears the
+   72 hour stale cutoff even when a shop dates hundreds of pages as changed
+   on every read;
+3. pages the sitemap dates after their last fetch, longest unread first;
+4. pages the sitemap does not date, longest unread first.
+
+A page the sitemap dates before its last fetch waits until it has not been
+fetched for a day, so a stock change the shop does not date is still caught.
+A date in the future, or one that cannot be read, counts as no date.
 
 A shop whose sitemap carries no dates is read round the whole index in
 turn: 600 pages a read, so 3,000 pages are all refreshed within five reads.

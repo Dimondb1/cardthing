@@ -1407,10 +1407,13 @@ class PageIndexTests(TestCase):
         now = timezone.now()
         a, b, c, d = (f"https://shop.example/products/{name}" for name in ("alpha", "bravo", "charlie", "delta"))
         old = (now - timedelta(days=3)).isoformat()
-        self.pages = [(a, old), (b, old), (c, old), (d, "")]
-        self.assertEqual(self.read(), [a, b, c, d])
+        # The changed page comes after the undated one in the sitemap and was fetched more recently,
+        # so only a real priority for changed pages puts it first.
+        self.pages = [(a, old), (b, old), (d, ""), (c, old)]
+        self.assertEqual(self.read(), [a, b, d, c])
         ShopPage.objects.update(last_fetched_at=now - timedelta(hours=2))
-        self.pages[2] = (c, (now - timedelta(hours=1)).isoformat())
+        ShopPage.objects.filter(url=d).update(last_fetched_at=now - timedelta(hours=5))
+        self.pages[3] = (c, (now - timedelta(hours=1)).isoformat())
         # Changed since its last fetch: ahead of the undated page.
         self.assertEqual(self.read(limit=1), [c])
         # Alpha and Bravo are dated before their last fetch and were read two hours ago.
@@ -1418,6 +1421,52 @@ class PageIndexTests(TestCase):
         ShopPage.objects.filter(url=a).update(last_fetched_at=now - timedelta(hours=25))
         # Unchanged pages are still read once a day, longest unread first.
         self.assertEqual(self.read(), [a, d])
+
+    def test_a_page_unread_for_a_day_goes_ahead_of_pages_dated_as_changed_on_every_read(self):
+        from datetime import timedelta
+
+        from .models import ShopPage
+
+        # Some shops date every page at the time the sitemap was made. Those pages count as changed
+        # on every read and must not keep the shop's other pages from ever being read again.
+        now = timezone.now()
+        busy = [self.address(n) for n in range(3)]
+        cold = self.address(9)
+        self.pages = [(u, (now - timedelta(minutes=1)).isoformat()) for u in busy]
+        self.pages.append((cold, (now - timedelta(days=10)).isoformat()))
+        self.read()
+        ShopPage.objects.update(last_fetched_at=now - timedelta(hours=2))
+        ShopPage.objects.filter(url=cold).update(last_fetched_at=now - timedelta(hours=25))
+        self.assertEqual(self.read(limit=2), [cold, busy[0]])
+        # Overdue pages are taken longest unread first, whatever the sitemap says about them.
+        ShopPage.objects.update(last_fetched_at=now - timedelta(hours=30))
+        ShopPage.objects.filter(url=busy[2]).update(last_fetched_at=now - timedelta(hours=40))
+        self.assertEqual(self.read(limit=2), [busy[2], busy[0]])
+
+    def test_a_page_dated_in_the_future_counts_as_undated_and_is_not_changed_on_every_read(self):
+        from datetime import timedelta
+
+        from .models import ShopPage
+
+        now = timezone.now()
+        undated, future = self.address(1), self.address(2)
+        self.pages = [(undated, ""), (future, "2099-01-01")]
+        self.assertEqual(self.read(), [undated, future])
+        self.assertIsNone(ShopPage.objects.get(url=future).lastmod)
+        ShopPage.objects.filter(url=undated).update(last_fetched_at=now - timedelta(hours=3))
+        ShopPage.objects.filter(url=future).update(last_fetched_at=now - timedelta(hours=1))
+        # Taken in turn with the undated page, not ahead of it as a changed page would be.
+        self.assertEqual(self.read(limit=1), [undated])
+
+    def test_a_date_at_the_edge_of_the_calendar_is_unreadable_and_never_stops_the_read(self):
+        from .models import ShopPage
+
+        # .NET writes its smallest date like this with a British summer time offset; it cannot be
+        # stored in UTC, and it used to stop every read of the shop.
+        first, last = self.address(1), self.address(2)
+        self.pages = [(first, "0001-01-01T00:00:00+01:00"), (last, "9999-12-31T23:59:59-01:00")]
+        self.assertEqual(self.read(), [first, last])
+        self.assertEqual(ShopPage.objects.filter(lastmod__isnull=True).count(), 2)
 
     def test_a_sitemap_without_lastmod_is_read_round_robin(self):
         self.pages = [(self.address(n), "") for n in range(5)]
@@ -1428,7 +1477,7 @@ class PageIndexTests(TestCase):
         self.assertEqual(self.read(limit=2), urls[1:3])
 
     def test_sitemap_dates_are_read_in_each_form_shops_use(self):
-        from datetime import datetime, timezone as tz
+        from datetime import datetime, timedelta, timezone as tz
 
         from .importers import sitemap_pages
 
@@ -1438,6 +1487,7 @@ class PageIndexTests(TestCase):
             ("https://shop.example/products/c", "2026-03-01T10:30:00Z"),
             ("https://shop.example/products/d", "not a date"),
             ("https://shop.example/products/e", ""),
+            ("https://shop.example/products/f", "0001-01-01T00:00:00+01:00"),
         ]
         dates = dict(sitemap_pages("https://shop.example", fetch=self.fetch))
         self.assertEqual(dates["https://shop.example/products/a"], datetime(2026, 3, 1, tzinfo=tz.utc))
@@ -1445,6 +1495,8 @@ class PageIndexTests(TestCase):
         self.assertEqual(dates["https://shop.example/products/c"], datetime(2026, 3, 1, 10, 30, tzinfo=tz.utc))
         self.assertIsNone(dates["https://shop.example/products/d"])
         self.assertIsNone(dates["https://shop.example/products/e"])
+        self.assertIsNone(dates["https://shop.example/products/f"])
+        self.assertEqual(dates["https://shop.example/products/b"].utcoffset(), timedelta(0))
 
     def test_a_page_that_fails_is_stamped_so_it_cannot_hold_the_front_of_every_read(self):
         from .models import ShopPage

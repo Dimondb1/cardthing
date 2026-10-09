@@ -321,8 +321,10 @@ TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 PRODUCT_PATH_WORDS = ("/product", "/products/", "/p/", "/item", "/shop/", "-p-")
 MAX_PAGES = 3000   # pages of one shop kept in its index, the ones worth fetching first
 PAGES_PER_READ = 600   # pages fetched in one read, so a 3,000 page shop is read through in five
-# A page the sitemap dates as unchanged is still read once a day: its listing then never nears the
-# 72 hour stale cutoff, and a stock change the shop does not date is caught within a day.
+# A page unread this long is read before any page the sitemap says has changed, and a page the
+# sitemap dates as unchanged is read again once it is this old. Its listing then never nears the
+# 72 hour stale cutoff, even when a shop dates hundreds of pages as changed on every read, and a
+# stock change the shop does not date is caught within a day.
 RECHECK_UNCHANGED = timedelta(hours=24)
 # A page missing from the sitemap this long has gone from the shop.
 PAGE_FORGOTTEN_AFTER = timedelta(days=30)
@@ -344,11 +346,15 @@ def sitemap_lastmod(text):
         if when is None:
             day = parse_date(text)
             when = datetime.combine(day, time_.min) if day else None
-    except ValueError:
+        if when is None:
+            return None
+        if timezone.is_naive(when):
+            when = when.replace(tzinfo=tz.utc)
+        # Stored in UTC, so a date at the edge of the calendar ("0001-01-01T00:00:00+01:00") fails
+        # here, where it is only unreadable, and not when the index is saved, where it would stop the read.
+        return when.astimezone(tz.utc)
+    except (ValueError, OverflowError):
         return None
-    if when is not None and timezone.is_naive(when):
-        when = when.replace(tzinfo=tz.utc)
-    return when
 
 
 def sitemap_pages(base, fetch=fetch, limit=MAX_PAGES):
@@ -544,26 +550,31 @@ def index_pages(retailer, pages, now=None):
 def pages_to_read(retailer, pages, limit=PAGES_PER_READ, now=None):
     """The (page pk, address) pairs one read fetches, in order, after indexing ``pages``.
 
-    Pages never fetched come first, in sitemap rank order; then pages the sitemap dates after their
-    last fetch; then the longest unread. A page the sitemap dates before its last fetch waits a day.
+    Pages never fetched come first, in sitemap rank order; then pages unread for RECHECK_UNCHANGED,
+    so no listing nears the stale cutoff however many pages the sitemap calls changed; then pages
+    the sitemap dates after their last fetch; then undated pages. Each group is longest unread
+    first. A page the sitemap dates before its last fetch waits until it is overdue. A date in the
+    future cannot be true, so it counts as no date: otherwise the page would count as changed on
+    every read for ever.
     """
     now = now or timezone.now()
+    pages = [(url, lastmod if lastmod is None or lastmod <= now else None) for url, lastmod in pages]
     index = index_pages(retailer, pages, now=now)
-    never, changed, rest = [], [], []
+    never, overdue, changed, undated = [], [], [], []
     for position, (url, lastmod) in enumerate(pages):
         if url not in index:
             continue
         pk, fetched = index[url]
         if fetched is None:
             never.append((position, pk, url))
+        elif fetched <= now - RECHECK_UNCHANGED:
+            overdue.append((fetched, position, pk, url))
         elif lastmod is not None and lastmod > fetched:
             changed.append((fetched, position, pk, url))
-        elif lastmod is None or fetched <= now - RECHECK_UNCHANGED:
-            rest.append((fetched, position, pk, url))
-    changed.sort()
-    rest.sort()
-    order = [row[-2:] for row in never] + [row[-2:] for row in changed] + [row[-2:] for row in rest]
-    return [tuple(row) for row in order[:limit]]
+        elif lastmod is None:
+            undated.append((fetched, position, pk, url))
+    order = never + sorted(overdue) + sorted(changed) + sorted(undated)
+    return [tuple(row[-2:]) for row in order[:limit]]
 
 
 def website_offers(retailer, fetch=fetch, pause=0.5, limit=PAGES_PER_READ):

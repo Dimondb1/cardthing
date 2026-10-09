@@ -26,9 +26,9 @@ from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from catalogue import crawl
-from catalogue.models import DailyPageView, Listing, OutboundClick, Product, Retailer, WorkerState
+from catalogue.models import DailyPageView, Listing, OutboundClick, Product, WorkerState
 # check_listing is the probe the background reader uses too; the names stay importable from here.
-from catalogue.probe import _session_fetches, probe_listing as check_listing, record_probe, shopify_js_url
+from catalogue.probe import NOT_PROBED, _session_fetches, probe_listing as check_listing, record_probe, shopify_js_url
 
 __all__ = ["Command", "check_listing", "shopify_js_url", "watched_products", "_session_fetches"]
 
@@ -75,7 +75,7 @@ class Command(BaseCommand):
         # A shop the owner paused is not asked about single products either.
         base = (
             Listing.objects.filter(is_active=True, retailer__is_active=True, retailer__reading_paused=False)
-            .exclude(retailer__source_type__in=[Retailer.Source.MANUAL, Retailer.Source.EBAY, Retailer.Source.AMAZON])
+            .exclude(retailer__source_type__in=NOT_PROBED)
         )
         recently_checked = Q(last_checked__gte=now - timedelta(minutes=8))
         queue = []

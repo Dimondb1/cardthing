@@ -92,8 +92,8 @@ class CronTests(TestCase):
         seen = set()
         for schedule, command in install_cron():
             for part in command.split(" && "):
-                # A blocking flock (no -w or -n) comes first, so its wait is not counted; see the test below.
-                found = re.match(r"(?:flock \S+ )?timeout -k (\d+) (\d+) .*manage\.py (\w+)", part)
+                # A flock may come first, so its wait is not counted; see the tests below.
+                found = re.match(r"(?:flock (?:-n |-w \d+ )?\S+ )*timeout -k (\d+) (\d+) .*manage\.py (\w+)", part)
                 self.assertIsNotNone(found, f"No timeout before: {part}")
                 kill, seconds, name = int(found.group(1)), int(found.group(2)), found.group(3)
                 self.assertEqual(seconds, TIMEOUTS[name], name)
@@ -137,6 +137,29 @@ class CronTests(TestCase):
         self.assertEqual(out.strip(), "SNAPSHOT_RAN")
         self.assertGreaterEqual(time.monotonic() - started, 2)
 
+    @skipUnless(shutil.which("flock") and shutil.which("timeout"), "needs flock and timeout")
+    def test_tidy_waits_for_a_read_holding_the_import_lock(self):
+        """The real tidy_all line, scaled down: a read holds the import lock for 2 s and tidy runs after it."""
+        line = next(command for _, command in install_cron() if "tidy_all" in command)
+        with tempfile.TemporaryDirectory() as folder:
+            lock = Path(folder) / "import.lock"
+            command = (
+                line.replace("/tmp/ripraptor-import.lock", str(lock))
+                .replace("/tmp/ripraptor-tidy.lock", str(Path(folder) / "tidy.lock"))
+                .replace(".venv/bin/python manage.py tidy_all", "echo TIDY_RAN")
+            )
+            self.assertIn("echo TIDY_RAN", command)
+            with open(lock, "w") as held:
+                fcntl.flock(held, fcntl.LOCK_EX)
+                started = time.monotonic()
+                waiter = subprocess.Popen(["sh", "-c", command], stdout=subprocess.PIPE, text=True)
+                time.sleep(2)
+                self.assertIsNone(waiter.poll())
+                fcntl.flock(held, fcntl.LOCK_UN)
+            out, _ = waiter.communicate(timeout=20)
+        self.assertEqual((waiter.returncode, out.strip()), (0, "TIDY_RAN"))
+        self.assertGreaterEqual(time.monotonic() - started, 2)
+
     def test_the_hourly_import_still_waits_for_the_lock(self):
         hourly = [command for schedule, command in install_cron() if schedule == "0 * * * *"]
         self.assertIn("flock -w 1800 /tmp/ripraptor-import.lock", hourly[0])
@@ -161,7 +184,11 @@ class CronTests(TestCase):
     def test_tidy_runs_hourly_on_its_own_lock_and_the_reader_is_checked_and_backed_up(self):
         lines = dict((command.split("manage.py ")[1].split()[0], (schedule, command)) for schedule, command in install_cron())
         self.assertEqual(lines["tidy_all"][0], "5 * * * *")
-        self.assertIn("flock -n /tmp/ripraptor-tidy.lock", lines["tidy_all"][1])
+        # Tidying merges and moves products, so it waits for the reads in flight and none starts while it runs.
+        self.assertIn(
+            "flock -n /tmp/ripraptor-tidy.lock flock -w 1800 /tmp/ripraptor-import.lock timeout -k 60 1500 ",
+            lines["tidy_all"][1],
+        )
         self.assertNotIn("tidy_all", lines["import_prices"][1])
         self.assertEqual(lines["check_worker"][0], "20 * * * *")
         self.assertEqual(lines["backup_db"][0], "40 0 * * *")

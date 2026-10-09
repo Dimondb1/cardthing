@@ -91,7 +91,47 @@ def safe_url(url):
     return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, query, ""))
 
 
-def fetch(url, retries=2):
+def time_left(deadline):
+    """Seconds before ``deadline`` (a time.monotonic() value), or None when there is no deadline."""
+    return None if deadline is None else deadline - time.monotonic()
+
+
+def socket_timeout(deadline):
+    """The wait allowed for each connect or read: TIMEOUT, or less when a deadline is closer."""
+    left = time_left(deadline)
+    if left is None:
+        return TIMEOUT
+    if left <= 0:
+        raise TimeoutError("ran out of time")
+    return min(TIMEOUT, max(left, 0.1))
+
+
+def read_body(response, deadline=None):
+    """The whole answer. With a deadline the body is read a piece at a time and given up once it passes.
+
+    The socket timeout covers each read on its own, so a shop that sends a byte every few seconds could
+    otherwise keep one request open for as long as it liked.
+    """
+    if deadline is None:
+        return response.read()
+    import http.client
+
+    pieces = []
+    while True:
+        if time_left(deadline) <= 0:
+            raise TimeoutError("ran out of time")
+        piece = response.read1(65536)
+        if not piece:
+            break
+        pieces.append(piece)
+    body = b"".join(pieces)
+    if getattr(response, "length", None):
+        raise http.client.IncompleteRead(body, response.length)
+    return body
+
+
+def fetch(url, retries=2, deadline=None):
+    """The page at ``url``. ``deadline`` (a time.monotonic() value) caps the whole request, every try included."""
     url = safe_url(url)
     import http.client
 
@@ -99,20 +139,26 @@ def fetch(url, retries=2):
     last = None
     for attempt in range(retries + 1):
         try:
-            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-                return response.read()
+            with urllib.request.urlopen(request, timeout=socket_timeout(deadline)) as response:
+                return read_body(response, deadline)
         except urllib.error.HTTPError as exc:
-            if exc.code in (429, 500, 502, 503, 504) and attempt < retries:
+            if exc.code in (429, 500, 502, 503, 504) and attempt < retries and not out_of_time(deadline):
                 time.sleep(2 * (attempt + 1))
                 last = exc
                 continue
             raise ImportError_(f"Could not fetch {url}: {exc}") from exc
         except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
             last = exc
-            if attempt < retries:
+            if attempt < retries and not out_of_time(deadline):
                 time.sleep(2 * (attempt + 1))
                 continue
+            break
     raise ImportError_(f"Could not fetch {url}: {last}")
+
+
+def out_of_time(deadline):
+    left = time_left(deadline)
+    return left is not None and left <= 0
 
 
 def clean_ean(value):
@@ -156,28 +202,31 @@ def session_fetch(session_url, timeout=None):
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     state = {"ready": False}
 
-    def fetch_with_cookies(url, retries=2):
+    def fetch_with_cookies(url, retries=2, deadline=None):
+        import http.client
+
         if not state["ready"]:
             state["ready"] = True
             try:
-                fetch_with_cookies(session_url, retries=retries)
+                fetch_with_cookies(session_url, retries=retries, deadline=deadline)
             except ImportError_:
                 pass
         request = urllib.request.Request(safe_url(url), headers={"User-Agent": USER_AGENT})
         last = None
         for attempt in range(retries + 1):
             try:
-                with opener.open(request, timeout=timeout or TIMEOUT) as response:
-                    return response.read()
+                wait = socket_timeout(deadline) if deadline is not None else (timeout or TIMEOUT)
+                with opener.open(request, timeout=wait) as response:
+                    return read_body(response, deadline)
             except urllib.error.HTTPError as exc:
                 last = exc
-                if exc.code in (429, 500, 502, 503, 504) and attempt < retries:
+                if exc.code in (429, 500, 502, 503, 504) and attempt < retries and not out_of_time(deadline):
                     time.sleep(2 * (attempt + 1))
                     continue
                 raise ImportError_(f"Could not fetch {url}: HTTP Error {exc.code}") from exc
-            except (urllib.error.URLError, OSError) as exc:
+            except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
                 last = exc
-                if attempt < retries:
+                if attempt < retries and not out_of_time(deadline):
                     time.sleep(2 * (attempt + 1))
                     continue
                 raise ImportError_(f"Could not fetch {url}: {exc}") from exc

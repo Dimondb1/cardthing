@@ -9,7 +9,7 @@ running.
 """
 
 import json
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 from django.utils import timezone
 
@@ -18,8 +18,9 @@ from .importers import ImportError_, money, page_offer
 from .models import Listing, Retailer
 
 # Listings read through their own shop's API or product page. A marketplace price comes from its
-# daily search, and a price entered by hand is never fetched.
-NOT_PROBED = (Retailer.Source.EBAY, Retailer.Source.AMAZON, Retailer.Source.MANUAL)
+# daily search, a feed shop's from the feed the owner agreed with it (its links are affiliate clicks,
+# which a server must never follow), and a price entered by hand is never fetched.
+NOT_PROBED = (Retailer.Source.EBAY, Retailer.Source.AMAZON, Retailer.Source.MANUAL, Retailer.Source.FEED)
 
 # One cookie-keeping fetch per shop that needs a session, kept for the life of the process.
 _session_fetches = {}
@@ -52,17 +53,32 @@ def settle_preorder(listing, availability, today=None):
     return availability
 
 
-def probe_listing(listing, fetch=None, today=None):
-    """(price, availability) from the shop right now, or None if it could not be read or is not probed."""
+def variant_id(url):
+    """The Shopify variant a listing's address names (?variant=123), or None."""
+    found = parse_qs(urlsplit(url).query).get("variant")
+    return found[0] if found else None
+
+
+def ask(listing, fetch=None, today=None):
+    """(price, availability) from the shop right now, or None when the shop's answer says nothing usable.
+
+    Raises ImportError_ when the shop could not be asked (an HTTP error, a timeout, an answer that is not
+    JSON), so the background reader can tell a shop that is throttling it from one listing gone missing.
+    """
     if listing.retailer.source_type in NOT_PROBED:
         return None
     fetch = fetch or importers.fetch
     if listing.retailer.source_type == Retailer.Source.SHOPIFY and "/products/" in listing.url:
         try:
             data = json.loads(fetch(shopify_js_url(listing.url)))
-        except (ImportError_, json.JSONDecodeError):
-            return None
+        except json.JSONDecodeError as exc:
+            raise ImportError_(f"{shopify_js_url(listing.url)} did not answer with JSON") from exc
         variants = data.get("variants") or []
+        wanted = variant_id(listing.url)
+        if wanted is not None:
+            # A listing for one variant (a case, not a box) is that variant's price and stock, never the
+            # cheapest of the page's. When the shop no longer has it, nothing is said.
+            variants = [v for v in variants if str(v.get("id")) == wanted]
         available = [v for v in variants if v.get("available")]
         chosen = min(available or variants, key=lambda v: v.get("price", 0), default=None)
         if chosen is None:
@@ -75,13 +91,18 @@ def probe_listing(listing, fetch=None, today=None):
         return price, settle_preorder(listing, Listing.Availability.IN_STOCK, today)
     if listing.retailer.session_url and fetch is importers.fetch:
         fetch = _session_fetches.setdefault(listing.retailer_id, importers.session_fetch(listing.retailer.session_url))
-    try:
-        offer = page_offer(listing.url, fetch(listing.url).decode("utf-8", "replace"))
-    except ImportError_:
-        return None
+    offer = page_offer(listing.url, fetch(listing.url).decode("utf-8", "replace"))
     if offer is None:
         return None
     return offer.price, settle_preorder(listing, offer.availability, today)
+
+
+def probe_listing(listing, fetch=None, today=None):
+    """(price, availability) from the shop right now, or None if it could not be read or is not probed."""
+    try:
+        return ask(listing, fetch=fetch, today=today)
+    except ImportError_:
+        return None
 
 
 def record_probe(listing, result, checked_at=None):

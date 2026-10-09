@@ -1,8 +1,8 @@
 """
 The background reader. systemd runs it as ripraptor-worker.service:
 
-    python manage.py run_worker                  # for ever, three threads
-    python manage.py run_worker --max-threads 2  # on a server with under 1 GB of memory
+    python manage.py run_worker                  # for ever, RIPRAPTOR_WORKER_THREADS threads (3 unless set)
+    python manage.py run_worker --max-threads 2  # this once; set RIPRAPTOR_WORKER_THREADS=2 in .env to keep it
     python manage.py run_worker --once           # one planning pass in this thread, then stop
 
 See catalogue/worker.py for what it does and the README for how to stop and start it.
@@ -10,6 +10,7 @@ See catalogue/worker.py for what it does and the README for how to stop and star
 
 import os
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from catalogue import worker
@@ -20,9 +21,14 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--once", action="store_true", help="Plan once, run every job due now in this thread, then stop.")
-        parser.add_argument("--max-threads", type=int, default=worker.THREADS, help="Jobs run at once (default 3).")
+        parser.add_argument(
+            "--max-threads", type=int, default=None,
+            help="Jobs run at once (default RIPRAPTOR_WORKER_THREADS, which is 3 unless set).",
+        )
 
-    def handle(self, *args, once=False, max_threads=worker.THREADS, **options):
+    def handle(self, *args, once=False, max_threads=None, **options):
+        if max_threads is None:
+            max_threads = getattr(settings, "RIPRAPTOR_WORKER_THREADS", worker.THREADS)
         held = worker.hold_worker_lock()
         if held is None:
             raise CommandError("Another background reader is running.")

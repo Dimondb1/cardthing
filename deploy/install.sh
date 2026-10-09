@@ -86,16 +86,18 @@ systemctl reload caddy
 # minutes (--if-worker-dead 30), and read the shops whose turn has come when it is not running. The
 # hourly import waits up to 30 minutes for the import lock rather than skipping, so the 10-minute
 # stock watcher (which fires at the same minute and skips while the lock is held) can never crowd it
-# out. tidy_all runs at five past on its own lock, the stock alerts never depend on the reader,
-# check_worker logs whether the reader is alive, and backup_db keeps five nightly copies.
+# out. tidy_all runs at five past on its own lock and then waits up to 30 minutes for the import
+# lock, so it never merges or moves products while a shop read is saving offers. The stock alerts
+# never depend on the reader, check_worker logs whether the reader is alive, and backup_db keeps
+# five nightly copies.
 # Every command runs under timeout, set to its budget plus five minutes: a command that hangs
 # while holding a lock would otherwise make every later run behind it give up silently.
-# The snapshot and the delivery check put timeout inside flock, so time spent waiting for a
-# long import does not use up their limit.
+# The snapshot, the delivery check and tidy_all put timeout inside flock, so time spent waiting
+# for a long import does not use up their limit.
 # deploy/crontab carries the same lines; catalogue/tests_ops.py fails when they differ.
 echo "PYTHONUNBUFFERED=1
 0 * * * *  cd $DIR && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices --due --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
-5 * * * *  cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1500 flock -n /tmp/ripraptor-tidy.lock .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
+5 * * * *  cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-tidy.lock flock -w 1800 /tmp/ripraptor-import.lock timeout -k 60 1500 .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
 15 0 * * * cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 1800 .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 3000 .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
 */10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1

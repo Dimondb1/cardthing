@@ -22,9 +22,13 @@ Safety:
   or the nightly snapshot under flock waits only for the reads in flight. After 20 minutes of holding
   it without a break it starts no new reads until the lock has been let go, so a command waiting for
   it always gets a turn;
-- every job has a deadline (shop read 20 minutes, website shop 45, marketplace 60, probe 60 seconds).
-  A job past it marks its shop "Stuck, restarting", closes its run and ends the process with code 1,
-  and systemd starts a fresh one;
+- every job has a deadline (shop read 20 minutes, website shop 45, marketplace 60, or twice the shop's
+  last healthy read when that is longer; probe 60 seconds, with each probe request cut off after 10).
+  A job past it marks its shop "Stuck, restarting" and backs it off like a failed read, closes its run,
+  hands the other reads in flight back to be read again at once, and ends the process with code 1;
+  systemd starts a fresh one;
+- a shop that answers probes with 429, or fails three in a row, backs off like a failed read, so
+  neither probes nor reads ask it again until its wait is over;
 - a heartbeat goes to WorkerState and to systemd's watchdog every 30 seconds. When it stops, the
   hourly cron (import_prices --if-worker-dead 30, watch_stock --if-worker-dead 30) reads the shops.
 
@@ -73,9 +77,18 @@ MAX_WEBSITE_READS = 1
 READ_DEADLINE = timedelta(minutes=20)
 WEBSITE_READ_DEADLINE = timedelta(minutes=45)
 MARKETPLACE_READ_DEADLINE = timedelta(minutes=60)
+# A shop whose healthy read takes longer than its limit gets twice its last read time, up to this, which
+# stays under the three hours after which a run counts as abandoned.
+LONGEST_READ_DEADLINE = timedelta(hours=2)
 PROBE_DEADLINE = timedelta(seconds=60)
 # A probe job starts no new request after this, so a slow shop cannot carry it past its deadline.
 PROBE_BUDGET = timedelta(seconds=20)
+# Each probe request is given up after this, however slowly the shop sends it: the socket timeout alone
+# allows each read 30 seconds, so a shop sending a byte at a time could hold a request open for ever.
+PROBE_FETCH_SECONDS = 10
+# Probe requests failing in a row (not counting a listing the shop no longer has) before the shop backs off.
+PROBE_ERRORS_IN_A_ROW = 3
+GONE = (404, 410)
 PROBE_BATCH = 30
 # A listing checked this recently is not probed: a shop read or a probe has just seen it.
 RECENTLY_CHECKED = timedelta(minutes=8)
@@ -94,6 +107,11 @@ STUCK = "Stuck, restarting"
 
 def minutes(delta):
     return delta.total_seconds() / 60
+
+
+def probe_deadline():
+    """When a probe request starting now must be over, on the clock importers.fetch reads."""
+    return time.monotonic() + PROBE_FETCH_SECONDS
 
 
 def sd_notify(message):
@@ -249,6 +267,7 @@ class Task:
     label: str
     tier: str = ""
     listings: list = field(default_factory=list)
+    last_read_seconds: int | None = None   # how long the shop's last healthy read took
 
 
 @dataclass
@@ -268,10 +287,14 @@ def deadline_for(task):
     if task.kind == PROBE:
         return PROBE_DEADLINE
     if task.source_type in MARKETPLACES:
-        return MARKETPLACE_READ_DEADLINE
-    if task.source_type == Retailer.Source.WEBSITE:
-        return WEBSITE_READ_DEADLINE
-    return READ_DEADLINE
+        limit = MARKETPLACE_READ_DEADLINE
+    elif task.source_type == Retailer.Source.WEBSITE:
+        limit = WEBSITE_READ_DEADLINE
+    else:
+        limit = READ_DEADLINE
+    # Longer than any healthy read: a big shop whose reads take 15 minutes is not killed at 20.
+    usual = timedelta(seconds=2 * (task.last_read_seconds or 0))
+    return max(limit, min(usual, LONGEST_READ_DEADLINE))
 
 
 class Worker:
@@ -290,6 +313,7 @@ class Worker:
         self.queue = []     # tasks planned and not yet started
         self.errors = deque()
         self.probe_failed = {}  # listing id -> when a probe of it last failed
+        self.probe_errors = {}  # retailer id -> probe requests failed in a row, across jobs
         self.jobs_done = 0
         self.last_job = ""
         self.last_plan = None
@@ -316,7 +340,7 @@ class Worker:
                 continue
             overdue = minutes(now - shop.next_read_at) if shop.next_read_at else NEVER_READ_MINUTES
             reads.append(Task(SHOP_READ, shop.pk, shop.source_type, WEIGHTS[SHOP_READ] * max(1.0, overdue),
-                              f"Read {shop.name}"[:120]))
+                              f"Read {shop.name}"[:120], last_read_seconds=shop.last_read_seconds))
         reads.sort(key=lambda t: -t.priority)
         chosen = []
         for task in reads:
@@ -477,11 +501,11 @@ class Worker:
             base = self.fetch
         elif retailer.session_url:
             session = importers.session_fetch(retailer.session_url)
-            base = (lambda url: session(url, retries=0)) if probing else session
+            base = (lambda url: session(url, retries=0, deadline=probe_deadline())) if probing else session
         elif probing:
-            # One try: a probe must finish inside its minute.
+            # One try, cut off after PROBE_FETCH_SECONDS: a probe must finish inside its minute.
             def base(url):
-                return importers.fetch(url, retries=0)
+                return importers.fetch(url, retries=0, deadline=probe_deadline())
         else:
             def base(url, *args, **kwargs):
                 return importers.fetch(url, *args, **kwargs)
@@ -507,6 +531,9 @@ class Worker:
         if not listings:
             return True
         fetch = self.fetch_for(next(iter(listings.values())).retailer, probing=True)
+        retailer_id = job.task.retailer_id
+        with self.lock:
+            in_a_row = self.probe_errors.get(retailer_id, 0)
         failures, restocked = 0, False
         for pk in job.task.listings:
             now = self.clock()
@@ -515,7 +542,20 @@ class Worker:
             listing = listings.get(pk)
             if listing is None or listing.last_checked >= now - RECENTLY_CHECKED:
                 continue
-            result = probe.probe_listing(listing, fetch=fetch)
+            status = None
+            try:
+                result = probe.ask(listing, fetch=fetch)
+            except importers.ImportError_ as exc:
+                result, status = None, crawl.http_status(str(exc))
+                in_a_row = 0 if status in GONE else in_a_row + 1
+                if status == 429 or in_a_row >= PROBE_ERRORS_IN_A_ROW:
+                    # The shop is throttling us or not answering: it waits like a failed read, and the
+                    # plan leaves a shop that is waiting out of the probes too.
+                    self.back_off(retailer_id, self.clock(), status, f"Checking single listings: {exc}")
+                    in_a_row, failures = 0, failures + 1
+                    break
+            else:
+                in_a_row = 0
             outcome = probe.record_probe(listing, result)
             if outcome is None:
                 # Not saved, so its check time did not move: wait before asking about it again.
@@ -523,9 +563,16 @@ class Worker:
                     self.probe_failed[pk] = now
                 failures += result is None
             restocked = restocked or outcome == "restocked"
+        with self.lock:
+            self.probe_errors[retailer_id] = in_a_row
         if restocked:
             clear_list_caches(force=True)
         return failures == 0
+
+    def back_off(self, retailer_id, now, status, error):
+        shop = Retailer.objects.get(pk=retailer_id)
+        shop.read_failed(now, status, error)
+        logger.warning("%s: %s", shop, error)
 
     def note_error(self):
         with self.lock:
@@ -576,12 +623,25 @@ class Worker:
                 ImportRun.objects.filter(
                     retailer=shop, finished_at__isnull=True, started_at__gte=job.runs_from
                 ).update(finished_at=now, error=importers.STOPPED)
-                shop.read_failed(now, None, STUCK)
-            else:
-                Retailer.objects.filter(pk=shop.pk).update(last_error=STUCK)
+            # A stuck probe backs its shop off too, so the fresh process does not pick the same shop
+            # straight away and restart again every few seconds with a heartbeat that looks healthy.
+            shop.read_failed(now, None, STUCK)
+            with self.lock:
+                others = [j for j in self.running.values() if j is not job and j.task.kind == SHOP_READ]
+            # The other reads did nothing wrong: they are closed and read again as soon as the process is back.
+            self.hand_back(others, now)
         except Exception:  # noqa: BLE001 - the restart matters more than the bookkeeping
             logger.exception("Could not record the stuck job")
         os._exit(1)
+
+    def hand_back(self, reads, now):
+        """Close the runs of reads cut short by a restart and make their shops due again at once."""
+        for job in reads:
+            ImportRun.objects.filter(
+                retailer_id=job.task.retailer_id, finished_at__isnull=True, started_at__gte=job.runs_from
+            ).update(finished_at=now, error=importers.STOPPED)
+            Retailer.objects.filter(pk=job.task.retailer_id).update(next_read_at=now)
+        WorkerState.objects.filter(pk=1).update(in_flight=[])
 
     # Life -------------------------------------------------------------------------------------
 
@@ -651,12 +711,7 @@ class Worker:
         with self.lock:
             reads = [job for job in self.running.values() if job.task.kind == SHOP_READ]
         try:
-            for job in reads:
-                ImportRun.objects.filter(
-                    retailer_id=job.task.retailer_id, finished_at__isnull=True, started_at__gte=job.runs_from
-                ).update(finished_at=now, error=importers.STOPPED)
-                Retailer.objects.filter(pk=job.task.retailer_id).update(next_read_at=now)
-            WorkerState.objects.filter(pk=1).update(in_flight=[])
+            self.hand_back(reads, now)
         except Exception:  # noqa: BLE001
             logger.exception("Could not close the runs in flight")
         # The pool's threads may be in the middle of a long read; they are not waited for.

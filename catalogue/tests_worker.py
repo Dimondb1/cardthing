@@ -634,6 +634,301 @@ class CrawlPageWorkerTests(WorkerTestCase):
         self.assertContains(page, "Shop will be read within a few minutes.")
 
 
+class VariantProbeTests(WorkerTestCase):
+    """A listing for one variant of a Shopify product is priced and stocked from that variant alone."""
+
+    def variants(self, case_available=True, box_available=True):
+        return json.dumps({"variants": [
+            {"id": 1, "price": 10000, "available": box_available},
+            {"id": 2, "price": 60000, "available": case_available},
+        ]}).encode()
+
+    def case_listing(self):
+        shop = self.shop("Shop")
+        return self.listing(self.product("thing", views=3), shop, 30, price="600.00",
+                            url="https://shop.example/products/thing?variant=2")
+
+    def test_the_probe_reads_the_variant_the_listing_names(self):
+        listing = self.case_listing()
+        self.assertEqual(probe.probe_listing(listing, fetch=lambda url: self.variants()), (Decimal("600.00"), "in_stock"))
+        # The case sold out while the box is still for sale: the case listing is out of stock.
+        self.assertEqual(probe.probe_listing(listing, fetch=lambda url: self.variants(case_available=False)),
+                         (Decimal("600.00"), "out_of_stock"))
+        gone = json.dumps({"variants": [{"id": 1, "price": 10000, "available": True}]}).encode()
+        self.assertIsNone(probe.probe_listing(listing, fetch=lambda url: gone))
+
+    def test_a_worker_pass_keeps_the_variant_price(self):
+        listing = self.case_listing()
+        asked = []
+        reader = self.make_worker(fetch=shop_answers({}, js={"https://shop.example/products/thing.js": self.variants()}, seen=asked))
+        reader.run_once()
+        listing.refresh_from_db()
+        self.assertEqual(asked, ["https://shop.example/products/thing.js"])
+        self.assertEqual((listing.price, listing.availability), (Decimal("600.00"), "in_stock"))
+        self.assertGreater(listing.last_checked, self.clock() - timedelta(minutes=1))
+
+
+class FeedProbeTests(WorkerTestCase):
+    def test_feed_listings_are_never_probed_so_no_affiliate_link_is_followed(self):
+        feed = self.shop("Feed Shop", source_type=Retailer.Source.FEED, source_url="https://feed.example/feed.csv")
+        self.listing(self.product("box", views=3), feed, 30, url="https://www.awin1.com/pclick.php?p=1&a=2&m=3")
+        asked = []
+        reader = self.make_worker(fetch=shop_answers({}, seen=asked))
+        self.assertEqual(reader.plan(self.clock()), [])
+        reader.run_once()
+        with mock.patch("catalogue.importers.fetch", shop_answers({}, seen=asked)):
+            out = StringIO()
+            call_command("watch_stock", "--pause", "0", stdout=out)
+        self.assertEqual(asked, [])
+        self.assertIn("0 checked", out.getvalue())
+
+
+class ProbeBackOffTests(WorkerTestCase):
+    def hot_listings(self, shop, count):
+        return [self.listing(self.product(f"box-{n}", views=3), shop, 30) for n in range(count)]
+
+    def failing(self, error, asked):
+        def fetch(url, *args, **kwargs):
+            asked.append(url)
+            raise ImportError_(f"Could not fetch {url}: {error}")
+
+        return fetch
+
+    def test_a_429_backs_the_shop_off_30_minutes_after_one_request(self):
+        shop = self.shop("Busy Shop")
+        self.hot_listings(shop, 8)
+        asked = []
+        reader = self.make_worker(fetch=self.failing("HTTP Error 429: Too Many Requests", asked))
+        with self.assertLogs("catalogue", "WARNING"):
+            reader.run_once()
+        shop.refresh_from_db()
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(shop.backoff_until - self.clock(), timedelta(minutes=30))
+        self.assertTrue(shop.last_error.startswith("Checking single listings: Could not fetch"))
+        self.assertIn("HTTP Error 429", shop.last_error)
+        self.clock.advance(minutes=1)
+        self.assertEqual(reader.plan(self.clock()), [])
+        # Nor is the shop read whole until its wait is over.
+        Retailer.objects.filter(pk=shop.pk).update(next_read_at=self.clock())
+        self.assertEqual(reader.plan(self.clock()), [])
+
+    def test_three_failures_in_a_row_back_the_shop_off_and_missing_listings_do_not_count(self):
+        gone_shop, broken_shop = self.shop("Gone Shop"), self.shop("Broken Shop")
+        self.hot_listings(gone_shop, 5)
+        asked = []
+        reader = self.make_worker(fetch=self.failing("HTTP Error 404: Not Found", asked))
+        reader.run_once()
+        gone_shop.refresh_from_db()
+        self.assertEqual((len(asked), gone_shop.backoff_until, gone_shop.error_streak), (5, None, 0))
+
+        Listing.objects.all().delete()
+        for n in range(5):
+            self.listing(self.product(f"other-{n}", views=3), broken_shop, 30)
+        asked = []
+        reader = self.make_worker(fetch=self.failing("HTTP Error 503: Service Unavailable", asked))
+        with self.assertLogs("catalogue", "WARNING"):
+            reader.run_once()
+        broken_shop.refresh_from_db()
+        self.assertEqual(len(asked), worker.PROBE_ERRORS_IN_A_ROW)
+        self.assertEqual((broken_shop.backoff_until - self.clock(), broken_shop.error_streak), (timedelta(minutes=5), 1))
+
+    def test_failures_in_a_row_are_counted_across_jobs(self):
+        shop = self.shop("Slow Shop")
+        listings = self.hot_listings(shop, 3)
+        asked = []
+        reader = self.make_worker(fetch=self.failing("timed out", asked))
+        for listing in listings:
+            # One listing a job, as when each request uses up the job's time.
+            task = worker.Task(worker.PROBE, shop.pk, "shopify", 1, "Check", tier="hot", listings=[listing.pk])
+            reader.executor = worker.InlineExecutor()
+            if listing is listings[-1]:
+                with self.assertLogs("catalogue", "WARNING"):
+                    reader.start(task, self.clock())
+            else:
+                reader.start(task, self.clock())
+        shop.refresh_from_db()
+        self.assertEqual(len(asked), 3)
+        self.assertIsNotNone(shop.backoff_until)
+
+
+class SlowShopTests(WorkerTestCase):
+    """A shop that sends its answer a byte at a time cannot hold a probe past its limit."""
+
+    def serve(self, delay, body=b"x" * 50):
+        import http.server
+
+        class Drip(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                try:
+                    for byte in body:
+                        self.wfile.write(bytes([byte]))
+                        self.wfile.flush()
+                        if delay:
+                            stopped.wait(delay)
+                except OSError:
+                    pass
+
+            def log_message(self, *args):
+                pass
+
+        stopped = threading.Event()
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Drip)
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(stopped.set)
+        return f"http://127.0.0.1:{server.server_address[1]}/products/box.js"
+
+    def test_a_dripping_answer_is_given_up_at_the_deadline(self):
+        import time
+
+        from . import importers
+
+        url = self.serve(0.2)
+        started = time.monotonic()
+        with self.assertRaisesMessage(ImportError_, "ran out of time"):
+            importers.fetch(url, retries=0, deadline=time.monotonic() + 1)
+        self.assertLess(time.monotonic() - started, 3)
+        started = time.monotonic()
+        session = importers.session_fetch(url)
+        with self.assertRaisesMessage(ImportError_, "ran out of time"):
+            session(url, retries=0, deadline=time.monotonic() + 1)
+        # The visit to the session address and the page share the one deadline.
+        self.assertLess(time.monotonic() - started, 3)
+
+    def test_a_prompt_answer_is_read_whole_with_a_deadline(self):
+        import time
+
+        from . import importers
+
+        url = self.serve(0, body=b"y" * 200000)
+        self.assertEqual(importers.fetch(url, retries=0, deadline=time.monotonic() + 5), b"y" * 200000)
+        self.assertEqual(importers.session_fetch(url)(url, retries=0, deadline=time.monotonic() + 5), b"y" * 200000)
+
+    def test_every_probe_request_carries_a_deadline(self):
+        shop = self.shop("Shop")
+        self.listing(self.product("box", views=3), shop, 30)
+        calls = []
+
+        def fetch(url, retries=2, deadline=None):
+            calls.append((retries, deadline))
+            return js_answer(4999)
+
+        reader = worker.Worker(clock=self.clock, sleep=self.clock.sleep, page_pause=0)
+        with mock.patch("catalogue.importers.fetch", fetch), mock.patch.object(worker.time, "monotonic", return_value=100.0):
+            reader.run_once()
+        self.assertEqual(calls, [(0, 100.0 + worker.PROBE_FETCH_SECONDS)])
+
+
+class StuckProbeTests(WorkerTestCase):
+    def test_a_stuck_probe_backs_its_shop_off_and_hands_the_other_reads_back(self):
+        stuck_shop = self.shop("Tarpit Shop")
+        self.listing(self.product("box", views=3), stuck_shop, 30)
+        reading = self.shop("Read Shop", due=True)
+        reader = self.make_worker(executor=HeldExecutor())
+        reader.queue = reader.plan(self.clock())
+        reader.dispatch(self.clock())
+        self.assertEqual({t.kind for t in reader.executor.jobs}, {worker.SHOP_READ, worker.PROBE})
+        run = ImportRun.objects.create(retailer=reading, started_at=self.clock())
+        self.clock.advance(seconds=61)
+        with mock.patch.object(worker.os, "_exit") as exit_, self.assertLogs("catalogue", "ERROR"):
+            reader.check_deadlines(self.clock())
+        exit_.assert_called_once_with(1)
+        stuck_shop.refresh_from_db(), reading.refresh_from_db(), run.refresh_from_db()
+        self.assertEqual((stuck_shop.last_error, stuck_shop.error_streak), (worker.STUCK, 1))
+        self.assertEqual(stuck_shop.backoff_until, self.clock() + timedelta(minutes=5))
+        # The read beside it did nothing wrong: closed, and due again at once.
+        self.assertEqual((run.error, reading.next_read_at, reading.error_streak), (STOPPED, self.clock(), 0))
+        self.assertEqual(WorkerState.objects.get().in_flight, [])
+        # The fresh process reads the shop it lost and leaves the stuck one alone.
+        self.clock.advance(seconds=10)
+        fresh = self.make_worker(executor=HeldExecutor())
+        fresh.begin()
+        self.assertEqual([(t.kind, t.retailer_id) for t in fresh.plan(self.clock())], [(worker.SHOP_READ, reading.pk)])
+
+    def test_a_shop_read_gets_twice_its_last_healthy_read_when_that_is_longer(self):
+        def limit(seconds, source=Retailer.Source.SHOPIFY):
+            return worker.deadline_for(worker.Task(worker.SHOP_READ, 1, source, 1, "Read", last_read_seconds=seconds))
+
+        self.assertEqual(limit(None), timedelta(minutes=20))
+        self.assertEqual(limit(300), timedelta(minutes=20))
+        self.assertEqual(limit(900), timedelta(minutes=30))
+        self.assertEqual(limit(900, Retailer.Source.WEBSITE), timedelta(minutes=45))
+        self.assertEqual(limit(5 * 3600), timedelta(hours=2))
+        big = self.shop("Big Shop", due=True, last_read_seconds=900)
+        task = self.make_worker().plan(self.clock())[0]
+        self.assertEqual((task.retailer_id, worker.deadline_for(task)), (big.pk, timedelta(minutes=30)))
+
+
+class StopTests(WorkerTestCase):
+    def reading(self):
+        shop = self.shop("Read Shop", due=True)
+        reader = self.make_worker(executor=HeldExecutor())
+        reader.queue = reader.plan(self.clock())
+        reader.dispatch(self.clock())
+        run = ImportRun.objects.create(retailer=shop, started_at=self.clock())
+        self.clock.advance(minutes=3)
+        return shop, reader, run
+
+    def assert_handed_back(self, shop, run):
+        shop.refresh_from_db(), run.refresh_from_db()
+        self.assertEqual((run.error, run.finished_at, shop.next_read_at), (STOPPED, self.clock(), self.clock()))
+        self.assertEqual(WorkerState.objects.get().in_flight, [])
+
+    def test_stop_closes_the_reads_in_flight_and_makes_their_shops_due(self):
+        shop, reader, run = self.reading()
+        with mock.patch.object(worker.os, "_exit") as exit_:
+            reader.stop()
+        exit_.assert_called_once_with(0)
+        self.assert_handed_back(shop, run)
+
+    def test_ctrl_c_or_sigint_from_systemd_stops_the_loop_cleanly(self):
+        shop, reader, run = self.reading()
+
+        def interrupted(seconds):
+            raise KeyboardInterrupt
+
+        reader.sleep = interrupted
+        reader.last_beat = None
+        with mock.patch.object(worker.os, "_exit") as exit_:
+            reader.run_forever()
+        exit_.assert_called_once_with(0)
+        self.assert_handed_back(shop, run)
+        # The loop beat once before it was stopped.
+        self.assertEqual(WorkerState.objects.get().heartbeat_at, self.clock())
+
+
+class SettingsTests(WorkerTestCase):
+    def test_the_worker_pauses_half_a_second_between_shopify_pages(self):
+        shop = self.shop("Big Shop", due=True)
+        reader = self.make_worker(page_pause=None, fetch=shop_answers({"https://big-shop.example": [product_json("box")]}))
+        self.assertEqual(reader.page_pause, 0.5)
+        with mock.patch("catalogue.importers.time.sleep") as slept:
+            reader.run_once()
+        shop.refresh_from_db()
+        self.assertIsNotNone(shop.last_ok_at)
+        # Page 1 held the products, page 2 was empty: one pause, before page 2.
+        slept.assert_called_once_with(0.5)
+
+    @override_settings(RIPRAPTOR_WORKER_THREADS=2)
+    def test_the_thread_count_comes_from_the_environment_setting(self):
+        built = []
+        real = worker.Worker
+
+        def spy(*args, **kwargs):
+            built.append(kwargs.get("threads"))
+            return real(*args, **kwargs)
+
+        with mock.patch.object(worker, "WORKER_LOCK", str(self.folder / "w.lock")), mock.patch.object(worker, "Worker", spy):
+            call_command("run_worker", "--once", stdout=StringIO())
+            call_command("run_worker", "--once", "--max-threads", "1", stdout=StringIO())
+        self.assertEqual(built, [2, 1])
+
+
 class SharedDatabaseTests(TestCase):
     def test_a_worker_pass_writes_listings_while_the_site_counts_pages_without_locked_errors(self):
         """A real file database: the worker reads a shop and probes listings while another connection

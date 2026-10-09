@@ -371,7 +371,13 @@ stamped and shown on the home page under "Back in stock" for
 `RIPRAPTOR_RESTOCK_HOURS` (48). A pre-order a shop marks as available stays
 a pre-order after a single-product check until the product's release date
 (or its set's) is known and has come; the next whole-shop read decides
-otherwise. eBay and Amazon listings are never checked this way.
+otherwise. A listing for one variant of a Shopify product (an address
+ending `?variant=...`, for example a case rather than a box) takes that
+variant's price and stock, never the cheapest on the page, and is left as
+it is when the shop no longer has that variant. eBay and Amazon listings are
+never checked this way, and nor are feed shops: their prices come from the
+feed agreed with them, and their links are affiliate clicks a server must
+never follow.
 
 Price history starts the day a product first gets a price and is kept for
 ever; the product page charts the last 90 days and, after 30 days, says
@@ -803,7 +809,8 @@ that keeps prices fresh all day:
   points a product's listings are checked every ten minutes (at most 600
   listings; the rest wait their turn hourly), with 3 every hour, otherwise
   only by its shop's whole read. A listing checked in the last 8 minutes,
-  or at a shop being read, is skipped.
+  or at a shop being read, is skipped. Feed shops, eBay and Amazon are
+  never asked about single listings.
 
 There is no job list: every minute it works out what is due from the shops
 and listings themselves, so a crash or a deploy loses only the jobs that
@@ -813,7 +820,12 @@ website shop and one every ten seconds to a feed; two a second in all;
 half a second between Shopify product pages; at most two whole-shop reads
 at once and only one of a website shop, so one of its three threads is
 always free for single listings. A shop waiting after errors or paused is
-not asked about single listings either.
+not asked about single listings either. A shop that answers a single-listing
+check with 429 (asked too often), or fails three checks in a row (a listing
+it no longer has does not count), waits exactly as after a failed read: 30
+minutes after a 429, otherwise 5, 10, 20 and so on, with no single-listing
+checks and no whole read until the wait is over. Its Crawl health row says
+"Checking single listings: ..." with the error.
 
 Safety: only one reader runs (`/tmp/ripraptor-worker.lock`). It holds the
 import lock (`/tmp/ripraptor-import.lock`) only while a whole-shop read is
@@ -822,9 +834,13 @@ delivery check wait only for reads in flight; after 20 minutes of holding it
 without a break it starts no new read until it has let go, so they always
 get a turn. Each job has a time limit: 20 minutes for a shop read, 45 for a
 website shop (600 pages at one every two seconds), 60 for eBay and Amazon,
-a minute for a single-listing check. A job past its limit marks its shop
-"Stuck, restarting" (which counts as a failed read), closes its run with
-"Stopped before it finished." and ends the process; systemd starts a new one
+or twice the shop's last healthy read when that is longer (at most two
+hours), and a minute for a single-listing check, where each request is
+given up after 10 seconds however slowly the shop sends it. A job past its
+limit marks its shop "Stuck, restarting" (which counts as a failed read, so
+the shop waits before it is asked again), closes its run with "Stopped
+before it finished.", closes the other reads in flight and makes those
+shops due again at once, and ends the process; systemd starts a new one
 ten seconds later, and on start the reader closes the runs it had in flight
 and any older than three hours. It writes a heartbeat every 30 seconds to
 the database (Crawl health reads it) and to systemd's watchdog, which
@@ -840,7 +856,10 @@ journalctl -u ripraptor-worker -f
 ```
 
 `run_worker --once` plans once, runs every job due in the calling thread
-and stops; `--max-threads 2` suits a server with under 1 GB of memory.
+and stops. It runs `RIPRAPTOR_WORKER_THREADS` jobs at once (3 unless set);
+set it to 2 in `.env` on a server with under 1 GB of memory and restart the
+reader. `install.sh` copies the unit file on every update, so the setting
+belongs in `.env`, not in the unit. `--max-threads` overrides it for one run.
 `check_worker` prints how old the heartbeat is and exits with code 1 when
 it is over ten minutes old or there has never been one; cron runs it hourly
 so the log shows when the reader stopped. Insights lists "Worker not
@@ -849,8 +868,14 @@ running" first among the things to improve while the heartbeat is stale.
 What cron still does: if the reader stops or never starts, the hourly
 `import_prices --due --if-worker-dead 30` and the ten-minute
 `watch_stock --if-worker-dead 30` read the shops as before once its
-heartbeat is 30 minutes old; while it runs they exit at once. `tidy_all`
-runs at five past every hour on its own lock, the back-in-stock emails
+heartbeat is 30 minutes old; while it runs they exit at once. Between 10
+and 30 minutes after the heartbeat stops, Crawl health and `check_worker`
+already say the reader has stopped but cron has not taken over yet, so
+nothing reads the shops; systemd normally restarts the reader within that
+time. `tidy_all` runs at five past every hour on its own lock and then waits
+up to 30 minutes for the import lock, so it never merges or moves products
+while a shop read is saving offers (its timeout starts once it holds the
+lock; no new read starts while it runs, single-listing checks go on). The back-in-stock emails
 every ten minutes whatever the reader is doing, the price history and a
 backup (`backup_db --keep 5`) nightly, and the delivery check weekly.
 
@@ -882,7 +907,7 @@ it has not stopped. `deploy/install.sh` and `deploy/crontab` carry the same
 lines and both load `.env` first; a test fails when they differ.
 
 The nightly snapshot and the weekly delivery check wait for the import
-lock for as long as it takes, and their timeout starts only once they hold
+lock for as long as it takes (`tidy_all` for up to 30 minutes), and their timeout starts only once they hold
 it (`flock ... timeout ...`). A full import can still be running at 00:15,
 and a wait counted against the snapshot's 30 minutes would stop it before
 it started, so that night's price history and checkpoint would be lost.
@@ -945,6 +970,7 @@ site's cache.
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
 | `RIPRAPTOR_RESTOCK_HOURS`      | 48      | How long a restocked product stays under "Back in stock". |
+| `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1 GB of memory. Restart `ripraptor-worker` after changing it. |
 | `RIPRAPTOR_AMAZON_ACCESS_KEY`  |         | Product Advertising API key from Amazon Associates. |
 | `RIPRAPTOR_AMAZON_SECRET_KEY`  |         | Its secret. |
 | `RIPRAPTOR_AMAZON_PARTNER_TAG` |         | The Associates tracking tag, for example `ripraptor-21`. All three set means Amazon is read once a day. |

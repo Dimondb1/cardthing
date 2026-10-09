@@ -123,9 +123,10 @@ class WatchStockTests(TestCase):
         shop = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
         listing = make_listing(product, shop, availability="out_of_stock", url="https://shop.example/products/etb?variant=1")
         self.assertEqual(shopify_js_url(listing.url), "https://shop.example/products/etb.js")
-        payload = json.dumps({"variants": [{"price": 4999, "available": True}, {"price": 5999, "available": True}]}).encode()
+        # Shopify's .js gives every variant its id; this listing is variant 1.
+        payload = json.dumps({"variants": [{"id": 1, "price": 4999, "available": True}, {"id": 2, "price": 5999, "available": True}]}).encode()
         self.assertEqual(check_listing(listing, fetch=lambda url: payload), (Decimal("49.99"), "in_stock"))
-        sold_out = json.dumps({"variants": [{"price": 4999, "available": False}]}).encode()
+        sold_out = json.dumps({"variants": [{"id": 1, "price": 4999, "available": False}]}).encode()
         self.assertEqual(check_listing(listing, fetch=lambda url: sold_out), (Decimal("49.99"), "out_of_stock"))
 
     def test_command_updates_stock_and_reports_restocks(self):

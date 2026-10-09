@@ -1,4 +1,4 @@
-{% load sitecopy ripraptor %}{# Announced sets still to come, as plain rows: the set, its date when one is published, and the cheapest pre-order or that there is none yet. Takes coming_soon, show_game and see_all. #}
+{% load sitecopy ripraptor %}{# Announced sets still to come, as plain rows: the set, its date when one is published, and the cheapest pre-order, that a shop already has it in stock, or that there are no pre-orders yet. Takes coming_soon, show_game and see_all. #}
 <section class="coming" aria-labelledby="coming-title">
   <div class="section-head">
     <h2 id="coming-title" class="section-head__title"><svg class="section-head__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h16v14H4zM4 10h16M8 3v5M16 3v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "new.coming_soon.title" %}</h2>
@@ -11,7 +11,7 @@
         <a class="coming__name" href="{{ item.get_absolute_url }}">{{ item.name }}</a>
         {% if show_game or item.release_date %}<span class="coming__meta">{% if show_game %}{{ item.game.display_short }}{% endif %}{% if show_game and item.release_date %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% if item.release_date %}{% copy "new.coming_soon.out" date=item.release_date|short_date %}{% endif %}</span>{% endif %}
       </span>
-      <span class="coming__offer">{% if item.preorder_price is not None %}{% preorders_from item %}{% else %}<span class="coming__none">{% copy "new.coming_soon.no_preorders" %}</span>{% endif %}</span>
+      <span class="coming__offer">{% if item.preorder_price is not None %}{% preorders_from item %}{% elif item.in_stock %}<a class="coming__stock" href="{{ item.get_absolute_url }}">{% copy "new.coming_soon.in_stock" %}</a>{% else %}<span class="coming__none">{% copy "new.coming_soon.no_preorders" %}</span>{% endif %}</span>
     </li>
     {% endfor %}
   </ul>

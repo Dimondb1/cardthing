@@ -487,6 +487,12 @@ ENTRIES = [
         "Next to a set still to come that no shop takes pre-orders for.",
     ),
     Entry(
+        "new.coming_soon.in_stock", T, "Coming soon set already in stock",
+        "In stock at a shop already",
+        "Next to a set still to come that a shop already sells from stock, before its published date, and no "
+        "shop takes pre-orders for. Links to the set page, where the prices are.",
+    ),
+    Entry(
         "new.coming_soon.preorders_from.one", T, "Pre-order price (one shop)",
         "Pre-orders from {price} at 1 shop",
         "Next to a set still to come that one shop takes pre-orders for. {price} is its cheapest pre-order "

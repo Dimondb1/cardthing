@@ -1330,6 +1330,61 @@ class ComingSoonTests(PageTestCase):
         self.assertIn("£49.99", home_block)
         self.assertIn('href="/new/"', home_block)
 
+    def test_the_home_page_shows_only_the_three_soonest_sets_with_a_pre_order(self):
+        self.add_preorder(self.soon_set)
+        for n in range(4):
+            product_set = make_set(self.game, name=f"Future {n}", slug=f"future-{n}", code=f"F{n}",
+                                   release_date=self.today + timedelta(days=n + 1))
+            self.add_preorder(product_set)
+        home = self.block(self.client.get(reverse("web:home")).content.decode())
+        self.assertEqual(home.count('class="coming__row"'), 3)
+        for name in ("Future 0", "Future 1", "Future 2"):
+            self.assertIn(name, home)
+        self.assertNotIn("Future 3", home)
+        self.assertNotIn("Ascended Heroes", home)
+        # The New page still lists every one.
+        self.assertEqual(self.block(self.client.get(reverse("web:new")).content.decode()).count('class="coming__row"'), 5)
+
+    def test_a_future_set_a_shop_already_has_in_stock_never_reads_no_pre_orders(self):
+        product = make_product(self.soon_set, name="Ascended Heroes Booster Box", slug="ascended-heroes-box")
+        make_listing(product, self.harbour, price="120.00", availability=Listing.Availability.IN_STOCK)
+        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        self.assertIn("Ascended Heroes", block)
+        self.assertIn("In stock at a shop already", block)
+        self.assertIn(f'class="coming__stock" href="{self.soon_set.get_absolute_url()}"', block)
+        self.assertNotIn("No pre-orders yet", block)
+        # A pre-order price still leads when a shop takes pre-orders too.
+        self.add_preorder(self.soon_set, retailer=self.north, price="49.99")
+        from django.core.cache import cache
+
+        cache.clear()
+        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        self.assertIn("£49.99", block)
+        self.assertNotIn("In stock at a shop already", block)
+
+    def test_an_ebay_or_stale_in_stock_listing_does_not_count_as_a_shop_selling_it(self):
+        from catalogue.models import Retailer
+
+        product = make_product(self.soon_set, name="Ascended Heroes Booster Box", slug="ascended-heroes-box")
+        make_listing(product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="150.00",
+                     availability=Listing.Availability.IN_STOCK)
+        make_listing(product, self.harbour, price="120.00", availability=Listing.Availability.IN_STOCK, hours_ago=100)
+        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        self.assertIn("No pre-orders yet", block)
+        self.assertNotIn("In stock at a shop already", block)
+
+    def test_an_undated_set_a_shop_already_sells_from_stock_is_not_coming_soon(self):
+        undated = make_set(self.game, name="Chaos Rising", slug="chaos-rising", code="CRI")
+        self.add_preorder(undated, price="55.00")
+        self.assertIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+        product = make_product(undated, name="Chaos Rising Booster Box", slug="chaos-rising-box")
+        make_listing(product, self.north, price="110.00", availability=Listing.Availability.IN_STOCK)
+        from django.core.cache import cache
+
+        cache.clear()
+        self.assertNotIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.assertNotIn("Date not announced yet", self.client.get(undated.get_absolute_url()).content.decode())
+
     def test_one_shop_and_an_unknown_delivery_are_worded_as_such(self):
         self.add_preorder(self.soon_set, price="44.00", delivery_known=False)
         block = self.block(self.client.get(reverse("web:new")).content.decode())
@@ -1501,6 +1556,10 @@ class ComingSoonTests(PageTestCase):
         self.add_preorder(self.soon_set)
         undated = make_set(self.game, name="Chaos Rising", slug="chaos-rising", code="CRI")
         self.add_preorder(undated, price="55.00")
+        early = make_set(self.game, name="Early Street", slug="early-street", code="ERS",
+                         release_date=self.today + timedelta(days=5))
+        make_listing(make_product(early, name="Early Street Box", slug="early-street-box"), self.north,
+                     price="99.00", availability=Listing.Availability.IN_STOCK)
         blocks = [reverse("web:home"), reverse("web:new"), self.game.get_absolute_url()]
         set_pages = [self.soon_set.get_absolute_url(), undated.get_absolute_url()]
         for url in blocks + set_pages:

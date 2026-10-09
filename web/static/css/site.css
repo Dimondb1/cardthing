@@ -510,6 +510,8 @@ ul, ol { margin: 0; padding: 0; }
 .coming__price:hover .price { text-decoration: underline; }
 .coming__price .price { line-height: var(--leading-snug); }
 .coming__none { color: var(--color-ink-subtle); }
+.coming__stock { color: var(--color-brand-text); text-decoration: none; }
+.coming__stock:hover { text-decoration: underline; }
 .browse-head__date { font-weight: var(--weight-strong); color: var(--color-ink); }
 @media (min-width: 48rem) {
   .coming__row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); }

@@ -344,7 +344,10 @@ COMING_SOON_ON_HOME = 3   # the home page is the money page: only sets a visitor
 
 def coming_soon_queryset(game=None):
     """Announced sets still to come, in one query: dated today or later, or undated with a shop taking
-    pre-orders. Each carries how many shops take pre-orders and the cheapest of them.
+    pre-orders and none selling it from stock, since an undated set a shop already sells is out. Each
+    carries how many shops take pre-orders, the cheapest of them, and whether a shop already has it in
+    stock (a UK street date can come before the published one), so a row never says no pre-orders while a
+    shop is selling it.
 
     Only a current pre-order at a shop counts: active, checked within the stale window, its price not
     kept out, and never eBay or Amazon, whose pre-orders are resellers' guesses. The cheapest is a
@@ -353,10 +356,11 @@ def coming_soon_queryset(game=None):
     """
     from catalogue.pricing import MARKETPLACES
 
-    preorders = Listing.objects.filter(
+    current = Listing.objects.filter(
         product__product_set=OuterRef("pk"), product__is_active=True, is_active=True, retailer__is_active=True,
-        last_checked__gte=stale_cutoff(), availability=Listing.Availability.PREORDER, sanity__in=Listing.COUNTED,
+        last_checked__gte=stale_cutoff(), sanity__in=Listing.COUNTED,
     ).exclude(retailer__source_type__in=MARKETPLACES)
+    preorders = current.filter(availability=Listing.Availability.PREORDER)
     cheapest = preorders.annotate(
         shown=Case(When(delivery_known=True, then=F("delivered_price")), default=F("price"))
     ).order_by("-delivery_known", "shown", "pk")
@@ -372,12 +376,13 @@ def coming_soon_queryset(game=None):
         sets.select_related("game")
         .annotate(
             has_preorder=Exists(preorders),
+            in_stock=Exists(current.filter(availability=Listing.Availability.IN_STOCK)),
             preorder_count=Coalesce(Subquery(shops[:1]), Value(0)),
             preorder_price=Subquery(cheapest.values("shown")[:1]),
             preorder_known=Subquery(cheapest.values("delivery_known")[:1]),
             preorder_slug=Subquery(cheapest.values("product__slug")[:1]),
         )
-        .filter(Q(release_date__gte=today) | Q(release_date__isnull=True, has_preorder=True))
+        .filter(Q(release_date__gte=today) | Q(release_date__isnull=True, has_preorder=True, in_stock=False))
         .order_by(F("release_date").asc(nulls_last=True), "name")
     )
 

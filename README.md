@@ -1287,8 +1287,9 @@ Announced sets still to come (from the release radar, a CSV import or
 admin) show as plain rows, soonest first, with no new address:
 
 - `/new/` lists every one above the products, each with its date when one
-  is published and either "No pre-orders yet" or the cheapest pre-order
-  and how many shops take them.
+  is published and the cheapest pre-order and how many shops take them,
+  or "In stock at a shop already" when a shop sells it before its date
+  and none takes pre-orders, or else "No pre-orders yet".
 - The home page shows up to 3 under Latest drops, and only sets a shop
   already takes pre-orders for.
 - A game page lists its own; a set page prints "Out <date>" and which
@@ -1297,7 +1298,8 @@ admin) show as plain rows, soonest first, with no new address:
 
 A set counts when its date is today or later, or when it has no date but a
 shop (never eBay or Amazon) has one of its products on pre-order, checked
-within the stale window. The price links to the product page, so a buy
+within the stale window, and no shop already sells one from stock (an
+undated set a shop sells is out, not coming). The price links to the product page, so a buy
 click still goes through `/go/` and is counted. The list is one query
 (`web/views.py` `coming_soon_sets`), cached under `web:coming-soon:v1` and
 `web:coming-soon:v1:<game>`, and cleared with the other lists, including

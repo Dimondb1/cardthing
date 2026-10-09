@@ -48,12 +48,29 @@ mkdir -p /var/lib/ripraptor media
 # belong to ripraptor: a folder the site cannot write falls back to a cache per process.
 install -d -o ripraptor -g ripraptor /var/lib/ripraptor/cache
 set -a; . ./.env; set +a
-# A copy of the database before any change, so an update can be rolled back. backup_db uses
-# SQLite's own backup, which is safe while the site is running; cp is not (it misses the -wal
-# file). The newest five copies are kept in /var/lib/ripraptor/backups/.
+# First shrink the database (old import records once filled the disk), so the copy below copies only
+# what is in use. Then a copy of the database before any change, so an update can be rolled back.
+# backup_db uses SQLite's own backup, which is safe while the site is running; cp is not (it misses
+# the -wal file). It makes room first and stops, changing nothing, if there is still not enough.
+# The newest five copies are kept in /var/lib/ripraptor/backups/.
 if [ -f /var/lib/ripraptor/db.sqlite3 ]; then
+  # As the site's own user, so the -wal and -shm files it may create stay writable by the running site.
+  sudo -E -u ripraptor .venv/bin/python manage.py compact_db
+  chown ripraptor:ripraptor /var/lib/ripraptor/db.sqlite3*
   .venv/bin/python manage.py backup_db --keep 5
 fi
+# Keep the import log to a fixed size: four weekly files, each cut at 50 MB.
+cat > /etc/logrotate.d/ripraptor <<'ROTATE'
+/var/log/ripraptor-import.log {
+    weekly
+    maxsize 50M
+    rotate 4
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+ROTATE
 .venv/bin/python manage.py migrate -v0
 .venv/bin/python manage.py backfill_restocks >/dev/null
 .venv/bin/python manage.py collectstatic --noinput -v0

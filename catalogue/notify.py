@@ -35,6 +35,9 @@ PUSH_BODY = b"Open admin to read it."
 WORKER_STOPPED = "RipRaptor crawl stopped"
 SHOP_FAILING = "A shop keeps failing"
 PRICES_TO_CHECK = "Prices to check"
+DISK_FULL = "Server disk nearly full"
+# Told when the disk the database sits on is fuller than this: at 99 percent the site stops saving anything.
+DISK_WARN_PERCENT = 85
 # Not a subject: when check_worker first found no heartbeat at all, so a reader still starting is not reported.
 NEVER_BEAT_SEEN = "no heartbeat first seen"
 CRAWL_PATH = "/admin/crawl/"
@@ -128,6 +131,28 @@ def crawl_problem(subject, click_path, detail="", now=None, opener=None):
     if not settings.RIPRAPTOR_CRAWL_PUSHES:
         return False
     return owner(subject, subject, click_path, detail, now=now, tags="warning", opener=opener)
+
+
+def disk_used(path):
+    """(percent of the disk used, bytes free) for the disk ``path`` is on."""
+    import shutil
+
+    usage = shutil.disk_usage(path)
+    return round(usage.used * 100 / usage.total), usage.free
+
+
+def disk_nearly_full(path, now=None):
+    """Tell the owner, once a day at most, when the database's disk is fuller than DISK_WARN_PERCENT.
+    Returns the percent used."""
+    percent, free = disk_used(path)
+    if percent > DISK_WARN_PERCENT:
+        detail = (
+            f"The server's disk is {percent} percent full, with {free / 1024 ** 3:.1f} GB left. When it is full the "
+            "site stops saving page counts and prices, and pages show an error. Old database "
+            "copies are in /var/lib/ripraptor/backups and can be deleted, keeping the newest."
+        )
+        crawl_problem(DISK_FULL, CRAWL_PATH, detail, now=now)
+    return percent
 
 
 def worker_stopped(heartbeat_at, now=None):

@@ -85,6 +85,19 @@ class ImportError_(Exception):
     pass
 
 
+# The unmatched products kept on one run, for the admin page and the stockist finder. A shop with
+# thousands would otherwise store every one of them on every read.
+UNMATCHED_KEPT = 3000
+
+
+def unmatched_text(lines):
+    """The unmatched lines a run keeps, with a note of how many more there were."""
+    text = "\n".join(lines[:UNMATCHED_KEPT])
+    if len(lines) > UNMATCHED_KEPT:
+        text += f"\n... and {len(lines) - UNMATCHED_KEPT} more not listed"
+    return text
+
+
 # Marketplaces allow a limited number of calls a day, so they are read this often, not hourly.
 DAILY_EVERY_HOURS = 20
 # A run still open after this long was cut short (a deploy, a timeout, a crash): the longest real
@@ -601,7 +614,7 @@ def poll_collections(retailer, fetch=fetch, now=None, pause=0.0, stop=None):
         raise
     finally:
         run.offers_found, run.listings_updated = found, updated
-        run.unmatched = "\n".join(unmatched)
+        run.unmatched = unmatched_text(unmatched)
         run.finished_at = timezone.now()
         run.save()
         pulse.updated = updated
@@ -1480,7 +1493,7 @@ def run_import(retailer, feed_path=None, fetch=None, page_pause=0.0):
         found, updated, unmatched = apply_offers(retailer, offers, run=run, complete=complete)
         run.offers_found = found
         run.listings_updated = updated
-        run.unmatched = "\n".join(unmatched)
+        run.unmatched = unmatched_text(unmatched)
     except (ImportError_, OSError) as exc:
         run.error = str(exc)
         logger.error("Import for %s failed: %s", retailer, exc)

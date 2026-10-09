@@ -25,8 +25,9 @@ class Command(BaseCommand):
     help = "Say how old the background reader's heartbeat is; exit 1 when it is older than ten minutes."
 
     def handle(self, *args, **options):
-        state = WorkerState.current()
         now = timezone.now()
+        self.check_disk(now)
+        state = WorkerState.current()
         if state is None or state.heartbeat_at is None:
             self.stdout.write("The background reader has never run. The hourly cron reads the shops.")
             self.tell(notify.worker_never_beat, now)
@@ -40,6 +41,22 @@ class Command(BaseCommand):
         )
         self.tell(notify.worker_stopped, state.heartbeat_at, now)
         sys.exit(1)
+
+    def check_disk(self, now):
+        """The disk the database is on: a full disk stops the whole site, so the owner hears well before."""
+        from django.db import connection
+
+        name = connection.settings_dict.get("NAME")
+        if connection.vendor != "sqlite" or not name or connection.is_in_memory_db():
+            return
+        from pathlib import Path
+
+        percent = notify.disk_used(Path(name).parent)[0]
+        self.stdout.write(f"The server's disk is {percent} percent full.")
+        try:
+            notify.disk_nearly_full(Path(name).parent, now)
+        except DatabaseError:
+            logger.exception("Could not note the disk notice to the owner")
 
     def tell(self, notice, *args):
         try:

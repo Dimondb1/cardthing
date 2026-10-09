@@ -16,7 +16,8 @@ The best page found is read once (/products/<handle>.js) for its barcode, price 
 - the same barcode as ours, or a name that agrees both ways when neither side has a barcode: the
   listing is added through apply_offers, so the price is judged against the other shops and its
   history starts like any other;
-- a different barcode never links, whatever the name says;
+- a different barcode never links, whatever the name says. The row it waits on keeps the shop's
+  barcode, so the autopilot and Claude can never link it either: only the owner can;
 - a likely match (60 to 99, or a sure name with a barcode on one side only) waits on the Things to
   check page for the owner's Yes or No;
 - anything else is noted as not found.
@@ -52,7 +53,7 @@ from django.utils import timezone
 
 from . import crawl, importers
 from .classify import classify
-from .importers import Catalogue, ImportError_, apply_offers, ean_key, link_key, money, product_offers
+from .importers import Catalogue, ImportError_, apply_offers, clean_ean, ean_key, link_key, money, product_offers
 from .classify import TYPES, label_kind
 from .matching import AUTO_LINK, SUGGEST, TYPE_WORDS, covers, key_words, shop_title
 from .models import (
@@ -894,7 +895,7 @@ class Finder:
     def review(self, product, shop, offer, value):
         return self.ask_owner(product, shop, offer.url, value, {
             "title": offer.title[:300], "price": offer.price, "availability": offer.availability,
-            "image_url": (offer.image or "")[:1000],
+            "image_url": (offer.image or "")[:1000], "shop_barcode": clean_ean(offer.ean),
             "suggested": product, "product": product, "confidence": value,
             "status": ShopProduct.Status.REVIEW, "source": ShopProduct.Source.FINDER,
             "last_seen": self.clock(),
@@ -968,6 +969,15 @@ def link(row):
         # Judged against the other shops at once, as a read would.
         judge_product(product.pk)
     return listing
+
+
+def barcodes_differ(row):
+    """The shop's page gave a barcode and it is not our product's. The names may still agree word for
+    word, so only the owner can say the row is our product. A row written before the shop's barcode was
+    kept has none and is not guessed at: it gets one the next time the finder or a read writes the row."""
+    ours = ean_key(row.suggested.ean) if row.suggested_id else ""
+    theirs = ean_key(row.shop_barcode)
+    return bool(ours and theirs and ours != theirs)
 
 
 def ignore(row):

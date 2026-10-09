@@ -244,6 +244,32 @@ class FoundTests(Base):
         self.assertIn("linked", autopilot.undo(answer))
         self.assertEqual(Ask.objects.get().owner_answer, "same")
 
+    def test_claude_never_links_a_found_row_whose_barcode_differs(self):
+        self.switch_on()
+        Product.objects.filter(pk=self.product.pk).update(ean="0820650851230")
+        same = self.found(title=BOX, price="101.00", confidence=100)
+        different = self.found(title=BOX, price="102.00", confidence=100)
+        ShopProduct.objects.filter(pk__in=[same.pk, different.pk]).update(shop_barcode="0196214105133")
+
+        def answer(key, params):
+            if key == f"found:{different.pk}":
+                return reply(key, "different", differences=["edition"], reason="The barcode names another edition.")
+            return reply(key)
+
+        client, _ = self.ask(answer)
+        sent = [json.loads(p["messages"][0]["content"][len("<evidence>"):-len("</evidence>")]) for _, p in client.sent]
+        self.assertEqual({e["barcode"] for e in sent}, {"differs"})
+        same.refresh_from_db()
+        different.refresh_from_db()
+        # A sure "same" is only a suggestion; a sure "different" still refuses.
+        self.assertEqual((same.status, different.status), (ShopProduct.Status.REVIEW, ShopProduct.Status.IGNORED))
+        self.assertFalse(Listing.objects.filter(retailer=same.retailer).exists())
+        self.assertEqual(Ask.objects.get(row_key=f"found:{same.pk}").action, Ask.Action.SUGGESTED)
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.REFUSE])
+        row = judge.Evidence({self.product.pk}).found(checks.found_waiting().get(pk=same.pk))
+        self.assertEqual(judge.ruling(row, judge.as_answer(Ask.objects.get(row_key=row.key))),
+                         (None, "the shop's barcode is not ours, so only you can say"))
+
     def test_a_difference_in_price_alone_never_acts(self):
         self.switch_on()
         row = self.found()
@@ -436,10 +462,10 @@ class AskingTests(Base):
         evidence = Ask.objects.get().evidence
         self.assertEqual(set(evidence), {
             "row", "kind", "ours", "shop", "shop_title", "price", "stock", "shop_url_path", "finder_score",
-            "title_reads_as", "set_codes_in_title", "price_band", "shop_titles_elsewhere",
+            "barcode", "title_reads_as", "set_codes_in_title", "price_band", "shop_titles_elsewhere",
         })
         self.assertNotIn("someone@example.com", json.dumps(client.sent[0][1]))
-        self.assertEqual(evidence["price_band"], "close to other shops")
+        self.assertEqual((evidence["price_band"], evidence["barcode"]), ("close to other shops", "we hold none"))
 
 
 class CostTests(Base):

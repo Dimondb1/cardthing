@@ -1197,11 +1197,13 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                                   "status": ShopProduct.Status.LINKED, "last_seen": checked_at},
                     )
                 elif match and value >= SUGGEST:
+                    # The shop's barcode is kept with what it saw: one that is not our product's means only the
+                    # owner can link the row.
                     ShopProduct.objects.update_or_create(
                         retailer=retailer, url=offer.url,
                         defaults={"title": offer.title, "price": offer.price, "availability": offer.availability,
-                                  "image_url": offer.image, "suggested_id": match[0], "confidence": value,
-                                  "last_seen": checked_at},
+                                  "image_url": offer.image, "shop_barcode": clean_ean(offer.ean),
+                                  "suggested_id": match[0], "confidence": value, "last_seen": checked_at},
                     )
                     unmatched.append(f"{offer.title} -> maybe {match[1]} ({value}%)")
                     continue

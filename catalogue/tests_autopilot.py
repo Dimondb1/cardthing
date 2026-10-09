@@ -112,6 +112,27 @@ class FoundAtAnotherShopTests(Base):
         right.refresh_from_db()
         self.assertEqual((right.status, self.kinds()), (ShopProduct.Status.REVIEW, []))
 
+    def test_a_page_held_back_for_a_different_barcode_is_never_linked_by_the_autopilot(self):
+        Product.objects.filter(pk=self.product.pk).update(ean="0820650851230")
+        self.shop(100)
+        self.shop(104)
+        differs = self.found(price="101.00")
+        same = self.found(price="102.00")
+        ShopProduct.objects.filter(pk=differs.pk).update(shop_barcode="0196214105133")
+        ShopProduct.objects.filter(pk=same.pk).update(shop_barcode="820650851230")
+        autopilot.run()
+        differs.refresh_from_db()
+        same.refresh_from_db()
+        # The names agree word for word and the price is close, but the barcode is the owner's to judge.
+        self.assertEqual(differs.status, ShopProduct.Status.REVIEW)
+        self.assertFalse(Listing.objects.filter(retailer=differs.retailer).exists())
+        self.assertEqual(same.status, ShopProduct.Status.LINKED)
+        self.assertEqual(list(CheckAnswer.objects.values_list("shop_product", flat=True)), [same.pk])
+        # Whatever reaches the link itself, it never links the row.
+        with self.assertRaises(autopilot.Stale):
+            autopilot.link_found(differs)
+        self.assertFalse(Listing.objects.filter(retailer=differs.retailer).exists())
+
     def test_a_shop_that_lists_the_product_already_is_left_for_the_owner(self):
         self.shop(100)
         row = self.found(price="101.00")

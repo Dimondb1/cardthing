@@ -1,7 +1,7 @@
 import json
 from decimal import Decimal
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from .classify import classify
@@ -422,6 +422,25 @@ class NameMatchingTests(TestCase):
         # A case is not something we list, and a playmat is not a TCG product.
         self.assertFalse(Product.objects.filter(name__icontains="case").exists())
         self.assertNotIn("https://pc.example/products/mat", rows)
+
+    @override_settings(RIPRAPTOR_AUTO_CATALOGUE=False)
+    def test_a_likely_match_keeps_the_shops_barcode_for_the_owner(self):
+        from .importers import Offer, apply_offers
+
+        offer = Offer(title="Pokemon Prismatic Evolutions Pokemon Center Elite Trainer Box", ean="0196214105133",
+                      url="https://pc.example/products/pc-etb", price=Decimal("120.00"))
+        apply_offers(self.retailer, [offer], complete=False)
+        row = ShopProduct.objects.get(retailer=self.retailer)
+        self.assertEqual((row.status, row.suggested, row.shop_barcode),
+                         (ShopProduct.Status.REVIEW, self.etb, "0196214105133"))
+        # The owner sees it in admin, as the shop gave it.
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        self.client.force_login(get_user_model().objects.create_superuser("admin", "a@example.com", "pw"))
+        page = self.client.get(reverse("admin:catalogue_shopproduct_change", args=[row.pk])).content.decode()
+        self.assertIn("0196214105133", page)
+        self.assertNotIn('name="shop_barcode"', page)
 
     def test_link_action_creates_listing_and_next_import_prices_it(self):
         from django.contrib.auth import get_user_model

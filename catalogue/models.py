@@ -661,6 +661,11 @@ class ShopProduct(models.Model):
         help_text="What the shop said about stock when this row was written. Blank when it was not recorded.",
     )
     image_url = models.URLField(max_length=1000, blank=True)
+    shop_barcode = models.CharField(
+        "shop's barcode", max_length=20, blank=True,
+        help_text="The barcode the shop's page gave when this row was written. Blank when it gave none, or "
+                  "the row was written before barcodes were kept.",
+    )
     suggested = models.ForeignKey(
         Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
         verbose_name="our product",

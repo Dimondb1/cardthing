@@ -7,9 +7,9 @@ Claude only ever says whether two things the site already holds are the same pro
 a price, a date, a barcode or a product. The site's own rules then decide whether that answer may act:
 
 - found at another shop: "different" (for a reason other than the price) refuses the page; "same" links it
-  only when the price is within 0.75 to 1.33 of what the other shops charge, the title does not plainly
-  name another kind or set, the shop does not list the product already, and the new price is judged OK
-  without making any other price doubtful.
+  only when the shop gives no barcode other than ours, the price is within 0.75 to 1.33 of what the
+  other shops charge, the title does not plainly name another kind or set, the shop does not list the
+  product already, and the new price is judged OK without making any other price doubtful.
 - a shop's price (the cheapest doubtful price, or either price of a wrong match): "different" hides it;
   for a wrong match, only when Claude calls the other price "same". "Same" never counts a price.
 - possible duplicates: "different" keeps the pair apart. "Same" never merges: the owner merges the pairs
@@ -56,7 +56,7 @@ from .types import type_label
 logger = logging.getLogger(__name__)
 
 Ask, Kind = ClaudeAsk, CheckAnswer.Kind
-PROMPT_VERSION = 3
+PROMPT_VERSION = 4
 
 # The models the owner can choose, with what each answer usually costs at medium effort.
 MODELS = {
@@ -338,6 +338,19 @@ def ours(product):
     }
 
 
+def barcode(row):
+    """How the shop's barcode on a found row compares with ours. A row written before the shop's barcode
+    was kept reads as the shop giving none: that is all the site knows."""
+    from .importers import ean_key
+
+    mine, theirs = ean_key(row.suggested.ean), ean_key(row.shop_barcode)
+    if not mine:
+        return "we hold none"
+    if not theirs:
+        return "shop gives none"
+    return "agrees" if mine == theirs else "differs"
+
+
 def reads_as(product, title):
     kind = find_type(box_contents(title or ""))
     return type_label(product.game.slug, kind) if kind else "nothing clear"
@@ -368,10 +381,10 @@ def pair_key(first, second):
 
 
 def fingerprint(evidence):
-    """What decides whether a row is asked again: the row and its titles, never other shops' prices,
-    the model or the effort."""
+    """What decides whether a row is asked again: the row, its titles and its barcode, never other shops'
+    prices, the model or the effort."""
     keep = {k: evidence.get(k) for k in ("kind", "row", "ours", "first", "second", "shop_title", "price_band",
-                                         "shop_titles_elsewhere")}
+                                         "shop_titles_elsewhere", "barcode")}
     keep["version"] = PROMPT_VERSION
     return hashlib.sha256(json.dumps(keep, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
@@ -420,7 +433,7 @@ class Evidence:
             "row": key, "kind": "found", "ours": ours(product),
             "shop": row.retailer.name, "shop_title": row.title, "price": str(row.price) if row.price else "none",
             "stock": row.get_availability_display() or "not recorded", "shop_url_path": url_path(row.url),
-            "finder_score": row.confidence, "title_reads_as": reads_as(product, row.title),
+            "finder_score": row.confidence, "barcode": barcode(row), "title_reads_as": reads_as(product, row.title),
             "set_codes_in_title": codes_in(row.title), "price_band": price_band(row.price, others),
             "shop_titles_elsewhere": self.elsewhere(product.pk, row.retailer_id),
         }
@@ -696,6 +709,10 @@ def ruling(row, answer, partner=None):
     if row.kind == "found":
         if answer["verdict"] == "different":
             return "refuse", ""
+        from .finder import barcodes_differ
+
+        if barcodes_differ(row.shop_product):
+            return None, "the shop's barcode is not ours, so only you can say"
         price = row.shop_product.price
         if not price or price <= 0:
             return None, "the shop shows no price"

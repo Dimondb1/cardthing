@@ -341,6 +341,27 @@ class SuggestTests(FinderCase):
         self.assertFalse(Listing.objects.filter(retailer=self.gg).exists())
         self.assertEqual(self.search(self.etb, self.gg).outcome, StockistSearch.Outcome.REVIEW)
 
+    def test_the_finder_keeps_the_shops_barcode_on_the_row_it_holds_back(self):
+        from . import autopilot
+        from .models import CheckAnswer
+
+        Product.objects.filter(pk=self.etb.pk).update(ean="0820650851230")
+        # The home shop charges what Gathering Games does, so only the barcode holds the row back.
+        Listing.objects.filter(product=self.etb, retailer=self.home).update(price=Decimal("149.99"))
+        self.find(self.shop(page=product_page(available=True)))
+        row = ShopProduct.objects.get(retailer=self.gg)
+        self.assertEqual((row.status, row.confidence, row.shop_barcode), (ShopProduct.Status.REVIEW, 100, PE_BARCODE))
+        self.assertTrue(finder.barcodes_differ(row))
+        autopilot.run()
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.REVIEW)
+        self.assertFalse(Listing.objects.filter(retailer=self.gg).exists())
+        self.assertFalse(CheckAnswer.objects.exists())
+        # A barcode on the shop's side only is kept too, and is not a different barcode.
+        Product.objects.filter(pk=self.etb.pk).update(ean="")
+        row.refresh_from_db()
+        self.assertFalse(finder.barcodes_differ(row))
+
     def test_a_barcode_on_one_side_only_waits_for_a_tap(self):
         self.find(self.shop())
         self.assertFalse(Listing.objects.filter(retailer=self.gg).exists())
@@ -727,8 +748,9 @@ class WebsiteTests(FinderCase):
         self.find(Shop({SITE_ETB: site_page()}))
         self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
         row = ShopProduct.objects.get(retailer=self.site)
-        self.assertEqual((row.status, row.source, row.price, row.availability),
-                         (ShopProduct.Status.REVIEW, ShopProduct.Source.FINDER, Decimal("129.99"), Listing.Availability.IN_STOCK))
+        self.assertEqual((row.status, row.source, row.price, row.availability, row.shop_barcode),
+                         (ShopProduct.Status.REVIEW, ShopProduct.Source.FINDER, Decimal("129.99"), Listing.Availability.IN_STOCK,
+                          PE_BARCODE))
         ShopProduct.objects.all().delete()
         StockistSearch.objects.all().delete()
         Product.objects.filter(pk=self.etb.pk).update(ean="")

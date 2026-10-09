@@ -391,8 +391,9 @@ never counts a doubtful price on its own say-so.
   times the median of two or more other shops' prices (one other shop may be
   the wrong one). **Yes** when the names agree word for word both ways, the
   shop does not list the product already, and the price is within 0.75 to
-  1.33 of the other shops' median. A likely name, or a page with no other
-  shop to compare, waits for you.
+  1.33 of the other shops' median. A likely name, a page with no other
+  shop to compare, or a page whose barcode is not ours (however well its
+  name agrees), waits for you.
 - **Doubtful prices and wrong matches: Hide**, for the product's cheapest
   price or either price of a wrong match, when the shop's title plainly
   names another kind of product or another set's code. A dearer doubtful
@@ -429,10 +430,11 @@ product, and never touches sets, release dates or delivery charges. The
 site's own rules decide whether its answer may act:
 
 - **Found at another shop:** Claude's "different" refuses the page; its
-  "same" links it only when the price is within 0.75 to 1.33 of the other
-  shops', the title does not plainly name another kind or set, the shop
-  does not list the product already, and the new price is judged OK
-  without making any other price doubtful.
+  "same" links it only when the shop gives no barcode other than ours, the
+  price is within 0.75 to 1.33 of the other shops', the title does not
+  plainly name another kind or set, the shop does not list the product
+  already, and the new price is judged OK without making any other price
+  doubtful. Claude is told whether the barcodes agree.
 - **A shop's price** (the cheapest doubtful one, or a wrong match): "different"
   hides it; for a wrong match only when Claude is sure the other price is
   the product. "Same" never counts a price as right.
@@ -1145,8 +1147,11 @@ page found is read once (`/products/<handle>.js`) for its barcode, price
 and stock. The same barcode as ours, or a name that agrees both ways when
 neither side has a barcode, adds the listing like a shop read would: the
 price is judged against the other shops and its history starts. A
-different barcode never links. A likely match (60 to 99, or a sure name
-with a barcode on one side only) is listed on Things to check as
+different barcode never links: the row keeps the shop's barcode, so neither
+the autopilot nor Claude can link it either. Rows written before barcodes
+were kept have none until the finder or a shop read writes them again. A
+likely match (60 to 99, or a sure name with a barcode on one side only) is
+listed on Things to check as
 "<our product> might be at <shop> as "<the shop's title>" for £<price>"
 with "Yes, link it" and "No, not this". Yes adds the listing with the
 price and stock the finder saw, dated when it saw them, and the shop's

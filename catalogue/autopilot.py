@@ -15,7 +15,8 @@ Found at another shop
     times what two or more other shops charge. One other shop is not enough: it may be the wrong one.
     Yes, when the names agree word for word both ways, the shop does not list the product already, and
     the price is within a quarter of what the other shops charge. A likely name waits for the owner, and
-    so does a page with no other shop to compare.
+    so does a page with no other shop to compare. So does a page whose barcode is not ours, however well
+    its name agrees: the finder held it back for that, and only the owner can link it.
 
 Doubtful prices and wrong matches
     Hide, for the product's cheapest price or either price of a wrong match, when the shop's title plainly
@@ -159,14 +160,15 @@ def refuse_found(row):
 
 def link_found(row, keep_ok=False):
     """Yes: link the stockist finder's row to its product. Raises Stale, so the caller's transaction rolls
-    back, when the row no longer waits or the shop lists the product already (linking would move that
-    listing). With ``keep_ok`` it also rolls back when the new price is not judged OK against the other
-    shops, or makes a price that was OK doubtful. Returns the fields for its CheckAnswer."""
+    back, when the row no longer waits, the shop's barcode is not ours (only the owner links that), or the
+    shop lists the product already (linking would move that listing). With ``keep_ok`` it also rolls back
+    when the new price is not judged OK against the other shops, or makes a price that was OK doubtful.
+    Returns the fields for its CheckAnswer."""
     from . import finder
 
     still_waiting(row)
     product = row.suggested
-    if Listing.objects.filter(product=product, retailer=row.retailer).exists():
+    if finder.barcodes_differ(row) or Listing.objects.filter(product=product, retailer=row.retailer).exists():
         raise Stale
     before = dict(Listing.objects.filter(product=product).values_list("pk", "sanity"))
     listing = finder.link(row)
@@ -226,6 +228,8 @@ class Autopilot:
     # Found at another shop
 
     def found_rows(self):
+        from . import finder
+
         rows = list(checks.found_waiting().select_related("retailer", "suggested__game", "suggested__product_set"))
         rates = going_rates({row.suggested_id for row in rows})
         listed = set(
@@ -246,6 +250,9 @@ class Autopilot:
                 continue
             # A shop that lists the product already is the owner's to sort: linking would move its listing.
             if (product.pk, row.retailer_id) in listed:
+                continue
+            # A different barcode is the owner's to judge, however well the name agrees.
+            if finder.barcodes_differ(row):
                 continue
             if row.confidence >= AUTO_LINK and ratio is not None and LINK_LOW <= ratio <= LINK_HIGH:
                 who = "the other shop charges" if len(others) == 1 else f"that {len(others)} other shops charge"

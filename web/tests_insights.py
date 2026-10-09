@@ -328,6 +328,11 @@ class ShopReadingTests(TestCase):
         make_retailer("Failing Shop", error_streak=3, backoff_until=now + timedelta(minutes=40),
                       last_error="Could not fetch https://failing.example/: HTTP Error 503", **shopify)
         slow = make_retailer("Slow Shop", read_every_minutes=360, **shopify)
+        # The same error on its latest run is shown under Problem, so Reading does not repeat it.
+        url_error = "Could not fetch https://repeat.example/collections/all/products.json?page=3&limit=250: HTTP Error 503"
+        repeat = make_retailer("Repeat Shop", error_streak=2, backoff_until=now + timedelta(minutes=10),
+                               last_error=url_error, **shopify)
+        ImportRun.objects.create(retailer=repeat, finished_at=now - timedelta(minutes=1), error=url_error)
         for shop in (regular, slow):
             ImportRun.objects.create(retailer=shop, started_at=now - timedelta(hours=8),
                                      finished_at=now - timedelta(hours=8))
@@ -341,6 +346,8 @@ class ShopReadingTests(TestCase):
         self.assertRegex(health["Failing Shop"]["reading"],
                          r"^Backing off until [\d\w :]+ after 3 errors: Could not fetch https://failing\.example/: HTTP Error 503$")
         self.assertEqual(health["Slow Shop"]["reading"], "Reads every 360 min")
+        self.assertRegex(health["Repeat Shop"]["reading"], r"^Backing off until [\d\w :]+ after 2 errors$")
+        self.assertEqual(health["Repeat Shop"]["problem"], url_error)
         # Not read for 8 hours: late for a shop read every 45 minutes, on time for one read every 6 hours.
         self.assertTrue(health["Regular Shop"]["problem"].startswith("Last read"))
         self.assertEqual(health["Slow Shop"]["problem"], "")
@@ -350,3 +357,7 @@ class ShopReadingTests(TestCase):
         html = self.client.get(reverse("insights")).content.decode()
         self.assertIn("<th>Reading</th>", html)
         self.assertIn("after 3 errors", html)
+        self.assertEqual(html.count("repeat.example"), 1)
+        # A long address in a cell wraps instead of making the page scroll sideways.
+        self.assertIn(".ins td.wrap { overflow-wrap: anywhere; }", html)
+        self.assertIn('<td class="wrap">Backing off until', html)

@@ -1,16 +1,20 @@
 import re
 import time
+import traceback
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from catalogue.importers import close_abandoned_runs, run_import
-from catalogue.models import Retailer
+from catalogue.models import ImportRun, Retailer
+from catalogue.signals import clear_list_caches
 
-# The hourly run reads a shop whose time comes before half past: that is nearer this run than the next
-# one, so a shop read every 45 or 60 minutes is still read every hour rather than every other hour.
-HOURLY_SLACK = timedelta(minutes=30)
+# The run on the hour also reads a shop whose next read falls within a quarter of an hour of the run's
+# start. Next reads are counted from the start of the run before, and a run can start a few minutes late
+# (Python starting, or the stock watch holding the lock for up to nine and a half minutes), so without it a
+# shop read every 60 minutes would be read every other hour. It never shortens a wait after errors.
+DUE_SLACK = timedelta(minutes=15)
 # "HTTP Error 429: Too Many Requests" from a shop, "eBay API 429: ..." or "Amazon API 503: ..." from a marketplace.
 STATUS_RE = re.compile(r"(?:HTTP Error|API) (\d{3})\b")
 
@@ -66,21 +70,41 @@ class Command(BaseCommand):
 
     def read_due(self, feed):
         """Read each due shop once, asking again after every read so a shop that comes due meanwhile is read too."""
+        started = timezone.now()
         read = set()
         while True:
             now = timezone.now()
-            item = Retailer.due(now + HOURLY_SLACK).exclude(pk__in=read).first()
+            item = Retailer.due(now, next_by=max(now, started + DUE_SLACK)).exclude(pk__in=read).first()
             if item is None:
                 break
             read.add(item.pk)
             # Stamped before the fetch: a read that crashes or hangs cannot be retried in a loop.
-            item.next_read_at = now + timedelta(minutes=item.read_every_minutes)
+            item.next_read_at = started + timedelta(minutes=item.read_every_minutes)
             item.save(update_fields=["next_read_at"])
-            self.read(item, feed)
+            began = timezone.now()
+            try:
+                self.read(item, feed, since=started)
+            except Exception as exc:
+                # One shop's read going wrong in a way nobody foresaw must not stop the others, nor the tidy
+                # that follows on the cron line. It counts as a failed read, so the shop backs off.
+                self.read_crashed(item, began, exc)
         if not read:
             self.stdout.write("No shops are due.")
 
-    def read(self, item, feed):
+    def read_crashed(self, item, began, exc):
+        error = f"The read stopped on an unexpected error: {type(exc).__name__}: {exc}"[:300]
+        self.stderr.write(f"{item}: {error}\n{traceback.format_exc()}")
+        now = timezone.now()
+        # The run it opened would otherwise show as running until close_abandoned_runs finds it.
+        ImportRun.objects.filter(retailer=item, finished_at__isnull=True, started_at__gte=began).update(
+            finished_at=now, error=error
+        )
+        # Whatever it wrote before it stopped should show.
+        clear_list_caches(force=True)
+        item.refresh_from_db(fields=["read_every_minutes", "error_streak"])
+        item.read_failed(now, None, error)
+
+    def read(self, item, feed, since=None):
         began = timezone.now()
         started = time.monotonic()
         run = run_import(item, feed_path=feed)
@@ -94,9 +118,9 @@ class Command(BaseCommand):
             return
         if run.started_at < began:
             # A marketplace already read today: run_import handed back that earlier run.
-            item.read_ok(now, 0, ok_at=run.finished_at)
+            item.read_ok(now, 0, ok_at=run.finished_at, since=since)
         else:
-            item.read_ok(now, seconds)
+            item.read_ok(now, seconds, since=since)
         line = f"{item}: {run.offers_found} offers, {run.listings_updated} listings updated"
         line += f" in {int(seconds)}s"
         if run.unmatched:

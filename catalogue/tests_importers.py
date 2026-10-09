@@ -1046,28 +1046,122 @@ class CadenceTests(TestCase):
             self.assertGreater(Retailer.objects.get(name=name).next_read_at, self.now + timedelta(minutes=40))
         self.assertEqual(self.run_due(due=True), [])
 
-        # A read that dies part way has already pushed its shop's next read on, so it cannot loop.
+        # A read that dies part way has already pushed its shop's next read on, so it cannot loop. It counts
+        # as a failed read, closes the run it opened, and the shops after it are still read.
         crashing = self.shop("Crashing Shop")
+        self.shop("Steady Shop")
         stamped = []
+        order = []
 
         def dying_run(retailer, feed_path=None):
+            order.append(retailer.name)
+            if retailer.name == "Steady Shop":
+                return ImportRun.objects.create(retailer=retailer, finished_at=timezone.now())
             stamped.append(Retailer.objects.get(pk=retailer.pk).next_read_at)
-            raise RuntimeError("fetch died midway")
+            ImportRun.objects.create(retailer=retailer)
+            raise KeyError("price")
 
+        stderr = StringIO()
         with mock.patch("catalogue.management.commands.import_prices.run_import", dying_run):
-            with self.assertRaises(RuntimeError):
-                call_command("import_prices", due=True, stdout=StringIO())
+            call_command("import_prices", due=True, stdout=StringIO(), stderr=stderr)
+        self.assertEqual(order, ["Crashing Shop", "Steady Shop"])
         self.assertGreater(stamped[0], self.now)
         crashing.refresh_from_db()
         self.assertGreater(crashing.next_read_at, self.now + timedelta(minutes=40))
+        self.assertEqual(crashing.error_streak, 1)
+        self.assertGreater(crashing.backoff_until, self.now)
+        self.assertIn("KeyError", crashing.last_error)
+        self.assertIn("Traceback", stderr.getvalue())
+        crashed_run = ImportRun.objects.get(retailer=crashing)
+        self.assertIsNotNone(crashed_run.finished_at)
+        self.assertIn("KeyError", crashed_run.error)
+        self.assertEqual(Retailer.objects.get(name="Steady Shop").error_streak, 0)
         self.assertNotIn("Crashing Shop", self.run_due(due=True))
 
-    def test_the_hourly_run_reads_a_shop_whose_turn_comes_before_half_past(self):
+    def hourly(self, hours, takes=None, errors=None, late=None):
+        """import_prices --due on the hour for ``hours`` hours on a fake clock.
+
+        ``takes`` is how long each shop's read lasts (a minute unless given), ``errors`` the shops whose reads
+        fail, and ``late`` how far into the hour a run starts. Returns the hours at which each shop was read.
+        """
+        from collections import defaultdict
+        from datetime import timedelta
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+
+        base = self.now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        clock = [base]
+        reads = defaultdict(list)
+
+        def fake_run(retailer, feed_path=None):
+            start = clock[0]
+            reads[retailer.name].append(round((start - base).total_seconds() / 3600, 2))
+            clock[0] += (takes or {}).get(retailer.name, timedelta(minutes=1))
+            error = (errors or {}).get(retailer.name, "")
+            return ImportRun.objects.create(retailer=retailer, started_at=start, finished_at=clock[0], error=error)
+
+        with mock.patch("django.utils.timezone.now", lambda: clock[0]), \
+                mock.patch("catalogue.management.commands.import_prices.time.monotonic", lambda: clock[0].timestamp()), \
+                mock.patch("catalogue.management.commands.import_prices.run_import", fake_run):
+            for hour in range(hours):
+                clock[0] = max(clock[0], base + timedelta(hours=hour) + (late or {}).get(hour, timedelta(seconds=2)))
+                call_command("import_prices", due=True, stdout=StringIO(), stderr=StringIO())
+        return dict(reads)
+
+    def test_the_hourly_run_reads_a_shop_due_within_a_quarter_hour_of_its_start(self):
         from datetime import timedelta
 
-        self.shop("Soon Shop", next_read_at=self.now + timedelta(minutes=20))
-        self.shop("Late Shop", next_read_at=self.now + timedelta(minutes=50))
+        self.shop("Soon Shop", next_read_at=self.now + timedelta(minutes=10))
+        self.shop("Late Shop", next_read_at=self.now + timedelta(minutes=20))
         self.assertEqual(self.run_due(due=True), ["Soon Shop"])
+
+    def test_the_hourly_run_honours_each_shops_interval_rounded_to_whole_hours(self):
+        from datetime import timedelta
+
+        # Read 40 minutes into the run behind a slow shop, and still read every hour, even after a run
+        # that started nine minutes late behind the stock watch.
+        self.shop("A Slow Shop", read_every_minutes=60)
+        self.shop("Hourly Shop", read_every_minutes=60)
+        reads = self.hourly(6, takes={"A Slow Shop": timedelta(minutes=40)}, late={2: timedelta(minutes=9)})
+        self.assertGreater(reads["Hourly Shop"][0], 0.6)
+        self.assertEqual([int(hour) for hour in reads["Hourly Shop"]], [0, 1, 2, 3, 4, 5])
+
+        # An owner's 80 or 120 minutes is every other hour, not every hour.
+        Retailer.objects.all().delete()
+        self.shop("Eighty Shop", read_every_minutes=80)
+        self.shop("Two Hour Shop", read_every_minutes=120)
+        self.shop("Seventy Shop", read_every_minutes=70)
+        reads = self.hourly(6)
+        self.assertEqual([int(hour) for hour in reads["Eighty Shop"]], [0, 2, 4])
+        self.assertEqual([int(hour) for hour in reads["Two Hour Shop"]], [0, 2, 4])
+        self.assertEqual([int(hour) for hour in reads["Seventy Shop"]], [0, 1, 2, 3, 4, 5])
+
+    def test_a_shop_backing_off_is_not_read_before_its_wait_ends(self):
+        from datetime import timedelta
+
+        self.shop("Throttled", next_read_at=self.now - timedelta(minutes=1),
+                  backoff_until=self.now + timedelta(minutes=20), error_streak=1,
+                  last_error="Could not fetch https://throttled.example/: HTTP Error 429: Too Many Requests")
+        self.assertEqual(self.run_due(due=True), [])
+
+        # A shop that keeps failing waits 80 minutes after its fifth error in a row, so the next hour's run
+        # leaves it alone and the one after reads it.
+        self.shop("Failing Shop", error_streak=4)
+        reads = self.hourly(3, errors={"Failing Shop": "Could not fetch https://failing.example/: HTTP Error 503"})
+        self.assertEqual(reads["Failing Shop"], [0.0, 2.0])
+
+    def test_a_slow_shop_is_never_read_more_than_a_third_of_the_time(self):
+        from datetime import timedelta
+
+        for minutes in (22, 50):
+            Retailer.objects.all().delete()
+            self.shop("Slow Shop", read_every_minutes=60)
+            reads = self.hourly(10, takes={"Slow Shop": timedelta(minutes=minutes)})["Slow Shop"]
+            self.assertGreater(len(reads), 1)
+            for earlier, later in zip(reads, reads[1:]):
+                self.assertGreaterEqual((later - earlier) * 60, 3 * minutes, (minutes, reads))
 
     def test_a_shop_that_comes_due_during_the_run_is_read_in_the_same_run(self):
         from datetime import timedelta
@@ -1133,6 +1227,10 @@ class CadenceTests(TestCase):
         shop.refresh_from_db()
         self.assertEqual(shop.error_streak, 1)
         self.assertAlmostEqual((shop.backoff_until - timezone.now()).total_seconds(), 30 * 60, delta=60)
+        # Once the doubling has gone past half an hour, a 429 waits as long as any other error.
+        shop.error_streak = 4
+        shop.read_failed(self.now, 429)
+        self.assertEqual(shop.backoff_until - self.now, timedelta(minutes=80))
 
     def test_a_failed_read_through_the_command_backs_off_and_a_good_one_resets(self):
         from datetime import timedelta
@@ -1165,6 +1263,10 @@ class CadenceTests(TestCase):
         shop.refresh_from_db()
         self.assertEqual(shop.last_read_seconds, 1800)
         self.assertEqual(shop.next_read_at, self.now + timedelta(minutes=90))
+        # In a run, the setting counts from the run's start and three times the read from the read's end.
+        run_start = self.now - timedelta(minutes=40)
+        self.assertEqual(shop.cadence_for(self.now, 60, since=run_start), run_start + timedelta(minutes=45))
+        self.assertEqual(shop.cadence_for(self.now, 20 * 60, since=run_start), self.now + timedelta(minutes=60))
 
     def test_a_slug_run_ignores_cadence(self):
         from datetime import timedelta

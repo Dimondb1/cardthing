@@ -297,15 +297,17 @@ def report(days=30):
         latest = last_any.get(retailer.pk)
         ok = last_ok.get(retailer.pk)
         problem = ""
-        if latest is not None and latest.error:
-            problem = latest.error[:160]
+        latest_error = latest.error[:160] if latest is not None and latest.error else None
+        if latest_error:
+            problem = latest_error
         elif ok is None:
             problem = "Not read successfully in the last week."
         elif ok < now - stale_after(retailer):
             problem = f"Last read {timezone.localtime(ok):%d %b %H:%M}."
         shops_health.append({
             "name": retailer.name, "slug": retailer.slug, "last_ok": ok, "in_stock": stock.get(retailer.pk, 0),
-            "problem": problem, "reading": reading_state(retailer, now), "earns": bool(retailer.affiliate_url_template)
+            "problem": problem, "reading": reading_state(retailer, now, error_shown=problem == latest_error),
+            "earns": bool(retailer.affiliate_url_template)
             or retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY),
         })
 
@@ -454,13 +456,16 @@ def clock(moment, now):
     return f"{local:%H:%M}" if local.date() == timezone.localtime(now).date() else f"{local:%d %b %H:%M}"
 
 
-def reading_state(retailer, now):
-    """One line on when a shop is read: paused, waiting after errors, or its interval and next read."""
+def reading_state(retailer, now, error_shown=False):
+    """One line on when a shop is read: paused, waiting after errors, or its interval and next read.
+
+    The error that started a wait is left out when the latest run's error is already shown beside it.
+    """
     if retailer.reading_paused:
         return "Paused"
     if retailer.backoff_until and retailer.backoff_until > now:
         line = f"Backing off until {clock(retailer.backoff_until, now)} after {plural(retailer.error_streak, 'error', 'errors')}"
-        return f"{line}: {retailer.last_error[:160]}" if retailer.last_error else line
+        return f"{line}: {retailer.last_error[:160]}" if retailer.last_error and not error_shown else line
     line = f"Reads every {retailer.read_every_minutes} min"
     return f"{line}, next {clock(retailer.next_read_at, now)}" if retailer.next_read_at else line
 

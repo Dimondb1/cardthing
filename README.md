@@ -682,22 +682,28 @@ shop's page in Admin > Retailers:
   straight from the Retailers list. `setup_shops` sets Shopify shops to 45
   minutes and everything else to 60, once: only shops never read on a
   schedule and still on the default are changed, so a value you set stays.
-  A shop that takes a long time to read is read less often, never more than
-  a third of the time: a read that took 30 minutes is next due 90 minutes
-  after it ended.
+  The hourly run rounds it to whole hours: up to 75 minutes is every hour,
+  76 to 135 every two hours, and so on. A shop that takes a long time to
+  read is read less often, never more than a third of the time: a read that
+  took 30 minutes is next due 90 minutes after it ended.
 - **Next read** is when its turn comes. `import_prices --due` stamps it
   before reading, so a read that crashes is not retried in a loop.
 - **Failed reads in a row** and **waiting after errors until**: after a
   failed read the shop waits 5 minutes, then 10, 20 and so on up to 6
   hours, and is read again once both that wait and its usual interval have
   passed. A shop that says it is being asked too often (HTTP 429) waits at
-  least 30 minutes. One read that works clears both.
+  least 30 minutes, and longer when the doubling has gone past that. A read
+  that stops on an error nobody foresaw counts as a failed read too, and the
+  run carries on with the next shop. One read that works clears both.
 - **Reading paused** keeps the shop out of every scheduled read. Reading it
   by name (`import_prices <slug>`) still works.
 
-The hourly cron runs `import_prices --due`. It reads every shop whose next
-read falls before half past the hour, so a shop read every 45 or 60 minutes
-is still read once an hour, and it checks again after each shop so one
+The hourly cron runs `import_prices --due`. A shop's next read is counted
+from the start of the run that read it, and each run also reads a shop
+whose next read falls within 15 minutes of its start, so a run that starts
+a few minutes late (waiting for the stock watch, say) does not push a shop
+read every 45 or 60 minutes to every other hour. A shop still waiting after
+errors is never read early. The run checks again after each shop so one
 that comes due during the run is read too. eBay and Amazon keep their own
 once-a-day limit inside the import: their hourly turn only retries a read
 that failed. `import_prices` with no slug and no `--due` reads every shop,

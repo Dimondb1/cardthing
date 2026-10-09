@@ -311,7 +311,8 @@ class Retailer(models.Model):
     read_every_minutes = models.PositiveIntegerField(
         "read every (minutes)",
         default=60,
-        help_text="How often to read this shop's prices. A shop that takes a long time to read is read less "
+        help_text="How often to read this shop's prices. The hourly read rounds it to whole hours: up to 75 "
+        "minutes is every hour, 76 to 135 every two hours. A shop that takes a long time to read is read less "
         "often: never more than a third of the time.",
     )
     next_read_at = models.DateTimeField("next read", null=True, blank=True, db_index=True)
@@ -335,17 +336,20 @@ class Retailer(models.Model):
         return self.name
 
     @classmethod
-    def due(cls, now=None):
+    def due(cls, now=None, next_by=None):
         """Shops whose next read has come and that are not waiting after errors or paused.
 
+        ``next_by`` lets a caller that runs on a fixed clock take a shop whose next read is a little
+        ahead of ``now``. It never shortens a wait after errors, which is always judged at ``now``.
         Marketplaces come first (they have a daily allowance), then the shop waiting longest, shops never
         read before any other, then by name.
         """
         now = now or timezone.now()
+        next_by = max(next_by or now, now)
         return (
             cls.objects.filter(is_active=True, reading_paused=False)
             .exclude(source_type=cls.Source.MANUAL)
-            .filter(Q(next_read_at__isnull=True) | Q(next_read_at__lte=now))
+            .filter(Q(next_read_at__isnull=True) | Q(next_read_at__lte=next_by))
             .filter(Q(backoff_until__isnull=True) | Q(backoff_until__lte=now))
             .alias(
                 marketplace=models.Case(
@@ -357,23 +361,24 @@ class Retailer(models.Model):
             .order_by("marketplace", F("next_read_at").asc(nulls_first=True), "name")
         )
 
-    def cadence_for(self, finished, seconds):
+    def cadence_for(self, finished, seconds, since=None):
         """When to read next after a read that ended at ``finished`` and took ``seconds``.
 
-        The setting, or three times the read time when that is longer, so a slow shop is never being read
-        more than a third of the time.
+        The setting, counted from ``since`` (the start of the run the read belonged to, so a shop read late
+        in an hourly run is still due at the next one) or from ``finished``. Never sooner than three times
+        the read time after it ended, so a slow shop is never being read more than a third of the time.
         """
-        minutes = max(self.read_every_minutes, 3 * (seconds or 0) / 60)
-        return finished + timedelta(minutes=minutes)
+        interval = (since or finished) + timedelta(minutes=self.read_every_minutes)
+        return max(interval, finished + timedelta(minutes=3 * (seconds or 0) / 60))
 
-    def read_ok(self, now, seconds, ok_at=None):
+    def read_ok(self, now, seconds, ok_at=None, since=None):
         """Record a read that worked: errors forgotten, next read set by the cadence."""
         self.error_streak = 0
         self.backoff_until = None
         self.last_error = ""
         self.last_ok_at = ok_at or now
         self.last_read_seconds = int(seconds)
-        self.next_read_at = self.cadence_for(now, seconds)
+        self.next_read_at = self.cadence_for(now, seconds, since=since)
         self.save(update_fields=[
             "error_streak", "backoff_until", "last_error", "last_ok_at", "last_read_seconds", "next_read_at",
         ])

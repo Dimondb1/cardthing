@@ -1,4 +1,5 @@
 import json
+import datetime
 from datetime import timedelta
 from unittest import mock
 
@@ -140,6 +141,176 @@ class StockAlertTests(TestCase):
     def test_terms_explain_what_is_kept_and_robots_keep_alert_links_private(self):
         self.assertContains(self.client.get(reverse("web:terms")), "Zoho ZeptoMail")
         self.assertContains(self.client.get("/robots.txt"), "Disallow: /alerts/")
+
+
+class PreorderAlertTests(TestCase):
+    """Alerts asked for since RIPRAPTOR_PREORDER_ALERTS_FROM also hear, once, when a shop opens pre-orders."""
+
+    def setUp(self):
+        self.now = timezone.now()
+        self.cutoff = self.now - timedelta(days=2)
+        overrides = self.settings(RIPRAPTOR_PREORDER_ALERTS_FROM=self.cutoff, **MAIL)
+        overrides.enable()
+        self.addCleanup(overrides.disable)
+        self.product = make_product(make_set(make_game()), name="Ascended Heroes Elite Trainer Box", slug="ascended-etb")
+        self.shop = make_retailer("Harbour Games")
+        self.listing = make_listing(self.product, self.shop, price="49.99", delivery="3.00", availability="out_of_stock")
+        self.outbox = Outbox()
+        patcher = mock.patch.object(mail, "send", self.outbox)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def alert(self, created_at, email="ben@example.com"):
+        return StockAlert.objects.create(product=self.product, email=email, created_at=created_at, confirmed_at=created_at)
+
+    def open_preorders(self, listing=None):
+        Listing.objects.filter(pk=(listing or self.listing).pk).update(availability="preorder", last_checked=timezone.now())
+
+    def test_an_alert_after_the_cut_off_hears_once_when_a_shop_opens_preorders(self):
+        alert = self.alert(self.now - timedelta(hours=1))
+        self.assertEqual(alerts.send_due(), (0, 0))   # nothing at any shop yet
+        self.open_preorders()
+        self.assertEqual(alerts.send_due(), (1, 0))
+        message = self.outbox.sent[0]
+        self.assertEqual(message["to"], "ben@example.com")
+        self.assertEqual(message["subject"], "Pre-orders open: Ascended Heroes Elite Trainer Box, £52.99 at Harbour Games")
+        self.assertEqual(message["unsubscribe"], f"https://ripraptor.com/alerts/stop/{alert.token}/")
+        self.assertIn(f'href="https://ripraptor.com/alerts/stop/{alert.token}/"', message["html"])
+        self.assertIn(">Unsubscribe</a>", message["html"])
+        self.assertIn('/static/img/logo.png" width="180" alt="RipRaptor"', message["html"])
+        self.assertIn("Cheapest pre-order now: £52.99 delivered at Harbour Games", message["text"])
+        self.assertIn("https://ripraptor.com/products/ascended-etb/", message["text"])
+        import re
+
+        for body in (message["text"], re.sub(r"<[^>]*>", " ", message["html"])):
+            self.assertNotIn("!", body)
+            self.assertNotIn("\u2014", body)
+        self.assertFalse(StockAlert.objects.exists())
+        # One email: the address is gone, so stock arriving later sends nothing.
+        Listing.objects.filter(pk=self.listing.pk).update(availability="in_stock")
+        self.assertEqual(alerts.send_due(), (0, 0))
+        self.assertEqual(len(self.outbox.sent), 1)
+
+    def test_a_shop_in_stock_sends_back_in_stock_not_preorder(self):
+        self.alert(self.now - timedelta(hours=1))
+        self.open_preorders()
+        make_listing(self.product, make_retailer("Dragon Vault"), price="60.00", availability="in_stock")
+        self.assertEqual(alerts.send_due(), (1, 0))
+        self.assertEqual(self.outbox.sent[0]["subject"], "Back in stock: Ascended Heroes Elite Trainer Box")
+        self.assertIn("£60.00 delivered at Dragon Vault", self.outbox.sent[0]["text"])
+
+    def test_an_alert_before_the_cut_off_waits_for_stock(self):
+        self.alert(self.cutoff - timedelta(minutes=1))
+        self.open_preorders()
+        self.assertEqual(alerts.send_due(), (0, 0))
+        self.assertTrue(StockAlert.objects.exists())
+        Listing.objects.filter(pk=self.listing.pk).update(availability="in_stock")
+        self.assertEqual(alerts.send_due(), (1, 0))
+        self.assertEqual(self.outbox.sent[0]["subject"], "Back in stock: Ascended Heroes Elite Trainer Box")
+
+    def test_without_the_setting_nobody_hears_about_preorders(self):
+        self.alert(self.now - timedelta(hours=1))
+        self.open_preorders()
+        with self.settings(RIPRAPTOR_PREORDER_ALERTS_FROM=None):
+            self.assertEqual(alerts.send_due(), (0, 0))
+            self.assertFalse(alerts.preorder_alerts_on())
+        self.assertEqual(self.outbox.sent, [])
+
+    def test_marketplace_preorders_never_count(self):
+        self.alert(self.now - timedelta(hours=1))
+        make_listing(self.product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="45.00", availability="preorder")
+        make_listing(self.product, make_retailer("Amazon", source_type=Retailer.Source.AMAZON), price="44.00", availability="preorder")
+        self.assertEqual(alerts.shop_stock(self.product, allow_preorder=True), (None, None))
+        self.assertEqual(alerts.send_due(), (0, 0))
+        self.assertTrue(StockAlert.objects.exists())
+
+    def test_shop_stock_prefers_stock_and_then_the_cheapest_preorder(self):
+        dear = make_listing(self.product, make_retailer("Dragon Vault"), price="70.00", availability="preorder")
+        self.open_preorders()
+        self.assertEqual(alerts.shop_stock(self.product), (None, None))
+        self.assertEqual(alerts.shop_stock(self.product, allow_preorder=True), (self.listing, "preorder"))
+        Listing.objects.filter(pk=dear.pk).update(availability="in_stock")
+        with self.assertNumQueries(1):
+            self.assertEqual(alerts.shop_stock(self.product, allow_preorder=True), (dear, "in_stock"))
+
+    def test_an_unknown_delivery_says_plus_delivery(self):
+        Listing.objects.filter(pk=self.listing.pk).update(delivery_known=False)
+        self.alert(self.now - timedelta(hours=1))
+        self.open_preorders()
+        alerts.send_due()
+        self.assertEqual(self.outbox.sent[0]["subject"],
+                         "Pre-orders open: Ascended Heroes Elite Trainer Box, £49.99 plus delivery at Harbour Games")
+
+    def test_the_form_asks_about_preorders_and_hides_when_a_shop_has_them(self):
+        url = self.product.get_absolute_url()
+        page = self.client.get(url)
+        self.assertContains(page, "Tell me when a shop has it or opens pre-orders")
+        self.assertNotContains(page, "Email me when it is back in stock")
+        self.assertContains(page, f'action="/alerts/{self.product.slug}/"')
+        self.open_preorders()
+        self.assertNotContains(self.client.get(url), 'id="alert"')
+        # A pre-order on eBay alone is not a shop opening.
+        Listing.objects.filter(pk=self.listing.pk).update(availability="out_of_stock")
+        make_listing(self.product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="45.00", availability="preorder")
+        self.assertContains(self.client.get(url), "Tell me when a shop has it or opens pre-orders")
+        # A cut-off still to come keeps the old promise.
+        with self.settings(RIPRAPTOR_PREORDER_ALERTS_FROM=self.now + timedelta(days=1)):
+            self.assertContains(self.client.get(url), "Email me when it is back in stock")
+
+    def test_the_confirmation_promises_what_will_be_sent(self):
+        self.client.post(reverse("web:alert_ask", args=[self.product.slug]), {"email": "ben@example.com"})
+        alert = StockAlert.objects.get()
+        self.assertIn("is in stock or open for pre-order at a UK shop we check", self.outbox.sent[0]["text"])
+        self.assertContains(self.client.get(reverse("web:alert_confirm", args=[alert.token])),
+                            "is in stock or open for pre-order at a UK shop we check")
+        StockAlert.objects.update(created_at=self.cutoff - timedelta(days=1), confirmed_at=None)
+        self.assertContains(self.client.get(reverse("web:alert_confirm", args=[alert.token])), "is back in stock at a UK shop we check")
+
+    def test_the_terms_still_describe_the_store(self):
+        terms = self.client.get(reverse("web:terms"))
+        for sentence in ("Nothing is sent until you confirm", "You get one email when a shop has the product, and your address is then",
+                         "Unconfirmed requests are deleted after a week", "Every email has a link that deletes your"):
+            self.assertContains(terms, sentence)
+        self.assertContains(self.client.get("/robots.txt"), "Disallow: /alerts/")
+
+
+class PreorderSettingTests(TestCase):
+    def test_the_setting_reads_a_date_or_a_moment_and_refuses_a_typo(self):
+        from zoneinfo import ZoneInfo
+
+        from ripraptor.settings import preorder_alerts_from
+
+        self.assertIsNone(preorder_alerts_from(""))
+        self.assertEqual(preorder_alerts_from("2026-10-09T12:30:00+00:00"),
+                         timezone.datetime(2026, 10, 9, 12, 30, tzinfo=datetime.timezone.utc))
+        self.assertEqual(preorder_alerts_from("2026-10-09"),
+                         timezone.datetime(2026, 10, 9, tzinfo=ZoneInfo("Europe/London")))
+        with self.assertRaises(ValueError):
+            preorder_alerts_from("9 Oct")
+
+    def test_install_writes_the_install_moment_once(self):
+        import re
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        from django.conf import settings as django_settings
+
+        from ripraptor.settings import preorder_alerts_from
+
+        script = (Path(django_settings.BASE_DIR) / "deploy" / "install.sh").read_text()
+        line = next(l for l in script.splitlines() if l.startswith("grep -q RIPRAPTOR_PREORDER_ALERTS_FROM .env ||"))
+        # Before the service restarts, so the site reads it from its first request.
+        self.assertLess(script.index(line), script.index("systemctl restart ripraptor"))
+        folder = tempfile.mkdtemp()
+        env = Path(folder) / ".env"
+        env.write_text("DJANGO_DEBUG=0\n")
+        for _ in range(2):
+            subprocess.run(["bash", "-c", line], cwd=folder, check=True)
+        found = re.findall(r"^RIPRAPTOR_PREORDER_ALERTS_FROM=(.+)$", env.read_text(), re.M)
+        self.assertEqual(len(found), 1)
+        moment = preorder_alerts_from(found[0])
+        self.assertLess(abs((timezone.now() - moment).total_seconds()), 60)
 
 
 @override_settings(**MAIL)

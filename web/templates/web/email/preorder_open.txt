@@ -1,0 +1,9 @@
+Pre-orders open: {{ product.name }}
+
+Cheapest pre-order now: {% if listing.delivery_known %}£{{ listing.delivered_price }} delivered{% else %}£{{ listing.price }} plus delivery (check the total at the shop){% endif %} at {{ listing.retailer.name }}, checked just now. No UK shop we check has it in stock yet.
+
+Compare every shop's price: {{ product_url }}
+
+This was your one alert for this product, so your email address has already been deleted. Ask again on the product page if you want to hear when it is in stock.
+
+{{ site_name }} may earn a commission when you buy through its links.

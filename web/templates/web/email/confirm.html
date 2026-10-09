@@ -2,7 +2,7 @@
 {% block body %}
 <h1 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:#1f2430;">Confirm your alert</h1>
 {% if image_url %}<p style="margin:0 0 16px;text-align:center;"><img src="{{ image_url }}" width="160" alt="{{ product.name }}" style="width:160px;max-width:50%;height:auto;border:0;border-radius:12px;"></p>{% endif %}
-<p style="margin:0 0 16px;">You asked us to email you when <strong>{{ product.name }}</strong> is back in stock at a UK shop we check.</p>
+<p style="margin:0 0 16px;">You asked us to email you when <strong>{{ product.name }}</strong> {% if preorder %}is in stock or open for pre-order{% else %}is back in stock{% endif %} at a UK shop we check.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>
   <td style="border-radius:12px;background:#e5470e;"><a href="{{ confirm_url }}" style="display:inline-block;padding:14px 24px;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;">Confirm my alert</a></td>
 </tr></table>

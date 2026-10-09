@@ -1242,6 +1242,7 @@ site's cache.
 | `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
 | `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
+| `RIPRAPTOR_PREORDER_ALERTS_FROM` | written by install.sh | ISO date or date and time (UK time without a zone). Alerts asked for from then on are also emailed when a shop opens pre-orders. `deploy/install.sh` adds it with the install moment when it is missing and never moves it. Empty means no pre-order emails. A value that does not parse stops the site starting. |
 | `RIPRAPTOR_INBOX_NOTIFY_EMAIL` |         | Your own address. Each new Message us message is emailed to it through ZeptoMail with a link to reply in admin, and so are crawl problems (see below). Never shown on the site. |
 | `RIPRAPTOR_NTFY_TOPIC`         |         | A long, unguessable ntfy topic name. Each new message, and each crawl problem, sends a push to the free ntfy phone app subscribed to it. The push holds only a title and a link to admin, never a name, the words, a shop, a product or a price. |
 | `RIPRAPTOR_NTFY_URL`           | `https://ntfy.sh` | The ntfy server, if you run your own. |
@@ -1365,6 +1366,17 @@ create a Mail Agent, copy its Send Mail token into `.env` as
 `python manage.py send_stock_alerts --test you@example.com`. Without the
 token the form does not appear.
 
+Pre-orders too: an alert asked for on or after `RIPRAPTOR_PREORDER_ALERTS_FROM`
+is also sent, once, when a shop opens pre-orders and no shop has the product
+in stock ("Pre-orders open: <product>, £x at <shop>"), and is then deleted
+like any other. Alerts asked for before then were promised back in stock
+only and hear only that. While the setting is on, the form reads "Tell me
+when a shop has it or opens pre-orders" and hides once a shop (not eBay or
+Amazon) has the product in stock or on pre-order, since the email would go
+at once. `deploy/install.sh` writes the moment it first runs this code into
+`.env`, so nothing needs doing by hand; without the setting no pre-order
+email is sent and the form and emails read as before.
+
 ## Message us
 
 `/contact/` (footer and How it works page) takes a message, an optional
@@ -1443,13 +1455,16 @@ Insights shows them under "Home screen".
 
 ## Feeds
 
-`/feeds/deals.xml` is an RSS feed of restocks and price drops across the
+`/feeds/deals.xml` is an RSS feed of restocks, pre-order openings and price drops across the
 site, and `/feeds/<game>.xml` (for example `/feeds/pokemon.xml`) the same
 for one game. Every page announces them in its head, and the deals page
 prints the address, so a feed reader or a Discord feed bot can follow
 them. Restocks come from the Restock rows with the shop and the delivered
-price. Price drops come from the daily lowest prices, which hold a date
-and no time, so a drop is dated to its day and a product appears once.
+price. Pre-order openings come from the PreorderOpen rows of the last
+seven days ("Pre-orders open: <product>, £x at <shop>", GUID
+`preorder-<id>`), marketplaces left out. Price drops come from the daily
+lowest prices, which hold a date and no time, so a drop is dated to its
+day and a product appears once.
 Entries link to the product page. Feeds are built with Django's own
 syndication module and cached like the home lists, so a restock recorded
 by a check appears on the next request.

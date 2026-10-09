@@ -1,12 +1,13 @@
 """
-RSS feeds of restocks and price drops: one for the whole site, one per game.
+RSS feeds of restocks, pre-order openings and price drops: one for the whole site, one per game.
 
     /feeds/deals.xml
     /feeds/pokemon.xml
 
 A feed is the one way to push news to people that stores nothing about
 anyone. Restocks come from the Restock rows (so marketplaces are left out),
-with the shop and the delivered price. Price drops come from the daily
+with the shop and the delivered price. Pre-order openings come from the
+PreorderOpen rows in the same way. Price drops come from the daily
 lowest prices, which hold a date and no time, so a drop is dated to its
 day and each product appears once. Entries link to the product page.
 """
@@ -22,7 +23,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from catalogue import pricing
-from catalogue.models import DailyLowestPrice, Game, Listing, Restock
+from catalogue.alerts import MARKETPLACES
+from catalogue.models import DailyLowestPrice, Game, Listing, PreorderOpen, Restock
 from content import service as copy
 
 FEED_DAYS = 7
@@ -75,6 +77,29 @@ def restock_entries(game, store, now):
     return entries
 
 
+def preorder_entries(game, store, now):
+    """One entry per time a shop opened pre-orders within the window. Marketplaces never count."""
+    rows = PreorderOpen.objects.filter(
+        at__gte=now - timedelta(days=FEED_DAYS), product__is_active=True, retailer__is_active=True
+    ).exclude(retailer__source_type__in=MARKETPLACES).exclude(listing__sanity=Listing.Sanity.EXCLUDED)
+    if game is not None:
+        rows = rows.filter(product__game=game)
+    entries = []
+    for opening in rows.select_related("product", "retailer").order_by("-at")[:FEED_LIMIT]:
+        when = timezone.localtime(opening.at)
+        entries.append(Entry(
+            key=f"preorder-{opening.pk}",
+            title=copy.get("feeds.preorder.title", store=store, product=opening.product.name,
+                           price=f"£{opening.price:.2f}", retailer=opening.retailer.name),
+            body=copy.get("feeds.preorder.body" if opening.delivery_known else "feeds.preorder.body_unknown", store=store,
+                          retailer=opening.retailer.name,
+                          date=when.strftime("%-d %b"), time=when.strftime("%H:%M"), price=f"£{opening.price:.2f}"),
+            url=opening.product.get_absolute_url(),
+            at=opening.at,
+        ))
+    return entries
+
+
 def drop_entries(game, store, now):
     """One entry per product whose daily lowest price fell within the window, dated to the day it fell."""
     today = timezone.localdate(now)
@@ -122,7 +147,7 @@ def build_feed(slug, store, now=None):
         title = copy.get("feeds.game.title", store=store, site_name=site, game=game.name)
         description = copy.get("feeds.game.description", store=store, game=game.name)
         url = game.get_absolute_url()
-    entries = restock_entries(game, store, now) + drop_entries(game, store, now)
+    entries = restock_entries(game, store, now) + preorder_entries(game, store, now) + drop_entries(game, store, now)
     entries.sort(key=lambda entry: entry.at, reverse=True)
     return FeedPage(slug=slug, title=title, description=description, url=url, entries=entries[:FEED_LIMIT])
 
@@ -136,7 +161,7 @@ def feed_cache_keys(game_slugs=None):
 
 
 class DealsFeed(Feed):
-    """Restocks and price drops, site-wide or for one game. Built once every few minutes, like the home lists."""
+    """Restocks, pre-order openings and price drops, site-wide or for one game. Built once every few minutes, like the home lists."""
 
     def get_object(self, request, game_slug="deals"):
         key = feed_cache_key(game_slug)

@@ -1,4 +1,4 @@
-You asked {{ site_name }} to email you when {{ product.name }} is back in stock at a UK shop we check.
+You asked {{ site_name }} to email you when {{ product.name }} {% if preorder %}is in stock or open for pre-order{% else %}is back in stock{% endif %} at a UK shop we check.
 
 Confirm with this link:
 {{ confirm_url }}

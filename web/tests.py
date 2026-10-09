@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from catalogue.models import DailyLowestPrice, Listing, OutboundClick, Product
+from catalogue.models import DailyLowestPrice, Listing, OutboundClick, Product, Retailer
 from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
 
 
@@ -201,6 +201,18 @@ class CopyStyleTests(PageTestCase):
             visible_text = re.sub(r"<[^>]*>", " ", html)
             with self.subTest(url=url):
                 self.assertNotIn("!", visible_text)
+
+    def test_the_product_page_alert_form_keeps_the_house_style(self):
+        mail_on = {"RIPRAPTOR_ZEPTOMAIL_TOKEN": "tok", "RIPRAPTOR_MAIL_FROM": "alerts@ripraptor.com",
+                   "RIPRAPTOR_PREORDER_ALERTS_FROM": timezone.now() - timedelta(days=1)}
+        with self.settings(**mail_on):
+            for url in (self.sold_out.get_absolute_url(), self.unpriced.get_absolute_url()):
+                html = self.client.get(url).content.decode()
+                with self.subTest(url=url):
+                    self.assertIn("Tell me when a shop has it or opens pre-orders", html)
+                    self.assertNotIn("!", re.sub(r"<[^>]*>", " ", html))
+                    for phrase in self.BANNED:
+                        self.assertNotIn(phrase, html.lower())
 
 
 class ServerErrorPageTests(TestCase):
@@ -824,6 +836,50 @@ class FeedTests(PageTestCase):
         self.assertTrue(items[0].findtext("pubDate"))
         self.assertEqual(items[1].find("guid").get("isPermaLink"), "false")
         self.assertIn(f"fell from £57.00 to £54.99 on {today.strftime('%-d %b')}", items[1].findtext("description"))
+
+    def test_feeds_announce_preorder_openings_beside_restocks_and_drops(self):
+        from catalogue.models import PreorderOpen, Restock
+
+        magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
+        box = make_product(make_set(magic, name="Foundations", slug="foundations"), name="Foundations Play Booster Box", product_type="booster_box")
+        ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
+        now = timezone.now()
+        restock = Restock.objects.create(product=self.sold_out, retailer=self.harbour, at=now - timedelta(minutes=5), price="140.00")
+        opening = PreorderOpen.objects.create(product=self.unpriced, retailer=self.north, at=now, price="44.50")
+        unknown = PreorderOpen.objects.create(product=box, retailer=self.harbour, at=now - timedelta(minutes=10), price="99.00",
+                                              delivery_known=False)
+        PreorderOpen.objects.create(product=self.unpriced, retailer=ebay, at=now, price="40.00")          # a marketplace
+        PreorderOpen.objects.create(product=self.unpriced, retailer=self.harbour, at=now - timedelta(days=8), price="45.00")  # too old
+        items = self.feed(reverse("web:feed_deals")).find("channel").findall("item")
+        self.assertEqual(
+            [(item.findtext("guid"), item.findtext("title")) for item in items],
+            [
+                (f"preorder-{opening.pk}", "Pre-orders open: Prismatic Evolutions Booster Bundle, £44.50 at Northgate Cards"),
+                (f"restock-{restock.pk}", "Back in stock: Prismatic Evolutions Super-Premium Collection, £140.00 at Harbour Games"),
+                (f"preorder-{unknown.pk}", "Pre-orders open: Foundations Play Booster Box, £99.00 at Harbour Games"),
+                (f"drop-{self.etb.pk}-{timezone.localdate().isoformat()}",
+                 "Price drop: Prismatic Evolutions Elite Trainer Box, now £54.99 delivered, was £57.00"),
+            ],
+        )
+        self.assertIn("Pre-orders opened at Northgate Cards on", items[0].findtext("description"))
+        self.assertIn("£44.50 delivered", items[0].findtext("description"))
+        self.assertIn("£99.00 plus delivery", items[2].findtext("description"))
+        self.assertEqual(items[0].findtext("link"), "http://testserver" + self.unpriced.get_absolute_url())
+        self.assertEqual(items[0].find("guid").get("isPermaLink"), "false")
+        magic_titles = [i.findtext("title") for i in self.feed(reverse("web:feed_game", args=["magic-the-gathering"])).find("channel").findall("item")]
+        self.assertEqual(magic_titles, ["Pre-orders open: Foundations Play Booster Box, £99.00 at Harbour Games"])
+
+    def test_preorder_entries_are_one_query(self):
+        from catalogue.models import PreorderOpen
+        from content import service as copy
+        from web import feeds
+
+        for product in (self.etb, self.sold_out, self.unpriced):
+            PreorderOpen.objects.create(product=product, retailer=self.north, price="44.50")
+        store = copy.load_all()   # the wording is read once per request, not once per entry
+        with self.assertNumQueries(1):
+            entries = feeds.preorder_entries(None, store, timezone.now())
+        self.assertEqual(len(entries), 3)
 
     def test_game_feed_keeps_to_its_game_and_unknown_games_are_404(self):
         from catalogue.models import Restock

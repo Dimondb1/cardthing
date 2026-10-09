@@ -1,5 +1,8 @@
 """
 Back-in-stock email alerts: sign up, confirm, send once, forget.
+
+An alert asked for since settings.RIPRAPTOR_PREORDER_ALERTS_FROM is also sent, once, when a shop opens
+pre-orders and no shop has the product in stock; that one email ends it like any other.
 """
 
 from datetime import timedelta
@@ -27,14 +30,49 @@ def link(name, *args):
     return settings.RIPRAPTOR_SITE_URL + reverse(name, args=args)
 
 
-def shop_stock(product):
-    """The cheapest in-stock listing at a shop (not a marketplace), or None."""
-    return (
+IN_STOCK = "in_stock"
+PREORDER = "preorder"
+
+
+def preorder_from():
+    """The moment pre-order alerts began (settings.RIPRAPTOR_PREORDER_ALERTS_FROM), or None when they are off."""
+    return settings.RIPRAPTOR_PREORDER_ALERTS_FROM
+
+
+def wants_preorder(alert):
+    """True when this alert was asked for under the form that promised pre-orders too. Earlier alerts
+    asked for back in stock only and hear only that."""
+    start = preorder_from()
+    return start is not None and alert.created_at >= start
+
+
+def preorder_alerts_on(now=None):
+    """True when an alert asked for now would also hear about pre-orders: the form says so only then."""
+    start = preorder_from()
+    return start is not None and (now or timezone.now()) >= start
+
+
+def shop_stock(product, allow_preorder=False):
+    """(listing, kind) for the cheapest in-stock listing at a shop (never a marketplace), kind "in_stock".
+    With allow_preorder and no shop in stock, the cheapest shop pre-order instead, kind "preorder".
+    (None, None) when there is neither. One query."""
+    wanted = [Listing.Availability.IN_STOCK, Listing.Availability.PREORDER] if allow_preorder else [Listing.Availability.IN_STOCK]
+    listing = (
         Listing.objects.filter(product=product).buyable()
-        .filter(availability=Listing.Availability.IN_STOCK)
+        .filter(availability__in=wanted)
         .exclude(retailer__source_type__in=MARKETPLACES)
-        .select_related("retailer").order_by("-delivery_known", "delivered_price").first()
+        .select_related("retailer")
+        # "in_stock" sorts before "preorder": any shop in stock wins over every pre-order.
+        .order_by("availability", "-delivery_known", "delivered_price").first()
     )
+    if listing is None:
+        return None, None
+    return listing, IN_STOCK if listing.availability == Listing.Availability.IN_STOCK else PREORDER
+
+
+def price_words(listing):
+    """"£34.99" delivered, or "£29.99 plus delivery" when the shop's delivery charge is not known."""
+    return f"£{listing.delivered_price}" if listing.delivery_known else f"£{listing.price} plus delivery"
 
 
 def absolute(url):
@@ -72,10 +110,12 @@ def ask(product, email):
         if StockAlert.objects.filter(email=email).count() >= MAX_PER_EMAIL:
             return "limit"
         existing = StockAlert.objects.create(product=product, email=email)
+    preorder = wants_preorder(existing)
     text, html = render_mail("confirm", {
         "product": product,
         "subject": f"Confirm your alert for {product.name}",
-        "preheader": "One click and we will email you when it is back.",
+        "preheader": "One click and we will email you when a shop has it." if preorder else "One click and we will email you when it is back.",
+        "preorder": preorder,
         "confirm_url": link("web:alert_confirm", existing.token),
         "stop_url": link("web:alert_stop", existing.token),
     })
@@ -104,7 +144,8 @@ def stop(token):
 
 
 def send_due(now=None, stdout=None):
-    """Email every confirmed alert whose product a shop now has in stock, then forget the address."""
+    """Email every confirmed alert whose product a shop now has in stock, or, for an alert asked for since
+    pre-order alerts began, has opened for pre-order, then forget the address. One email per alert."""
     now = now or timezone.now()
     StockAlert.objects.filter(
         Q(confirmed_at__isnull=True, created_at__lt=now - timedelta(days=UNCONFIRMED_DAYS))
@@ -114,23 +155,32 @@ def send_due(now=None, stdout=None):
     waiting = StockAlert.objects.filter(confirmed_at__isnull=False).select_related("product")
     stock = {}
     for alert in waiting:
-        if alert.product_id not in stock:
-            stock[alert.product_id] = shop_stock(alert.product)
-        listing = stock[alert.product_id]
+        allow_preorder = wants_preorder(alert)
+        key = (alert.product_id, allow_preorder)
+        if key not in stock:
+            stock[key] = shop_stock(alert.product, allow_preorder=allow_preorder)
+        listing, kind = stock[key]
         if listing is None:
             continue
-        text, html = render_mail("back_in_stock", {
+        product_url = settings.RIPRAPTOR_SITE_URL + alert.product.get_absolute_url()
+        stop_url = link("web:alert_stop", alert.token)
+        if kind == PREORDER:
+            subject = f"Pre-orders open: {alert.product.name}, {price_words(listing)} at {listing.retailer.name}"
+            template = "preorder_open"
+        else:
+            subject = f"Back in stock: {alert.product.name}"
+            template = "back_in_stock"
+        preheader = f"{price_words(listing)}{' delivered' if listing.delivery_known else ''} at {listing.retailer.name}, checked just now."
+        text, html = render_mail(template, {
             "product": alert.product,
-            "subject": f"Back in stock: {alert.product.name}",
-            "preheader": (f"£{listing.delivered_price} delivered" if listing.delivery_known else f"£{listing.price} plus delivery")
-            + f" at {listing.retailer.name}, checked just now.",
+            "subject": subject,
+            "preheader": preheader,
             "listing": listing,
-            "product_url": settings.RIPRAPTOR_SITE_URL + alert.product.get_absolute_url(),
-            "stop_url": link("web:alert_stop", alert.token),
+            "product_url": product_url,
+            "stop_url": stop_url,
         })
         try:
-            mail.send(alert.email, f"Back in stock: {alert.product.name}", text, html,
-                      unsubscribe=link("web:alert_stop", alert.token))
+            mail.send(alert.email, subject, text, html, unsubscribe=stop_url)
         except mail.MailError as exc:
             failed += 1
             if stdout:

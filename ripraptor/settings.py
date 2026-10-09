@@ -15,6 +15,18 @@ from ripraptor.caching import MEMORY_CACHE, cache_dir, shared_caches
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def preorder_alerts_from(value):
+    """The aware moment pre-order alerts start, or None when the setting is empty."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    value = value.strip()
+    if not value:
+        return None
+    moment = datetime.fromisoformat(value)   # raises ValueError on a typo
+    return moment if moment.tzinfo else moment.replace(tzinfo=ZoneInfo("Europe/London"))
+
+
 def env_bool(name, default=False):
     value = os.environ.get(name)
     if value is None:
@@ -240,6 +252,11 @@ RIPRAPTOR_ZEPTOMAIL_TOKEN = os.environ.get("RIPRAPTOR_ZEPTOMAIL_TOKEN", "").stri
 RIPRAPTOR_ZEPTOMAIL_URL = os.environ.get("RIPRAPTOR_ZEPTOMAIL_URL", "https://cpaas.zoho.com/v1.1/email").strip()
 RIPRAPTOR_MAIL_FROM = os.environ.get("RIPRAPTOR_MAIL_FROM", "alerts@ripraptor.com").strip()
 RIPRAPTOR_SITE_URL = os.environ.get("RIPRAPTOR_SITE_URL", "https://ripraptor.com").strip().rstrip("/")
+# Alerts asked for on or after this moment are also emailed when a shop opens pre-orders. deploy/install.sh
+# writes the moment it first installs this code, so people who asked before then, when the form promised
+# only back in stock, hear only that. Empty means no pre-order emails at all. An ISO date or date and time;
+# without a zone it is UK time. A value that does not parse stops the site starting rather than guess.
+RIPRAPTOR_PREORDER_ALERTS_FROM = preorder_alerts_from(os.environ.get("RIPRAPTOR_PREORDER_ALERTS_FROM", ""))
 RIPRAPTOR_INBOX_NOTIFY_EMAIL = os.environ.get("RIPRAPTOR_INBOX_NOTIFY_EMAIL", "").strip()
 RIPRAPTOR_NTFY_TOPIC = os.environ.get("RIPRAPTOR_NTFY_TOPIC", "").strip()
 RIPRAPTOR_NTFY_URL = os.environ.get("RIPRAPTOR_NTFY_URL", "https://ntfy.sh").strip()
@@ -250,6 +267,8 @@ if TESTING:
     # A test run started from a shell holding the server's .env must never reach the owner's phone or inbox.
     # Tests that send set these with override_settings and catch what would go out.
     RIPRAPTOR_NTFY_TOPIC = RIPRAPTOR_INBOX_NOTIFY_EMAIL = RIPRAPTOR_ZEPTOMAIL_TOKEN = ""
+    # The server's cut-off would change which form and emails the alert tests see; they set their own.
+    RIPRAPTOR_PREORDER_ALERTS_FROM = None
 
 RIPRAPTOR_EBAY_APP_ID = os.environ.get("RIPRAPTOR_EBAY_APP_ID", "").strip()
 RIPRAPTOR_EBAY_CERT_ID = os.environ.get("RIPRAPTOR_EBAY_CERT_ID", "").strip()

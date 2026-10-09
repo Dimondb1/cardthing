@@ -689,6 +689,8 @@ def product_detail(request, slug):
     in_stock_count = sum(1 for l in current if l.availability == Listing.Availability.IN_STOCK)
     preorder_count = sum(1 for l in current if l.availability == Listing.Availability.PREORDER)
     last_checked = max((l.last_checked for l in listings), default=None)
+    alerts_preorder = alerts.preorder_alerts_on()
+    alert_hides = Listing.BUYABLE if alerts_preorder else [Listing.Availability.IN_STOCK]
 
     today = timezone.localdate()
     days = settings.RIPRAPTOR_HISTORY_DAYS
@@ -779,10 +781,12 @@ def product_detail(request, slug):
             "month_ago": month_ago,
             "last_known": last_known,
             "restocks": restocks,
+            # Once pre-order emails are on, a shop pre-order hides the form too: the alert would be sent at once.
             "alerts_on": mail.enabled() and not any(
-                l.availability == Listing.Availability.IN_STOCK and l.retailer.source_type not in alerts.MARKETPLACES
+                l.availability in alert_hides and l.retailer.source_type not in alerts.MARKETPLACES
                 for l in current
             ),
+            "alerts_preorder": alerts_preorder,
             "alert_state": request.GET.get("alert") if request.GET.get("alert") in ALERT_STATES else "",
             "amazon_search": amazon_search_url(product, listings),
             "ebay_search": ebay_search_url(product, listings),
@@ -1166,7 +1170,8 @@ def alert_confirm(request, token):
         heading, message, product = text(request, "alerts.gone.title"), text(request, "alerts.gone.body"), None
     else:
         heading = text(request, "alerts.confirmed.title")
-        message = text(request, "alerts.confirmed.body", product=alert.product.name)
+        message = text(request, "alerts.confirmed.preorder" if alerts.wants_preorder(alert) else "alerts.confirmed.body",
+                       product=alert.product.name)
         product = alert.product
     return render(request, "web/alert_done.html", {"heading": heading, "message": message, "product": product,
                                                     "meta_title": heading, "noindex": True})

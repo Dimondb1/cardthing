@@ -367,7 +367,7 @@ class KeptOutTests(Shops, TestCase):
         product = Product.objects.for_lists().prefetch_related(offers.buyable_prefetch()).get(pk=self.product.pk)
         self.assertEqual((product.lowest_price, product.in_stock_count), (Decimal("120.00"), 3))
         self.assertNotIn(self.odd.pk, [listing.pk for listing in product.offers])
-        self.assertEqual(alerts.shop_stock(self.product).delivered_price, Decimal("120.00"))
+        self.assertEqual(alerts.shop_stock(self.product)[0].delivered_price, Decimal("120.00"))
 
     def test_the_feed_drop_is_the_counted_price(self):
         from web.feeds import build_feed

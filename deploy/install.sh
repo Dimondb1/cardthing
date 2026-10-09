@@ -59,6 +59,9 @@ fi
 .venv/bin/python manage.py collectstatic --noinput -v0
 .venv/bin/python manage.py setup_shops
 grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb" >> .env
+# Pre-order emails go only to alerts asked for from this install on, when the form first promised them.
+# Written once, so a later update never moves the cut-off and an earlier subscriber never hears about pre-orders.
+grep -q RIPRAPTOR_PREORDER_ALERTS_FROM .env || echo "RIPRAPTOR_PREORDER_ALERTS_FROM=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" >> .env
 set -a; . ./.env; set +a
 [ -f /var/lib/ripraptor/dbip-country.mmdb ] || .venv/bin/python manage.py fetch_geoip || true
 chown -R ripraptor:ripraptor "$DIR" /var/lib/ripraptor

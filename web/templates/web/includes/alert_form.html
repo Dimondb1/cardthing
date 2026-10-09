@@ -4,7 +4,7 @@
   {% elif alert_state == "already" %}
     <p class="alert-box__done" role="status">{% copy "alerts.form.already" %}</p>
   {% else %}
-    <p class="alert-box__title">{% copy "alerts.form.title" %}</p>
+    <p class="alert-box__title">{% if alerts_preorder %}{% copy "alerts.form.preorder" %}{% else %}{% copy "alerts.form.title" %}{% endif %}</p>
     {% if alert_state == "limit" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.limit" %}</p>{% elif alert_state == "invalid" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.invalid" %}</p>{% elif alert_state == "failed" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.failed" %}</p>{% endif %}
     <form class="alert-box__form" method="post" action="{% url 'web:alert_ask' product.slug %}">
       {% csrf_token %}

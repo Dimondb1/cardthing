@@ -30,7 +30,7 @@
 <div class="chk">
   <section>
     <h2>Sorted for you ({{ answers_count }})</h2>
-    <p class="note">Every hour the site answers the rows its evidence settles: a shop page whose name and price match, a price whose shop title names another product, a price in line with what this product has always cost, products with the same barcode. Here is what it did in the last {{ answers_days }} days. If one is wrong, tap Undo and it is put back the other way.</p>
+    <p class="note">Every hour the site answers the rows its evidence settles: a shop page whose name and price match, a shop page or cheapest price whose title plainly names another product, a set that products on the site already name. It answers each row once and never merges. Here is what it did in the last {{ answers_days }} days. If one is wrong, tap Undo and it is put back the other way, and the site leaves that row to you.</p>
     {% if tally %}<p class="tally">{% for label, n in tally %}{{ label }}: {{ n }}{% if not forloop.last %}. {% endif %}{% endfor %}.</p>{% endif %}
     <form method="post">{% csrf_token %}<input type="hidden" name="action" value="autopilot_now"><input type="submit" value="Sort what you can now"></form>
     {% if answers %}<details>

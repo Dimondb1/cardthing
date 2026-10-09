@@ -1,5 +1,5 @@
 """The autopilot answers the Things to check rows its evidence settles, writes each answer down with its
-reason, and every answer but a merge can be undone with one tap."""
+reason, every answer can be undone with one tap, and an answered row is never answered again."""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -68,7 +68,7 @@ class FoundAtAnotherShopTests(Base):
         self.assertEqual(row.status, ShopProduct.Status.LINKED)
         answer = CheckAnswer.objects.get()
         self.assertEqual(answer.kind, Kind.LINK)
-        self.assertIn("close to the £105.00 other shops charge", answer.why)
+        self.assertIn("close to the £105.00 that 2 other shops charge", answer.why)
         linked = Listing.objects.get(product=self.product, retailer=row.retailer)
         self.assertEqual((answer.listing, linked.price), (linked, Decimal("104.00")))
         self.assertIn("not compared", autopilot.undo(answer))
@@ -89,8 +89,9 @@ class FoundAtAnotherShopTests(Base):
             self.assertEqual(row.status, ShopProduct.Status.REVIEW)
         self.assertEqual(self.kinds(), [])
 
-    def test_another_kind_another_set_code_or_a_far_price_is_refused_and_undo_links_it(self):
+    def test_another_kind_or_a_price_far_from_two_shops_is_refused_and_undo_links_it(self):
         self.shop(100)
+        self.shop(104)
         pack = self.found(title="Surging Sparks Booster Pack", price="4.50", confidence=70)
         dear = self.found(price="400.00")
         autopilot.run()
@@ -99,9 +100,37 @@ class FoundAtAnotherShopTests(Base):
             self.assertEqual(row.status, ShopProduct.Status.IGNORED)
         answers = {a.shop_product_id: a for a in CheckAnswer.objects.all()}
         self.assertEqual(answers[pack.pk].why, "the shop's title says booster pack, not booster box")
-        self.assertEqual(answers[dear.pk].why, "£400.00 is far from the £100.00 other shops charge")
+        self.assertEqual(answers[dear.pk].why, "£400.00 is far from the £102.00 that 2 other shops charge")
         self.assertIn("linked", autopilot.undo(answers[dear.pk]))
         self.assertTrue(Listing.objects.filter(product=self.product, retailer=dear.retailer).exists())
+
+    def test_one_other_shop_never_refuses_on_price_alone(self):
+        # The only other shop may be the wrong match: its £30 is not checked by anything.
+        self.shop(30)
+        right = self.found(price="100.00")
+        autopilot.run()
+        right.refresh_from_db()
+        self.assertEqual((right.status, self.kinds()), (ShopProduct.Status.REVIEW, []))
+
+    def test_a_shop_that_lists_the_product_already_is_left_for_the_owner(self):
+        self.shop(100)
+        row = self.found(price="101.00")
+        make_listing(self.product, row.retailer, price="99.00", url=f"{row.retailer.website}p/other")
+        autopilot.run()
+        row.refresh_from_db()
+        self.assertEqual((row.status, self.kinds()), (ShopProduct.Status.REVIEW, []))
+
+    def test_a_row_the_owner_answered_meanwhile_is_left_alone(self):
+        from unittest import mock
+
+        self.shop(100)
+        row = self.found(title="Surging Sparks Booster Pack", price="4.50", confidence=70)
+        read_before = list(checks.found_waiting())
+        ShopProduct.objects.filter(pk=row.pk).update(status=ShopProduct.Status.LINKED)
+        with mock.patch.object(checks, "found_waiting", return_value=ShopProduct.objects.filter(pk__in=[r.pk for r in read_before])):
+            autopilot.run()
+        row.refresh_from_db()
+        self.assertEqual((row.status, self.kinds()), (ShopProduct.Status.LINKED, []))
 
     def test_a_title_naming_another_sets_code_is_refused(self):
         one_piece = make_game(name="One Piece", slug="one-piece")
@@ -120,49 +149,88 @@ class FoundAtAnotherShopTests(Base):
         self.assertEqual(autopilot.contradiction(self.product, "Surging Sparks Booster Box (36 Packs)"), "")
         self.assertNotEqual(autopilot.contradiction(self.product, "Surging Sparks Sleeved Booster"), "")
 
+    def test_real_shop_titles_of_the_same_product_are_never_ruled_out(self):
+        games, made = {}, {}
+
+        def product(game, name, kind):
+            if game not in games:
+                games[game] = make_game(name=game, slug=game.lower().replace(" ", "-"))
+            if name not in made:
+                made[name] = Product.objects.create(game=games[game], name=name, product_type=kind)
+            return made[name]
+
+        same = [
+            (product("Lorcana", "Wilds Unknown Booster Box", "booster_box"),
+             "Disney Lorcana TCG - Wilds Unknown Booster Box - Set 12"),
+            (product("Digimon", "Cyber Eden Booster Box", "booster_box"),
+             "Digimon Card Game: Booster Box Set Cyber Eden (BT-22)"),
+            (product("Lorcana", "Archazia's Island Gift Box", "collection_box"), "Archazia's Island Gift Set"),
+            (product("Pokemon TCG", "Stellar Crown Build & Battle Box Display (10 Boxes)", "collection_box"),
+             "Stellar Crown Build & Battle Display (10 Boxes)"),
+            (product("Dragon Ball", "Perfect Combination Booster Box", "booster_box"),
+             "Dragon Ball Super Card Game: Booster Box Set 23 - Perfect Combination"),
+            (product("Magic", "Final Fantasy Play Booster Box", "booster_box"),
+             "Magic The Gathering Final Fantasy Play Booster Box Set of 30"),
+            (product("Pokemon TCG", "Surging Sparks 3 Pack Blister", "bundle"), "Surging Sparks 3-Pack"),
+            (product("Pokemon TCG", "Surging Sparks 3 Pack Blister", "bundle"), "Surging Sparks 3 x Booster Packs"),
+            (product("Magic", "Duskmourn Play Booster Pack", "booster_pack"), "Duskmourn Booster Pack (from Booster Display)"),
+            (product("Yu-Gi-Oh", "Quarter Century Bonanza Booster Box", "booster_box"),
+             "Quarter Century Bonanza Booster Display Box Set"),
+        ]
+        for item, title in same:
+            self.assertEqual(autopilot.contradiction(item, title), "", title)
+
 
 class DoubtfulPriceTests(Base):
-    def test_the_cheapest_price_this_product_has_always_had_is_counted_and_undo_judges_it_again(self):
+    def test_a_doubtful_price_is_never_counted_on_the_sites_own_history(self):
+        # A shop alone at a wrong £98 for weeks made the history itself: it cannot vouch for that price.
         self.history(100)
-        right = self.shop(98)
-        case = self.shop(400, title=f"{BOX} Case")
-        sanity.judge_product(self.product.pk)
-        self.assertEqual([Listing.objects.get(pk=x.pk).sanity for x in (right, case)], [DOUBTFUL, DOUBTFUL])
-        self.assertEqual(list(checks.doubtful_waiting()), [right])
-        autopilot.run()
-        right.refresh_from_db()
-        self.assertEqual((right.sanity, right.trusted_price), (OK, Decimal("98.00")))
-        answer = CheckAnswer.objects.get()
-        self.assertEqual(answer.kind, Kind.TRUST)
-        self.assertIn("usual lowest price of £100.00", answer.why)
-        autopilot.undo(answer)
-        right.refresh_from_db()
-        self.assertEqual((right.sanity, right.trusted_price), (DOUBTFUL, None))
-
-    def test_no_history_or_a_name_that_does_not_agree_waits_for_the_owner(self):
-        right = self.shop(98)
-        self.shop(400)
+        self.shop(98)
+        self.shop(400, title=f"{BOX} Case")
         sanity.judge_product(self.product.pk)
         autopilot.run()
         self.assertEqual(self.kinds(), [])
-        self.history(100)
-        Listing.objects.filter(pk=right.pk).update(title="Surging Sparks Booster Box Pokemon Center Exclusive")
-        autopilot.run()
-        self.assertEqual(self.kinds(), [])
+        self.assertEqual(checks.doubtful_count(), 1)
 
-    def test_a_price_whose_title_names_another_kind_is_hidden_even_when_dearer(self):
+    def test_the_cheapest_price_whose_title_names_another_kind_is_hidden_and_undo_sticks(self):
+        etb = self.shop(30, title="Surging Sparks Elite Trainer Box")
         self.shop(100)
-        self.shop(105)
-        etb = self.shop(250, title="Surging Sparks Elite Trainer Box")
         sanity.judge_product(self.product.pk)
-        self.assertEqual(Listing.objects.get(pk=etb.pk).sanity, DOUBTFUL)
-        self.assertEqual(checks.doubtful_count(), 0)
+        self.assertEqual(list(checks.doubtful_waiting()), [etb])
         autopilot.run()
         self.assertFalse(Listing.objects.get(pk=etb.pk).is_active)
         answer = CheckAnswer.objects.get()
         self.assertEqual((answer.kind, answer.listing_id), (Kind.HIDE, etb.pk))
         autopilot.undo(answer)
         self.assertTrue(Listing.objects.get(pk=etb.pk).is_active)
+        sanity.judge_product(self.product.pk)
+        autopilot.run()
+        self.assertTrue(Listing.objects.get(pk=etb.pk).is_active)
+        self.assertEqual(self.kinds(), [Kind.HIDE])
+
+    def test_a_dearer_doubtful_price_is_left_alone_whatever_its_title(self):
+        self.shop(100)
+        self.shop(105)
+        etb = self.shop(250, title="Surging Sparks Elite Trainer Box")
+        sanity.judge_product(self.product.pk)
+        self.assertEqual(Listing.objects.get(pk=etb.pk).sanity, DOUBTFUL)
+        autopilot.run()
+        self.assertTrue(Listing.objects.get(pk=etb.pk).is_active)
+        self.assertEqual(self.kinds(), [])
+
+    def test_a_price_the_owner_hid_and_showed_again_is_never_hidden_by_the_autopilot(self):
+        user = get_user_model().objects.create_superuser("ben", "ben@example.com", "pw")
+        self.client.force_login(user)
+        etb = self.shop(30, title="Surging Sparks Elite Trainer Box")
+        self.shop(100)
+        sanity.judge_product(self.product.pk)
+        self.client.post(reverse("checks"), {"action": "hide", "listing": etb.pk, "price": "30.00"})
+        self.assertFalse(Listing.objects.get(pk=etb.pk).is_active)
+        Listing.objects.filter(pk=etb.pk).update(is_active=True)   # ticked show on site in admin
+        sanity.judge_product(self.product.pk)
+        autopilot.run()
+        self.assertTrue(Listing.objects.get(pk=etb.pk).is_active)
+        self.assertEqual(checks.recent_answers(), [])
 
     def test_a_wrong_match_whose_title_says_pack_is_hidden(self):
         pack = self.shop(20, title="Surging Sparks Booster Pack")
@@ -182,6 +250,15 @@ class DoubtfulPriceTests(Base):
         Listing.objects.filter(pk=cheap.pk).update(availability=Listing.Availability.OUT_OF_STOCK)
         self.assertEqual(list(checks.doubtful_waiting()), [dear])
 
+    def test_a_confirmed_delivered_price_comes_before_a_cheaper_one_with_unknown_delivery(self):
+        known = self.shop(100, title="")
+        unknown = self.shop(95, title="", delivery_known=False)
+        Listing.objects.filter(pk=known.pk).update(sanity=DOUBTFUL)
+        self.assertEqual(list(checks.doubtful_waiting()), [known])
+        Listing.objects.filter(pk=known.pk).update(sanity=OK)
+        Listing.objects.filter(pk=unknown.pk).update(sanity=DOUBTFUL)
+        self.assertEqual(list(checks.doubtful_waiting()), [])
+
 
 class DuplicateTests(Base):
     def pair(self, ean="0820650853456", other_ean="0820650853456"):
@@ -190,19 +267,15 @@ class DuplicateTests(Base):
         self.shop(50, product=keep, title=keep.name)
         return keep, other
 
-    def test_the_same_barcode_is_merged(self):
+    def test_duplicates_are_never_merged_by_the_autopilot_even_with_one_barcode(self):
         keep, other = self.pair()
-        self.assertEqual(len(checks.duplicates()), 1)
         autopilot.run()
-        self.assertFalse(Product.objects.filter(pk=other.pk).exists())
-        self.assertEqual(self.kinds(), [Kind.MERGE])
-        self.assertEqual(autopilot.undo(CheckAnswer.objects.get()), "")
-
-    def test_different_barcodes_wait_and_a_shop_selling_both_or_not_the_same_keeps_them_apart(self):
-        keep, other = self.pair(other_ean="")
-        autopilot.run()
+        self.assertTrue(Product.objects.filter(pk=other.pk).exists())
         self.assertEqual(self.kinds(), [])
         self.assertEqual(len(checks.duplicates()), 1)
+
+    def test_a_shop_selling_both_or_not_the_same_keeps_them_apart(self):
+        keep, other = self.pair(other_ean="")
         autopilot.owner_apart(keep, other)
         self.assertEqual(checks.duplicates(), [])
         CheckAnswer.objects.all().delete()
@@ -210,6 +283,17 @@ class DuplicateTests(Base):
         make_listing(keep, both)
         make_listing(other, both)
         self.assertEqual(checks.duplicates(), [])
+
+    def test_two_others_one_shop_sells_side_by_side_are_not_merged_together(self):
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        first = make_product(self.set, name="Surging Sparks Elite Trainer Box Exclusive")
+        second = make_product(self.set, name="Surging Sparks Elite Trainer Box English")
+        both = make_retailer("Both")
+        make_listing(first, both)
+        make_listing(second, both, url=f"{both.website}p/second")
+        self.shop(50, product=keep, title=keep.name)
+        [(kept, others)] = checks.duplicates()
+        self.assertEqual((kept, len(others)), (keep, 1))
 
 
 class AnnouncedSetTests(Base):
@@ -235,6 +319,22 @@ class AnnouncedSetTests(Base):
         row.refresh_from_db()
         self.assertFalse(ProductSet.objects.filter(name="Destined Rivals").exists())
         self.assertEqual((etb.product_set, row.status), (None, Release.Status.DISMISSED))
+
+    def test_a_set_that_has_gained_a_date_is_not_taken_away_by_undo(self):
+        Product.objects.create(game=self.game, name="Destined Rivals Elite Trainer Box", product_type="elite_trainer_box")
+        self.row()
+        autopilot.run()
+        ProductSet.objects.filter(name="Destined Rivals").update(release_date=timezone.localdate())
+        self.assertEqual(autopilot.undo(CheckAnswer.objects.get()), "")
+        self.assertTrue(ProductSet.objects.filter(name="Destined Rivals").exists())
+
+    def test_a_game_with_no_publisher_source_keeps_the_set_for_the_owner_to_date(self):
+        lorcana = make_game(name="Lorcana", slug="lorcana")
+        Product.objects.create(game=lorcana, name="Archazia's Island Booster Box", product_type="booster_box")
+        Release.objects.create(game=lorcana, name="Archazia's Island", source="lorcast_sets",
+                               release_date=timezone.localdate() + timedelta(days=40), precision=Release.Precision.DAY)
+        autopilot.run()
+        self.assertEqual(self.kinds(), [])
 
     def test_a_set_nothing_names_or_a_product_filed_elsewhere_names_waits(self):
         self.row()
@@ -312,6 +412,7 @@ class BusyDatabaseTests(Base):
         from django.db import OperationalError
 
         self.shop(100)
+        self.shop(104)
         first = self.found(title="Surging Sparks Booster Pack", price="4.50", confidence=70)
         second = self.found(price="400.00")
         from . import finder

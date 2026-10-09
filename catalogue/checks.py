@@ -51,17 +51,21 @@ def sanity_counts():
 
 
 def doubtful_waiting():
-    """Doubtful prices a visitor sees as the product's cheapest: buyable, and no buyable price is lower.
+    """Doubtful prices a visitor sees as the product's cheapest: buyable, and no buyable price comes before
+    them in the order the product page shows (confirmed delivered prices first, cheapest first, then the
+    prices whose delivery is not known).
 
-    A doubtful price that is dearer than another shop's, or out of stock, never shows as the cheapest and
+    A doubtful price that comes after another shop's, or is out of stock, never shows as the cheapest and
     claims no saving, so it waits for nobody. It is listed again if it becomes the cheapest.
     """
-    cheaper = Listing.objects.buyable().filter(
-        product=OuterRef("product_id"), delivered_price__lt=OuterRef("delivered_price"),
-    )
+    buyable = Listing.objects.buyable().filter(product=OuterRef("product_id"))
+    known_cheaper = buyable.filter(delivery_known=True, delivered_price__lt=OuterRef("delivered_price"))
+    any_known = buyable.filter(delivery_known=True)
+    unknown_cheaper = buyable.filter(delivery_known=False, delivered_price__lt=OuterRef("delivered_price"))
     return (
         Listing.objects.buyable().filter(product__is_active=True, sanity=Listing.Sanity.DOUBTFUL)
-        .exclude(Exists(cheaper))
+        .exclude(Q(delivery_known=True) & Exists(known_cheaper))
+        .exclude(Q(delivery_known=False) & (Exists(any_known) | Exists(unknown_cheaper)))
     )
 
 
@@ -134,7 +138,8 @@ def duplicates():
     """[(keep, [others])] that the loose rule would merge. Strict duplicates are merged every hour already.
 
     A product the owner said is not the same as the one kept is left out, and so is one a shop sells
-    beside it: a shop that lists both under their own names sells two products.
+    beside the kept one or beside another in the group: a shop that lists both under their own names
+    sells two products.
     """
     from .management.commands.merge_duplicates import duplicate_groups
 
@@ -150,10 +155,16 @@ def duplicates():
         shops.setdefault(product_id, set()).add(retailer_id)
     found = []
     for keep, others in groups:
-        mine = shops.get(keep.pk, set())
-        others = [o for o in others if frozenset((keep.pk, o.pk)) not in apart and not (mine & shops.get(o.pk, set()))]
-        if others:
-            found.append((keep, others))
+        taken, kept = set(shops.get(keep.pk, ())), []
+        for other in others:
+            # A shop that sells this one beside the kept one, or beside another in the group, sells two products.
+            theirs = shops.get(other.pk, set())
+            if frozenset((keep.pk, other.pk)) in apart or taken & theirs:
+                continue
+            taken |= theirs
+            kept.append(other)
+        if kept:
+            found.append((keep, kept))
     return found
 
 

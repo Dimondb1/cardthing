@@ -4,35 +4,33 @@ sees the ones that need a person. It runs every hour (tidy_all) and when the own
 now. Every answer is written down as a CheckAnswer with what was done and why, and listed at the top of
 the page with an Undo button.
 
-It answers only from what the site already holds: the shop's own title, what the other shops charge,
-the product's own price history and barcodes. It never adds a shop, a product or a price no shop gave,
-and never publishes a release date.
+It answers only from what the site already holds: the shop's own title and what the other shops charge.
+It never adds a shop, a product or a price no shop gave, never publishes a release date, and never does
+what cannot be undone (a merge). It answers each listing and each found page once: after an answer,
+undone or not, and after the owner hid a price himself, that row is the owner's.
 
 Found at another shop
-    No, when the shop's title names another kind of product (a pack against a box) or another set code
-    (OP-10 against OP-09), or its price is under 0.3 or over 3.33 times what the other shops charge, the
-    gap at which two shops make each other doubtful.
-    Yes, when the names agree word for word both ways and the price is within a quarter of what the other
-    shops charge. A likely name waits for the owner, and so does a page with no other shop to compare.
+    No, when the shop's title plainly names another kind of product (a pack against a box, an ETB against
+    a bundle) or only another set's code (OP-10 against OP-09), or its price is under 0.3 or over 3.33
+    times what two or more other shops charge. One other shop is not enough: it may be the wrong one.
+    Yes, when the names agree word for word both ways, the shop does not list the product already, and
+    the price is within a quarter of what the other shops charge. A likely name waits for the owner, and
+    so does a page with no other shop to compare.
 
 Doubtful prices and wrong matches
-    Hide, when the shop's title names another kind of product or another set code.
-    This price is right, for the product's cheapest price only, when the names agree word for word both
-    ways, the delivery charge is known and the price is within 15% of the product's usual lowest price:
-    the median of its daily lows over the 90 days before the price became doubtful, at least 7 of them.
-
-Possible duplicates
-    Merge, when the products carry the same barcode.
+    Hide, for the product's cheapest price or either price of a wrong match, when the shop's title plainly
+    names another kind of product or only another set's code. A doubtful price is never counted on the
+    site's own say-so: the product's history may hold that same price.
 
 Announced sets
     Add set, with no date, when a community source names a set that products on the site already name,
-    and no product it names is filed under another set. Its date is published only by the usual rules:
-    the publisher's own, or two sources agreeing.
+    no product it names is filed under another set, and the game has a publisher source that can give
+    the date later. Its date is published only by the usual rules: the publisher's own, or two sources
+    agreeing.
 """
 
 import logging
 import re
-from datetime import timedelta
 from decimal import Decimal
 from statistics import median
 
@@ -41,10 +39,9 @@ from django.db import DatabaseError, transaction
 from django.utils import timezone
 
 from . import checks, sanity
-from .classify import box_contents, find_type
-from .importers import ean_key
-from .matching import AUTO_LINK
-from .models import CheckAnswer, DailyLowestPrice, Listing, Product, ProductSet, Release
+from .classify import TYPES, box_contents, find_type
+from .matching import AUTO_LINK, expand
+from .models import CheckAnswer, Listing, Product, ProductSet, Release, ShopProduct
 from .types import type_label
 
 logger = logging.getLogger(__name__)
@@ -54,19 +51,29 @@ OK, DOUBTFUL = Listing.Sanity.OK, Listing.Sanity.DOUBTFUL
 
 # Found at another shop: a sure name is linked when its price is within this band of the other shops'.
 LINK_LOW, LINK_HIGH = Decimal("0.75"), Decimal("1.33")
-# It is refused when its price is outside the band at which two shops make each other doubtful.
+# It is refused when its price is outside the band at which two shops make each other doubtful, and only
+# against two or more other shops: with one, either price may be the wrong one.
 REFUSE_LOW, REFUSE_HIGH = sanity.ONE_PEER_LOW, sanity.ONE_PEER_HIGH
-# A doubtful price is counted when it is within this share of the product's usual lowest price, worked
-# out from at least HISTORY_MIN_DAYS daily lows over the HISTORY_DAYS before it became doubtful.
-HISTORY_BAND = Decimal("0.15")
-HISTORY_DAYS = sanity.HISTORY_DAYS
-HISTORY_MIN_DAYS = sanity.HISTORY_MIN_ROWS
+REFUSE_PEERS = 2
+
+# Kinds a shop title names plainly, none of which is ever another of them. Collection boxes, gift sets,
+# tins and decks are left out: shops call one product a "Box Set", a "Gift Set" or a "Display".
+CLEAR_KINDS = {"booster_box", "booster_pack", "elite_trainer_box", "bundle", "collector_booster_box",
+               "collector_booster_pack"}
+# What says a title is of a kind. A bare "booster" says nothing: nearly every title carries it.
+KIND_PHRASES = {kind: tuple(p for p in phrases if p != "booster") for kind, phrases in TYPES}
+# A title read as a pack must say pack, and one pack: "Blazing Dominion Booster" is as often the box,
+# and "3-Pack" or "3 x Booster Packs" is a bundle.
+PACK_WORDS = re.compile(r"\bpacks?\b|\bpacket\b|\bchecklane\b|\bsleeved\b", re.I)
+MULTI_PACK = re.compile(r"\d+\s*[-x×]?\s*(?:booster\s*)?packs?\b|\bpacks?\s+of\s+\d", re.I)
 
 # Set codes that name one set and no other: One Piece (OP-09, EB-02, PRB-01, ST-21) and Dragon Ball
 # (FB05, BT24). A title that names only codes other than the product's is another set's product.
 SET_CODE = re.compile(r"(?<![a-z0-9])(op|eb|prb|st|fb|bt)-?0*(\d{1,2})(?![0-9])", re.I)
-# A title the classifier reads as a pack must say pack: "Blazing Dominion Booster" is as often the box.
-PACK_WORDS = re.compile(r"\bpacks?\b|\bpacket\b|\bblister\b|\bchecklane\b|\bsleeved\b", re.I)
+
+
+class Stale(Exception):
+    """The row changed between the autopilot reading it and acting on it: it is left for the next run."""
 
 
 def money(value):
@@ -77,31 +84,34 @@ def codes(text):
     return {(family.lower(), int(number)) for family, number in SET_CODE.findall(text or "")}
 
 
+def says_kind(title, kind):
+    text = " " + expand(box_contents(title)) + " "
+    return any(f" {phrase} " in text for phrase in KIND_PHRASES.get(kind, ()))
+
+
 def contradiction(product, title):
-    """Why the shop's title cannot be this product, or "": it names another kind of product, or only
-    another set's code. A title that merely lacks words says nothing."""
+    """Why the shop's title cannot be this product, or "": it plainly names another kind of product and
+    not ours, or only another set's code. A title that merely lacks words, or names a kind loosely, says
+    nothing."""
     if not title:
         return ""
-    theirs = find_type(box_contents(title))
-    # The rule holds only where the classifier reads our own name as the product's type.
-    if theirs and theirs != product.product_type and find_type(box_contents(product.name)) == product.product_type:
-        if theirs != "booster_pack" or PACK_WORDS.search(title):
-            game = product.game.slug
-            return (f"the shop's title says {type_label(game, theirs).lower()}, "
-                    f"not {type_label(game, product.product_type).lower()}")
-    ours = codes(product.name) | codes(product.product_set.code if product.product_set_id else "")
+    theirs, ours = find_type(box_contents(title)), product.product_type
+    plain = (
+        theirs in CLEAR_KINDS and ours in CLEAR_KINDS and theirs != ours
+        # The classifier must read our own name as the product's type, and the title must not say it too.
+        and find_type(box_contents(product.name)) == ours and not says_kind(title, ours)
+        and (theirs != "booster_pack" or (PACK_WORDS.search(title) and not MULTI_PACK.search(title)))
+    )
+    if plain:
+        game = product.game.slug
+        return (f"the shop's title says {type_label(game, theirs).lower()}, "
+                f"not {type_label(game, ours).lower()}")
+    mine = codes(product.name) | codes(product.product_set.code if product.product_set_id else "")
     named = codes(title)
-    if ours and named and not ours & named:
+    if mine and named and not mine & named:
         found = ", ".join(sorted(f"{family.upper()}-{number:02d}" for family, number in named))
         return f"the shop's title names {found}, another set"
     return ""
-
-
-def names_agree(product, title):
-    """The shop's title and our name agree word for word both ways, as a sure stockist finder match."""
-    from .finder import judge
-
-    return bool(title) and judge(product, title) >= AUTO_LINK
 
 
 def going_rates(product_ids):
@@ -116,20 +126,6 @@ def going_rates(product_ids):
     return rates
 
 
-def usual_lowest(listing, now):
-    """The median of the product's daily lows over the HISTORY_DAYS before the price became doubtful, or
-    None with fewer than HISTORY_MIN_DAYS. The days since cannot vouch: the doubtful price is in them."""
-    day = timezone.localdate(min(listing.sanity_at or now, now))
-    lows = list(
-        DailyLowestPrice.objects.filter(
-            product_id=listing.product_id, date__lt=day, date__gte=day - timedelta(days=HISTORY_DAYS),
-        ).values_list("price", flat=True)
-    )
-    if len(lows) < HISTORY_MIN_DAYS:
-        return None
-    return median(lows)
-
-
 def hide(listing):
     """Take a listing off the site, as the owner's Hide: the other shops are judged again without it,
     and today's history loses a low it may have made."""
@@ -140,15 +136,30 @@ def hide(listing):
     correct_daily_lowest(listing.product_id)
 
 
+def owner_hid(listing):
+    """Note the owner's own Hide, so the autopilot never answers that listing again."""
+    return CheckAnswer.objects.create(
+        kind=Kind.HIDE, by_owner=True, what=f"Hid {money(listing.shown_price)} for {listing.product.name} at "
+        f"{listing.retailer.name}", listing=listing, product=listing.product, price=listing.price,
+    )
+
+
+def answered_listings():
+    """Listings with any answer, the owner's or the autopilot's, undone or not: they are the owner's now."""
+    return set(CheckAnswer.objects.filter(listing__isnull=False).values_list("listing_id", flat=True))
+
+
 class Autopilot:
     def __init__(self, now=None, dry_run=False):
         self.now = now or timezone.now()
         self.dry_run = dry_run
         self.done = []
+        self.answered = answered_listings()
 
     def answer(self, kind, what, why, act=None, **refs):
-        """Record one answer and, unless this is a dry run, act on it in its own short transaction. A busy
-        database rolls that one answer back and the rest go on: the next run tries it again."""
+        """Record one answer and, unless this is a dry run, act on it in its own short transaction. A row
+        that changed since it was read, or a busy database, rolls that one answer back and the rest go on:
+        the next run looks at it again."""
         if self.dry_run:
             self.done.append((kind, what, why))
             return
@@ -157,16 +168,19 @@ class Autopilot:
                 extra = act() if act else None
                 CheckAnswer.objects.create(kind=kind, what=what[:300], why=why[:300], created_at=self.now,
                                            **refs, **(extra or {}))
+        except Stale:
+            return
         except DatabaseError:
             logger.warning("Autopilot could not answer %r; it is tried again next run.", what, exc_info=True)
             return
         self.done.append((kind, what, why))
+        if refs.get("listing") is not None:
+            self.answered.add(refs["listing"].pk)
 
     def run(self):
         self.found_rows()
         self.doubtful_prices()
         self.wrong_matches()
-        self.duplicates()
         self.announced_sets()
         if self.done and not self.dry_run:
             from .signals import clear_list_caches
@@ -181,97 +195,98 @@ class Autopilot:
 
         rows = list(checks.found_waiting().select_related("retailer", "suggested__game", "suggested__product_set"))
         rates = going_rates({row.suggested_id for row in rows})
+        listed = set(
+            Listing.objects.filter(product_id__in={row.suggested_id for row in rows}).values_list("product_id", "retailer_id")
+        )
+
+        def still_waiting(row):
+            if not ShopProduct.objects.filter(pk=row.pk, status=ShopProduct.Status.REVIEW).exists():
+                raise Stale
+
         for row in rows:
             product, shop = row.suggested, row.retailer.name
             others = [price for shop_id, price in rates.get(product.pk, []) if shop_id != row.retailer_id]
             rate = median(others) if others else None
             ratio = row.price / rate if row.price and row.price > 0 and rate else None
             why = contradiction(product, row.title)
-            if not why and ratio is not None and not REFUSE_LOW <= ratio <= REFUSE_HIGH:
-                why = f"{money(row.price)} is far from the {money(rate)} other shops charge"
+            if not why and ratio is not None and len(others) >= REFUSE_PEERS and not REFUSE_LOW <= ratio <= REFUSE_HIGH:
+                why = f"{money(row.price)} is far from the {money(rate)} that {len(others)} other shops charge"
             if why:
+
+                def refuse(row=row):
+                    still_waiting(row)
+                    finder.ignore(row)
+
                 self.answer(Kind.REFUSE, f'"{row.title}" at {shop} is not {product.name}', why,
-                            act=lambda row=row: finder.ignore(row), shop_product=row, product=product, price=row.price)
+                            act=refuse, shop_product=row, product=product, price=row.price)
+                continue
+            # A shop that lists the product already is the owner's to sort: linking would move its listing.
+            if (product.pk, row.retailer_id) in listed:
                 continue
             if row.confidence >= AUTO_LINK and ratio is not None and LINK_LOW <= ratio <= LINK_HIGH:
 
                 def link(row=row, product=product):
-                    existed = Listing.objects.filter(product=product, retailer=row.retailer).exists()
-                    listing = finder.link(row)
-                    return {"listing": None if existed else listing}
+                    still_waiting(row)
+                    if Listing.objects.filter(product=product, retailer=row.retailer).exists():
+                        raise Stale
+                    return {"listing": finder.link(row)}
 
+                who = "the other shop charges" if len(others) == 1 else f"that {len(others)} other shops charge"
                 self.answer(Kind.LINK, f"Linked {product.name} at {shop}, {money(row.price)}",
-                            f"the names agree word for word and the price is close to the {money(rate)} other "
-                            "shops charge", act=link, shop_product=row, product=product, price=row.price)
+                            f"the names agree word for word and the price is close to the {money(rate)} {who}",
+                            act=link, shop_product=row, product=product, price=row.price)
 
     # Doubtful prices and wrong matches
 
     def doubtful_prices(self):
-        """Every doubtful price whose title rules it out is hidden; the cheapest ones the product's history
-        backs are counted. A dearer one that is neither is left as it is: it never shows as the cheapest."""
-        waiting = set(checks.doubtful_waiting().values_list("pk", flat=True))
+        """The doubtful prices shown as a product's cheapest whose title rules them out are hidden. A dearer
+        one never shows as the cheapest, and hiding it could leave a wrong price as the product's."""
         listings = (
-            checks.judged().filter(sanity=DOUBTFUL)
+            checks.doubtful_waiting()
             .select_related("product__game", "product__product_set", "retailer").order_by("pk")
         )
         for listing in listings:
-            product, shop = listing.product, listing.retailer.name
-            why = contradiction(product, listing.title)
+            if listing.pk in self.answered:
+                continue
+            why = contradiction(listing.product, listing.title)
             if why:
-                self.hide(listing, why)
-                continue
-            if listing.pk not in waiting or not listing.delivery_known or not names_agree(product, listing.title):
-                continue
-            usual = usual_lowest(listing, self.now)
-            if usual and abs(listing.delivered_price - usual) <= HISTORY_BAND * usual:
+                self.hide(listing, why, sanity=DOUBTFUL)
 
-                def trust(listing=listing):
-                    sanity.trust(listing, self.now)
+    def hide(self, listing, why, **unchanged):
+        def act():
+            # Only the price the autopilot looked at is hidden, as with the owner's Hide.
+            if not Listing.objects.filter(pk=listing.pk, is_active=True, price=listing.price, **unchanged).exists():
+                raise Stale
+            hide(listing)
 
-                self.answer(Kind.TRUST, f"Counted {money(listing.delivered_price)} for {product.name} at {shop}",
-                            f"the names agree word for word and it is close to this product's usual lowest price "
-                            f"of {money(usual)}", act=trust, listing=listing, product=product, price=listing.price)
-
-    def hide(self, listing, why):
         self.answer(Kind.HIDE, f"Hid {money(listing.shown_price)} for {listing.product.name} at {listing.retailer.name}",
-                    why, act=lambda: hide(listing), listing=listing, product=listing.product, price=listing.price)
+                    why, act=act, listing=listing, product=listing.product, price=listing.price)
 
     def wrong_matches(self):
         """The cheapest or the next price, when exactly one of the two has a title that rules it out."""
         for product, summary in checks.wrong_matches():
-            ruled_out = [(offer, contradiction(product, offer.title)) for offer in (summary.best, summary.second)]
+            pair = (summary.best, summary.second)
+            if any(offer.pk in self.answered for offer in pair):
+                continue
+            ruled_out = [(offer, contradiction(product, offer.title)) for offer in pair]
             ruled_out = [(offer, why) for offer, why in ruled_out if why]
             if len(ruled_out) == 1:
                 offer, why = ruled_out[0]
                 offer.product = product
                 self.hide(offer, why)
 
-    # Possible duplicates
-
-    def duplicates(self):
-        from .management.commands.merge_duplicates import merge
-
-        for keep, others in checks.duplicates():
-            barcode = ean_key(keep.ean)
-            same = [other for other in others if barcode and ean_key(other.ean) == barcode]
-            if not same:
-                continue
-            names = ", ".join(other.name for other in same)
-
-            def merged(keep=keep, same=same):
-                merge(keep, same)
-
-            self.answer(Kind.MERGE, f"Merged {names} into {keep.name}", "they carry the same barcode",
-                        act=merged, product=keep)
-
     # Announced sets
 
     def announced_sets(self):
         from . import releases
 
+        # A game whose publisher is read can date a set later; for the rest the owner's Add set gives it.
+        dated = {source.game for source in releases.SOURCES if source.official}
         products = {}
         for row in checks.release_candidates(self.now, limit=None):
             if row.product_set_id or row.source.startswith(releases.SHOP_PREFIX) or row.official:
+                continue
+            if row.game.slug not in dated:
                 continue
             if row.game_id not in products:
                 products[row.game_id] = list(
@@ -284,6 +299,8 @@ class Autopilot:
             label = releases.BY_NAME[row.source].label if row.source in releases.BY_NAME else row.source
 
             def add(row=row):
+                if not Release.objects.filter(pk=row.pk, status=Release.Status.PENDING, product_set__isnull=True).exists():
+                    raise Stale
                 created = releases.find_set(row.game, row.name, row.code) is None
                 product_set = releases.add_set(row, row.name)
                 return {"product_set": product_set if created else None}
@@ -311,7 +328,7 @@ def enabled():
 def undo(answer, now=None):
     """Put back what an answer did, the other way round where that is the owner's meaning. Returns a
     message for the owner, or "" when it can no longer be undone (a merge, or the rows are gone)."""
-    from . import finder, releases
+    from . import finder
     from .pricing import correct_daily_lowest
     from .signals import clear_list_caches
 
@@ -343,15 +360,7 @@ def undo(answer, now=None):
             sanity.judge_product(answer.listing.product_id)
             message = f"Undone: {answer.listing.retailer.name}'s price for {answer.listing.product.name} is judged again."
         elif answer.kind == Kind.ADD_SET and answer.release is not None:
-            row = answer.release
-            product_set = answer.product_set
-            if product_set is not None:
-                Product.objects.filter(product_set=product_set).update(product_set=None)
-                Release.objects.filter(product_set=product_set).update(product_set=None)
-                ProductSet.objects.filter(pk=product_set.pk).delete()
-            row.refresh_from_db()
-            releases.dismiss(row)
-            message = f"Undone: {row.name} is not a set, and {row.game.name} sets called that are not suggested again from this source."
+            message = undo_set(answer)
         elif answer.kind == Kind.APART:
             message = "Undone: the two products may be suggested as duplicates again."
         if message:
@@ -362,9 +371,27 @@ def undo(answer, now=None):
     return message
 
 
+def undo_set(answer):
+    """Take away a set the autopilot added, unless it has gained a date or another source since: then it
+    is more than the autopilot's guess, and the owner changes it in admin."""
+    from . import releases
+
+    row = answer.release
+    product_set = answer.product_set
+    if product_set is not None:
+        others = Release.objects.filter(product_set=product_set, status=Release.Status.ACCEPTED).exclude(pk=row.pk)
+        if product_set.release_date is not None or others.exists():
+            return ""
+        Product.objects.filter(product_set=product_set).update(product_set=None)
+        Release.objects.filter(product_set=product_set).update(product_set=None)
+        ProductSet.objects.filter(pk=product_set.pk).delete()
+    row.refresh_from_db()
+    releases.dismiss(row)
+    return f"Undone: {row.name} is not a set, and {row.game.name} sets called that are not suggested again from this source."
+
+
 def owner_apart(keep, other):
     """The owner's Not the same: the loose duplicate rule never pairs these two again."""
     return CheckAnswer.objects.create(
         kind=Kind.APART, by_owner=True, what=f"{other.name} is not {keep.name}", product=keep, other=other,
     )
-

@@ -379,35 +379,42 @@ listed because a community source says otherwise.
 
 Every hour (`tidy_all`), and when you tap **Sort what you can now**, the
 autopilot (`catalogue/autopilot.py`) answers the rows the evidence settles.
-It uses only what the site already holds: the shop's own title, the prices
-the other shops charge, the product's price history and barcodes.
+It uses only what the site already holds: the shop's own title and the
+prices the other shops charge. It answers each row once, never merges and
+never counts a doubtful price on its own say-so.
 
-- **Found at another shop: No** when the shop's title names another kind of
-  product (a pack against a box; a bare "Booster" is not taken for a pack)
-  or only another set's code (OP-10 against OP-09, also EB, PRB, ST, FB and
-  BT codes), or its price is under 0.3 or over 3.33 times the median of the
-  other shops' prices. **Yes** when the names agree word for word both ways
-  and the price is within 0.75 to 1.33 of that median. A likely name, or a
-  page with no other shop to compare, waits for you.
-- **Doubtful prices and wrong matches: Hide** when the shop's title names
-  another kind of product or another set's code. **This price is right**,
-  for the cheapest price only, when the names agree word for word, the
-  delivery charge is known and the price is within 15% of the median of the
-  product's daily lows over the 90 days before it became doubtful (at least
-  7 days of them).
-- **Possible duplicates: Merge** when the products carry the same barcode.
+- **Found at another shop: No** when the shop's title plainly names another
+  kind of product (a single pack against a box, an ETB against a bundle; a
+  bare "Booster", "Box Set", "Gift Set", "Display" or "3-Pack" is never
+  taken as another kind) or only another set's code (OP-10 against OP-09,
+  also EB, PRB, ST, FB and BT codes), or its price is under 0.3 or over 3.33
+  times the median of two or more other shops' prices (one other shop may be
+  the wrong one). **Yes** when the names agree word for word both ways, the
+  shop does not list the product already, and the price is within 0.75 to
+  1.33 of the other shops' median. A likely name, or a page with no other
+  shop to compare, waits for you.
+- **Doubtful prices and wrong matches: Hide**, for the product's cheapest
+  price or either price of a wrong match, when the shop's title plainly
+  names another kind of product or another set's code. A dearer doubtful
+  price is left alone: hiding it could leave a wrong price as the cheapest.
 - **Announced sets: Add set**, with no date, when a community source names a
-  set that products on the site already name and none of them is filed
-  under another set. Its date still needs the publisher or a second source.
+  set that products on the site already name, none of them is filed under
+  another set, and the game has a publisher source that can give the date
+  later (Pokémon, Magic, One Piece, Dragon Ball, Vanguard, Weiss Schwarz,
+  Flesh and Blood). For Yu-Gi-Oh, Lorcana and Star Wars Unlimited the set
+  waits for you, so you can give its date.
 
 Each answer is listed at the top of the page under **Sorted for you** for 7
 days, with what was done, why, and an **Undo** button. Undo puts it back the
 other way: a linked page is unlinked and that shop is not asked about it
-again; a refused page is linked; a hidden price is shown; a counted price is
-judged again; an added set is taken away and the source is not asked about
-it again. A merge cannot be undone, which is why only a shared barcode
-merges. `RIPRAPTOR_AUTOPILOT=0` stops the hourly run; the button still works.
-`python manage.py tidy_all --dry-run` lists what it would answer.
+again; a refused page is linked; a hidden price is shown; an added set is
+taken away (unless it has since gained a date or another source) and the
+source is not asked about it again. After an answer, undone or not, the
+autopilot leaves that row to you, and it never touches a price you hid
+yourself. A row that changed between the autopilot reading it and acting
+on it is left for the next run. `RIPRAPTOR_AUTOPILOT=0` stops the hourly
+run; the button still works. `python manage.py tidy_all --dry-run` lists
+what it would answer.
 
 On the server the background reader (see "Background reader" below) asks
 shops about single products all day: the products people look at, save,

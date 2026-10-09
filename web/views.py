@@ -1387,8 +1387,10 @@ def checks_page(request):
                 # Only the price the owner looked at is acted on, as with a merge.
                 messages.warning(request, "That price has changed since the page loaded. Check it again below.")
             elif action == "hide":
-                # The other shops were judged against this price: without it they may be fine.
+                # The other shops were judged against this price: without it they may be fine. The autopilot
+                # never answers a price the owner hid.
                 autopilot.hide(listing)
+                autopilot.owner_hid(listing)
                 clear_list_caches(force=True)
                 messages.success(request, f"Hidden: {listing.product.name} at {listing.retailer.name}. "
                                           "Tick show on site on the listing to bring it back.")

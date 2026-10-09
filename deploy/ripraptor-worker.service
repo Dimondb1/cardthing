@@ -1,0 +1,28 @@
+# systemd unit for the background reader (manage.py run_worker). Copy to /etc/systemd/system/ripraptor-worker.service
+# It reads the shops when their turn comes and checks popular listings every ten minutes. systemd restarts it
+# when it stops, and when its heartbeat to the watchdog stops for three minutes. If it never runs, the hourly
+# cron reads the shops instead (import_prices --if-worker-dead 30). Its log: journalctl -u ripraptor-worker
+[Unit]
+Description=RipRaptor background reader
+After=network.target
+# Never give up restarting it.
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=ripraptor
+WorkingDirectory=/srv/ripraptor
+EnvironmentFile=/srv/ripraptor/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/srv/ripraptor/.venv/bin/python manage.py run_worker
+Restart=always
+RestartSec=10
+WatchdogSec=180
+MemoryMax=300M
+Nice=10
+KillSignal=SIGINT
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

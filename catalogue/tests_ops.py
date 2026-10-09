@@ -42,6 +42,8 @@ TIMEOUTS = {
     "snapshot_daily_prices": 1800,
     "check_delivery": 3000,
     "fetch_geoip": 1800,
+    "check_worker": 600,
+    "backup_db": 1800,
 }
 
 
@@ -76,13 +78,13 @@ def file_cron():
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()
-        self.assertEqual(len(installed), 6)
+        self.assertEqual(len(installed), 9)
         self.assertEqual(installed, file_cron())
 
     def test_both_files_load_the_settings_before_every_command(self):
         for name, block in (("install.sh", install_block()), ("crontab", (DEPLOY / "crontab").read_text())):
             commands = [SCHEDULE.match(raw.strip()).group(2) for raw in block.splitlines() if "manage.py" in raw]
-            self.assertEqual(len(commands), 6, name)
+            self.assertEqual(len(commands), 9, name)
             for command in commands:
                 self.assertRegex(command, PREFIX, name)
 
@@ -142,7 +144,42 @@ class CronTests(TestCase):
     def test_the_hourly_import_reads_only_the_shops_that_are_due(self):
         hourly = [command for schedule, command in install_cron() if schedule == "0 * * * *"]
         self.assertIn("manage.py import_prices --due ", hourly[0])
-        self.assertIn("manage.py import_prices --due ", (DEPLOY / "install.sh").read_text().split("# First price import")[1])
+
+    def test_no_import_or_stock_watch_runs_beside_a_live_background_reader(self):
+        """Every cron read of the shops is a fallback: none is a bare import_prices or watch_stock."""
+        for name, text in (("install.sh", install_block()), ("crontab", (DEPLOY / "crontab").read_text())):
+            reads = [line for line in text.splitlines() if re.search(r"manage\.py (import_prices|watch_stock)\b", line)]
+            self.assertEqual(len(reads), 2, name)
+            for line in reads:
+                self.assertIn(" --if-worker-dead 30 ", line, name)
+            self.assertIn(" import_prices --due --if-worker-dead 30 ", reads[0], name)
+        # install.sh no longer starts an import of its own: the reader reads every shop on its first start.
+        text = (DEPLOY / "install.sh").read_text()
+        self.assertEqual(len(re.findall(r"manage\.py import_prices", text)), 1)
+        self.assertNotIn("nohup", text)
+
+    def test_tidy_runs_hourly_on_its_own_lock_and_the_reader_is_checked_and_backed_up(self):
+        lines = dict((command.split("manage.py ")[1].split()[0], (schedule, command)) for schedule, command in install_cron())
+        self.assertEqual(lines["tidy_all"][0], "5 * * * *")
+        self.assertIn("flock -n /tmp/ripraptor-tidy.lock", lines["tidy_all"][1])
+        self.assertNotIn("tidy_all", lines["import_prices"][1])
+        self.assertEqual(lines["check_worker"][0], "20 * * * *")
+        self.assertEqual(lines["backup_db"][0], "40 0 * * *")
+        self.assertIn("backup_db --keep 5", lines["backup_db"][1])
+        # The stock alerts never depend on the reader.
+        self.assertNotIn("--if-worker-dead", lines["send_stock_alerts"][1])
+
+    def test_the_worker_unit_restarts_it_under_a_watchdog_and_install_starts_it(self):
+        unit = (DEPLOY / "ripraptor-worker.service").read_text()
+        for setting in ("Type=notify", "WatchdogSec=180", "MemoryMax=300M", "Restart=always", "RestartSec=10",
+                        "StartLimitIntervalSec=0", "Nice=10", "KillSignal=SIGINT", "TimeoutStopSec=60",
+                        "User=ripraptor", "EnvironmentFile=/srv/ripraptor/.env", "manage.py run_worker"):
+            self.assertIn(setting, unit)
+        text = (DEPLOY / "install.sh").read_text()
+        self.assertIn("cp deploy/ripraptor-worker.service /etc/systemd/system/", text)
+        self.assertIn("systemctl restart ripraptor-worker", text)
+        # Restarted after the migration, so the new code never runs on the old tables.
+        self.assertGreater(text.index("systemctl restart ripraptor-worker"), text.index("manage.py migrate"))
 
     def test_install_backs_up_with_backup_db_not_cp(self):
         text = (DEPLOY / "install.sh").read_text()

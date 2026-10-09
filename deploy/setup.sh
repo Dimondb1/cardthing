@@ -13,6 +13,7 @@ set -a; . ./.env; set +a
 .venv/bin/python manage.py seed_catalogue
 chown -R ripraptor /srv/ripraptor
 cp deploy/ripraptor.service /etc/systemd/system/ripraptor.service
-systemctl daemon-reload && systemctl enable --now ripraptor
+cp deploy/ripraptor-worker.service /etc/systemd/system/ripraptor-worker.service
+systemctl daemon-reload && systemctl enable --now ripraptor ripraptor-worker
 crontab -u ripraptor deploy/crontab
 echo "Done. Create an admin user with: sudo -u ripraptor .venv/bin/python manage.py createsuperuser"

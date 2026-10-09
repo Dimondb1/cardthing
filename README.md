@@ -282,8 +282,8 @@ pre-orders in a pre-order collection, which the importer reads, so a
 pre-order never shows as in stock.
 
 Three cleanup commands keep the catalogue honest after the rules improve
-(`tidy_all` runs them in order, and `start.bat`, `update_prices` and the
-server's hourly import run `tidy_all` automatically):
+(`tidy_all` runs them in order; `start.bat` and `update_prices` run it
+after their import, and the server's cron runs it at five past every hour):
 `tidy_catalogue` (products that no longer pass), `merge_duplicates` (one
 product under two names) and `tidy_listings` (a shop item linked to the
 wrong product, judged by the words in its shop address; it also hides an
@@ -354,7 +354,12 @@ anyway", the wrong matches with a Hide button under each price, the possible dup
 exactly as shown is merged), and the shops whose delivery charge is not
 known with a link to fill it in.
 
-`watch_stock` runs every ten minutes on the server. It asks each shop
+On the server the background reader (see "Background reader" below) asks
+shops about single products all day: the products people look at, save,
+click or wait for every ten minutes, the rest of the single-shop, pre-order
+and new products every hour. `watch_stock` is the same check from cron,
+run every ten minutes only while the background reader is not running.
+It asks each shop
 about single products (a Shopify shop answers `/products/<handle>.js` in
 milliseconds). Half its budget of 300 goes to the products people are
 watching: the most viewed and most saved to a watchlist over the last two
@@ -363,19 +368,20 @@ click, then sold-out items people click, then everything else by age. The
 "Reload prices" button on a product page only re-reads what the site
 holds; it never asks a shop. Anything that comes back is
 stamped and shown on the home page under "Back in stock" for
-`RIPRAPTOR_RESTOCK_HOURS` (48). Checking whole shops more often than hourly
-is not possible: the shops rate-limit scripted requests and a full read of
-all of them takes over an hour.
+`RIPRAPTOR_RESTOCK_HOURS` (48). A pre-order a shop marks as available stays
+a pre-order after a single-product check until the product's release date
+(or its set's) is known and has come; the next whole-shop read decides
+otherwise. eBay and Amazon listings are never checked this way.
 
 Price history starts the day a product first gets a price and is kept for
 ever; the product page charts the last 90 days and, after 30 days, says
 what the cheapest price was a month ago. `snapshot_daily_prices` runs
 nightly on the server to record each day's cheapest price.
 
-The first import takes 20 to 40 minutes for a Shopify shop and about an
-hour for a large website shop; later ones are similar, so run it hourly on
-a server rather than on a laptop. The server cron takes a lock so a slow
-import never overlaps the next one.
+A whole read takes a few minutes for a Shopify shop and up to about 25
+minutes for a website shop, so leave it to the server rather than a
+laptop. On the server the background reader and the cron fallback share a
+lock, so a read by hand never overlaps one of theirs.
 
 ### Shops we cannot read
 
@@ -614,9 +620,9 @@ curl -fsSL https://raw.githubusercontent.com/Dimondb1/cardthing/claude/compassio
 
 `deploy/install.sh` installs Python and Caddy, clones the code to
 `/srv/ripraptor`, writes `.env` with a generated secret key, migrates,
-collects static files, sets up the shops, starts the app as a service,
-configures HTTPS for the domain, schedules hourly imports and starts the
-first import. Run the same command again to update. The repository must be
+collects static files, sets up the shops, starts the app and the
+background reader as services, configures HTTPS for the domain and
+schedules the cron jobs. The reader reads every shop on its first start. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
 
 Each update first copies the database to `/var/lib/ripraptor/backups/`
@@ -627,12 +633,12 @@ and `-shm` files belong to the database being replaced, so they go too;
 left in place they would be applied to the restored copy.
 
 ```sh
-sudo systemctl stop ripraptor cron
+sudo systemctl stop ripraptor ripraptor-worker cron
 sudo rm -f /var/lib/ripraptor/db.sqlite3-wal /var/lib/ripraptor/db.sqlite3-shm
 sudo cp /var/lib/ripraptor/backups/db.sqlite3.YYYYMMDD-HHMM.bak /var/lib/ripraptor/db.sqlite3
 sudo chown ripraptor:ripraptor /var/lib/ripraptor/db.sqlite3
 cd /srv/ripraptor && sudo -u ripraptor git checkout <previous commit>
-sudo systemctl start ripraptor cron
+sudo systemctl start ripraptor ripraptor-worker cron
 ```
 
 The manual steps:
@@ -642,8 +648,8 @@ month VPS is enough):
 
 1. Clone the repository to `/srv/ripraptor` and run `sudo deploy/setup.sh`.
    It creates a virtualenv, installs requirements, applies migrations,
-   collects static files, loads the catalogue, installs a systemd service
-   for the app and a crontab for the hourly price check.
+   collects static files, loads the catalogue, installs systemd services
+   for the app and the background reader, and the crontab.
 2. Edit `/srv/ripraptor/.env` (start from `.env.example`): a long random
    `DJANGO_SECRET_KEY`, your domain in `DJANGO_ALLOWED_HOSTS` and
    `DJANGO_CSRF_TRUSTED_ORIGINS`, then `sudo systemctl restart ripraptor`.
@@ -688,8 +694,9 @@ shop's page in Admin > Retailers:
   76 to 135 every two hours, and so on. A shop that takes a long time to
   read is read less often, never more than a third of the time: a read that
   took 30 minutes is next due 90 minutes after it ended.
-- **Next read** is when its turn comes. `import_prices --due` stamps it
-  before reading, so a read that crashes is not retried in a loop.
+- **Next read** is when its turn comes. The background reader and
+  `import_prices --due` stamp it before reading, so a read that crashes is
+  not retried in a loop.
 - **Failed reads in a row** and **waiting after errors until**: after a
   failed read the shop waits 5 minutes, then 10, 20 and so on up to 6
   hours, and is read again once both that wait and its usual interval have
@@ -701,7 +708,8 @@ shop's page in Admin > Retailers:
   the ten-minute stock checks. Reading it by name (`import_prices <slug>`)
   still works.
 
-The hourly cron runs `import_prices --due`. A shop's next read is counted
+The background reader reads each shop when its next read comes. When it is
+not running, the hourly cron runs `import_prices --due`. A shop's next read is counted
 from the start of the run that read it, and each run also reads a shop
 whose next read falls within 15 minutes of its start, so a run that starts
 a few minutes late (waiting for the stock watch, say) does not push a shop
@@ -746,24 +754,105 @@ Admin, Crawl health (`/admin/crawl/`, linked from the admin home page and
 from each shop under Shop health on Insights) shows whether shops are being
 read and lets you change it with one tap, from a phone:
 
-- The status line says reads are hourly and when the last one finished.
+- The status line says whether the background reader is running: green
+  while its heartbeat is under ten minutes old, red when it has stopped or
+  never started (the hourly schedule then reads the shops). Below it: when
+  the last read finished, how many products are checked every ten minutes
+  and every hour, the requests to shops and the errors in the last hour,
+  the jobs done since it started, and why it last restarted itself, if it
+  did. The admin home page shows a red line under Crawl health when the
+  reader has stopped.
 - **Pause all** stops every scheduled read and stock check until you tap
-  **Resume all**: `import_prices --due` and `watch_stock` read nothing
-  while it is on, and a run already reading stops before its next shop
-  (the shop it is on finishes). Runs left open by a crash or a timeout are
-  still closed. Reading a shop by name still works. Shops you paused one by one stay paused when you
-  resume. The switch is a file called `crawl-paused` in the cache folder
-  (`RIPRAPTOR_CACHE_DIR`), so the site and the hourly cron see the same
-  thing and a deploy that empties the cache leaves it alone. If the folder
-  cannot be written the page says so and nothing changes.
+  **Resume all**: the background reader starts no new job (the ones
+  running finish, and its heartbeat goes on), `import_prices --due` and
+  `watch_stock` read nothing, and a run already reading stops before its
+  next shop. Runs left open by a crash or a timeout are still closed.
+  Reading a shop by name still works. Shops you paused one by one stay
+  paused when you resume. The switch is a row in the database (the
+  background reader's), so the site, the reader and the cron all see the
+  same thing and a deploy that empties the cache leaves it alone. A
+  `crawl-paused` file left in the cache folder by the earlier version still
+  counts as paused until Resume all removes it. If the database is busy the
+  page says so and nothing changes.
 - One row per shop read on a schedule: Reading (its latest run has not
   finished), Paused, Backing off until a time, or Idle, then its last read
   that worked, how long that took, its next read (paused while it or every
   shop is paused, and never before a wait after errors ends), its errors in
   a row and its last error.
 - **Read now** makes the shop due at once and forgets its errors and its
-  wait, so the next hourly read takes it. **Pause** and **Resume** set the
-  shop's Reading paused box, which stops its stock checks too.
+  wait, so the background reader takes it within a few minutes (or the next
+  hourly read does when the reader is not running). **Pause** and
+  **Resume** set the shop's Reading paused box, which stops its stock
+  checks too.
+
+## Background reader
+
+`python manage.py run_worker` is one long-running process (systemd unit
+`deploy/ripraptor-worker.service`, installed and started by `install.sh`)
+that keeps prices fresh all day:
+
+- **Whole shops** when their next read comes, by the same rules as the
+  hourly cron (Reading schedule above): Shopify shops every 45 minutes,
+  website shops and feeds every hour, eBay and Amazon tried hourly under
+  their once-a-day limit.
+- **Single listings** of the products that matter (`catalogue/heat.py`):
+  points for page views today (4 each, at most 20), a watchlist in the
+  last two days (6), clicks in the last week (3 each, at most 15), a
+  confirmed back-in-stock alert waiting (8), one shop or none selling it
+  (5), any pre-order (6) and being new in the last fortnight (5). With 10
+  points a product's listings are checked every ten minutes (at most 600
+  listings; the rest wait their turn hourly), with 3 every hour, otherwise
+  only by its shop's whole read. A listing checked in the last 8 minutes,
+  or at a shop being read, is skipped.
+
+There is no job list: every minute it works out what is due from the shops
+and listings themselves, so a crash or a deploy loses only the jobs that
+were running. It is polite: one job per shop at a time; at most one request
+a second to a Shopify shop (three at once), one every two seconds to a
+website shop and one every ten seconds to a feed; two a second in all;
+half a second between Shopify product pages; at most two whole-shop reads
+at once and only one of a website shop, so one of its three threads is
+always free for single listings. A shop waiting after errors or paused is
+not asked about single listings either.
+
+Safety: only one reader runs (`/tmp/ripraptor-worker.lock`). It holds the
+import lock (`/tmp/ripraptor-import.lock`) only while a whole-shop read is
+running, so `import_prices` run by hand, the nightly snapshot and the weekly
+delivery check wait only for reads in flight; after 20 minutes of holding it
+without a break it starts no new read until it has let go, so they always
+get a turn. Each job has a time limit: 20 minutes for a shop read, 45 for a
+website shop (600 pages at one every two seconds), 60 for eBay and Amazon,
+a minute for a single-listing check. A job past its limit marks its shop
+"Stuck, restarting" (which counts as a failed read), closes its run with
+"Stopped before it finished." and ends the process; systemd starts a new one
+ten seconds later, and on start the reader closes the runs it had in flight
+and any older than three hours. It writes a heartbeat every 30 seconds to
+the database (Crawl health reads it) and to systemd's watchdog, which
+restarts it after three minutes without one. It is capped at 300 MB of
+memory and runs at a lower priority than the site.
+
+To stop it, start it or read its log on the server:
+
+```sh
+sudo systemctl stop ripraptor-worker
+sudo systemctl start ripraptor-worker
+journalctl -u ripraptor-worker -f
+```
+
+`run_worker --once` plans once, runs every job due in the calling thread
+and stops; `--max-threads 2` suits a server with under 1 GB of memory.
+`check_worker` prints how old the heartbeat is and exits with code 1 when
+it is over ten minutes old or there has never been one; cron runs it hourly
+so the log shows when the reader stopped. Insights lists "Worker not
+running" first among the things to improve while the heartbeat is stale.
+
+What cron still does: if the reader stops or never starts, the hourly
+`import_prices --due --if-worker-dead 30` and the ten-minute
+`watch_stock --if-worker-dead 30` read the shops as before once its
+heartbeat is 30 minutes old; while it runs they exit at once. `tidy_all`
+runs at five past every hour on its own lock, the back-in-stock emails
+every ten minutes whatever the reader is doing, the price history and a
+backup (`backup_db --keep 5`) nightly, and the delivery check weekly.
 
 ## Backups, timeouts and runs cut short
 
@@ -783,8 +872,9 @@ in the log and tries again the next night.
 
 Every cron line runs its command under `timeout`, set to the command's
 budget plus five minutes: the hourly import 55 minutes, `tidy_all` 25,
-the stock watcher and the stock alerts 9, the nightly snapshot 30, the
-weekly delivery check 50 and the monthly GeoIP download 30. Without it a
+the stock watcher and the stock alerts 9, `check_worker` 10, the nightly
+snapshot and backup 30 each, the weekly delivery check 50 and the monthly
+GeoIP download 30. Without it a
 command that hangs while holding a lock would make every later run behind
 the lock give up without a word. A command still running after its limit is
 stopped, and killed a minute later (30 seconds for the ten-minute jobs) if

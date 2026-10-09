@@ -268,3 +268,7 @@ RIPRAPTOR_AUTO_CATALOGUE = env_bool("RIPRAPTOR_AUTO_CATALOGUE", default=True)
 # shops already added (catalogue/finder.py). The tests turn it on where they need it, so the reader's
 # own tests see only the jobs they set up.
 RIPRAPTOR_FINDER = env_bool("RIPRAPTOR_FINDER", default=True) and not TESTING
+
+# The background reader reads free publisher and community sources for announced sets and release dates
+# (catalogue/releases.py). Off in tests, which turn it on where they need it.
+RIPRAPTOR_RELEASES = env_bool("RIPRAPTOR_RELEASES", default=True) and not TESTING

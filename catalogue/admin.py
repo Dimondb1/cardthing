@@ -3,7 +3,7 @@ from django.db.models import Count
 from django.utils.html import format_html
 
 from . import pricing, sanity
-from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Restock, Retailer, ShopProduct, StockAlert, TypeBand
+from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release, Restock, Retailer, ShopProduct, StockAlert, TypeBand
 
 
 @admin.register(Game)
@@ -23,11 +23,42 @@ class GameAdmin(admin.ModelAdmin):
 
 @admin.register(ProductSet)
 class ProductSetAdmin(admin.ModelAdmin):
-    list_display = ("name", "game", "code", "release_date")
+    list_display = ("name", "game", "code", "release_date", "release_date_source")
     list_filter = ("game",)
     search_fields = ("name", "code")
     prepopulated_fields = {"slug": ("name",)}
     date_hierarchy = "release_date"
+    readonly_fields = ("release_date_source",)
+
+    def save_model(self, request, obj, form, change):
+        if "release_date" in form.changed_data:
+            # A date typed here is the owner's, and no release source changes it. Clearing it lets one again.
+            from .releases import OWNER
+
+            obj.release_date_source = OWNER if obj.release_date else ""
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Release)
+class ReleaseAdmin(admin.ModelAdmin):
+    """What each release source said. Read only: sets are added from the Things to check page."""
+
+    list_display = ("name", "game", "code", "release_date", "precision", "source", "status", "product_set", "last_seen_at")
+    list_filter = ("status", "game", "source", "official")
+    search_fields = ("name", "code", "note")
+    list_select_related = ("game", "product_set")
+    actions = ["hide"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    @admin.action(description="Hide: not a set")
+    def hide(self, request, queryset):
+        count = queryset.exclude(status=Release.Status.DISMISSED).update(status=Release.Status.DISMISSED)
+        self.message_user(request, f"{count} hidden. They are not suggested again from their source.", messages.SUCCESS)
 
 
 class BarcodeFilter(admin.SimpleListFilter):

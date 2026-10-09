@@ -1,0 +1,560 @@
+<!-- Trimmed copy of the real page, fetched 9 Oct 2026. -->
+<html><body>
+<h3 class="style-h3 margin-half">NEW RELEASE</h3>
+
+
+<div class="products-list">
+<div>
+<a href="https://en.cf-vanguard.com/products/dzbt16/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/2026/06/05145532/DZ-BT16_540x360.jpg" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-BT16】<br />
+Cardfight!! Vanguard Booster Pack 16: Parallactic Dawn</div>
+<div class="release">October 30, 2026</div>
+<div class="clan">Featured Nations: Dragon Empire, Dark States, Brandt Gate, Keter Sanctuary, Stoicheia, Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+
+<div>
+<a href="https://en.cf-vanguard.com/products/dztb03/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/2026/07/03153907/DZ-TB03_BFE2_1920.png" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-TB03】<br />
+Cardfight!! Vanguard Title Booster 03: Future Card Buddyfight &#8211; Disaster Force</div>
+<div class="release">November 20, 2026</div>
+<div class="clan">Featured Nations: Buddyfight</div>
+</div>
+</a>
+</div>
+
+<div>
+<a href="https://en.cf-vanguard.com/products/dzbt17/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/2026/07/10164221/22f53544126e106496deff2fff0112d2.png" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-BT17】<br />
+Cardfight!! Vanguard Booster Pack 17: Parallactic Fate</div>
+<div class="release">November 20, 2026</div>
+<div class="clan">Featured Nations: Dragon Empire, Dark States, Brandt Gate, Keter Sanctuary, Stoicheia, Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+
+<div>
+<a href="https://en.cf-vanguard.com/products/dztbp02/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/2026/07/24104204/DZ-TBP02-Persona-30th-1920_1080.png" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-TBP02】<br />
+Cardfight!! Vanguard Title Booster Premium 02: Persona 30th Anniversary</div>
+<div class="release">December 11, 2026</div>
+<div class="clan">Featured Nations: Persona Series</div>
+</div>
+</a>
+</div>
+
+<div>
+<a href="https://en.cf-vanguard.com/products/dz-ss16/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/2026/09/08162541/57348fabe6338da54d532f80397f6d82-1.png" /></span>
+<div class="text">
+
+
+<div class="category trial">CONSTRUCTED DECK</div>
+<div class="title">
+【VGE-DZ-SS16】<br />
+Cardfight!! Vanguard Special Series 16: Ghost Meets Gal! Start Deck</div>
+<div class="release">January 22, 2027</div>
+<div class="clan">Featured Nations: Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+
+<div>
+<a href="https://en.cf-vanguard.com/products/dz-lbt03/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/2026/09/09101954/9a991a641527347d739bd4ea2b6523e3.png" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-LBT03】<br />
+Cardfight!! Vanguard Lyrical Booster 03: Lyrical Monasterio The Legendary Idols!</div>
+<div class="release">January 22, 2027</div>
+<div class="clan">Featured Nations: Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+
+
+</div>
+
+
+<h3 id="product-list-header" class="style-h3 margin-half">NOW ON SALE
+</h3>
+
+<ul class="category-menu margin-half">
+<li class="cat-all"><a href="/products/"><span>ALL</span></a></li>
+<li class="cat-trial"><a href="/products/cat/trial/"><span>CONSTRUCTED <br>DECK</span></a></li>
+<li class="cat-booster"><a href="/products/cat/booster/"><span>BOOSTER <br>PACK</span></a></li>
+<li class="cat-supply"><a href="/products/cat/supply/"><span>OTHERS</span></a></li>
+</ul>
+
+<script type="text/javascript">
+$(function() {
+	$('.category-menu a:first').parent().addClass('current');
+});
+</script>
+<script type="text/javascript">
+$(function() {
+	$.ajax({
+		type: 'GET',
+		url: '/system/app/ajax/clan_option_product',
+		cache: false,
+		dataType: 'json',
+		success: function(json) {
+			let data = '';
+			data += '<optgroup label="Nation">';
+			for(let d in json.nation) {
+				let selected = '';
+				if(d == '') {
+					selected = ' selected="selected"';
+				}
+				data += '<option value="d-' + d + '"' + selected + '>' + d + '</option>';
+			}
+			data += '</optiongroup>';
+			
+			data += '<optgroup label="Clan">';
+			for(let d in json.clan) {
+				let selected = '';
+				if(d == '') {
+					selected = ' selected="selected"';
+				}
+				data += '<option value="' + d + '"' + selected + '>' + d + '</option>';
+			}
+			data += '</optiongroup>';
+			$('#param-select').append(data);
+			
+			$('#param-select').change(function() {
+				val = $('#param-select').val();
+				if(val == '') {
+					location.href="/products/";
+				} else if(val) {
+					let _add_param = "?clan=" + val;
+					if(val.indexOf('d-') == 0) {
+						val = val.substr(2);
+						_add_param = "?nation=" + val;
+					}
+					location.href="/products/" + _add_param;
+				}
+				
+			});
+		}
+	});
+});
+</script>
+<div class="products-clan-search">
+<form action="/products/" method="GET" id="clan-search-form">
+<select name="clan" class="full active" id="param-select">
+<option value="">-- Select Nation/Clan --</option>
+</select>
+</form>
+</div>
+
+
+<div class="products-list">
+<div>
+<a href="https://en.cf-vanguard.com/products/dz-tbp01/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/2026/05/04103311/540x360-BangDream.jpg" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-TBP01】<br />
+Cardfight!! Vanguard Title Booster Premium 01: BanG Dream! Girls Band Party!</div>
+<div class="release">October 2, 2026</div>
+<div class="clan">Featured Nations：BanG Dream!</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dz-bt15/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-BT15_540x360.png" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-BT15】<br />
+Cardfight!! Vanguard Booster Pack 15: Strike of Illusionary Shadows</div>
+<div class="release">August 28, 2026</div>
+<div class="clan">Featured Nations：Dragon Empire, Dark States, Brandt Gate, Keter Sanctuary, Stoicheia</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dz-ss15/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-SS15-Feature-Image.jpg" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-SS15】<br />
+Cardfight!! Vanguard Special Series 15: The Legendary Vanguards</div>
+<div class="release">July 31, 2026</div>
+<div class="clan">Featured Nations：CoroCoro, Dragon Empire, Dark States, Brandt Gate, Keter Sanctuary, Stoicheia, Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dz-bt14/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-BT14_540x360.jpg" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-BT14】<br />
+Cardfight!! Vanguard Booster Pack 14: Envoys of the Crimson Moon</div>
+<div class="release">June 26, 2026</div>
+<div class="clan">Featured Nations：Dragon Empire, Dark States, Brandt Gate, Keter Sanctuary, Stoicheia, Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/cardfight-vanguard-special-series-14-dragonic-overlord-start-deck/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/2026/05/25112037/540X360-1.jpg" /></span>
+<div class="text">
+
+
+<div class="category trial">CONSTRUCTED DECK</div>
+<div class="title">
+【VGE-DZ-SS14】<br />
+Cardfight!! Vanguard Special Series 14: Dragonic Overlord Start Deck</div>
+<div class="release">May 22, 2026</div>
+<div class="clan">Featured Nations：Dragon Empire</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/cardfight-vanguard-special-series-13-blaster-blade-start-deck/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/2026/05/25112031/540x360.jpg" /></span>
+<div class="text">
+
+
+<div class="category trial">CONSTRUCTED DECK</div>
+<div class="title">
+【VGE-DZ-SS13】<br />
+Cardfight!! Vanguard Special Series 13: Blaster Blade Start Deck</div>
+<div class="release">May 22, 2026</div>
+<div class="clan">Featured Nations：Keter Sanctuary</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dzbt13/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-BT13_product.png" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-BT13】<br />
+Cardfight!! Vanguard Booster Pack 13: Parallactic Clash</div>
+<div class="release">May 8, 2026</div>
+<div class="clan">Featured Nations：Dragon Empire, Dark States, Brandt Gate, Keter Sanctuary, Stoicheia, Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/kanami-berucrea-rubber-playmat/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/kanami_v2_rgb_round_small.png" /></span>
+<div class="text">
+
+
+<div class="category supply">OTHERS</div>
+<div class="title">
+&#8220;Kanami &#038; Berucrea&#8221; Rubber Playmat</div>
+<div class="release">April 24, 2026</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/ryuga-alphard-fantome-rubber-playmat/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/Ryuga_v3_rgb_round_small.png" /></span>
+<div class="text">
+
+
+<div class="category supply">OTHERS</div>
+<div class="title">
+&#8220;Ryuga &#038; Alphard “Fantôme”&#8221; Rubber Playmat</div>
+<div class="release">April 24, 2026</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dzss12/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-SS12-540x360-1.jpg" /></span>
+<div class="text">
+
+
+<div class="category trial">CONSTRUCTED DECK</div>
+<div class="title">
+【VGE-DZ-SS12】<br />
+Cardfight!! Vanguard Special Series 12: Master Deckset -Erika Myojo-</div>
+<div class="release">April 24, 2026</div>
+<div class="clan">Featured Nations：Keter Sanctuary</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dzss11/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-SS11-540X360.jpg" /></span>
+<div class="text">
+
+
+<div class="category trial">CONSTRUCTED DECK</div>
+<div class="title">
+【VGE-DZ-SS11】<br />
+Cardfight!! Vanguard Special Series 11: Master Deckset -Hikari Myodo-</div>
+<div class="release">April 24, 2026</div>
+<div class="clan">Featured Nations：Dark States</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dztb02/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-TB02_product.png" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-TB02】<br />
+Cardfight!! Vanguard Title Booster 02: Touken Ranbu ONLINE 2025</div>
+<div class="release">March 20, 2026</div>
+<div class="clan">Featured Nations：Touken Ranbu</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dzbt12/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-BT12_product.jpg" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-BT12】<br />
+Cardfight!! Vanguard Booster Pack 12: Chasm of Lost Souls</div>
+<div class="release">February 27, 2026</div>
+<div class="clan">Featured Nations：Dragon Empire, Dark States, Brandt Gate, Keter Sanctuary, Stoicheia</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dzlbt02/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-LBT02_Product.jpg" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-LBT02】<br />
+Cardfight!! Vanguard Lyrical Booster 02: Lyrical Monasterio Season of Wonders</div>
+<div class="release">January 30, 2026</div>
+<div class="clan">Featured Nations：Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dzbt11/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-BT11_product.jpg" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-BT11】<br />
+Cardfight!! Vanguard Booster Pack 11: Symphony of Might &#038; Bloom</div>
+<div class="release">December 19, 2025</div>
+<div class="clan">Featured Nations：Dragon Empire, Dark States, Brandt Gate, Keter Sanctuary, Stoicheia, Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/yu-yu-ars-vairina-rubber-playmat/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/yu-yu-ars-vairina-playmat.png" /></span>
+<div class="text">
+
+
+<div class="category supply">OTHERS</div>
+<div class="title">
+&#8220;Yu-yu &#038; Ars Vairina&#8221; Rubber Playmat</div>
+<div class="release">December 12, 2025</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/erika-liael-draconis-rubber-playmat/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/erika-liael-draconis-playmat.png" /></span>
+<div class="text">
+
+
+<div class="category supply">OTHERS</div>
+<div class="title">
+&#8220;Erika &#038; Liael=Draconis&#8221; Rubber Playmat</div>
+<div class="release">December 12, 2025</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dztb01/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-TB01_product.jpg" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-TB01】<br />
+Cardfight!! Vanguard Title Booster 01: &#8220;Future Card Buddyfight&#8221;</div>
+<div class="release">November 21, 2025</div>
+<div class="clan">Featured Nations：Buddyfight</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/michiru-drajeweled-magnus-playmat/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/michiru-drajeweled-magnus.png" /></span>
+<div class="text">
+
+
+<div class="category supply">OTHERS</div>
+<div class="title">
+&#8220;Michiru &#038; Drajeweled Magnus&#8221; Rubber Playmat</div>
+<div class="release">October 24, 2025</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/ruka-nannaclir-rubber-playmat/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/ruka-nannaclir-playmat.png" /></span>
+<div class="text">
+
+
+<div class="category supply">OTHERS</div>
+<div class="title">
+&#8220;Ruka &#038; Nannaclir&#8221; Rubber Playmat</div>
+<div class="release">October 24, 2025</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dzbt10/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/DZ-BT10_Product.jpg" /></span>
+<div class="text">
+
+
+<div class="category booster">BOOSTER PACK</div>
+<div class="title">
+【VGE-DZ-BT10】<br />
+Cardfight!! Vanguard Booster Pack 10: Dragonsoul Resonance</div>
+<div class="release">October 24th, 2025</div>
+<div class="clan">Featured Nations：Dragon Empire, Dark States, Brandt Gate, Keter Sanctuary, Stoicheia, Lyrical Monasterio</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/suo-blangdmire-nexus-rubber-playmat/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/suo-blangdmire-nexus-playmat.png" /></span>
+<div class="text">
+
+
+<div class="category supply">OTHERS</div>
+<div class="title">
+&#8220;Suo &#038; Blangdmire Nexus&#8221; Rubber Playmat</div>
+<div class="release">September 26th, 2025</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/mirei-bavsargra-aksayya-rubber-playmat/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/mirei-bavsargra-aksayya-playmat.png" /></span>
+<div class="text">
+
+
+<div class="category supply">OTHERS</div>
+<div class="title">
+&#8220;Mirei &#038; Bavsargra Aksayya&#8221; Rubber Playmat</div>
+<div class="release">September 26th, 2025</div>
+</div>
+</a>
+</div>
+<div>
+<a href="https://en.cf-vanguard.com/products/dzss10/">
+<span class="img">
+<img src="https://en.cf-vanguard.com/wordpress/wp-content/uploads/540x360_SS10_v2.jpg" /></span>
+<div class="text">
+
+
+<div class="category trial">CONSTRUCTED DECK</div>
+<div class="title">
+【VGE-DZ-SS10】<br />
+Cardfight!! Vanguard Special Series 10: Shiki Otei Start Deck</div>
+<div class="release">September 12th, 2025</div>
+<div class="clan">Featured Nations：Stoicheia</div>
+</div>
+</a>
+</div>
+
+</div>
+
+
+<!-- navigation -->
+
+</body></html>

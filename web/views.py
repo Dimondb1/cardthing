@@ -1318,6 +1318,8 @@ def checks_page(request):
             else:
                 finder.ignore(row)
                 messages.success(request, f"Noted: {row.retailer.name} is not asked about {row.suggested.name} again.")
+        elif action in ("add_set", "not_a_set", "use_release_date"):
+            release_tap(request, action)
         elif action == "merge":
             # Only a group the page offered, exactly as it stands now, is merged.
             wanted = request.POST.get("keep", ""), sorted(request.POST.getlist("other"))
@@ -1341,8 +1343,60 @@ def checks_page(request):
         "duplicates": checks.duplicates(), "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
         "found": checks.found_stockists(), "found_count": checks.found_waiting().count(),
+        "releases": checks.release_candidates(), "disagreements": checks.release_disagreements(),
+        "stale_sources": checks.stale_release_sources(),
     }
     return render(request, "admin/checks.html", context)
+
+
+def release_tap(request, action):
+    """The Things to check buttons for announced sets: Add set, Not a set and Use this date.
+
+    Only a row the page offered, still in the state the page showed, is acted on.
+    """
+    from django.contrib import messages
+    from django.db import transaction
+
+    from catalogue import checks, releases
+    from catalogue.signals import clear_list_caches
+
+    pk = request.POST.get("release", "")
+    if not pk.isdigit():
+        raise Http404("No such announced set.")
+    if action == "use_release_date":
+        row = next((r for group in checks.release_disagreements() for r in group["rows"] if r.pk == int(pk)), None)
+    else:
+        row = next((r for r in checks.release_candidates() if r.pk == int(pk)), None)
+    if row is None:
+        messages.warning(request, "That row has changed since the page loaded. Check it again below.")
+        return
+    if action == "not_a_set":
+        releases.dismiss(row)
+        messages.success(request, f"Noted: {row.name} is not a set. {row.game.name} sets called that are not "
+                                  "suggested again from this source.")
+        return
+    if action == "use_release_date":
+        with transaction.atomic():
+            product_set = releases.use_date(row)
+        clear_list_caches(force=True)
+        messages.success(request, f"{product_set.name} now comes out on {product_set.release_date:%-d %B %Y}. "
+                                  "No source changes it.")
+        return
+    name = " ".join(request.POST.get("name", "").split())
+    if not name or len(name) > 120:
+        messages.warning(request, "Give the set a name of up to 120 characters, then tap Add set again.")
+        return
+    typed = request.POST.get("date", "").strip()
+    released = releases.parse_owner_date(typed)
+    if typed and released is None:
+        messages.warning(request, "That date was not understood. Pick it from the calendar, or leave it empty.")
+        return
+    with transaction.atomic():
+        product_set = releases.add_set(row, name, released)
+    clear_list_caches(force=True)
+    when = f" It comes out on {product_set.release_date:%-d %B %Y}." if product_set.release_date else ""
+    messages.success(request, f"Added the set {product_set.name} to {row.game.name}.{when} Products named after it "
+                              "are filed under it.")
 
 
 @staff_member_required

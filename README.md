@@ -827,6 +827,9 @@ that keeps prices fresh all day:
   never asked about single listings.
 - **The pre-order pulse** for each Shopify shop every 15 minutes (see
   Pre-order pulse below).
+- **Release sources**, one at a time, every 6 hours (Scryfall once a day),
+  for announced sets and release dates (see Release radar below). A source
+  read has two minutes and leaves one thread free, like the stockist finder.
 
 There is no job list: every minute it works out what is due from the shops
 and listings themselves, so a crash or a deploy loses only the jobs that
@@ -1043,6 +1046,78 @@ python manage.py find_stockists --budget-seconds 60  # start nothing new after a
 
 It prints "N products searched, M listings added, K to check".
 
+## Release radar
+
+Announced sets and release dates come from free publisher and community
+sources, never from a shop you have not added and never from a paid
+service (`catalogue/releases.py`). The background reader reads one source at
+a time when its turn comes; `scan_releases` does the same by hand.
+
+| Source | Game | Kind | Read every | Terms we keep to |
+|---|---|---|---|---|
+| Scryfall sets API | Magic | official data | 24 hours | an accurate User-Agent and Accept header, at most 10 requests a second, cached a day |
+| TCGdex | Pokémon | community | 6 hours | no published limit; the newest 40 sets, at most 40 set pages a read, 100 ms apart |
+| pokemon.com UK news | Pokémon | official | 6 hours | the news index and at most 3 expansion articles a read |
+| YGOPRODeck card sets | Yu-Gi-Oh! | community | 6 hours | one request; filtered on our side; set images are never shown from their server |
+| Lorcast | Lorcana | community | 6 hours | 100 ms between requests |
+| SWU-DB | Star Wars Unlimited | community | 6 hours | one request |
+| One Piece Card Game products | One Piece | official | 6 hours | pages 1 and 2 |
+| Dragon Ball Super Fusion World products | Dragon Ball | official | 6 hours | page 1 |
+| Cardfight!! Vanguard products | Vanguard | official | 6 hours | page 1 |
+| Weiss Schwarz products | Weiss Schwarz | official | 6 hours | page 1 |
+| Flesh and Blood coming soon | Flesh and Blood | official | 6 hours | page 1, asked with a browser User-Agent because the site refuses any other |
+
+Web pages are fetched a second apart and no more than 25 a day across all
+of them; a source that would go over waits for the next day. Sets released
+more than 180 days ago are recorded but change nothing.
+
+What is published, and when:
+
+- A set is added, with its date, when the source is the game's publisher
+  (marked official above) and gives a full date, or when two different
+  sources give the same day.
+- A month-only date ("Delivery Month November 2026") is kept on the
+  announced set and never shown as a set's date.
+- A lone community source waits on Things to check under "Announced sets
+  to check", with Add set (a small form with the name and date filled in
+  where known) and Not a set. Not a set is final for that game, name and
+  source.
+- Shops add evidence too: a pre-order whose title carries a set code no set
+  of that game has (OP-18, EB-05, FB11, VGE-DZ-BT16, SV9, ME03, Set 6), and
+  any "Pre-Release Event" ticket, waits under "Announced sets to check"
+  with the shop's title. A ticket is never a product.
+- A date you type on a set in admin is yours: no source changes it. A
+  source may move a date it set itself, and a publisher may replace a
+  community source's date.
+- When sources are more than a day apart on a set, "Release dates to
+  confirm" lists each source's date with Use this date. Your choice is
+  final.
+- A source with no good read for 14 days is listed under "Release sources
+  not answering". Insights has a "Release sources" table with each
+  source's last read, sets found and last error.
+- No product is ever created from an announced set, and a game you have
+  not added is skipped.
+
+Products are filed under their set by the set's code (a whole word of the
+product name, with letters and digits, such as OP-18) or, failing that, by
+the longest set name whose words all appear in the product name. A name
+needs two words that are not filler: series names such as Scarlet &
+Violet or Mega Evolution never file anything alone. This runs when a set is
+added, when an import creates a product, and in `tidy_all`.
+
+`RIPRAPTOR_RELEASES=0` stops the background reader reading these sources.
+
+```sh
+python manage.py scan_releases                         # every source that is due
+python manage.py scan_releases --source scryfall_sets  # one source, when it is due
+python manage.py scan_releases --dry-run               # what the due sources say; writes nothing
+```
+
+The parsers are tested against trimmed copies of each source's real
+answer in `catalogue/fixtures/releases/`. pokemon.com refused requests
+from the machine that saved them, so its three files are rebuilt from what
+was read there by hand and say so at the top.
+
 ## Backups, timeouts and runs cut short
 
 `python manage.py backup_db` copies the database with SQLite's own backup,
@@ -1153,6 +1228,7 @@ site's cache.
 | `RIPRAPTOR_NTFY_TOPIC`         |         | A long, unguessable ntfy topic name. Each new message, and each crawl problem, sends a push to the free ntfy phone app subscribed to it. The push holds only a title and a link to admin, never a name, the words, a shop, a product or a price. |
 | `RIPRAPTOR_NTFY_URL`           | `https://ntfy.sh` | The ntfy server, if you run your own. |
 | `RIPRAPTOR_FINDER`             | on      | The background reader looks for other shops selling products that one shop sells, or none (see "Stockist finder"). `RIPRAPTOR_FINDER=0` turns it off; `find_stockists` still runs by hand. |
+| `RIPRAPTOR_RELEASES`           | on      | The background reader reads free publisher and community sources for announced sets and release dates (see "Release radar"). `RIPRAPTOR_RELEASES=0` turns it off; `scan_releases` still runs by hand. |
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 

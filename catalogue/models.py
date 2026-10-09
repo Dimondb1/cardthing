@@ -62,6 +62,11 @@ class ProductSet(models.Model):
         help_text="Set code, for example SV8.5 or OP-10. Optional.",
     )
     release_date = models.DateField(null=True, blank=True)
+    release_date_source = models.CharField(
+        "date from", max_length=20, blank=True,
+        help_text="Where the release date came from: a release source, or owner when it was set here. "
+        "A date set here is never changed by a source.",
+    )
 
     class Meta:
         ordering = ["game", F("release_date").desc(nulls_last=True), "name"]
@@ -861,6 +866,71 @@ class PreorderOpen(models.Model):
 
     def __str__(self):
         return f"{self.product} at {self.retailer}, {self.at:%d %b %H:%M}"
+
+
+class Release(models.Model):
+    """One set a release source announced: a publisher's page, a community database or a shop's title.
+
+    Written by catalogue/releases.py. A set is added and its date published only when the source is
+    official with a full date, or two sources agree on the day; everything else waits for the owner on
+    the Things to check page. One row per game, source and name, so a row the owner dismissed stays
+    dismissed however often the source repeats it.
+    """
+
+    class Precision(models.TextChoices):
+        DAY = "day", "Day"
+        MONTH = "month", "Month only"
+        NONE = "none", "No date"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Waiting for a tap"
+        ACCEPTED = "accepted", "Set added"
+        DISMISSED = "dismissed", "Not a set"
+
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="releases")
+    name = models.CharField(max_length=120)
+    code = models.CharField(max_length=20, blank=True)
+    release_date = models.DateField(null=True, blank=True)
+    precision = models.CharField(max_length=5, choices=Precision.choices, default=Precision.NONE)
+    source = models.CharField(max_length=40, help_text="The release source, or shop:<shop> for a shop's title.")
+    source_url = models.URLField(max_length=500, blank=True)
+    official = models.BooleanField(default=False, help_text="On when the source is the game's publisher.")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
+    product_set = models.ForeignKey(
+        ProductSet, on_delete=models.SET_NULL, null=True, blank=True, related_name="releases", verbose_name="set",
+    )
+    note = models.CharField(max_length=300, blank=True, help_text="The shop's title, for a row from a shop.")
+    first_seen_at = models.DateTimeField(default=timezone.now)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-first_seen_at"]
+        unique_together = [("game", "source", "name")]
+        verbose_name = "announced set"
+
+    def __str__(self):
+        return f"{self.name} ({self.source})"
+
+
+class ReleaseSourceState(models.Model):
+    """When one release source was last read, what it gave and when it is read next."""
+
+    name = models.CharField(max_length=40, unique=True)
+    last_ok_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=200, blank=True)
+    signals_found = models.PositiveIntegerField(default=0)
+    next_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    # Web pages fetched from this source today, so every page-reading source together stays under its daily cap.
+    pages_day = models.DateField(null=True, blank=True)
+    pages_today = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "release source"
+
+    def __str__(self):
+        return self.name
 
 
 def alert_token():

@@ -96,8 +96,8 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        # 33 since the pre-order line (listings first seen on pre-order this week) joined the report.
-        with self.assertNumQueries(33):
+        # 34 since the release sources table (one query for every source's state) joined the report.
+        with self.assertNumQueries(34):
             insights.report(30)
 
 

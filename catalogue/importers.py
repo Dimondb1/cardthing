@@ -1129,6 +1129,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     to_stamp = []
     # Product pk -> (first offer without a price, whether every such offer said out of stock).
     unpriced = {}
+    # Set codes in pre-order titles and pre-release event tickets: the earliest sign of a new set.
+    from .releases import ShopSignals
+
+    shop_signals = ShopSignals(retailer)
 
     try:
         for offer in offers:
@@ -1138,6 +1142,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 if run is not None:
                     ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             found += 1
+            notice_release(shop_signals, offer, checked_at)
             product_pk = offer.product_pk
             if product_pk is None:
                 product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
@@ -1247,6 +1252,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         raise
 
     stamp_checked(to_stamp, checked_at)
+    try:
+        shop_signals.finish(checked_at)
+    except Exception:  # noqa: BLE001 - a release note must never cost a price read
+        logger.warning("Release notes from %s not stamped", retailer, exc_info=True)
 
     # Products this run saw only without a price: the stock of a listing we have, nothing more.
     unpriced = {pk: held for pk, held in unpriced.items() if pk not in seen_products}
@@ -1280,6 +1289,14 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at)
 
     return found, updated, unmatched
+
+
+def notice_release(shop_signals, offer, checked_at):
+    """Note a set code or pre-release event in the offer's title. A failure is logged, never raised."""
+    try:
+        shop_signals.see(offer, now=checked_at)
+    except Exception:  # noqa: BLE001 - a release note must never cost a price read
+        logger.warning("Could not note a release from %r", offer.title, exc_info=True)
 
 
 class Catalogue:
@@ -1371,6 +1388,10 @@ def create_from_offer(offer, catalogue, sealed=None):
         ean=offer.ean or "", image_url=offer.image[:1000] if offer.image else "",
     )
     catalogue.append((product.pk, product.name, game.slug))
+    # Born in its set when its name or code names one.
+    from .releases import attach_sets
+
+    attach_sets(game, product_ids=[product.pk])
     return product.pk
 
 

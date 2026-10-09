@@ -17,6 +17,9 @@
   .chk summary { cursor: pointer; }
   .chk summary h2 { display: inline; }
   .chk details > p.note { margin-top: 4px; }
+  .chk .addset { display: grid; gap: 8px; margin-top: 8px; max-width: 24rem; }
+  .chk .addset label { display: grid; gap: 4px; }
+  .chk .addset input[type=text], .chk .addset input[type=date] { min-height: 36px; width: 100%; box-sizing: border-box; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Things to check</div>{% endblock %}
 {% block content %}
@@ -100,6 +103,59 @@
       {% endfor %}
     </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
   </section>
+
+  <section>
+    <h2>Announced sets to check ({{ releases|length }})</h2>
+    <p class="note">A community list or a shop's title names a set the site does not have yet. Nothing is published until you tap. Tap Add set to check the name and date and add it: products with its name or code are filed under it. Tap Not a set and this source is not asked about it again.</p>
+    {% if releases %}<ul>
+      {% for row in releases %}
+      <li class="item"><b>{{ row.name }}{% if row.code and row.code != row.name %} ({{ row.code }}){% endif %}</b>
+        {{ row.game.name }}, from {% if row.source_url %}<a href="{{ row.source_url }}" target="_blank" rel="noopener noreferrer">{{ row.source }}</a>{% else %}{{ row.source }}{% endif %}.
+        {% if row.precision == "day" %}Out {{ row.release_date|date:"j F Y" }}.{% elif row.precision == "month" %}Out in {{ row.release_date|date:"F Y" }}, day not given.{% else %}No date given.{% endif %}
+        {% if row.note %}Shop title: "{{ row.note }}".{% endif %}
+        <div class="row">
+          <details><summary>Add set</summary>
+            <form method="post" class="addset">{% csrf_token %}<input type="hidden" name="action" value="add_set"><input type="hidden" name="release" value="{{ row.pk }}">
+              <label>Set name <input type="text" name="name" maxlength="120" required value="{% if row.name != row.code %}{{ row.name }}{% endif %}"></label>
+              <label>Release date <input type="date" name="date" value="{% if row.precision == 'day' %}{{ row.release_date|date:'Y-m-d' }}{% endif %}"></label>
+              <input type="submit" value="Add set">
+            </form>
+          </details>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="not_a_set"><input type="hidden" name="release" value="{{ row.pk }}"><input type="submit" value="Not a set"></form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Release dates to confirm ({{ disagreements|length }})</h2>
+    <p class="note">These sources give the same set dates more than a day apart. Open the links, then tap Use this date on the right one. Your choice is never changed by a source.</p>
+    {% if disagreements %}<ul>
+      {% for group in disagreements %}
+      <li class="item"><b>{% if group.set %}<a href="{{ group.set.get_absolute_url }}" target="_blank" rel="noopener">{{ group.name }}</a>{% else %}{{ group.name }}{% endif %}</b>
+        {{ group.game.name }}{% if group.set and group.set.release_date %}, shown as out {{ group.set.release_date|date:"j F Y" }}{% endif %}.
+        {% for row in group.rows %}
+        <div class="row">{% if row.source_url %}<a href="{{ row.source_url }}" target="_blank" rel="noopener noreferrer">{{ row.source }}</a>{% else %}{{ row.source }}{% endif %}: {{ row.release_date|date:"j F Y" }}
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="use_release_date"><input type="hidden" name="release" value="{{ row.pk }}"><input type="submit" value="Use this date"></form></div>
+        {% endfor %}
+      </li>
+      {% endfor %}
+    </ul>{% else %}<p class="none">Every source agrees.</p>{% endif %}
+  </section>
+
+  {% if stale_sources %}<section>
+    <h2>Release sources not answering ({{ stale_sources|length }})</h2>
+    <p class="note">These sources have not been read successfully for 14 days, so their sets and dates may be missing. Their page may have changed. Nothing needs doing on this page; the Insights page shows each source's last error.</p>
+    <ul>
+      {% for item in stale_sources %}
+      <li class="item"><b>{{ item.source.label }}</b>
+        {% if item.state.last_ok_at %}Last read {{ item.state.last_ok_at|date:"j M H:i" }}{% else %}Never read{% endif %}{% if item.state.last_error %}: {{ item.state.last_error }}{% endif %}.
+        <div class="row"><a href="{{ item.source.url }}" target="_blank" rel="noopener noreferrer">Open the source</a></div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>{% endif %}
 
   <section>
     <h2>Unknown delivery charges ({{ shops|length }})</h2>

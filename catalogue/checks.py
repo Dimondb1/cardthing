@@ -2,8 +2,9 @@
 What the owner should look at, for the Things to check page in admin: prices
 the other shops make doubtful or impossible, wrong matches behind impossible
 savings, products that look like duplicates, products the stockist finder
-may have found at another shop, and shops whose delivery charge is not known.
-Each comes with its fix.
+may have found at another shop, shops whose delivery charge is not known,
+announced sets waiting for a tap, release dates the sources disagree on and
+release sources that have stopped answering. Each comes with its fix.
 """
 
 from datetime import timedelta
@@ -13,7 +14,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from . import offers
-from .models import Listing, OutboundClick, Product, Retailer, ShopProduct
+from .models import Listing, OutboundClick, Product, Release, ReleaseSourceState, Retailer, ShopProduct
 from .pricing import MARKETPLACES
 
 # How many doubtful or excluded prices the page lists at once.
@@ -22,6 +23,10 @@ SANITY_ROWS = 50
 CLICK_DAYS = 7
 # How many products found at another shop the page lists at once.
 FOUND_ROWS = 50
+# How many announced sets, and release date disagreements, the page lists at once.
+RELEASE_ROWS = 50
+# Sources further apart than this on a set's date go to the owner.
+DATE_GAP_DAYS = 1
 
 
 def judged():
@@ -111,3 +116,61 @@ def found_waiting():
 def found_stockists():
     """Products the finder may have found at another shop, newest first, in one query."""
     return list(found_waiting().select_related("retailer", "suggested").order_by("-last_seen", "-pk")[:FOUND_ROWS])
+
+
+def release_candidates(now=None):
+    """Announced sets no rule could add, waiting for Add set or Not a set, newest first, in one query.
+
+    A row already filed under a set is not listed: if its date differs, it is under release dates to confirm.
+    Rows about sets released long ago are recorded but never listed.
+    """
+    from .releases import local_today, recent_cutoff
+
+    cutoff = recent_cutoff(local_today(now or timezone.now()))
+    return list(
+        Release.objects.filter(status=Release.Status.PENDING, product_set__isnull=True, game__is_active=True)
+        .filter(Q(release_date__isnull=True) | Q(release_date__gte=cutoff))
+        .select_related("game").order_by("-first_seen_at", "-pk")[:RELEASE_ROWS]
+    )
+
+
+def release_disagreements(now=None):
+    """[{'game', 'name', 'set', 'rows'}] where sources give one set dates more than a day apart.
+
+    Each row is a source's date with its own Use this date button. A set whose date the owner chose is
+    left alone: the owner's answer stands. One query.
+    """
+    from .releases import SHOP_PREFIX, local_today, name_key, recent_cutoff
+
+    cutoff = recent_cutoff(local_today(now or timezone.now()))
+    rows = (
+        Release.objects.filter(precision=Release.Precision.DAY, release_date__gte=cutoff, game__is_active=True)
+        .exclude(status=Release.Status.DISMISSED).exclude(source__startswith=SHOP_PREFIX)
+        .select_related("game", "product_set").order_by("game__name", "release_date", "source")
+    )
+    groups = {}
+    for row in rows:
+        key = (row.game_id, ("set", row.product_set_id) if row.product_set_id else ("name", name_key(row.name)))
+        groups.setdefault(key, []).append(row)
+    found = []
+    for members in groups.values():
+        dates = [r.release_date for r in members]
+        if (max(dates) - min(dates)).days <= DATE_GAP_DAYS:
+            continue
+        product_set = next((r.product_set for r in members if r.product_set_id), None)
+        if product_set is not None and product_set.release_date_source == "owner":
+            continue
+        found.append({"game": members[0].game, "name": product_set.name if product_set else members[0].name,
+                      "set": product_set, "rows": members})
+    return found[:RELEASE_ROWS]
+
+
+def stale_release_sources(now=None):
+    """Release sources with no good read in STALE_SOURCE_DAYS days, counted from when first tried."""
+    from .releases import BY_NAME, STALE_SOURCE_DAYS
+
+    cutoff = (now or timezone.now()) - timedelta(days=STALE_SOURCE_DAYS)
+    states = ReleaseSourceState.objects.filter(name__in=BY_NAME).filter(
+        Q(last_ok_at__lt=cutoff) | Q(last_ok_at__isnull=True, created_at__lt=cutoff)
+    ).order_by("name")
+    return [{"state": state, "source": BY_NAME[state.name]} for state in states]

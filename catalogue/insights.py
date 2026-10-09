@@ -403,6 +403,7 @@ def report(days=30):
         "worker_stopped": worker_stopped(now),
         "doubtful_waiting": checks.doubtful_count(),
         "preorder_pulse": preorder_pulse(now),
+        "release_sources": release_sources(now),
         "viewed_no_click": viewed_no_click,
         "one_shop": one_shop,
         "catalogue": catalogue_stats,
@@ -476,6 +477,13 @@ def ebay_coverage():
 # The median is printed only once this many pre-orders can be timed: fewer says nothing.
 PREORDER_TIMING_MIN = 5
 PREORDER_WINDOW = timedelta(days=7)
+
+
+def release_sources(now):
+    """One row per release source: when it was last read, how many sets it gave, its last error."""
+    from .releases import source_rows
+
+    return source_rows(now)
 
 
 def preorder_pulse(now):

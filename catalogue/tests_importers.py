@@ -435,6 +435,17 @@ class AutoCatalogueTests(TestCase):
         self.assertEqual(product.listings.count(), 2)
         self.assertEqual(Listing.objects.filter(product=product).order_by("delivered_price").first().retailer, shop_b)
 
+    def test_a_new_product_is_born_in_the_set_its_name_names(self):
+        game = make_game(name="Yu-Gi-Oh!", slug="yu-gi-oh")
+        phoenix = make_set(game, name="Immortal Phoenix", slug="immortal-phoenix", code="")
+        shop = make_retailer("Shop A", source_type=Retailer.Source.SHOPIFY, source_url="https://a.example/")
+        page = shopify_page([
+            {"handle": "ip-box", "title": "Yu-Gi-Oh! Immortal Phoenix Booster Box (24 Packs)", "product_type": "Booster Box",
+             "vendor": "Konami", "tags": [], "variants": [{"price": "79.99", "available": True, "barcode": ""}]},
+        ])
+        run_import(shop, fetch=lambda url: page if "page=1" in url else shopify_page([]))
+        self.assertEqual(Product.objects.get().product_set, phoenix)
+
 
 class SetupShopsTests(TestCase):
     def test_setup_shops_is_idempotent_and_renames(self):

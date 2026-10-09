@@ -173,6 +173,15 @@
   </div>
 
   <div class="module">
+    <h2>Release sources</h2>
+    <p>Free publisher and community lists of announced sets. Official sources add sets on their own; the rest wait on Things to check.</p>
+    <table>
+      <thead><tr><th>Source</th><th>Last read</th><th>Sets</th><th>Next read</th><th>Last error</th></tr></thead>
+      <tbody>{% for r in release_sources %}<tr><td>{{ r.label }}{% if r.official %} (official){% endif %}</td><td>{% if r.last_ok %}{{ r.last_ok|date:"j M H:i" }}{% else %}never{% endif %}</td><td class="n">{{ r.signals }}</td><td>{% if r.next %}{{ r.next|date:"j M H:i" }}{% else %}due{% endif %}</td><td class="wrap">{% if r.error %}<span class="bad">{{ r.error }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+
+  <div class="module">
     <h2>Shop health</h2>
     <table>
       <thead><tr><th>Shop</th><th>Last read</th><th>In stock</th><th>Pre-orders</th><th>Last pulse</th><th>Earns</th><th>Reading</th></tr></thead>

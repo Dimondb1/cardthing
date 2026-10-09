@@ -450,3 +450,65 @@ class HourlyTests(Base):
             call_command("tidy_all", stdout=StringIO())
         row.refresh_from_db()
         self.assertEqual((row.status, self.kinds()), (ShopProduct.Status.IGNORED, [Kind.REFUSE]))
+
+
+class UndoableMergeTests(Base):
+    def test_a_merge_can_be_put_back_exactly(self):
+        from datetime import timedelta as days
+
+        from .management.commands.merge_duplicates import merge_undoable, unmerge
+        from .models import OutboundClick, ProductAlias, Restock
+
+        keep = make_product(self.set, name="Phantasmal Flames Elite Trainer Box")
+        other = make_product(self.set, name="Mega Evolution Phantasmal Flames Elite Trainer Box",
+                             image_url="https://img.example/etb.jpg", ean="0196214112345")
+        here, both = make_retailer("Here"), make_retailer("Both")
+        kept_listing = make_listing(keep, both, price="45.00")
+        moved = make_listing(other, here, price="44.00")
+        stays = make_listing(other, both, price="46.00", url=f"{both.website}p/other")
+        today = timezone.localdate()
+        DailyLowestPrice.objects.create(product=keep, date=today - days(1), price=Decimal("50.00"))
+        DailyLowestPrice.objects.create(product=other, date=today - days(1), price=Decimal("44.00"))
+        DailyLowestPrice.objects.create(product=other, date=today - days(2), price=Decimal("47.00"))
+        restock = Restock.objects.create(product=other, retailer=here, listing=moved, price=Decimal("44.00"))
+        click = OutboundClick.objects.create(product=other, retailer=here, listing=moved)
+        old_address = ProductAlias.objects.create(slug="old-etb-address", product=other)
+
+        note = merge_undoable(keep, [other])
+        other.refresh_from_db()
+        self.assertFalse(other.is_active)
+        self.assertEqual(Listing.objects.get(pk=moved.pk).product, keep)
+        self.assertEqual(Listing.objects.get(pk=stays.pk).product, other)   # kept, not deleted
+        self.assertEqual(ProductAlias.objects.get(slug=other.slug).product, keep)
+        self.assertEqual(ProductAlias.objects.get(pk=old_address.pk).product, keep)
+        lows = dict(DailyLowestPrice.objects.filter(product=keep).values_list("date", "price"))
+        self.assertEqual(lows, {today - days(1): Decimal("44.00"), today - days(2): Decimal("47.00")})
+        keep.refresh_from_db()
+        self.assertEqual((keep.image_url, keep.ean), ("https://img.example/etb.jpg", "0196214112345"))
+
+        import json
+        unmerge(json.loads(json.dumps(note)))   # the note survives a trip through a JSON field
+        other.refresh_from_db()
+        keep.refresh_from_db()
+        self.assertTrue(other.is_active)
+        self.assertEqual(Listing.objects.get(pk=moved.pk).product, other)
+        self.assertEqual(Listing.objects.get(pk=kept_listing.pk).product, keep)
+        self.assertEqual((Restock.objects.get(pk=restock.pk).product, OutboundClick.objects.get(pk=click.pk).product),
+                         (other, other))
+        self.assertFalse(ProductAlias.objects.filter(slug=other.slug).exists())
+        self.assertEqual(ProductAlias.objects.get(pk=old_address.pk).product, other)
+        lows = dict(DailyLowestPrice.objects.filter(product=keep).values_list("date", "price"))
+        self.assertEqual(lows, {today - days(1): Decimal("50.00")})
+        self.assertEqual((keep.image_url, keep.ean), ("", ""))
+        self.assertEqual(DailyLowestPrice.objects.filter(product=other).count(), 2)
+
+    def test_a_merged_product_leaves_every_list_and_its_address_redirects(self):
+        from .management.commands.merge_duplicates import merge_undoable
+
+        keep = make_product(self.set, name="Phantasmal Flames Elite Trainer Box")
+        other = make_product(self.set, name="Mega Evolution Phantasmal Flames Elite Trainer Box")
+        make_listing(other, make_retailer("Here"))
+        merge_undoable(keep, [other])
+        self.assertEqual(checks.duplicates(), [])
+        response = self.client.get(other.get_absolute_url())
+        self.assertRedirects(response, keep.get_absolute_url(), status_code=301, fetch_redirect_response=False)

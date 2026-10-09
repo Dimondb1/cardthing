@@ -263,3 +263,8 @@ RIPRAPTOR_USE_FEED_IMAGES = env_bool("RIPRAPTOR_USE_FEED_IMAGES", default=True)
 
 # Price imports may add sealed products they find in shops to the catalogue.
 RIPRAPTOR_AUTO_CATALOGUE = env_bool("RIPRAPTOR_AUTO_CATALOGUE", default=True)
+
+# The background reader looks for other shops selling products that one shop sells, or none, at the
+# shops already added (catalogue/finder.py). The tests turn it on where they need it, so the reader's
+# own tests see only the jobs they set up.
+RIPRAPTOR_FINDER = env_bool("RIPRAPTOR_FINDER", default=True) and not TESTING

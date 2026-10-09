@@ -194,12 +194,13 @@ class ImportRunAdmin(admin.ModelAdmin):
 
 @admin.register(ShopProduct)
 class ShopProductAdmin(admin.ModelAdmin):
-    list_display = ("title", "retailer", "price", "suggested", "confidence", "status", "last_seen")
-    list_filter = ("status", "retailer")
+    list_display = ("title", "retailer", "price", "suggested", "confidence", "status", "source", "last_seen")
+    list_filter = ("status", "source", "retailer")
     search_fields = ("title", "suggested__name")
     autocomplete_fields = ("suggested",)
     list_select_related = ("retailer", "suggested")
-    readonly_fields = ("retailer", "title", "url", "price", "image_url", "confidence", "first_seen", "last_seen")
+    readonly_fields = ("retailer", "title", "url", "price", "image_url", "confidence", "source", "product", "first_seen",
+                       "last_seen")
     actions = ["link_to_suggested", "mark_ignored", "mark_review"]
     list_per_page = 50
 
@@ -212,28 +213,20 @@ class ShopProductAdmin(admin.ModelAdmin):
 
     @admin.action(description="Link to our product (creates the listing)")
     def link_to_suggested(self, request, queryset):
+        from . import finder
+
         made = 0
         for row in queryset.select_related("retailer", "suggested"):
-            if row.suggested is None:
-                continue
-            listing, _created = Listing.objects.get_or_create(
-                product=row.suggested, retailer=row.retailer,
-                defaults={"url": row.url, "price": row.price or 0, "availability": Listing.Availability.IN_STOCK},
-            )
-            if listing.url != row.url:
-                listing.url = row.url
-                listing.save(update_fields=["url"])
-            if row.image_url and not row.suggested.image_src:
-                row.suggested.image_url = row.image_url
-                row.suggested.save(update_fields=["image_url"])
-            row.status = ShopProduct.Status.LINKED
-            row.save(update_fields=["status"])
-            made += 1
+            if finder.link(row) is not None:
+                made += 1
         self.message_user(request, f"Linked {made}. The next price import fills in the prices.", messages.SUCCESS)
 
     @admin.action(description="Not one of ours (hide from now on)")
     def mark_ignored(self, request, queryset):
-        queryset.update(status=ShopProduct.Status.IGNORED)
+        from . import finder
+
+        for row in queryset.select_related("retailer"):
+            finder.ignore(row)
 
     @admin.action(description="Put back for review")
     def mark_review(self, request, queryset):

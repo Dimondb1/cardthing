@@ -86,6 +86,22 @@
   </section>
 
   <section>
+    <h2>Found at another shop ({{ found_count }})</h2>
+    <p class="note">Products one shop sells, or none, are looked for at your other shops. These look like the same product but are not certain. Open the link. If it is the same product, tap Yes and the shop's price is checked at its next read. If not, tap No and that shop is not asked about it again.</p>
+    {% if found %}<ul>
+      {% for row in found %}
+      <li class="item"><b><a href="{{ row.suggested.get_absolute_url }}" target="_blank" rel="noopener">{{ row.suggested.name }}</a></b>
+        might be at {{ row.retailer.name }} as <a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">"{{ row.title }}"</a>{% if row.price %} for £{{ row.price }}{% endif %}.
+        <div class="row">
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="link_found"><input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="price" value="{{ row.price|default_if_none:'' }}"><input type="submit" value="Yes, link it"></form>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="not_found"><input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="price" value="{{ row.price|default_if_none:'' }}"><input type="submit" value="No, not this"></form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
+  </section>
+
+  <section>
     <h2>Unknown delivery charges ({{ shops|length }})</h2>
     <p class="note">These shops' prices show as "+ delivery" and rank below confirmed delivered prices. Open the shop, put its standard UK delivery charge in Standard delivery and save: every price updates at once. Leave it empty if you still do not know it.</p>
     {% if shops %}<ul>

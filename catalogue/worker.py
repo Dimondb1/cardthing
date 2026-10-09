@@ -4,7 +4,8 @@ The background reader: one long-running process (manage.py run_worker) that keep
 It reads each shop when its turn comes (Retailer.due, the same rules as the hourly cron) and, between
 reads, asks shops about single listings of the products people care about (catalogue/heat.py): HOT
 ones every ten minutes, WARM ones every hour. Every 15 minutes it also looks at each Shopify shop's
-collection list for new pre-orders (importers.poll_collections). There is no job table. Every minute plan() works out
+collection list for new pre-orders (importers.poll_collections), and every 5 minutes it looks for other
+shops selling products that one shop sells, or none (catalogue/finder.py). There is no job table. Every minute plan() works out
 what is due from the shops and listings themselves, so a crash or a deploy loses only the jobs that
 were running.
 
@@ -51,11 +52,12 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from django.conf import settings
 from django.db import connections
 from django.db.models import Q
 from django.utils import timezone
 
-from . import checks, crawl, heat, importers, notify, probe
+from . import checks, crawl, finder, heat, importers, notify, probe
 from .models import ImportRun, Listing, Retailer, WorkerState
 
 logger = logging.getLogger(__name__)
@@ -71,8 +73,11 @@ BEAT_EVERY = timedelta(seconds=30)
 SHOP_READ = "shop_read"
 PROBE = "probe"
 PULSE = "pulse"
+FINDER = "finder"
+# The finder asks many shops, so its job is held under this key instead of a shop's.
+FINDER_KEY = 0
 # Priority is weight times minutes overdue, so nothing waits for ever behind something heavier.
-WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, PULSE: 300}
+WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, PULSE: 300, FINDER: 50}
 # A shop never read before has no next read; it counts as an hour overdue.
 NEVER_READ_MINUTES = 60
 
@@ -97,6 +102,12 @@ PULSE_LATE = timedelta(minutes=15)
 PULSE_GAP = 0.3
 # A probe job starts no new request after this, so a slow shop cannot carry it past its deadline.
 PROBE_BUDGET = timedelta(seconds=20)
+# A batch of the stockist finder every 5 minutes, of this many products. It starts no new search after
+# FINDER_BUDGET so it ends inside its deadline.
+FINDER_EVERY = timedelta(minutes=5)
+FINDER_BATCH = 30
+FINDER_DEADLINE = timedelta(seconds=120)
+FINDER_BUDGET = timedelta(seconds=90)
 # Each probe request is given up after this, however slowly the shop sends it: the socket timeout alone
 # allows each read 30 seconds, so a shop sending a byte at a time could hold a request open for ever.
 PROBE_FETCH_SECONDS = 10
@@ -305,6 +316,8 @@ class Job:
 def deadline_for(task):
     if task.kind == PROBE:
         return PROBE_DEADLINE
+    if task.kind == FINDER:
+        return FINDER_DEADLINE
     if task.kind == PULSE:
         return PULSE_DEADLINE
     if task.source_type in MARKETPLACES:
@@ -338,6 +351,7 @@ class Worker:
         self.jobs_done = 0
         self.last_job = ""
         self.last_pulse = None  # clock seconds when the last pulse began
+        self.last_finder = None  # when the last finder batch began
         self.last_plan = None
         self.last_beat = None
 
@@ -383,7 +397,18 @@ class Worker:
         probes = self.plan_probes(now, skip | {t.retailer_id for t in late})
         probed = {t.retailer_id for t in probes}
         pulses = late + [t for t in pulses if not t.late and t.retailer_id not in probed]
-        return sorted(chosen + probes + pulses, key=lambda t: -t.priority)
+        return sorted(chosen + probes + pulses + self.plan_finder(now, busy), key=lambda t: -t.priority)
+
+    def plan_finder(self, now, busy):
+        """A finder batch every FINDER_EVERY, one at a time. It asks no shop another job is asking."""
+        if not settings.RIPRAPTOR_FINDER or FINDER_KEY in busy:
+            return []
+        with self.lock:
+            last = self.last_finder
+        if last is not None and now - last < FINDER_EVERY:
+            return []
+        overdue = minutes(now - last - FINDER_EVERY) if last is not None else 1.0
+        return [Task(FINDER, FINDER_KEY, "", WEIGHTS[FINDER] * max(1.0, overdue), "Look for other shops")]
 
     def plan_pulses(self, now, skip):
         """A look at the collection list of each Shopify shop due one (Retailer.pulse_due), in one query."""
@@ -479,6 +504,9 @@ class Worker:
                 if task.retailer_id in self.running:
                     continue
                 reads = [j.task for j in self.running.values() if j.task.kind == SHOP_READ]
+            if task.kind == FINDER and self.threads > 1 and len(self.running) >= self.threads - 1:
+                # One thread is always left for probes and pulses.
+                continue
             if task.kind == SHOP_READ:
                 if len(reads) >= self.max_reads():
                     continue
@@ -523,6 +551,8 @@ class Worker:
         job = Job(task, now, now + deadline_for(task))
         with self.lock:
             self.running[task.retailer_id] = job
+            if task.kind == FINDER:
+                self.last_finder = now
         self.executor.submit(self.run_job, job)
 
     # Jobs (in a pool thread, or inline) --------------------------------------------------------
@@ -534,6 +564,8 @@ class Worker:
                 ok = self.read_shop(job)
             elif task.kind == PULSE:
                 ok = self.pulse_shop(job)
+            elif task.kind == FINDER:
+                ok = self.find_stockists(job)
             else:
                 ok = self.probe_shop(job)
             if not ok:
@@ -660,6 +692,21 @@ class Worker:
             logger.warning("%s: %s", shop, result.error)
         return False
 
+    def find_stockists(self, job):
+        """One batch of the stockist finder, through this process's buckets, at a fifth of its requests."""
+        def busy():
+            with self.lock:
+                return {pk for pk in self.running if pk != FINDER_KEY}
+
+        result = finder.find(
+            FINDER_BATCH, fetch_for=lambda shop: self.fetch_for(shop, probing=True), clock=self.clock,
+            sleep=self.sleep, busy=busy, stop=lambda: self.clock() - job.started >= FINDER_BUDGET,
+            worker_requests=self.politeness.requests_last_hour,
+        )
+        if result.products:
+            logger.info("Stockist finder: %s", result)
+        return True
+
     def back_off(self, retailer_id, now, status, error):
         shop = Retailer.objects.get(pk=retailer_id)
         shop.read_failed(now, status, error)
@@ -709,6 +756,12 @@ class Worker:
         logger.error(note)
         try:
             WorkerState.objects.update_or_create(pk=1, defaults={"note": note[:300]})
+            if task.kind == FINDER:
+                # The finder holds no shop and leaves no run open: only the other reads need handing back.
+                with self.lock:
+                    others = [j for j in self.running.values() if j is not job and j.task.kind == SHOP_READ]
+                self.hand_back(others, now)
+                os._exit(1)
             shop = Retailer.objects.get(pk=task.retailer_id)
             if task.kind in (SHOP_READ, PULSE):
                 ImportRun.objects.filter(

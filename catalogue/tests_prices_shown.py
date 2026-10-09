@@ -270,6 +270,7 @@ class ChecksPageTests(TestCase):
         self.assertContains(page, "£38.95 at Magic Madhouse")
         self.assertContains(page, "Possible duplicates (1)")
         self.assertContains(page, "Unknown delivery charges (1)")
+        self.assertContains(page, "Found at another shop (0)")
         self.assertContains(page, "1 price without a known delivery charge")
         self.assertContains(self.client.get(reverse("admin:index")), "Things to check")
         self.client.logout()

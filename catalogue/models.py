@@ -172,6 +172,8 @@ class Product(models.Model):
     )
     amazon_checked_at = models.DateTimeField(null=True, blank=True, editable=False)
     ebay_checked_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # When the stockist finder (catalogue/finder.py) last looked for this product at the other shops.
+    finder_checked_at = models.DateTimeField(null=True, blank=True, editable=False, db_index=True)
     release_date = models.DateField(
         null=True, blank=True, help_text="Leave empty to use the set's release date."
     )
@@ -329,6 +331,10 @@ class Retailer(models.Model):
     # and whether it has one. A Shopify shop without /collections.json is looked at once a week.
     collections_polled_at = models.DateTimeField("collections last looked at", null=True, blank=True)
     collections_ok = models.BooleanField("has a collection list", null=True, blank=True)
+    # The stockist finder asks a Shopify shop's /search/suggest.json. A shop that answers it with a 404 or
+    # something that is not JSON is not asked again for a week; its last full read is still searched.
+    suggest_ok = models.BooleanField("search answers", default=True)
+    suggest_failed_at = models.DateTimeField("search last failed", null=True, blank=True)
 
     # A failed read waits 5 minutes, then 10, 20 and so on up to 6 hours. A shop that says it is being
     # asked too often (HTTP 429) waits at least 30 minutes at once.
@@ -627,13 +633,19 @@ class ShopProduct(models.Model):
     """A product a retailer sells that price imports could not match by barcode or link.
 
     The importer suggests one of our products from the name. Confident matches
-    are linked automatically; the rest wait here for a person to confirm.
+    are linked automatically; the rest wait here for a person to confirm. The
+    stockist finder (catalogue/finder.py) adds rows too: a shop product that may
+    be one of ours that no other shop sells, waiting on the Things to check page.
     """
 
     class Status(models.TextChoices):
         REVIEW = "review", "Needs a decision"
         LINKED = "linked", "Linked"
         IGNORED = "ignored", "Not one of ours"
+
+    class Source(models.TextChoices):
+        IMPORT = "import", "Price import"
+        FINDER = "finder", "Stockist finder"
 
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="shop_products")
     title = models.CharField(max_length=300)
@@ -647,6 +659,11 @@ class ShopProduct(models.Model):
     )
     confidence = models.PositiveSmallIntegerField(default=0, help_text="0 to 100.")
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.REVIEW, db_index=True)
+    source = models.CharField("found by", max_length=10, choices=Source.choices, default=Source.IMPORT)
+    product = models.ForeignKey(
+        Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        verbose_name="looked for", help_text="The product the stockist finder was looking for.",
+    )
     first_seen = models.DateTimeField(default=timezone.now)
     last_seen = models.DateTimeField(default=timezone.now)
 
@@ -658,6 +675,35 @@ class ShopProduct(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.retailer})"
+
+
+class StockistSearch(models.Model):
+    """When the stockist finder last looked for one product at one shop, and what it found.
+
+    A shop is not asked about the same product again for 14 days (7 when people want it), and never
+    after the owner said a found product was not this one.
+    """
+
+    class Outcome(models.TextChoices):
+        LINKED = "linked", "Linked"
+        REVIEW = "review", "Waiting for a tap"
+        NONE = "none", "Not found"
+        IGNORED = "ignored", "Owner said no"
+        ERROR = "error", "Could not ask"
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stockist_searches")
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="stockist_searches")
+    searched_at = models.DateTimeField(default=timezone.now)
+    outcome = models.CharField(max_length=10, choices=Outcome.choices)
+    url = models.URLField(max_length=1000, blank=True)
+    confidence = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        unique_together = [("product", "retailer")]
+        verbose_name = "stockist search"
+
+    def __str__(self):
+        return f"{self.product} at {self.retailer}: {self.get_outcome_display()}"
 
 
 class ShopPage(models.Model):

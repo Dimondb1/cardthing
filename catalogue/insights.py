@@ -337,6 +337,12 @@ def report(days=30):
         for slug, hits in product_views.items()
         if slug in products and shops_by_product.get(slug, 0) == 1
     ][:15]
+    # How far the stockist finder has looked for each, in one query.
+    from .finder import search_counts
+
+    searched = search_counts(row["product"].pk for row in one_shop)
+    for row in one_shop:
+        row["searched"], row["searched_at"] = searched.get(row["product"].pk, (0, None))
 
     catalogue = Product.objects.for_lists()
     catalogue_stats = catalogue.aggregate(

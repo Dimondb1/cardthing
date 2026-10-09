@@ -351,7 +351,9 @@ with "This price is right" (it then counts while it moves less than 10% for
 30 days) and "Hide this one", the prices excluded automatically with "Show it
 anyway", the wrong matches with a Hide button under each price, the possible duplicates the
 `--loose` rule finds with a Merge button for each group (only the group
-exactly as shown is merged), and the shops whose delivery charge is not
+exactly as shown is merged), the products the stockist finder may have
+found at another shop with "Yes, link it" and "No, not this" (see
+"Stockist finder" below), and the shops whose delivery charge is not
 known with a link to fill it in.
 
 On the server the background reader (see "Background reader" below) asks
@@ -945,6 +947,62 @@ pre-orders and last pulse in Shop health.
 `python manage.py poll_preorders` runs the pulse by hand for every shop due
 one, and `--shop <slug>` for one shop now.
 
+## Stockist finder
+
+Products that one shop sells, or none, are looked for at every other
+Shopify shop you have added. Nothing else is ever asked: no shop you have
+not added, no search engine. Every 5 minutes the background reader takes
+the 30 such products people want most (5 points per click to a shop in 7
+days, 3 per product page view and 3 per watchlist row in 2 days, 10 per
+confirmed stock alert, 2 for a pre-order, 2 for a product added in the
+last 14 days; then pre-orders and new products, then the one looked for
+longest ago) and, for each, every active Shopify shop that has no listing
+for it, is not paused and is not waiting after errors. Shops that earn
+from clicks are asked first.
+
+For each pair it first looks again at the shop's last whole read: a line
+it could not match that names the same game and kind of product, with a
+name that agrees with ours word for word both ways, is the shop's page.
+Otherwise it asks the shop's own search (`/search/suggest.json`), first
+with the game and our name, then, when that finds nothing, with the set
+code and kind, and judges the titles as a shop read judges them. The best
+page found is read once (`/products/<handle>.js`) for its barcode, price
+and stock. The same barcode as ours, or a name that agrees both ways when
+neither side has a barcode, adds the listing like a shop read would: the
+price is judged against the other shops and its history starts. A
+different barcode never links. A likely match (60 to 99, or a sure name
+with a barcode on one side only) is listed on Things to check as
+"<our product> might be at <shop> as "<the shop's title>" for £<price>"
+with "Yes, link it" (the listing is added and the shop's next read checks
+its price and stock) and "No, not this" (that shop is never asked about
+it again). A title must carry at least half of the words that name our
+product beyond its kind, so another set's Elite Trainer Box is never
+offered for ours.
+
+A shop is not asked about the same product again for 14 days (7 when it
+has 10 or more interest points), the next day after a request failed, and
+never after a No. The finder makes at most 20 requests to one shop and 200
+in all each hour, one second apart at one shop, and never more than a
+fifth of the background reader's requests, so whole-shop reads come
+first. A shop whose search answers 404 or not with JSON is not searched
+for a week (its last read is still looked at); one that answers 429 waits
+30 minutes like a failed read. Every product looked for is stamped, found
+or not. A batch has two minutes and starts nothing new after 90 seconds,
+and it leaves one of the reader's threads free for single-product checks.
+
+On Insights, each "Popular with only one shop" row says how many shops
+were searched and when, with a "Search other shops now" button: the
+product goes first for the next hour and shops searched before the tap are
+asked again. `RIPRAPTOR_FINDER=0` stops the background reader looking.
+
+```sh
+python manage.py find_stockists                      # one batch of 30 products now
+python manage.py find_stockists --requests 20        # ask the shops at most 20 times
+python manage.py find_stockists --budget-seconds 60  # start nothing new after a minute
+```
+
+It prints "N products searched, M listings added, K to check".
+
 ## Backups, timeouts and runs cut short
 
 `python manage.py backup_db` copies the database with SQLite's own backup,
@@ -1054,6 +1112,7 @@ site's cache.
 | `RIPRAPTOR_INBOX_NOTIFY_EMAIL` |         | Your own address. Each new Message us message is emailed to it through ZeptoMail with a link to reply in admin, and so are crawl problems (see below). Never shown on the site. |
 | `RIPRAPTOR_NTFY_TOPIC`         |         | A long, unguessable ntfy topic name. Each new message, and each crawl problem, sends a push to the free ntfy phone app subscribed to it. The push holds only a title and a link to admin, never a name, the words, a shop, a product or a price. |
 | `RIPRAPTOR_NTFY_URL`           | `https://ntfy.sh` | The ntfy server, if you run your own. |
+| `RIPRAPTOR_FINDER`             | on      | The background reader looks for other shops selling products that one shop sells, or none (see "Stockist finder"). `RIPRAPTOR_FINDER=0` turns it off; `find_stockists` still runs by hand. |
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 

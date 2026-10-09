@@ -18,6 +18,8 @@
   .ins__todo p { margin: 0; }
   .ins .bad { color: var(--error-fg, #ba2121); }
   .ins .ok { color: var(--message-success-fg, #2a7a2a); }
+  .ins .quiet { display: block; color: var(--body-quiet-color); margin: 2px 0 6px; }
+  .ins td form input[type=submit] { min-height: 40px; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Insights</div>{% endblock %}
 {% block content %}
@@ -139,7 +141,11 @@
     </div>
     <div class="module">
       <h2>Popular with only one shop</h2>
-      <table><tbody>{% for r in one_shop %}<tr><td><a href="{{ r.product.get_absolute_url }}">{{ r.product.name }}</a></td><td class="n">{{ r.views }} views</td></tr>{% empty %}<tr><td>None.</td></tr>{% endfor %}</tbody></table>
+      <p>Your other shops are searched for these automatically. Tap to search now.</p>
+      <table><tbody>{% for r in one_shop %}<tr><td><a href="{{ r.product.get_absolute_url }}">{{ r.product.name }}</a>
+        <span class="quiet">{% if r.searched %}Searched at {{ r.searched }} shop{{ r.searched|pluralize }}, last {{ r.searched_at|date:"j M" }}.{% else %}Not searched yet.{% endif %}</span>
+        <form method="post" action="{% url 'crawl' %}">{% csrf_token %}<input type="hidden" name="action" value="find_now"><input type="hidden" name="product" value="{{ r.product.pk }}"><input type="submit" value="Search other shops now"></form></td>
+        <td class="n">{{ r.views }} views</td></tr>{% empty %}<tr><td>None.</td></tr>{% endfor %}</tbody></table>
     </div>
   </div>
 

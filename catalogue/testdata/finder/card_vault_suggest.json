@@ -1,0 +1,76 @@
+{
+ "resources": {
+  "results": {
+   "products": [
+    {
+     "available": false,
+     "handle": "pokemon-tcg-mega-evolution-phantasmal-flames-booster-box-36-packs",
+     "id": 8940989546734,
+     "image": "https://cdn.shopify.com/s/files/1/0530/0243/6801/files/Pokemon_TCG_Mega-Evolution_Phantasmal-Flames_Booster-Box_R.png?v=1758291811",
+     "price": "154.25",
+     "tags": [
+      "Notify-Me-Button",
+      "Reserve-Stock-Only",
+      "To-Update"
+     ],
+     "title": "Pokemon TCG - Mega Evolution - Phantasmal Flames - Booster Box (36x Packs)",
+     "type": "Booster Box",
+     "url": "/products/pokemon-tcg-mega-evolution-phantasmal-flames-booster-box-36-packs?_pos=1&_psq=pokemon+surging+sparks+booster+box&_psid=88787873a&_ss=e",
+     "variants": [],
+     "vendor": "Pokemon"
+    },
+    {
+     "available": false,
+     "handle": "pokemon-tcg-mega-evolution-base-set-booster-box-display-36-packs",
+     "id": 8878877507822,
+     "image": "https://cdn.shopify.com/s/files/1/0530/0243/6801/files/Pokemon_Mega-Evolution_Booster-Box.png?v=1757730274",
+     "price": "154.25",
+     "tags": [
+      "Notify-Me-Button"
+     ],
+     "title": "Pokemon TCG - Mega Evolution - Base Set - Booster Box (36x Packs)",
+     "type": "Booster Box",
+     "url": "/products/pokemon-tcg-mega-evolution-base-set-booster-box-display-36-packs?_pos=2&_psq=pokemon+surging+sparks+booster+box&_psid=88787873a&_ss=e",
+     "variants": [],
+     "vendor": "Pokemon"
+    },
+    {
+     "available": true,
+     "handle": "digimon-card-game-dual-revolution-bt25-booster-box-24-packs",
+     "id": 9008462299374,
+     "image": "https://cdn.shopify.com/s/files/1/0530/0243/6801/files/Digimon_Dual-Revolution_BT25_Booster-Box_Open.png?v=1778057672",
+     "price": "79.95",
+     "tags": [
+      "Collection-Only",
+      "digimon-tcg",
+      "in-stock",
+      "Notify-Me-Button",
+      "other-tcgs",
+      "smart-cart-shipping-excluded",
+      "vday"
+     ],
+     "title": "Digimon Card Game - Dual Revolution (BT25) - Booster Box (24 Packs)",
+     "type": "Booster Box",
+     "url": "/products/digimon-card-game-dual-revolution-bt25-booster-box-24-packs?_pos=3&_psq=pokemon+surging+sparks+booster+box&_psid=88787873a&_ss=e",
+     "variants": [],
+     "vendor": "Digimon"
+    },
+    {
+     "available": false,
+     "handle": "pokemon-tcg-scarlet-violet-destined-rivals-booster-box-36-packs",
+     "id": 8754035425518,
+     "image": "https://cdn.shopify.com/s/files/1/0530/0243/6801/files/Pokemon_TCG_Scarlet_Violet_Destined_Rivals_Booster_Box_R.png?v=1757726696",
+     "price": "154.25",
+     "tags": [
+      "Notify-Me-Button"
+     ],
+     "title": "Pokemon TCG - Scarlet & Violet - Destined Rivals - Booster Box (36x Packs)",
+     "type": "Booster Box",
+     "url": "/products/pokemon-tcg-scarlet-violet-destined-rivals-booster-box-36-packs?_pos=4&_psq=pokemon+surging+sparks+booster+box&_psid=88787873a&_ss=e",
+     "variants": [],
+     "vendor": "Pokemon"
+    }
+   ]
+  }
+ }
+}

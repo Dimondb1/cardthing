@@ -1262,9 +1262,11 @@ def insights_page(request):
 
 
 def posted_price_moved(request, listing):
-    """True when the form posted a price and the listing's price is no longer that price."""
+    """True when the form posted a price and the listing's (or found row's) price is no longer that price."""
     if "price" not in request.POST:
         return False
+    if listing.price is None:
+        return request.POST["price"] != ""
     try:
         return Decimal(request.POST["price"]) != listing.price
     except (InvalidOperation, ValueError):
@@ -1273,8 +1275,8 @@ def posted_price_moved(request, listing):
 
 @staff_member_required
 def checks_page(request):
-    """Things to check: doubtful and excluded prices, wrong matches, likely duplicates and unknown delivery,
-    each with a one-tap fix."""
+    """Things to check: doubtful and excluded prices, wrong matches, likely duplicates, products found at
+    another shop and unknown delivery, each with a one-tap fix."""
     from django.contrib import messages
     from django.db import transaction
 
@@ -1302,6 +1304,20 @@ def checks_page(request):
                 messages.success(request, f"Counted: £{listing.price} for {listing.product.name} at {listing.retailer.name}. "
                                           f"It stays counted while it moves less than {sanity.TRUST_BAND * 100:.0f}% "
                                           f"for {sanity.TRUST_DAYS} days.")
+        elif action in ("link_found", "not_found"):
+            from catalogue import finder
+
+            row = get_object_or_404(checks.found_waiting().select_related("retailer", "suggested"), pk=request.POST.get("row"))
+            if posted_price_moved(request, row):
+                messages.warning(request, "That price has changed since the page loaded. Check it again below.")
+            elif action == "link_found":
+                finder.link(row)
+                clear_list_caches(force=True)
+                messages.success(request, f"Linked: {row.suggested.name} at {row.retailer.name}. "
+                                          "The next read of the shop checks its price and stock.")
+            else:
+                finder.ignore(row)
+                messages.success(request, f"Noted: {row.retailer.name} is not asked about {row.suggested.name} again.")
         elif action == "merge":
             # Only a group the page offered, exactly as it stands now, is merged.
             wanted = request.POST.get("keep", ""), sorted(request.POST.getlist("other"))
@@ -1324,6 +1340,7 @@ def checks_page(request):
         "wrong": [row for row in checks.wrong_matches() if row[0].pk not in listed],
         "duplicates": checks.duplicates(), "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
+        "found": checks.found_stockists(), "found_count": checks.found_waiting().count(),
     }
     return render(request, "admin/checks.html", context)
 
@@ -1350,6 +1367,21 @@ def crawl_page(request):
                     messages.success(request, "Reading has resumed. Each shop is read on its own schedule.")
             except (DatabaseError, OSError):
                 messages.error(request, "The database was busy, so nothing changed. Tap the button again.")
+        elif action == "find_now":
+            from catalogue import finder
+
+            pk = request.POST.get("product", "")
+            if not pk.isdigit():
+                raise Http404("No such product.")
+            product = get_object_or_404(Product.objects.active(), pk=pk)
+            finder.boost(product.pk)
+            state = WorkerState.current()
+            if state is not None and state.alive() and settings.RIPRAPTOR_FINDER:
+                messages.success(request, f"{product.name} will be looked for at the other shops within a few minutes.")
+            else:
+                messages.warning(request, f"{product.name} is first in line, but the background reader is not running, "
+                                          "so the search starts when it is back.")
+            return HttpResponseRedirect(reverse("insights"))
         elif action in ("read_now", "pause", "resume"):
             pk = request.POST.get("shop", "")
             if not pk.isdigit():

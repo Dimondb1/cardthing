@@ -96,8 +96,8 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        # 32 since the count of doubtful prices waiting joined the report.
-        with self.assertNumQueries(32):
+        # 33 since the pre-order line (listings first seen on pre-order this week) joined the report.
+        with self.assertNumQueries(33):
             insights.report(30)
 
 
@@ -362,3 +362,57 @@ class ShopReadingTests(TestCase):
         # A long address in a cell wraps instead of making the page scroll sideways.
         self.assertIn(".ins td.wrap { overflow-wrap: anywhere; }", html)
         self.assertIn('<td class="wrap">Backing off until', html)
+
+
+class PreorderPulseInsightTests(TestCase):
+    def setUp(self):
+        from catalogue.models import Retailer
+
+        self.now = timezone.now()
+        self.shop = make_retailer("Pulse Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://pulse.example/",
+                                  collections_polled_at=self.now - timedelta(minutes=3), collections_ok=True)
+        self.set = make_set(make_game())
+
+    def preorder(self, n, published_minutes_ago, waited_minutes, retailer=None):
+        from catalogue.models import Listing
+
+        published = self.now - timedelta(minutes=published_minutes_ago)
+        listing = make_listing(make_product(self.set, name=f"Box {n}", slug=f"box-{n}"), retailer or self.shop,
+                               availability=Listing.Availability.PREORDER)
+        Listing.objects.filter(pk=listing.pk).update(
+            shop_published_at=published, first_preorder_at=published + timedelta(minutes=waited_minutes)
+        )
+
+    def test_the_median_needs_five_timed_preorders(self):
+        from catalogue.models import Retailer
+
+        for n, wait in enumerate((4, 9, 12, 30)):
+            self.preorder(n, 600, wait)
+        # Published long ago and only opened now, or seen before it was published: never timed.
+        self.preorder(10, 60 * 24 * 30, 60 * 24 * 30 - 5)
+        self.preorder(11, 60, -5)
+        # Marketplaces are not shops opening pre-orders.
+        self.preorder(12, 60, 1, retailer=make_retailer("eBay", source_type=Retailer.Source.EBAY))
+        line = insights.preorder_pulse(self.now)
+        self.assertEqual((line["listed"], line["timed"], line["median"]), (6, 4, None))
+        self.preorder(4, 600, 14)
+        line = insights.preorder_pulse(self.now)
+        self.assertEqual((line["listed"], line["timed"], line["median"]), (7, 5, 12))
+        self.preorder(5, 600, 16)
+        self.assertEqual(insights.preorder_pulse(self.now)["median"], 13)
+
+    def test_the_page_shows_the_line_and_each_shops_preorders_and_last_pulse(self):
+        staff = User.objects.create_user("ben", password="pw", is_staff=True)
+        self.client.force_login(staff)
+        self.preorder(1, 30, 6)
+        html = self.client.get(reverse("insights")).content.decode()
+        self.assertIn("Pre-orders: 1 listed, not enough data yet on how fast they appear here (1 of 5 needed) (last 7 days).", html)
+        self.assertIn("<th>Pre-orders</th>", html)
+        self.assertIn("<th>Last pulse</th>", html)
+        health = {s["name"]: s for s in insights.report(7)["shops_health"]}
+        self.assertEqual(health["Pulse Shop"]["preorders"], 1)
+        self.assertEqual(health["Pulse Shop"]["pulse"], insights.clock(self.now - timedelta(minutes=3), self.now))
+        for n, wait in enumerate((5, 7, 9, 11), start=2):
+            self.preorder(n, 30, wait)
+        html = self.client.get(reverse("insights")).content.decode()
+        self.assertIn("Pre-orders: 5 listed, median 7 minutes from a shop publishing a pre-order to it appearing here (last 7 days).", html)

@@ -3,7 +3,8 @@ The background reader: one long-running process (manage.py run_worker) that keep
 
 It reads each shop when its turn comes (Retailer.due, the same rules as the hourly cron) and, between
 reads, asks shops about single listings of the products people care about (catalogue/heat.py): HOT
-ones every ten minutes, WARM ones every hour. There is no job table. Every minute plan() works out
+ones every ten minutes, WARM ones every hour. Every 15 minutes it also looks at each Shopify shop's
+collection list for new pre-orders (importers.poll_collections). There is no job table. Every minute plan() works out
 what is due from the shops and listings themselves, so a crash or a deploy loses only the jobs that
 were running.
 
@@ -69,8 +70,9 @@ BEAT_EVERY = timedelta(seconds=30)
 
 SHOP_READ = "shop_read"
 PROBE = "probe"
+PULSE = "pulse"
 # Priority is weight times minutes overdue, so nothing waits for ever behind something heavier.
-WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100}
+WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, PULSE: 300}
 # A shop never read before has no next read; it counts as an hour overdue.
 NEVER_READ_MINUTES = 60
 
@@ -85,6 +87,12 @@ MARKETPLACE_READ_DEADLINE = timedelta(minutes=60)
 # stays under the three hours after which a run counts as abandoned.
 LONGEST_READ_DEADLINE = timedelta(hours=2)
 PROBE_DEADLINE = timedelta(seconds=60)
+# A pulse has the same minute, and starts no new request after PULSE_BUDGET so it ends inside it; a
+# collection it had no time for is read at the next pulse.
+PULSE_DEADLINE = timedelta(seconds=60)
+PULSE_BUDGET = timedelta(seconds=40)
+# Pulses of different shops start at least this far apart.
+PULSE_GAP = 0.3
 # A probe job starts no new request after this, so a slow shop cannot carry it past its deadline.
 PROBE_BUDGET = timedelta(seconds=20)
 # Each probe request is given up after this, however slowly the shop sends it: the socket timeout alone
@@ -294,6 +302,8 @@ class Job:
 def deadline_for(task):
     if task.kind == PROBE:
         return PROBE_DEADLINE
+    if task.kind == PULSE:
+        return PULSE_DEADLINE
     if task.source_type in MARKETPLACES:
         limit = MARKETPLACE_READ_DEADLINE
     elif task.source_type == Retailer.Source.WEBSITE:
@@ -324,6 +334,7 @@ class Worker:
         self.probe_errors = {}  # retailer id -> probe requests failed in a row, across jobs
         self.jobs_done = 0
         self.last_job = ""
+        self.last_pulse = None  # clock seconds when the last pulse began
         self.last_plan = None
         self.last_beat = None
 
@@ -361,7 +372,21 @@ class Worker:
             chosen.append(task)
         # A shop being read, or about to be, is not probed: the read sees every listing.
         skip = set(busy) | {t.retailer_id for t in chosen}
-        return sorted(chosen + self.plan_probes(now, skip), key=lambda t: -t.priority)
+        probes = self.plan_probes(now, skip)
+        # Nor pulsed, and a shop with listings to check this minute is pulsed at the next plan: one job per shop.
+        pulses = self.plan_pulses(now, skip | {t.retailer_id for t in probes})
+        return sorted(chosen + probes + pulses, key=lambda t: -t.priority)
+
+    def plan_pulses(self, now, skip):
+        """A look at the collection list of each Shopify shop due one (Retailer.pulse_due), in one query."""
+        tasks = []
+        for pk, name, polled in Retailer.pulse_due(now).values_list("pk", "name", "collections_polled_at"):
+            if pk in skip:
+                continue
+            overdue = minutes(now - polled - Retailer.PULSE_EVERY) if polled else NEVER_READ_MINUTES
+            tasks.append(Task(PULSE, pk, Retailer.Source.SHOPIFY, WEIGHTS[PULSE] * max(1.0, overdue),
+                              f"Pre-order pulse {name}"[:120]))
+        return tasks
 
     def plan_probes(self, now, skip):
         scores = heat.heat_scores(now)
@@ -495,6 +520,8 @@ class Worker:
         try:
             if task.kind == SHOP_READ:
                 ok = self.read_shop(job)
+            elif task.kind == PULSE:
+                ok = self.pulse_shop(job)
             else:
                 ok = self.probe_shop(job)
             if not ok:
@@ -592,6 +619,35 @@ class Worker:
             clear_list_caches(force=True)
         return failures == 0
 
+    def pulse_shop(self, job):
+        """Look at one Shopify shop's collection list and read the pre-order collections that changed.
+
+        Pulses of different shops start at least PULSE_GAP apart. A shop that throttles the pulse (429)
+        waits like a failed read, so nothing asks it again until its wait is over; any other failure is
+        tried again at the next pulse.
+        """
+        with self.lock:
+            now = self.clock().timestamp()
+            wait = 0.0 if self.last_pulse is None else self.last_pulse + PULSE_GAP - now
+            self.last_pulse = max(now, now + wait)
+        if wait > 0:
+            self.sleep(wait)
+        shop = Retailer.objects.filter(pk=job.task.retailer_id).first()
+        if shop is None:
+            return True
+        result = importers.poll_collections(
+            shop, fetch=self.fetch_for(shop, probing=True), now=self.clock(), pause=self.page_pause,
+            stop=lambda: self.clock() - job.started >= PULSE_BUDGET,
+        )
+        # A shop without a collection list is not a failure: it is looked at weekly from now on.
+        if not result.error or result.no_list:
+            return True
+        if result.status == 429:
+            self.back_off(shop.pk, self.clock(), 429, f"Looking for pre-orders: {result.error}")
+        else:
+            logger.warning("%s: %s", shop, result.error)
+        return False
+
     def back_off(self, retailer_id, now, status, error):
         shop = Retailer.objects.get(pk=retailer_id)
         shop.read_failed(now, status, error)
@@ -642,7 +698,7 @@ class Worker:
         try:
             WorkerState.objects.update_or_create(pk=1, defaults={"note": note[:300]})
             shop = Retailer.objects.get(pk=task.retailer_id)
-            if task.kind == SHOP_READ:
+            if task.kind in (SHOP_READ, PULSE):
                 ImportRun.objects.filter(
                     retailer=shop, finished_at__isnull=True, started_at__gte=job.runs_from
                 ).update(finished_at=now, error=importers.STOPPED)

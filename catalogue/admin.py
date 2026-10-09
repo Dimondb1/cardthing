@@ -120,7 +120,7 @@ class RetailerAdmin(admin.ModelAdmin):
     # written by the reads themselves.
     list_editable = ("read_every_minutes",)
     readonly_fields = ("next_read_at", "last_read_seconds", "last_ok_at", "last_error", "error_streak",
-                       "backoff_until", "reading_paused")
+                       "backoff_until", "reading_paused", "collections_polled_at", "collections_ok")
     list_filter = ("is_active", "source_type")
     search_fields = ("name", "website")
     prepopulated_fields = {"slug": ("name",)}
@@ -134,7 +134,8 @@ class RetailerAdmin(admin.ModelAdmin):
                                    "the import corrects it). Unmatched shop products are listed on each "
                                    "price import with their links."}),
         ("Reading", {"fields": ("read_every_minutes", "next_read_at", "last_read_seconds", "last_ok_at",
-                                "error_streak", "backoff_until", "last_error", "reading_paused")}),
+                                "error_streak", "backoff_until", "last_error", "reading_paused",
+                                "collections_polled_at", "collections_ok")}),
         ("Links", {"fields": ("affiliate_url_template",)}),
     )
 
@@ -158,7 +159,8 @@ class ListingAdmin(admin.ModelAdmin):
     list_select_related = ("product", "retailer")
     date_hierarchy = "last_checked"
     # Verdicts are worked out from the other shops' prices; the owner acts on them from Things to check.
-    readonly_fields = ("sanity", "sanity_reason", "sanity_ratio", "sanity_at", "last_ok_price", "trusted_price", "trusted_at")
+    readonly_fields = ("sanity", "sanity_reason", "sanity_ratio", "sanity_at", "last_ok_price", "trusted_price", "trusted_at",
+                       "shop_published_at", "first_preorder_at")
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -173,7 +175,7 @@ class ListingAdmin(admin.ModelAdmin):
 class ImportRunAdmin(admin.ModelAdmin):
     list_display = ("retailer", "started_at", "status", "offers_found", "listings_updated", "unmatched_count")
     list_filter = ("retailer",)
-    readonly_fields = ("retailer", "started_at", "finished_at", "offers_found", "listings_updated", "unmatched", "error")
+    readonly_fields = ("retailer", "note", "started_at", "finished_at", "offers_found", "listings_updated", "unmatched", "error")
     date_hierarchy = "started_at"
 
     @admin.display(description="Result")

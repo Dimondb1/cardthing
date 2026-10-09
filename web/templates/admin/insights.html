@@ -162,10 +162,15 @@
   {% endif %}
 
   <div class="module">
+    <h2>Pre-orders</h2>
+    <p>Pre-orders: {{ preorder_pulse.listed }} listed, {% if preorder_pulse.median is not None %}median {{ preorder_pulse.median }} minute{{ preorder_pulse.median|pluralize }} from a shop publishing a pre-order to it appearing here{% else %}not enough data yet on how fast they appear here ({{ preorder_pulse.timed }} of {{ preorder_pulse.needed }} needed){% endif %} (last 7 days).</p>
+  </div>
+
+  <div class="module">
     <h2>Shop health</h2>
     <table>
-      <thead><tr><th>Shop</th><th>Last read</th><th>In stock</th><th>Earns</th><th>Reading</th></tr></thead>
-      <tbody>{% for s in shops_health %}<tr><td><a href="{% url 'crawl' %}#shop-{{ s.slug }}">{{ s.name }}</a></td><td>{% if s.last_ok %}{{ s.last_ok|date:"j M H:i" }}{% else %}never{% endif %}</td><td class="n">{{ s.in_stock }}</td><td>{% if s.earns %}<span class="ok">yes</span>{% else %}no{% endif %}</td><td class="wrap">{{ s.reading }}{% if s.problem %}<span class="bad">{{ s.problem }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
+      <thead><tr><th>Shop</th><th>Last read</th><th>In stock</th><th>Pre-orders</th><th>Last pulse</th><th>Earns</th><th>Reading</th></tr></thead>
+      <tbody>{% for s in shops_health %}<tr><td><a href="{% url 'crawl' %}#shop-{{ s.slug }}">{{ s.name }}</a></td><td>{% if s.last_ok %}{{ s.last_ok|date:"j M H:i" }}{% else %}never{% endif %}</td><td class="n">{{ s.in_stock }}</td><td class="n">{{ s.preorders }}</td><td>{{ s.pulse|default:"" }}</td><td>{% if s.earns %}<span class="ok">yes</span>{% else %}no{% endif %}</td><td class="wrap">{{ s.reading }}{% if s.problem %}<span class="bad">{{ s.problem }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 

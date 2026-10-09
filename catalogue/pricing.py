@@ -17,7 +17,7 @@ from django.db import OperationalError
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, FloatField, Min, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from .models import DailyLowestPrice, Listing, OutboundClick, Product, Restock, Retailer, stale_cutoff
+from .models import DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, Restock, Retailer, stale_cutoff
 from .offers import MAX_REAL_PERCENT
 
 # A listing that flips out and back within this long is one restock, not two.
@@ -88,6 +88,9 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     verdict was not OK, when it comes back from being out of date or when the owner's trust in it has
     run out, so an unchanged price costs no extra queries. It is judged before any restock is kept, so a
     price kept out of the comparison is never announced as back in stock.
+
+    A listing on pre-order is stamped with when it was first seen so, and an existing listing that goes
+    from out of stock to pre-order keeps a PreorderOpen (record_preorder_open), judged first in the same way.
     """
     from .sanity import trust_expiry
 
@@ -120,6 +123,13 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     if restocked:
         listing.back_in_stock_at = checked_at
         fields.append("back_in_stock_at")
+    # Pre-orders opening: a listing we already had, out of stock (not in stock: a shop relabelling stock it
+    # has is not opening anything), now on pre-order. A listing seen for the first time never counts.
+    preorder = availability == Listing.Availability.PREORDER
+    opened = preorder and not new and listing.availability not in (Listing.Availability.PREORDER, Listing.Availability.IN_STOCK)
+    if preorder and listing.first_preorder_at is None:
+        listing.first_preorder_at = checked_at
+        fields.append("first_preorder_at")
     listing.price = price
     listing.delivery_known = delivery_cost is not None
     listing.delivery_cost = cost
@@ -130,6 +140,8 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
         judge(listing, checked_at, repriced=repriced)
     if restocked and listing.sanity != Listing.Sanity.EXCLUDED:
         record_restock(listing, checked_at)
+    if opened and listing.sanity != Listing.Sanity.EXCLUDED:
+        record_preorder_open(listing, checked_at)
     return update_daily_lowest(listing.product, date=timezone.localdate(checked_at))
 
 
@@ -174,6 +186,18 @@ def record_restock(listing, at):
     if Restock.objects.filter(listing=listing, at__gte=at - RESTOCK_COLLAPSE).exists():
         return None
     return Restock.objects.create(
+        product_id=listing.product_id, retailer_id=listing.retailer_id, listing=listing, at=at, price=listing.total,
+        delivery_known=listing.delivery_known,
+    )
+
+
+def record_preorder_open(listing, at):
+    """Keep a PreorderOpen for this listing, unless it only flickered or the shop is a marketplace."""
+    if listing.retailer.source_type in MARKETPLACES:
+        return None
+    if PreorderOpen.objects.filter(listing=listing, at__gte=at - RESTOCK_COLLAPSE).exists():
+        return None
+    return PreorderOpen.objects.create(
         product_id=listing.product_id, retailer_id=listing.retailer_id, listing=listing, at=at, price=listing.total,
         delivery_known=listing.delivery_known,
     )

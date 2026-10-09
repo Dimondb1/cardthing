@@ -325,6 +325,10 @@ class Retailer(models.Model):
     # once a shop has kept failing for a day. Cleared by a read that works.
     failing_since = models.DateTimeField("failing since", null=True, blank=True)
     reading_paused = models.BooleanField("reading paused", default=False)
+    # The pre-order pulse (importers.poll_collections): when the shop's collection list was last looked at,
+    # and whether it has one. A Shopify shop without /collections.json is looked at once a week.
+    collections_polled_at = models.DateTimeField("collections last looked at", null=True, blank=True)
+    collections_ok = models.BooleanField("has a collection list", null=True, blank=True)
 
     # A failed read waits 5 minutes, then 10, 20 and so on up to 6 hours. A shop that says it is being
     # asked too often (HTTP 429) waits at least 30 minutes at once.
@@ -362,6 +366,28 @@ class Retailer(models.Model):
                 )
             )
             .order_by("marketplace", F("next_read_at").asc(nulls_first=True), "name")
+        )
+
+    # The pre-order pulse looks at a Shopify shop's collection list this often, or once a week when the
+    # shop has none: one small request per shop is the cheapest early sign of a new pre-order.
+    PULSE_EVERY = timedelta(minutes=15)
+    PULSE_WITHOUT_COLLECTIONS = timedelta(days=7)
+
+    @classmethod
+    def pulse_due(cls, now=None):
+        """Shopify shops whose collection list is due a look: not paused, not waiting after errors, never
+        looked at first, then the one waiting longest."""
+        now = now or timezone.now()
+        return (
+            cls.objects.filter(is_active=True, reading_paused=False, source_type=cls.Source.SHOPIFY)
+            .exclude(source_url="")
+            .filter(Q(backoff_until__isnull=True) | Q(backoff_until__lte=now))
+            .filter(
+                Q(collections_polled_at__isnull=True)
+                | Q(collections_polled_at__lte=now - cls.PULSE_EVERY) & ~Q(collections_ok=False)
+                | Q(collections_polled_at__lte=now - cls.PULSE_WITHOUT_COLLECTIONS, collections_ok=False)
+            )
+            .order_by(F("collections_polled_at").asc(nulls_first=True), "name")
         )
 
     def cadence_for(self, finished, seconds, since=None):
@@ -519,6 +545,11 @@ class Listing(models.Model):
         help_text="A price the owner confirmed on Things to check. It counts while it moves less than 10% for 30 days.",
     )
     trusted_at = models.DateTimeField(null=True, blank=True)
+    # When the shop says it published the product (Shopify's published_at), kept from the first read that
+    # gave it, and when this listing was first seen on pre-order here: together they say how fast a
+    # pre-order reached the site.
+    shop_published_at = models.DateTimeField("shop published it", null=True, blank=True)
+    first_preorder_at = models.DateTimeField("first seen on pre-order", null=True, blank=True)
 
     objects = ListingQuerySet.as_manager()
 
@@ -576,6 +607,9 @@ class ImportRun(models.Model):
         "add a listing for this retailer and paste the link shown here.",
     )
     error = models.TextField(blank=True)
+    # Set on a run that read only part of a shop, such as the pre-order pulse reading changed collections.
+    # Such a run is not a read of the whole shop, so it never counts as the shop's last read.
+    note = models.CharField(max_length=200, blank=True)
 
     class Meta:
         ordering = ["-started_at"]
@@ -731,6 +765,49 @@ class Restock(models.Model):
     class Meta:
         ordering = ["-at"]
         verbose_name = "restock"
+
+    def __str__(self):
+        return f"{self.product} at {self.retailer}, {self.at:%d %b %H:%M}"
+
+
+class RetailerCollection(models.Model):
+    """One Shopify collection the pre-order pulse watches: its size and change time when last read.
+
+    A collection whose count or change time moves is read again; one that has not moved costs nothing.
+    """
+
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="watched_collections")
+    handle = models.CharField(max_length=200)
+    products_count = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    last_read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = [("retailer", "handle")]
+        verbose_name = "watched shop collection"
+
+    def __str__(self):
+        return f"{self.retailer} {self.handle}"
+
+
+class PreorderOpen(models.Model):
+    """One time a shop opened pre-orders on a product it already listed as out of stock.
+
+    Written by ``pricing.record_check``, like Restock: a listing that flips back and forth within two
+    hours counts once, marketplaces are left out, and a listing seen for the first time never counts,
+    because the first read of a shop is not a shop opening anything.
+    """
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="preorder_opens")
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="preorder_opens")
+    listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True, related_name="preorder_opens")
+    at = models.DateTimeField(default=timezone.now, db_index=True)
+    price = models.DecimalField(max_digits=9, decimal_places=2, help_text="Delivered price when pre-orders opened.")
+    delivery_known = models.BooleanField(default=True, help_text="Off when the price is the item price alone.")
+
+    class Meta:
+        ordering = ["-at"]
+        verbose_name = "pre-order opening"
 
     def __str__(self):
         return f"{self.product} at {self.retailer}, {self.at:%d %b %H:%M}"

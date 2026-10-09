@@ -280,7 +280,8 @@ def report(days=30):
     # Shop health: when each shop was last read successfully, its latest error and its reading schedule.
     now = timezone.now()
     shops_health = []
-    recent_runs = ImportRun.objects.filter(finished_at__gte=timezone.now() - timedelta(days=7))
+    # A pre-order pulse reads part of a shop, so it says nothing about whether the shop's reads work.
+    recent_runs = ImportRun.objects.filter(finished_at__gte=timezone.now() - timedelta(days=7), note="")
     last_ok = dict(
         recent_runs.filter(error="")
         .values_list("retailer_id").annotate(t=Max("finished_at")).values_list("retailer_id", "t")
@@ -292,9 +293,13 @@ def report(days=30):
         "retailer_id", "error", "finished_at"
     ):
         last_any.setdefault(run.retailer_id, run)
-    stock = dict(
-        Listing.objects.buyable().values_list("retailer_id").annotate(n=Count("id")).values_list("retailer_id", "n")
-    )
+    stock, preorders = {}, {}
+    for retailer_id, n, on_preorder in (
+        Listing.objects.buyable().values_list("retailer_id")
+        .annotate(n=Count("id"), p=Count("id", filter=Q(availability=Listing.Availability.PREORDER)))
+        .values_list("retailer_id", "n", "p")
+    ):
+        stock[retailer_id], preorders[retailer_id] = n, on_preorder
     for retailer in Retailer.objects.filter(is_active=True).exclude(source_type=Retailer.Source.MANUAL).order_by("name"):
         latest = last_any.get(retailer.pk)
         ok = last_ok.get(retailer.pk)
@@ -308,6 +313,7 @@ def report(days=30):
             problem = f"Last read {timezone.localtime(ok):%d %b %H:%M}."
         shops_health.append({
             "name": retailer.name, "slug": retailer.slug, "last_ok": ok, "in_stock": stock.get(retailer.pk, 0),
+            "preorders": preorders.get(retailer.pk, 0), "pulse": pulse_state(retailer, now),
             "problem": problem, "reading": reading_state(retailer, now, error_shown=problem == latest_error),
             "earns": bool(retailer.affiliate_url_template)
             or retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY),
@@ -390,6 +396,7 @@ def report(days=30):
         "shops_health": shops_health,
         "worker_stopped": worker_stopped(now),
         "doubtful_waiting": checks.doubtful_count(),
+        "preorder_pulse": preorder_pulse(now),
         "viewed_no_click": viewed_no_click,
         "one_shop": one_shop,
         "catalogue": catalogue_stats,
@@ -447,6 +454,47 @@ def ebay_coverage():
         "days_left": -(-waiting // per_day) if waiting else 0,
         "missed": [{"name": row["name"], "shops": row["in_stock_count"]} for row in missed],
     }
+
+
+# The median is printed only once this many pre-orders can be timed: fewer says nothing.
+PREORDER_TIMING_MIN = 5
+PREORDER_WINDOW = timedelta(days=7)
+
+
+def preorder_pulse(now):
+    """How many pre-orders reached the site in the last 7 days and how fast.
+
+    ``listed`` counts listings first seen on pre-order here in the window, at shops rather than
+    marketplaces. ``median`` is the median minutes from the shop publishing the product
+    (Listing.shop_published_at) to its listing first showing on pre-order here (first_preorder_at), over
+    those also published in the window, so a product a shop has listed for months and only now opened is
+    not timed from months ago. It is None under PREORDER_TIMING_MIN timed rows.
+    """
+    since = now - PREORDER_WINDOW
+    rows = list(
+        Listing.objects.filter(first_preorder_at__gte=since)
+        .exclude(retailer__source_type__in=[Retailer.Source.AMAZON, Retailer.Source.EBAY])
+        .order_by().values_list("shop_published_at", "first_preorder_at")
+    )
+    waits = sorted(
+        (seen - published).total_seconds() / 60
+        for published, seen in rows if published is not None and since <= published <= seen
+    )
+    median = None
+    if len(waits) >= PREORDER_TIMING_MIN:
+        middle = len(waits) // 2
+        median = round(waits[middle] if len(waits) % 2 else (waits[middle - 1] + waits[middle]) / 2)
+    return {"listed": len(rows), "timed": len(waits), "median": median, "needed": PREORDER_TIMING_MIN}
+
+
+def pulse_state(retailer, now):
+    """When the pre-order pulse last looked at a Shopify shop, or None for a shop it does not look at."""
+    if retailer.source_type != Retailer.Source.SHOPIFY:
+        return None
+    if retailer.collections_polled_at is None:
+        return "not yet"
+    when = clock(retailer.collections_polled_at, now)
+    return f"{when}, no collection list" if retailer.collections_ok is False else when
 
 
 def worker_stopped(now):

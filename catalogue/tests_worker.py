@@ -121,6 +121,10 @@ class WorkerTestCase(TestCase):
         kwargs.setdefault("read_every_minutes", 45)
         if not due:
             kwargs.setdefault("next_read_at", self.clock() + timedelta(hours=1))
+        # The pre-order pulse has just looked, so its request does not mix with the reads and probes a test
+        # counts; the pulse tests set this themselves.
+        kwargs.setdefault("collections_polled_at", self.clock())
+        kwargs.setdefault("collections_ok", True)
         return make_retailer(name, **kwargs)
 
     def product(self, slug, views=0, old=True, **kwargs):
@@ -219,8 +223,9 @@ class PlanTests(WorkerTestCase):
             for m in range(3):
                 self.listing(self.product(f"box-{n}-{m}", views=m), shop, 20 + 30 * m)
         self.assertEqual(count(), few)
-        # Pause all, the shops due, four for how hot each product is, and the listings to check.
-        self.assertEqual(few, 7)
+        # Pause all, the shops due, four for how hot each product is, the listings to check and the shops
+        # due a pre-order pulse.
+        self.assertEqual(few, 8)
 
 
 class PolitenessTests(WorkerTestCase):
@@ -864,6 +869,125 @@ class StuckProbeTests(WorkerTestCase):
         big = self.shop("Big Shop", due=True, last_read_seconds=900)
         task = self.make_worker().plan(self.clock())[0]
         self.assertEqual((task.retailer_id, worker.deadline_for(task)), (big.pk, timedelta(minutes=30)))
+
+
+class PulseTests(WorkerTestCase):
+    """The pre-order pulse: each Shopify shop's collection list every 15 minutes, between reads and probes."""
+
+    def pulse_shop(self, name, **kwargs):
+        kwargs.setdefault("collections_polled_at", None)
+        kwargs.setdefault("collections_ok", None)
+        return self.shop(name, **kwargs)
+
+    def collections(self, base, handles, products=None, seen=None, status=None):
+        """A fetch answering /collections.json for ``base`` with ``handles`` ({handle: count}) and their products."""
+
+        def fetch(url, *args, **kwargs):
+            if seen is not None:
+                seen.append(url)
+            if status is not None:
+                raise ImportError_(f"Could not fetch {url}: HTTP Error {status}: Too Many Requests")
+            if url == f"{base}/meta.json":
+                return b'{"currency": "GBP"}'
+            if url == f"{base}/collections.json?limit=250":
+                return json.dumps({"collections": [
+                    {"handle": h, "products_count": n, "updated_at": "2026-10-09T08:00:00Z"} for h, n in handles.items()
+                ]}).encode()
+            for handle, items in (products or {}).items():
+                if url.startswith(f"{base}/collections/{handle}/products.json"):
+                    return json.dumps({"products": items if url.endswith("page=1") else []}).encode()
+            return b'{"products": []}'
+
+        return fetch
+
+    def test_a_shop_due_a_pulse_is_planned_once_per_shop_after_reads_and_probes(self):
+        due = self.pulse_shop("Pulse Shop")
+        reading = self.pulse_shop("Read Shop", due=True)
+        probed = self.pulse_shop("Probe Shop")
+        self.listing(self.product("hot-box", views=3), probed, 30)
+        self.pulse_shop("Paused Shop", reading_paused=True)
+        self.pulse_shop("Waiting Shop", backoff_until=self.clock() + timedelta(minutes=20))
+        self.shop("Just Pulsed")
+        self.pulse_shop("Feed Shop", source_type=Retailer.Source.FEED, source_url="https://feed.example/f.csv")
+        tasks = self.make_worker().plan(self.clock())
+        self.assertEqual([(t.kind, t.retailer_id) for t in tasks], [
+            (worker.SHOP_READ, reading.pk), (worker.PROBE, probed.pk), (worker.PULSE, due.pk),
+        ])
+        self.assertEqual(tasks[2].priority, worker.WEIGHTS[worker.PULSE] * worker.NEVER_READ_MINUTES)
+        self.assertEqual(worker.deadline_for(tasks[2]), timedelta(seconds=60))
+
+    def test_a_pulse_finds_a_new_preorder_and_is_not_repeated_within_fifteen_minutes(self):
+        shop = self.pulse_shop("Pulse Shop")
+        product = self.product("dr-box", ean="0196214112345")
+        base = shop.source_url.rstrip("/")
+        item = product_json("dr-box", price="139.99")
+        item["variants"][0]["barcode"] = "0196214112345"
+        seen = []
+        fetch = self.collections(base, {"pre-orders": 1}, {"pre-orders": [item]}, seen)
+        reader = self.make_worker(fetch=fetch)
+        start = self.clock()
+        reader.run_once()
+        listing = Listing.objects.get(product=product, retailer=shop)
+        self.assertEqual(listing.availability, Listing.Availability.PREORDER)
+        shop.refresh_from_db()
+        self.assertEqual(shop.collections_polled_at, start)
+        self.assertTrue(ImportRun.objects.get().note.startswith("Pre-order pulse"))
+        # The new pre-order is hot, so it is probed too; the collection list waits its 15 minutes.
+        seen.clear()
+        self.clock.advance(minutes=14)
+        reader.run_once()
+        self.assertEqual([url for url in seen if "/collections" in url], [])
+        self.clock.advance(minutes=1)
+        reader.run_once()
+        self.assertEqual([url for url in seen if "/collections" in url], [f"{base}/collections.json?limit=250"])
+
+    def test_a_shop_that_throttles_the_pulse_backs_off(self):
+        shop = self.pulse_shop("Busy Shop")
+        reader = self.make_worker(fetch=self.collections(shop.source_url.rstrip("/"), {}, status=429))
+        reader.run_once()
+        shop.refresh_from_db()
+        self.assertEqual(shop.backoff_until - self.clock(), timedelta(minutes=30))
+        self.assertTrue(shop.last_error.startswith("Looking for pre-orders:"))
+        self.clock.advance(minutes=20)
+        self.assertEqual(reader.plan(self.clock()), [])
+
+    def test_a_pulse_out_of_time_leaves_the_rest_for_the_next_look(self):
+        from .models import RetailerCollection
+
+        shop = self.pulse_shop("Slow Shop")
+        base = shop.source_url.rstrip("/")
+        answer = self.collections(base, {"pre-orders": 1, "coming-soon": 1})
+
+        def slow(url, *args, **kwargs):
+            if "/products.json" in url:
+                self.clock.advance(seconds=45)
+            return answer(url)
+
+        self.make_worker(fetch=slow).run_once()
+        self.assertEqual(list(RetailerCollection.objects.values_list("handle", flat=True)), ["pre-orders"])
+
+    def test_pulses_of_different_shops_start_apart(self):
+        for name in ("Shop A", "Shop B"):
+            self.pulse_shop(name)
+        started = []
+        reader = self.make_worker(fetch=lambda url, *a, **k: started.append(self.clock()) or b'{"collections": []}')
+        reader.run_once()
+        self.assertEqual(len(started), 2)
+        self.assertGreaterEqual((started[1] - started[0]).total_seconds(), worker.PULSE_GAP)
+
+    def test_a_stuck_pulse_closes_its_run(self):
+        shop = self.pulse_shop("Tarpit Shop")
+        reader = self.make_worker(executor=HeldExecutor())
+        reader.queue = reader.plan(self.clock())
+        reader.dispatch(self.clock())
+        self.assertEqual([t.kind for t in reader.executor.jobs], [worker.PULSE])
+        run = ImportRun.objects.create(retailer=shop, started_at=self.clock(), note="Pre-order pulse: pre-orders")
+        self.clock.advance(seconds=61)
+        with mock.patch.object(worker.os, "_exit") as exit_, self.assertLogs("catalogue", "ERROR"):
+            reader.check_deadlines(self.clock())
+        exit_.assert_called_once_with(1)
+        run.refresh_from_db()
+        self.assertEqual(run.error, STOPPED)
 
 
 class StopTests(WorkerTestCase):

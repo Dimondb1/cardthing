@@ -811,6 +811,8 @@ that keeps prices fresh all day:
   only by its shop's whole read. A listing checked in the last 8 minutes,
   or at a shop being read, is skipped. Feed shops, eBay and Amazon are
   never asked about single listings.
+- **The pre-order pulse** for each Shopify shop every 15 minutes (see
+  Pre-order pulse below).
 
 There is no job list: every minute it works out what is due from the shops
 and listings themselves, so a crash or a deploy loses only the jobs that
@@ -892,6 +894,48 @@ while a shop read is saving offers (its timeout starts once it holds the
 lock; no new read starts while it runs, single-listing checks go on). The back-in-stock emails
 every ten minutes whatever the reader is doing, the price history and a
 backup (`backup_db --keep 5`) nightly, and the delivery check weekly.
+
+## Pre-order pulse
+
+A pre-order shows on the site within about 15 minutes of a Shopify shop
+opening it, without reading the whole shop. Every 15 minutes the background
+reader asks each Shopify shop for its collection list (`/collections.json`,
+one small request) and compares the size and change time of the
+collections it watches: any named for pre-orders or coming soon, and new
+releases or new arrivals (but not one named for leaving pre-orders out).
+Only a watched collection that changed, or is new, has its products read
+(up to 20 pages), and they are saved like a shop read that covers part of
+the shop: nothing it does not list is marked out of stock. A product in a
+pre-order or coming soon collection is a pre-order while the shop has it
+available; one in a new releases or arrivals collection is taken only when
+its own title or tags say pre-order, because new says nothing about stock.
+Tags that count: pre-order, pre-orders, Pre-Orders-Live and Coming Soon,
+in any case. Pre-release event tickets are never products.
+
+Each pulse that reads something leaves a price import noted "Pre-order
+pulse: <collections>". It is not a read of the shop, so it never counts as
+the shop's last read on Insights or Crawl health. A shop without a
+collection list (404 or not JSON) is asked once a week; a paused shop or
+one waiting after errors is not asked; a shop that answers 429 waits 30
+minutes like a failed read. Pulses start at least 0.3 seconds apart, a
+shop being read or having single listings checked that minute is pulsed at
+the next plan, and a pulse has a minute: it starts no new request after 40
+seconds and reads any collection it had no time for at the next pulse. A
+shop that prices in another currency has nothing applied.
+
+Bookkeeping: a listing records when the shop published the product (from
+Shopify, kept from the first read that gives it) and when it was first
+seen on pre-order here. A listing already known as out of stock that goes
+on pre-order is kept as a pre-order opening (like a restock: once per two
+hours, never for eBay or Amazon, never for a listing seen for the first
+time, never for a price kept out of the comparison). Insights shows
+"Pre-orders: N listed, median M minutes from a shop publishing a pre-order
+to it appearing here (last 7 days)", the median only once 5 pre-orders
+published and listed in the week can be timed, and each Shopify shop's
+pre-orders and last pulse in Shop health.
+
+`python manage.py poll_preorders` runs the pulse by hand for every shop due
+one, and `--shop <slug>` for one shop now.
 
 ## Backups, timeouts and runs cut short
 

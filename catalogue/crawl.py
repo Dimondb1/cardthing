@@ -105,7 +105,7 @@ def crash_read(item, began, exc):
 
 def last_finished():
     """When the latest shop read finished, or None."""
-    return ImportRun.objects.aggregate(t=Max("finished_at"))["t"]
+    return ImportRun.objects.filter(note="").aggregate(t=Max("finished_at"))["t"]
 
 
 def next_read_for(retailer, now, everything_paused=False):
@@ -128,7 +128,8 @@ def shops(now, state=_UNREAD):
     A shop is Reading while its latest run has not finished, then Paused, Backing off or Idle.
     """
     latest_open = (
-        ImportRun.objects.filter(retailer=OuterRef("pk"))
+        # A pulse reads part of a shop (ImportRun.note); only whole reads say a shop is being read.
+        ImportRun.objects.filter(retailer=OuterRef("pk"), note="")
         .order_by("-started_at", "-pk")
         .annotate(open=ExpressionWrapper(Q(finished_at__isnull=True), output_field=BooleanField()))
         .values("open")[:1]

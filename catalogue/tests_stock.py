@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from . import pricing
 from .management.commands.watch_stock import check_listing, shopify_js_url
-from .models import Listing, OutboundClick, Restock, Retailer
+from .models import Listing, OutboundClick, PreorderOpen, Restock, Retailer
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
 
@@ -115,6 +115,74 @@ class RestockRecordTests(TestCase):
         call_command("backfill_restocks", stdout=out)
         self.assertEqual(out.getvalue(), "1 restocks recorded.\n0 restocks recorded.\n")
         self.assertEqual(Restock.objects.get().at, when)
+
+
+class PreorderOpenTests(TestCase):
+    """A shop opening pre-orders on a product it already listed is kept, like a restock."""
+
+    def setUp(self):
+        self.product = make_product(make_set(make_game()), name="Destined Rivals Booster Box", product_type="booster_box",
+                                    ean="0196214112345")
+        self.shop = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+
+    def flip(self, listing, availability, at):
+        pricing.record_check(listing, price=Decimal("139.99"), delivery_cost=Decimal("2.99"), availability=availability, checked_at=at)
+
+    def test_an_out_of_stock_listing_going_on_preorder_is_one_opening(self):
+        listing = make_listing(self.product, self.shop, availability="out_of_stock")
+        at = timezone.now()
+        self.flip(listing, "preorder", at)
+        opened = PreorderOpen.objects.get()
+        self.assertEqual((opened.product, opened.retailer, opened.listing, opened.price, opened.at),
+                         (self.product, self.shop, listing, Decimal("142.98"), at))
+        listing.refresh_from_db()
+        self.assertEqual(listing.first_preorder_at, at)
+        # Staying on pre-order changes nothing, and the first time seen on pre-order is kept.
+        self.flip(listing, "preorder", at + timedelta(hours=5))
+        listing.refresh_from_db()
+        self.assertEqual((PreorderOpen.objects.count(), listing.first_preorder_at), (1, at))
+
+    def test_a_new_listing_is_never_an_opening_but_is_stamped(self):
+        from .importers import Offer, apply_offers
+
+        apply_offers(self.shop, [Offer(title="Destined Rivals Booster Box", url="https://shop.example/products/dr-box",
+                                       price=Decimal("139.99"), ean="0196214112345", availability="preorder")])
+        listing = Listing.objects.get()
+        self.assertEqual(listing.availability, "preorder")
+        self.assertIsNotNone(listing.first_preorder_at)
+        self.assertFalse(PreorderOpen.objects.exists())
+
+    def test_in_stock_to_preorder_and_marketplaces_are_not_openings(self):
+        listing = make_listing(self.product, self.shop, availability="in_stock")
+        self.flip(listing, "preorder", timezone.now())
+        ebay = make_listing(self.product, make_retailer("eBay", source_type=Retailer.Source.EBAY), availability="out_of_stock")
+        self.flip(ebay, "preorder", timezone.now())
+        ebay.refresh_from_db()
+        self.assertIsNotNone(ebay.first_preorder_at)
+        self.assertFalse(PreorderOpen.objects.exists())
+
+    def test_a_flicker_within_two_hours_counts_once(self):
+        listing = make_listing(self.product, self.shop, availability="out_of_stock")
+        start = timezone.now() - timedelta(hours=5)
+        self.flip(listing, "preorder", start)
+        self.flip(listing, "out_of_stock", start + timedelta(minutes=20))
+        self.flip(listing, "preorder", start + timedelta(minutes=40))
+        self.assertEqual(PreorderOpen.objects.count(), 1)
+        self.flip(listing, "out_of_stock", start + timedelta(hours=3))
+        self.flip(listing, "preorder", start + timedelta(hours=4))
+        self.assertEqual(PreorderOpen.objects.count(), 2)
+
+    def test_a_price_kept_out_is_never_an_opening(self):
+        from unittest import mock
+
+        listing = make_listing(self.product, self.shop, availability="out_of_stock")
+
+        def keep_out(listing, now, repriced=False):
+            listing.sanity = Listing.Sanity.EXCLUDED
+
+        with mock.patch.object(pricing, "judge", keep_out):
+            self.flip(listing, "preorder", timezone.now())
+        self.assertFalse(PreorderOpen.objects.exists())
 
 
 class WatchStockTests(TestCase):

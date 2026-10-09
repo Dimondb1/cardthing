@@ -1559,3 +1559,224 @@ class PageIndexTests(TestCase):
         call_command("tidy_all", stdout=StringIO())
         self.assertFalse(ShopPage.objects.filter(pk=gone.pk).exists())
         self.assertTrue(ShopPage.objects.filter(pk=kept.pk).exists())
+
+
+class PreorderPulseTests(TestCase):
+    """The pre-order pulse: one look at a Shopify shop's collection list, reading only what changed."""
+
+    def setUp(self):
+        from datetime import timedelta
+
+        self.now = timezone.now()
+        self.shop = make_retailer("Pulse Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://pulse.example/")
+        self.box = make_product(make_set(make_game()), name="Destined Rivals Booster Box", ean="0196214112345")
+        self.updated = "2026-10-09T08:00:00+01:00"
+        self.hour = timedelta(hours=1)
+
+    def answers(self, collections, products=None, asked=None):
+        """A fetch for /collections.json (``collections``: [(handle, count)]) and each collection's products."""
+
+        def fetch(url, *args, **kwargs):
+            if asked is not None:
+                asked.append(url)
+            if url.endswith("/meta.json"):
+                return b'{"currency": "GBP"}'
+            if url.endswith("/collections.json?limit=250"):
+                return json.dumps({"collections": [
+                    {"handle": handle, "products_count": count, "updated_at": self.updated} for handle, count in collections
+                ]}).encode()
+            for handle, items in (products or {}).items():
+                if f"/collections/{handle}/products.json" in url:
+                    return shopify_page(items if url.endswith("page=1") else [])
+            return shopify_page([])
+
+        return fetch
+
+    def box_json(self, available=True, tags=(), published="2026-10-09T08:50:00+01:00"):
+        return {"handle": "destined-rivals-booster-box", "title": "Pokemon TCG: Destined Rivals Booster Box",
+                "tags": list(tags), "published_at": published, "product_type": "Booster Box",
+                "variants": [{"price": "139.99", "available": available, "barcode": "0196214112345"}]}
+
+    def remember(self, handle, count):
+        from .importers import parse_published
+        from .models import RetailerCollection
+
+        RetailerCollection.objects.create(retailer=self.shop, handle=handle, products_count=count,
+                                          updated_at=parse_published(self.updated))
+
+    def test_an_unchanged_collection_list_reads_no_products(self):
+        from .importers import poll_collections
+
+        self.remember("pre-orders", 4)
+        asked = []
+        pulse = poll_collections(self.shop, fetch=self.answers([("pre-orders", 4), ("pokemon", 300)], asked=asked), now=self.now)
+        self.assertEqual(asked, ["https://pulse.example/collections.json?limit=250"])
+        self.assertEqual((pulse.read, pulse.run, pulse.error), ([], None, ""))
+        self.assertFalse(ImportRun.objects.exists())
+        self.shop.refresh_from_db()
+        self.assertEqual((self.shop.collections_polled_at, self.shop.collections_ok), (self.now, True))
+
+    def test_a_changed_count_reads_only_that_collection_and_the_product_is_a_preorder_at_once(self):
+        from .importers import PULSE_NOTE, poll_collections
+        from .models import RetailerCollection
+
+        self.remember("pre-orders", 4)
+        self.remember("coming-soon", 2)
+        asked = []
+        fetch = self.answers([("pre-orders", 5), ("coming-soon", 2)], {"pre-orders": [self.box_json()]}, asked)
+        pulse = poll_collections(self.shop, fetch=fetch, now=self.now)
+        self.assertEqual(pulse.read, ["pre-orders"])
+        self.assertFalse([url for url in asked if "/collections/coming-soon/" in url])
+        listing = Listing.objects.get(product=self.box, retailer=self.shop)
+        self.assertEqual(listing.availability, Listing.Availability.PREORDER)
+        self.assertIsNotNone(listing.first_preorder_at)
+        self.assertEqual(listing.shop_published_at.isoformat(), "2026-10-09T07:50:00+00:00")
+        run = ImportRun.objects.get()
+        self.assertEqual((run.note, run.offers_found, run.error), (f"{PULSE_NOTE}: pre-orders", 1, ""))
+        self.assertIsNotNone(run.finished_at)
+        self.assertEqual(RetailerCollection.objects.get(handle="pre-orders").products_count, 5)
+        # The next look finds nothing new.
+        asked.clear()
+        self.assertEqual(poll_collections(self.shop, fetch=fetch, now=self.now + self.hour).read, [])
+        self.assertEqual(len(asked), 1)
+
+    def test_a_new_watched_collection_counts_as_a_change_and_a_gone_one_is_forgotten(self):
+        from .importers import poll_collections
+        from .models import RetailerCollection
+
+        self.remember("old-pre-orders", 3)
+        fetch = self.answers([("coming-soon", 1), ("singles", 900)], {"coming-soon": [self.box_json()]})
+        self.assertEqual(poll_collections(self.shop, fetch=fetch, now=self.now).read, ["coming-soon"])
+        self.assertEqual(list(RetailerCollection.objects.values_list("handle", flat=True)), ["coming-soon"])
+        self.assertEqual(Listing.objects.get(product=self.box).availability, Listing.Availability.PREORDER)
+
+    def test_new_arrivals_count_only_when_the_product_says_preorder(self):
+        from .importers import poll_collections, preorder_collections
+
+        other = make_product(self.box.product_set, name="Destined Rivals Elite Trainer Box", ean="0196214112352")
+        in_stock = {"handle": "destined-rivals-etb", "title": "Pokemon TCG: Destined Rivals Elite Trainer Box", "tags": [],
+                    "product_type": "Elite Trainer Box",
+                    "variants": [{"price": "49.99", "available": True, "barcode": "0196214112352"}]}
+        fetch = self.answers([("new-arrivals", 2)], {"new-arrivals": [in_stock, self.box_json(tags=["Pre-Orders-Live"])]})
+        poll_collections(self.shop, fetch=fetch, now=self.now)
+        self.assertEqual(Listing.objects.get(product=self.box).availability, Listing.Availability.PREORDER)
+        # Being new says nothing about stock: the full read decides that one.
+        self.assertFalse(Listing.objects.filter(product=other).exists())
+        # So new arrivals never mark a whole-shop read's products as pre-orders.
+        names = preorder_collections("https://pulse.example", fetch=self.answers([("new-arrivals", 2), ("coming-soon", 1)]))
+        self.assertIn("coming-soon", names)
+        self.assertNotIn("new-arrivals", names)
+
+    def test_a_shop_without_a_collection_list_is_looked_at_weekly(self):
+        from datetime import timedelta
+
+        from .importers import poll_collections
+
+        def missing(url, *args, **kwargs):
+            raise ImportError_(f"Could not fetch {url}: HTTP Error 404: Not Found")
+
+        pulse = poll_collections(self.shop, fetch=missing, now=self.now)
+        self.assertTrue(pulse.no_list)
+        self.shop.refresh_from_db()
+        self.assertIs(self.shop.collections_ok, False)
+        self.assertNotIn(self.shop, Retailer.pulse_due(self.now + timedelta(days=6)))
+        self.assertIn(self.shop, Retailer.pulse_due(self.now + timedelta(days=7)))
+        # Not JSON at all counts the same.
+        Retailer.objects.filter(pk=self.shop.pk).update(collections_ok=None)
+        self.shop.refresh_from_db()
+        self.assertTrue(poll_collections(self.shop, fetch=lambda url, *a, **k: b"<html>", now=self.now).no_list)
+
+    def test_a_shop_is_looked_at_at_most_every_fifteen_minutes(self):
+        from datetime import timedelta
+
+        from .importers import poll_collections
+
+        self.assertIn(self.shop, Retailer.pulse_due(self.now))
+        poll_collections(self.shop, fetch=self.answers([]), now=self.now)
+        self.assertNotIn(self.shop, Retailer.pulse_due(self.now + timedelta(minutes=14)))
+        self.assertIn(self.shop, Retailer.pulse_due(self.now + timedelta(minutes=15)))
+        # Paused, waiting after errors, inactive or not Shopify: never looked at.
+        Retailer.objects.filter(pk=self.shop.pk).update(reading_paused=True)
+        self.assertFalse(Retailer.pulse_due(self.now + self.hour).exists())
+        Retailer.objects.filter(pk=self.shop.pk).update(reading_paused=False, backoff_until=self.now + 2 * self.hour)
+        self.assertFalse(Retailer.pulse_due(self.now + self.hour).exists())
+        make_retailer("Feed Shop", source_type=Retailer.Source.FEED, source_url="https://feed.example/f.csv")
+        self.assertFalse(Retailer.pulse_due(self.now + self.hour).exists())
+
+    def test_a_shop_pricing_in_another_currency_applies_nothing(self):
+        from .importers import poll_collections
+
+        base = self.answers([("pre-orders", 1)], {"pre-orders": [self.box_json()]})
+
+        def fetch(url, *args, **kwargs):
+            return b'{"currency": "EUR"}' if url.endswith("/meta.json") else base(url)
+
+        pulse = poll_collections(self.shop, fetch=fetch, now=self.now)
+        self.assertIn("EUR", pulse.error)
+        self.assertFalse(Listing.objects.exists())
+        self.assertIn("EUR", ImportRun.objects.get().error)
+
+    def test_a_pulse_run_is_not_a_read_of_the_shop(self):
+        from datetime import timedelta
+
+        from . import crawl, insights
+        from .importers import poll_collections
+
+        poll_collections(self.shop, fetch=self.answers([("pre-orders", 1)], {"pre-orders": [self.box_json()]}), now=self.now)
+        self.assertTrue(ImportRun.objects.get().ok)
+        health = {s["name"]: s for s in insights.report(7)["shops_health"]}
+        self.assertIsNone(health["Pulse Shop"]["last_ok"])
+        self.assertEqual(health["Pulse Shop"]["preorders"], 1)
+        self.assertIsNone(crawl.last_finished())
+        # An open pulse never shows the shop as being read.
+        ImportRun.objects.update(finished_at=None)
+        rows = {row["retailer"].name: row for row in crawl.shops(self.now + timedelta(minutes=1))}
+        self.assertEqual(rows["Pulse Shop"]["state"], "Idle")
+
+    def test_poll_preorders_looks_at_due_shops_or_one_by_hand(self):
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        fetch = self.answers([("pre-orders", 1)], {"pre-orders": [self.box_json()]})
+        out = StringIO()
+        with mock.patch("catalogue.importers.fetch", fetch):
+            call_command("poll_preorders", stdout=out)
+            self.assertEqual(Listing.objects.get(product=self.box).availability, Listing.Availability.PREORDER)
+            call_command("poll_preorders", stdout=out)   # just looked at: not due
+            call_command("poll_preorders", "--shop", "pulse-shop", stdout=out)   # by hand: looked at now
+        self.assertEqual(out.getvalue().splitlines(), [
+            "Pulse Shop: read pre-orders, 1 listings checked.", "No shop is due a look.", "Pulse Shop: nothing changed.",
+        ])
+        with self.assertRaises(CommandError):
+            call_command("poll_preorders", "--shop", "nowhere", stdout=out)
+
+
+class PreorderSignalTests(TestCase):
+    def test_preorder_tags_in_their_usual_spellings(self):
+        from .importers import PREORDER_TAG
+
+        for tag in ("Pre-Orders-Live", "Coming Soon", "pre-order", "Preorder", "PRE ORDERS", "coming-soon", "pre-order live"):
+            self.assertTrue(PREORDER_TAG.match(tag), tag)
+        for tag in ("Pre-Order - Inventory Trigger", "not pre-order", "coming soon 2027 maybe", "new-release"):
+            self.assertFalse(PREORDER_TAG.match(tag), tag)
+
+    def test_pre_release_event_tickets_are_not_products(self):
+        for title in ("Pokemon TCG Destined Rivals Pre-Release Event Ticket", "One Piece OP-13 Pre Release Event Entry",
+                      "Riftbound Prerelease Event Saturday"):
+            self.assertIsNone(classify(title, "", "", (), Decimal("25")), title)
+
+    def test_the_shops_publishing_time_is_kept_from_the_first_read(self):
+        from .importers import Offer
+
+        shop = make_retailer("Shop")
+        product = make_product(make_set(make_game()), ean="0820650851230")
+        first = timezone.now() - timezone.timedelta(days=2)
+        offer = Offer(title="Box", url="https://shop.example/products/box", price=Decimal("40"), ean="0820650851230",
+                      published_at=first)
+        apply_offers(shop, [offer])
+        offer.published_at = timezone.now()   # the shop republished it
+        apply_offers(shop, [offer])
+        self.assertEqual(Listing.objects.get(product=product).shop_published_at, first)

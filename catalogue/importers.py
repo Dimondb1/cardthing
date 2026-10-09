@@ -29,17 +29,20 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from . import pricing
 from .classify import GAMES, classify, find_game
 from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
-from .models import Game, ImportRun, Listing, Product, Retailer, ShopPage, ShopProduct, stale_cutoff
+from .models import (
+    Game, ImportRun, Listing, Product, Retailer, RetailerCollection, ShopPage, ShopProduct, stale_cutoff,
+)
 from .sanity import judge_product, trust_expiry
 
 logger = logging.getLogger(__name__)
@@ -48,9 +51,14 @@ USER_AGENT = "RipRaptor price check (+https://ripraptor.example)"
 MAX_SHOPIFY_PAGES = 400
 TIMEOUT = 30
 PREORDER_WORDS = re.compile(r"pre[\s-]?order", re.I)
-# A tag counts only when it says pre-order and nothing else. Shop apps add tags
-# like "Pre-Order - Inventory Trigger" to products that are in stock today.
-PREORDER_TAG = re.compile(r"^\s*pre[\s-]?orders?\s*$", re.I)
+# A tag counts only when it says pre-order (or pre-orders live, or coming soon) and nothing else. Shop apps
+# add tags like "Pre-Order - Inventory Trigger" to products that are in stock today.
+PREORDER_TAG = re.compile(r"^\s*(?:pre[\s-]?orders?(?:[\s-]?live)?|coming[\s-]?soon)\s*$", re.I)
+# Collections a shop fills before release day: their available products are pre-orders.
+COMING_SOON = re.compile(r"coming[\s-]?soon", re.I)
+# Collections where a new pre-order often shows first. The pre-order pulse watches them, but being in one
+# says nothing about stock, so a product found there is a pre-order only by its own title or tags.
+NEW_IN = re.compile(r"new[\s-]?(?:releases?|arrivals?)", re.I)
 # A collection named for leaving pre-orders out ("all-products-excluding-pre-orders").
 NOT_PREORDER = re.compile(r"\b(?:exclud\w*|without|except|no|non|not)[\s-]+(?:\w+[\s-]+)?pre[\s-]?orders?", re.I)
 
@@ -69,6 +77,7 @@ class Offer:
     tags: tuple = ()
     product_pk: int | None = None   # set when the source already knows which product this is
     page_pk: int | None = None   # the ShopPage a website read took this offer from
+    published_at: datetime | None = None   # when the shop published the product (Shopify's published_at)
 
 
 class ImportError_(Exception):
@@ -262,9 +271,25 @@ def preorder_collections(base, fetch=fetch):
         listed = []
     for collection in listed:
         handle = collection.get("handle", "")
-        if PREORDER_WORDS.search(handle) and not NOT_PREORDER.search(handle) and handle not in names:
+        if collection_kind(handle) == PREORDER_KIND and handle not in names:
             names.append(handle)
     return names
+
+
+PREORDER_KIND, NEW_KIND = "preorder", "new"
+
+
+def collection_kind(handle):
+    """PREORDER_KIND for a collection named for pre-orders or coming soon, NEW_KIND for new releases or
+    arrivals, None for any other (and for one named for leaving pre-orders out)."""
+    handle = str(handle or "")
+    if not handle or NOT_PREORDER.search(handle):
+        return None
+    if PREORDER_WORDS.search(handle) or COMING_SOON.search(handle):
+        return PREORDER_KIND
+    if NEW_IN.search(handle):
+        return NEW_KIND
+    return None
 
 
 def preorder_handles(base, fetch=fetch, limit=20):
@@ -292,6 +317,71 @@ def preorder_handles(base, fetch=fetch, limit=20):
 
 # The background reader waits this long between products.json pages, on top of the shop's own rate.
 PAGE_PAUSE = 0.5
+
+
+def says_preorder(product):
+    """True when a Shopify product's own title or tags say pre-order."""
+    return bool(PREORDER_WORDS.search(product.get("title", "") or "")) or any(
+        PREORDER_TAG.match(str(tag)) for tag in product.get("tags", []) or []
+    )
+
+
+def product_offers(base, product, preorder=False):
+    """One Offer per priced variant of a Shopify product (a products.json entry).
+
+    ``preorder`` says the shop lists it in a pre-order collection; its own title or tags can say so too.
+    An available variant of a pre-order is PREORDER, an unavailable one OUT_OF_STOCK.
+    """
+    url = f"{base}/products/{product.get('handle', '')}"
+    preorder = preorder or says_preorder(product)
+    images = product.get("images") or []
+    product_image = images[0].get("src", "") if images else ""
+    published_at = parse_published(product.get("published_at"))
+    for variant in product.get("variants", []):
+        price = money(variant.get("price"))
+        if price is None:
+            continue
+        variant_image = (variant.get("featured_image") or {}).get("src", "")
+        if not variant.get("available", False):
+            availability = Listing.Availability.OUT_OF_STOCK
+        elif preorder:
+            availability = Listing.Availability.PREORDER
+        else:
+            availability = Listing.Availability.IN_STOCK
+        title = product.get("title", "")
+        variant_url = url
+        if variant.get("title") and variant["title"] != "Default Title":
+            title = f"{title} ({variant['title']})"
+            # Land the buyer on this variant, not the page's variant menu.
+            if variant.get("id"):
+                variant_url = f"{url}?variant={variant['id']}"
+        yield Offer(
+            title=title,
+            url=variant_url,
+            price=price,
+            ean=clean_ean(variant.get("barcode")),
+            availability=availability,
+            image=variant_image or product_image,
+            shop_type=product.get("product_type", "") or "",
+            vendor=product.get("vendor", "") or "",
+            tags=tuple(product.get("tags", []) or []),
+            published_at=published_at,
+        )
+
+
+def parse_published(value):
+    """A Shopify time ("2026-10-09T09:00:00+01:00") as an aware datetime, or None when missing or odd."""
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        moment = parse_datetime(value)
+    except ValueError:
+        return None
+    if moment is None:
+        return None
+    if timezone.is_naive(moment):
+        moment = timezone.make_aware(moment, dt_timezone.utc)
+    return moment
 
 
 def shopify_offers(retailer, fetch=fetch, pause=0.0):
@@ -327,42 +417,176 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0):
         elif handle == first_handle:
             return  # the shop repeats its first page instead of ending
         for product in products:
-            url = f"{base}/products/{product.get('handle', '')}"
-            preorder = bool(PREORDER_WORDS.search(product.get("title", ""))) or any(
-                PREORDER_TAG.match(tag) for tag in product.get("tags", [])
-            ) or product.get("handle") in preorders
-            images = product.get("images") or []
-            product_image = images[0].get("src", "") if images else ""
-            for variant in product.get("variants", []):
-                price = money(variant.get("price"))
-                if price is None:
-                    continue
-                variant_image = (variant.get("featured_image") or {}).get("src", "")
-                if not variant.get("available", False):
-                    availability = Listing.Availability.OUT_OF_STOCK
-                elif preorder:
-                    availability = Listing.Availability.PREORDER
-                else:
-                    availability = Listing.Availability.IN_STOCK
-                title = product.get("title", "")
-                variant_url = url
-                if variant.get("title") and variant["title"] != "Default Title":
-                    title = f"{title} ({variant['title']})"
-                    # Land the buyer on this variant, not the page's variant menu.
-                    if variant.get("id"):
-                        variant_url = f"{url}?variant={variant['id']}"
-                yield Offer(
-                    title=title,
-                    url=variant_url,
-                    price=price,
-                    ean=clean_ean(variant.get("barcode")),
-                    availability=availability,
-                    image=variant_image or product_image,
-                    shop_type=product.get("product_type", "") or "",
-                    vendor=product.get("vendor", "") or "",
-                    tags=tuple(product.get("tags", []) or []),
-                )
+            yield from product_offers(base, product, preorder=product.get("handle") in preorders)
         page += 1
+
+
+# The pre-order pulse ----------------------------------------------------------
+
+# Pages of one collection read in a pulse, as for the pre-order collections of a whole-shop read.
+COLLECTION_PAGES = 20
+PULSE_NOTE = "Pre-order pulse"
+HTTP_STATUS = re.compile(r"HTTP Error (\d{3})\b")
+
+
+@dataclass
+class Pulse:
+    """What one look at a shop's collections did."""
+
+    read: list = dataclasses.field(default_factory=list)   # handles whose products were read and applied
+    run: ImportRun | None = None
+    error: str = ""
+    status: int | None = None   # the HTTP status of a failed request, when it gave one
+    updated: int = 0
+    no_list: bool = False   # the shop has no collection list, so it is looked at weekly
+
+
+def status_of(error):
+    found = HTTP_STATUS.search(str(error))
+    return int(found.group(1)) if found else None
+
+
+def tracked_collections(listed):
+    """{handle: (kind, products_count, updated_at)} for the collections in a collections.json answer the pulse watches."""
+    tracked = {}
+    for collection in listed:
+        if not isinstance(collection, dict):
+            continue
+        handle = str(collection.get("handle") or "")[:200]
+        kind = collection_kind(handle)
+        if kind is None:
+            continue
+        try:
+            count = int(collection.get("products_count") or 0)
+        except (TypeError, ValueError):
+            count = 0
+        tracked[handle] = (kind, count, parse_published(collection.get("updated_at")))
+    return tracked
+
+
+def collection_products(base, handle, fetch, pause=0.0, stop=None):
+    """The products of one collection, page by page. Returns (products, finished): ``finished`` is False
+    when ``stop()`` said time was up before the last page, so the collection is read again next time."""
+    products, first = [], None
+    for page in range(1, COLLECTION_PAGES + 1):
+        if page > 1:
+            if stop is not None and stop():
+                return products, False
+            if pause:
+                time.sleep(pause)
+        try:
+            items = json.loads(fetch(f"{base}/collections/{handle}/products.json?limit=250&page={page}")).get("products", [])
+        except (json.JSONDecodeError, UnicodeDecodeError, AttributeError) as exc:
+            raise ImportError_(f"{base} did not return Shopify JSON for {handle}") from exc
+        if not items or not isinstance(items, list):
+            break
+        if page == 1:
+            first = items[0].get("handle")
+        elif items[0].get("handle") == first:
+            break   # the shop repeats its first page instead of ending
+        products.extend(item for item in items if isinstance(item, dict))
+        if len(items) < 250:
+            break
+    return products, True
+
+
+def poll_collections(retailer, fetch=fetch, now=None, pause=0.0, stop=None):
+    """One look at a Shopify shop's collection list, reading only the watched collections that changed.
+
+    One request for /collections.json. A watched collection (named for pre-orders, coming soon, new
+    releases or new arrivals) whose product count or change time moved since the last look, or that is
+    new, has its products read (up to COLLECTION_PAGES pages) and applied like a shop read that covers
+    part of the shop, on an ImportRun noted as the pulse. A product from a pre-order or coming soon
+    collection is a pre-order while available; one from a new releases or arrivals collection is applied
+    only when its own title or tags say pre-order, because being new says nothing about stock.
+
+    A shop that answers 404 or not JSON has no collection list: it is marked so and looked at weekly.
+    The look is stamped before the request, so a pulse that fails is not repeated in a loop. ``stop`` is
+    asked between requests; a collection left part read is read again at the next look.
+    """
+    now = now or timezone.now()
+    base = retailer.source_url.rstrip("/")
+    Retailer.objects.filter(pk=retailer.pk).update(collections_polled_at=now)
+    retailer.collections_polled_at = now
+    pulse = Pulse()
+
+    def has_list(ok):
+        pulse.no_list = not ok
+        if retailer.collections_ok is not ok:
+            Retailer.objects.filter(pk=retailer.pk).update(collections_ok=ok)
+            retailer.collections_ok = ok
+
+    try:
+        listed = json.loads(fetch(f"{base}/collections.json?limit=250")).get("collections")
+        if not isinstance(listed, list):
+            raise ValueError("no collections")
+    except ImportError_ as exc:
+        pulse.error, pulse.status = str(exc)[:300], status_of(exc)
+        if pulse.status in (404, 410):
+            has_list(False)
+        return pulse
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        has_list(False)
+        pulse.error = f"{base} has no collection list"
+        return pulse
+    has_list(True)
+
+    tracked = tracked_collections(listed)
+    known = {row.handle: row for row in RetailerCollection.objects.filter(retailer=retailer)}
+    gone = [handle for handle in known if handle not in tracked]
+    if gone:
+        RetailerCollection.objects.filter(retailer=retailer, handle__in=gone).delete()
+    changed = [
+        handle for handle, (_kind, count, updated) in tracked.items()
+        if handle not in known or known[handle].products_count != count or known[handle].updated_at != updated
+    ]
+    if not changed:
+        return pulse
+
+    pulse.run = run = ImportRun.objects.create(retailer=retailer, note=f"{PULSE_NOTE}: {', '.join(changed)}"[:200])
+    found = updated = 0
+    unmatched = []
+    try:
+        # As a whole-shop read does: prices in another currency are never applied.
+        currency = shop_currency(base, fetch=fetch)
+        if currency and currency != "GBP":
+            raise ImportError_(f"{base} prices in {currency}, not pounds. Prices were not imported.")
+        for attempt, handle in enumerate(changed):
+            if attempt and stop is not None and stop():
+                break
+            kind, count, changed_at = tracked[handle]
+            products, finished = collection_products(base, handle, fetch, pause=pause, stop=stop)
+            offers = []
+            for product in products:
+                for offer in product_offers(base, product, preorder=kind == PREORDER_KIND):
+                    if kind == PREORDER_KIND or offer.availability == Listing.Availability.PREORDER:
+                        offers.append(offer)
+            if offers:
+                n, changed_count, missed = apply_offers(retailer, offers, run=run, complete=False)
+                found, updated, unmatched = found + n, updated + changed_count, unmatched + missed
+            if finished:
+                RetailerCollection.objects.update_or_create(
+                    retailer=retailer, handle=handle,
+                    defaults={"products_count": count, "updated_at": changed_at, "last_read_at": now},
+                )
+                pulse.read.append(handle)
+    except ImportError_ as exc:
+        run.error = pulse.error = str(exc)[:300]
+        pulse.status = status_of(exc)
+    except Exception as exc:
+        run.error = f"The pulse stopped on an unexpected error: {type(exc).__name__}: {exc}"[:300]
+        raise
+    finally:
+        run.offers_found, run.listings_updated = found, updated
+        run.unmatched = "\n".join(unmatched)
+        run.finished_at = timezone.now()
+        run.save()
+        pulse.updated = updated
+        if updated:
+            from .signals import clear_list_caches
+
+            clear_list_caches(force=True)
+    return pulse
 
 
 # Any website: sitemap + schema.org product data -----------------------------
@@ -927,10 +1151,17 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     continue
             seen_products.add(product_pk)
             title = (offer.title or "")[:300]
-            if created or listing.url != offer.url or listing.title != title:
+            # The shop's own publishing time is kept from the first read that gives it, so a later
+            # republish cannot make a pre-order look as if it reached the site sooner than it did.
+            published = offer.published_at if listing.shop_published_at is None else None
+            if created or listing.url != offer.url or listing.title != title or published:
                 listing.url = offer.url
                 listing.title = title
-                listing.save(update_fields=["url", "title"])
+                fields = ["url", "title"]
+                if published:
+                    listing.shop_published_at = published
+                    fields.append("shop_published_at")
+                listing.save(update_fields=fields)
             if offer.image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
                 images_by_product.setdefault(product_pk, offer.image)
             delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)

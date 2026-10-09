@@ -1455,6 +1455,10 @@ def checks_page(request):
             message = autopilot.undo(answer) if answer is not None else ""
             if message:
                 messages.success(request, message)
+            elif answer is not None and answer.kind == CheckAnswer.Kind.MERGE and answer.product is not None \
+                    and not answer.product.is_active:
+                messages.warning(request, f"{answer.product.name} was merged into another product since. Undo that "
+                                          "merge first, then this one.")
             else:
                 messages.warning(request, "That one can no longer be undone. Check it on its own page.")
         elif action == "merge_sure":

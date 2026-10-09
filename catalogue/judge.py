@@ -56,7 +56,7 @@ from .types import type_label
 logger = logging.getLogger(__name__)
 
 Ask, Kind = ClaudeAsk, CheckAnswer.Kind
-PROMPT_VERSION = 2
+PROMPT_VERSION = 3
 
 # The models the owner can choose, with what each answer usually costs at medium effort.
 MODELS = {
@@ -438,8 +438,9 @@ class Evidence:
             return {**ours(product), "shop_titles": self.elsewhere(product.pk, None)}
 
         key = pair_key(keep, other)
+        first, second = sorted((keep, other), key=lambda product: product.pk)
         evidence = {
-            "row": key, "kind": "pair", "first": side(keep), "second": side(other),
+            "row": key, "kind": "pair", "first": side(first), "second": side(second),
             "same_barcode": bool(keep.ean) and keep.ean == other.ean,
         }
         return Row("pair", key, evidence, product=keep, other=other)
@@ -603,7 +604,12 @@ def settle_failed(ask, error, kind, worst):
     counted; a request Anthropic refused, or one that never reached it, cost nothing."""
     import anthropic
 
-    timed_out = isinstance(error, anthropic.APITimeoutError)
+    import httpx2
+
+    # A failure before the request left (no connection, or no free connection) cost nothing; one after it
+    # may have been paid for, so its worst case stays counted.
+    unsent = isinstance(error.__cause__, (httpx2.ConnectError, httpx2.ConnectTimeout, httpx2.PoolTimeout, httpx2.ProxyError))
+    timed_out = isinstance(error, anthropic.APIConnectionError) and not unsent
     status = getattr(error, "status_code", None)
     detail = str(getattr(error, "message", "") or error)
     outcome = Ask.Outcome.SENT if timed_out else Ask.Outcome.REJECTED if kind == "rejected" else Ask.Outcome.ERROR
@@ -625,10 +631,18 @@ def check_key(client, state, previous_run):
     saved_since = state.key_saved_at and (previous_run is None or state.key_saved_at > previous_run)
     if not (saved_since or state.problem in ("key", "model")):
         return
+    import anthropic
+
     try:
         client.models.retrieve(state.model)
     except Exception as error:
         kind = problem_of(error)
+        if isinstance(error, anthropic.APIError):
+            logger.warning("Claude judge: the key check got %s %s %s (request %s)", getattr(error, "status_code", None),
+                           getattr(error, "type", ""), str(getattr(error, "message", "") or error)[:300],
+                           getattr(error, "request_id", ""))
+        else:
+            logger.exception("Claude judge: the key check failed", exc_info=error)
         if kind in ("busy", "rejected"):
             return
         raise Stop(kind, str(error)) from error
@@ -830,15 +844,20 @@ def run(client=None, now=None, dry_run=False, force=False):
     started = time.monotonic()
     client = client or make_client(key())
     answers, trusted = {}, {}
-    rejected = 0
+    rejected, rejected_asks = 0, []
     previous_run = state.last_run_at
     ClaudeJudge.objects.filter(pk=state.pk).update(last_run_at=now)
     try:
         check_key(client, state, previous_run)
+        from . import crawl
+
         for row in rows:
             state = ClaudeJudge.load()
             if not state.enabled or not key():
                 result.note = "Claude was switched off"
+                break
+            if crawl.all_paused():
+                result.note = "Pause all is on"
                 break
             if time.monotonic() - started > RUN_SECONDS:
                 result.note = "Stopped for time"
@@ -866,11 +885,14 @@ def run(client=None, now=None, dry_run=False, force=False):
                 settle_failed(ask, error, kind, worst)
                 if kind == "rejected":
                     rejected += 1
+                    rejected_asks.append(ask.pk)
                     if rejected >= REJECTED_IN_A_ROW:
+                        # Every request refused: the fault is the site's, not the rows'. They are asked again.
+                        Ask.objects.filter(pk__in=rejected_asks).update(outcome=Ask.Outcome.ERROR)
                         raise Stop("bug", str(error)) from error
                     continue
                 raise Stop(kind, str(error)) from error
-            rejected = 0
+            rejected, rejected_asks = 0, []
             outcome, answer, category = read_answer(message, row)
             cost = cost_micros(message, state.model)
             usage = message.usage
@@ -896,10 +918,13 @@ def run(client=None, now=None, dry_run=False, force=False):
             # A wrong match is decided once both prices are answered.
             if row.partner and row.partner not in answers and any(r.key == row.partner for r in rows):
                 continue
+            # Suggest only, Switch Claude off or Pause all tapped while the question was out still counts.
+            fresh = ClaudeJudge.load()
+            allowed = fresh.enabled and fresh.may_act and not crawl.all_paused()
             for todo in ([row] if not row.partner else [r for r in rows if r.key in (row.key, row.partner)]):
                 todo_ask = ask if todo.key == row.key else Ask.objects.filter(row_key=todo.key).order_by("-pk").first()
                 todo_answer = answers.get(todo.key)
-                may_act = state.may_act and trusted.get(todo.key, False) and (
+                may_act = allowed and trusted.get(todo.key, False) and (
                     not todo.partner or trusted.get(todo.partner, False))
                 action = decide(todo, todo_answer, may_act, partner=answers.get(todo.partner))
                 if action is None:
@@ -920,7 +945,7 @@ def run(client=None, now=None, dry_run=False, force=False):
         result.note = "The database was busy"
     else:
         ClaudeJudge.objects.filter(pk=state.pk).update(problem="", problem_at=None)
-    not_asked = max(0, total - result.asked)
+    not_asked = result.left = max(0, total - result.asked)
     note = f"asked {result.asked}, sorted {result.acted}, {result.suggested} for you to check, {not_asked} not asked yet"
     if result.note:
         note += f". {result.note.rstrip('.')}"

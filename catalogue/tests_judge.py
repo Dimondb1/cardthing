@@ -722,7 +722,7 @@ class ReviewFindingTests(Base):
         self.found()
 
         def answer(key, params):
-            raise anthropic.APIConnectionError(request=httpx2.Request("POST", URL))
+            raise anthropic.APIConnectionError(request=httpx2.Request("POST", URL)) from httpx2.ConnectError("refused")
 
         self.ask(answer)
         self.assertEqual((Ask.objects.get().outcome, judge.spent_this_month()), (Ask.Outcome.ERROR, 0))
@@ -850,3 +850,156 @@ class ReviewFindingTests(Base):
             page = self.client.get(reverse("checks"))
         self.assertContains(page, "Claude is switched off in the server settings.")
         self.assertNotContains(page, 'value="Switch Claude on"')
+
+
+class RecheckTests(Base):
+    """One test for each defect the second review found in the fixes."""
+
+    def setUp(self):
+        super().setUp()
+        from .management.commands.merge_duplicates import merge_undoable, unmerge
+
+        self.merge_undoable, self.unmerge = merge_undoable, unmerge
+
+    def pair(self):
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        return keep, other
+
+    def test_undo_keeps_the_kept_products_own_sticky_exclusion(self):
+        keep, other = self.pair()
+        a, b = self.shop(100, product=keep, title=keep.name), self.shop(104, product=keep, title=keep.name)
+        c = self.shop(25, product=keep, title=keep.name)
+        sanity.judge_product(keep.pk)
+        Listing.objects.filter(pk=b.pk).update(availability=Listing.Availability.OUT_OF_STOCK)
+        sanity.judge_product(keep.pk)
+        self.assertEqual(Listing.objects.get(pk=c.pk).sanity, Listing.Sanity.EXCLUDED)
+        self.shop(102, product=other, title=other.name)
+        note = self.merge_undoable(keep, [other])
+        self.unmerge(note)
+        self.assertEqual(Listing.objects.get(pk=c.pk).sanity, Listing.Sanity.EXCLUDED)
+        self.assertEqual(Listing.objects.get(pk=a.pk).sanity, Listing.Sanity.OK)
+
+    def test_undo_keeps_the_kept_products_own_history_when_the_other_was_dearer(self):
+        from .models import DailyLowestPrice
+
+        keep, other = self.pair()
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(70, product=other, title=other.name)
+        today = timezone.localdate()
+        DailyLowestPrice.objects.create(product=keep, date=today, price=Decimal("50.00"))
+        note = self.merge_undoable(keep, [other])
+        later = today + timedelta(days=1)
+        DailyLowestPrice.objects.create(product=keep, date=later, price=Decimal("50.00"))
+        self.unmerge(note)
+        lows = dict(DailyLowestPrice.objects.filter(product=keep).values_list("date", "price"))
+        self.assertEqual(lows, {today: Decimal("50.00"), later: Decimal("50.00")})
+
+    def test_an_undo_that_cannot_finish_changes_nothing(self):
+        keep, other = self.pair()
+        self.shop(50, product=keep, title=keep.name)
+        other.ean = "5012345678900"
+        other.save(update_fields=["ean"])
+        self.shop(51, product=other, title=other.name)
+        note = self.merge_undoable(keep, [other])
+        answer = CheckAnswer.objects.create(kind=CheckAnswer.Kind.MERGE, what="m", product=keep, undo_note=note)
+        Product.objects.filter(pk=other.pk).delete()
+        self.assertEqual(autopilot.undo(answer), "")
+        keep.refresh_from_db()
+        self.assertEqual(keep.ean, "5012345678900")
+        self.assertIsNone(CheckAnswer.objects.get(pk=answer.pk).undone_at)
+
+    def test_undo_works_when_the_old_addresses_owner_has_gone(self):
+        from .models import ProductAlias
+
+        keep, other = self.pair()
+        gone = make_product(self.set, name="Surging Sparks Old Name")
+        ProductAlias.objects.create(slug=other.slug, product=gone)
+        note = self.merge_undoable(keep, [other])
+        Product.objects.filter(pk=gone.pk).delete()
+        self.assertEqual(len(self.unmerge(note)), 1)
+        self.assertFalse(ProductAlias.objects.filter(slug=other.slug).exists())
+
+    def test_a_found_row_naming_the_merged_product_follows_the_merge_and_back(self):
+        keep, other = self.pair()
+        row = self.found(product=other, title=other.name)
+        note = self.merge_undoable(keep, [other])
+        self.assertEqual(ShopProduct.objects.get(pk=row.pk).suggested, keep)
+        self.unmerge(note)
+        self.assertEqual(ShopProduct.objects.get(pk=row.pk).suggested, other)
+
+    def test_a_pairs_evidence_is_the_same_whichever_product_is_kept(self):
+        keep, other = self.pair()
+        build = judge.Evidence({keep.pk, other.pk})
+        self.assertEqual(build.pair(keep, other).fingerprint, build.pair(other, keep).fingerprint)
+
+    def test_merges_undone_out_of_order_wait_for_the_later_one(self):
+        keep, other = self.pair()
+        top = make_product(self.set, name="Pokemon Surging Sparks Elite Trainer Box")
+        self.shop(50, product=other, title=other.name)
+        first = CheckAnswer.objects.create(kind=CheckAnswer.Kind.MERGE, what="1", product=keep,
+                                           undo_note=self.merge_undoable(keep, [other]))
+        CheckAnswer.objects.create(kind=CheckAnswer.Kind.MERGE, what="2", product=top,
+                                   undo_note=self.merge_undoable(top, [keep]))
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        response = self.client.post(reverse("checks"), {"action": "undo", "answer": first.pk}, follow=True)
+        self.assertContains(response, "Undo that merge first")
+        self.assertFalse(Product.objects.get(pk=other.pk).is_active)
+
+    def test_what_left_the_server_is_counted_and_what_never_did_is_not(self):
+        cases = [
+            (anthropic.APIConnectionError(request=httpx2.Request("POST", URL)), httpx2.RemoteProtocolError("gone"), Ask.Outcome.SENT),
+            (anthropic.APITimeoutError(request=httpx2.Request("POST", URL)), httpx2.ConnectTimeout("no route"), Ask.Outcome.ERROR),
+            (anthropic.APITimeoutError(request=httpx2.Request("POST", URL)), httpx2.ReadTimeout("slow"), Ask.Outcome.SENT),
+        ]
+        for err, cause, outcome in cases:
+            err.__cause__ = cause
+            ask = Ask.objects.create(kind="found", row_key="found:1", fingerprint="x", model_asked="m", effort="low")
+            judge.settle_failed(ask, err, judge.problem_of(err), 280_000)
+            ask.refresh_from_db()
+            self.assertEqual((ask.outcome, ask.reserved_micros > 0), (outcome, outcome == Ask.Outcome.SENT), cause)
+
+    def test_suggest_only_tapped_while_a_question_is_out_stops_that_answer_acting(self):
+        self.switch_on()
+        self.shop(100)
+        self.shop(104)
+        row = self.found(price="101.00")
+
+        def answer(key, params):
+            ClaudeJudge.objects.filter(pk=1).update(may_act=False)
+            return reply(key)
+
+        self.ask(answer)
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.REVIEW)
+
+    def test_pause_all_stops_a_run_already_going(self):
+        self.switch_on(may_act=False)
+        for n in range(3):
+            self.found(title=f"Surging Sparks Booster Display {n}")
+
+        def answer(key, params):
+            WorkerState.objects.update_or_create(pk=1, defaults={"paused": True})
+            return reply(key)
+
+        client, result = self.ask(answer)
+        self.assertEqual((len(client.sent), result.note), (1, "Pause all is on"))
+
+    def test_rows_a_systematic_refusal_hit_are_asked_again(self):
+        self.switch_on(may_act=False)
+        for n in range(4):
+            self.found(title=f"Surging Sparks Booster Display {n}")
+        refusal = error(anthropic.BadRequestError, 400, "invalid_request_error", "Unexpected value for the anthropic-beta header")
+        with mock.patch("catalogue.notify.owner", return_value=True), self.assertLogs("catalogue.judge", "WARNING"):
+            self.ask(lambda key, params: (_ for _ in ()).throw(refusal))
+        self.assertFalse(Ask.objects.exclude(outcome=Ask.Outcome.ERROR).exists())
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None, problem="", problem_at=None)
+        client, _ = self.ask()
+        self.assertEqual(len(client.sent), 4)
+
+    def test_the_cron_log_says_how_many_rows_are_left(self):
+        self.switch_on(may_act=False)
+        for n in range(judge.ROWS_PER_RUN + 2):
+            self.found(title=f"Surging Sparks Booster Display {n}")
+        _, result = self.ask()
+        self.assertEqual(result.left, 2)

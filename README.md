@@ -438,8 +438,13 @@ site's own rules decide whether its answer may act:
   the product. "Same" never counts a price as right.
 - **Possible duplicates:** "different" keeps the pair apart. "Same" never
   merges by itself: **Merge the pairs Claude is sure are the same** merges
-  them on your tap, each so it can be undone (the merged product is switched
-  off, not deleted, and Undo puts back its listings, history and address).
+  them on your tap, each so it can be undone. The merged product is switched
+  off, not deleted; its barcode, shop pages and found rows move to the kept
+  product so shop reads never price it; and Undo puts back its listings,
+  history, address and every price's verdict as it was. Of the days the kept
+  product recorded while merged, only lows under its own cheapest price are
+  removed. Merges undo in reverse order: a product merged on into a third
+  waits until that later merge is undone.
 
 It starts in **trial**: it only suggests, and its answer shows under each
 row ("Claude, 9 Oct: same product, sure. ..."). Once you agree with it, tap

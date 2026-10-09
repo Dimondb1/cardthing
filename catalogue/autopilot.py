@@ -382,14 +382,18 @@ def undo(answer, now=None):
             message = undo_set(answer)
         elif answer.kind == Kind.APART:
             message = "Undone: the two products may be suggested as duplicates again."
-        elif answer.kind == Kind.MERGE and answer.undo_note:
+        elif answer.kind == Kind.MERGE and answer.undo_note and answer.product is not None and answer.product.is_active:
+            # A kept product a later merge switched off waits until that merge is undone.
             from .management.commands.merge_duplicates import unmerge
 
             restored = unmerge(answer.undo_note)
             if restored:
                 names = ", ".join(product.name for product in restored)
                 message = f"Undone: {names} is its own product again, with its prices and its address."
-        if message:
+        if not message:
+            # Whatever was tried is put back: an Undo that cannot finish changes nothing.
+            transaction.set_rollback(True)
+        else:
             answer.undone_at = now or timezone.now()
             answer.save(update_fields=["undone_at"])
             if answer.ask_id:

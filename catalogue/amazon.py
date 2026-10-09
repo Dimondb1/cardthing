@@ -213,12 +213,12 @@ def amazon_offers(retailer, limit=None, call_api=None, pause=PAUSE):
         time.sleep(pause)
 
     budget = max(0, limit - calls)
-    # The products visitors want most first, then never tried, then the longest ago; products with a
-    # barcode ahead of the rest.
+    # The products visitors want most first (unless searched in the last three days), then never tried,
+    # then the longest ago; products with a barcode ahead of the rest.
     fresh = products.filter(amazon_asin="").order_by(F("amazon_checked_at").asc(nulls_first=True), "-ean", "-pk")
     checked = []
     found = {}
-    for product in interest_first(fresh, budget):
+    for product in interest_first(fresh, budget, "amazon_checked_at"):
         keywords = product.ean or product.name
         answer = api("SearchItems", search_payload(keywords, tag))
         checked.append(product.pk)

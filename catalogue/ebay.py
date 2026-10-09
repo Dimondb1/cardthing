@@ -529,13 +529,14 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
             mark_checked()
             logger.info("eBay: %d known listings still live, %d ended or not reached, now searching", len(checked), len(gone))
 
-        # New lookups: the products visitors want most first, then never tried or tried longest ago,
-        # then the products most shops stock.
+        # New lookups: the products visitors want most first (unless searched in the last three days),
+        # then never tried or tried longest ago, then the products most shops stock.
         fresh = interest_first(
             products.exclude(pk__in=existing)
             .annotate(shops=Count("listings"))
             .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk"),
             limit - len(gone),
+            "ebay_checked_at",
         )
         failures = 0
         specifics = {}

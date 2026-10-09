@@ -177,7 +177,29 @@ class LookupTests(TestCase):
         api = FakeApi([])
         ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
         self.assertIn("Booster+Bundle", api.searches()[0])
-        # Tried today and still wanted, the bundle stays first tomorrow.
+        # Searched today and still wanted, the bundle waits behind the box, never searched.
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("gtin=0820650853500", api.searches()[0])
+        # Three days on, its clicks put it first again.
+        Product.objects.update(ebay_checked_at=timezone.now() - datetime.timedelta(days=3, minutes=1))
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("Booster+Bundle", api.searches()[0])
+
+    def test_a_new_or_pre_order_product_searched_lately_does_not_go_before_one_never_searched(self):
+        from .testing import make_retailer
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        # An old box never searched, and a bundle added today, on pre-order and searched an hour ago.
+        Product.objects.filter(pk=self.etb.pk).update(created_at=timezone.now() - datetime.timedelta(days=60))
+        make_listing(self.bundle, make_retailer("Shop A"), availability=Listing.Availability.PREORDER)
+        Product.objects.filter(pk=self.bundle.pk).update(ebay_checked_at=timezone.now() - datetime.timedelta(hours=1))
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("gtin=0820650853500", api.searches()[0])
+        # Then the one searched longest ago, as before.
         api = FakeApi([])
         ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
         self.assertIn("Booster+Bundle", api.searches()[0])

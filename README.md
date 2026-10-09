@@ -177,8 +177,11 @@ hidden once we have an Amazon price for the product. The hourly import reads Ama
 found there is refreshed in batches of ten, then up to
 `RIPRAPTOR_AMAZON_DAILY_LIMIT` products are looked up, by barcode where we
 have one and otherwise by name. The products visitors want most go first
-(the interest score the stockist finder uses), then those never tried,
-then those tried longest ago. A result is kept only when it matches the
+(clicks, views, watchlists, alerts and the owner's "Search other shops
+now" tap; being new or on pre-order does not count here), then those never
+tried, then those tried longest ago. A wanted product searched in the last
+three days waits its normal turn, so the same one is not searched every
+day ahead of products never tried. A result is kept only when it matches the
 product asked about. Amazon's own tracked link is stored on each listing,
 so the shop needs no affiliate link format. The Terms page carries the
 Amazon Associates line while Amazon is an active shop. Amazon removes API
@@ -202,9 +205,11 @@ then run `setup_shops`, which adds eBay as a shop only when the keys are
 set. The hourly import reads eBay once a day, up to
 `RIPRAPTOR_EBAY_DAILY_LIMIT` products a run: those already listed first,
 then the rest, by barcode where we have one and otherwise by name. Of the
-rest, the products visitors want most go first (the interest score the
-stockist finder uses), then those never tried or tried longest ago, then
-those most shops stock. For
+rest, the products visitors want most go first (counted as for Amazon
+above, and waiting their normal turn for three days after a search), then
+those never tried or tried longest ago, then those most shops stock. The
+"Not looked up yet" estimate on Insights leaves out the searches that go
+back to wanted products. For
 each product it asks for new, buy-it-now items in Britain delivered to a
 London postcode, cheapest first including postage, from sellers with at
 least 95 percent feedback, and keeps the cheapest whose title matches the

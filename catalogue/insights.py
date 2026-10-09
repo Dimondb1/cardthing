@@ -437,8 +437,19 @@ def ebay_coverage():
     cheapest = sum(1 for pk, price in ebay_prices.items() if lowest.get(pk) is not None and price <= lowest[pk])
     from django.conf import settings as dj
 
+    from .finder import MARKET_RETRY_AFTER, interest_scores
+
     per_day = getattr(dj, "RIPRAPTOR_EBAY_DAILY_LIMIT", 4000) or 4000
     waiting = total - checked
+    # Wanted products already searched and not on eBay are searched again, each at most once every
+    # three days, ahead of products not searched yet, so those searches are not counted as new ones.
+    wanted = interest_scores(visitors_only=True)
+    again = (
+        products.filter(ebay_checked_at__isnull=False, pk__in=list(wanted))
+        .exclude(pk__in=listings.values("product")).count()
+        if wanted else 0
+    )
+    new_per_day = max(1, per_day - -(-again // MARKET_RETRY_AFTER.days))
     missed = list(
         Product.objects.for_lists()
         .filter(ebay_checked_at__isnull=False, in_stock_count__gte=2)
@@ -457,7 +468,7 @@ def ebay_coverage():
         "last_run": last_run,
         "cheapest": cheapest,
         "waiting": waiting,
-        "days_left": -(-waiting // per_day) if waiting else 0,
+        "days_left": -(-waiting // new_per_day) if waiting else 0,
         "missed": [{"name": row["name"], "shops": row["in_stock_count"]} for row in missed],
     }
 

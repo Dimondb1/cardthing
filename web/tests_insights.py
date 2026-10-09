@@ -1,12 +1,12 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from catalogue import insights
-from catalogue.models import DailyPageView, DailySearch, OutboundClick
+from catalogue.models import DailyPageView, DailySearch, OutboundClick, Product, Retailer
 from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
 
 HUMAN = {"HTTP_USER_AGENT": "Mozilla/5.0 (iPhone) Safari/605.1"}
@@ -99,6 +99,31 @@ class InsightsPageTests(TestCase):
         # 33 since the pre-order line (listings first seen on pre-order this week) joined the report.
         with self.assertNumQueries(33):
             insights.report(30)
+
+
+class EbayCoverageTests(TestCase):
+    @override_settings(RIPRAPTOR_EBAY_DAILY_LIMIT=3)
+    def test_days_left_leaves_out_the_searches_that_go_back_to_wanted_products(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        product_set = make_set(make_game())
+        ebay = Retailer.objects.create(
+            name="eBay", slug="ebay", website="https://www.ebay.co.uk/", source_type=Retailer.Source.EBAY
+        )
+        shop = make_retailer("Harbour Games")
+        for n in range(6):
+            make_product(product_set, name=f"Prismatic Evolutions Mini Tin {n}", slug=f"pe-tin-{n}")
+        self.assertEqual(insights.ebay_coverage()["days_left"], 2)   # 6 waiting at 3 a day
+        searched = timezone.now() - timedelta(days=1)
+        for n in range(4):
+            wanted = make_product(product_set, name=f"Prismatic Evolutions Booster Bundle {n}", slug=f"pe-bb-{n}")
+            Product.objects.filter(pk=wanted.pk).update(ebay_checked_at=searched)
+            OutboundClick.objects.create(product=wanted, retailer=shop)
+        make_listing(wanted, ebay)   # found on eBay, so not searched again
+        # Three wanted products searched again once in three days take one search a day: 6 at 2 a day.
+        self.assertEqual(insights.ebay_coverage()["days_left"], 3)
 
 
 class VisitorTests(TestCase):

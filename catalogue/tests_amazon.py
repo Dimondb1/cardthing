@@ -164,6 +164,20 @@ class LookupTests(TestCase):
         amazon.amazon_offers(None, limit=1, call_api=api, pause=0)
         self.assertEqual(self.calls[-1][1]["Keywords"], "0820650853500")
 
+    def test_a_clicked_product_searched_lately_waits_behind_one_never_searched(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        OutboundClick.objects.create(product=self.box, retailer=make_retailer("Shop A"))
+        Product.objects.filter(pk=self.box.pk).update(amazon_checked_at=timezone.now() - datetime.timedelta(days=1))
+        api = self.fake_api({"SearchItems": {}})
+        amazon.amazon_offers(None, limit=1, call_api=api, pause=0)
+        self.assertEqual(self.calls[-1][1]["Keywords"], "0820650853500")
+        # Three days after its last search the click puts it first again.
+        Product.objects.update(amazon_checked_at=timezone.now() - datetime.timedelta(days=3, minutes=1))
+        Product.objects.filter(pk=self.etb.pk).update(amazon_checked_at=None)
+        amazon.amazon_offers(None, limit=1, call_api=api, pause=0)
+        self.assertEqual(self.calls[-1][1]["Keywords"], self.box.name)
+
     def test_search_other_shops_now_also_moves_a_product_up_the_amazon_queue(self):
         from . import finder
 

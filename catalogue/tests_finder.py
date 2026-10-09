@@ -233,11 +233,40 @@ class CandidateTests(FinderCase):
         everything = list(queue)
         scores = {everything[-1].pk: 9, everything[2].pk: 9, everything[3].pk: 1}
         with self.assertNumQueries(2):
-            picked = finder.interest_first(queue, 4, scores=scores)
+            picked = finder.interest_first(queue, 4, "ebay_checked_at", scores=scores)
             self.assertEqual(picked[0].game.slug, everything[2].game.slug)   # the game came with it
         self.assertEqual(picked, [everything[2], everything[-1], everything[3], everything[0]])
-        self.assertEqual(finder.interest_first(queue, 0, scores=scores), [])
-        self.assertEqual(finder.interest_first(queue, -3, scores=scores), [])
+        self.assertEqual(finder.interest_first(queue, 0, "ebay_checked_at", scores=scores), [])
+        self.assertEqual(finder.interest_first(queue, -3, "ebay_checked_at", scores=scores), [])
+
+    def test_interest_first_lifts_a_wanted_product_at_most_once_in_three_days(self):
+        older = make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pe-bundle-two")
+        queue = Product.objects.order_by("pk")
+        scores = {older.pk: 9}
+        now = timezone.now()
+
+        def first(checked_at):
+            Product.objects.filter(pk=older.pk).update(ebay_checked_at=checked_at)
+            return finder.interest_first(queue, 1, "ebay_checked_at", scores=scores, now=now)[0]
+
+        self.assertEqual(first(None), older)                              # wanted and never searched
+        self.assertEqual(first(now - timedelta(hours=1)), self.etb)       # searched an hour ago: waits its turn
+        self.assertEqual(first(now - timedelta(days=2)), self.etb)
+        self.assertEqual(first(now - timedelta(days=3, minutes=1)), older)
+        # The owner's tap after that search lifts it again straight away.
+        finder.boost(older.pk, now=now)
+        self.assertEqual(first(now - timedelta(hours=1)), older)
+
+    def test_marketplace_interest_counts_only_what_visitors_and_the_owner_did(self):
+        Product.objects.update(created_at=timezone.now() - timedelta(days=60))
+        new = make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pe-bundle-two")
+        make_listing(new, self.gg, availability=Listing.Availability.PREORDER)
+        self.assertEqual(finder.interest_scores()[new.pk], finder.NEW_POINTS + finder.PREORDER_POINTS)
+        self.assertNotIn(new.pk, finder.interest_scores(visitors_only=True))
+        OutboundClick.objects.create(product=self.etb, retailer=self.home)
+        finder.boost(new.pk)
+        scores = finder.interest_scores(visitors_only=True)
+        self.assertEqual((scores[self.etb.pk], scores[new.pk]), (finder.CLICK_POINTS, finder.BOOST_POINTS))
 
 
 class LastReadTests(FinderCase):

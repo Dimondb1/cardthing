@@ -70,6 +70,9 @@ BOOST_KEY = "finder:boost"
 RETRY_AFTER = timedelta(days=14)
 HOT_RETRY_AFTER = timedelta(days=7)
 HOT_INTEREST = 10
+# eBay and Amazon listings come and go within days, so a wanted product is searched there again
+# after three, but never every day ahead of products not searched yet.
+MARKET_RETRY_AFTER = timedelta(days=3)
 # A shop that could not be asked (a timeout, an error page) is asked again the next day.
 ERROR_RETRY_AFTER = timedelta(days=1)
 # A shop whose search answers 404 or not with JSON is not searched for a week.
@@ -113,12 +116,13 @@ def boost(product_id, now=None):
     Product.objects.filter(pk=product_id).update(finder_checked_at=None)
 
 
-def interest_scores(now=None):
+def interest_scores(now=None, visitors_only=False):
     """{product id: points} for every active product with any, in four queries.
 
     5 per click to a shop in 7 days, 3 per product page view and 3 per loaded watchlist row in 2 days,
     10 per confirmed stock alert, 2 when any shop has it on pre-order, 2 when added in the last 14 days,
-    and 20 for an hour after the owner asks for a search.
+    and 20 for an hour after the owner asks for a search. ``visitors_only`` leaves out the pre-order and
+    new points, which nobody asked for, so only what visitors and the owner did counts.
     """
     now = now or timezone.now()
     today = timezone.localdate(now)
@@ -146,19 +150,20 @@ def interest_scores(now=None):
     preorder = Q(
         listings__availability=Listing.Availability.PREORDER, listings__is_active=True, listings__retailer__is_active=True
     )
+    products = Product.objects.filter(is_active=True)
+    if visitors_only:
+        products = products.annotate(preorders=Value(0, output_field=IntegerField()))
+    else:
+        products = products.annotate(preorders=Count("listings", filter=preorder))
     scores = {}
-    for pk, slug, created, preorders in (
-        Product.objects.filter(is_active=True)
-        .annotate(preorders=Count("listings", filter=preorder))
-        .values_list("pk", "slug", "created_at", "preorders")
-    ):
+    for pk, slug, created, preorders in products.values_list("pk", "slug", "created_at", "preorders"):
         points = (
             CLICK_POINTS * clicks.get(pk, 0) + VIEW_POINTS * views.get(slug, 0)
             + WATCHED_POINTS * watched.get(slug, 0) + ALERT_POINTS * alerts.get(pk, 0)
         )
         if preorders:
             points += PREORDER_POINTS
-        if created and created >= new_since:
+        if created and created >= new_since and not visitors_only:
             points += NEW_POINTS
         if pk in boosted:
             points += BOOST_POINTS
@@ -167,21 +172,35 @@ def interest_scores(now=None):
     return scores
 
 
-def interest_first(queryset, limit, scores=None, now=None):
+def interest_first(queryset, limit, checked, scores=None, now=None):
     """Up to ``limit`` products from an ordered queryset, the ones visitors want most first.
 
-    Equal interest keeps the queryset's own order, so a product nobody has looked at waits where it
-    always did. Used by the eBay and Amazon lookups to spend each day's searches on wanted products.
+    ``checked`` names the field holding when the product was last searched there. Only what visitors
+    and the owner did counts (no points for being new or on pre-order), and a product searched in the
+    last three days counts none until the owner taps Search other shops now again, so the same wanted
+    product is not searched every day ahead of products never searched. Equal interest keeps the
+    queryset's own order, so a product nobody wants waits where it always did. Used by the eBay and
+    Amazon lookups to spend each day's searches on wanted products.
     """
     limit = max(0, limit)
     if not limit:
         return []
-    scores = interest_scores(now) if scores is None else scores
-    pks = list(queryset.values_list("pk", flat=True))
-    pks.sort(key=lambda pk: -scores.get(pk, 0))   # stable, so ties keep the queryset's order
-    pks = pks[:limit]
-    rows = queryset.in_bulk(pks)
-    return [rows[pk] for pk in pks if pk in rows]
+    now = now or timezone.now()
+    scores = interest_scores(now, visitors_only=True) if scores is None else scores
+    held = boosts(now)
+    since = now - MARKET_RETRY_AFTER
+
+    def lift(row):
+        pk, at = row
+        if at is None or at < since or (pk in held and held[pk] > at):
+            return -scores.get(pk, 0)
+        return 0
+
+    rows = list(queryset.values_list("pk", checked))
+    rows.sort(key=lift)   # stable, so ties keep the queryset's order
+    pks = [pk for pk, _ in rows[:limit]]
+    found = queryset.in_bulk(pks)
+    return [found[pk] for pk in pks if pk in found]
 
 
 # Candidates -------------------------------------------------------------------------------------

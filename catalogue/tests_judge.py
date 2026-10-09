@@ -1159,7 +1159,7 @@ class FeedbackTests(Base):
         self.ask(lambda key, params: reply(key, reason="The display is the booster box."))
         page = self.client.get(self.url)
         self.assertContains(page, "Recent runs (1)")
-        self.assertContains(page, "looked at 1, sorted 0, 1 for you to check, 0 not asked yet, $0.02")
+        self.assertContains(page, "looked at 1, sorted 0, 0 need you, 1 can wait, 0 not asked yet, $0.02")
         self.assertContains(page, "Claude's last 1 answer")
         self.assertContains(page, f"&quot;Pokemon Surging Sparks Display&quot; at {row.retailer.name} for {BOX}")
         self.assertContains(page, "Same product, sure. The display is the booster box. Suggested, waiting for you.")
@@ -1182,14 +1182,14 @@ class FeedbackTests(Base):
             self.ask(now=timezone.now() + timedelta(seconds=1))
         subject, title = told.call_args[0][:2]
         self.assertEqual(subject, judge.FINISHED)
-        self.assertEqual(title, "Claude looked at 1: 0 sorted, 1 for you to check")
+        self.assertEqual(title, "Claude looked at 1: 0 sorted, 0 need you, 1 can wait")
         self.assertFalse(told.call_args.kwargs["once_a_day"])
         self.found(title="Surging Sparks Booster Display Box")
         ClaudeJudge.objects.filter(pk=1).update(last_run_at=None, asked_at=None)
         with mock.patch("catalogue.notify.owner", return_value=True) as told:
             self.ask()
         self.assertEqual(told.call_args[0][0], judge.DAILY)
-        self.assertEqual(told.call_args[0][1], "Claude today: 2 looked at, 0 sorted, 2 for you to check")
+        self.assertEqual(told.call_args[0][1], "Claude today: 2 looked at, 0 sorted, 0 need you, 2 can wait")
 
     def test_a_run_that_dies_says_so_on_the_page(self):
         self.switch_on(may_act=False)
@@ -1340,7 +1340,7 @@ class EarlierAnswerTests(Base):
         self.assertIn("Left for you: Claude was only fairly sure.", page)
         self.assertIn("Left for you: the price is far from what other shops charge.", page)
         self.assertIn("Left for you: Claude never merges by itself.", page)
-        self.assertIn("Left for you: Claude never counts a price as right. Tap This price is right if it is.", page)
+        self.assertIn("Left for you: the shop&#x27;s barcode is not recorded yet. Its next read records it.", page)
         self.assertEqual(judge.act_on_earlier(), 0)
         self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
         ClaudeJudge.objects.filter(pk=1).update(may_act=False)
@@ -1426,3 +1426,295 @@ class EarlierAnswerTests(Base):
         response = self.client.post(self.url, {"action": "claude_act_on"}, follow=True)
         self.assertContains(response, "It starts once Pause all is off.")
         self.assertEqual(self.answers(), [])
+
+
+class ClearsTheQueueTests(Base):
+    """Claude ticks off the doubtful prices it is sure are the right product without changing anything
+    visitors see, says no to pages and pairs when fairly sure of a plain difference, asks first about the
+    rows an answer can clear, and never counts a price or merges."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.url = reverse("checks")
+        self.bundle = make_product(self.set, name="Surging Sparks Booster Bundle", product_type="bundle")
+
+    def doubtful(self, title="Surging Sparks Booster Bundle", shop_ean="", product=None, **kwargs):
+        product = product or self.bundle
+        cheap = self.shop(30, product=product, title=title, shop_ean=shop_ean, **kwargs)
+        self.shop(100, product=product, title=product.name, shop_ean="")
+        sanity.judge_product(product.pk)
+        cheap.refresh_from_db()
+        self.assertEqual(cheap.sanity, Listing.Sanity.DOUBTFUL)
+        return cheap
+
+    def test_a_sure_same_doubtful_price_is_checked_and_visitors_see_no_change(self):
+        cheap = self.doubtful()
+        self.switch_on()
+        before = self.client.get(self.bundle.get_absolute_url()).content
+        self.ask(lambda key, params: reply(key, "same", differences=["price"]))
+        [answer] = self.answers()
+        self.assertEqual((answer.kind, answer.listing, answer.title), (CheckAnswer.Kind.CHECKED, cheap, cheap.title))
+        self.assertEqual(answer.ask.action, Ask.Action.ACTED)
+        cheap.refresh_from_db()
+        self.assertEqual((cheap.is_active, cheap.sanity, cheap.trusted_price), (True, Listing.Sanity.DOUBTFUL, None))
+        cache.clear()
+        self.assertEqual(self.client.get(self.bundle.get_absolute_url()).content, before)
+        self.assertEqual((checks.doubtful_count(), checks.checked_count()), (0, 1))
+        self.assertEqual(judge.open_rows(), [])
+        self.assertContains(self.client.get(self.url), "1 more is checked: the right product, shown with no saving claimed.")
+
+    def test_a_checked_price_comes_back_when_its_title_changes_and_can_then_be_hidden(self):
+        cheap = self.doubtful()
+        self.switch_on()
+        self.ask(lambda key, params: reply(key, "same", differences=["price"]))
+        Listing.objects.filter(pk=cheap.pk).update(title="Surging Sparks Booster Bundle Opened")
+        self.assertEqual(checks.doubtful_count(), 1)
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        self.ask(lambda key, params: reply(key, "different", differences=["condition"]))
+        self.assertFalse(Listing.objects.get(pk=cheap.pk).is_active)
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.CHECKED, CheckAnswer.Kind.HIDE])
+
+    def test_undoing_a_check_gives_the_price_back_to_the_owner_for_good(self):
+        cheap = self.doubtful()
+        self.switch_on()
+        self.ask(lambda key, params: reply(key, "same", differences=["price"]))
+        [answer] = self.answers()
+        self.assertIn("back under Doubtful prices for you", autopilot.undo(answer))
+        self.assertEqual(Ask.objects.get().owner_answer, "look")
+        self.assertEqual(checks.doubtful_count(), 1)
+        self.assertEqual(judge.waiting(), [])
+        self.assertEqual(judge.act_on_earlier(), 0)
+        self.assertEqual(judge.page_status()["agreement_total"], 0)
+        self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
+
+    def test_marketplace_deposit_and_barcode_doubts_are_never_checked_and_say_why(self):
+        from .models import Retailer
+
+        cases = {
+            "seller": self.doubtful(product=make_product(self.set, name="Surging Sparks Tin", product_type="tin"),
+                                    title="Surging Sparks Tin"),
+            "deposit": self.doubtful(product=make_product(self.set, name="Surging Sparks Mini Tin", product_type="tin"),
+                                     title="Surging Sparks Mini Tin Deposit"),
+            "barcode": self.doubtful(product=make_product(self.set, name="Surging Sparks Booster Display",
+                                                          product_type="booster_box", ean="0820650851230"),
+                                     title="Surging Sparks Booster Display", shop_ean="5099999999999"),
+            "unread": self.doubtful(product=make_product(self.set, name="Surging Sparks Elite Trainer Box"),
+                                    title="Surging Sparks Elite Trainer Box", shop_ean=None),
+        }
+        Retailer.objects.filter(pk=cases["seller"].retailer_id).update(source_type=Retailer.Source.EBAY)
+        self.switch_on()
+        self.ask(lambda key, params: reply(key, "same", differences=["price"]))
+        self.assertEqual(self.answers(), [])
+        page = self.client.get(self.url).content.decode().replace("&#x27;", "'")
+        for words in ("eBay and Amazon titles are the seller's own words", "the shop's title says deposit",
+                      "the shop's barcode is not ours, so only you can say", "the shop's barcode is not recorded yet"):
+            self.assertIn(words, page)
+
+    def test_the_autopilot_checks_a_price_the_shops_barcode_proves_but_never_a_marketplaces(self):
+        from .models import Retailer
+
+        Product.objects.filter(pk=self.bundle.pk).update(ean="0820650851230")
+        self.bundle.refresh_from_db()
+        cheap = self.doubtful(shop_ean="820650851230")
+        autopilot.run()
+        [answer] = self.answers()
+        self.assertEqual((answer.kind, answer.ask), (CheckAnswer.Kind.CHECKED, None))
+        self.assertIn("the shop's barcode is this product's", answer.why)
+        autopilot.undo(answer)
+        tin = make_product(self.set, name="Surging Sparks Tin", product_type="tin", ean="0820650851247")
+        seller = self.doubtful(product=tin, title="Surging Sparks Tin", shop_ean="820650851247")
+        Retailer.objects.filter(pk=seller.retailer_id).update(source_type=Retailer.Source.EBAY)
+        autopilot.run()
+        self.assertEqual(len(self.answers()), 1)
+        self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
+
+    def test_claude_never_counts_a_price_or_merges(self):
+        cheap = self.doubtful()
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(51, product=other, title=other.name)
+        self.shop(100)
+        self.shop(104)
+        row = self.found(price="101.00")
+        rows = judge.open_rows()
+        self.assertEqual({r.kind for r in rows}, {"offer", "found", "pair"})
+        for r in rows:
+            for verdict in ("same", "different", "unsure"):
+                for confidence in ("high", "medium", "low"):
+                    for differences in ([], ["price"], ["kind"], ["condition"]):
+                        for partner in (None, judge.SURE_SAME):
+                            answer = {"verdict": verdict, "confidence": confidence, "differences": differences}
+                            self.assertIn(judge.decide(r, answer, True, partner=partner),
+                                          {None, "hide", "refuse", "apart", "check", "link"})
+        self.switch_on()
+        self.ask()
+        self.assertFalse(CheckAnswer.objects.filter(kind__in=[CheckAnswer.Kind.TRUST, CheckAnswer.Kind.MERGE]).exists())
+        self.assertIsNone(Listing.objects.get(pk=cheap.pk).trusted_price)
+        self.assertTrue(Product.objects.get(pk=other.pk).is_active)
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.LINKED)
+
+    def test_a_fairly_sure_plain_difference_refuses_or_keeps_apart_but_never_hides(self):
+        cheap = self.doubtful()
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(51, product=other, title=other.name)
+        row = self.found(title="Surging Sparks Booster Box Japanese", price="101.00")
+        self.switch_on()
+        self.ask(lambda key, params: reply(key, "different", confidence="medium", differences=["language"]))
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.IGNORED)
+        self.assertEqual(checks.duplicates(), [])
+        self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
+        Ask.objects.all().delete()
+        CheckAnswer.objects.all().delete()
+        ShopProduct.objects.filter(pk=row.pk).update(status=ShopProduct.Status.REVIEW)
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        self.ask(lambda key, params: reply(key, "different", confidence="medium", differences=["condition"]))
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.REVIEW)
+
+    def test_both_wrong_match_prices_called_the_same_stay_with_the_owner(self):
+        best = self.shop(20, title="Surging Sparks Booster Box Opened")
+        second = self.shop(100)
+        self.shop(104)
+        self.assertEqual(len(checks.wrong_matches()), 1)
+        self.switch_on()
+        self.ask()
+        self.assertEqual(self.answers(), [])
+        self.assertTrue(Listing.objects.get(pk=best.pk).is_active and Listing.objects.get(pk=second.pk).is_active)
+        self.assertContains(self.client.get(self.url), "Claude says both prices are this product")
+
+    def test_an_earlier_answer_acts_only_on_the_exact_price_claude_saw(self):
+        cheap = self.doubtful()
+        self.switch_on(may_act=False)
+        self.ask(lambda key, params: reply(key, "same", differences=["price"]))
+        Listing.objects.filter(pk=cheap.pk).update(price=Decimal("31.00"))
+        sanity.judge_product(self.bundle.pk)
+        ClaudeJudge.objects.filter(pk=1).update(may_act=True)
+        self.assertEqual(judge.act_on_earlier(), 0)
+        self.assertEqual(self.answers(), [])
+
+    def test_a_link_that_would_claim_a_big_saving_rolls_back(self):
+        self.shop(100)
+        self.shop(104)
+        row = self.found(price="101.00")
+        self.switch_on()
+        with mock.patch.object(judge, "LINK_SAVING_MAX", 0):
+            self.ask()
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.REVIEW)
+        self.assertEqual(Ask.objects.get().action, Ask.Action.STALE)
+
+    def test_the_merge_button_leaves_out_pairs_whose_barcodes_or_prices_disagree(self):
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box", ean="0820650851230")
+        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(51, product=other, title=other.name)
+        self.switch_on(may_act=False)
+        self.ask()
+        self.assertEqual(len(judge.sure_pairs(checks.duplicates())), 1)
+        Product.objects.filter(pk=other.pk).update(ean="5099999999999")
+        self.assertEqual(judge.sure_pairs(checks.duplicates()), [])
+        Product.objects.filter(pk=other.pk).update(ean="")
+        Listing.objects.filter(product=other).update(price=Decimal("90.00"))
+        self.assertEqual(judge.sure_pairs(checks.duplicates()), [])
+
+    def test_a_fallback_answer_never_acts_and_is_asked_again_at_the_next_run(self):
+        self.doubtful()
+        self.switch_on()
+        step = dict(input_tokens=700, output_tokens=900, cache_creation_input_tokens=0, cache_read_input_tokens=0)
+        fell_back = usage(iterations=[SimpleNamespace(type="message", model="claude-opus-5-5", **step),
+                                      SimpleNamespace(type="fallback_message", model="claude-opus-5-5", **step)])
+        self.ask(lambda key, params: reply(key, "same", differences=["price"], use=fell_back))
+        self.assertEqual(self.answers(), [])
+        self.assertTrue(Ask.objects.get().fallback)
+        self.assertEqual(judge.act_on_earlier(), 0)
+        self.assertEqual(len(judge.waiting()), 1)
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        self.ask(lambda key, params: reply(key, "same", differences=["price"]))
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.CHECKED])
+
+    def test_rows_an_answer_can_clear_are_asked_first(self):
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(51, product=other, title=other.name)
+        unread = self.doubtful(product=make_product(self.set, name="Surging Sparks Tin", product_type="tin"),
+                               title="Surging Sparks Tin", shop_ean=None)
+        ready = self.doubtful()
+        lone = self.found(product=make_product(self.set, name="Surging Sparks Mini Tin", product_type="tin"),
+                          title="Surging Sparks Mini Tin")
+        order = [row.key for row in judge.waiting()]
+        self.assertEqual(order[0], f"offer:{ready.pk}")
+        self.assertEqual(order[1][:5], "pair:")
+        self.assertEqual(set(order[2:]), {f"offer:{unread.pk}", f"found:{lone.pk}"})
+
+    def test_a_run_the_owner_asks_for_looks_past_25_rows(self):
+        self.shop(100)
+        self.shop(104)
+        for n in range(30):
+            self.found(title=f"Surging Sparks Booster Display {n}", price="101.00")
+        self.switch_on(may_act=False)
+        _, hourly = self.ask()
+        self.assertEqual(hourly.asked, 25)
+        ClaudeJudge.objects.filter(pk=1).update(asked_at=timezone.now() + timedelta(seconds=1))
+        _, asked = self.ask(now=timezone.now() + timedelta(seconds=2))
+        self.assertEqual(asked.asked, 5)
+
+    def test_a_run_hides_at_most_ten_prices_and_the_rest_are_hidden_next_time(self):
+        for n in range(12):
+            product = make_product(self.set, name=f"Surging Sparks Tin {n}", product_type="tin")
+            self.doubtful(product=product, title=f"Surging Sparks Tin {n} Opened")
+        self.switch_on()
+        self.ask(lambda key, params: reply(key, "different", differences=["condition"]))
+        self.assertEqual(CheckAnswer.objects.filter(kind=CheckAnswer.Kind.HIDE).count(), 10)
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        _, result = self.ask()
+        self.assertEqual((result.asked, result.earlier), (0, 2))
+        self.assertEqual(CheckAnswer.objects.filter(kind=CheckAnswer.Kind.HIDE).count(), 12)
+
+    def test_three_undos_in_a_week_put_claude_back_to_suggesting(self):
+        for n in range(3):
+            product = make_product(self.set, name=f"Surging Sparks Tin {n}", product_type="tin")
+            self.doubtful(product=product, title=f"Surging Sparks Tin {n} Opened")
+        self.switch_on(acting_since=timezone.now() - timedelta(days=1))
+        self.ask(lambda key, params: reply(key, "different", differences=["condition"]))
+        first, second, third = self.answers()
+        self.assertNotIn("only suggests", autopilot.undo(first))
+        self.assertNotIn("only suggests", autopilot.undo(second))
+        with mock.patch("catalogue.notify.owner", return_value=True) as told:
+            self.assertIn("so it now only suggests", autopilot.undo(third))
+        self.assertEqual(told.call_args[0][0], judge.BACK_TO_SUGGESTING)
+        self.assertFalse(ClaudeJudge.objects.get().may_act)
+        self.client.post(self.url, {"action": "claude_act_on"})
+        state = ClaudeJudge.objects.get()
+        self.assertTrue(state.may_act)
+        self.assertFalse(judge.too_many_undone(timezone.now()))
+
+    def test_the_dry_run_says_what_earlier_answers_would_sort_and_sends_nothing(self):
+        self.doubtful()
+        self.switch_on(may_act=False)
+        self.ask(lambda key, params: reply(key, "same", differences=["price"]))
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        client, result = self.ask(dry_run=True)
+        self.assertEqual(client.sent, [])
+        self.assertIn("From answers already given, at no cost: 1 to check", result.lines[0])
+        self.assertEqual(self.answers(), [])
+
+    def test_the_push_says_what_needs_the_owner_and_what_can_wait(self):
+        self.doubtful(product=make_product(self.set, name="Surging Sparks Tin", product_type="tin"),
+                      title="Surging Sparks Tin", shop_ean=None)
+        self.shop(100)
+        self.shop(104)
+        self.found(price="150.00")
+        self.switch_on(asked_at=timezone.now())
+        with mock.patch("catalogue.notify.owner", return_value=True) as told:
+            self.ask()
+        title = told.call_args[0][1]
+        self.assertEqual(title, "Claude looked at 2: 0 sorted, 1 need you, 1 can wait")
+        self.assertNotIn(chr(0x2014), title)
+        self.assertNotIn("!", title)

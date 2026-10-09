@@ -1479,6 +1479,7 @@ def checks_page(request):
     now = timezone.now()
     counts = checks.sanity_counts()
     doubtful_count = checks.doubtful_count()
+    checked_count = checks.checked_count()
     answers = checks.recent_answers(now)
     tally = Counter(answer.kind for answer in answers if answer.undone_at is None)
     doubtful, wrong, duplicates = checks.doubtful_prices(now), checks.wrong_matches(), checks.duplicates()
@@ -1492,7 +1493,7 @@ def checks_page(request):
         "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
         "tally": [(CheckAnswer.Kind(kind).label, n) for kind, n in tally.most_common()],
         "doubtful": doubtful, "doubtful_count": doubtful_count,
-        "doubtful_left": max(0, counts["doubtful"] - doubtful_count),
+        "doubtful_left": max(0, counts["doubtful"] - doubtful_count - checked_count), "checked_count": checked_count,
         "excluded": checks.excluded_prices(), "counts": counts,
         "wrong": wrong, "duplicates": duplicates, "sure_pairs": judge.sure_pairs(duplicates),
         "shops": checks.unknown_delivery_shops(),
@@ -1560,6 +1561,9 @@ def claude_tap(request, action):
                          else "Claude is on." if update["enabled"] else "Claude is off. Nothing is sent and nothing is spent.")
     elif action in ("claude_act_on", "claude_act_off"):
         update["may_act"] = action == "claude_act_on"
+        if update["may_act"]:
+            # Undos are counted afresh from here: three in a week put Claude back to suggesting.
+            update["acting_since"] = timezone.now()
         if not update["may_act"]:
             messages.success(request, "Claude now only suggests. Its answers show under each row.")
     elif action == "claude_settings":

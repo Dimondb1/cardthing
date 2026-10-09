@@ -50,28 +50,41 @@ def sanity_counts():
     )
 
 
-def doubtful_waiting():
+def doubtful_waiting(checked=False):
     """Doubtful prices a visitor sees as the product's cheapest: buyable, and no buyable price comes before
     them in the order the product page shows (confirmed delivered prices first, cheapest first, then the
     prices whose delivery is not known).
 
     A doubtful price that comes after another shop's, or is out of stock, never shows as the cheapest and
     claims no saving, so it waits for nobody. It is listed again if it becomes the cheapest.
+
+    A price checked as the right product (a standing Checked answer for this price and title) waits for
+    nobody either; ``checked`` gives those instead.
     """
     buyable = Listing.objects.buyable().filter(product=OuterRef("product_id"))
     known_cheaper = buyable.filter(delivery_known=True, delivered_price__lt=OuterRef("delivered_price"))
     any_known = buyable.filter(delivery_known=True)
     unknown_cheaper = buyable.filter(delivery_known=False, delivered_price__lt=OuterRef("delivered_price"))
-    return (
+    is_checked = Exists(CheckAnswer.objects.filter(
+        kind=CheckAnswer.Kind.CHECKED, undone_at__isnull=True, listing=OuterRef("pk"), price=OuterRef("price"),
+        title=OuterRef("title"),
+    ))
+    rows = (
         Listing.objects.buyable().filter(product__is_active=True, sanity=Listing.Sanity.DOUBTFUL)
         .exclude(Q(delivery_known=True) & Exists(known_cheaper))
         .exclude(Q(delivery_known=False) & (Exists(any_known) | Exists(unknown_cheaper)))
     )
+    return rows.filter(is_checked) if checked else rows.exclude(is_checked)
 
 
 def doubtful_count():
     """How many doubtful prices wait for the owner, counted as the page counts them."""
     return doubtful_waiting().count()
+
+
+def checked_count():
+    """How many doubtful prices are checked as the right product and left as shown."""
+    return doubtful_waiting(checked=True).count()
 
 
 def doubtful_prices(now=None):

@@ -2,7 +2,8 @@
 Let Claude answer the Things to check rows the autopilot leaves (catalogue/judge.py).
 
     python manage.py judge_checks            # run now if due: asked from the page, or an hour since the last run
-    python manage.py judge_checks --dry-run  # list the rows, what would be sent and the most each could cost
+    python manage.py judge_checks --dry-run  # what the answers already given would sort, the rows, what
+                                             # would be sent and the most each could cost
 
 Run by cron every five minutes on its own lock. It does nothing until the owner saves a key and switches
 Claude on in Things to check, and nothing while Pause all is on.

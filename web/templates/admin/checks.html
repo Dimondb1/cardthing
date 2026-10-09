@@ -52,9 +52,9 @@
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_on"><input type="submit" value="Switch Claude on"></form>
       {% endif %}
     </div>{% endif %}
-    <p class="note">Claude reads the rows the free checks leave and says whether two things are the same product. In trial it only suggests: its answer shows under each row. Once you agree with its answers, tap Let Claude act. It then acts at once on the answers it has already given, and on new ones, but only when it is sure and the site's own checks agree. It never counts a price as right and never merges by itself, and each answer it leaves for you says why. Each act is listed under Sorted for you with Undo.</p>
+    <p class="note">Claude reads the rows the free checks leave and says whether two things are the same product. In trial it only suggests: its answer shows under each row. Once you agree with its answers, tap Let Claude act. When it is sure a cheapest price is the right product, it ticks the row off as checked: the price stays on the site with no saving claimed, and the row comes back if the price or the shop's title changes. When it is sure a price or a shop's page is another product, it hides it or says no. It never counts a price as right and never merges by itself, and each answer it leaves for you says why. Each act is listed under Sorted for you with Undo, and if you undo three in a week it goes back to suggesting.</p>
     {% if claude.runs %}<details><summary>Recent runs ({{ claude.runs|length }})</summary>
-      <ul class="names">{% for run in claude.runs %}<li>{{ run.at|date:"j M H:i" }}: looked at {{ run.asked }}, sorted {{ run.sorted }}{% if run.earlier %} ({{ run.earlier }} from earlier answers){% endif %}, {{ run.suggested }} for you to check, {{ run.left }} not asked yet, {{ run.spent }}{% if run.note %}. {{ run.note }}{% endif %}.</li>{% endfor %}</ul>
+      <ul class="names">{% for run in claude.runs %}<li>{{ run.at|date:"j M H:i" }}: looked at {{ run.asked }}, sorted {{ run.sorted }}{% if run.earlier %} ({{ run.earlier }} from earlier answers){% endif %}, {{ run.need_you }} need you, {{ run.can_wait }} can wait, {{ run.left }} not asked yet, {{ run.spent }}{% if run.note %}. {{ run.note }}{% endif %}.</li>{% endfor %}</ul>
     </details>{% endif %}
     {% if claude.recent %}<details><summary>Claude's last {{ claude.recent|length }} answer{{ claude.recent|length|pluralize }}</summary>
       <ul>{% for ask in claude.recent %}
@@ -108,7 +108,7 @@
   <section>
     <h2>Doubtful prices ({{ doubtful_count }})</h2>
     {% include "admin/_claude_counts.html" with c=claude_counts.doubtful %}
-    <p class="note">These are the cheapest price for their product but far from what the other shops charge, so the site shows them but claims no saving, badge or price drop. Open the link. If the price is right, tap This price is right and it counts while it moves less than 10% for 30 days. If it is a different product, hide it.{% if doubtful_left %} {{ doubtful_left }} other doubtful price{{ doubtful_left|pluralize }} {{ doubtful_left|pluralize:"is,are" }} dearer than another shop or out of stock, so never shown as the cheapest, and {{ doubtful_left|pluralize:"is,are" }} left as {{ doubtful_left|pluralize:"it is,they are" }}.{% endif %}</p>
+    <p class="note">These are the cheapest price for their product but far from what the other shops charge, so the site shows them but claims no saving, badge or price drop. Open the link. If the price is right, tap This price is right and it counts while it moves less than 10% for 30 days. If it is a different product, hide it.{% if doubtful_left %} {{ doubtful_left }} other doubtful price{{ doubtful_left|pluralize }} {{ doubtful_left|pluralize:"is,are" }} dearer than another shop or out of stock, so never shown as the cheapest, and {{ doubtful_left|pluralize:"is,are" }} left as {{ doubtful_left|pluralize:"it is,they are" }}.{% endif %}{% if checked_count %} {{ checked_count }} more {{ checked_count|pluralize:"is,are" }} checked: the right product, shown with no saving claimed. Each is under Sorted for you with Undo.{% endif %}</p>
     {% if doubtful %}<ul>
       {% for listing in doubtful %}
       <li class="item"><b><a href="{{ listing.product.get_absolute_url }}" target="_blank" rel="noopener">{{ listing.product.name }}</a></b>
@@ -159,12 +159,13 @@
   </section>
 
   <section>
-    <h2>Possible duplicates ({{ duplicates|length }})</h2>
+    <h2>Possible duplicates ({{ duplicates|length }}){% if duplicates %}. Can wait{% endif %}</h2>
     {% include "admin/_claude_counts.html" with c=claude_counts.pairs %}
-    <p class="note">These names differ only by words like Exclusive, English or the series name. Merge only when they are the same product. Merging keeps every price, the price history and the old addresses. Merge these cannot be undone; a merge from the Claude button can, under Sorted for you. If one is a different product, tap Not the same beside it and the two are not suggested together again.</p>
     {% if sure_pairs %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge_sure">{% for keep, other, ask in sure_pairs %}<input type="hidden" name="pair" value="{{ keep.pk }}:{{ other.pk }}">{% endfor %}<input type="submit" value="Merge the {{ sure_pairs|length }} pair{{ sure_pairs|pluralize }} Claude is sure are the same"></form>
     <p class="note">Each merge can be undone under Sorted for you.</p>{% endif %}
-    {% if duplicates %}<ul>
+    {% if duplicates %}<details><summary>Nothing on the site is wrong while these wait. A merge puts one product's two pages together. Show them</summary>
+    <p class="note">These names differ only by words like Exclusive, English or the series name. Merge only when they are the same product. Merging keeps every price, the price history and the old addresses. Merge these cannot be undone; a merge from the Claude button can, under Sorted for you. If one is a different product, tap Not the same beside it and the two are not suggested together again.</p>
+    <ul>
       {% for keep, others in duplicates %}
       <li class="item"><b>Keep: <a href="{{ keep.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.name }}</a></b>
         Merge into it:
@@ -173,14 +174,15 @@
         <form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="keep" value="{{ keep.pk }}">{% for other in others %}<input type="hidden" name="other" value="{{ other.pk }}">{% endfor %}<input type="submit" value="Merge these"></form>
       </li>
       {% endfor %}
-    </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
+    </ul></details>{% else %}<p class="none">Nothing to check.</p>{% endif %}
   </section>
 
   <section>
-    <h2>Found at another shop ({{ found_count }})</h2>
+    <h2>Found at another shop ({{ found_count }}){% if found %}. Can wait{% endif %}</h2>
     {% include "admin/_claude_counts.html" with c=claude_counts.found %}
+    {% if found %}<details><summary>Nothing on the site is wrong while these wait. Each Yes adds a shop's price to the comparison. Show them</summary>
     <p class="note">Products one shop sells, or none, are looked for at your other shops. These look like the same product but are not certain, and the ones visitors want most come first. Open the link. If it is the same product, tap Yes and the shop's price is checked at its next read. If not, tap No and that shop is not asked about it again.</p>
-    {% if found %}<ul>
+    <ul>
       {% for row in found %}
       <li class="item"><b><a href="{{ row.suggested.get_absolute_url }}" target="_blank" rel="noopener">{{ row.suggested.name }}</a></b>
         might be at {{ row.retailer.name }} as <a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">"{{ row.title }}"</a>{% if row.price %} for £{{ row.price }}{% endif %}.
@@ -191,7 +193,7 @@
         </div>
       </li>
       {% endfor %}
-    </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
+    </ul></details>{% else %}<p class="none">Nothing to check.</p>{% endif %}
   </section>
 
   <section>

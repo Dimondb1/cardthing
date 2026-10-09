@@ -67,6 +67,9 @@ KIND_PHRASES = {kind: tuple(p for p in phrases if p != "booster") for kind, phra
 PACK_WORDS = re.compile(r"\bpacks?\b|\bpacket\b|\bchecklane\b|\bsleeved\b", re.I)
 MULTI_PACK = re.compile(r"\d+\s*[-x×]?\s*(?:booster\s*)?packs?\b|\bpacks?\s+of\s+\d", re.I)
 
+# A title that says the price is only part of it.
+DEPOSIT = re.compile(r"\b(deposit|reservation|part[\s-]?payment)\b", re.I)
+
 # Set codes that name one set and no other: One Piece (OP-09, EB-02, PRB-01, ST-21) and Dragon Ball
 # (FB05, BT24). A title that names only codes other than the product's is another set's product.
 SET_CODE = re.compile(r"(?<![a-z0-9])(op|eb|prb|st|fb|bt)-?0*(\d{1,2})(?![0-9])", re.I)
@@ -206,9 +209,54 @@ def link_found(row, keep_ok=False):
     return {"listing": listing}
 
 
+def owners_answers():
+    """Answers that make a listing the owner's: every answer, undone or not, except a Checked one still
+    standing. A Checked price changed nothing on the site, so it comes back to be looked at again once
+    its price or title changes; an undone one is the owner's for good."""
+    return CheckAnswer.objects.exclude(kind=Kind.CHECKED, undone_at__isnull=True)
+
+
 def answered_listings():
-    """Listings with any answer, the owner's or the autopilot's, undone or not: they are the owner's now."""
-    return set(CheckAnswer.objects.filter(listing__isnull=False).values_list("listing_id", flat=True))
+    """Listings the owner, the autopilot or Claude answered: they are the owner's now (see owners_answers)."""
+    return set(owners_answers().filter(listing__isnull=False).values_list("listing_id", flat=True))
+
+
+def marketplace(listing):
+    """eBay and Amazon: the title is the seller's own and the barcode our own, so neither proves the product."""
+    from .models import Retailer
+
+    return listing.retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY)
+
+
+def check_bars(listing):
+    """Why a doubtful price may not be ticked off as the right product on a sure same, or "": a
+    marketplace's, a deposit, a title naming another product, or a barcode that is not ours or not read."""
+    if marketplace(listing):
+        return "eBay and Amazon titles are the seller's own words, so Claude leaves these to you"
+    if DEPOSIT.search(listing.title or ""):
+        return "the shop's title says deposit, so the price may not be the whole price"
+    if contradiction(listing.product, listing.title):
+        return "the shop's title names another kind of product"
+    barcode = barcode_check(listing.product, listing.shop_ean)
+    if barcode == "different":
+        return "the shop's barcode is not ours, so only you can say"
+    if barcode == "not recorded":
+        return "the shop's barcode is not recorded yet. Its next read records it"
+    return ""
+
+
+def check(listing):
+    """Tick a doubtful price off as the right product, inside the caller's transaction. Nothing on the site
+    changes: it stays doubtful, so it is shown and claims no saving. Raises Stale unless the price is still
+    the one looked at: shown, doubtful, not counted, the same price and title, and nobody's to answer."""
+    current = Listing.objects.filter(pk=listing.pk, is_active=True, price=listing.price, title=listing.title,
+                                     sanity=DOUBTFUL, trusted_price__isnull=True)
+    if not current.exists() or owners_answers().filter(listing_id=listing.pk).exists():
+        raise Stale
+    if CheckAnswer.objects.filter(kind=Kind.CHECKED, undone_at__isnull=True, listing_id=listing.pk,
+                                  price=listing.price, title=listing.title).exists():
+        raise Stale
+    return {"title": listing.title}
 
 
 class Autopilot:
@@ -298,6 +346,13 @@ class Autopilot:
             why = contradiction(listing.product, listing.title)
             if why:
                 self.hide(listing, why, sanity=DOUBTFUL)
+            elif barcode_check(listing.product, listing.shop_ean, marketplace(listing)) == "same" \
+                    and not check_bars(listing):
+                self.answer(Kind.CHECKED, f"Checked {money(listing.shown_price)} for {listing.product.name} at "
+                            f"{listing.retailer.name}", "the shop's barcode is this product's. It stays on the site "
+                            "with no saving claimed, and comes back if its price or title changes",
+                            act=lambda listing=listing: check(listing), listing=listing, product=listing.product,
+                            price=listing.price)
 
     def hide(self, listing, why, **unchanged):
         def act():
@@ -408,6 +463,10 @@ def undo(answer, now=None):
             Listing.objects.filter(pk=answer.listing.pk).update(trusted_price=None, trusted_at=None)
             sanity.judge_product(answer.listing.product_id)
             message = f"Undone: {answer.listing.retailer.name}'s price for {answer.listing.product.name} is judged again."
+        elif answer.kind == Kind.CHECKED and answer.listing is not None:
+            # Nothing on the site changed, so nothing is put back: the price waits for the owner again.
+            message = (f"Undone: {answer.listing.retailer.name}'s price for {answer.listing.product.name} is back "
+                       "under Doubtful prices for you.")
         elif answer.kind == Kind.ADD_SET and answer.release is not None:
             message = undo_set(answer)
         elif answer.kind == Kind.APART:
@@ -428,11 +487,19 @@ def undo(answer, now=None):
             answer.undone_at = now or timezone.now()
             answer.save(update_fields=["undone_at"])
             if answer.ask_id:
-                # Undoing Claude's answer is the owner saying the opposite.
+                # Undoing Claude's answer is the owner saying the opposite, except a Checked one: that only
+                # asks to look at the price himself.
                 from .models import ClaudeAsk
 
-                opposite = "different" if answer.ask.verdict == "same" else "same"
+                opposite = "look" if answer.kind == Kind.CHECKED else (
+                    "different" if answer.ask.verdict == "same" else "same")
                 ClaudeAsk.objects.filter(pk=answer.ask_id).update(owner_answer=opposite)
+    if message and answer.ask_id and answer.kind not in (Kind.CHECKED, Kind.MERGE):
+        # Outside the transaction: it may send the owner a message.
+        from . import judge
+
+        if judge.too_many_undone(answer.undone_at):
+            message += f" {judge.BACK_TO_SUGGESTING_DETAIL}"
     if message:
         clear_list_caches(force=True)
     return message

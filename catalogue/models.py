@@ -1113,6 +1113,7 @@ class CheckAnswer(models.Model):
         MERGE = "merge", "Merged duplicates"
         APART = "apart", "Not the same product"
         ADD_SET = "add_set", "Added an announced set"
+        CHECKED = "checked", "Checked, left as shown"
 
     kind = models.CharField(max_length=10, choices=Kind.choices)
     by_owner = models.BooleanField(default=False)
@@ -1121,6 +1122,8 @@ class CheckAnswer(models.Model):
     what = models.CharField(max_length=300)
     why = models.CharField(max_length=300, blank=True)
     price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    # The shop's title when the answer was given: a Checked answer stands only while price and title are unchanged.
+    title = models.CharField(max_length=300, blank=True)
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     other = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
@@ -1155,6 +1158,7 @@ class ClaudeJudge(models.Model):
 
     enabled = models.BooleanField(default=False)
     may_act = models.BooleanField("acts when sure", default=False)
+    acting_since = models.DateTimeField(null=True, blank=True, help_text="When the owner last tapped Let Claude act.")
     model = models.CharField(max_length=40, default="claude-opus-5-5")
     effort = models.CharField(max_length=8, choices=Effort.choices, default=Effort.MEDIUM)
     monthly_budget_usd = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("10.00"))
@@ -1223,6 +1227,7 @@ class ClaudeAsk(models.Model):
     fingerprint = models.CharField(max_length=64)
     model_asked = models.CharField(max_length=40)
     model_answered = models.CharField(max_length=40, blank=True)
+    fallback = models.BooleanField(default=False, help_text="Part of the answer came from a model other than the one asked.")
     effort = models.CharField(max_length=8)
     outcome = models.CharField(max_length=8, choices=Outcome.choices, default=Outcome.SENT)
     refusal_category = models.CharField(max_length=40, blank=True)

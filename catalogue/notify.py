@@ -35,6 +35,8 @@ PUSH_BODY = b"Open admin to read it."
 WORKER_STOPPED = "RipRaptor crawl stopped"
 SHOP_FAILING = "A shop keeps failing"
 PRICES_TO_CHECK = "Prices to check"
+# Not a subject: when check_worker first found no heartbeat at all, so a reader still starting is not reported.
+NEVER_BEAT_SEEN = "no heartbeat first seen"
 CRAWL_PATH = "/admin/crawl/"
 CHECKS_PATH = "/admin/checks/"
 
@@ -135,6 +137,40 @@ def worker_stopped(heartbeat_at, now=None):
         f"The background reader last sent a heartbeat at {when:%H:%M} on {when:%d %b}. The hourly schedule "
         "reads the shops meanwhile, so prices update less often. The server restarts the reader on its own; "
         "if this stays, the server needs a look."
+    )
+    return crawl_problem(WORKER_STOPPED, CRAWL_PATH, detail, now=now)
+
+
+def worker_never_beat(now=None):
+    """The reader has never sent a heartbeat. Told once the hourly check has seen that for ten minutes or more.
+
+    The first time check_worker finds no heartbeat it notes the time (NEVER_BEAT_SEEN in WorkerState.notices)
+    and sends nothing, so a reader still starting up is not reported. A later check that still finds none
+    tells the owner, under the same once-a-day subject as a reader that stopped.
+    """
+    from .models import WorkerState
+
+    if not settings.RIPRAPTOR_CRAWL_PUSHES or not (can_push() or can_email()):
+        return False
+    now = now or timezone.now()
+    with transaction.atomic():
+        state = WorkerState.load()
+        notices = dict(state.notices or {})
+        try:
+            seen = datetime.fromisoformat(notices.get(NEVER_BEAT_SEEN) or "")
+        except (TypeError, ValueError):
+            seen = None
+        if seen is None:
+            notices[NEVER_BEAT_SEEN] = now.isoformat()
+            WorkerState.objects.filter(pk=state.pk).update(notices=notices)
+            return False
+    if now - seen < WorkerState.STALE_AFTER:
+        return False
+    when = timezone.localtime(seen)
+    detail = (
+        f"The background reader has never sent a heartbeat. The hourly check first found none at {when:%H:%M} "
+        f"on {when:%d %b}. The hourly schedule reads the shops meanwhile, so prices update less often. The "
+        "reader may be failing as it starts, so the server needs a look."
     )
     return crawl_problem(WORKER_STOPPED, CRAWL_PATH, detail, now=now)
 

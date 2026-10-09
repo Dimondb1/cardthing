@@ -89,7 +89,7 @@ systemctl reload caddy
 # out. tidy_all runs at five past on its own lock and then waits up to 30 minutes for the import
 # lock, so it never merges or moves products while a shop read is saving offers. The stock alerts
 # never depend on the reader, check_worker logs whether the reader is alive (and tells the owner,
-# at most once a day, when it has stopped), and backup_db keeps five nightly copies.
+# at most once a day, when it has stopped or never starts), and backup_db keeps five nightly copies.
 # Every command runs under timeout, set to its budget plus five minutes: a command that hangs
 # while holding a lock would otherwise make every later run behind it give up silently.
 # The snapshot, the delivery check and tidy_all put timeout inside flock, so time spent waiting

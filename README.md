@@ -867,8 +867,10 @@ running" first among the things to improve while the heartbeat is stale.
 
 Crawl problems reach your phone through the same ntfy topic and email
 address as new messages: "RipRaptor crawl stopped" when `check_worker`
-finds a heartbeat over ten minutes old (not when the reader has never
-run), "A shop keeps failing" when a shop that is not paused has failed
+finds a heartbeat over ten minutes old, or finds none at all on two
+checks ten minutes or more apart (a reader that fails every time it
+starts; the first check only notes the time, so a reader still starting
+is not reported), "A shop keeps failing" when a shop that is not paused has failed
 every read for more than a day, and "Prices to check" when more than 10
 doubtful prices are waiting on Things to check. The reader looks for the
 last two on each planning pass, except while Pause all is on. Each is sent
@@ -1261,3 +1263,6 @@ python manage.py test
 
 Besides behaviour, the tests render every public page and fail on em dashes,
 exclamation marks and stock marketing phrases.
+A test run blanks `RIPRAPTOR_NTFY_TOPIC`, `RIPRAPTOR_INBOX_NOTIFY_EMAIL`
+and `RIPRAPTOR_ZEPTOMAIL_TOKEN`, so running the tests from a shell that
+has loaded the server's `.env` never sends a push or an email.

@@ -3,7 +3,9 @@
 import fcntl
 import json
 import os
+import runpy
 import socket
+import sys
 import tempfile
 import threading
 from datetime import datetime, timedelta
@@ -1019,8 +1021,6 @@ class NoticeTests(WorkerTestCase):
                 call_command("check_worker", stdout=out)
             return out.getvalue()
 
-        check()                                   # never ran: the hourly cron is the normal schedule
-        self.assertEqual(self.pushes, [])
         WorkerState.objects.update_or_create(pk=1, defaults={"heartbeat_at": timezone.now() - timedelta(minutes=5)})
         call_command("check_worker", stdout=StringIO())
         self.assertEqual(self.pushes, [])
@@ -1036,6 +1036,41 @@ class NoticeTests(WorkerTestCase):
         })
         check()
         self.assertEqual(self.titles(), ["RipRaptor crawl stopped"] * 2)
+
+    def test_a_reader_that_never_beats_is_pushed_about_from_the_second_check(self):
+        def check():
+            out = StringIO()
+            with self.assertRaises(SystemExit) as stopped:
+                call_command("check_worker", stdout=out)
+            self.assertEqual(stopped.exception.code, 1)
+            return out.getvalue()
+
+        def seen_ago(minutes):
+            state = WorkerState.objects.get()
+            seen = datetime.fromisoformat(state.notices[notify.NEVER_BEAT_SEEN])
+            WorkerState.objects.filter(pk=1).update(notices={
+                **state.notices, notify.NEVER_BEAT_SEEN: (seen - timedelta(minutes=minutes)).isoformat(),
+            })
+
+        # The first check only notes the time: a reader still starting up is not reported.
+        self.assertNotIn("The owner has been told.", check())
+        self.assertEqual(self.pushes, [])
+        self.assertIsNone(WorkerState.objects.get().heartbeat_at)
+        seen_ago(5)
+        check()
+        self.assertEqual(self.pushes, [])
+        # An hour on, the next check still finds no heartbeat.
+        seen_ago(55)
+        self.assertIn("The owner has been told.", check())
+        self.assertNotIn("The owner has been told.", check())
+        self.assertEqual(self.titles(), ["RipRaptor crawl stopped"])
+        self.assertEqual(self.pushes[0].get_header("Click"), "https://ripraptor.com/admin/crawl/")
+        self.assertEqual(self.pushes[0].data, b"Open admin to read it.")
+        self.assertIn("never sent a heartbeat", self.emails[0][2])
+        # The same once-a-day guard as a reader that stopped: a beat then a stop the same day is not sent again.
+        WorkerState.objects.filter(pk=1).update(heartbeat_at=timezone.now() - timedelta(minutes=15))
+        check()
+        self.assertEqual(len(self.pushes), 1)
 
     def test_eleven_doubtful_prices_push_once_and_nine_do_not(self):
         self.doubtful(9)
@@ -1084,6 +1119,8 @@ class NoticeTests(WorkerTestCase):
     def test_no_settings_sends_nothing_and_raises_nothing(self):
         self.failing_shop("Grimm Cards", 25)
         self.doubtful(11)
+        with self.assertRaises(SystemExit):
+            call_command("check_worker", stdout=StringIO())   # never beat
         self.make_worker().run_once()
         WorkerState.objects.filter(pk=1).update(heartbeat_at=timezone.now() - timedelta(minutes=15))
         with self.assertRaises(SystemExit):
@@ -1101,6 +1138,21 @@ class NoticeTests(WorkerTestCase):
         with self.assertRaises(SystemExit):
             call_command("check_worker", stdout=StringIO())
         self.assertEqual((self.pushes, self.emails), ([], []))
+
+
+class TestRunSendsNothingTests(TestCase):
+    def test_a_test_run_from_a_shell_holding_the_servers_env_blanks_the_owners_addresses(self):
+        server_env = {"RIPRAPTOR_NTFY_TOPIC": "owner-topic", "RIPRAPTOR_INBOX_NOTIFY_EMAIL": "owner@example.com",
+                      "RIPRAPTOR_ZEPTOMAIL_TOKEN": "real-token"}
+        path = Path(__file__).resolve().parent.parent / "ripraptor" / "settings.py"
+        with mock.patch.dict(os.environ, server_env):
+            with mock.patch.object(sys, "argv", ["manage.py", "test"]):
+                tested = runpy.run_path(str(path))
+            with mock.patch.object(sys, "argv", ["manage.py", "check_worker"]):
+                served = runpy.run_path(str(path))
+        for name in server_env:
+            self.assertEqual(tested[name], "")
+            self.assertEqual(served[name], server_env[name])
 
 
 class SharedDatabaseTests(TestCase):

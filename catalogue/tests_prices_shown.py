@@ -298,26 +298,52 @@ class UnpricedTests(TestCase):
         self.shop = make_retailer("Harbour Games", delivery_cost=Decimal("2.00"))
         self.product = make_product(make_set(make_game()), ean="0820650851230", image_url="https://img.example/x.jpg")
 
-    def test_a_zero_price_preorder_stamps_availability_only_and_writes_no_history(self):
+    def test_a_zero_price_preorder_changes_nothing_and_writes_no_history(self):
         from .models import Restock
 
         listing = make_listing(self.product, self.shop, price="45.00", delivery="2.00", hours_ago=5,
                                availability=Listing.Availability.OUT_OF_STOCK)
-        checked_at = timezone.now()
+        old = listing.last_checked
         self.assertIsNone(pricing.record_check(listing, price=Decimal("0.00"), delivery_cost=Decimal("2.00"),
-                                               availability=Listing.Availability.PREORDER, checked_at=checked_at))
+                                               availability=Listing.Availability.PREORDER))
         listing.refresh_from_db()
         self.assertEqual((listing.price, listing.delivery_cost, listing.delivery_known), (Decimal("45.00"), Decimal("2.00"), True))
-        self.assertEqual((listing.availability, listing.last_checked), (Listing.Availability.PREORDER, checked_at))
+        self.assertEqual((listing.availability, listing.last_checked), (Listing.Availability.OUT_OF_STOCK, old))
         self.assertIsNone(listing.back_in_stock_at)
         self.assertFalse(DailyLowestPrice.objects.exists())
         # In stock at nothing is treated the same way: a shop never sells for nothing.
         pricing.record_check(listing, price=Decimal("0"), delivery_cost=None, availability=Listing.Availability.IN_STOCK)
         listing.refresh_from_db()
         self.assertEqual((listing.price, listing.delivery_known), (Decimal("45.00"), True))
+        self.assertEqual((listing.availability, listing.last_checked), (Listing.Availability.OUT_OF_STOCK, old))
         self.assertIsNone(listing.back_in_stock_at)
         self.assertFalse(Restock.objects.exists())
         self.assertFalse(DailyLowestPrice.objects.exists())
+
+    def test_no_price_never_brings_an_old_price_back_as_buyable_or_freshly_checked(self):
+        from datetime import timedelta
+
+        from .importers import Offer, apply_offers
+
+        listing = make_listing(self.product, self.shop, price="20.00", delivery="2.00", hours_ago=24 * 30,
+                               availability=Listing.Availability.OUT_OF_STOCK, url="https://harbour.example/products/pe-etb")
+        old = listing.last_checked
+        for state in (Listing.Availability.IN_STOCK, Listing.Availability.PREORDER):
+            offer = Offer(title="ETB", url=listing.url, price=Decimal("0"), ean="0820650851230", availability=state)
+            self.assertEqual(apply_offers(self.shop, [offer])[1], 0)
+            listing.refresh_from_db()
+            self.assertEqual((listing.availability, listing.last_checked), (Listing.Availability.OUT_OF_STOCK, old))
+            self.assertIsNone(Product.objects.with_prices().get(pk=self.product.pk).lowest_known)
+        # A listing in stock at a real price keeps it, but the check does not make that price fresher.
+        Listing.objects.filter(pk=listing.pk).update(availability=Listing.Availability.IN_STOCK,
+                                                     last_checked=timezone.now() - timedelta(hours=5))
+        listing.refresh_from_db()
+        old = listing.last_checked
+        offer = Offer(title="ETB", url=listing.url, price=Decimal("0"), ean="0820650851230")
+        apply_offers(self.shop, [offer])
+        listing.refresh_from_db()
+        self.assertEqual((listing.availability, listing.price, listing.last_checked),
+                         (Listing.Availability.IN_STOCK, Decimal("20.00"), old))
 
     def test_a_zero_price_new_offer_creates_no_listing_and_is_listed_as_unmatched(self):
         from .importers import Offer, apply_offers
@@ -358,3 +384,59 @@ class UnpricedTests(TestCase):
         listing = Listing.objects.get(product=self.product, retailer=self.shop)
         self.assertEqual((listing.price, listing.availability), (Decimal("45.00"), Listing.Availability.IN_STOCK))
         self.assertEqual(self.product.daily_prices.get().price, Decimal("47.00"))
+
+    def test_a_priceless_variant_read_first_takes_nothing_over(self):
+        from .importers import Offer, apply_offers
+
+        listing = make_listing(self.product, self.shop, price="45.00", delivery="2.00", hours_ago=5,
+                               url="https://harbour.example/products/pe-etb?variant=2", title="ETB")
+
+        def read(price, availability=Listing.Availability.IN_STOCK):
+            offers = [
+                Offer(title="ETB (Deposit)", url="https://harbour.example/products/pe-etb?variant=1", price=Decimal("0"),
+                      ean="0820650851230"),
+                Offer(title="ETB", url="https://harbour.example/products/pe-etb?variant=2", price=Decimal(price),
+                      ean="0820650851230", availability=availability),
+            ]
+            checked_at = timezone.now()
+            found, updated, unmatched = apply_offers(self.shop, offers, checked_at=checked_at)
+            self.assertEqual((found, updated, unmatched), (2, 1, []))
+            listing.refresh_from_db()
+            self.assertEqual((listing.url, listing.title), ("https://harbour.example/products/pe-etb?variant=2", "ETB"))
+            self.assertEqual(listing.last_checked, checked_at)
+
+        # The priced variant is unchanged: the listing is stamped and keeps its link.
+        read("45.00")
+        self.assertEqual(listing.price, Decimal("45.00"))
+        # The priced variant moved: the new price is saved, not skipped.
+        read("50.00")
+        self.assertEqual((listing.price, listing.availability), (Decimal("50.00"), Listing.Availability.IN_STOCK))
+        self.assertEqual(self.product.daily_prices.get().price, Decimal("52.00"))
+        # The priced variant sold out: an in stock variant without a price does not keep it buyable.
+        read("50.00", Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(listing.availability, Listing.Availability.OUT_OF_STOCK)
+
+    def test_a_product_seen_only_without_a_price_is_not_swept_or_stamped(self):
+        from .importers import Offer, apply_offers
+
+        listing = make_listing(self.product, self.shop, price="45.00", delivery="2.00", hours_ago=5,
+                               url="https://harbour.example/products/pe-etb", title="ETB")
+        old = listing.last_checked
+        offers = [
+            Offer(title="ETB (Deposit)", url="https://harbour.example/products/pe-etb?variant=1", price=Decimal("0"),
+                  ean="0820650851230", availability=Listing.Availability.OUT_OF_STOCK),
+            Offer(title="ETB (Reserve)", url="https://harbour.example/products/pe-etb?variant=3", price=Decimal("0"),
+                  ean="0820650851230"),
+        ]
+        # One variant says in stock, so the complete-run sweep must not take it out either.
+        self.assertEqual(apply_offers(self.shop, offers, complete=True), (2, 0, []))
+        listing.refresh_from_db()
+        self.assertEqual((listing.url, listing.title, listing.availability, listing.last_checked),
+                         ("https://harbour.example/products/pe-etb", "ETB", Listing.Availability.IN_STOCK, old))
+        # Every variant without a price says sold out: the listing goes out of stock and nothing else changes.
+        checked_at = timezone.now()
+        self.assertEqual(apply_offers(self.shop, offers[:1], checked_at=checked_at)[1], 1)
+        listing.refresh_from_db()
+        self.assertEqual((listing.url, listing.price, listing.availability, listing.last_checked),
+                         ("https://harbour.example/products/pe-etb", Decimal("45.00"), Listing.Availability.OUT_OF_STOCK,
+                          checked_at))

@@ -139,6 +139,21 @@ class WatchStockTests(TestCase):
         self.assertIsNotNone(listing.back_in_stock_at)
         self.assertIn("1 back in stock", out.getvalue())
 
+    def test_a_variant_without_a_price_is_not_reported_back_in_stock(self):
+        product = make_product(make_set(make_game()))
+        shop = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+        listing = make_listing(product, shop, availability="out_of_stock", url="https://shop.example/products/etb", hours_ago=5)
+        old = listing.last_checked
+        # A shop that lists its price as text, at nothing.
+        payload = json.dumps({"variants": [{"price": "0.00", "available": True}]}).encode()
+        out = StringIO()
+        with mock.patch("catalogue.importers.fetch", lambda url: payload):
+            call_command("watch_stock", "--pause", "0", stdout=out)
+        listing.refresh_from_db()
+        self.assertEqual((listing.availability, listing.price, listing.last_checked), ("out_of_stock", Decimal("50.00"), old))
+        self.assertNotIn("back in stock:", out.getvalue())
+        self.assertIn("0 changed, 0 back in stock", out.getvalue())
+
 
 class WatchedFirstTests(TestCase):
     def test_viewed_and_watched_products_take_half_the_budget_before_clicked_ones(self):

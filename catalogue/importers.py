@@ -614,15 +614,12 @@ PROGRESS_EVERY = 250
 def unchanged(listing, offer, delivery):
     """True when this offer says nothing the existing ``listing`` does not already hold, so the check
     only needs its time stamped. ``delivery`` is the charge worked out for the offer (None = unknown).
-    An offer without a price only ever changes the stock state, so only that is compared."""
-    if listing.pk is None or listing._state.adding:
+    An offer without a price is never unchanged: it confirms no price, so it never stamps one."""
+    if listing.pk is None or listing._state.adding or offer.price <= 0:
         return False
-    if offer.availability != listing.availability:
-        return False
-    if offer.price <= 0:
-        return True
     return (
-        listing.price == offer.price
+        offer.availability == listing.availability
+        and listing.price == offer.price
         and listing.delivery_known == (delivery is not None)
         and listing.delivery_cost == (delivery if delivery is not None else Decimal("0.00"))
         and link_key(listing.url) == link_key(offer.url)
@@ -647,8 +644,11 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     added by hand for this retailer. Returns (found, updated, unmatched titles).
 
     An offer that changes nothing on its listing is not written: its listing is only stamped as
-    checked, in chunks, before each progress post and at the end. An offer without a price never
-    creates a listing.
+    checked, in chunks, before each progress post and at the end, and when the read fails part way.
+
+    An offer without a price is held until every offer has been read, because variants of one product
+    come in any order. It is used only for a product no priced offer in this run touched, never changes
+    a listing's link or title, never creates a listing, and can only take a listing out of stock.
     """
     checked_at = checked_at or timezone.now()
     products_by_link = {
@@ -669,8 +669,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     )
 
     to_stamp = []
+    # Product pk -> (first offer without a price, whether every such offer said out of stock).
+    unpriced = {}
 
-    if True:
+    try:
         for offer in offers:
             if found and found % PROGRESS_EVERY == 0:
                 # Stamp first, so a run cut short after this point leaves these listings fresh.
@@ -721,19 +723,14 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 unmatched.append(f"{offer.title} [link is not a web address]")
                 continue
             if offer.price <= 0:
-                # No price is not a price: it may update the stock of a listing we have, never make one,
-                # and never stands in for a sibling variant seen earlier in this run.
-                if product_pk in seen_products:
-                    continue
-                listing = Listing.objects.filter(product_id=product_pk, retailer=retailer).first()
-                if listing is None:
-                    unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url} (no price)")
-                    continue
-                created = False
-            else:
-                listing, created = Listing.objects.get_or_create(
-                    product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
-                )
+                # No price is not a price. A priced variant of the same product may still come later in
+                # the run, so this offer waits until the end and never stands in for one.
+                first, all_out = unpriced.get(product_pk, (offer, True))
+                unpriced[product_pk] = (first, all_out and offer.availability == Listing.Availability.OUT_OF_STOCK)
+                continue
+            listing, created = Listing.objects.get_or_create(
+                product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
+            )
             if product_pk in seen_products and listing.availability != Listing.Availability.OUT_OF_STOCK:
                 # Several variants of one product: keep the cheapest one that is in stock.
                 if offer.availability == Listing.Availability.OUT_OF_STOCK or offer.price >= listing.price:
@@ -758,20 +755,46 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 availability=offer.availability,
                 checked_at=checked_at,
             )
+    except BaseException:
+        # The listings seen so far were checked: keep that, unless the database cannot take it either.
+        try:
+            stamp_checked(to_stamp, checked_at)
+        except Exception:
+            logger.warning("Checks of %s not stamped after the read failed", retailer, exc_info=True)
+        raise
 
-        stamp_checked(to_stamp, checked_at)
+    stamp_checked(to_stamp, checked_at)
 
-        # Fill in images for products that have none.
-        if images_by_product:
-            for product in Product.objects.filter(pk__in=images_by_product, image="", image_url=""):
-                product.image_url = images_by_product[product.pk][:1000]
-                product.save(update_fields=["image_url"])
+    # Products this run saw only without a price: the stock of a listing we have, nothing more.
+    unpriced = {pk: held for pk, held in unpriced.items() if pk not in seen_products}
+    pks = list(unpriced)
+    listings = {}
+    for start in range(0, len(pks), STAMP_CHUNK):
+        for listing in Listing.objects.filter(retailer=retailer, product_id__in=pks[start:start + STAMP_CHUNK]):
+            listings.setdefault(listing.product_id, listing)
+    for pk, (offer, all_out) in unpriced.items():
+        listing = listings.get(pk)
+        if listing is None:
+            unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url} (no price)")
+            continue
+        # Still listed by the shop, so not swept out of stock below.
+        seen_products.add(pk)
+        if all_out and listing.availability != Listing.Availability.OUT_OF_STOCK:
+            pricing.record_check(listing, price=Decimal("0"), delivery_cost=None,
+                                 availability=Listing.Availability.OUT_OF_STOCK, checked_at=checked_at)
+            updated += 1
 
-        # Anything the retailer no longer lists is out of stock there.
-        if complete:
-            Listing.objects.filter(retailer=retailer).exclude(product_id__in=seen_products).exclude(
-                availability=Listing.Availability.OUT_OF_STOCK
-            ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at)
+    # Fill in images for products that have none.
+    if images_by_product:
+        for product in Product.objects.filter(pk__in=images_by_product, image="", image_url=""):
+            product.image_url = images_by_product[product.pk][:1000]
+            product.save(update_fields=["image_url"])
+
+    # Anything the retailer no longer lists is out of stock there.
+    if complete:
+        Listing.objects.filter(retailer=retailer).exclude(product_id__in=seen_products).exclude(
+            availability=Listing.Availability.OUT_OF_STOCK
+        ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at)
 
     return found, updated, unmatched
 

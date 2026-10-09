@@ -538,15 +538,19 @@ it again after changing the mark and commit the files.
 - Unchanged offers are stamped, not rewritten. When a shop read finds the
   same price, delivery, stock state and link a listing already holds, only
   its last checked time moves, 500 listings to one short write, before each
-  progress note on the run (every 250 offers) and at the end. Only offers
-  that change something go through `record_check`, so a read of a large
-  shop writes a few dozen rows instead of thousands.
+  progress note on the run (every 250 offers), at the end, and when the read
+  fails part way. Only offers that change something go through
+  `record_check`, so a read of a large shop writes a few dozen rows instead
+  of thousands.
 - A price of £0.00 or less is not a price, whatever the stock state says (a
-  shop opening a pre-order before pricing it, or a page that lost its
-  price). An existing listing keeps its last price and only its stock state
-  and check time are saved, with no restock and no price history. No new
-  listing is made from such an offer; it appears in the run's unmatched list
-  ending "(no price)".
+  shop opening a pre-order before pricing it, a deposit variant, or a page
+  that lost its price). Such an offer can only take an existing listing out
+  of stock. It never makes a listing buyable, never moves its last checked
+  time otherwise (so an old price ages out as usual), never changes its link
+  or title, and writes no restock or price history. When a product has
+  priced and unpriced variants in the same read, only the priced ones count,
+  whatever order the shop lists them in. No new listing is made from such an
+  offer; it appears in the run's unmatched list ending "(no price)".
 - Run `python manage.py snapshot_daily_prices` once a day (for example from
   cron) so price history and "Price drops this week" have no gaps.
 - Retailer affiliate links: set **Affiliate link format** on the retailer, for

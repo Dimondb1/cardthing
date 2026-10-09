@@ -76,14 +76,16 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     """Save one check of a listing. ``delivery_cost`` None means the charge is not known: it is stored as
     unknown, never as free.
 
-    A price of nothing or less is not a price (a shop opening a pre-order before pricing it, or a page
-    that lost its price); a shop never sells for nothing, so this holds whatever the stock says. An
-    existing listing keeps its last price and only its stock and check time are saved, with no restock
-    and no history. A new listing is not created. Returns None in both cases.
+    A price of nothing or less is not a price (a shop opening a pre-order before pricing it, a deposit
+    variant, or a page that lost its price); a shop never sells for nothing, so this holds whatever the
+    stock says. Such a check can only take an existing listing out of stock: its stock and check time are
+    saved, its price stays, with no restock and no history. It never makes a listing buyable or marks its
+    old price as freshly checked, so that price ages out as it would without the check. A new listing is
+    not created. Returns None in every case.
     """
     checked_at = checked_at or timezone.now()
     if price is None or price <= 0:
-        if listing.pk and not listing._state.adding:
+        if listing.pk and not listing._state.adding and availability == Listing.Availability.OUT_OF_STOCK:
             listing.availability = availability
             listing.last_checked = checked_at
             listing.save(update_fields=["availability", "last_checked"])

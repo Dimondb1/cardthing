@@ -128,6 +128,9 @@ class Command(BaseCommand):
             if result is None:
                 continue
             price, availability = result
+            if (price is None or price <= 0) and availability != Listing.Availability.OUT_OF_STOCK:
+                # No price is not a price: the shop is not selling it, so there is nothing to save or report.
+                continue
             if availability != listing.availability or price != listing.price:
                 changed += 1
                 if availability == Listing.Availability.IN_STOCK and listing.availability != Listing.Availability.IN_STOCK:

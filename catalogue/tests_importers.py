@@ -971,3 +971,25 @@ class WriteSkippingTests(TestCase):
         self.assertIsNotNone(listing.back_in_stock_at)
         self.assertEqual(Restock.objects.filter(listing=listing).count(), 1)
         self.assertFalse(Restock.objects.filter(listing=self.listings[1]).exists())
+
+    def test_a_failed_read_still_stamps_every_listing_it_saw(self):
+        from unittest import mock
+
+        from django.db import OperationalError
+
+        from . import importers
+
+        def offers(fail):
+            yield self.offer(0)
+            yield self.offer(1)
+            raise fail
+
+        checked_at = timezone.now()
+        with self.assertRaises(ImportError_):
+            apply_offers(self.retailer, offers(ImportError_("The shop stopped answering")), checked_at=checked_at)
+        stamped = set(Listing.objects.filter(last_checked=checked_at).values_list("pk", flat=True))
+        self.assertEqual(stamped, {self.listings[0].pk, self.listings[1].pk})
+        # A database that cannot take the stamps either does not hide why the read failed.
+        with mock.patch.object(importers, "stamp_checked", side_effect=OperationalError("database is locked")), \
+                self.assertLogs("catalogue.importers", "WARNING"), self.assertRaises(ImportError_):
+            apply_offers(self.retailer, offers(ImportError_("The shop stopped answering")))

@@ -1707,6 +1707,20 @@ show, and "Clear history" forgets both. Nothing is sent to or stored on
 the server, and nobody is sent back to where they were: the site opens
 the same for everyone and the recent things are simply there.
 
+## Picked for you
+
+The first row under the home page's search box, for anyone who has viewed,
+saved or searched for something. The same script sends the viewed and saved
+slugs and up to three recent searches to `/api/picks/?p=slug,slug&s=a|b` as
+the page loads, and shows the row it gets back; with nothing known, or with
+JavaScript off, the row stays hidden. The server (`catalogue/picks.py`)
+ranks up to 8 in-stock products from the same set, or the same game and
+kind, never one already viewed or saved: deals "Too good to miss" first (a
+confirmed saving of at least 15% on the next shop, or the lowest price of
+the week), then the closest match (same set, same language), then the most
+widely stocked. It keeps nothing about the visitor, and the request is never
+cached.
+
 ## Add to home screen
 
 `/manifest.webmanifest` is a web app manifest, built by a view so it

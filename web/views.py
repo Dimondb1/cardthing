@@ -1130,6 +1130,25 @@ def recent_api(request):
 
 
 @require_GET
+def picks_api(request):
+    """The home page's Picked for you row: in-stock products like those named in ``p`` (viewed and saved)
+    and found by the searches in ``s``, deals too good to miss first.
+
+    What a visitor looked at lives in their browser; the server only ranks and prices, and keeps nothing.
+    """
+    from django.template.loader import render_to_string
+
+    from catalogue import picks
+
+    seen = products_for_slugs(slugs_in(request, RECENT_MAX + WATCHLIST_MAX))
+    searches = [term[:80] for term in request.GET.get("s", "").split("|")][:picks.SEARCHES_READ]
+    rows = picks.picks(seen + picks.from_searches(searches))
+    response = HttpResponse(render_to_string("web/includes/picks_row.html", {"rows": rows}, request=request))
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_GET
 def note_api(request):
     """Count one home screen event (shown, added, dismissed, opened). Nothing about the visitor is kept."""
     event = request.GET.get("what", "")

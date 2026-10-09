@@ -1629,3 +1629,60 @@ class ComingSoonTests(PageTestCase):
                 self.assertNotIn("!", visible)
                 for phrase in CopyStyleTests.BANNED:
                     self.assertNotIn(phrase, html.lower())
+
+
+class PicksTests(TestCase):
+    """Picked for you: in-stock products like the ones a visitor viewed, saved or searched for, real deals
+    first and labelled too good to miss, never the ones they already looked at."""
+
+    def setUp(self):
+        from decimal import Decimal
+
+        self.game = make_game()
+        self.set = make_set(self.game, name="Surging Sparks", slug="surging-sparks")
+        other_set = make_set(self.game, name="Journey Together", slug="journey-together")
+        self.shops = [make_retailer(f"Shop {n}", delivery_cost=Decimal("0")) for n in range(3)]
+        self.viewed = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        self.same_set = make_product(self.set, name="Surging Sparks Booster Bundle", product_type="booster_bundle")
+        self.deal = make_product(other_set, name="Journey Together Elite Trainer Box")
+        self.sold_out = make_product(self.set, name="Surging Sparks Booster Box", product_type="booster_box")
+        self.unrelated = make_product(other_set, name="Journey Together Booster Box", product_type="booster_box")
+        for product, prices in ((self.viewed, ("50.00", "52.00")), (self.same_set, ("30.00", "31.00")),
+                                (self.deal, ("40.00", "52.00")), (self.unrelated, ("100.00", "101.00"))):
+            for shop, price in zip(self.shops, prices):
+                make_listing(product, shop, price=price)
+        make_listing(self.sold_out, self.shops[0], price="120.00", availability=Listing.Availability.OUT_OF_STOCK)
+
+    def picks(self, query):
+        return self.client.get(reverse("web:picks_api") + query).content.decode()
+
+    def test_products_like_the_viewed_one_come_with_the_real_deals_first(self):
+        body = self.picks(f"?p={self.viewed.slug}")
+        self.assertNotIn(self.viewed.name, body)
+        self.assertNotIn(self.sold_out.name, body)
+        self.assertNotIn(self.unrelated.name, body)
+        # A 23% saving on the next shop is too good to miss and comes first; the same set's bundle follows.
+        self.assertLess(body.index(self.deal.name), body.index(self.same_set.name))
+        self.assertEqual(body.count("Too good to miss"), 1)
+        self.assertIn("Save £12.00", body)
+
+    def test_searches_count_too_and_nothing_known_gives_nothing(self):
+        self.assertIn(self.same_set.name, self.picks("?s=surging+sparks+elite"))
+        self.assertEqual(self.picks("").count("trending__item"), 0)
+        self.assertEqual(self.picks("?p=nope").count("trending__item"), 0)
+
+    def test_the_row_costs_the_same_queries_however_much_was_viewed(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as one:
+            self.picks(f"?p={self.viewed.slug}")
+        with CaptureQueriesContext(connection) as many:
+            self.picks(f"?p={self.viewed.slug},{self.same_set.slug},{self.deal.slug},{self.unrelated.slug}")
+        self.assertLessEqual(len(many), len(one))
+        self.assertLessEqual(len(one), 6)
+
+    def test_the_home_page_has_the_section_hidden_until_the_script_fills_it(self):
+        page = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn(f'data-picks data-endpoint="{reverse("web:picks_api")}" hidden', page)
+        self.assertLess(page.index("data-picks"), page.index("data-resume"))

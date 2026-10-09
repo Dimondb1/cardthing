@@ -28,6 +28,26 @@
     store(SEARCHES, searches.slice(0, KEEP_SEARCHES));
   }
 
+  // Picked for you: products like those viewed, saved and searched for, best deals first. Asked for at
+  // once, so the row appears as the page settles. The server keeps nothing about the visitor.
+  const picks = document.querySelector("[data-picks]");
+  if (picks) {
+    const slugOf = (item) => item.slug || (item.url || "").split("/").filter(Boolean).pop() || "";
+    const slugs = [...load(VIEWED), ...load("ripraptor.saved")].map(slugOf).filter(Boolean);
+    const terms = load(SEARCHES).slice(0, 3);
+    if (slugs.length || terms.length) {
+      const query = `p=${encodeURIComponent([...new Set(slugs)].join(","))}&s=${encodeURIComponent(terms.join("|"))}`;
+      fetch(`${picks.dataset.endpoint}?${query}`)
+        .then((r) => (r.ok ? r.text() : ""))
+        .then((html) => {
+          if (!html.includes("trending__item")) return;
+          picks.querySelector("[data-picks-list]").innerHTML = html;   // our own server's markup
+          picks.hidden = false;
+        })
+        .catch(() => {});
+    }
+  }
+
   // The home page section.
   const section = document.querySelector("[data-resume]");
   if (!section) return;

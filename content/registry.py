@@ -399,6 +399,19 @@ ENTRIES = [
         "Kept in this browser only.",
         "Small note under the pick up section.",
     ),
+    Entry(
+        "home.picks.title", H, "Picked for you heading", "Picked for you",
+        "Top home page row of in-stock products like the ones this browser viewed, saved or searched for. Hidden "
+        "until there are some.",
+    ),
+    Entry(
+        "home.picks.note", T, "Picked for you note", "Like what you have looked at, best deals first.",
+        "Small note under the Picked for you heading.",
+    ),
+    Entry(
+        "home.picks.hot", T, "Too good to miss label", "Too good to miss",
+        "Green label on a pick whose saving on the next shop is big, or whose price is the lowest of the week.",
+    ),
     Entry("home.featured.title", H, "Featured deals heading", "Featured deals", "Home page row near the top."),
     Entry(
         "home.featured.note", T, "Featured deals note",

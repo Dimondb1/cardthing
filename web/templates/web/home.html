@@ -24,6 +24,14 @@
   {% endif %}
 </section>
 
+<section class="home-section" aria-labelledby="picks-title" data-picks data-endpoint="{% url 'web:picks_api' %}" hidden>
+  <div class="section-head">
+    <h2 id="picks-title" class="section-head__title">{% copy "home.picks.title" %}</h2>
+  </div>
+  <p class="section-head__note">{% copy "home.picks.note" %}</p>
+  <div data-picks-list></div>
+</section>
+
 <section class="home-section resume" aria-labelledby="resume-title" data-resume hidden>
   <div class="section-head">
     <h2 id="resume-title" class="section-head__title">{% copy "home.resume.title" %}</h2>

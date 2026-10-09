@@ -78,7 +78,9 @@ class Offer:
     product_pk: int | None = None   # set when the source already knows which product this is
     page_pk: int | None = None   # the ShopPage a website read took this offer from
     published_at: datetime | None = None   # when the shop published the product (Shopify's published_at)
-    variant: str = ""   # the shop's variant label ("1 Pack", "Booster Box"), when the product page has several
+    variant: str = ""   # the shop's label for this variant ("1 Pack", "Booster Box"), when it gave one
+    page_title: str = ""   # the product page's own title, without the variant's label
+    variants: int = 1   # how many variants the product page has
 
 
 class ImportError_(Exception):
@@ -355,10 +357,11 @@ def product_offers(base, product, preorder=False):
             availability = Listing.Availability.PREORDER
         else:
             availability = Listing.Availability.IN_STOCK
-        title = product.get("title", "")
+        title = page_title = product.get("title", "")
+        label = "" if variant.get("title") == "Default Title" else variant.get("title") or ""
         variant_url = url
-        if variant.get("title") and variant["title"] != "Default Title":
-            title = f"{title} ({variant['title']})"
+        if label:
+            title = f"{page_title} ({label})"
             # Land the buyer on this variant, not the page's variant menu.
             if variant.get("id"):
                 variant_url = f"{url}?variant={variant['id']}"
@@ -373,8 +376,9 @@ def product_offers(base, product, preorder=False):
             vendor=product.get("vendor", "") or "",
             tags=tuple(product.get("tags", []) or []),
             published_at=published_at,
-            # Only a page with several variants can mix products up; a lone "6 Packs" variant is the page itself.
-            variant=variant["title"] if len(product.get("variants") or []) > 1 and variant.get("title") not in (None, "", "Default Title") else "",
+            variant=label,
+            page_title=page_title,
+            variants=len(product.get("variants") or []),
         )
 
 
@@ -1152,12 +1156,11 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             found += 1
             notice_release(shop_signals, offer, checked_at)
-            if offer.variant:
+            if offer.variant and offer.variants > 1:
                 # "1 Pack", "18 Packs", "Half Box" or "Case" on a booster box page is another product at another
                 # price. It is judged against the page before any matching, so it can never take over the
                 # box's listing (whose address it shares) or leave a linked row behind.
-                page_title = offer.title.removesuffix(f" ({offer.variant})")
-                why = variant_differs(page_title, offer.variant, offer.shop_type)
+                why = variant_differs(offer.page_title, offer.variant, offer.shop_type)
                 if why:
                     unmatched.append(f"{offer.title} [{why}] {offer.url}")
                     continue

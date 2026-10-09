@@ -148,6 +148,23 @@ class ClassifyLeakTests(TestCase):
             self.assertEqual(variant_differs(page, label), "", label)
         self.assertTrue(variant_differs("Magic Duskmourn Play Booster Box (36 Packs)", "Collector Booster Box"))
 
+    def test_a_variant_label_caps_what_it_can_score_for_our_product(self):
+        from .classify import another_kind, variant_cap
+        from .matching import AUTO_LINK, SUGGEST
+
+        box = ("booster_box", "Prismatic Evolutions Booster Box")
+        pack = ("booster_pack", "Prismatic Evolutions Booster Pack")
+        cases = [(box, "", 100), (box, "English", 100), (box, "Booster Box", 100), (box, "1 Pack", SUGGEST - 1),
+                 (box, "Single Packs", SUGGEST - 1), (box, "36 Packs", AUTO_LINK - 1),
+                 (box, "Booster Bundle", SUGGEST - 1), (pack, "Single Pack", 100), (pack, "3 Packs", AUTO_LINK - 1),
+                 (pack, "Booster Box", SUGGEST - 1)]
+        for (kind, name), label, cap in cases:
+            with self.subTest(product=name, label=label):
+                self.assertEqual(variant_cap(label, kind, name), cap)
+                self.assertEqual(another_kind(label, kind), cap == SUGGEST - 1)
+        # A product of no known kind is never judged by a label's kind.
+        self.assertFalse(another_kind("1 Pack", None))
+
     def test_a_word_repeated_by_the_shop_appears_once(self):
         self.assertEqual(classify("Yu-Gi-Oh! Justice Hunters Booster Booster Pack", price=3).name, "Justice Hunters Booster Pack")
 

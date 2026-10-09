@@ -437,19 +437,6 @@ class SuggestTests(FinderCase):
         self.assertFalse(ShopProduct.objects.filter(retailer=self.gg).exists())
         self.assertEqual(self.search(box, self.gg).outcome, StockistSearch.Outcome.NONE)
 
-    def test_a_variant_label_caps_what_it_can_score(self):
-        box = make_product(self.set, name="Prismatic Evolutions Booster Box", slug="pe-box", product_type="booster_box")
-        pack = make_product(self.set, name="Prismatic Evolutions Booster Pack", slug="pe-pack", product_type="booster_pack")
-        cases = [(box, "", 100), (box, "English", 100), (box, "Booster Box", 100), (box, "1 Pack", finder.SUGGEST - 1),
-                 (box, "Single Packs", finder.SUGGEST - 1), (box, "36 Packs", finder.AUTO_LINK - 1),
-                 (box, "Booster Bundle", finder.SUGGEST - 1), (pack, "Single Pack", 100), (pack, "3 Packs", finder.AUTO_LINK - 1),
-                 (pack, "Booster Box", finder.SUGGEST - 1)]
-        for product, label, cap in cases:
-            with self.subTest(product=product.name, label=label):
-                self.assertEqual(finder.variant_cap(product, label), cap)
-        self.assertEqual(finder.variant_label("Box (1 Pack)", "Box"), "1 Pack")
-        self.assertEqual(finder.variant_label("Box", "Box"), "")
-
     def test_every_candidate_is_stamped_even_when_nothing_is_found(self):
         self.find(Shop({"suggest.json": recorded("empty_suggest.json")}))
         self.etb.refresh_from_db()

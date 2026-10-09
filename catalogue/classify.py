@@ -13,7 +13,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-from .matching import expand
+from .matching import AUTO_LINK, SUGGEST, expand
 
 # slug, name, short name, words that identify the game in a title, vendor or tag
 GAMES = [
@@ -139,6 +139,32 @@ def label_kind(label):
                 return None
             return kind
     return None
+
+
+def another_kind(label, kind):
+    """True when a variant label names a kind of product other than ``kind``: "1 Pack" is not a booster box."""
+    named = label_kind(label)
+    return bool(named and kind and named != kind)
+
+
+# Numbers in a variant label: "3 Packs", "Case (6 Boxes)".
+NUMBER = re.compile(r"\d+")
+
+
+def variant_cap(label, kind, name):
+    """The highest score a variant with this label can have for our product of this kind and name.
+
+    The stockist finder's rule. A variant of another kind ("1 Pack" for a booster box) is a different
+    product: not even likely. A variant with a count our name does not carry ("3 Packs") may be a
+    different amount: it waits for the owner, never links. A shop read uses the first half on every
+    variant; it judges counts against the page instead (variant_differs).
+    """
+    if another_kind(label, kind):
+        return SUGGEST - 1
+    ours = set(NUMBER.findall(name))
+    if any(count not in ours for count in NUMBER.findall(label or "")):
+        return AUTO_LINK - 1
+    return 100
 
 
 # Makers of merchandise and accessories, not cards. Nothing from them is a sealed TCG product.

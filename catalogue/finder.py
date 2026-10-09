@@ -53,7 +53,7 @@ from django.utils import timezone
 from . import crawl, importers
 from .classify import classify
 from .importers import Catalogue, ImportError_, apply_offers, ean_key, link_key, money, product_offers
-from .classify import TYPES, label_kind
+from .classify import TYPES, variant_cap
 from .matching import AUTO_LINK, SUGGEST, TYPE_WORDS, covers, key_words, shop_title
 from .models import (
     DailyPageView, ImportRun, Listing, OutboundClick, Product, Retailer, ShopPage, ShopProduct, StockAlert,
@@ -347,32 +347,6 @@ def judge(product, title, sealed=None):
     if sealed is not None and sealed.product_type != product.product_type:
         value = min(value, AUTO_LINK - 1)
     return value
-
-
-# What a variant's own label can say about it beyond the page's title: "(1 Pack)" on a booster box page.
-COUNT = re.compile(r"\d+")
-
-
-def variant_label(title, page_title):
-    """The variant's own label in an offer title written "<page title> (<variant>)", or ""."""
-    if page_title and title.startswith(f"{page_title} (") and title.endswith(")"):
-        return title[len(page_title) + 2:-1]
-    return ""
-
-
-def variant_cap(product, label):
-    """The highest score a variant with this label can have for our product. A variant of another kind
-    ("1 Pack" on a booster box page) is a different product: not even likely. A variant with a count our
-    name does not carry ("3 Packs") may be a different amount: it waits for the owner, never links."""
-    if not label:
-        return 100
-    kind = label_kind(label)
-    if kind is not None and kind != product.product_type:
-        return SUGGEST - 1
-    ours = set(COUNT.findall(product.name))
-    if any(count not in ours for count in COUNT.findall(label)):
-        return AUTO_LINK - 1
-    return 100
 
 
 def fold(text):
@@ -844,12 +818,11 @@ class Finder:
         if same:
             return self.link(product, shop, min(same, key=lambda o: (o.availability == out, o.price)), AUTO_LINK)
         judged = []
-        page_title = data.get("title") or ""
         for offer in offers:
             sealed = classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price)
             if sealed is not None and sealed.game == product.game.slug:
                 value = judge(product, offer.title, sealed)
-                judged.append((min(value, variant_cap(product, variant_label(offer.title, page_title))), offer))
+                judged.append((min(value, variant_cap(offer.variant, product.product_type, product.name)), offer))
         if not judged:
             return self.note(product, shop, StockistSearch.Outcome.NONE)
         value, offer = max(judged, key=lambda item: (item[0], item[1].availability != out, -item[1].price))

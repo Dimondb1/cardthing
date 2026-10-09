@@ -359,7 +359,7 @@ def ours(product):
 
 def title_language(product, title):
     """The language a shop's title says or implies, in words: "English" when it says nothing."""
-    return languages.name(languages.language_of(title or "", product.game.slug, loose=True))
+    return languages.name(languages.language_of(title or "", product.game.slug))
 
 
 def reads_as(product, title):

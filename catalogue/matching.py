@@ -143,8 +143,9 @@ def match_key(text):
     return " ".join(kept)
 
 
-def score(product_name, title):
-    """0 to 100. 100 means every meaningful word of our name is in the title."""
+def score(product_name, title, game=""):
+    """0 to 100. 100 means every meaningful word of our name is in the title. ``game`` lets the language
+    rules read set codes (catalogue/languages.py)."""
     ours = words(product_name)
     if not ours:
         return 0
@@ -158,7 +159,7 @@ def score(product_name, title):
             return min(value, SUGGEST - 1)
     # A title in another language is another product, whether it says so in words, a seller's code or
     # a set code only that language has ("151 sv2a" is Japanese, our "151" English).
-    if not same_language(product_name, title):
+    if not same_language(product_name, title, game):
         return min(value, SUGGEST - 1)
     for kind in TYPE_WORDS:
         if (kind in theirs) != (kind in ours_text):
@@ -168,18 +169,20 @@ def score(product_name, title):
     return value
 
 
-def same_language(product_name, title):
-    """False when the shop's title is in a language our product's name is not. A title that names no
-    language says nothing: shops selling only Japanese boxes often leave it out."""
-    theirs = languages.language_of(title or "", loose=True)
-    return not theirs or languages.same(languages.language_of(product_name or ""), theirs)
+def same_language(product_name, title, game=""):
+    """False when the shop's title is in a language our product's name is not, or states two. A title that
+    names no language says nothing here: shops selling only Japanese boxes often leave it out."""
+    if languages.mixed(title or "", game):
+        return False
+    theirs = languages.language_of(title or "", game)
+    return not theirs or languages.same(languages.language_of(product_name or "", game), theirs)
 
 
-def best_match(title, products):
+def best_match(title, products, game=""):
     """(product, score) for the best of ``products`` (iterable of (pk, name)) or (None, 0)."""
     best, best_score = None, 0
     for pk, name in products:
-        value = score(name, title)
+        value = score(name, title, game)
         if value > best_score or (value == best_score and best is not None and len(name) > len(best[1])):
             best, best_score = (pk, name), value
     return best, best_score

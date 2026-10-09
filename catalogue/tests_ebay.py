@@ -610,13 +610,13 @@ class FallbackSearchTests(TestCase):
     def test_language_shorthand_and_foreign_script_are_another_edition(self):
         pack = make_product(self.set, name="30th Celebration Booster Pack", slug="30th-pack", product_type="booster_pack")
         jp = make_product(self.set, name="Japanese Pokemon: Abyss Eye Booster Pack", slug="abyss-jp", product_type="booster_pack")
-        for title in ("CHS Pokémon TCG 30th Celebration Booster Pack", "Pokemon 30th Celebration Booster Pack (SC) Sealed",
+        for title in ("CHS Pokémon TCG 30th Celebration Booster Pack", "Pokemon 30th Celebration Booster Pack (CHS) Sealed",
                       "Pokemon 30th Celebration Booster Pack S-Chinese", "Pokemon 30th Celebration Booster Pack JPN",
                       "宝可梦 Pokemon 30th Celebration Booster Pack", "Pokemon TCG 30th Celebration Booster Pack KOR",
                       "Pokemon 30th Celebration JP Booster Pack"):
             self.assertTrue(ebay.junk(pack, title), title)
-        # "SC" alone is also a set code, and an all-capitals "KOR" may be Magic's Kor.
-        self.assertFalse(ebay.junk(pack, "Pokemon 30th Celebration Booster Pack SC Sealed"))
+        # "SC" is also Shiny Collection, and an all-capitals "KOR" may be Magic's Kor.
+        self.assertFalse(ebay.junk(pack, "Pokemon 30th Celebration Booster Pack (SC) Sealed"))
         self.assertFalse(ebay.junk(pack, "Pokemon TCG 30th Celebration Booster Pack English Sealed"))
         self.assertFalse(ebay.junk(pack, "Pokemon TCG 30th Celebration Booster Pack TCG Sealed"))
         self.assertFalse(ebay.junk(jp, "Pokemon Abyss Eye Booster Pack JPN Sealed"))

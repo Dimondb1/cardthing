@@ -1481,28 +1481,40 @@ for example "(Japanese)".
 
 What counts, in order:
 
+- **Guards first:** "not Japanese", "rulebook in Dutch", "made in Japan",
+  "Chinese New Year" and "Asian English" say nothing about the cards.
 - **Stated:** a language word in English or the language itself
-  (Japanese, Korean, Simplified Chinese, Deutsch, Japonais), a kind of
-  product named in another language (Top-Trainer-Box, Coffret Dresseur
-  d'Elite), a script (kana, Hangul, Thai, Cyrillic, Chinese characters), or
-  a seller's code where it cannot be a word: "[JP]", "(DE)", "- KR" at the
-  end, "JP Version", "JPN", "CHS". In shop and eBay titles an upper-case
-  "JP", "KR" or "KOR" on its own counts too. "It" in Wreck It Ralph, "De" in
-  Cruella De Vil, Magic's "Kor" and "Germany" never count.
-- **Implied, Pokémon:** a set code with a letter after the number, which
-  only Asian editions have (sv2a, sv5M, s12a, SM12a, M2a); a Simplified
-  Chinese code (CSV9C, CBB3C) or Gem Pack; a Japanese-only kind of product
-  (High Class Pack, Deck Build Box) or set name (Terastal Festival, VSTAR
-  Universe, Eevee Heroes). These mean Japanese unless the text states
-  another language, because Korean and Traditional Chinese reuse the codes;
-  a letter after the code names the edition ("s7D F" Traditional Chinese,
-  "SV8A-T" Thai). English numbering (SV3.5, SV08, SWSH12.5), bare codes
-  English shares (SV8, SM6) and set names English shares (Black Bolt, White
-  Flare, 151) say nothing.
-- **Implied, One Piece:** the Chinese and Korean set codes (OPC-01, OPK-01).
-- "English", "Asian English" or "(EN)" outweighs anything implied.
+  (Japanese, Korean, Simplified Chinese, Deutsch, Japonais), a product
+  named in another language (Top-Trainer-Box, Coffret Dresseur d'Elite,
+  Bustine), a script (kana, Hangul, Thai, Cyrillic, Chinese characters,
+  Simplified or Traditional where a character says which), or a seller's
+  code where it cannot be a word: "(JP)", "[DE]", "- FR" at the end, "JP
+  Version", and the tokens JPN, CHN and KR. eBay titles are also read
+  loosely: an upper-case JP, KOR, CHS or CHT on its own counts there. A bare
+  JP in a shop's title does not (it may be a player's country on an English
+  deck), and neither do "SC", "It" in Wreck It Ralph, "De" in Cruella De
+  Vil, Magic's "Kor" or "Germany". For Pokémon, the codes only a stated
+  language has: Simplified Chinese (CSV8C, CBB3, Gem Pack, 151C), a letter
+  after a Japanese code ("s7D F" Traditional Chinese, "SV8-T" Thai), and
+  the Thai and Indonesian sets (sv9s, MA2); for One Piece, OPC and OPK.
+- **English** ("English", "Eng", "(EN)") then outweighs what is implied.
+- **Implied, Pokémon only:** a set code with a letter after the number,
+  which only Asian editions have (sv2a, sv5M, s12a, SM12a, M2a); a
+  Japanese-only kind of product (High Class Pack, Deck Build Box, Premium
+  Trainer Box) or set name (Terastal Festival, VSTAR Universe, Eevee
+  Heroes, Ninja Spinner). These mean Japanese, because Korean and
+  Traditional Chinese reuse the codes but say so. English numbering (SV3.5,
+  SV08, SWSH12.5), bare codes English shares (SV8, SM6, M2) and set names
+  English shares (Black Bolt, White Flare, 151) say nothing.
 
-A shop or eBay title in another language never matches a product by name,
+Football boxes are read by language words and scripts only: JPN, KOR and
+GER are team codes there. A title that states two languages, or joins a
+Japanese-only set to another ("Destined Rivals / Glory of Team Rocket"), is
+mixed: it never matches by name and the autopilot never acts on it.
+
+A shop or eBay title in another language never matches a product by name
+(a title naming no language counts as English, so it only suggests our
+Japanese product, never links it),
 two products in different languages are never duplicates (so never merged),
 a product is filed only under a set of its own language, the autopilot says
 no to a found page or hides a price whose title is plainly in another

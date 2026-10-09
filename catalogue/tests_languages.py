@@ -64,24 +64,92 @@ class ReadingTests(TestCase):
     def test_chinese_and_one_piece_codes(self):
         for text in ("Gem Pack Vol. 2 Booster Box", "CSV9C Booster Box", "Pokemon CBB3 C Gem Pack Vol 3"):
             self.assertEqual(self.read(text), "zh-hans", text)
-        self.assertEqual(self.read("One Piece OPC-01 Booster Box", "one-piece"), "zh")
+        self.assertEqual(self.read("One Piece OPC-01 Booster Box", "one-piece"), "zh-hans")
+        self.assertEqual(self.read("One Piece OPC 15 Booster Box", "one-piece"), "zh-hans")
+        self.assertEqual(self.read("O-Pee-Chee OPC-23 Hockey Hobby Box", "football"), "")
         self.assertEqual(self.read("One Piece OPK-05 Booster Box", "one-piece"), "ko")
 
     def test_sellers_codes_count_only_where_they_cannot_be_words(self):
         for text, code in (("Booster Box [JP]", "ja"), ("Booster Box (DE)", "de"), ("Booster Box - KR", "ko"),
-                           ("151 JP Version Booster Box", "ja"), ("151 JPN Booster Box", "ja"), ("Booster Box (SC)", "zh-hans")):
+                           ("151 JP Version Booster Box", "ja"), ("151 JPN Booster Box", "ja"), ("Booster Box (CHS)", "zh-hans")):
             self.assertEqual(self.read(text), code, text)
         self.assertEqual(self.read("151 JP Booster Box"), "")
+        self.assertEqual(self.read("Booster Box (SC)"), "")
+        self.assertEqual(self.read("Snow White Make It Edition Deck", "lorcana"), "")
         self.assertEqual(self.read("151 JP Booster Box", loose=True), "ja")
+        self.assertEqual(self.read("CHS Pokémon 30th Celebration Booster Pack", loose=True), "zh-hans")
         self.assertEqual(self.read("Pokemon 151 Booster Pack KOR", loose=True), "ko")
         self.assertEqual(self.read("ZENDIKAR KOR ARMORY INTRO PACK", "magic-the-gathering", loose=True), "")
         self.assertEqual(self.read("Pokemon 151 Booster Pack SC Sealed", loose=True), "")
 
     def test_scripts_and_native_words(self):
-        for text, code in (("ポケモンカード 151", "ja"), ("포켓몬 카드 151", "ko"), ("โปเกมอน 151", "th"), ("宝可梦 151", "zh"),
+        for text, code in (("ポケモンカード 151", "ja"), ("포켓몬 카드 151", "ko"), ("โปเกมอน 151", "th"), ("宝可梦 151", "zh-hans"), ("寶可夢 151", "zh-hant"), ("中文 151", "zh"),
                            ("Pokemon Karmesin & Purpur Top-Trainer-Box", "de"), ("Coffret Dresseur d'Élite Pokemon", "fr"),
                            ("Display Pokémon (Français)", "fr"), ("Booster Box Japonais", "ja")):
             self.assertEqual(self.read(text), code, text)
+
+
+class CheckedRulesTests(TestCase):
+    """The cases the fact-check of the rules named, each read the way it should be."""
+
+    def read(self, text, game=POKEMON, loose=False):
+        return languages.language_of(text, game, loose=loose)
+
+    def test_words_that_name_a_language_without_being_one(self):
+        for text, game in (("Pokemon 151 Booster Box - ENGLISH (NOT Japanese)", POKEMON),
+                           ("Portal Second Age: 2 Player Starter Set (Rulebook in Dutch)", "magic-the-gathering"),
+                           ("Panini Chinese New Year Basketball Box", "football"), ("Booster Box Made in Japan", POKEMON),
+                           ("Pokemon 151 ENG Booster Bundle sv2a", POKEMON), ("FIFA World Cup JPN KOR GER Hobby Box", "football"),
+                           ("Asian English Booster Box", "yu-gi-oh")):
+            self.assertEqual(self.read(text, game), "", text)
+
+    def test_codes_and_names_count_only_inside_their_game(self):
+        for text, game in (("Airsoft M1A Rifle Booster Box", "magic-the-gathering"), ("Power Rangers Wild Force Deck", "lorcana"),
+                           ("Counter Strike CS2 C Case", "football"), ("Tarkir: Dragonstorm Play Booster Box", "magic-the-gathering"),
+                           ("Pokemon Mega Charizard X ex Inferno X Premium Collection", POKEMON), ("Terastal Festival Booster Box", "")):
+            self.assertEqual(self.read(text, game), "", text)
+        self.assertEqual(self.read("Inferno X (M2) Booster Box"), "ja")
+
+    def test_language_letters_after_codes(self):
+        cases = [("SV9F Booster Box", "zh-hant"), ("S11A-T Booster Box", "th"), ("MA2T Booster Box", "th"),
+                 ("Ties of Fate sv9s I Booster Box", "id"), ("MA4I Booster Box", "id"), ("SV9 F Booster Box", ""),
+                 ("m6 F Booster Box", ""), ("s5I Booster Box", "ja"), ("sv10a Booster Box", "")]
+        for text, code in cases:
+            self.assertEqual(self.read(text), code, text)
+
+    def test_names_kinds_and_codes_the_first_rules_missed(self):
+        for text in ("Ninja Spinner Booster Box", "Abyss Eye Booster Box", "Storm Emeralda Booster Box",
+                     "Jet-Black Spirit Booster Box", "Terastal Fest ex Booster Box", "Tag All Stars Booster Box",
+                     "Premium Trainer Box ex", "Battle Master Deck Terapagos", "Booster Box japanische Version", "Japense Booster Box"):
+            self.assertEqual(self.read(text), "ja", text)
+        for text in ("CSV8 Brilliant Fantasy Slim Booster Box", "151C Hope Booster Box"):
+            self.assertEqual(self.read(text), "zh-hans", text)
+
+    def test_a_mixed_bundle_is_mixed_and_never_acted_on(self):
+        title = "Destined Rivals / Glory of Team Rocket Mega Bundle"
+        self.assertTrue(languages.mixed(title, POKEMON))
+        self.assertTrue(languages.mixed("Booster Box Japanese and Korean", POKEMON))
+        self.assertFalse(languages.mixed("Terastal Festival Booster Box", POKEMON))
+        self.assertFalse(languages.mixed("Center Japan Mega Brave / Mega Symphonia Card Display Frame", POKEMON))
+        product = make_product(make_set(make_game()), name="Destined Rivals Booster Bundle", product_type="booster_bundle")
+        self.assertEqual(autopilot.language_differs(product, title), "")
+
+    def test_a_plain_title_only_suggests_our_product_in_another_language(self):
+        # The name key drops set codes, so "151 (sv2a)" and a plain "151" title share it.
+        catalogue = Catalogue([(1, "151 (sv2a) Booster Box", POKEMON)])
+        self.assertEqual(catalogue.best_match("Pokemon 151 Booster Box", POKEMON), ((1, "151 (sv2a) Booster Box"), SUGGEST))
+        self.assertEqual(catalogue.best_match("Pokemon 151 sv2a Booster Box", POKEMON)[1], 100)
+        catalogue = Catalogue([(1, "151 Booster Box (Japanese)", POKEMON)])
+        self.assertLess(catalogue.best_match("Pokemon 151 Booster Box", POKEMON)[1], 100)
+        catalogue = Catalogue([(1, "151 Booster Box (Japanese)", POKEMON), (2, "151 Booster Box", POKEMON)])
+        self.assertEqual(catalogue.best_match("Pokemon 151 Booster Box", POKEMON), ((2, "151 Booster Box"), 100))
+        self.assertEqual(catalogue.best_match("Pokemon 151 Booster Box Japanese", POKEMON)[0][0], 1)
+
+    def test_the_refresh_changes_nothing_the_second_time(self):
+        make_product(make_set(make_game()), name="151 (sv2a) Booster Box", product_type="booster_box")
+        Product.objects.update(language="")
+        self.assertEqual(languages.refresh_languages(), 1)
+        self.assertEqual(languages.refresh_languages(), 0)
 
 
 class ProductTests(TestCase):
@@ -137,9 +205,14 @@ class MatchingTests(TestCase):
         self.set = make_set(self.game, name="Black Bolt", slug="black-bolt", code="SV10.5")
 
     def test_new_products_say_their_language_in_words(self):
-        for title in ("Pokemon 151 (sv2a) Booster Box", "Pokemon 151 Booster Box [JP]", "Pokemon 151 JP Booster Box"):
+        for title in ("Pokemon 151 (sv2a) Booster Box", "Pokemon 151 Booster Box [JP]"):
             sealed = classify(title, vendor="Pokemon")
             self.assertTrue(sealed.name.endswith("(Japanese)"), sealed.name)
+        sealed = classify("Pokemon 151 JP Version Booster Box", vendor="Pokemon")
+        self.assertEqual(languages.stated(sealed.name, POKEMON), "ja")
+        # A bare JP in a shop's title may be a player's country, as on this English deck.
+        sealed = classify("Pokemon 2025 World Championship Deck Yuya Okita (JP Raging Bolt)", vendor="Pokemon")
+        self.assertNotIn("Japanese", sealed.name)
         self.assertEqual(classify("Pokemon 151 Booster Box Japanese", vendor="Pokemon").name.count("Japanese"), 1)
         self.assertNotIn("(", classify("Pokemon Black Bolt Booster Box", vendor="Pokemon").name)
 
@@ -164,8 +237,8 @@ class MatchingTests(TestCase):
         from .releases import choose_set, set_rules
 
         rules = set_rules(POKEMON, [(1, "Black Bolt", "SV10.5"), (2, "Black Bolt (Japanese)", "sv11B")])
-        self.assertEqual(choose_set("Black Bolt (sv11B) Booster Box", rules), 2)
-        self.assertEqual(choose_set("Black Bolt Booster Box", rules), 1)
+        self.assertEqual(choose_set("Black Bolt (sv11B) Booster Box", rules, POKEMON), 2)
+        self.assertEqual(choose_set("Black Bolt Booster Box", rules, POKEMON), 1)
 
     def test_the_autopilot_refuses_a_title_in_another_language(self):
         english = make_product(self.set, name="Black Bolt Booster Box", product_type="booster_box")

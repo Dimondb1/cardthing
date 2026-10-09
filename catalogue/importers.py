@@ -37,9 +37,9 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from . import pricing
+from . import languages, pricing
 from .classify import GAMES, classify, find_game, variant_differs
-from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, same_language, score, shop_title
+from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
 from .models import (
     Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, stale_cutoff,
 )
@@ -1357,10 +1357,17 @@ class Catalogue:
         """
         title = shop_title(title)
         title_words = set(self._words(title))
-        for pk in self.by_key.get((game, match_key(title)), ()):
-            # The key drops set codes and language words: "151 (sv2a)" must not take our English "151".
-            if same_language(self.names[pk], title):
-                return (pk, self.names[pk]), AUTO_LINK
+        # The key drops set codes and language words, so it is taken only in the title's language: a title
+        # naming none is English. "151 (sv2a)" never takes our English "151", and a plain "151" title only
+        # suggests our Japanese one.
+        keyed = self.by_key.get((game, match_key(title)), ())
+        if keyed and not languages.mixed(title, game or ""):
+            theirs = languages.language_of(title, game or "")
+            for pk in keyed:
+                if languages.same(languages.language_of(self.names[pk], game or ""), theirs):
+                    return (pk, self.names[pk]), AUTO_LINK
+            if not theirs:
+                return (keyed[0], self.names[keyed[0]]), SUGGEST
         counts = {}
         for word in title_words:
             for pk in self.index.get(word, ()):
@@ -1368,7 +1375,7 @@ class Catalogue:
                     counts[pk] = counts.get(pk, 0) + 1
         # Only products sharing at least two words (or all of a short name) are worth scoring.
         candidates = [(pk, self.names[pk]) for pk, n in counts.items() if n >= 2 or n >= len(set(self._words(self.names[pk])))]
-        match, value = best_match(title, candidates)
+        match, value = best_match(title, candidates, game or "")
         if match and value >= AUTO_LINK and not covers(match[1], title):
             value = SUGGEST
         return match, value

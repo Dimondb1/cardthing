@@ -286,10 +286,11 @@ def junk(product, title):
     A multi-buy, an online code, a part, another language. Checked on every
     result, including those that name the product word for word.
     """
+    game = product.game.slug if product.game_id else ""
     ours = getattr(product, "language", None)
-    ours = languages.language_of(product.name) if ours is None else ours
-    theirs = languages.language_of(title or "", loose=True)
-    if not languages.same(ours, theirs):
+    ours = languages.language_of(product.name, game) if ours is None else ours
+    theirs = languages.language_of(title or "", game, loose=True)
+    if not languages.same(ours, theirs) or languages.mixed(title or "", game):
         return True
     if NOT_THE_THING.search(title) and not NOT_THE_THING.search(product.name):
         return True

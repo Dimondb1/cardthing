@@ -41,6 +41,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from .checks import DATE_GAP_DAYS
+from . import languages
 from .classify import find_game, language_of
 from .models import Game, Listing, Product, ProductSet, Release, ReleaseSourceState
 
@@ -832,7 +833,7 @@ def find_set(game, name, code=""):
     compact = compact_code(code)
     if compact:
         for product_set in sets.exclude(code=""):
-            if compact_code(product_set.code) == compact and not language_of(product_set.name):
+            if compact_code(product_set.code) == compact and not language_of(f"{product_set.name} {product_set.code}", game.slug):
                 return product_set
     return sets.filter(slug=name_key(name)).first()
 
@@ -1133,14 +1134,15 @@ def set_rules(game_slug, sets):
     rules = []
     for pk, name, code in sets:
         # A set's language is what its name says, or what a code only another language has implies.
-        language = language_of(f"{name} {code or ''}", game_slug).lower()
+        language = languages.language_of(f"{name} {code or ''}", game_slug)
+        said = languages.name(language).lower().split() if language else []
         code = compact_code(code) if usable_code(code) else ""
-        name_words = {w for w in words_of(name) if w not in filler and w not in language.split()}
+        name_words = {w for w in words_of(name) if w not in filler and w not in said}
         rules.append((pk, code, name_words, len(name), language))
     return rules
 
 
-def choose_set(product_name, rules):
+def choose_set(product_name, rules, game=""):
     """The set a product name belongs to, or None.
 
     Only a set of the product's own language can take it: a Japanese box shares the English set's code
@@ -1149,8 +1151,8 @@ def choose_set(product_name, rules):
     a set needs two such words, so one word or series words alone never file anything ('Scarlet & Violet'
     never takes 'Scarlet & Violet Surging Sparks ETB').
     """
-    language = language_of(product_name or "").lower()
-    rules = [rule for rule in rules if rule[4] == language]
+    language = languages.language_of(product_name or "", game)
+    rules = [rule for rule in rules if languages.same(rule[4], language)]
     lowered = (product_name or "").lower()
     tokens = {compact_code(t) for t in CODE_TOKEN.findall(lowered)}
     by_code = [rule for rule in rules if rule[1] and rule[1] in tokens]
@@ -1173,7 +1175,7 @@ def attach_sets(game, product_ids=None):
         products = products.filter(pk__in=product_ids)
     moves = defaultdict(list)
     for pk, name in products.values_list("pk", "name"):
-        chosen = choose_set(name, rules)
+        chosen = choose_set(name, rules, game.slug)
         if chosen is not None:
             moves[chosen].append(pk)
     moved = 0

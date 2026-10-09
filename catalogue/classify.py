@@ -273,8 +273,7 @@ def language_of(title, game="", loose=False):
 
 
 def clean_name(title, game=""):
-    # A shop's title, so a seller's "JP" counts.
-    code = languages.language_of(title or "", game, loose=True)
+    code = languages.language_of(title or "", game)
     name = tidy_name(title)
     name = re.sub(r"\s+", " ", name).strip()
     name = drop_repeated_tail(PREFIXES.sub("", name))
@@ -288,7 +287,7 @@ def clean_name(title, game=""):
     name = name.replace("Elite Trainer Box", "Elite Trainer Box").replace(" Etb", " ETB").replace(" ETB", " Elite Trainer Box")
     # A language edition is a different product; keep it in the name in words even when the shop wrote
     # it in brackets, which are otherwise noise, or gave only a set code ("151 (sv2a)" is Japanese).
-    if code and not languages.stated(name):
+    if code and not languages.stated(name, game):
         name = f"{name} ({languages.name(code)})"
     return name[:200]
 

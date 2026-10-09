@@ -150,7 +150,10 @@ def language_differs(product, title):
     another language has (sv2a). A Japanese code on our side only implies the language, so a title that
     states Korean beside it is left alone: Korean reuses the Japanese codes."""
     game = product.game.slug
-    ours, theirs = languages.stated(product.name), languages.stated(title)
+    if languages.mixed(title, game):
+        # Two languages, or a Japanese-only set joined to another: too unclear to act on.
+        return ""
+    ours, theirs = languages.stated(product.name, game), languages.stated(title, game)
     if ours and theirs and not languages.same(ours, theirs):
         return f"the shop's title says {languages.name(theirs)}, not {languages.name(ours)}"
     if not languages.product_language(product):
@@ -412,7 +415,8 @@ class Autopilot:
                     Product.objects.filter(game_id=row.game_id, is_active=True).values_list("name", "product_set_id")
                 )
             rules = releases.set_rules(row.game.slug, [(0, row.name, row.code)])
-            named = [set_id for name, set_id in products[row.game_id] if releases.choose_set(name, rules) == 0]
+            named = [set_id for name, set_id in products[row.game_id]
+                     if releases.choose_set(name, rules, row.game.slug) == 0]
             if not named or any(set_id is not None for set_id in named):
                 continue
             label = releases.BY_NAME[row.source].label if row.source in releases.BY_NAME else row.source

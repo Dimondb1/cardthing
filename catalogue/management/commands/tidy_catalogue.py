@@ -7,6 +7,7 @@ from django.db import transaction
 from django.db.models import Count, Min
 
 from catalogue.classify import find_type, MIN_PRICE, NOT_SEALED, is_generic, tidy_name
+from catalogue.languages import product_language
 from catalogue.models import Listing, Product, ProductAlias
 
 
@@ -74,6 +75,9 @@ class Command(BaseCommand):
                 Product.objects.filter(game=product.game, name=name).exclude(pk=product.pk)
                 .exclude(is_active=False, slug__in=ProductAlias.objects.values("slug")).first()
             )
+            if other is not None and product_language(other) != product_language(product):
+                # One name in two languages (one filed under a Japanese set): two products, never merged.
+                other = None
             if other is not None:
                 self.stdout.write(f"{'would merge' if dry_run else 'merged'}: {product.name} -> {other.name}")
                 if not dry_run:

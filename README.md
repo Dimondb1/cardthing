@@ -960,17 +960,17 @@ one, and `--shop <slug>` for one shop now.
 ## Stockist finder
 
 Products that one shop sells, or none, are looked for at every other
-Shopify shop you have added. Nothing else is ever asked: no shop you have
+Shopify or website shop you have added. Nothing else is ever asked: no shop you have
 not added, no search engine. Every 5 minutes the background reader takes
 the 30 such products people want most (5 points per click to a shop in 7
 days, 3 per product page view and 3 per watchlist row in 2 days, 10 per
 confirmed stock alert, 2 for a pre-order, 2 for a product added in the
 last 14 days; then pre-orders and new products, then the one looked for
-longest ago) and, for each, every active Shopify shop that has no listing
-for it, is not paused and is not waiting after errors. Shops that earn
+longest ago) and, for each, every active Shopify or website shop that has
+no listing for it, is not paused and is not waiting after errors. Shops that earn
 from clicks are asked first.
 
-For each pair it first looks again at the shop's last whole read: a line
+At a Shopify shop it first looks again at the shop's last whole read: a line
 it could not match that names the same game and kind of product, with a
 name that agrees with ours word for word both ways, is the shop's page.
 Otherwise it asks the shop's own search (`/search/suggest.json`), first
@@ -989,6 +989,21 @@ next read checks both; a row that did not record its stock is added as
 out of stock until that read. No means that shop is never asked about that
 product again; the No is about that product only, so the same page can
 still be matched to another of our products by a shop read or the finder.
+
+A website shop has no search to ask, so its page index (the pages its
+reads have listed, see "Website shop pages") is searched instead, with no
+request: the words in the address of each page no product holds yet are
+judged as a title would be. The best page at 60 or more is read once, and
+only when reading it can make a sure match: its address agrees with our
+name both ways, or we have a barcode to compare. The same rules then
+decide, and a sure match without barcodes also needs the page's own title
+to agree. A likely address that reading could not make sure is listed on
+Things to check with the address words as its title and no price (or with
+what an earlier read of the page saw, and when), so the shop is not asked;
+Yes adds it with what was seen, or as out of stock when nothing was, until
+the shop's next read prices it. A website shop not read yet has no index: it is noted as not
+found and not asked.
+
 A title must carry at least half of the words that name our product beyond
 its kind, so another set's Elite Trainer Box is never offered for ours. A
 variant of another kind on the page ("1 Pack" on a booster box page) is

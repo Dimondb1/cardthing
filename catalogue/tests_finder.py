@@ -16,14 +16,16 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import call_command
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from . import crawl, finder, worker
-from .importers import ImportError_, run_import
+from .importers import ImportError_, run_import, slug_words
 from .models import (
-    DailyPageView, ImportRun, Listing, OutboundClick, Product, Retailer, ShopProduct, StockistSearch,
+    DailyPageView, ImportRun, Listing, OutboundClick, Product, Retailer, ShopPage, ShopProduct, StockistSearch,
 )
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
@@ -193,14 +195,16 @@ class CandidateTests(FinderCase):
         first = finder.candidates(now=self.clock())[0]
         self.assertEqual(first.shops, [self.gg, self.third])
 
-    def test_only_active_unpaused_waiting_free_shopify_shops_are_candidates(self):
+    def test_only_active_unpaused_waiting_free_shopify_and_website_shops_are_candidates(self):
         make_retailer("Feed Shop", source_type=Retailer.Source.FEED, source_url="https://feed.example/f.csv")
+        site = make_retailer("Fenland Cards", source_type=Retailer.Source.WEBSITE, source_url="https://fenland.example/")
+        make_retailer("Off Site", source_type=Retailer.Source.WEBSITE, source_url="https://offsite.example/", is_active=False)
         make_retailer("Off Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://off.example/", is_active=False)
         make_retailer("Paused Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://paused.example/",
                       reading_paused=True)
         make_retailer("Waiting Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://waiting.example/",
                       backoff_until=self.clock() + timedelta(minutes=30))
-        self.assertEqual(finder.searchable_shops(self.clock()), [self.third, self.gg, self.home])
+        self.assertEqual(finder.searchable_shops(self.clock()), [self.third, site, self.gg, self.home])
 
     def test_interest_counts_clicks_views_watchlists_alerts_preorders_and_new(self):
         from .models import StockAlert
@@ -658,6 +662,202 @@ class WorkerTests(FinderCase):
     def test_the_setting_turns_it_off(self):
         reader = worker.Worker(clock=self.clock, fetch=Shop({}))
         self.assertNotIn(worker.FINDER, [t.kind for t in reader.plan(self.clock())])
+
+
+SITE = "https://fenland.example"
+SITE_ETB = f"{SITE}/shop/pokemon-prismatic-evolutions-elite-trainer-box"
+
+
+def site_page(url=SITE_ETB, title="Pokemon Prismatic Evolutions Elite Trainer Box", price="129.99", barcode=PE_BARCODE,
+              availability="InStock"):
+    """A website shop's product page in the schema.org shape website reads parse (made up for the tests)."""
+    data = {"@context": "https://schema.org", "@type": "Product", "name": title, "gtin13": barcode,
+            "offers": {"@type": "Offer", "price": price, "priceCurrency": "GBP", "url": url,
+                       "availability": f"https://schema.org/{availability}"}}
+    return f'<html><head><script type="application/ld+json">{json.dumps(data)}</script></head><body></body></html>'.encode()
+
+
+class WebsiteTests(FinderCase):
+    """Website shops have no search to ask: their page index is searched, and at most one page is read."""
+
+    def setUp(self):
+        super().setUp()
+        self.site = make_retailer("Fenland Cards", source_type=Retailer.Source.WEBSITE, source_url=f"{SITE}/",
+                                  website=f"{SITE}/", delivery_cost=Decimal("0"))
+        # Only the website shop is asked unless a test says otherwise.
+        Retailer.objects.filter(pk=self.gg.pk).update(is_active=False)
+        self.pages = {}
+        for slug in ("pokemon-prismatic-evolutions-elite-trainer-box", "pokemon-prismatic-evolutions-booster-bundle",
+                     "pokemon-surging-sparks-elite-trainer-box", "magic-the-gathering-foundations-play-booster-box"):
+            url = f"{SITE}/shop/{slug}"
+            self.pages[slug] = ShopPage.objects.create(retailer=self.site, url=url, slug_words=slug_words(url))
+
+    def test_a_slug_that_scores_100_with_a_matching_barcode_links_and_only_that_page_is_fetched(self):
+        Product.objects.filter(pk=self.etb.pk).update(ean=PE_BARCODE)
+        Listing.objects.filter(product=self.etb, retailer=self.home).update(price=Decimal("40.00"))
+        shop = Shop({SITE_ETB: site_page(price="149.99")})
+        result = self.find(shop)
+        self.assertEqual(shop.calls, [SITE_ETB])
+        listing = Listing.objects.get(product=self.etb, retailer=self.site)
+        self.assertEqual((listing.price, listing.url, listing.availability),
+                         (Decimal("149.99"), SITE_ETB, Listing.Availability.IN_STOCK))
+        # Through apply_offers: £149.99 against £40 is judged like any other price, and the page now names
+        # its product.
+        self.assertEqual(listing.sanity, Listing.Sanity.DOUBTFUL)
+        self.assertEqual(ShopPage.objects.get(url=SITE_ETB).product, self.etb)
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.LINKED)
+        self.assertEqual(result.linked, 1)
+
+    def test_a_sure_address_and_title_link_when_neither_side_has_a_barcode(self):
+        shop = Shop({SITE_ETB: site_page(barcode="", price="61.50")})
+        self.find(shop)
+        listing = Listing.objects.get(product=self.etb, retailer=self.site)
+        self.assertEqual((listing.price, listing.sanity), (Decimal("61.50"), Listing.Sanity.OK))
+        # The page's own title must agree too: a sure address with a title naming more waits for a tap.
+        Listing.objects.filter(retailer=self.site).delete()
+        StockistSearch.objects.all().delete()
+        ShopPage.objects.update(product=None)
+        self.find(Shop({SITE_ETB: site_page(barcode="", title="Pokemon Prismatic Evolutions Pokemon Center Elite Trainer Box")}))
+        self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.REVIEW)
+
+    def test_a_different_barcode_never_links_and_a_barcode_on_one_side_waits(self):
+        Product.objects.filter(pk=self.etb.pk).update(ean="0820650851230")
+        self.find(Shop({SITE_ETB: site_page()}))
+        self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
+        row = ShopProduct.objects.get(retailer=self.site)
+        self.assertEqual((row.status, row.source, row.price, row.availability),
+                         (ShopProduct.Status.REVIEW, ShopProduct.Source.FINDER, Decimal("129.99"), Listing.Availability.IN_STOCK))
+        ShopProduct.objects.all().delete()
+        StockistSearch.objects.all().delete()
+        Product.objects.filter(pk=self.etb.pk).update(ean="")
+        self.find(Shop({SITE_ETB: site_page()}))
+        self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
+        self.assertEqual(ShopProduct.objects.get(retailer=self.site).confidence, 100)
+
+    def test_a_likely_slug_writes_a_review_row_and_fetches_nothing(self):
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        self.etb.refresh_from_db()
+        self.assertTrue(finder.SUGGEST <= finder.judge(self.etb, "pokemon prismatic evolutions elite trainer box") < 100)
+        shop = Shop({SITE_ETB: site_page()})
+        result = self.find(shop)
+        self.assertEqual(shop.calls, [])
+        self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
+        row = ShopProduct.objects.get(retailer=self.site)
+        # Not read, so its price and stock stay unknown: never guessed.
+        self.assertEqual((row.url, row.title, row.price, row.availability, row.product, row.status),
+                         (SITE_ETB, "pokemon prismatic evolutions elite trainer box", None, "", self.etb,
+                          ShopProduct.Status.REVIEW))
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.REVIEW)
+        self.assertEqual(result.review, 1)
+        # Yes adds it as sold out with no price until the shop's next read prices it.
+        listing = finder.link(row)
+        self.assertEqual((listing.price, listing.availability), (0, Listing.Availability.OUT_OF_STOCK))
+
+    def test_a_likely_slug_keeps_what_an_earlier_read_saw_on_the_page(self):
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        seen = self.clock() - timedelta(hours=5)
+        ShopProduct.objects.create(retailer=self.site, url=SITE_ETB, title="Prismatic Evolutions ETB", price=Decimal("58.00"),
+                                   availability=Listing.Availability.IN_STOCK, confidence=70, last_seen=seen)
+        shop = Shop({})
+        self.find(shop)
+        self.assertEqual(shop.calls, [])
+        row = ShopProduct.objects.get(retailer=self.site)
+        self.assertEqual((row.title, row.price, row.availability, row.last_seen, row.product, row.source),
+                         ("Prismatic Evolutions ETB", Decimal("58.00"), Listing.Availability.IN_STOCK, seen, self.etb,
+                          ShopProduct.Source.FINDER))
+
+    def test_a_likely_slug_is_read_when_our_barcode_can_make_it_sure(self):
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box",
+                                                     ean=PE_BARCODE)
+        shop = Shop({SITE_ETB: site_page()})
+        self.find(shop)
+        self.assertEqual(shop.calls, [SITE_ETB])
+        self.assertTrue(Listing.objects.filter(product=self.etb, retailer=self.site).exists())
+
+    def test_a_website_shop_with_no_index_yet_is_skipped_with_no_request(self):
+        ShopPage.objects.all().delete()
+        shop = Shop({})
+        self.find(shop)
+        self.assertEqual(shop.calls, [])
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.NONE)
+
+    def test_pages_another_product_or_another_game_holds_are_never_offered(self):
+        bundle = make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pe-bundle", product_type="bundle")
+        foundations = make_product(self.set, name="Foundations Play Booster Box", slug="fdn", product_type="booster_box")
+        make_listing(foundations, self.home, price="90.00")
+        # The ETB's page belongs to another product at this shop.
+        make_listing(bundle, self.home, price="30.00")
+        make_listing(bundle, self.site, url=SITE_ETB)
+        ShopPage.objects.filter(url=SITE_ETB).update(product=bundle)
+        shop = Shop({})
+        self.find(shop)
+        self.assertEqual(shop.calls, [])
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.NONE)
+        # A Magic page is not offered for a Pokemon product of the same name.
+        self.assertEqual(self.search(foundations, self.site).outcome, StockistSearch.Outcome.NONE)
+        self.assertFalse(ShopProduct.objects.exists())
+
+    def test_the_index_is_read_in_one_query_per_shop_per_batch(self):
+        for n in range(5):
+            product = make_product(self.set, name=f"Prismatic Evolutions Tin {n}", slug=f"pe-tin-{n}", product_type="tin")
+            make_listing(product, self.home, price="20.00")
+        with CaptureQueriesContext(connection) as queries:
+            result = self.find(Shop({}))
+        self.assertEqual(result.products, 6)
+        reads = [q["sql"] for q in queries.captured_queries
+                 if q["sql"].startswith("SELECT") and "catalogue_shoppage" in q["sql"].split(" FROM ")[1].split(" ")[0]]
+        self.assertEqual(len(reads), 1)
+
+    def test_caps_and_the_14_day_guard_hold_across_both_kinds_of_shop(self):
+        Retailer.objects.filter(pk=self.gg.pk).update(is_active=True)
+        gg = Shop({"suggest.json": recorded("empty_suggest.json")})
+        site = Shop({SITE_ETB: site_page(barcode="")})
+        both = {self.gg.pk: gg, self.site.pk: site}
+        now = self.clock().timestamp()
+        # The website shop has had its 20 this hour: only the Shopify shop is asked.
+        cache.set(finder.LOG_KEY, [(now - 60, self.site.pk)] * finder.SHOP_HOURLY, 3600)
+        finder.find(fetch_for=lambda retailer: both[retailer.pk], clock=self.clock, sleep=self.sleep)
+        self.assertEqual(site.calls, [])
+        self.assertTrue(gg.calls)
+        self.assertFalse(StockistSearch.objects.filter(retailer=self.site).exists())
+        # One request left in all: the website shop's page takes it and the Shopify shop waits.
+        StockistSearch.objects.all().delete()
+        gg.calls.clear()
+        self.clock.now += timedelta(minutes=61)
+        cache.set(finder.LOG_KEY, [(self.clock().timestamp() - 60, 999)] * (finder.OVERALL_HOURLY - 1), 3600)
+        finder.find(fetch_for=lambda retailer: both[retailer.pk], clock=self.clock, sleep=self.sleep)
+        self.assertEqual((site.calls, gg.calls), ([SITE_ETB], []))
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.LINKED)
+        # Searched three days ago at both: neither is asked, whichever kind.
+        Listing.objects.filter(retailer=self.site).delete()
+        ShopPage.objects.update(product=None)
+        cache.clear()
+        site.calls.clear()
+        self.clock.now += timedelta(days=3)
+        StockistSearch.objects.update(searched_at=self.clock() - timedelta(days=3), outcome=StockistSearch.Outcome.NONE)
+        StockistSearch.objects.create(product=self.etb, retailer=self.gg, searched_at=self.clock() - timedelta(days=3),
+                                      outcome=StockistSearch.Outcome.NONE)
+        finder.find(fetch_for=lambda retailer: both[retailer.pk], clock=self.clock, sleep=self.sleep)
+        self.assertEqual((site.calls, gg.calls), ([], []))
+        # After 14 days both are asked again.
+        self.clock.now += timedelta(days=12)
+        finder.find(fetch_for=lambda retailer: both[retailer.pk], clock=self.clock, sleep=self.sleep)
+        self.assertEqual(site.calls, [SITE_ETB])
+        self.assertTrue(gg.calls)
+
+    def test_the_reader_searches_website_shops_through_its_buckets(self):
+        now = self.clock()
+        Retailer.objects.update(next_read_at=now + timedelta(hours=1), collections_polled_at=now, collections_ok=True)
+        Listing.objects.update(last_checked=now)
+        shop = Shop({SITE_ETB: site_page(barcode="")})
+        reader = worker.Worker(clock=self.clock, fetch=shop, sleep=self.clock.sleep)
+        for _ in range(50):
+            reader.politeness.requests.append(self.clock().timestamp())
+        reader.find_stockists(worker.Job(worker.Task(worker.FINDER, worker.FINDER_KEY, "", 1, "finder"),
+                                         self.clock(), self.clock() + worker.FINDER_DEADLINE))
+        self.assertEqual(shop.calls, [SITE_ETB])
+        self.assertTrue(Listing.objects.filter(product=self.etb, retailer=self.site).exists())
 
 
 class CommandTests(FinderCase):

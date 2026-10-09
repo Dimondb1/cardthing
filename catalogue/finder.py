@@ -1,6 +1,6 @@
 """
-The stockist finder: products that one shop sells, or none, are looked for at every other Shopify shop
-the owner has already added. It never asks any other site.
+The stockist finder: products that one shop sells, or none, are looked for at every other Shopify or
+website shop the owner has already added. It never asks any other site.
 
 For each product (most wanted first) and each such shop that has no listing for it:
 
@@ -21,13 +21,18 @@ The best page found is read once (/products/<handle>.js) for its barcode, price 
   check page for the owner's Yes or No;
 - anything else is noted as not found.
 
+A website shop has no search to ask. Its page index (ShopPage, kept by its reads) is searched instead:
+the words in each unclaimed page's address are judged as a title would be. The best page is read once,
+and only when reading it can make a sure match: its address agrees with our name both ways, or we hold
+a barcode to compare. The same rules then decide. A likely address that reading could not make sure
+waits for the owner without a request. A website shop not read yet has no index and is not asked.
+
 A shop is not asked about the same product again for 14 days, 7 when people want it, and never after
 the owner said No. Requests are capped at 20 per shop and 200 in all each hour, one second apart at one
 shop, and inside the background reader at a fifth of its requests, so whole-shop reads always come first.
 The caps hold across processes. A shop's 429 stops the finder asking it for the rest of the batch (and
 its search for a week) but never touches the shop's read back-off.
 """
-
 import fcntl
 import json
 import logging
@@ -51,8 +56,8 @@ from .importers import Catalogue, ImportError_, apply_offers, ean_key, link_key,
 from .classify import TYPES
 from .matching import AUTO_LINK, SUGGEST, TYPE_WORDS, covers, key_words, shop_title
 from .models import (
-    DailyPageView, ImportRun, Listing, OutboundClick, Product, Retailer, ShopProduct, StockAlert, StockistSearch,
-    stale_cutoff,
+    DailyPageView, ImportRun, Listing, OutboundClick, Product, Retailer, ShopPage, ShopProduct, StockAlert,
+    StockistSearch, stale_cutoff,
 )
 
 # Interest: clicks are the strongest sign a comparison matters, and an alert is an explicit ask.
@@ -90,6 +95,8 @@ BATCH = 30
 # Products whose shops are looked up in one query while candidates are chosen.
 CHUNK = 200
 MARKETPLACES = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
+# The shops the finder can ask: Shopify shops through their search, website shops through their page index.
+SEARCHABLE = (Retailer.Source.SHOPIFY, Retailer.Source.WEBSITE)
 UNMATCHED_LINE = re.compile(r"^(?P<title>.+) \[[^\]]*\] (?P<url>https?://\S+)$")
 # Held while a request is counted against the caps, so the background reader and a hand-run
 # find_stockists never both take the last place in an hour.
@@ -213,10 +220,11 @@ class Candidate:
 
 
 def searchable_shops(now=None, busy=()):
-    """Active Shopify shops that are not paused or waiting after errors: paying shops first, then by name."""
+    """Active Shopify and website shops that are not paused or waiting after errors: paying shops first,
+    then by name."""
     now = now or timezone.now()
     return list(
-        Retailer.objects.filter(is_active=True, reading_paused=False, source_type=Retailer.Source.SHOPIFY)
+        Retailer.objects.filter(is_active=True, reading_paused=False, source_type__in=SEARCHABLE)
         .exclude(source_url="")
         .exclude(pk__in=list(busy))
         .filter(Q(backoff_until__isnull=True) | Q(backoff_until__lte=now))
@@ -535,6 +543,15 @@ class Hit:
     value: int
 
 
+@dataclass
+class PageHit:
+    """A website shop's indexed page whose address words name our product."""
+    page_pk: int
+    url: str
+    words: str
+    value: int
+
+
 def plain_fetch(shop):
     if shop.session_url:
         return importers.session_fetch(shop.session_url)
@@ -559,6 +576,8 @@ class Finder:
         self.stop = stop or (lambda: False)
         self.fetches = {}
         self.unmatched = {}
+        self.pages = {}
+        self.page_kinds = {}
         self.taken = {}
         self.ignored = {}
         self.blocked = set()
@@ -610,6 +629,8 @@ class Finder:
         if not self.still_askable(shop):
             return None
         try:
+            if shop.source_type == Retailer.Source.WEBSITE:
+                return self.search_website(product, shop)
             hit = self.from_last_read(product, shop)
             if hit is None and self.can_suggest(shop):
                 hit = self.from_suggest(product, shop)
@@ -731,6 +752,91 @@ class Finder:
             if value >= SUGGEST and (best is None or value > best.value):
                 best = Hit(handle, value)
         return best
+
+    # Website shops: the page index
+
+    def shop_pages(self, shop):
+        """[(page pk, address, address words, naming words)] for the shop's indexed pages no product has
+        claimed, read in one query once per batch. None when the shop has no index yet."""
+        if shop.pk not in self.pages:
+            rows = list(
+                ShopPage.objects.filter(retailer=shop).order_by("pk").values_list("pk", "url", "slug_words", "product_id")
+            )
+            self.pages[shop.pk] = None if not rows else [
+                (pk, url, words, naming_words(words)) for pk, url, words, owner in rows if owner is None and words
+            ]
+        return self.pages[shop.pk]
+
+    def page_kind(self, product, page_pk, words):
+        """What the address words say the page sells, as a website read's classifier reads them. An address
+        that leaves the game out is read with ours in front, only so its kind of product is known."""
+        if page_pk not in self.page_kinds:
+            self.page_kinds[page_pk] = classify(words)
+        sealed = self.page_kinds[page_pk]
+        if sealed is None:
+            sealed = classify(f"{product.game.display_short} {words}")
+            if sealed is not None and sealed.game != product.game.slug:
+                sealed = None
+        return sealed
+
+    def from_pages(self, product, shop):
+        """The unclaimed page whose address words best name this product, at SUGGEST or more, or None."""
+        ours = naming_words(product.name)
+        best = None
+        for page_pk, url, words, naming in self.shop_pages(shop) or ():
+            # judge() caps a title this short of our naming words below SUGGEST, so it is not judged at all.
+            if ours and len(ours & naming) < NAMING_SHARE * len(ours):
+                continue
+            sealed = self.page_kind(product, page_pk, words)
+            named = self.page_kinds[page_pk]   # what the address says by itself
+            if (named is not None and named.game != product.game.slug) or self.is_taken(shop, url, product):
+                continue
+            value = judge(product, words, sealed)
+            if value >= SUGGEST and (best is None or value > best.value):
+                best = PageHit(page_pk, url, words, value)
+        return best
+
+    def search_website(self, product, shop):
+        """Look for one product in a website shop's page index, reading at most one page."""
+        if self.shop_pages(shop) is None:
+            # Not read yet, so there is nothing to search: noted, and nothing is asked.
+            return self.note(product, shop, StockistSearch.Outcome.NONE)
+        hit = self.from_pages(product, shop)
+        if hit is None:
+            return self.note(product, shop, StockistSearch.Outcome.NONE)
+        if hit.value < AUTO_LINK and not ean_key(product.ean):
+            # Reading the page could not make it sure: the address falls short of our name and we have no
+            # barcode to compare. The owner decides, and the shop is not asked.
+            # A row an earlier read wrote for the page keeps what that read saw, and when.
+            answer = {"suggested": product, "product": product, "confidence": hit.value,
+                      "status": ShopProduct.Status.REVIEW, "source": ShopProduct.Source.FINDER}
+            ShopProduct.objects.update_or_create(
+                retailer=shop, url=hit.url, defaults=answer,
+                create_defaults={**answer, "title": hit.words[:300], "last_seen": self.clock()},
+            )
+            return self.note(product, shop, StockistSearch.Outcome.REVIEW, hit.url, hit.value)
+        return self.decide_page(product, shop, hit)
+
+    def decide_page(self, product, shop, hit):
+        raw = self.ask(shop, hit.url)
+        offer = importers.page_offer(hit.url, raw.decode("utf-8", "replace"))
+        if offer is None or not offer.title or offer.price <= 0 or self.is_taken(shop, offer.url, product):
+            return self.note(product, shop, StockistSearch.Outcome.NONE, hit.url, hit.value)
+        # As a website read sends it: the address words go along for the classifier, and the page is named.
+        offer = replace(offer, tags=offer.tags or (hit.words,), page_pk=hit.page_pk)
+        ours, theirs = ean_key(product.ean), ean_key(offer.ean)
+        if ours and theirs == ours:
+            return self.link(product, shop, offer, AUTO_LINK)
+        sealed = classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price)
+        if sealed is None or sealed.game != product.game.slug:
+            return self.note(product, shop, StockistSearch.Outcome.NONE, offer.url, hit.value)
+        # The address and the page's own title must both agree for a sure match.
+        value = min(hit.value, judge(product, offer.title, sealed))
+        if value >= AUTO_LINK and not ours and not theirs:
+            return self.link(product, shop, offer, value)
+        if value >= SUGGEST:
+            return self.review(product, shop, offer, value)
+        return self.note(product, shop, StockistSearch.Outcome.NONE, offer.url, value)
 
     # The page and the decision
 

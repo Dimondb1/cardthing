@@ -3,6 +3,7 @@ from decimal import Decimal
 from io import StringIO
 from unittest import mock
 
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -10,8 +11,8 @@ from django.utils import timezone
 
 from . import amazon
 from .importers import Offer, run_import
-from .models import ImportRun, Listing, Product, Retailer
-from .testing import make_game, make_product, make_set
+from .models import ImportRun, Listing, OutboundClick, Product, Retailer
+from .testing import make_game, make_product, make_retailer, make_set
 
 KEYS = {
     "RIPRAPTOR_AMAZON_ACCESS_KEY": "AKIAEXAMPLE",
@@ -145,6 +146,33 @@ class LookupTests(TestCase):
         first = self.calls[0][1]["Keywords"]
         amazon.amazon_offers(None, limit=1, call_api=api, pause=0)
         self.assertNotEqual(self.calls[1][1]["Keywords"], first)
+
+    def test_a_clicked_product_is_looked_up_first_and_ties_keep_the_barcode_first_order(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        api = self.fake_api({"SearchItems": {}})
+        amazon.amazon_offers(None, limit=1, call_api=api, pause=0)
+        self.assertEqual(self.calls[-1][1]["Keywords"], "0820650853500")
+        Product.objects.update(amazon_checked_at=None)
+        shop = make_retailer("Shop A")
+        OutboundClick.objects.create(product=self.box, retailer=shop)
+        amazon.amazon_offers(None, limit=1, call_api=api, pause=0)
+        self.assertEqual(self.calls[-1][1]["Keywords"], self.box.name)
+        # The same interest on both: the barcode goes first again, as before.
+        Product.objects.update(amazon_checked_at=None)
+        OutboundClick.objects.create(product=self.etb, retailer=shop)
+        amazon.amazon_offers(None, limit=1, call_api=api, pause=0)
+        self.assertEqual(self.calls[-1][1]["Keywords"], "0820650853500")
+
+    def test_search_other_shops_now_also_moves_a_product_up_the_amazon_queue(self):
+        from . import finder
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        finder.boost(self.box.pk)
+        api = self.fake_api({"SearchItems": {}})
+        amazon.amazon_offers(None, limit=1, call_api=api, pause=0)
+        self.assertEqual(self.calls[0][1]["Keywords"], self.box.name)
 
     def test_known_products_are_refreshed_in_batches_before_new_lookups(self):
         Product.objects.filter(pk=self.etb.pk).update(amazon_asin="B0ETB")

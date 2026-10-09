@@ -167,6 +167,23 @@ def interest_scores(now=None):
     return scores
 
 
+def interest_first(queryset, limit, scores=None, now=None):
+    """Up to ``limit`` products from an ordered queryset, the ones visitors want most first.
+
+    Equal interest keeps the queryset's own order, so a product nobody has looked at waits where it
+    always did. Used by the eBay and Amazon lookups to spend each day's searches on wanted products.
+    """
+    limit = max(0, limit)
+    if not limit:
+        return []
+    scores = interest_scores(now) if scores is None else scores
+    pks = list(queryset.values_list("pk", flat=True))
+    pks.sort(key=lambda pk: -scores.get(pk, 0))   # stable, so ties keep the queryset's order
+    pks = pks[:limit]
+    rows = queryset.in_bulk(pks)
+    return [rows[pk] for pk in pks if pk in rows]
+
+
 # Candidates -------------------------------------------------------------------------------------
 
 @dataclass

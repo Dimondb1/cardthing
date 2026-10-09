@@ -176,7 +176,9 @@ on Amazon" link, a tagged Amazon search shown below the real prices and
 hidden once we have an Amazon price for the product. The hourly import reads Amazon once a day: every product already
 found there is refreshed in batches of ten, then up to
 `RIPRAPTOR_AMAZON_DAILY_LIMIT` products are looked up, by barcode where we
-have one and otherwise by name, keeping a result only when it matches the
+have one and otherwise by name. The products visitors want most go first
+(the interest score the stockist finder uses), then those never tried,
+then those tried longest ago. A result is kept only when it matches the
 product asked about. Amazon's own tracked link is stored on each listing,
 so the shop needs no affiliate link format. The Terms page carries the
 Amazon Associates line while Amazon is an active shop. Amazon removes API
@@ -199,7 +201,10 @@ RIPRAPTOR_EBAY_CAMPAIGN_ID=...
 then run `setup_shops`, which adds eBay as a shop only when the keys are
 set. The hourly import reads eBay once a day, up to
 `RIPRAPTOR_EBAY_DAILY_LIMIT` products a run: those already listed first,
-then the rest, by barcode where we have one and otherwise by name. For
+then the rest, by barcode where we have one and otherwise by name. Of the
+rest, the products visitors want most go first (the interest score the
+stockist finder uses), then those never tried or tried longest ago, then
+those most shops stock. For
 each product it asks for new, buy-it-now items in Britain delivered to a
 London postcode, cheapest first including postage, from sellers with at
 least 95 percent feedback, and keeps the cheapest whose title matches the
@@ -1003,8 +1008,8 @@ leaves one of the reader's threads free for single-product checks.
 
 On Insights, each "Popular with only one shop" row says how many shops
 were searched and when, with a "Search other shops now" button: the
-product goes first for the next hour and shops searched before the tap are
-asked again. `RIPRAPTOR_FINDER=0` stops the background reader looking.
+product goes first for the next hour, in the finder and in the eBay and
+Amazon lookups, and shops searched before the tap are asked again. `RIPRAPTOR_FINDER=0` stops the background reader looking.
 
 ```sh
 python manage.py find_stockists                      # one batch of 30 products now

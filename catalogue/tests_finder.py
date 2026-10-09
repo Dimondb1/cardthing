@@ -226,6 +226,19 @@ class CandidateTests(FinderCase):
             found = finder.candidates(now=self.clock(), shops=shops, scores=scores)
         self.assertEqual(len(found), 7)
 
+    def test_interest_first_puts_wanted_products_first_keeps_ties_in_order_and_takes_two_queries(self):
+        for n in range(5):
+            make_product(self.set, name=f"Prismatic Evolutions Mini Tin {n}", slug=f"pe-tin-{n}", product_type="tin")
+        queue = Product.objects.select_related("game").order_by("pk")
+        everything = list(queue)
+        scores = {everything[-1].pk: 9, everything[2].pk: 9, everything[3].pk: 1}
+        with self.assertNumQueries(2):
+            picked = finder.interest_first(queue, 4, scores=scores)
+            self.assertEqual(picked[0].game.slug, everything[2].game.slug)   # the game came with it
+        self.assertEqual(picked, [everything[2], everything[-1], everything[3], everything[0]])
+        self.assertEqual(finder.interest_first(queue, 0, scores=scores), [])
+        self.assertEqual(finder.interest_first(queue, -3, scores=scores), [])
+
 
 class LastReadTests(FinderCase):
     def test_an_unmatched_line_that_agrees_both_ways_links_with_no_search(self):

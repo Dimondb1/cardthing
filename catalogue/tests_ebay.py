@@ -3,13 +3,14 @@ from decimal import Decimal
 from io import StringIO
 from unittest import mock
 
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from . import ebay
 from .importers import Offer, run_import
-from .models import ImportRun, Listing, Product, Retailer
+from .models import ImportRun, Listing, OutboundClick, Product, Retailer
 from .testing import make_game, make_listing, make_product, make_set
 
 KEYS = {
@@ -157,6 +158,52 @@ class LookupTests(TestCase):
 
         make_listing(self.bundle, make_retailer("Shop A"), price="30.00")
         make_listing(self.bundle, make_retailer("Shop B"), price="31.00")
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("Booster+Bundle", api.searches()[0])
+
+    def test_a_clicked_product_is_looked_up_before_an_unclicked_one(self):
+        from .testing import make_retailer
+
+        # Without interest the barcode puts the Elite Trainer Box first.
+        cache.clear()
+        self.addCleanup(cache.clear)
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("gtin=0820650853500", api.searches()[0])
+        Product.objects.update(ebay_checked_at=None)
+        # A click on the bundle moves it ahead, even of a product never tried.
+        OutboundClick.objects.create(product=self.bundle, retailer=make_retailer("Shop A"))
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("Booster+Bundle", api.searches()[0])
+        # Tried today and still wanted, the bundle stays first tomorrow.
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("Booster+Bundle", api.searches()[0])
+
+    def test_equal_interest_keeps_the_existing_order(self):
+        from .testing import make_retailer
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        shop = make_retailer("Shop A")
+        for product in (self.etb, self.bundle):
+            OutboundClick.objects.create(product=product, retailer=shop)
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("gtin=0820650853500", api.searches()[0])
+        # The box was tried and found nothing, so the bundle, never tried, goes first next time.
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
+        self.assertIn("Booster+Bundle", api.searches()[0])
+
+    def test_search_other_shops_now_also_moves_a_product_up_the_ebay_queue(self):
+        from . import finder
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        finder.boost(self.bundle.pk)
         api = FakeApi([])
         ebay.ebay_offers(self.retailer, limit=1, request=api, pause=0)
         self.assertIn("Booster+Bundle", api.searches()[0])

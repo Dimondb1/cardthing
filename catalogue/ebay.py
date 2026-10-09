@@ -412,6 +412,7 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
     When an allowance runs out the run stops and keeps what it found.
     ``run`` is the ImportRun to keep posted so admin shows progress.
     """
+    from .finder import interest_first
     from .importers import Catalogue, Offer
 
     request = request or http
@@ -528,11 +529,13 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
             mark_checked()
             logger.info("eBay: %d known listings still live, %d ended or not reached, now searching", len(checked), len(gone))
 
-        # New lookups, the products most shops stock first.
-        fresh = list(
+        # New lookups: the products visitors want most first, then never tried or tried longest ago,
+        # then the products most shops stock.
+        fresh = interest_first(
             products.exclude(pk__in=existing)
             .annotate(shops=Count("listings"))
-            .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk")[: max(0, limit - len(gone))]
+            .order_by(F("ebay_checked_at").asc(nulls_first=True), "-shops", "-ean", "-pk"),
+            limit - len(gone),
         )
         failures = 0
         specifics = {}

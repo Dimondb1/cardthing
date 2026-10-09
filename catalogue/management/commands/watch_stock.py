@@ -143,5 +143,5 @@ class Command(BaseCommand):
         if restocked:
             from catalogue.signals import clear_list_caches
 
-            clear_list_caches()
+            clear_list_caches(force=True)
         self.stdout.write(f"{checked} checked, {changed} changed, {restocked} back in stock.")

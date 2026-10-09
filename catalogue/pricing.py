@@ -125,7 +125,7 @@ def apply_delivery_rules(retailer):
             Listing.objects.filter(pk=listing.pk).update(delivery_cost=cost, delivery_known=known)
     from .signals import clear_list_caches
 
-    clear_list_caches()
+    clear_list_caches(force=True)
     return unknown
 
 

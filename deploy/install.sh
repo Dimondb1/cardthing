@@ -44,6 +44,9 @@ RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb
 ENV
 fi
 mkdir -p /var/lib/ripraptor media
+# The cache the web app and every cron command share (RIPRAPTOR_CACHE_DIR's default). It must
+# belong to ripraptor: a folder the site cannot write falls back to a cache per process.
+install -d -o ripraptor -g ripraptor /var/lib/ripraptor/cache
 set -a; . ./.env; set +a
 # A copy of the database before any change, so an update can be rolled back. backup_db uses
 # SQLite's own backup, which is safe while the site is running; cp is not (it misses the -wal

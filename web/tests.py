@@ -1,4 +1,6 @@
 import re
+import shutil
+import tempfile
 from datetime import timedelta
 
 from django.test import TestCase
@@ -1062,3 +1064,144 @@ class LatestDropsTests(PageTestCase):
         self.assertContains(response, "Mega Evolution Elite Trainer Box")
         self.assertNotContains(response, "Base Set Booster Box")
         self.assertNotContains(response, "Prismatic Evolutions Booster Bundle")
+
+
+class SharedCacheTests(PageTestCase):
+    """The web workers and every command share one cache folder, so a clear anywhere is seen everywhere."""
+
+    def file_cache(self):
+        from django.test import override_settings
+
+        folder = tempfile.mkdtemp(prefix="ripraptor-cache-test-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        overrides = override_settings(CACHES={"default": {
+            "BACKEND": "django.core.cache.backends.filebased.FileBasedCache", "LOCATION": folder,
+        }})
+        overrides.enable()
+        self.addCleanup(overrides.disable)
+        return folder
+
+    def inside_the_window(self):
+        """This process cleared a moment ago, so an unforced clear is skipped for the next 30 seconds."""
+        import time
+        from unittest import mock
+
+        from django.test import override_settings
+
+        overrides = override_settings(RIPRAPTOR_CACHE_CLEAR_SECONDS=30)
+        overrides.enable()
+        self.addCleanup(overrides.disable)
+        patcher = mock.patch("catalogue.signals._last_clear", time.monotonic())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_two_cache_instances_on_one_directory_share_a_clear(self):
+        from django.core.cache.backends.filebased import FileBasedCache
+
+        from catalogue.importers import run_import
+        from catalogue.models import Retailer
+        from catalogue.signals import HOME_CACHE_KEY, clear_list_caches
+        from web.feeds import feed_cache_key
+
+        folder = self.file_cache()
+        web_worker = FileBasedCache(folder, {})  # another process's view of the same folder
+        self.client.get(reverse("web:home"))
+        self.assertIsNotNone(web_worker.get(HOME_CACHE_KEY))
+        web_worker.set(feed_cache_key("deals"), "cached feed", 300)
+        clear_list_caches(force=True)
+        self.assertIsNone(web_worker.get(HOME_CACHE_KEY))
+        self.assertIsNone(web_worker.get(feed_cache_key("deals")))
+
+        # The end of an import in a cron process clears what the web worker cached, even inside the window.
+        self.client.get(reverse("web:home"))
+        self.assertIsNotNone(web_worker.get(HOME_CACHE_KEY))
+        self.inside_the_window()
+        self.harbour.source_type = Retailer.Source.SHOPIFY
+        self.harbour.source_url = "https://h.example/"
+        self.harbour.save()
+        self.assertIsNotNone(web_worker.get(HOME_CACHE_KEY))
+        run_import(self.harbour, fetch=lambda url: b'{"products": []}')
+        self.assertIsNone(web_worker.get(HOME_CACHE_KEY))
+
+    def test_clear_is_debounced_to_once_per_thirty_seconds_unless_forced(self):
+        from unittest import mock
+
+        from django.core.cache import cache
+        from django.test import override_settings
+
+        from catalogue import signals
+
+        clock = mock.Mock(return_value=1000.0)
+        with override_settings(RIPRAPTOR_CACHE_CLEAR_SECONDS=30), \
+                mock.patch.object(signals, "_last_clear", None), mock.patch("catalogue.signals.time.monotonic", clock):
+            self.assertTrue(signals.clear_list_caches())
+            cache.set(signals.HOME_CACHE_KEY, "lists", 300)
+            clock.return_value = 1010.0
+            self.assertFalse(signals.clear_list_caches())
+            self.cheap.save()  # a save inside the window is skipped too
+            self.assertEqual(cache.get(signals.HOME_CACHE_KEY), "lists")
+            self.assertTrue(signals.clear_list_caches(force=True))
+            self.assertIsNone(cache.get(signals.HOME_CACHE_KEY))
+            cache.set(signals.HOME_CACHE_KEY, "lists", 300)
+            clock.return_value = 1039.9  # the forced clear started a new window
+            self.assertFalse(signals.clear_list_caches())
+            self.assertEqual(cache.get(signals.HOME_CACHE_KEY), "lists")
+            clock.return_value = 1040.0
+            self.cheap.save()
+            self.assertIsNone(cache.get(signals.HOME_CACHE_KEY))
+
+    def test_owner_fixes_and_delivery_rules_clear_inside_the_window(self):
+        from django.contrib.auth import get_user_model
+        from django.core.cache import cache
+
+        from catalogue import pricing
+        from catalogue.signals import HOME_CACHE_KEY
+
+        self.inside_the_window()
+        cache.set(HOME_CACHE_KEY, "lists", 300)
+        self.cheap.save()
+        self.assertEqual(cache.get(HOME_CACHE_KEY), "lists")
+        pricing.apply_delivery_rules(self.harbour)
+        self.assertIsNone(cache.get(HOME_CACHE_KEY))
+
+        cache.set(HOME_CACHE_KEY, "lists", 300)
+        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.com", "pw"))
+        self.client.post(reverse("checks"), {"action": "hide", "listing": self.cheap.pk})
+        self.assertIsNone(cache.get(HOME_CACHE_KEY))
+
+    def test_unwritable_cache_dir_falls_back_to_locmem_with_a_warning(self):
+        import os
+        from pathlib import Path
+        from unittest import mock
+
+        from ripraptor.caching import shared_caches
+
+        folder = Path(tempfile.mkdtemp(prefix="ripraptor-cache-test-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        caches = shared_caches(folder / "cache")
+        self.assertEqual(caches["default"]["BACKEND"], "django.core.cache.backends.filebased.FileBasedCache")
+        self.assertEqual(caches["default"]["LOCATION"], str(folder / "cache"))
+        self.assertEqual(os.listdir(folder / "cache"), [])  # the write check leaves nothing behind
+
+        blocker = folder / "a-file"
+        blocker.write_text("")
+        with self.assertLogs("ripraptor", "WARNING") as logged:
+            caches = shared_caches(blocker / "cache")  # cannot be created
+        self.assertEqual(caches["default"]["BACKEND"], "django.core.cache.backends.locmem.LocMemCache")
+        self.assertIn("cannot be used", logged.output[0])
+
+        with mock.patch("ripraptor.caching.tempfile.NamedTemporaryFile", side_effect=PermissionError("read only")), \
+                self.assertLogs("ripraptor", "WARNING") as logged:
+            caches = shared_caches(folder / "cache")  # exists but cannot be written
+        self.assertEqual(caches["default"]["BACKEND"], "django.core.cache.backends.locmem.LocMemCache")
+        self.assertIn("read only", logged.output[0])
+
+    def test_cache_folder_comes_from_the_environment_or_the_server_default(self):
+        from pathlib import Path
+
+        from ripraptor.caching import cache_dir
+
+        base = Path("/srv/ripraptor")
+        self.assertEqual(cache_dir({"RIPRAPTOR_CACHE_DIR": "/tmp/rr-cache"}, False, base), Path("/tmp/rr-cache"))
+        self.assertEqual(cache_dir({}, False, base), Path("/var/lib/ripraptor/cache"))
+        self.assertEqual(cache_dir({"RIPRAPTOR_CACHE_DIR": " "}, True, base), base / ".cache")

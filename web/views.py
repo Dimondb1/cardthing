@@ -1273,7 +1273,7 @@ def checks_page(request):
         if action == "hide":
             listing = get_object_or_404(Listing.objects.select_related("product", "retailer"), pk=request.POST.get("listing"))
             Listing.objects.filter(pk=listing.pk).update(is_active=False)
-            clear_list_caches()
+            clear_list_caches(force=True)
             messages.success(request, f"Hidden: {listing.product.name} at {listing.retailer.name}. "
                                       "Tick show on site on the listing to bring it back.")
         elif action == "merge":
@@ -1283,7 +1283,7 @@ def checks_page(request):
                 if (str(keep.pk), sorted(str(o.pk) for o in others)) == wanted:
                     with transaction.atomic():
                         merge(keep, others)
-                    clear_list_caches()
+                    clear_list_caches(force=True)
                     messages.success(request, f"Merged into {keep.name}. The old addresses redirect to it.")
                     break
             else:

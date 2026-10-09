@@ -143,7 +143,7 @@ class Command(BaseCommand):
                         availability=Listing.Availability.OUT_OF_STOCK
                     )
                 if cheap:
-                    clear_list_caches()
+                    clear_list_caches(force=True)
             if dry_run:
                 transaction.set_rollback(True)
         self.stdout.write(f"{removed} listings. {Listing.objects.count()} remain. {len(cheap)} eBay prices too low to trust.")

@@ -6,7 +6,10 @@ The defaults are for local development only.
 """
 
 import os
+import sys
 from pathlib import Path
+
+from ripraptor.caching import MEMORY_CACHE, cache_dir, shared_caches
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -105,12 +108,22 @@ DATABASES = {
     }
 }
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "ripraptor",
-    }
-}
+# One cache shared by the web workers and every command, so a restock or a
+# pre-order written by an import shows at once rather than when a worker's own
+# copy expires. It is a folder of files (RIPRAPTOR_CACHE_DIR); a folder that
+# cannot be created or written falls back to a per-process memory cache with a
+# warning. The test run keeps a memory cache so it never reads or clears the
+# development site's cache, and parallel test processes never share entries.
+TESTING = sys.argv[1:2] == ["test"]
+RIPRAPTOR_CACHE_DIR = cache_dir(os.environ, DEBUG, BASE_DIR)
+CACHES = {"default": dict(MEMORY_CACHE)} if TESTING else shared_caches(RIPRAPTOR_CACHE_DIR)
+
+# A clear of the list caches triggered by a save is skipped when this process
+# cleared them less than this many seconds ago; the end of an import, a restock
+# found by the stock watcher and the owner's fixes always clear. A shop read
+# changes a few dozen listings, so this bounds the clears without leaving lists
+# stale for the whole cache lifetime. Tests clear on every save.
+RIPRAPTOR_CACHE_CLEAR_SECONDS = 0 if TESTING else 30
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

@@ -971,5 +971,5 @@ def run_import(retailer, feed_path=None, fetch=None):
     run.save()
     from .signals import clear_list_caches
 
-    clear_list_caches()
+    clear_list_caches(force=True)
     return run

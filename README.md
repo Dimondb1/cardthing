@@ -673,6 +673,31 @@ an error, such a run never counts as the day's eBay or Amazon read, so
 the next hourly import reads them again. Three hours is longer than the
 longest real read (Amazon, about 37 minutes).
 
+## Shared cache
+
+The home lists, the deals page, the newest drops and the feeds are kept in
+a cache for `RIPRAPTOR_HOME_CACHE_SECONDS` (five minutes) because they read
+every priced product. The cache is a folder of files, `RIPRAPTOR_CACHE_DIR`,
+shared by the web app's workers and every command, so when an import or the
+stock watcher finds a restock or a new pre-order, the site shows it on the
+next page load rather than up to five minutes later. On a server the folder
+is `/var/lib/ripraptor/cache` (`install.sh` creates it, owned by
+`ripraptor`); on your own computer it is `.cache` beside the code. Deleting
+its contents is always safe.
+
+If the folder cannot be created or written, the site still runs: it logs
+"Cache folder ... cannot be used" and each process keeps its own cache, as
+before, so changes from imports take up to five minutes to show. Fix the
+folder's owner and restart the site.
+
+Every saved listing or product clears the cached lists, but a process that
+cleared them less than 30 seconds ago skips the next clear, so a shop read
+that changes a few dozen prices clears a handful of times rather than once
+per price. The end of every import, a restock found by the stock watcher,
+`tidy_listings` hiding eBay prices, a delivery rule change and the fixes on
+Things to check always clear at once. The tests keep a memory cache of
+their own, so they never read or clear your development site's cache.
+
 ## Settings
 
 | Environment variable           | Default | Notes |
@@ -686,6 +711,7 @@ longest real read (Amazon, about 37 minutes).
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
+| `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
 | `RIPRAPTOR_RESTOCK_HOURS`      | 48      | How long a restocked product stays under "Back in stock". |
 | `RIPRAPTOR_AMAZON_ACCESS_KEY`  |         | Product Advertising API key from Amazon Associates. |
 | `RIPRAPTOR_AMAZON_SECRET_KEY`  |         | Its secret. |

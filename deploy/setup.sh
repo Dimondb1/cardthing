@@ -6,7 +6,7 @@ id -u ripraptor >/dev/null 2>&1 || useradd --system --home /srv/ripraptor riprap
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 test -f .env || { cp .env.example .env; echo "Edit /srv/ripraptor/.env before starting."; }
-mkdir -p /var/lib/ripraptor && chown ripraptor /var/lib/ripraptor
+mkdir -p /var/lib/ripraptor/cache && chown -R ripraptor /var/lib/ripraptor
 set -a; . ./.env; set +a
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py collectstatic --noinput

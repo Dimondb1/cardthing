@@ -114,6 +114,8 @@ class ClassifyLeakTests(TestCase):
             "Pokemon TCG: Surging Sparks Booster Box (36x Packs)": ("booster_box", "Surging Sparks Booster Box"),
             "One Piece OP-10 Booster Box (24x Packs)": ("booster_box", "OP 10 Booster Box"),
             "Pokemon Prismatic Evolutions Elite Trainer Box (9x Booster Packs)": ("elite_trainer_box", "Prismatic Evolutions Elite Trainer Box"),
+            "Digimon Card Game - Sinister Order (EX10) - Booster Box (24x Packs)": ("booster_box", "Sinister Order Booster Box"),
+            "Pokemon Destined Rivals Booster Box (36x Booster Packs)": ("booster_box", "Destined Rivals Booster Box"),
         }
         for title, (kind, name) in cases.items():
             sealed = classify(title, price=100)
@@ -124,6 +126,7 @@ class ClassifyLeakTests(TestCase):
                       "Pokemon Surging Sparks Booster Box x2", "Pokemon Surging Sparks Booster Box 2x",
                       "Pokemon Surging Sparks 3x Booster Box", "Pokemon Surging Sparks Booster Pack x 36",
                       "Pokemon Surging Sparks Booster Box (4x Packs)", "Pokemon Surging Sparks Booster Box (48x Packs)",
+                      "Pokemon Destined Rivals 2x Booster Box", "Pokemon Destined Rivals Booster Pack x3",
                       # Only the count straight after the box is its contents; any other count is a multi-buy or a bundle.
                       "Pokemon TCG - Scarlet & Violet - Destined Rivals - Booster Box (36x Packs) + 6x Booster Packs",
                       "One Piece OP-10 Booster Box (24x Packs) + 12x Booster Packs", "Destined Rivals 2 Booster Boxes (36x Packs)",

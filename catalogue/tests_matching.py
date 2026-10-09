@@ -175,3 +175,14 @@ class BoxContentsKeyTests(TestCase):
         # Extra packs sold with the box keep their count and mark, so they never share the plain box's key.
         self.assertNotEqual(match_key("Destined Rivals Booster Box (36x Packs) + 6x Booster Packs"),
                             match_key("Destined Rivals Booster Box"))
+
+    def test_the_card_vaults_box_titles_score_100_against_our_boxes(self):
+        from .importers import Catalogue
+
+        catalogue = Catalogue([(1, "Destined Rivals Booster Box", "pokemon"), (2, "Destined Rivals Booster Pack", "pokemon"),
+                               (3, "Sinister Order Booster Box", "digimon")])
+        cases = [("Pokemon TCG - Scarlet & Violet - Destined Rivals - Booster Box (36x Packs)", "pokemon", 1),
+                 ("Digimon Card Game - Sinister Order (EX10) - Booster Box (24x Packs)", "digimon", 3)]
+        for title, game, pk in cases:
+            (found, _name), value = catalogue.best_match(title, game=game)
+            self.assertEqual((found, value), (pk, 100), title)

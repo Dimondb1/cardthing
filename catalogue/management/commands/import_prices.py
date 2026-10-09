@@ -52,17 +52,18 @@ class Command(BaseCommand):
             if not retailers.exists():
                 raise CommandError(f"No retailer with slug '{retailer}'.")
             due = False
-        if due and crawl.all_paused():
-            # The owner tapped Pause all on the Crawl health page. A shop named by hand is still read.
-            self.stdout.write("Reading is paused for every shop. Resume all on the Crawl health page starts it again.")
-            return
         if not retailers.exists():
             self.stdout.write("No retailers have a price source. Set one in admin.")
             return
-        # Runs a deploy, a timeout or a crash cut short would otherwise show as running for ever.
+        # Runs a deploy, a timeout or a crash cut short would otherwise show as running for ever. Closing
+        # them reads nothing, so it is done even while Pause all is on, when a hung shop is most likely.
         closed = close_abandoned_runs()
         if closed:
             self.stdout.write(f"Closed {closed} earlier runs that stopped before they finished.")
+        if due and crawl.all_paused():
+            # The owner tapped Pause all on the Crawl health page. A shop named by hand is still read.
+            self.say_paused()
+            return
         if due:
             self.read_due(feed)
             return
@@ -78,6 +79,10 @@ class Command(BaseCommand):
         started = timezone.now()
         read = set()
         while True:
+            if crawl.all_paused():
+                # Pause all tapped while this run was reading: the shops still waiting are left for later.
+                self.say_paused()
+                return
             now = timezone.now()
             item = Retailer.due(now, next_by=max(now, started + DUE_SLACK)).exclude(pk__in=read).first()
             if item is None:
@@ -95,6 +100,9 @@ class Command(BaseCommand):
                 self.read_crashed(item, began, exc)
         if not read:
             self.stdout.write("No shops are due.")
+
+    def say_paused(self):
+        self.stdout.write("Reading is paused for every shop. Resume all on the Crawl health page starts it again.")
 
     def read_crashed(self, item, began, exc):
         error = f"The read stopped on an unexpected error: {type(exc).__name__}: {exc}"[:300]

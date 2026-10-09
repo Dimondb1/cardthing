@@ -210,3 +210,101 @@ class CrawlPageTests(TestCase):
             visible = re.sub(r"<script.*?</script>|<!--.*?-->", "", text.split("<body", 1)[1], flags=re.S)
             self.assertIn("Read now" if page.request["PATH_INFO"] == self.url else "Crawl health", visible)
             self.assertNotIn("!", visible)
+
+
+class PauseAllReachesEveryReadTests(TestCase):
+    """Pause all and a shop's own pause stop every request to the shops, not only the next hourly run."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        moved = override_settings(RIPRAPTOR_CACHE_DIR=folder.name)
+        moved.enable()
+        self.addCleanup(moved.disable)
+        self.now = timezone.now()
+
+    def make_shop(self, name, **kwargs):
+        kwargs.setdefault("source_type", Retailer.Source.SHOPIFY)
+        kwargs.setdefault("source_url", f"https://{name.lower().replace(' ', '-')}.example/")
+        return make_retailer(name, **kwargs)
+
+    def test_pause_all_tapped_during_a_run_stops_it_before_the_next_shop(self):
+        for name in ("Aaa Shop", "Bbb Shop", "Ccc Shop"):
+            self.make_shop(name)
+        read = []
+
+        def fake_run(retailer, feed_path=None):
+            read.append(retailer.name)
+            # The owner taps Pause all while the first shop is being read.
+            crawl.pause_all()
+            return ImportRun.objects.create(retailer=retailer, finished_at=timezone.now())
+
+        out = StringIO()
+        with mock.patch("catalogue.management.commands.import_prices.run_import", fake_run):
+            call_command("import_prices", due=True, stdout=out, stderr=StringIO())
+        self.assertEqual(read, ["Aaa Shop"])
+        self.assertIn("Reading is paused for every shop.", out.getvalue())
+        self.assertNotIn("No shops are due.", out.getvalue())
+        # The shops left are still due once reading resumes.
+        crawl.resume_all()
+        self.assertEqual(list(Retailer.due(timezone.now()).values_list("name", flat=True)), ["Bbb Shop", "Ccc Shop"])
+
+    def test_a_run_left_open_is_closed_while_pause_all_is_on(self):
+        shop = self.make_shop("Hung Shop")
+        run = ImportRun.objects.create(retailer=shop, started_at=self.now - timedelta(days=2))
+        self.assertEqual(crawl.shops(self.now)[0]["state"], "Reading")
+        crawl.pause_all()
+        out = StringIO()
+        with mock.patch("catalogue.management.commands.import_prices.run_import") as fake_run:
+            call_command("import_prices", due=True, stdout=out, stderr=StringIO())
+        fake_run.assert_not_called()
+        self.assertIn("Closed 1 earlier runs", out.getvalue())
+        self.assertIn("Reading is paused for every shop.", out.getvalue())
+        run.refresh_from_db()
+        self.assertIsNotNone(run.finished_at)
+        self.assertEqual(crawl.shops(timezone.now())[0]["state"], "Idle")
+
+    def test_next_read_never_claims_a_read_that_will_not_happen(self):
+        self.make_shop("Backoff Shop", next_read_at=self.now - timedelta(minutes=5),
+                       backoff_until=self.now + timedelta(hours=3), error_streak=4)
+        self.make_shop("Late Shop", next_read_at=self.now + timedelta(hours=2),
+                       backoff_until=self.now + timedelta(minutes=10), error_streak=1)
+        self.make_shop("Paused Shop", reading_paused=True)
+        self.make_shop("Due Shop", next_read_at=self.now - timedelta(minutes=1),
+                       backoff_until=self.now - timedelta(minutes=1))
+        self.make_shop("Waiting Shop", next_read_at=self.now + timedelta(minutes=40))
+        rows = {row["retailer"].name: row["next_read"] for row in crawl.shops(self.now)}
+        due = set(Retailer.due(self.now).values_list("name", flat=True))
+        self.assertEqual(rows["Backoff Shop"], crawl.clock(self.now + timedelta(hours=3), self.now))
+        self.assertEqual(rows["Late Shop"], crawl.clock(self.now + timedelta(hours=2), self.now))
+        self.assertEqual(rows["Paused Shop"], "paused")
+        self.assertEqual(rows["Due Shop"], "due now")
+        self.assertEqual(rows["Waiting Shop"], crawl.clock(self.now + timedelta(minutes=40), self.now))
+        # "due now" is said of exactly the shops a run would read now.
+        self.assertEqual({name for name, said in rows.items() if said == "due now"}, due)
+        crawl.pause_all()
+        self.assertEqual({row["next_read"] for row in crawl.shops(self.now)}, {"paused"})
+
+    def test_the_stock_watch_leaves_paused_shops_alone(self):
+        from catalogue.testing import make_game, make_listing, make_product, make_set
+
+        product = make_product(make_set(make_game()))
+        reading = self.make_shop("Reading Shop")
+        paused = self.make_shop("Paused Shop", reading_paused=True)
+        make_listing(product, reading, availability="out_of_stock", url="https://reading-shop.example/products/etb", hours_ago=5)
+        make_listing(product, paused, availability="out_of_stock", url="https://paused-shop.example/products/etb", hours_ago=5)
+        asked = []
+
+        def fetch(url):
+            asked.append(url)
+            return b'{"variants": [{"price": 4999, "available": false}]}'
+
+        with mock.patch("catalogue.importers.fetch", fetch):
+            call_command("watch_stock", "--pause", "0", stdout=StringIO())
+            self.assertEqual(asked, ["https://reading-shop.example/products/etb.js"])
+            asked.clear()
+            crawl.pause_all()
+            out = StringIO()
+            call_command("watch_stock", "--pause", "0", stdout=out)
+        self.assertEqual(asked, [])
+        self.assertIn("Reading is paused for every shop.", out.getvalue())

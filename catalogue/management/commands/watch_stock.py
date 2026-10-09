@@ -27,7 +27,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from catalogue import pricing
+from catalogue import crawl, pricing
 from catalogue import importers
 from catalogue.importers import ImportError_, money, page_offer
 from catalogue.models import DailyPageView, Listing, OutboundClick, Product, Retailer
@@ -97,12 +97,20 @@ class Command(BaseCommand):
         parser.add_argument("--pause", type=float, default=0.3)
 
     def handle(self, *args, limit=300, pause=0.3, **options):
+        if crawl.all_paused():
+            # Pause all on the Crawl health page stops every request to the shops, stock checks included.
+            self.stdout.write("Reading is paused for every shop. Resume all on the Crawl health page starts it again.")
+            return
         now = timezone.now()
         popular = set(
             OutboundClick.objects.filter(created_at__gte=now - timedelta(days=7))
             .values("product").annotate(n=Count("id")).order_by("-n").values_list("product", flat=True)[:200]
         )
-        base = Listing.objects.filter(is_active=True, retailer__is_active=True).exclude(retailer__source_type=Retailer.Source.MANUAL)
+        # A shop the owner paused is not asked about single products either.
+        base = (
+            Listing.objects.filter(is_active=True, retailer__is_active=True, retailer__reading_paused=False)
+            .exclude(retailer__source_type=Retailer.Source.MANUAL)
+        )
         recently_checked = Q(last_checked__gte=now - timedelta(minutes=8))
         queue = []
         # 0. Up to half the budget: what people are viewing and watching, in or out of stock.

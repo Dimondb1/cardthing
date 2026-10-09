@@ -695,8 +695,9 @@ shop's page in Admin > Retailers:
   least 30 minutes, and longer when the doubling has gone past that. A read
   that stops on an error nobody foresaw counts as a failed read too, and the
   run carries on with the next shop. One read that works clears both.
-- **Reading paused** keeps the shop out of every scheduled read. Reading it
-  by name (`import_prices <slug>`) still works.
+- **Reading paused** keeps the shop out of every scheduled read and out of
+  the ten-minute stock checks. Reading it by name (`import_prices <slug>`)
+  still works.
 
 The hourly cron runs `import_prices --due`. A shop's next read is counted
 from the start of the run that read it, and each run also reads a shop
@@ -718,20 +719,23 @@ from each shop under Shop health on Insights) shows whether shops are being
 read and lets you change it with one tap, from a phone:
 
 - The status line says reads are hourly and when the last one finished.
-- **Pause all** stops every scheduled read until you tap **Resume all**:
-  `import_prices --due` reads nothing while it is on. Reading a shop by
-  name still works. Shops you paused one by one stay paused when you
+- **Pause all** stops every scheduled read and stock check until you tap
+  **Resume all**: `import_prices --due` and `watch_stock` read nothing
+  while it is on, and a run already reading stops before its next shop
+  (the shop it is on finishes). Runs left open by a crash or a timeout are
+  still closed. Reading a shop by name still works. Shops you paused one by one stay paused when you
   resume. The switch is a file called `crawl-paused` in the cache folder
   (`RIPRAPTOR_CACHE_DIR`), so the site and the hourly cron see the same
   thing and a deploy that empties the cache leaves it alone. If the folder
   cannot be written the page says so and nothing changes.
 - One row per shop read on a schedule: Reading (its latest run has not
   finished), Paused, Backing off until a time, or Idle, then its last read
-  that worked, how long that took, its next read, its errors in a row and
-  its last error.
+  that worked, how long that took, its next read (paused while it or every
+  shop is paused, and never before a wait after errors ends), its errors in
+  a row and its last error.
 - **Read now** makes the shop due at once and forgets its errors and its
   wait, so the next hourly read takes it. **Pause** and **Resume** set the
-  shop's Reading paused box.
+  shop's Reading paused box, which stops its stock checks too.
 
 ## Backups, timeouts and runs cut short
 

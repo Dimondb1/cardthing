@@ -24,17 +24,17 @@
     <h2>Status</h2>
     <p>Hourly reads. {% if last_finished %}The last read finished at {{ last_finished }}.{% else %}No read has finished yet.{% endif %}</p>
     {% if all_paused %}
-    <p class="bad"><strong>Paused for every shop.</strong> Nothing is read until you tap Resume all.</p>
+    <p class="bad"><strong>Paused for every shop.</strong> No shop is read or stock checked until you tap Resume all.</p>
     <form method="post">{% csrf_token %}<input type="hidden" name="action" value="resume_all"><input type="submit" value="Resume all"></form>
     {% else %}
-    <p class="note">Pause all stops every scheduled read. Shops you paused one by one stay paused when you resume.</p>
+    <p class="note">Pause all stops every scheduled read and stock check. A read in progress stops after the shop it is on. Shops you paused one by one stay paused when you resume.</p>
     <form method="post">{% csrf_token %}<input type="hidden" name="action" value="pause_all"><input type="submit" value="Pause all"></form>
     {% endif %}
   </section>
 
   <section>
     <h2>Shops ({{ shops|length }})</h2>
-    <p class="note">Read now adds a shop to the next hourly read and forgets its errors. Pause stops reading one shop until you tap Resume.</p>
+    <p class="note">Read now adds a shop to the next hourly read and forgets its errors. Pause stops reading and stock checks for one shop until you tap Resume.</p>
     {% if shops %}<ul>
       {% for row in shops %}{% with shop=row.retailer %}
       <li class="item" id="shop-{{ shop.slug }}"><b>{{ shop.name }}</b><span{% if row.problem %} class="bad"{% endif %}>{{ row.state }}</span>

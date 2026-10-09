@@ -1341,7 +1341,8 @@ def crawl_page(request):
             try:
                 if action == "pause_all":
                     crawl.pause_all()
-                    messages.success(request, "Reading is paused for every shop. Nothing is read until you tap Resume all.")
+                    messages.success(request, "Reading is paused for every shop. No shop is read or stock checked until you tap "
+                                              "Resume all; a shop being read now finishes first.")
                 else:
                     crawl.resume_all()
                     messages.success(request, "Reading has resumed. Each shop is read on its own schedule.")
@@ -1371,7 +1372,7 @@ def crawl_page(request):
                 shop.reading_paused = action == "pause"
                 shop.save(update_fields=["reading_paused"])
                 if shop.reading_paused:
-                    messages.success(request, f"{shop.name} is paused. It is not read until you tap Resume.")
+                    messages.success(request, f"{shop.name} is paused. It is not read or stock checked until you tap Resume.")
                 else:
                     messages.success(request, f"{shop.name} will be read on its schedule again.")
         return HttpResponseRedirect(reverse("crawl"))

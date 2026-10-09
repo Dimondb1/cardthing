@@ -46,6 +46,20 @@ def last_finished():
     return ImportRun.objects.aggregate(t=Max("finished_at"))["t"]
 
 
+def next_read_for(retailer, now, everything_paused=False):
+    """When a shop's next read comes, judged as Retailer.due judges it.
+
+    A paused shop has none. A shop waiting after errors is not read before its wait ends, whatever
+    its next read says.
+    """
+    if everything_paused or retailer.reading_paused:
+        return "paused"
+    moments = [m for m in (retailer.next_read_at, retailer.backoff_until) if m is not None]
+    if not moments or max(moments) <= now:
+        return "due now"
+    return clock(max(moments), now)
+
+
 def shops(now):
     """One row per shop that is read on a schedule, for the Crawl health page, in one query.
 
@@ -63,6 +77,7 @@ def shops(now):
         .annotate(reading=Subquery(latest_open, output_field=BooleanField()))
         .order_by("name")
     )
+    everything_paused = all_paused()
     rows = []
     for retailer in retailers:
         backing_off = retailer.backoff_until is not None and retailer.backoff_until > now
@@ -74,10 +89,7 @@ def shops(now):
             state = f"Backing off until {clock(retailer.backoff_until, now)}"
         else:
             state = "Idle"
-        if retailer.next_read_at is None or retailer.next_read_at <= now:
-            next_read = "due now"
-        else:
-            next_read = clock(retailer.next_read_at, now)
+        next_read = next_read_for(retailer, now, everything_paused)
         rows.append({
             "retailer": retailer,
             "state": state,

@@ -39,7 +39,7 @@ from django.utils import timezone
 from . import pricing
 from .classify import GAMES, classify, find_game
 from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
-from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct, stale_cutoff
+from .models import Game, ImportRun, Listing, Product, Retailer, ShopPage, ShopProduct, stale_cutoff
 from .sanity import judge_product, trust_expiry
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,7 @@ class Offer:
     vendor: str = ""
     tags: tuple = ()
     product_pk: int | None = None   # set when the source already knows which product this is
+    page_pk: int | None = None   # the ShopPage a website read took this offer from
 
 
 class ImportError_(Exception):
@@ -312,19 +313,50 @@ def shopify_offers(retailer, fetch=fetch):
 # Any website: sitemap + schema.org product data -----------------------------
 
 SITEMAP_LOC = re.compile(r"<loc>\s*([^<\s]+)\s*</loc>", re.I)
+SITEMAP_LASTMOD = re.compile(r"<lastmod>\s*([^<\s]+)\s*</lastmod>", re.I)
+SITEMAP_ENTRY_END = re.compile(r"</(?:url|sitemap)\s*>", re.I)
 JSON_LD = re.compile(r"<script[^>]+type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>", re.I | re.S)
 META = re.compile(r"<meta[^>]+(?:property|name)=[\"']([^\"']+)[\"'][^>]+content=[\"']([^\"']*)[\"']", re.I)
 TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 PRODUCT_PATH_WORDS = ("/product", "/products/", "/p/", "/item", "/shop/", "-p-")
-MAX_PAGES = 3000
+MAX_PAGES = 3000   # pages of one shop kept in its index, the ones worth fetching first
+PAGES_PER_READ = 600   # pages fetched in one read, so a 3,000 page shop is read through in five
+# A page the sitemap dates as unchanged is still read once a day: its listing then never nears the
+# 72 hour stale cutoff, and a stock change the shop does not date is caught within a day.
+RECHECK_UNCHANGED = timedelta(hours=24)
+# A page missing from the sitemap this long has gone from the shop.
+PAGE_FORGOTTEN_AFTER = timedelta(days=30)
 MAX_SITEMAPS = 500
 INFORMATIVE_SITEMAP = 50   # this many product-looking pages and the rest of the sitemap is skipped
 SITEMAP_WORKERS = 4
 
 
-def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
-    """Every page address listed in the site's sitemap(s), product-looking ones first."""
-    found, seen, queue = [], set(), [f"{base}/sitemap.xml", f"{base}/sitemap_index.xml", f"{base}/xmlsitemap.php"]
+def sitemap_lastmod(text):
+    """A sitemap <lastmod> as an aware datetime, or None when missing or unreadable."""
+    from datetime import datetime, time as time_, timezone as tz
+
+    from django.utils.dateparse import parse_date, parse_datetime
+
+    if not text:
+        return None
+    try:
+        when = parse_datetime(text)
+        if when is None:
+            day = parse_date(text)
+            when = datetime.combine(day, time_.min) if day else None
+    except ValueError:
+        return None
+    if when is not None and timezone.is_naive(when):
+        when = when.replace(tzinfo=tz.utc)
+    return when
+
+
+def sitemap_pages(base, fetch=fetch, limit=MAX_PAGES):
+    """(address, lastmod) for every page the site's sitemap(s) list, product-looking ones first.
+
+    lastmod is None when the sitemap does not date the page.
+    """
+    found, seen, queue = {}, set(), [f"{base}/sitemap.xml", f"{base}/sitemap_index.xml", f"{base}/xmlsitemap.php"]
     try:
         robots = fetch(f"{base}/robots.txt").decode("utf-8", "replace")
         queue = [line.split(":", 1)[1].strip() for line in robots.splitlines() if line.lower().startswith("sitemap:")] + queue
@@ -349,20 +381,30 @@ def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
                     seen.add(url)
                     batch.append(url)
             for text in pool.map(read, batch):
-                for loc in SITEMAP_LOC.findall(text):
-                    loc = loc.replace("&amp;", "&")
-                    if loc.endswith(".xml") or "sitemap" in loc.lower():
-                        queue.append(loc)
-                    else:
-                        found.append(loc)
-    found = [u for u in found if not u.lower().endswith((".jpg", ".png", ".webp", ".pdf"))]
-    ranked = [(rank, i, u) for i, u in enumerate(found) if (rank := page_rank(u)) is not None]
-    ranked.sort()
+                for entry in SITEMAP_ENTRY_END.split(text):
+                    locs = SITEMAP_LOC.findall(entry)
+                    # A date belongs to a page only when its entry names that one page.
+                    dated = SITEMAP_LASTMOD.search(entry) if len(locs) == 1 else None
+                    lastmod = sitemap_lastmod(dated.group(1)) if dated else None
+                    for loc in locs:
+                        loc = loc.replace("&amp;", "&")
+                        if loc.endswith(".xml") or "sitemap" in loc.lower():
+                            queue.append(loc)
+                        elif loc not in found or (lastmod and (found[loc] is None or lastmod > found[loc])):
+                            found[loc] = lastmod
+    found = [(u, lastmod) for u, lastmod in found.items() if not u.lower().endswith((".jpg", ".png", ".webp", ".pdf"))]
+    ranked = [(rank, i, page) for i, page in enumerate(found) if (rank := page_rank(page[0])) is not None]
+    ranked.sort(key=lambda row: row[:2])
     # When the sitemap clearly marks its product pages, the pages that read as
     # neither product nor game (blog posts, guides, policies) are not worth an hour.
-    if sum(1 for rank, _i, _u in ranked if rank <= 1) >= INFORMATIVE_SITEMAP:
+    if sum(1 for rank, _i, _p in ranked if rank <= 1) >= INFORMATIVE_SITEMAP:
         ranked = [row for row in ranked if row[0] <= 1]
-    return [u for _rank, _i, u in ranked[:limit]]
+    return [page for _rank, _i, page in ranked[:limit]]
+
+
+def sitemap_urls(base, fetch=fetch, limit=MAX_PAGES):
+    """Every page address listed in the site's sitemap(s), product-looking ones first."""
+    return [url for url, _lastmod in sitemap_pages(base, fetch=fetch, limit=limit)]
 
 
 def slug_words(url):
@@ -479,24 +521,83 @@ def page_offer(url, html):
     return None
 
 
-def website_offers(retailer, fetch=fetch, pause=0.5, limit=MAX_PAGES):
-    """Offers from every product page the site's sitemap lists."""
+def index_pages(retailer, pages, now=None):
+    """Record the sitemap's pages for ``retailer``. Returns {address: (page pk, last fetched)}."""
+    now = now or timezone.now()
+    rows = [
+        ShopPage(retailer=retailer, url=url, slug_words=slug_words(url)[:300], lastmod=lastmod, last_seen_at=now)
+        for url, lastmod in pages
+        if len(url) <= 1000
+    ]
+    ShopPage.objects.bulk_create(
+        rows, batch_size=500, update_conflicts=True,
+        unique_fields=["retailer", "url"], update_fields=["lastmod", "last_seen_at"],
+    )
+    wanted = {row.url for row in rows}
+    return {
+        url: (pk, fetched)
+        for pk, url, fetched in ShopPage.objects.filter(retailer=retailer).values_list("pk", "url", "last_fetched_at")
+        if url in wanted
+    }
+
+
+def pages_to_read(retailer, pages, limit=PAGES_PER_READ, now=None):
+    """The (page pk, address) pairs one read fetches, in order, after indexing ``pages``.
+
+    Pages never fetched come first, in sitemap rank order; then pages the sitemap dates after their
+    last fetch; then the longest unread. A page the sitemap dates before its last fetch waits a day.
+    """
+    now = now or timezone.now()
+    index = index_pages(retailer, pages, now=now)
+    never, changed, rest = [], [], []
+    for position, (url, lastmod) in enumerate(pages):
+        if url not in index:
+            continue
+        pk, fetched = index[url]
+        if fetched is None:
+            never.append((position, pk, url))
+        elif lastmod is not None and lastmod > fetched:
+            changed.append((fetched, position, pk, url))
+        elif lastmod is None or fetched <= now - RECHECK_UNCHANGED:
+            rest.append((fetched, position, pk, url))
+    changed.sort()
+    rest.sort()
+    order = [row[-2:] for row in never] + [row[-2:] for row in changed] + [row[-2:] for row in rest]
+    return [tuple(row) for row in order[:limit]]
+
+
+def website_offers(retailer, fetch=fetch, pause=0.5, limit=PAGES_PER_READ):
+    """Offers from up to ``limit`` of the product pages the site's sitemap lists.
+
+    Every page is indexed as a ShopPage, and each fetch is stamped on its page, so the next read
+    carries on where this one stopped.
+    """
     base = retailer.source_url.rstrip("/")
-    for url in sitemap_urls(base, fetch=fetch, limit=limit):
+    for page_pk, url in pages_to_read(retailer, sitemap_pages(base, fetch=fetch), limit=limit):
         try:
             html = fetch(url).decode("utf-8", "replace")
         except ImportError_:
-            continue
-        offer = page_offer(url, html)
+            html = None
+        # Stamped even when the page fails, so a broken page cannot hold the front of every read.
+        ShopPage.objects.filter(pk=page_pk).update(last_fetched_at=timezone.now())
+        offer = page_offer(url, html) if html is not None else None
         if offer and offer.title:
             # Some shops leave the game out of the title ("Kyurem V Collection
             # Box") but put it in the address, so the address words go along
             # as a tag for the classifier to read.
             if not offer.tags:
                 offer = dataclasses.replace(offer, tags=(slug_words(url),))
-            yield offer
+            yield dataclasses.replace(offer, page_pk=page_pk)
         if pause:
             time.sleep(pause)
+
+
+def forget_pages(now=None, dry_run=False):
+    """Remove pages no sitemap has listed for PAGE_FORGOTTEN_AFTER. Returns how many."""
+    gone = ShopPage.objects.filter(last_seen_at__lt=(now or timezone.now()) - PAGE_FORGOTTEN_AFTER)
+    if dry_run:
+        return gone.count()
+    return gone.delete()[0]
 
 
 # CSV feed -------------------------------------------------------------------
@@ -657,8 +758,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     """Update listings from ``offers``.
 
     ``complete`` says the offers cover the shop's whole range, so anything not
-    among them is out of stock there. A website crawl stops at MAX_PAGES and
-    is not complete: its unseen products keep their last state.
+    among them is out of stock there. A website read fetches PAGES_PER_READ pages
+    and is not complete: its unseen products keep their last state.
 
     Offers match a product by barcode, or by the link of a listing that was
     added by hand for this retailer. Returns (found, updated, unmatched titles).
@@ -742,6 +843,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if not offer.url.lower().startswith(("http://", "https://")):
                 unmatched.append(f"{offer.title} [link is not a web address]")
                 continue
+            if offer.page_pk is not None:
+                # The shop's page now names its product, so a search can find it without a fetch.
+                ShopPage.objects.filter(pk=offer.page_pk).exclude(product_id=product_pk).update(product_id=product_pk)
             if offer.price <= 0:
                 # No price is not a price. A priced variant of the same product may still come later in
                 # the run, so this offer waits until the end and never stands in for one.

@@ -423,9 +423,11 @@ network is the way in for all of these.
      data (price, stock, barcode, image), which most Magento, WooCommerce,
      BigCommerce and custom shops publish. It pauses half a second between
      pages. A big shop can list 100,000 pages, so pages whose address reads
-     as a sealed product are fetched first (up to 3,000 a run), pages whose
-     address reads as a single card or accessory are skipped, and the game
-     is taken from the address when the page title leaves it out.
+     as a sealed product come first, pages whose address reads as a single
+     card or accessory are skipped, and the game is taken from the address
+     when the page title leaves it out. Up to 3,000 pages a shop are kept in
+     a page index (see "Website shop pages" below) and each read fetches 600
+     of them.
    - A shop that shows each visitor their own currency (Unicorn Cards shows
      dollars to an American address) gets a "visit first" address on the
      retailer: the importer opens it before reading pages and keeps the
@@ -711,6 +713,28 @@ that failed. `import_prices` with no slug and no `--due` reads every shop,
 as before. Insights shows each shop's schedule under Shop health, and a
 shop counts as not updating when its last good read is older than 6 hours
 or two of its intervals, whichever is longer.
+
+## Website shop pages
+
+A website shop has no product list to read in one go, so each read takes a
+slice of its sitemap. Every page the sitemap lists that is worth fetching
+(up to 3,000 a shop, sealed products first) is kept as a shop page with the
+words of its address, when the sitemap says it last changed, when it was
+last fetched and, once a price from it is linked, the product it sells.
+Each read fetches at most 600 pages, in this order:
+
+1. pages never fetched;
+2. pages the sitemap dates after their last fetch, longest unread first;
+3. the rest, longest unread first. A page the sitemap dates before its last
+   fetch is left for a day, then read again, so its price never nears the
+   72 hour stale cutoff and a stock change the shop does not date is still
+   caught.
+
+A shop whose sitemap carries no dates is read round the whole index in
+turn: 600 pages a read, so 3,000 pages are all refreshed within five reads.
+A page that fails to load counts as fetched, so it cannot hold the front of
+every read. Pages a shop's sitemap has not listed for 30 days are removed
+by `tidy_all`. A website read never marks unseen products out of stock.
 
 ## Crawl health
 

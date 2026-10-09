@@ -1338,3 +1338,172 @@ class CadenceTests(TestCase):
         for field in ("error_streak", "backoff_until", "next_read_at", "reading_paused", "last_error"):
             self.assertNotIn(f'name="{field}"', page)
         self.assertIn("HTTP Error 503", page)
+
+
+class PageIndexTests(TestCase):
+    """Website shops: every sitemap page is indexed, and each read fetches a short, fair slice."""
+
+    def setUp(self):
+        self.retailer = make_retailer("Web Shop", source_type=Retailer.Source.WEBSITE, source_url="https://shop.example/")
+        self.fetched = []
+        self.pages = []   # (address, lastmod text or "")
+
+    def fetch(self, url):
+        if url.endswith("/sitemap.xml"):
+            entries = "".join(
+                f"<url><loc>{u}</loc>{f'<lastmod>{lastmod}</lastmod>' if lastmod else ''}</url>" for u, lastmod in self.pages
+            )
+            return f"<urlset>{entries}</urlset>".encode()
+        if "sitemap" in url or url.endswith(".xml") or url.endswith("robots.txt"):
+            raise ImportError_("missing")
+        self.fetched.append(url)
+        return b"<html><body>Nothing to price</body></html>"
+
+    def read(self, **kwargs):
+        from .importers import website_offers
+
+        self.fetched = []
+        list(website_offers(self.retailer, fetch=self.fetch, pause=0, **kwargs))
+        return self.fetched
+
+    def address(self, n):
+        return f"https://shop.example/products/pokemon-set-{n}-booster-box"
+
+    def test_first_read_of_1500_pages_fetches_600_and_indexes_all_then_the_next_600(self):
+        from .models import ShopPage
+
+        self.pages = [(self.address(n), "2026-01-05") for n in range(1500)]
+        urls = [u for u, _lastmod in self.pages]
+        self.assertEqual(self.read(), urls[:600])
+        self.assertEqual(ShopPage.objects.filter(retailer=self.retailer).count(), 1500)
+        self.assertEqual(ShopPage.objects.filter(last_fetched_at__isnull=False).count(), 600)
+        self.assertEqual(ShopPage.objects.get(url=urls[0]).slug_words, "pokemon set 0 booster box")
+        self.assertEqual(self.read(), urls[600:1200])
+        self.assertEqual(self.read(), urls[1200:])
+        # Every page read and none changed since: nothing to fetch until a day has passed.
+        self.assertEqual(self.read(), [])
+
+    def test_indexing_writes_in_batches_never_a_query_per_page(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from .importers import pages_to_read
+        from .models import ShopPage
+
+        pages = [(self.address(n), None) for n in range(1500)]
+        for _read in range(2):
+            with CaptureQueriesContext(connection) as queries:
+                chosen = pages_to_read(self.retailer, pages)
+            # One insert per batch of rows (SQLite caps the values in one statement) and one read.
+            self.assertLessEqual(len(queries), 15)
+            self.assertEqual(len(chosen), 600)
+        self.assertEqual(ShopPage.objects.count(), 1500)
+
+    def test_a_page_whose_lastmod_moved_is_fetched_first_and_an_unchanged_page_waits_a_day(self):
+        from datetime import timedelta
+
+        from .models import ShopPage
+
+        now = timezone.now()
+        a, b, c, d = (f"https://shop.example/products/{name}" for name in ("alpha", "bravo", "charlie", "delta"))
+        old = (now - timedelta(days=3)).isoformat()
+        self.pages = [(a, old), (b, old), (c, old), (d, "")]
+        self.assertEqual(self.read(), [a, b, c, d])
+        ShopPage.objects.update(last_fetched_at=now - timedelta(hours=2))
+        self.pages[2] = (c, (now - timedelta(hours=1)).isoformat())
+        # Changed since its last fetch: ahead of the undated page.
+        self.assertEqual(self.read(limit=1), [c])
+        # Alpha and Bravo are dated before their last fetch and were read two hours ago.
+        self.assertEqual(self.read(), [d])
+        ShopPage.objects.filter(url=a).update(last_fetched_at=now - timedelta(hours=25))
+        # Unchanged pages are still read once a day, longest unread first.
+        self.assertEqual(self.read(), [a, d])
+
+    def test_a_sitemap_without_lastmod_is_read_round_robin(self):
+        self.pages = [(self.address(n), "") for n in range(5)]
+        urls = [u for u, _lastmod in self.pages]
+        self.assertEqual(self.read(limit=2), urls[0:2])
+        self.assertEqual(self.read(limit=2), urls[2:4])
+        self.assertEqual(self.read(limit=2), [urls[4], urls[0]])
+        self.assertEqual(self.read(limit=2), urls[1:3])
+
+    def test_sitemap_dates_are_read_in_each_form_shops_use(self):
+        from datetime import datetime, timezone as tz
+
+        from .importers import sitemap_pages
+
+        self.pages = [
+            ("https://shop.example/products/a", "2026-03-01"),
+            ("https://shop.example/products/b", "2026-03-01T10:30:00+01:00"),
+            ("https://shop.example/products/c", "2026-03-01T10:30:00Z"),
+            ("https://shop.example/products/d", "not a date"),
+            ("https://shop.example/products/e", ""),
+        ]
+        dates = dict(sitemap_pages("https://shop.example", fetch=self.fetch))
+        self.assertEqual(dates["https://shop.example/products/a"], datetime(2026, 3, 1, tzinfo=tz.utc))
+        self.assertEqual(dates["https://shop.example/products/b"], datetime(2026, 3, 1, 9, 30, tzinfo=tz.utc))
+        self.assertEqual(dates["https://shop.example/products/c"], datetime(2026, 3, 1, 10, 30, tzinfo=tz.utc))
+        self.assertIsNone(dates["https://shop.example/products/d"])
+        self.assertIsNone(dates["https://shop.example/products/e"])
+
+    def test_a_page_that_fails_is_stamped_so_it_cannot_hold_the_front_of_every_read(self):
+        from .models import ShopPage
+
+        self.pages = [(self.address(n), "") for n in range(3)]
+        broken = self.address(0)
+
+        def fetch(url):
+            if url == broken:
+                self.fetched.append(url)
+                raise ImportError_("gone")
+            return self.fetch(url)
+
+        self.fetched = []
+        from .importers import website_offers
+
+        list(website_offers(self.retailer, fetch=fetch, pause=0, limit=1))
+        self.assertEqual(self.fetched, [broken])
+        self.assertIsNotNone(ShopPage.objects.get(url=broken).last_fetched_at)
+        self.assertEqual(self.read(limit=1), [self.address(1)])
+
+    def test_the_page_names_its_product_once_an_offer_from_it_is_linked(self):
+        from unittest import mock
+
+        from .models import ShopPage
+
+        product = make_product(make_set(make_game()), ean="0820650851230")
+        page = "https://shop.example/products/pokemon-prismatic-evolutions-elite-trainer-box"
+        other = "https://shop.example/products/pokemon-mystery-booster-box"
+        self.pages = [(page, ""), (other, "")]
+
+        def fetch(url):
+            if url == page:
+                return (b'<script type="application/ld+json">{"@type": "Product", "name": "Prismatic Evolutions Elite Trainer Box",'
+                        b' "gtin13": "0820650851230", "offers": {"price": "84.99", "priceCurrency": "GBP"}}</script>')
+            return self.fetch(url)
+
+        with mock.patch("catalogue.importers.time.sleep", lambda s: None):
+            run = run_import(self.retailer, fetch=fetch)
+        self.assertTrue(run.ok, run.error)
+        self.assertEqual(ShopPage.objects.get(url=page).product, product)
+        self.assertIsNone(ShopPage.objects.get(url=other).product)
+        self.assertEqual(Listing.objects.get(product=product, retailer=self.retailer).price, Decimal("84.99"))
+
+    def test_pages_missing_from_the_sitemap_for_30_days_are_forgotten_by_tidy_all(self):
+        from datetime import timedelta
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .models import ShopPage
+
+        now = timezone.now()
+        gone = ShopPage.objects.create(retailer=self.retailer, url=self.address(1), last_seen_at=now - timedelta(days=31))
+        kept = ShopPage.objects.create(retailer=self.retailer, url=self.address(2), last_seen_at=now - timedelta(days=29))
+        out = StringIO()
+        call_command("tidy_all", "--dry-run", stdout=out)
+        self.assertIn("1 shop pages would be forgotten.", out.getvalue())
+        self.assertTrue(ShopPage.objects.filter(pk=gone.pk).exists())
+        call_command("tidy_all", stdout=StringIO())
+        self.assertFalse(ShopPage.objects.filter(pk=gone.pk).exists())
+        self.assertTrue(ShopPage.objects.filter(pk=kept.pk).exists())

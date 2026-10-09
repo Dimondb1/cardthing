@@ -619,6 +619,30 @@ class ShopProduct(models.Model):
         return f"{self.title} ({self.retailer})"
 
 
+class ShopPage(models.Model):
+    """A page a website shop's sitemap lists, and when it was last read.
+
+    Kept so each read fetches the pages never read or changed since, then the longest unread,
+    instead of the same pages every hour. The address words let a search find a shop's pages
+    without fetching them.
+    """
+
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="pages")
+    url = models.URLField(max_length=1000)
+    slug_words = models.CharField(max_length=300, blank=True)
+    lastmod = models.DateTimeField(null=True, blank=True, help_text="When the shop's sitemap says the page last changed.")
+    last_fetched_at = models.DateTimeField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(default=timezone.now, help_text="When the page was last in the shop's sitemap.")
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+
+    class Meta:
+        unique_together = [("retailer", "url")]
+        indexes = [models.Index(fields=["retailer", "last_fetched_at"])]
+
+    def __str__(self):
+        return self.url
+
+
 class DailyLowestPrice(models.Model):
     """The cheapest delivered price seen for a product on one day."""
 

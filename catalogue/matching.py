@@ -60,8 +60,10 @@ SERIES = re.compile(
 )
 # Counts and codes that describe the same product: "36 packs", "(10)", "OP-10", "BT-22", "ST13".
 # "set of 4" stays: a set of four decks is not one deck.
-COUNTS = re.compile(r"\b\d+ (?:booster )?packs?\b|\(\d+\)|\bx\s?\d+\b|"
+COUNTS = re.compile(r"\b\d+ (?:sealed )?(?:booster )?packs?\b|\(\d+\)|\bx\s?\d+\b|"
                     r"\b(?:op|st|bt|ex|eb|lm|pb|fb)[- ]?\d{1,3}\b")
+BOX_WORDS = re.compile(r"\b(?:box|boxes|display)\b")
+BOX_PACKS = re.compile(r"\b(\d{1,2}) ?x (?:sealed )?(?:booster )?packs?\b")
 SET_CODE = re.compile(r"^(?:sv|swsh|sm|xy|op|st|bt|ex|eb|lm|pb|b|fb)-?\d{1,3}(?:\.\d)?[a-z]?$")
 KIND_MARKS = (
     ("#box", re.compile(r"\bbooster box\b|\bdisplay\b|\bbox of \d+|\bcase of \d+")),
@@ -105,6 +107,10 @@ def key_text(text):
     for phrase in PHRASES:
         expanded = expanded.replace(f" {phrase} ", " ")
     expanded = SERIES.sub(" ", expanded)
+    if BOX_WORDS.search(expanded):
+        # "Booster Box (36x Packs)" says what is inside the box, the same rule classify uses. A bare
+        # "3x Booster Packs" names no box, so it keeps its count and its pack mark as the multi-buy it is.
+        expanded = BOX_PACKS.sub(lambda m: " " if 6 <= int(m.group(1)) <= 36 else m.group(0), expanded)
     expanded = COUNTS.sub(" ", expanded)
     return expanded
 

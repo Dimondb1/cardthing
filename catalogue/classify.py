@@ -73,6 +73,20 @@ NOT_SEALED = re.compile(
     r"\bposters?\b|\bbeanie\b|\bscarf\b|\bfigures\b|\binch\b|\bmug\b|\bkeychain\b|\bwallet\b|\bhoodie\b|\bt-shirt\b|\bsocks\b|\bpuzzle\b|\bsofbits\b|\bshokugan\b",
     re.I,
 )
+# "Booster Box (36x Packs)" says what is inside the box, not that it is a multi-buy, but NOT_SEALED's
+# "36x" rule would refuse it. A count of 6 to 36 packs in a title that names a box or display is
+# rewritten as "36 packs" first. "Booster Pack x3" and "3x Booster Packs" stay multi-buys.
+BOX_WORDS = re.compile(r"\b(?:box|boxes|display)\b", re.I)
+BOX_CONTENTS = re.compile(r"\b(\d{1,2})\s?[x×]\s*((?:sealed\s+)?(?:booster\s*)?packs?)\b", re.I)
+
+
+def box_contents(title):
+    """The title with a box's pack count written as a count, not a multi-buy."""
+    if not BOX_WORDS.search(title or ""):
+        return title
+    return BOX_CONTENTS.sub(lambda m: f"{m.group(1)} {m.group(2)}" if 6 <= int(m.group(1)) <= 36 else m.group(0), title)
+
+
 # Makers of merchandise and accessories, not cards. Nothing from them is a sealed TCG product.
 NOT_SEALED_VENDORS = {"gb posters", "gb eye", "difuzed", "funko", "loungefly", "paladone", "ultra pro", "ultra-pro", "gamegenic",
                       "dragon shield", "ultimate guard", "bandai spirits", "jazwares", "mattel", "hasbro", "lego",
@@ -99,7 +113,7 @@ PREFIXES = re.compile(
 )
 KIND_FIRST = re.compile(r"^(Booster Box|Booster Pack|Trial Deck\+?|Start Deck|Starter Deck|Extra Booster(?: Box| Pack)?)\s*[:\-–]\s*(.+)$", re.I)
 NOISE = re.compile(
-    r"\s*\((?:en|eng|english|uk|new|sealed|in stock|pre-?order|\d+ packs?|\d+ boosters?|\d+ ct|[a-z]{2,3}-?\d{2,3}[a-z]?)\)"
+    r"\s*\((?:en|eng|english|uk|new|sealed|in stock|pre-?order|\d+ (?:sealed )?(?:booster )?packs?|\d+ boosters?|\d+ ct|[a-z]{2,3}-?\d{2,3}[a-z]?)\)"
     r"|\s*\[[^\]]*\]|\s*[-–:|]\s*(?:english|en|sealed|new|pre-?order|in stock)\s*$|\s*[-–]\s*$|^\s*[-–:]\s*",
     re.I,
 )
@@ -237,6 +251,7 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
         return None
     if (vendor or "").lower().strip() in NOT_SEALED_VENDORS:
         return None
+    title = box_contents(title)
     if NOT_SEALED.search(title):
         return None
     if VARIANT_MENU.search(title):

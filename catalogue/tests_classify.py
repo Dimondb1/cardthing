@@ -108,6 +108,24 @@ class ClassifyLeakTests(TestCase):
                       "Yu-Gi-Oh Legacy of Destruction 24-Pack Box", "Pokemon Surging Sparks Booster Pack Display Box", "Pokemon 151 Booster Bundle 6 Booster Packs"]:
             self.assertIsNotNone(classify(title, price=50), title)
 
+    def test_a_box_that_says_how_many_packs_are_inside_is_not_a_multi_buy(self):
+        # The Card Vault writes every box this way; the multi-buy rule used to refuse them all.
+        cases = {
+            "Pokemon TCG: Surging Sparks Booster Box (36x Packs)": ("booster_box", "Surging Sparks Booster Box"),
+            "One Piece OP-10 Booster Box (24x Packs)": ("booster_box", "OP 10 Booster Box"),
+            "Pokemon Prismatic Evolutions Elite Trainer Box (9x Booster Packs)": ("elite_trainer_box", "Prismatic Evolutions Elite Trainer Box"),
+        }
+        for title, (kind, name) in cases.items():
+            sealed = classify(title, price=100)
+            self.assertIsNotNone(sealed, title)
+            self.assertEqual((sealed.product_type, sealed.name), (kind, name), title)
+        # Multi-buys stay refused: no box word, a count outside a box's contents, or boxes counted.
+        for title in ["Pokemon 3x Booster Pack Bundle", "Pokemon Mega Evolution 6x Booster Packs",
+                      "Pokemon Surging Sparks Booster Box x2", "Pokemon Surging Sparks Booster Box 2x",
+                      "Pokemon Surging Sparks 3x Booster Box", "Pokemon Surging Sparks Booster Pack x 36",
+                      "Pokemon Surging Sparks Booster Box (4x Packs)", "Pokemon Surging Sparks Booster Box (48x Packs)"]:
+            self.assertIsNone(classify(title, price=100), title)
+
     def test_a_word_repeated_by_the_shop_appears_once(self):
         self.assertEqual(classify("Yu-Gi-Oh! Justice Hunters Booster Booster Pack", price=3).name, "Justice Hunters Booster Pack")
 

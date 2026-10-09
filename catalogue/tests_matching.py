@@ -151,3 +151,12 @@ class SeriesDecimalTests(TestCase):
         )
         self.assertEqual(match_key("Scarlet & Violet 151 Booster Bundle"), match_key("151 Booster Bundle"))
         self.assertNotEqual(match_key("151 Booster Bundle"), match_key("Booster Bundle"))
+
+
+class BoxContentsKeyTests(TestCase):
+    def test_a_bracketed_pack_count_is_the_same_box_and_a_bare_multi_buy_keeps_its_pack_mark(self):
+        from .matching import match_key
+
+        self.assertEqual(match_key("Pokemon TCG: Scarlet & Violet - Destined Rivals Booster Box (36x Packs)"),
+                         match_key("Destined Rivals Booster Box"))
+        self.assertIn("#pack", match_key("Pokemon 3x Booster Packs"))

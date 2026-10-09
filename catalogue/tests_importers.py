@@ -324,6 +324,15 @@ class NameMatchingTests(TestCase):
         self.assertLess(score(self.box.name, "Surging Sparks Booster Pack"), 100)
         self.assertLess(score(self.etb.name, "Prismatic Evolutions Booster Bundle"), 100)
 
+    def test_a_box_listed_with_its_pack_count_links_to_our_box(self):
+        from .importers import Offer, apply_offers
+
+        offer = Offer(title="Pokemon TCG: Surging Sparks Booster Box (36x Packs)", url="https://pc.example/products/ssp-box",
+                      price=Decimal("109.99"), availability=Listing.Availability.IN_STOCK)
+        found, updated, unmatched = apply_offers(self.retailer, [offer], complete=False)
+        self.assertEqual((updated, unmatched), (1, []))
+        self.assertEqual(Listing.objects.get(retailer=self.retailer).product, self.box)
+
     def test_import_links_confident_matches_and_queues_the_rest(self):
         page = shopify_page([
             {"handle": "pe-etb", "title": "Pokemon TCG Prismatic Evolutions Elite Trainer Box", "tags": [], "images": [{"src": "https://cdn.example/etb.jpg"}],

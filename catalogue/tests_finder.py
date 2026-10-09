@@ -378,10 +378,11 @@ class SuggestTests(FinderCase):
         product = make_product(digimon, name="Dual Revolution Booster Box", slug="dr-digimon", product_type="booster_box")
         hit = finder.Finder().best_result(product, self.gg, GG, found)
         self.assertEqual((hit.handle, hit.value), ("digimon-card-game-dual-revolution-bt25-booster-box-24-packs", 100))
-        # The same shop writes "(36x Packs)" on its Pokemon boxes, which the sealed rules read as a multipack:
-        # such a title is passed over, never guessed at.
+        # The same shop writes "(36x Packs)" on its Pokemon boxes: that is what is inside the box, so it is found
+        # as surely as any other shop's box, and the set's neighbours stay apart.
         rivals = make_product(self.set, name="Destined Rivals Booster Box", slug="dr-box", product_type="booster_box")
-        self.assertIsNone(finder.Finder().best_result(rivals, self.gg, GG, found))
+        hit = finder.Finder().best_result(rivals, self.gg, GG, found)
+        self.assertEqual((hit.handle, hit.value), ("pokemon-tcg-scarlet-violet-destined-rivals-booster-box-36-packs", 100))
 
     def test_a_result_from_another_game_is_passed_over_however_well_it_reads(self):
         origins = make_product(self.set, name="Origins Booster Box", slug="origins-box", product_type="booster_box")

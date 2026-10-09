@@ -1206,3 +1206,213 @@ class FeedbackTests(Base):
         with CaptureQueriesContext(connection) as many:
             self.client.get(self.url)
         self.assertEqual(len(few), len(many))
+
+
+class EarlierAnswerTests(Base):
+    """Let Claude act also acts on the answers Claude gave before it was let act, for free, under the same
+    rules as a fresh answer, and every answer it leaves for the owner says why."""
+
+    def setUp(self):
+        super().setUp()
+        self.shop(100)
+        self.shop(104)
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.url = reverse("checks")
+
+    def trial(self, verdicts=None, **kwargs):
+        """Claude answers in trial: verdicts maps a row key to reply() arguments."""
+        self.switch_on(may_act=False)
+        verdicts = verdicts or {}
+        self.ask(lambda key, params: reply(key, **verdicts.get(key, {})), **kwargs)
+        self.assertEqual(self.answers(), [])
+        ClaudeJudge.objects.filter(pk=1).update(may_act=True)
+
+    def test_trial_answers_act_once_claude_may_act_and_nothing_is_sent(self):
+        right = self.found(price="101.00")
+        wrong = self.found(title="Surging Sparks Booster Box Japanese", price="101.00")
+        self.trial({f"found:{wrong.pk}": {"verdict": "different", "differences": ["language"],
+                                         "reason": "The shop sells the Japanese box."}})
+        with mock.patch.object(judge, "send", side_effect=AssertionError("nothing is sent")):
+            self.assertEqual(judge.act_on_earlier(), 2)
+        right.refresh_from_db()
+        wrong.refresh_from_db()
+        self.assertEqual((right.status, wrong.status), (ShopProduct.Status.LINKED, ShopProduct.Status.IGNORED))
+        made = {answer.kind: answer for answer in self.answers()}
+        self.assertEqual(set(made), {CheckAnswer.Kind.LINK, CheckAnswer.Kind.REFUSE})
+        self.assertTrue(made[CheckAnswer.Kind.REFUSE].why.startswith("Claude: The shop sells the Japanese box."))
+        self.assertEqual(set(Ask.objects.values_list("action", flat=True)), {Ask.Action.ACTED})
+        self.assertEqual(judge.act_on_earlier(), 0)
+
+    def test_the_let_claude_act_button_acts_at_once_and_says_so(self):
+        self.found(price="101.00")
+        self.trial()
+        ClaudeJudge.objects.filter(pk=1).update(may_act=False)
+        response = self.client.post(self.url, {"action": "claude_act_on"}, follow=True)
+        self.assertContains(response, "It sorted 1 row from answers it had already given.")
+        self.assertEqual(self.answers()[0].kind, CheckAnswer.Kind.LINK)
+        self.assertContains(response, "Linked " + BOX)
+        response = self.client.post(self.url, {"action": "claude_act_off"}, follow=True)
+        self.assertContains(response, "Claude now only suggests.")
+
+    def test_nothing_acts_while_claude_is_off_suggests_only_or_pause_all_is_on(self):
+        from . import crawl
+
+        self.found(price="101.00")
+        self.trial()
+        ClaudeJudge.objects.filter(pk=1).update(may_act=False)
+        self.assertEqual(judge.act_on_earlier(), 0)
+        ClaudeJudge.objects.filter(pk=1).update(may_act=True, enabled=False)
+        self.assertEqual(judge.act_on_earlier(), 0)
+        ClaudeJudge.objects.filter(pk=1).update(enabled=True)
+        crawl.pause_all()
+        self.assertEqual(judge.act_on_earlier(), 0)
+        crawl.resume_all()
+        with override_settings(RIPRAPTOR_CLAUDE=False):
+            self.assertEqual(judge.act_on_earlier(), 0)
+        self.assertEqual(self.answers(), [])
+        self.assertEqual(judge.act_on_earlier(), 1)
+
+    def test_never_an_answer_the_row_outgrew_a_fallback_gave_or_the_owner_undid(self):
+        changed = self.found(price="101.00")
+        fell_back = self.found(title="Surging Sparks Booster Box Display", price="101.00")
+        undone = self.found(title="Pokemon Surging Sparks Booster Box", price="101.00")
+        self.trial({f"found:{fell_back.pk}": {"model": "claude-opus-4-8"}})
+        ShopProduct.objects.filter(pk=changed.pk).update(title="Surging Sparks Booster Box (Japanese)")
+        self.assertEqual(judge.act_on_earlier(), 1)
+        [answer] = self.answers()
+        self.assertEqual(answer.shop_product, undone)
+        autopilot.undo(answer)
+        self.assertEqual(judge.act_on_earlier(), 0)
+        undone.refresh_from_db()
+        self.assertEqual(undone.status, ShopProduct.Status.IGNORED)
+        for row in (changed, fell_back):
+            row.refresh_from_db()
+            self.assertEqual(row.status, ShopProduct.Status.REVIEW)
+
+    def test_a_run_acts_on_earlier_answers_before_asking_and_counts_them(self):
+        old = self.found(price="101.00")
+        self.trial()
+        new = self.found(title="Surging Sparks Booster Display", price="102.00")
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        client, result = self.ask()
+        self.assertEqual([client.row_key(params) for _, params in client.sent], [f"found:{new.pk}"])
+        self.assertEqual((result.asked, result.earlier, result.acted), (1, 1, 2))
+        state = ClaudeJudge.objects.get()
+        self.assertIn("sorted 2 (1 from earlier answers)", state.last_run_note)
+        self.assertEqual(state.runs[0]["earlier"], 1)
+        old.refresh_from_db()
+        self.assertEqual(old.status, ShopProduct.Status.LINKED)
+        self.assertContains(self.client.get(self.url), "sorted 2 (1 from earlier answers)")
+
+    def test_a_trial_wrong_match_hides_the_price_claude_is_sure_is_another_product(self):
+        best = self.shop(20, title="Surging Sparks Booster Box Opened")
+        second = self.shop(100)
+        self.assertEqual(len(checks.wrong_matches()), 1)
+        self.trial({f"offer:{best.pk}": {"verdict": "different", "differences": ["condition"]}})
+        self.assertEqual(judge.act_on_earlier(), 1)
+        self.assertFalse(Listing.objects.get(pk=best.pk).is_active)
+        self.assertTrue(Listing.objects.get(pk=second.pk).is_active)
+
+    def test_each_answer_left_for_the_owner_says_why(self):
+        unsure = self.found(price="101.00")
+        self.found(title="Surging Sparks Booster Display", price="150.00")
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(51, product=other, title=other.name)
+        bundle = make_product(self.set, name="Surging Sparks Booster Bundle", product_type="bundle")
+        cheap = self.shop(30, product=bundle, title=bundle.name)
+        self.shop(100, product=bundle, title=bundle.name)
+        sanity.judge_product(bundle.pk)
+        self.assertEqual(Listing.objects.get(pk=cheap.pk).sanity, Listing.Sanity.DOUBTFUL)
+        self.trial({f"found:{unsure.pk}": {"confidence": "medium"}})
+        page = self.client.get(self.url).content.decode()
+        self.assertIn("Left for you: Claude was only fairly sure.", page)
+        self.assertIn("Left for you: the price is far from what other shops charge.", page)
+        self.assertIn("Left for you: Claude never merges by itself.", page)
+        self.assertIn("Left for you: Claude never counts a price as right. Tap This price is right if it is.", page)
+        self.assertEqual(judge.act_on_earlier(), 0)
+        self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
+        ClaudeJudge.objects.filter(pk=1).update(may_act=False)
+        self.assertNotIn("Left for you", self.client.get(self.url).content.decode())
+
+    def test_decide_and_the_reasons_agree(self):
+        """decide never acts where the page says an answer was left, and the page never gives a reason for
+        one that acts."""
+        row = judge.Evidence({self.product.pk}).found(
+            ShopProduct.objects.select_related("retailer", "suggested__game", "suggested__product_set")
+            .get(pk=self.found(price="101.00").pk))
+        for verdict in ("same", "different", "unsure"):
+            for confidence in ("high", "medium", "low"):
+                for differences in ([], ["price"], ["kind"]):
+                    answer = {"verdict": verdict, "confidence": confidence, "differences": differences}
+                    action, why = judge.ruling(row, answer)
+                    self.assertEqual(judge.decide(row, answer, True), action)
+                    self.assertEqual(bool(why), action is None, answer)
+
+    def test_a_busy_database_leaves_the_rest_for_the_next_run(self):
+        from django.db import OperationalError
+
+        self.found(price="101.00")
+        self.trial()
+        with mock.patch.object(judge, "act", side_effect=OperationalError("database is locked")):
+            response = self.client.post(self.url, {"action": "claude_now"}, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(judge.act_on_earlier(), 1)
+
+    def test_a_row_answered_and_undone_before_stays_with_the_owner_and_says_so(self):
+        bundle = make_product(self.set, name="Surging Sparks Booster Bundle", product_type="bundle")
+        cheap = self.shop(30, product=bundle, title="Surging Sparks Booster Bundle Opened")
+        self.shop(100, product=bundle, title=bundle.name)
+        sanity.judge_product(bundle.pk)
+        self.trial({f"offer:{cheap.pk}": {"verdict": "different", "differences": ["condition"]}})
+        CheckAnswer.objects.create(kind=CheckAnswer.Kind.HIDE, what="Hid it", why="Test", listing=cheap,
+                                   product=bundle, undone_at=timezone.now())
+        self.assertEqual(judge.act_on_earlier(), 0)
+        self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
+        self.assertContains(self.client.get(self.url), "Left for you: the row was answered before, so it stays with you.")
+
+    def test_the_reasons_cost_the_same_queries_however_many_answers(self):
+        self.switch_on(may_act=True)
+        rows = [self.found(title=f"Surging Sparks Booster Display {n}", price="150.00") for n in range(6)]
+        rows = list(ShopProduct.objects.filter(pk__in=[r.pk for r in rows]).select_related(
+            "retailer", "suggested__game", "suggested__product_set"))
+
+        def said(row):
+            fingerprint = judge.Evidence({self.product.pk}).found(row).fingerprint
+            Ask.objects.create(kind="found", row_key=f"found:{row.pk}", fingerprint=fingerprint, model_asked="m",
+                               model_answered="m", effort="low", outcome=Ask.Outcome.ANSWERED, verdict="same",
+                               confidence="high", reason="Match.", action=Ask.Action.SUGGESTED)
+
+        said(rows[0])
+        with CaptureQueriesContext(connection) as one:
+            self.client.get(self.url)
+        for row in rows[1:]:
+            said(row)
+        with CaptureQueriesContext(connection) as six:
+            page = self.client.get(self.url)
+        self.assertContains(page, "Left for you: the price is far from what other shops charge.", count=6)
+        self.assertEqual(len(one), len(six))
+
+    def test_an_act_made_meanwhile_is_never_relabelled_as_a_changed_row(self):
+        self.found(price="101.00")
+        self.trial()
+
+        def other_process_acted_first(row, ask, action, now):
+            Ask.objects.filter(pk=ask.pk).update(action=Ask.Action.ACTED)
+            return False
+
+        with mock.patch.object(judge, "act", side_effect=other_process_acted_first):
+            self.assertEqual(judge.act_on_earlier(), 0)
+        self.assertEqual(Ask.objects.get().action, Ask.Action.ACTED)
+
+    def test_let_claude_act_under_pause_all_says_when_it_starts(self):
+        from . import crawl
+
+        self.found(price="101.00")
+        self.trial()
+        ClaudeJudge.objects.filter(pk=1).update(may_act=False)
+        crawl.pause_all()
+        response = self.client.post(self.url, {"action": "claude_act_on"}, follow=True)
+        self.assertContains(response, "It starts once Pause all is off.")
+        self.assertEqual(self.answers(), [])

@@ -458,6 +458,16 @@ fallback), and the row is still as Claude saw it. Each act is listed under
 Sorted for you with Claude's reason and an Undo. The box counts how often
 Claude agreed with your own taps.
 
+Answers Claude gave in trial are not wasted. Let Claude act, Ask Claude now
+and every run first put Claude's existing answers through the same rules,
+free (nothing is sent), and act on the ones that pass: only a row's latest
+answer, only while the row is unchanged, never one from a fallback, never on
+a row anyone answered before (an undone answer included). While Claude may
+act, every answer it leaves for you says why under its row ("Left for you:
+the price is far from what other shops charge.", "Claude was only fairly
+sure.", "Claude never merges by itself.", and so on). The run line says how
+many rows were sorted from earlier answers.
+
 **Cost.** Each request is priced from Anthropic's usage figures at the
 model's rates and saved (Claude's answers are listed read-only in admin).
 Before a request is sent, the most it could cost is reserved, and nothing is

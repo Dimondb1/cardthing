@@ -1484,7 +1484,9 @@ def checks_page(request):
     doubtful, wrong, duplicates = checks.doubtful_prices(now), checks.wrong_matches(), checks.duplicates()
     found = checks.found_stockists(now)
     # Claude's latest answer for each row on the page, while the row is still as Claude saw it.
-    claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates)
+    claude = judge.page_status(now)
+    claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates,
+                                         may_act=bool(claude["state"] and claude["state"].may_act))
     context = {
         **admin.site.each_context(request), "title": "Things to check",
         "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
@@ -1496,7 +1498,7 @@ def checks_page(request):
         "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
         "found": found, "found_count": checks.found_waiting().count(),
-        "claude": judge.page_status(now), "claude_counts": claude_counts,
+        "claude": claude, "claude_counts": claude_counts,
         "releases": checks.release_candidates(now), "disagreements": checks.release_disagreements(now),
         "stale_sources": checks.stale_release_sources(now),
     }
@@ -1558,8 +1560,8 @@ def claude_tap(request, action):
                          else "Claude is on." if update["enabled"] else "Claude is off. Nothing is sent and nothing is spent.")
     elif action in ("claude_act_on", "claude_act_off"):
         update["may_act"] = action == "claude_act_on"
-        messages.success(request, "Claude now acts when it is sure and the site's checks agree. Each act is listed with Undo."
-                         if update["may_act"] else "Claude now only suggests. Its answers show under each row.")
+        if not update["may_act"]:
+            messages.success(request, "Claude now only suggests. Its answers show under each row.")
     elif action == "claude_settings":
         model, effort = request.POST.get("model", ""), request.POST.get("effort", "")
         try:
@@ -1585,6 +1587,20 @@ def claude_tap(request, action):
             messages.warning(request, "The server could not delete the key file. Switch Claude off, and delete the key in the Console.")
     if update:
         ClaudeJudge.objects.filter(pk=state.pk).update(**update)
+    if action in ("claude_act_on", "claude_now"):
+        # What Claude has already answered, it may act on at once: nothing is sent and nothing is spent.
+        earlier = judge.act_on_earlier()
+        start = ("Claude now acts when it is sure and the site's checks agree. " if action == "claude_act_on"
+                 else "")
+        if earlier:
+            messages.success(request, f"{start}It sorted {earlier} row{'s' if earlier != 1 else ''} from answers it "
+                                      "had already given. Each is under Sorted for you with Undo. Every answer left "
+                                      "for you says why under its row.")
+        elif action == "claude_act_on":
+            from catalogue import crawl
+
+            messages.success(request, f"{start}It starts once Pause all is off." if crawl.all_paused() else
+                             f"{start}None of its answers so far can act. Each one left for you says why under its row.")
 
 
 def release_tap(request, action):

@@ -1,0 +1,1 @@
+{% if ask %}<span class="why said">Claude, {{ ask.asked_at|date:"j M" }}: {{ ask.summary }}. {{ ask.reason }}{% if ask.left_because %} <i>Left for you: {{ ask.left_because }}.</i>{% endif %}</span>{% endif %}

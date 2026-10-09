@@ -52,9 +52,9 @@
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_on"><input type="submit" value="Switch Claude on"></form>
       {% endif %}
     </div>{% endif %}
-    <p class="note">Claude reads the rows the free checks leave and says whether two things are the same product. In trial it only suggests: its answer shows under each row. Once you agree with its answers, tap Let Claude act. It then acts only when it is sure and the site's own checks agree, never counts a price as right and never merges by itself. Each act is listed under Sorted for you with Undo.</p>
+    <p class="note">Claude reads the rows the free checks leave and says whether two things are the same product. In trial it only suggests: its answer shows under each row. Once you agree with its answers, tap Let Claude act. It then acts at once on the answers it has already given, and on new ones, but only when it is sure and the site's own checks agree. It never counts a price as right and never merges by itself, and each answer it leaves for you says why. Each act is listed under Sorted for you with Undo.</p>
     {% if claude.runs %}<details><summary>Recent runs ({{ claude.runs|length }})</summary>
-      <ul class="names">{% for run in claude.runs %}<li>{{ run.at|date:"j M H:i" }}: looked at {{ run.asked }}, sorted {{ run.sorted }}, {{ run.suggested }} for you to check, {{ run.left }} not asked yet, {{ run.spent }}{% if run.note %}. {{ run.note }}{% endif %}.</li>{% endfor %}</ul>
+      <ul class="names">{% for run in claude.runs %}<li>{{ run.at|date:"j M H:i" }}: looked at {{ run.asked }}, sorted {{ run.sorted }}{% if run.earlier %} ({{ run.earlier }} from earlier answers){% endif %}, {{ run.suggested }} for you to check, {{ run.left }} not asked yet, {{ run.spent }}{% if run.note %}. {{ run.note }}{% endif %}.</li>{% endfor %}</ul>
     </details>{% endif %}
     {% if claude.recent %}<details><summary>Claude's last {{ claude.recent|length }} answer{{ claude.recent|length|pluralize }}</summary>
       <ul>{% for ask in claude.recent %}
@@ -113,7 +113,7 @@
       {% for listing in doubtful %}
       <li class="item"><b><a href="{{ listing.product.get_absolute_url }}" target="_blank" rel="noopener">{{ listing.product.name }}</a></b>
         <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer">£{{ listing.shown_price }} at {{ listing.retailer.name }}</a>: {{ listing.sanity_reason }}.
-        {% if listing.claude %}<span class="why said">Claude, {{ listing.claude.asked_at|date:"j M" }}: {{ listing.claude.summary }}. {{ listing.claude.reason }}</span>{% endif %}
+        {% include "admin/_claude_said.html" with ask=listing.claude %}
         <div class="row">
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="trust"><input type="hidden" name="listing" value="{{ listing.pk }}"><input type="hidden" name="price" value="{{ listing.price }}"><input type="submit" value="This price is right"></form>
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ listing.pk }}"><input type="hidden" name="price" value="{{ listing.price }}"><input type="submit" value="Hide this one"></form>
@@ -148,9 +148,9 @@
       {% for product, summary in wrong %}
       <li class="item"><b><a href="{{ product.get_absolute_url }}" target="_blank" rel="noopener">{{ product.name }}</a></b>
         {% with a=summary.best b=summary.second %}
-        <div class="row"><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">£{{ a.delivered_price }} at {{ a.retailer.name }}</a>{% if a.claude %}<span class="why said">Claude, {{ a.claude.asked_at|date:"j M" }}: {{ a.claude.summary }}. {{ a.claude.reason }}</span>{% endif %}
+        <div class="row"><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">£{{ a.delivered_price }} at {{ a.retailer.name }}</a>{% include "admin/_claude_said.html" with ask=a.claude %}
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ a.pk }}"><input type="submit" value="Hide this one"></form></div>
-        <div class="row"><a href="{{ b.url }}" target="_blank" rel="noopener noreferrer">£{{ b.delivered_price }} at {{ b.retailer.name }}</a>{% if b.claude %}<span class="why said">Claude, {{ b.claude.asked_at|date:"j M" }}: {{ b.claude.summary }}. {{ b.claude.reason }}</span>{% endif %}
+        <div class="row"><a href="{{ b.url }}" target="_blank" rel="noopener noreferrer">£{{ b.delivered_price }} at {{ b.retailer.name }}</a>{% include "admin/_claude_said.html" with ask=b.claude %}
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ b.pk }}"><input type="submit" value="Hide this one"></form></div>
         {% endwith %}
       </li>
@@ -168,7 +168,7 @@
       {% for keep, others in duplicates %}
       <li class="item"><b>Keep: <a href="{{ keep.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.name }}</a></b>
         Merge into it:
-        <ul class="names">{% for other in others %}<li><a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a>{% if other.claude %}<span class="why said">Claude, {{ other.claude.asked_at|date:"j M" }}: {{ other.claude.summary }}. {{ other.claude.reason }}</span>{% endif %}
+        <ul class="names">{% for other in others %}<li><a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a>{% include "admin/_claude_said.html" with ask=other.claude %}
           <div class="row"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="apart"><input type="hidden" name="keep" value="{{ keep.pk }}"><input type="hidden" name="other" value="{{ other.pk }}"><input type="submit" value="Not the same"></form></div></li>{% endfor %}</ul>
         <form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="keep" value="{{ keep.pk }}">{% for other in others %}<input type="hidden" name="other" value="{{ other.pk }}">{% endfor %}<input type="submit" value="Merge these"></form>
       </li>
@@ -184,7 +184,7 @@
       {% for row in found %}
       <li class="item"><b><a href="{{ row.suggested.get_absolute_url }}" target="_blank" rel="noopener">{{ row.suggested.name }}</a></b>
         might be at {{ row.retailer.name }} as <a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">"{{ row.title }}"</a>{% if row.price %} for £{{ row.price }}{% endif %}.
-        {% if row.claude %}<span class="why said">Claude, {{ row.claude.asked_at|date:"j M" }}: {{ row.claude.summary }}. {{ row.claude.reason }}</span>{% endif %}
+        {% include "admin/_claude_said.html" with ask=row.claude %}
         <div class="row">
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="link_found"><input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="price" value="{{ row.price|default_if_none:'' }}"><input type="submit" value="Yes, link it"></form>
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="not_found"><input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="price" value="{{ row.price|default_if_none:'' }}"><input type="submit" value="No, not this"></form>

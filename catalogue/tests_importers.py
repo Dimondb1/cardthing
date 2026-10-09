@@ -381,7 +381,7 @@ class NameMatchingTests(TestCase):
         self.assertFalse(ShopProduct.objects.filter(retailer=self.retailer, price=Decimal("5.50")).exists())
         self.assertEqual(Listing.objects.get(retailer=self.retailer).price, Decimal("154.25"))
 
-    def test_a_page_with_one_variant_is_that_product_whatever_its_label(self):
+    def test_a_page_with_one_variant_is_that_product_whatever_its_count(self):
         from .importers import apply_offers, product_offers
 
         bundle = make_product(self.box.product_set, name="Surging Sparks Booster Bundle", slug="ssp-bundle", product_type="bundle")
@@ -389,6 +389,74 @@ class NameMatchingTests(TestCase):
                 "variants": [{"id": 7, "title": "6 Packs", "price": "29.99", "available": True, "barcode": ""}]}
         apply_offers(self.retailer, product_offers("https://pc.example", page), complete=False)
         self.assertEqual(Listing.objects.get(retailer=self.retailer).product, bundle)
+
+    def pe_box_page(self, *variants):
+        return {"handle": "pe-box", "title": "Pokemon Prismatic Evolutions Booster Box", "tags": [], "images": [],
+                "variants": [{"id": n, "title": title, "price": price, "available": True, "barcode": ""}
+                             for n, (title, price) in enumerate(variants, start=1)]}
+
+    def pe_box(self):
+        return make_product(self.etb.product_set, name="Prismatic Evolutions Booster Box", slug="pe-box", product_type="booster_box")
+
+    def test_a_one_pack_variant_beside_the_box_never_prices_the_box(self):
+        from .importers import apply_offers, product_offers
+
+        box = self.pe_box()
+        offers = list(product_offers("https://pc.example", self.pe_box_page(("1 Pack", "4.99"), ("Booster Box", "150.00"))))
+        self.assertEqual([(o.variant, o.page_title, o.variants) for o in offers],
+                         [("1 Pack", "Pokemon Prismatic Evolutions Booster Box", 2),
+                          ("Booster Box", "Pokemon Prismatic Evolutions Booster Box", 2)])
+        apply_offers(self.retailer, offers, complete=False)
+        listing = Listing.objects.get(retailer=self.retailer)
+        self.assertEqual((listing.product, listing.price, listing.url), (box, Decimal("150.00"), "https://pc.example/products/pe-box?variant=2"))
+        self.assertFalse(ShopProduct.objects.filter(retailer=self.retailer, price=Decimal("4.99")).exists())
+
+    def test_a_page_with_only_a_one_pack_variant_never_prices_the_box(self):
+        from .importers import apply_offers, product_offers
+
+        self.pe_box()
+        products = Product.objects.count()
+        _found, updated, unmatched = apply_offers(self.retailer, product_offers("https://pc.example", self.pe_box_page(("1 Pack", "4.99"))),
+                                                  complete=False)
+        self.assertEqual(updated, 0)
+        self.assertFalse(Listing.objects.filter(retailer=self.retailer).exists())
+        # Not even a likely match, so nothing waits for the owner, and no second box is made from it.
+        self.assertFalse(ShopProduct.objects.filter(retailer=self.retailer).exists())
+        self.assertEqual(Product.objects.count(), products)
+        self.assertEqual(unmatched, ["Pokemon Prismatic Evolutions Booster Box (1 Pack) [no barcode] https://pc.example/products/pe-box?variant=1"])
+
+    def test_a_page_with_only_a_one_pack_variant_makes_no_box(self):
+        from .importers import apply_offers, product_offers
+
+        products = Product.objects.count()
+        apply_offers(self.retailer, product_offers("https://pc.example", self.pe_box_page(("1 Pack", "4.99"))), complete=False)
+        self.assertEqual(Product.objects.count(), products)
+        self.assertFalse(Listing.objects.filter(retailer=self.retailer).exists())
+        self.assertFalse(ShopProduct.objects.filter(retailer=self.retailer).exists())
+
+    def test_a_box_page_left_with_only_its_pack_variant_stops_pricing_the_box(self):
+        from .importers import apply_offers, product_offers
+
+        box = self.pe_box()
+        apply_offers(self.retailer, product_offers("https://pc.example", self.pe_box_page(("1 Pack", "4.99"), ("Booster Box", "150.00"))))
+        # The shop deletes the box variant: the pack shares the page's address, but never takes over the box's listing.
+        _found, _updated, unmatched = apply_offers(self.retailer, product_offers("https://pc.example", self.pe_box_page(("1 Pack", "4.99"))))
+        listing = Listing.objects.get(retailer=self.retailer)
+        self.assertEqual((listing.product, listing.price, listing.url, listing.availability),
+                         (box, Decimal("150.00"), "https://pc.example/products/pe-box?variant=2", Listing.Availability.OUT_OF_STOCK))
+        self.assertEqual(unmatched, ["Pokemon Prismatic Evolutions Booster Box (1 Pack) [no barcode] https://pc.example/products/pe-box?variant=1"])
+
+    def test_variants_of_two_kinds_on_one_page_each_price_their_own_product(self):
+        from .importers import apply_offers, product_offers
+
+        box = self.pe_box()
+        page = {**self.pe_box_page(("Booster Box", "150.00"), ("Elite Trainer Box", "60.00")), "title": "Pokemon Prismatic Evolutions"}
+        for _read in range(2):
+            # The second read finds both by the address they share, which names only one of the two products.
+            apply_offers(self.retailer, product_offers("https://pc.example", page))
+        self.assertEqual(set(Listing.objects.filter(retailer=self.retailer).values_list("product", "price", "url")),
+                         {(box.pk, Decimal("150.00"), "https://pc.example/products/pe-box?variant=1"),
+                          (self.etb.pk, Decimal("60.00"), "https://pc.example/products/pe-box?variant=2")})
 
     def test_a_box_sold_with_extra_packs_is_not_the_box(self):
         from .importers import Offer, apply_offers

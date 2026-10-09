@@ -38,7 +38,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from . import pricing
-from .classify import GAMES, classify, find_game, variant_differs
+from .classify import GAMES, another_kind, classify, find_game, variant_differs
 from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
 from .models import (
     Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, stale_cutoff,
@@ -1117,7 +1117,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     unmatched = []
     seen_products = set()
     images_by_product = {}
-    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
+    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug", "product_type"))
     # A page the owner said is not one of ours is never matched by name. A No to the stockist finder is
     # about one product only: the page can still be matched by name to any other.
     # A page the owner said Yes to before any read had priced it (a website page the stockist finder
@@ -1169,6 +1169,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
             if product_pk is None:
                 product_pk = products_by_link.get(link_key(offer.url))
+                if another_kind(offer.variant, catalogue.kinds.get(product_pk)):
+                    # Every variant shares its page's address. One whose label names another kind than the listed
+                    # product (the "1 Pack" left once a box page drops its box) is matched as a new offer instead.
+                    product_pk = None
             answer = None
             if product_pk is None and link_key(offer.url) in waiting:
                 answer, product_pk = waiting[link_key(offer.url)]
@@ -1181,6 +1185,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url}")
                     continue
                 match, value = catalogue.best_match(offer.title, game=sealed.game)
+                if match is not None and another_kind(offer.variant, catalogue.kinds.get(match[0])):
+                    # The page's title is in the offer's, so "Booster Box (1 Pack)" scores 100 for our box. Its
+                    # label names another kind: as the stockist finder judges it, not even a likely match.
+                    value = min(value, SUGGEST - 1)
                 if match is not None and match[0] in refused.get(offer.url, ()):
                     # The owner said this page is not that product.
                     unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url}")
@@ -1328,15 +1336,17 @@ class Catalogue:
 
         self.names = {}
         self.games = {}
+        self.kinds = {}
         self.index = {}
         self.by_key = {}
         self._words = words
         for row in rows:
             self.add(*row)
 
-    def add(self, pk, name, game=None):
+    def add(self, pk, name, game=None, kind=None):
         self.names[pk] = name
         self.games[pk] = game
+        self.kinds[pk] = kind
         self.by_key.setdefault((game, match_key(name)), []).append(pk)
         for word in set(self._words(name)):
             self.index.setdefault(word, set()).add(pk)
@@ -1378,7 +1388,8 @@ def create_from_offer(offer, catalogue, sealed=None):
     so later offers in the same run match the new product.
     """
     sealed = sealed or classify(offer.title, offer.shop_type, offer.vendor, offer.tags, offer.price)
-    if sealed is None:
+    if sealed is None or another_kind(offer.variant, sealed.product_type):
+        # "Booster Box (1 Pack)" reads as a box, but its label says it is a pack: it is neither made nor matched.
         return None
     # The clean name may already exist under a slightly different shop title.
     match, value = catalogue.best_match(sealed.name, game=sealed.game)
@@ -1400,20 +1411,20 @@ def create_from_offer(offer, catalogue, sealed=None):
         if alias is not None:
             existing = alias.product
     if existing is not None and existing.game_id == game.pk:
-        catalogue.append((existing.pk, existing.name, game.slug))
+        catalogue.append((existing.pk, existing.name, game.slug, existing.product_type))
         return existing.pk
     if existing is not None:
         # Same words, another game ("Origins Booster Pack"): keep the addresses apart.
         slug = f"{slug[:200]}-{game.slug}"
         existing = Product.objects.filter(slug=slug).first()
         if existing is not None:
-            catalogue.append((existing.pk, existing.name, game.slug))
+            catalogue.append((existing.pk, existing.name, game.slug, existing.product_type))
             return existing.pk
     product = Product.objects.create(
         game=game, name=sealed.name, slug=slug, product_type=sealed.product_type,
         ean=offer.ean or "", image_url=offer.image[:1000] if offer.image else "",
     )
-    catalogue.append((product.pk, product.name, game.slug))
+    catalogue.append((product.pk, product.name, game.slug, product.product_type))
     # Born in its set when its name or code names one.
     from .releases import attach_sets
 

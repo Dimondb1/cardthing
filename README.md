@@ -545,7 +545,14 @@ it is when the shop no longer has that variant. In a whole-shop read, a
 variant that is another product than its page ("1 Pack", "18 Packs", "Half
 Box" or "Case" on a booster box page) is left out before any matching, so it
 never prices the box; "English", "Japanese" or the page's own count ("36
-Packs" on a "(36x Packs)" page) are not left out. A box title counts its packs
+Packs" on a "(36x Packs)" page) are not left out. A page's only variant is
+the page's own product ("6 Packs" on a booster bundle) unless its label
+names another kind of product, as the stockist finder judges it: a "1 Pack"
+alone on a booster box page is never linked to the box, offered as it or
+made into a new box. Variants share their page's address, so one whose
+label names another kind than the product already listed there is matched
+afresh: the "1 Pack" never takes over the box's listing, and a "Booster Box"
+and an "Elite Trainer Box" on one page each keep their own price. A box title counts its packs
 only in brackets straight after the box ("Booster Box (36x Packs)"); any other
 "36x" is read as a multi-buy and refused. eBay and Amazon listings are
 never checked this way, and nor are feed shops: their prices come from the

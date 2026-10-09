@@ -22,7 +22,7 @@
 {% block content %}
 <div class="chk">
   <section>
-    <h2>Doubtful prices ({{ doubtful|length }})</h2>
+    <h2>Doubtful prices ({{ counts.doubtful }})</h2>
     <p class="note">These prices are far from what the other shops charge, so the site shows them but claims no saving, badge or price drop. Open the link. If the price is right, tap This price is right and it counts while it moves less than 10% for 30 days. If it is a different product, hide it.</p>
     {% if doubtful %}<ul>
       {% for listing in doubtful %}
@@ -39,7 +39,7 @@
 
   <section>
     <details>
-      <summary><h2>Excluded automatically ({{ excluded|length }})</h2></summary>
+      <summary><h2>Excluded automatically ({{ counts.excluded }})</h2></summary>
       <p class="note">These prices are so far from at least two other shops that they cannot be this product. They are left out of every comparison and the product page shows them as not counted. Nothing needs doing unless one is right.</p>
       {% if excluded %}<ul>
         {% for listing in excluded %}

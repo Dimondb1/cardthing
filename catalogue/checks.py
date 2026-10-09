@@ -21,6 +21,19 @@ SANITY_ROWS = 50
 CLICK_DAYS = 7
 
 
+def judged():
+    """Listings that are judged and shown: a hidden listing, a switched-off shop or product waits until it is back."""
+    return Listing.objects.live().filter(product__is_active=True)
+
+
+def sanity_counts():
+    """{'doubtful': n, 'excluded': n} over every judged listing, in one query, for the section headings."""
+    return judged().aggregate(
+        doubtful=Count("pk", filter=Q(sanity=Listing.Sanity.DOUBTFUL)),
+        excluded=Count("pk", filter=Q(sanity=Listing.Sanity.EXCLUDED)),
+    )
+
+
 def doubtful_prices(now=None):
     """Listings whose price the other shops make doubtful, most clicked products first, then oldest verdict."""
     since = (now or timezone.now()) - timedelta(days=CLICK_DAYS)
@@ -29,7 +42,7 @@ def doubtful_prices(now=None):
         .order_by().values("product").annotate(n=Count("id")).values("n")
     )
     return list(
-        Listing.objects.filter(sanity=Listing.Sanity.DOUBTFUL, is_active=True)
+        judged().filter(sanity=Listing.Sanity.DOUBTFUL)
         .annotate(clicks=Coalesce(Subquery(clicks, output_field=IntegerField()), Value(0)))
         .select_related("product", "retailer")
         .order_by("-clicks", "sanity_at", "pk")[:SANITY_ROWS]
@@ -39,7 +52,7 @@ def doubtful_prices(now=None):
 def excluded_prices():
     """Listings kept out of the comparison because they are far from every other shop, newest verdict first."""
     return list(
-        Listing.objects.filter(sanity=Listing.Sanity.EXCLUDED, is_active=True)
+        judged().filter(sanity=Listing.Sanity.EXCLUDED)
         .select_related("product", "retailer")
         .order_by("-sanity_at", "pk")[:SANITY_ROWS]
     )

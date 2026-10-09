@@ -22,7 +22,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from catalogue import pricing
-from catalogue.models import DailyLowestPrice, Game, Restock
+from catalogue.models import DailyLowestPrice, Game, Listing, Restock
 from content import service as copy
 
 FEED_DAYS = 7
@@ -56,7 +56,7 @@ def feed_cache_key(slug):
 def restock_entries(game, store, now):
     rows = Restock.objects.filter(
         at__gte=now - timedelta(days=FEED_DAYS), product__is_active=True, retailer__is_active=True
-    )
+    ).exclude(listing__sanity=Listing.Sanity.EXCLUDED)  # a price since kept out of the comparison is not news
     if game is not None:
         rows = rows.filter(product__game=game)
     entries = []

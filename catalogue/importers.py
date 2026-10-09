@@ -33,13 +33,14 @@ from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 
 from . import pricing
 from .classify import GAMES, classify, find_game
 from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
-from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct
-from .sanity import judge_product
+from .models import Game, ImportRun, Listing, Product, Retailer, ShopProduct, stale_cutoff
+from .sanity import judge_product, trust_expiry
 
 logger = logging.getLogger(__name__)
 
@@ -630,17 +631,24 @@ def unchanged(listing, offer, delivery):
 def stamp_checked(pks, checked_at):
     """Mark listings as checked at ``checked_at`` without rewriting anything else, then empty ``pks``.
 
-    A listing whose last verdict was not OK is judged again although its price is the same, because the
-    other shops may have corrected theirs since: one query per chunk finds them.
+    The product of a listing is judged again although its price is the same when the listing's last
+    verdict was not OK (the other shops may have corrected theirs since), when the owner's trust in it
+    has run out, or when it was out of date until now (the other shops were judged without it). One
+    query per chunk, run before the stamp, finds them.
     """
+    again = (
+        ~Q(sanity=Listing.Sanity.OK)
+        | Q(trusted_at__lt=trust_expiry(checked_at))
+        | Q(last_checked__lt=stale_cutoff(checked_at), availability__in=Listing.BUYABLE)
+    )
     for start in range(0, len(pks), STAMP_CHUNK):
         chunk = pks[start:start + STAMP_CHUNK]
-        Listing.objects.filter(pk__in=chunk).update(last_checked=checked_at)
-        products = (
-            Listing.objects.filter(pk__in=chunk).exclude(sanity=Listing.Sanity.OK)
+        products = list(
+            Listing.objects.filter(again, pk__in=chunk)
             .order_by().values_list("product_id", flat=True).distinct()
         )
-        for product_id in list(products):
+        Listing.objects.filter(pk__in=chunk).update(last_checked=checked_at)
+        for product_id in products:
             judge_product(product_id, now=checked_at)
     pks.clear()
 

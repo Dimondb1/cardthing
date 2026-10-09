@@ -9,6 +9,10 @@ Price verdicts: every checked price is judged against what the other shops charg
 
 Nothing is deleted. A verdict is worked out again on every change, and the owner can confirm a price
 with one tap, which holds while it moves less than TRUST_BAND for TRUST_DAYS.
+
+A listing with no other shop to compare against is OK, but that OK is never stored as the shop's last
+good price. An excluded price stays excluded while fewer than two other shops are left to judge it, or
+until the owner shows it: the shops that showed it was impossible selling out does not make it possible.
 """
 
 from datetime import timedelta
@@ -62,17 +66,23 @@ def ratio_of(value):
 
 
 def is_peer(row, cutoff):
-    """A shop (not a marketplace) whose price is current and buyable."""
+    """A shop (not a marketplace) whose price is current, buyable and more than nothing."""
     return (
         row["retailer__source_type"] not in MARKETPLACES
+        and figure(row) > 0
         and row["last_checked"] >= cutoff
         and row["availability"] in Listing.BUYABLE
     )
 
 
+def trust_expiry(now):
+    """Owner trust given before this moment no longer applies."""
+    return now - timedelta(days=TRUST_DAYS)
+
+
 def is_trusted(row, now):
     trusted = row["trusted_price"]
-    if not trusted or row["trusted_at"] is None or row["trusted_at"] < now - timedelta(days=TRUST_DAYS):
+    if not trusted or row["trusted_at"] is None or row["trusted_at"] < trust_expiry(now):
         return False
     return abs(row["price"] - trusted) / trusted <= TRUST_BAND
 
@@ -88,11 +98,13 @@ def peer_verdict(row, peers):
     n = len(peers)
     who = f"what {n} other shops charge" if n > 1 else "what the other shop charges"
     around = f", around {money(ref)}"
-    both = False
-    if n == 1 and (r < ONE_PEER_LOW or r > ONE_PEER_HIGH):
+    if n == 1:
+        if ONE_PEER_LOW <= r <= ONE_PEER_HIGH:
+            # Two shops are allowed the gap the saving cap allows: a real half-price offer stays a saving.
+            return OK, "", None, False
         # Two prices this far apart: either could be the wrong one, so neither is kept out.
-        sanity, reason, both = DOUBTFUL, disagree(peers[0]), True
-    elif r < PEER_EXCLUDE_LOW:
+        return DOUBTFUL, noted(disagree(peers[0]), row, peers), ratio_of(r), True
+    if r < PEER_EXCLUDE_LOW:
         sanity, reason = EXCLUDED, f"under a third of {who}{around}"
     elif r < PEER_DOUBT_LOW:
         sanity, reason = DOUBTFUL, f"well under {who}{around}"
@@ -102,7 +114,7 @@ def peer_verdict(row, peers):
         sanity, reason = DOUBTFUL, f"over twice {who}{around}"
     else:
         sanity, reason = EXCLUDED, f"over four times {who}{around}"
-    return sanity, noted(reason, row, peers), ratio_of(r), both
+    return sanity, noted(reason, row, peers), ratio_of(r), False
 
 
 def disagree(other):
@@ -124,7 +136,7 @@ def worse(current, new):
 
 
 def verdicts(rows, now):
-    """{pk: (sanity, reason, ratio)} for every row.
+    """({pk: (sanity, reason, ratio)} for every row, {pks that had no other shop to compare against}).
 
     Two passes: the second leaves out of every comparison the prices the first kept out, so one wild
     price cannot drag the median the others are judged by.
@@ -136,19 +148,29 @@ def verdicts(rows, now):
 
     def judge(left_out):
         result = {pk: (OK, TRUSTED_REASON, None) for pk in trusted}
+        lone = set()
         for row in rows:
             if row["pk"] in trusted:
                 continue
             others = [p for p in peers if p["pk"] != row["pk"] and p["pk"] not in left_out]
+            if row["sanity"] == EXCLUDED and len(others) < 2:
+                # Only two or more shops can keep a price out, so only two or more, or the owner, let it back in.
+                result[row["pk"]] = (EXCLUDED, row["sanity_reason"], row["sanity_ratio"])
+                continue
+            if not others:
+                lone.add(row["pk"])
+                result[row["pk"]] = worse(result.get(row["pk"]), (OK, "", None))
+                continue
             sanity, reason, ratio, both = peer_verdict(row, others)
             result[row["pk"]] = worse(result.get(row["pk"]), (sanity, reason, ratio))
             partner = others[0] if both else None
-            if partner is not None and row["pk"] in peer_pks and partner["pk"] not in trusted:
+            # Only a peer still in the comparison, whose figure is above nothing, can make its one partner doubtful.
+            if partner is not None and row["pk"] in peer_pks and row["pk"] not in left_out and partner["pk"] not in trusted:
                 back = (DOUBTFUL, noted(disagree(row), partner, [row]), ratio_of(figure(partner) / figure(row)))
                 result[partner["pk"]] = worse(result.get(partner["pk"]), back)
-        return result
+        return result, lone
 
-    first = judge(left_out=set())
+    first, _ = judge(left_out=set())
     return judge(left_out={pk for pk, verdict in first.items() if verdict[0] == EXCLUDED})
 
 
@@ -164,7 +186,7 @@ def judge_product(product_id, now=None):
     )
     if not rows:
         return {}
-    result = verdicts(rows, now)
+    result, lone = verdicts(rows, now)
     changed = False
     stamp_ok, drop_trust = [], []
     for row in rows:
@@ -172,14 +194,14 @@ def judge_product(product_id, now=None):
         lost_trust = row["trusted_price"] is not None and reason != TRUSTED_REASON
         if (sanity, reason, ratio) != (row["sanity"], row["sanity_reason"], row["sanity_ratio"]):
             update = {"sanity": sanity, "sanity_reason": reason, "sanity_ratio": ratio, "sanity_at": now}
-            if sanity == OK:
+            if sanity == OK and row["pk"] not in lone:
                 update["last_ok_price"] = row["price"]
             if lost_trust:
                 update.update(trusted_price=None, trusted_at=None)
             Listing.objects.filter(pk=row["pk"]).update(**update)
             changed = True
             continue
-        if sanity == OK and row["last_ok_price"] != row["price"]:
+        if sanity == OK and row["pk"] not in lone and row["last_ok_price"] != row["price"]:
             stamp_ok.append(row["pk"])
         if lost_trust:
             drop_trust.append(row["pk"])

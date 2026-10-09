@@ -1291,6 +1291,8 @@ def checks_page(request):
                 messages.warning(request, "That price has changed since the page loaded. Check it again below.")
             elif action == "hide":
                 Listing.objects.filter(pk=listing.pk).update(is_active=False)
+                # The other shops were judged against this price: without it they may be fine.
+                sanity.judge_product(listing.product_id)
                 clear_list_caches(force=True)
                 messages.success(request, f"Hidden: {listing.product.name} at {listing.retailer.name}. "
                                           "Tick show on site on the listing to bring it back.")
@@ -1317,7 +1319,7 @@ def checks_page(request):
     listed = {listing.product_id for listing in doubtful}
     context = {
         **admin.site.each_context(request), "title": "Things to check",
-        "doubtful": doubtful, "excluded": checks.excluded_prices(),
+        "doubtful": doubtful, "excluded": checks.excluded_prices(), "counts": checks.sanity_counts(),
         # A product already listed under doubtful prices is not listed twice.
         "wrong": [row for row in checks.wrong_matches() if row[0].pk not in listed],
         "duplicates": checks.duplicates(), "shops": checks.unknown_delivery_shops(),

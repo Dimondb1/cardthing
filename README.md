@@ -310,11 +310,15 @@ Every price check that changes a price or its stock is also judged against
 the other shops' prices for the same product (`catalogue/sanity.py`). A
 price under a third of, or over four times, what two or more other shops
 charge is kept out of every comparison and shown on the product page as not
-counted. A price well under or over twice the others, or two shops that are
-far apart, is doubtful: still shown, but never claimed as a saving, a badge
+counted. A price well under or over twice the others, or two shops more than
+70% apart, is doubtful: still shown, but never claimed as a saving, a badge
 or a price drop, and listed for you to look at. Marketplaces are judged but
-never judge anyone. Nothing is deleted, and the verdict is worked out again
-on the next change.
+never judge anyone. An excluded price stays out while fewer than two other
+shops are left to judge it, so it never becomes the cheapest just because the
+others sold out. Nothing is deleted, and the verdict is worked out again on
+the next change, on every read while it is not OK, when a shop comes back
+from being out of date, when your confirmation runs out, when you hide a
+price, and when you save a listing in admin.
 
 All of this can be done from a phone, without the server console: admin
 has a **Things to check** page (`/admin/checks/`) that lists doubtful prices

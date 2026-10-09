@@ -2,7 +2,7 @@ from django.contrib import admin, messages
 from django.db.models import Count
 from django.utils.html import format_html
 
-from . import pricing
+from . import pricing, sanity
 from .models import ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Restock, Retailer, ShopProduct, StockAlert
 
 
@@ -154,6 +154,10 @@ class ListingAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        # A price, stock or shop typed in here is judged like any check, and so is the product it left.
+        moved_from = form.initial.get("product") if change and "product" in form.changed_data else None
+        for product_id in {obj.product_id, moved_from} - {None}:
+            sanity.judge_product(product_id)
         pricing.update_daily_lowest(obj.product)
 
 

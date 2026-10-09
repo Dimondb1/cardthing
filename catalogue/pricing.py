@@ -84,9 +84,13 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     not created. Returns None in every case.
 
     The price is judged against the other shops (sanity.judge_product) when it, its delivery or the
-    stock changed, when the listing is new (``new``, for one just created by the caller) or when its
-    last verdict was not OK, so an unchanged price costs no extra queries.
+    stock changed, when the listing is new (``new``, for one just created by the caller), when its last
+    verdict was not OK, when it comes back from being out of date or when the owner's trust in it has
+    run out, so an unchanged price costs no extra queries. It is judged before any restock is kept, so a
+    price kept out of the comparison is never announced as back in stock.
     """
+    from .sanity import trust_expiry
+
     checked_at = checked_at or timezone.now()
     new = new or not listing.pk or listing._state.adding
     if price is None or price <= 0:
@@ -104,6 +108,8 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
         listing.price != price or listing.availability != availability
         or listing.delivery_known != (delivery_cost is not None) or listing.delivery_cost != cost
         or listing.sanity != Listing.Sanity.OK
+        or (listing.last_checked is not None and listing.last_checked < stale_cutoff(checked_at))
+        or (listing.trusted_at is not None and listing.trusted_at < trust_expiry(checked_at))
     )
     fields = ["price", "delivery_cost", "delivery_known", "availability", "last_checked"]
     was_in_stock = listing.availability == Listing.Availability.IN_STOCK
@@ -117,10 +123,10 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     listing.availability = availability
     listing.last_checked = checked_at
     listing.save(update_fields=fields)
-    if restocked:
-        record_restock(listing, checked_at)
     if changed:
         judge(listing, checked_at)
+    if restocked and listing.sanity != Listing.Sanity.EXCLUDED:
+        record_restock(listing, checked_at)
     return update_daily_lowest(listing.product, date=timezone.localdate(checked_at))
 
 
@@ -216,6 +222,8 @@ def restock_log(days=7, per_day=30, now=None):
     now = now or timezone.now()
     rows = (
         Restock.objects.filter(at__gte=now - timedelta(days=days), product__is_active=True, retailer__is_active=True)
+        # A price since kept out of the comparison is not repeated here.
+        .exclude(listing__sanity=Listing.Sanity.EXCLUDED)
         .select_related("product__game", "retailer", "listing")
         .order_by("-at")
     )
@@ -237,6 +245,7 @@ def back_in_stock(limit=8, hours=None):
     rows = (
         Listing.objects.live()
         .filter(availability=Listing.Availability.IN_STOCK, back_in_stock_at__gte=since)
+        .exclude(sanity=Listing.Sanity.EXCLUDED)
         .select_related("retailer")
         .order_by("-back_in_stock_at")
     )

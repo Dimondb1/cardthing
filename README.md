@@ -781,7 +781,10 @@ read and lets you change it with one tap, from a phone:
   and every hour, the requests to shops and the errors in the last hour,
   the jobs done since it started, and why it last restarted itself, if it
   did. The admin home page shows a red line under Crawl health when the
-  reader has stopped.
+  reader has stopped. One line says how crawl problems reach you: by push,
+  email or both, turned off (`RIPRAPTOR_CRAWL_PUSHES=0`), or in red when
+  neither `RIPRAPTOR_NTFY_TOPIC` nor `RIPRAPTOR_INBOX_NOTIFY_EMAIL` with
+  ZeptoMail is set, so nothing is sent.
 - **Pause all** stops every scheduled read and stock check until you tap
   **Resume all**: the background reader starts no new job (the ones
   running finish, and its heartbeat goes on), `import_prices --due` and

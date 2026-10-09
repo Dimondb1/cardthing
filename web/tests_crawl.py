@@ -227,6 +227,25 @@ class CrawlPageTests(TestCase):
             self.assertNotIn("!", visible)
 
 
+    def alerts_line(self):
+        page = self.client.get(self.url).content.decode()
+        found = re.search(r'id="alerts-line">([^<]+)<', page)
+        self.assertIsNotNone(found, "the page does not say how problems reach the owner")
+        return found.group(1)
+
+    @override_settings(RIPRAPTOR_NTFY_TOPIC="", RIPRAPTOR_INBOX_NOTIFY_EMAIL="", RIPRAPTOR_CRAWL_PUSHES=True)
+    def test_the_page_says_when_nothing_reaches_the_owners_phone(self):
+        self.assertIn("Nothing tells you about crawl problems yet", self.alerts_line())
+
+    @override_settings(RIPRAPTOR_NTFY_TOPIC="a-long-topic", RIPRAPTOR_INBOX_NOTIFY_EMAIL="", RIPRAPTOR_CRAWL_PUSHES=True)
+    def test_the_page_says_problems_are_pushed(self):
+        self.assertIn("You are told by push when the reader stops", self.alerts_line())
+
+    @override_settings(RIPRAPTOR_NTFY_TOPIC="a-long-topic", RIPRAPTOR_CRAWL_PUSHES=False)
+    def test_the_page_says_when_problem_alerts_are_off(self):
+        self.assertIn("turned off on the server", self.alerts_line())
+
+
 class PauseAllReachesEveryReadTests(TestCase):
     """Pause all and a shop's own pause stop every request to the shops, not only the next hourly run."""
 

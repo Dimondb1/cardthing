@@ -1517,7 +1517,7 @@ def crawl_page(request):
     from django.contrib import messages
     from django.db import DatabaseError
 
-    from catalogue import crawl, heat
+    from catalogue import crawl, heat, notify
     from catalogue.models import WorkerState
 
     if request.method == "POST":
@@ -1587,5 +1587,7 @@ def crawl_page(request):
         **admin.site.each_context(request), "title": "Crawl health",
         "all_paused": crawl.all_paused(state), "last_finished": insights.clock(last, now) if last else None,
         "shops": crawl.shops(now, state), "worker": crawl.worker_status(state, now), "hot": hot, "warm": warm,
+        # Whether a problem reaches the owner's phone, so a page with no way to set it up says so.
+        "alerts": {"on": settings.RIPRAPTOR_CRAWL_PUSHES, "push": notify.can_push(), "email": notify.can_email()},
     }
     return render(request, "admin/crawl.html", context)

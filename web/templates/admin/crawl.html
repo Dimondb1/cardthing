@@ -30,6 +30,13 @@
     {% else %}
     <p class="bad" id="worker-line"><strong>Background reader not started.</strong> The hourly schedule reads the shops.</p>
     {% endif %}
+    {% if not alerts.on %}
+    <p class="note" id="alerts-line">Telling you about crawl problems is turned off on the server, so they show only on this page.</p>
+    {% elif alerts.push or alerts.email %}
+    <p class="note" id="alerts-line">You are told by {% if alerts.push and alerts.email %}push and email{% elif alerts.push %}push{% else %}email{% endif %} when the reader stops, a shop fails for a day or more than 10 prices wait to be checked, at most once a day each.</p>
+    {% else %}
+    <p class="bad" id="alerts-line">Nothing tells you about crawl problems yet: the server has no ntfy topic or email address for you. Until one is set, check this page.</p>
+    {% endif %}
     <p>{% if last_finished %}The last read finished at {{ last_finished }}.{% else %}No read has finished yet.{% endif %}</p>
     <p class="note">Checked every ten minutes: {{ hot }} product{{ hot|pluralize }}. Every hour: {{ warm }} product{{ warm|pluralize }}. The rest are refreshed when their shop is read.</p>
     {% if worker.known %}

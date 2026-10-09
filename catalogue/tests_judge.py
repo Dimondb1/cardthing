@@ -880,20 +880,66 @@ class RecheckTests(Base):
         self.assertEqual(Listing.objects.get(pk=c.pk).sanity, Listing.Sanity.EXCLUDED)
         self.assertEqual(Listing.objects.get(pk=a.pk).sanity, Listing.Sanity.OK)
 
-    def test_undo_keeps_the_kept_products_own_history_when_the_other_was_dearer(self):
+    def test_undo_never_leaves_the_other_products_prices_in_the_kept_products_history(self):
         from .models import DailyLowestPrice
+        from .pricing import price_drops
 
         keep, other = self.pair()
-        self.shop(50, product=keep, title=keep.name)
-        self.shop(70, product=other, title=other.name)
+        mine = self.shop(50, product=keep, title=keep.name)
+        self.shop(60, product=other, title=other.name)
         today = timezone.localdate()
-        DailyLowestPrice.objects.create(product=keep, date=today, price=Decimal("50.00"))
+        DailyLowestPrice.objects.create(product=keep, date=today - timedelta(days=8), price=Decimal("50.00"))
         note = self.merge_undoable(keep, [other])
-        later = today + timedelta(days=1)
-        DailyLowestPrice.objects.create(product=keep, date=later, price=Decimal("50.00"))
+        note["at"] = (today - timedelta(days=8)).isoformat()
+        note["day_low"] = "50.00"
+        # While merged, the kept product's own shop sold out: that day's low was the other product's £60.
+        DailyLowestPrice.objects.create(product=keep, date=today - timedelta(days=7), price=Decimal("60.00"))
         self.unmerge(note)
         lows = dict(DailyLowestPrice.objects.filter(product=keep).values_list("date", "price"))
-        self.assertEqual(lows, {today: Decimal("50.00"), later: Decimal("50.00")})
+        self.assertEqual(lows, {today - timedelta(days=8): Decimal("50.00"), today: Decimal("50.00")})
+        self.assertNotIn(keep.name, [p.name for p in price_drops(days=7)])
+        self.assertTrue(Listing.objects.filter(pk=mine.pk, product=keep).exists())
+
+    def test_a_price_corrected_while_merged_is_judged_on_its_own_evidence_after_undo(self):
+        keep, other = self.pair()
+        self.shop(100, product=keep, title=keep.name)
+        b = self.shop(104, product=keep, title=keep.name)
+        c = self.shop(25, product=keep, title=keep.name)
+        sanity.judge_product(keep.pk)
+        Listing.objects.filter(pk=b.pk).update(availability=Listing.Availability.OUT_OF_STOCK)
+        sanity.judge_product(keep.pk)
+        self.shop(102, product=other, title=other.name)
+        note = self.merge_undoable(keep, [other])
+        Listing.objects.filter(pk=c.pk).update(price=Decimal("101.00"))
+        sanity.judge_product(keep.pk, repriced={c.pk})
+        self.unmerge(note)
+        self.assertEqual(Listing.objects.get(pk=c.pk).sanity, Listing.Sanity.OK)
+
+    def test_two_merges_into_one_product_undone_oldest_first_leave_the_first_price_alone(self):
+        keep, a_product = self.pair()
+        b_product = make_product(self.set, name="Pokemon Surging Sparks Elite Trainer Box")
+        self.shop(100, product=keep, title=keep.name)
+        self.shop(104, product=keep, title=keep.name)
+        la = self.shop(30, product=a_product, title=a_product.name)
+        first = self.merge_undoable(keep, [a_product])
+        self.shop(101, product=b_product, title=b_product.name)
+        second = self.merge_undoable(keep, [b_product])
+        self.unmerge(first)
+        self.assertEqual(Listing.objects.get(pk=la.pk).sanity, Listing.Sanity.OK)
+        self.unmerge(second)
+        la.refresh_from_db()
+        self.assertEqual((la.product_id, la.sanity), (a_product.pk, Listing.Sanity.OK))
+
+    def test_a_note_from_before_verdicts_were_kept_still_starts_them_afresh(self):
+        keep, other = self.pair()
+        self.shop(100, product=keep, title=keep.name)
+        self.shop(104, product=keep, title=keep.name)
+        cheap = self.shop(25, product=other, title=other.name)
+        note = self.merge_undoable(keep, [other])
+        del note["verdicts"]
+        self.assertEqual(Listing.objects.get(pk=cheap.pk).sanity, Listing.Sanity.EXCLUDED)
+        self.unmerge(note)
+        self.assertEqual(Listing.objects.get(pk=cheap.pk).sanity, Listing.Sanity.OK)
 
     def test_an_undo_that_cannot_finish_changes_nothing(self):
         keep, other = self.pair()
@@ -920,13 +966,19 @@ class RecheckTests(Base):
         self.assertEqual(len(self.unmerge(note)), 1)
         self.assertFalse(ProductAlias.objects.filter(slug=other.slug).exists())
 
-    def test_a_found_row_naming_the_merged_product_follows_the_merge_and_back(self):
+    def test_a_linked_shop_row_follows_the_merge_and_brings_its_listing_back(self):
         keep, other = self.pair()
-        row = self.found(product=other, title=other.name)
+        waiting = self.found(product=other, title=other.name)
+        linked = self.found(product=other, title=f"{other.name} (Shop)", price="0")
+        ShopProduct.objects.filter(pk=linked.pk).update(status=ShopProduct.Status.LINKED)
         note = self.merge_undoable(keep, [other])
-        self.assertEqual(ShopProduct.objects.get(pk=row.pk).suggested, keep)
+        self.assertEqual(ShopProduct.objects.get(pk=waiting.pk).suggested, other)   # waits, hidden with it
+        self.assertEqual(ShopProduct.objects.get(pk=linked.pk).suggested, keep)
+        # The shop's first read while merged priced the page onto the kept product.
+        brought = make_listing(keep, linked.retailer, price="49.00", url=linked.url)
         self.unmerge(note)
-        self.assertEqual(ShopProduct.objects.get(pk=row.pk).suggested, other)
+        self.assertEqual(ShopProduct.objects.get(pk=linked.pk).suggested, other)
+        self.assertEqual(Listing.objects.get(pk=brought.pk).product, other)
 
     def test_a_pairs_evidence_is_the_same_whichever_product_is_kept(self):
         keep, other = self.pair()
@@ -939,12 +991,15 @@ class RecheckTests(Base):
         self.shop(50, product=other, title=other.name)
         first = CheckAnswer.objects.create(kind=CheckAnswer.Kind.MERGE, what="1", product=keep,
                                            undo_note=self.merge_undoable(keep, [other]))
-        CheckAnswer.objects.create(kind=CheckAnswer.Kind.MERGE, what="2", product=top,
+        CheckAnswer.objects.create(kind=CheckAnswer.Kind.MERGE, what="2", product=top, other=keep,
                                    undo_note=self.merge_undoable(top, [keep]))
         self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
         response = self.client.post(reverse("checks"), {"action": "undo", "answer": first.pk}, follow=True)
         self.assertContains(response, "Undo that merge first")
         self.assertFalse(Product.objects.get(pk=other.pk).is_active)
+        CheckAnswer.objects.filter(what="2").update(undone_at=timezone.now())
+        response = self.client.post(reverse("checks"), {"action": "undo", "answer": first.pk}, follow=True)
+        self.assertContains(response, "is switched off. Tick show on site on it first")
 
     def test_what_left_the_server_is_counted_and_what_never_did_is_not(self):
         cases = [

@@ -439,12 +439,14 @@ site's own rules decide whether its answer may act:
 - **Possible duplicates:** "different" keeps the pair apart. "Same" never
   merges by itself: **Merge the pairs Claude is sure are the same** merges
   them on your tap, each so it can be undone. The merged product is switched
-  off, not deleted; its barcode, shop pages and found rows move to the kept
-  product so shop reads never price it; and Undo puts back its listings,
-  history, address and every price's verdict as it was. Of the days the kept
-  product recorded while merged, only lows under its own cheapest price are
-  removed. Merges undo in reverse order: a product merged on into a third
-  waits until that later merge is undone.
+  off, not deleted; its barcode, shop pages and linked shop rows move to the
+  kept product so shop reads never price it; and Undo puts back its listings,
+  history and address. A price that has not changed since the merge gets
+  back the verdict it had; one that changed is judged on its own evidence.
+  The kept product's days after the merge held both products' prices, so
+  Undo removes them rather than leave a price history that never happened.
+  Merges undo in reverse order: a product merged on into a third waits until
+  that later merge is undone.
 
 It starts in **trial**: it only suggests, and its answer shows under each
 row ("Claude, 9 Oct: same product, sure. ..."). Once you agree with it, tap

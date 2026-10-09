@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Crawl health | {{ site_title }}{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .crawl { display: grid; gap: 28px; max-width: 60rem; }
+  .crawl h2 { margin: 0 0 4px; }
+  .crawl p { margin: 0 0 8px; }
+  .crawl p.note { color: var(--body-quiet-color); }
+  .crawl ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .crawl ul li.item { list-style-type: none; }
+  .crawl li.item { padding: 12px 14px; border: 1px solid var(--hairline-color); border-radius: 8px; background: var(--body-bg); }
+  .crawl li.item b { margin-right: 8px; }
+  .crawl .facts { margin: 6px 0 0; color: var(--body-quiet-color); }
+  .crawl .bad { color: var(--error-fg); }
+  .crawl .error { margin: 6px 0 0; overflow-wrap: anywhere; }
+  .crawl .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; }
+  .crawl form { margin: 0; }
+  .crawl input[type=submit] { min-height: 40px; }
+  .crawl .none { color: var(--body-quiet-color); }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Crawl health</div>{% endblock %}
+{% block content %}
+<div class="crawl">
+  <section>
+    <h2>Status</h2>
+    <p>Hourly reads. {% if last_finished %}The last read finished at {{ last_finished }}.{% else %}No read has finished yet.{% endif %}</p>
+    {% if all_paused %}
+    <p class="bad"><strong>Paused for every shop.</strong> Nothing is read until you tap Resume all.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="resume_all"><input type="submit" value="Resume all"></form>
+    {% else %}
+    <p class="note">Pause all stops every scheduled read. Shops you paused one by one stay paused when you resume.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="pause_all"><input type="submit" value="Pause all"></form>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Shops ({{ shops|length }})</h2>
+    <p class="note">Read now adds a shop to the next hourly read and forgets its errors. Pause stops reading one shop until you tap Resume.</p>
+    {% if shops %}<ul>
+      {% for row in shops %}{% with shop=row.retailer %}
+      <li class="item" id="shop-{{ shop.slug }}"><b>{{ shop.name }}</b><span{% if row.problem %} class="bad"{% endif %}>{{ row.state }}</span>
+        <p class="facts">Last read that worked: {{ row.last_ok }}{% if shop.last_read_seconds is not None %}, took {{ shop.last_read_seconds }} s{% endif %}. Next read: {{ row.next_read }}. Errors in a row: {{ shop.error_streak }}.</p>
+        {% if row.last_error %}<p class="error{% if shop.error_streak %} bad{% endif %}">Last error: {{ row.last_error }}</p>{% endif %}
+        <div class="row">
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="read_now"><input type="hidden" name="shop" value="{{ shop.pk }}"><input type="submit" value="Read now"></form>
+          {% if shop.reading_paused %}
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="resume"><input type="hidden" name="shop" value="{{ shop.pk }}"><input type="submit" value="Resume"></form>
+          {% else %}
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="pause"><input type="hidden" name="shop" value="{{ shop.pk }}"><input type="submit" value="Pause"></form>
+          {% endif %}
+        </div>
+      </li>
+      {% endwith %}{% endfor %}
+    </ul>{% else %}<p class="none">No shops are read on a schedule. Add a shop with a price source in Retailers.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

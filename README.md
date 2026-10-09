@@ -711,6 +711,28 @@ as before. Insights shows each shop's schedule under Shop health, and a
 shop counts as not updating when its last good read is older than 6 hours
 or two of its intervals, whichever is longer.
 
+## Crawl health
+
+Admin, Crawl health (`/admin/crawl/`, linked from the admin home page and
+from each shop under Shop health on Insights) shows whether shops are being
+read and lets you change it with one tap, from a phone:
+
+- The status line says reads are hourly and when the last one finished.
+- **Pause all** stops every scheduled read until you tap **Resume all**:
+  `import_prices --due` reads nothing while it is on. Reading a shop by
+  name still works. Shops you paused one by one stay paused when you
+  resume. The switch is a file called `crawl-paused` in the cache folder
+  (`RIPRAPTOR_CACHE_DIR`), so the site and the hourly cron see the same
+  thing and a deploy that empties the cache leaves it alone. If the folder
+  cannot be written the page says so and nothing changes.
+- One row per shop read on a schedule: Reading (its latest run has not
+  finished), Paused, Backing off until a time, or Idle, then its last read
+  that worked, how long that took, its next read, its errors in a row and
+  its last error.
+- **Read now** makes the shop due at once and forgets its errors and its
+  wait, so the next hourly read takes it. **Pause** and **Resume** set the
+  shop's Reading paused box.
+
 ## Backups, timeouts and runs cut short
 
 `python manage.py backup_db` copies the database with SQLite's own backup,
@@ -764,7 +786,8 @@ stock watcher finds a restock or a new pre-order, the site shows it on the
 next page load rather than up to five minutes later. On a server the folder
 is `/var/lib/ripraptor/cache` (`install.sh` creates it, owned by
 `ripraptor`); on your own computer it is `.cache` beside the code. Deleting
-its contents is always safe. The folder outlives a restart, so `install.sh`
+the cache files (`*.djcache`) is always safe. The folder also holds
+`crawl-paused` while Pause all is on: deleting it resumes reading. The folder outlives a restart, so `install.sh`
 empties it once the site has restarted on the new code: lists saved by the
 old code can lack a field a migration added.
 

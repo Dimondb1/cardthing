@@ -1326,3 +1326,60 @@ def checks_page(request):
         "max_percent": offers.MAX_REAL_PERCENT,
     }
     return render(request, "admin/checks.html", context)
+
+
+@staff_member_required
+def crawl_page(request):
+    """Crawl health: whether shops are being read, with one-tap buttons to read a shop now or pause reading."""
+    from django.contrib import messages
+
+    from catalogue import crawl
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action in ("pause_all", "resume_all"):
+            try:
+                if action == "pause_all":
+                    crawl.pause_all()
+                    messages.success(request, "Reading is paused for every shop. Nothing is read until you tap Resume all.")
+                else:
+                    crawl.resume_all()
+                    messages.success(request, "Reading has resumed. Each shop is read on its own schedule.")
+            except OSError:
+                messages.error(request, "The cache folder cannot be written, so nothing changed. "
+                                        "Check RIPRAPTOR_CACHE_DIR on the server.")
+        elif action in ("read_now", "pause", "resume"):
+            pk = request.POST.get("shop", "")
+            if not pk.isdigit():
+                raise Http404("No such shop.")
+            shop = get_object_or_404(
+                Retailer.objects.filter(is_active=True).exclude(source_type=Retailer.Source.MANUAL), pk=pk
+            )
+            if action == "read_now":
+                shop.next_read_at = timezone.now()
+                shop.backoff_until = None
+                shop.error_streak = 0
+                shop.save(update_fields=["next_read_at", "backoff_until", "error_streak"])
+                note = f"{shop.name} will be read at the next hourly read."
+                if shop.reading_paused:
+                    note += " It is paused: tap Resume as well."
+                elif crawl.all_paused():
+                    note += " Reading is paused for every shop: tap Resume all as well."
+                messages.success(request, note)
+            else:
+                # Set rather than toggled, so a second tap from a page loaded earlier cannot undo the first.
+                shop.reading_paused = action == "pause"
+                shop.save(update_fields=["reading_paused"])
+                if shop.reading_paused:
+                    messages.success(request, f"{shop.name} is paused. It is not read until you tap Resume.")
+                else:
+                    messages.success(request, f"{shop.name} will be read on its schedule again.")
+        return HttpResponseRedirect(reverse("crawl"))
+    now = timezone.now()
+    last = crawl.last_finished()
+    context = {
+        **admin.site.each_context(request), "title": "Crawl health",
+        "all_paused": crawl.all_paused(), "last_finished": insights.clock(last, now) if last else None,
+        "shops": crawl.shops(now),
+    }
+    return render(request, "admin/crawl.html", context)

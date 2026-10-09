@@ -7,6 +7,7 @@ The defaults are for local development only.
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 from ripraptor.caching import MEMORY_CACHE, cache_dir, shared_caches
@@ -117,6 +118,9 @@ DATABASES = {
 TESTING = sys.argv[1:2] == ["test"]
 RIPRAPTOR_CACHE_DIR = cache_dir(os.environ, DEBUG, BASE_DIR)
 CACHES = {"default": dict(MEMORY_CACHE)} if TESTING else shared_caches(RIPRAPTOR_CACHE_DIR)
+if TESTING:
+    # Pause all (catalogue/crawl.py) is a file in this folder: the tests never see the development site's.
+    RIPRAPTOR_CACHE_DIR = Path(tempfile.gettempdir()) / f"ripraptor-tests-{os.getpid()}"
 
 # A clear of the list caches triggered by a save is skipped when this process
 # cleared them less than this many seconds ago; the end of an import, a restock

@@ -6,6 +6,7 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
+from catalogue import crawl
 from catalogue.importers import close_abandoned_runs, run_import
 from catalogue.models import ImportRun, Retailer
 from catalogue.signals import clear_list_caches
@@ -51,6 +52,10 @@ class Command(BaseCommand):
             if not retailers.exists():
                 raise CommandError(f"No retailer with slug '{retailer}'.")
             due = False
+        if due and crawl.all_paused():
+            # The owner tapped Pause all on the Crawl health page. A shop named by hand is still read.
+            self.stdout.write("Reading is paused for every shop. Resume all on the Crawl health page starts it again.")
+            return
         if not retailers.exists():
             self.stdout.write("No retailers have a price source. Set one in admin.")
             return

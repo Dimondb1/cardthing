@@ -13,6 +13,7 @@ admin.site.index_template = "admin/ripraptor_index.html"
 urlpatterns = [
     path("admin/insights/", web_views.insights_page, name="insights"),
     path("admin/checks/", web_views.checks_page, name="checks"),
+    path("admin/crawl/", web_views.crawl_page, name="crawl"),
     path("admin/", admin.site.urls),
     path("", include("web.urls")),
 ]

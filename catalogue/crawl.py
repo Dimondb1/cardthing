@@ -125,7 +125,9 @@ def next_read_for(retailer, now, everything_paused=False):
 def shops(now, state=_UNREAD):
     """One row per shop that is read on a schedule, for the Crawl health page, in one query.
 
-    A shop is Reading while its latest run has not finished, then Paused, Backing off or Idle.
+    A shop is Reading while its latest run has not finished, then Paused, Backing off or Idle. Shops
+    with errors come first, then paused ones, so a problem is at the top of a phone screen, not
+    somewhere in a list of fifty.
     """
     latest_open = (
         # A pulse reads part of a shop (ImportRun.note); only whole reads say a shop is being read.
@@ -160,7 +162,9 @@ def shops(now, state=_UNREAD):
             "last_ok": clock(retailer.last_ok_at, now) if retailer.last_ok_at else "never",
             "next_read": next_read,
             "last_error": retailer.last_error[:160],
+            "order": (0 if backing_off or retailer.error_streak else 1 if retailer.reading_paused else 2, retailer.name.lower()),
         })
+    rows.sort(key=lambda row: row["order"])
     return rows
 
 

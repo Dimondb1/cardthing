@@ -342,3 +342,17 @@ class PauseAllReachesEveryReadTests(TestCase):
             call_command("watch_stock", "--pause", "0", stdout=out)
         self.assertEqual(asked, [])
         self.assertIn("Reading is paused for every shop.", out.getvalue())
+
+
+class CrawlOrderTests(TestCase):
+    def test_shops_with_errors_come_first_then_paused_then_the_rest_by_name(self):
+        from catalogue.testing import make_retailer
+
+        now = timezone.now()
+        make_retailer("Aardvark Cards", source_type=Retailer.Source.SHOPIFY)
+        make_retailer("Zebra Games", source_type=Retailer.Source.SHOPIFY, error_streak=2,
+                      backoff_until=now + timedelta(minutes=20), last_error="HTTP Error 500")
+        make_retailer("Middle Cards", source_type=Retailer.Source.SHOPIFY, reading_paused=True)
+        make_retailer("Beta Cards", source_type=Retailer.Source.SHOPIFY, error_streak=1)
+        names = [row["retailer"].name for row in crawl.shops(now)]
+        self.assertEqual(names, ["Beta Cards", "Zebra Games", "Middle Cards", "Aardvark Cards"])

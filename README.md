@@ -1281,6 +1281,29 @@ or first listed by a shop in the last 14 days, newest release first, with
 the usual filters. The home page carries a Latest drops row of the same
 list, cached with the other home lists.
 
+### Coming soon
+
+Announced sets still to come (from the release radar, a CSV import or
+admin) show as plain rows, soonest first, with no new address:
+
+- `/new/` lists every one above the products, each with its date when one
+  is published and either "No pre-orders yet" or the cheapest pre-order
+  and how many shops take them.
+- The home page shows up to 3 under Latest drops, and only sets a shop
+  already takes pre-orders for.
+- A game page lists its own; a set page prints "Out <date>" and which
+  release source gave the date (nothing for a date you set), or "Date not
+  announced yet" for an undated set shops already take pre-orders for.
+
+A set counts when its date is today or later, or when it has no date but a
+shop (never eBay or Amazon) has one of its products on pre-order, checked
+within the stale window. The price links to the product page, so a buy
+click still goes through `/go/` and is counted. The list is one query
+(`web/views.py` `coming_soon_sets`), cached under `web:coming-soon:v1` and
+`web:coming-soon:v1:<game>`, and cleared with the other lists, including
+whenever a set is saved. The wording is under "Coming soon sets" in
+Site wording.
+
 ## Deals page
 
 `/deals/` is the page to link from social posts: the biggest savings

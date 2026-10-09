@@ -28,7 +28,11 @@
   <h1 class="browse-head__title">{{ heading }}</h1>
   {% if intro %}<p class="browse-head__meta">{{ intro }}</p>{% endif %}
   {% if product_set %}
+    {% if set_upcoming %}
+    <p class="browse-head__meta">{% if product_set.code %}{{ product_set.code }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% if product_set.release_date %}<strong class="browse-head__date">{% copy "new.coming_soon.out" date=product_set.release_date|short_date %}</strong>{% if date_source %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy "new.coming_soon.source" source=date_source %}{% endif %}{% else %}{% copy "new.coming_soon.tbc" %}{% endif %}</p>
+    {% else %}
     <p class="browse-head__meta">{% if product_set.code %}{{ product_set.code }}{% if product_set.release_date %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% endif %}{% if product_set.release_date %}{% copy "browse.set.released" date=product_set.release_date|short_date %}{% endif %}</p>
+    {% endif %}
   {% endif %}
   <p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>
 </div>
@@ -43,6 +47,10 @@
     {% endfor %}
   </ul>
 </nav>
+{% endif %}
+
+{% if coming_soon and page.number == 1 %}
+  {% if game %}{% include "web/includes/coming_soon.html" %}{% else %}{% include "web/includes/coming_soon.html" with show_game=True %}{% endif %}
 {% endif %}
 
 <form class="filters" method="get" action="" data-autosubmit>

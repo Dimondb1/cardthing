@@ -127,10 +127,12 @@ def build_feed(slug, store, now=None):
     return FeedPage(slug=slug, title=title, description=description, url=url, entries=entries[:FEED_LIMIT])
 
 
-def feed_cache_keys():
-    """The cache key of the site-wide feed and of each active game's feed."""
-    slugs = ["deals", *Game.objects.filter(is_active=True).values_list("slug", flat=True)]
-    return [feed_cache_key(slug) for slug in slugs]
+def feed_cache_keys(game_slugs=None):
+    """The cache key of the site-wide feed and of each active game's feed. A caller that already read the
+    active games' slugs passes them, so a clear costs one query."""
+    if game_slugs is None:
+        game_slugs = Game.objects.filter(is_active=True).values_list("slug", flat=True)
+    return [feed_cache_key(slug) for slug in ["deals", *game_slugs]]
 
 
 class DealsFeed(Feed):

@@ -107,6 +107,32 @@ def copy_count(context, key, count, **values):
     )
 
 
+# Stands in for the price while the sentence around it is filled in and escaped.
+PRICE_MARK = "\x00price\x00"
+
+
+@register.simple_tag(takes_context=True)
+def preorders_from(context, product_set):
+    """'Pre-orders from £x at n shops' for a set still to come, the price linked to the product it is for.
+
+    The link goes to our product page, so a buy click still passes through /go/ and is counted, and the
+    price says whether delivery is included, as every price on the site does.
+    """
+    from django.urls import reverse
+
+    store = context.get("site_content")
+    count = product_set.preorder_count
+    suffix = "one" if count == 1 else "other"
+    sentence = service.get(f"new.coming_soon.preorders_from.{suffix}", store=store, price=PRICE_MARK, count=count)
+    basis = service.get("browse.price.label" if product_set.preorder_known else "browse.price.plus", store=store)
+    link = format_html(
+        '<a class="coming__price" href="{}"><span class="price">{}</span> <span class="delivered">{}</span></a>',
+        reverse("web:product", args=[product_set.preorder_slug]), gbp(product_set.preorder_price), basis,
+    )
+    before, found, after = sentence.partition(PRICE_MARK)
+    return format_html("{}{}{}", before, link if found else "", after)
+
+
 @register.simple_tag
 def product_image(product, size="thumb"):
     return render_to_string(

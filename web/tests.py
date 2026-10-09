@@ -1273,3 +1273,244 @@ class SharedCacheTests(PageTestCase):
         self.assertEqual(cache_dir({"RIPRAPTOR_CACHE_DIR": "/tmp/rr-cache"}, False, base), Path("/tmp/rr-cache"))
         self.assertEqual(cache_dir({}, False, base), Path("/var/lib/ripraptor/cache"))
         self.assertEqual(cache_dir({"RIPRAPTOR_CACHE_DIR": " "}, True, base), base / ".cache")
+
+
+class ComingSoonTests(PageTestCase):
+    """Announced sets still to come, on the New page, the home page, game pages and set pages."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.today = timezone.localdate()
+        self.soon_set = make_set(self.game, name="Ascended Heroes", slug="ascended-heroes", code="ASC",
+                                 release_date=self.today + timedelta(days=10))
+
+    def block(self, html):
+        start = html.index('id="coming-title"')
+        return html[start:html.index("</section>", start)]
+
+    def add_preorder(self, product_set, retailer=None, price="49.99", **kwargs):
+        slug = kwargs.pop("slug", f"{product_set.slug}-etb")
+        product = Product.objects.filter(slug=slug).first() or make_product(
+            product_set, name=f"{product_set.name} Elite Trainer Box", slug=slug)
+        make_listing(product, retailer or self.harbour, price=price,
+                     availability=Listing.Availability.PREORDER, **kwargs)
+        return product
+
+    def test_a_set_dated_in_ten_days_with_no_products_shows_its_date_and_no_pre_orders(self):
+        html = self.client.get(reverse("web:new")).content.decode()
+        block = self.block(html)
+        self.assertIn("Coming soon", block)
+        self.assertIn("Ascended Heroes", block)
+        self.assertIn(f'href="{self.soon_set.get_absolute_url()}"', block)
+        self.assertIn(f"Out {(self.today + timedelta(days=10)):%-d %b %Y}", block)
+        self.assertIn("No pre-orders yet", block)
+        # The block sits above the product list.
+        self.assertLess(html.index('id="coming-title"'), html.index('class="filters"'))
+        # Without a pre-order price it stays off the home page, which is the money page.
+        self.assertNotIn('id="coming-title"', self.client.get(reverse("web:home")).content.decode())
+
+    def test_a_pre_order_shows_the_price_and_shop_count_and_reaches_the_home_page(self):
+        product = self.add_preorder(self.soon_set, price="49.99")
+        self.add_preorder(self.soon_set, retailer=self.north, price="52.00")
+        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        self.assertIn("Pre-orders from", block)
+        self.assertIn("£49.99", block)
+        self.assertIn("at 2 shops", block)
+        self.assertNotIn("No pre-orders yet", block)
+        # The price links to our product page, so a buy click still goes through /go/ and is counted.
+        self.assertIn(f'href="{product.get_absolute_url()}"', block)
+        self.assertNotIn("/go/", block)
+        home = self.client.get(reverse("web:home")).content.decode()
+        self.assertLess(home.index('id="latest-title"'), home.index('id="coming-title"'))
+        home_block = self.block(home)
+        self.assertIn("Ascended Heroes", home_block)
+        self.assertIn("£49.99", home_block)
+        self.assertIn('href="/new/"', home_block)
+
+    def test_one_shop_and_an_unknown_delivery_are_worded_as_such(self):
+        self.add_preorder(self.soon_set, price="44.00", delivery_known=False)
+        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        self.assertIn("at 1 shop", block)
+        self.assertIn("£44.00", block)
+        self.assertIn("+ delivery", block)
+
+    def test_a_confirmed_delivered_price_leads_an_unknown_one(self):
+        self.add_preorder(self.soon_set, price="40.00", delivery_known=False)
+        self.add_preorder(self.soon_set, retailer=self.north, price="45.00", delivery="3.00")
+        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        self.assertIn("£48.00", block)
+        self.assertNotIn("£40.00", block)
+
+    def test_an_undated_set_shows_only_while_a_shop_takes_pre_orders(self):
+        undated = make_set(self.game, name="Chaos Rising", slug="chaos-rising", code="CRI")
+        self.assertNotIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+        # An eBay pre-order is a reseller's guess and does not count.
+        from catalogue.models import Retailer
+
+        ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
+        self.add_preorder(undated, retailer=ebay, price="60.00")
+        from django.core.cache import cache
+
+        cache.clear()
+        self.assertNotIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.add_preorder(undated, price="55.00")
+        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        self.assertIn("Chaos Rising", block)
+        self.assertIn("£55.00", block)
+        self.assertIn("at 1 shop", block)
+        # Undated sets follow the dated ones.
+        self.assertLess(block.index("Ascended Heroes"), block.index("Chaos Rising"))
+        set_page = self.client.get(undated.get_absolute_url()).content.decode()
+        self.assertIn("Date not announced yet", set_page)
+
+    def test_a_stale_or_kept_out_pre_order_does_not_count(self):
+        undated = make_set(self.game, name="Chaos Rising", slug="chaos-rising", code="CRI")
+        self.add_preorder(undated, price="55.00", hours_ago=100)
+        self.add_preorder(undated, retailer=self.north, price="5.00", sanity=Listing.Sanity.EXCLUDED)
+        self.assertNotIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+
+    def test_a_set_dated_yesterday_leaves_the_block(self):
+        self.soon_set.release_date = self.today - timedelta(days=1)
+        self.soon_set.save()
+        self.add_preorder(self.soon_set)
+        for url in (reverse("web:new"), reverse("web:home"), self.game.get_absolute_url()):
+            with self.subTest(url=url):
+                self.assertNotIn("Ascended Heroes</a>\n", self.client.get(url).content.decode())
+                self.assertNotIn('id="coming-title"', self.client.get(url).content.decode())
+        # Its set page says it is out.
+        self.assertContains(self.client.get(self.soon_set.get_absolute_url()),
+                            f"Released {(self.today - timedelta(days=1)):%-d %b %Y}")
+
+    def test_a_set_dated_today_still_shows(self):
+        self.soon_set.release_date = self.today
+        self.soon_set.save()
+        self.assertIn("Ascended Heroes", self.block(self.client.get(reverse("web:new")).content.decode()))
+
+    def test_game_pages_show_their_own_sets(self):
+        other = make_game(name="Magic: The Gathering", slug="magic-the-gathering")
+        make_set(other, name="Lorwyn Eclipsed", slug="lorwyn-eclipsed", code="ECL",
+                 release_date=self.today + timedelta(days=20))
+        make_product(make_set(other, name="Old Magic", slug="old-magic", code="OLD"), name="Old Magic Box", slug="old-magic-box")
+        page = self.client.get(self.game.get_absolute_url()).content.decode()
+        block = self.block(page)
+        self.assertIn("Ascended Heroes", block)
+        self.assertNotIn("Lorwyn Eclipsed", block)
+        magic = self.block(self.client.get(other.get_absolute_url()).content.decode())
+        self.assertIn("Lorwyn Eclipsed", magic)
+        self.assertNotIn("Ascended Heroes", magic)
+        new = self.block(self.client.get(reverse("web:new")).content.decode())
+        self.assertLess(new.index("Ascended Heroes"), new.index("Lorwyn Eclipsed"))
+        # A set page does not repeat the block.
+        self.assertNotIn('id="coming-title"', self.client.get(self.pre.get_absolute_url()).content.decode())
+
+    def test_the_set_page_prints_the_date_and_where_it_came_from(self):
+        self.soon_set.release_date_source = "pokemon_uk_news"
+        self.soon_set.save()
+        html = self.client.get(self.soon_set.get_absolute_url()).content.decode()
+        self.assertIn(f"Out {(self.today + timedelta(days=10)):%-d %b %Y}", html)
+        self.assertIn("Date from pokemon.com UK news", html)
+        self.assertNotIn("Released ", html)
+        # The owner's own date carries no source line.
+        self.soon_set.release_date_source = "owner"
+        self.soon_set.save()
+        html = self.client.get(self.soon_set.get_absolute_url()).content.decode()
+        self.assertIn("Out ", html)
+        self.assertNotIn("Date from", html)
+        # A released set with no date says nothing about one.
+        self.assertNotIn("Date not announced yet", self.client.get(self.pre.get_absolute_url()).content.decode())
+
+    def test_a_source_name_never_brings_an_exclamation_mark(self):
+        vanguard = make_game(name="Cardfight Vanguard", slug="cardfight-vanguard")
+        product_set = make_set(vanguard, name="Dragon Rhapsody", slug="dragon-rhapsody", code="VGE-DZ-BT16",
+                               release_date=self.today + timedelta(days=5), release_date_source="bushiroad_vanguard")
+        html = self.client.get(product_set.get_absolute_url()).content.decode()
+        self.assertIn("Date from Cardfight Vanguard site", html)
+        self.assertNotIn("!", re.sub(r"<[^>]*>", " ", html))
+
+    def test_coming_soon_sets_is_one_query(self):
+        from django.core.cache import cache
+
+        from web.views import coming_soon_queryset, coming_soon_sets
+
+        for n in range(3):
+            product_set = make_set(self.game, name=f"Future {n}", slug=f"future-{n}", code=f"F{n}",
+                                   release_date=self.today + timedelta(days=n + 1))
+            self.add_preorder(product_set)
+            self.add_preorder(product_set, retailer=self.north, price="60.00")
+        with self.assertNumQueries(1):
+            rows = list(coming_soon_queryset())
+        self.assertEqual(len(rows), 4)
+        self.assertEqual([row.preorder_count for row in rows], [2, 2, 2, 0])
+        cache.clear()
+        with self.assertNumQueries(1):
+            coming_soon_sets(self.game)
+        with self.assertNumQueries(0):
+            self.assertEqual(len(coming_soon_sets(self.game, limit=2)), 2)
+
+    def page_queries(self, url):
+        from django.core.cache import cache
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        cache.clear()
+        with CaptureQueriesContext(connection) as queries:
+            self.assertEqual(self.client.get(url).status_code, 200)
+        return len(queries)
+
+    def test_every_page_keeps_its_query_count_however_many_sets_are_coming(self):
+        self.add_preorder(self.soon_set)
+        urls = [reverse("web:new"), reverse("web:home"), self.game.get_absolute_url(), self.soon_set.get_absolute_url()]
+        before = {url: self.page_queries(url) for url in urls}
+        for n in range(4):
+            product_set = make_set(self.game, name=f"Future {n}", slug=f"future-{n}", code=f"F{n}",
+                                   release_date=self.today + timedelta(days=n + 2))
+            self.add_preorder(product_set)
+        after = {url: self.page_queries(url) for url in urls}
+        self.assertEqual(after, before)
+
+    def test_the_block_is_cached_and_cleared_by_clear_list_caches(self):
+        from django.core.cache import cache
+
+        from catalogue.signals import clear_list_caches
+        from catalogue.testing import inside_the_cache_window
+
+        self.client.get(reverse("web:new"))
+        self.client.get(self.game.get_absolute_url())
+        self.assertIsNotNone(cache.get("web:coming-soon:v1"))
+        self.assertIsNotNone(cache.get("web:coming-soon:v1:pokemon"))
+        # Inside the clear window a new set waits for the cache, then a forced clear shows it.
+        inside_the_cache_window(self)
+        make_set(self.game, name="Phantom Tides", slug="phantom-tides", code="PHT",
+                 release_date=self.today + timedelta(days=30))
+        self.assertNotIn("Phantom Tides", self.client.get(reverse("web:new")).content.decode())
+        clear_list_caches(force=True)
+        self.assertIsNone(cache.get("web:coming-soon:v1"))
+        self.assertIsNone(cache.get("web:coming-soon:v1:pokemon"))
+        self.assertIn("Phantom Tides", self.block(self.client.get(reverse("web:new")).content.decode()))
+
+    def test_a_new_set_shows_at_once_outside_the_clear_window(self):
+        self.client.get(reverse("web:new"))
+        make_set(self.game, name="Phantom Tides", slug="phantom-tides", code="PHT",
+                 release_date=self.today + timedelta(days=30))
+        self.assertIn("Phantom Tides", self.block(self.client.get(reverse("web:new")).content.decode()))
+
+    def test_house_style_holds_with_the_block_on_every_page(self):
+        self.add_preorder(self.soon_set)
+        undated = make_set(self.game, name="Chaos Rising", slug="chaos-rising", code="CRI")
+        self.add_preorder(undated, price="55.00")
+        blocks = [reverse("web:home"), reverse("web:new"), self.game.get_absolute_url()]
+        set_pages = [self.soon_set.get_absolute_url(), undated.get_absolute_url()]
+        for url in blocks + set_pages:
+            html = self.client.get(url).content.decode()
+            visible = re.sub(r"<[^>]*>", " ", html)
+            with self.subTest(url=url):
+                if url in blocks:
+                    self.assertIn('id="coming-title"', html)
+                else:
+                    self.assertTrue("Out " in visible or "Date not announced yet" in visible)
+                self.assertNotIn("!", visible)
+                for phrase in CopyStyleTests.BANNED:
+                    self.assertNotIn(phrase, html.lower())

@@ -141,6 +141,12 @@
 </section>
 {% endif %}
 
+{% if coming_soon %}
+<div class="home-section">
+  {% include "web/includes/coming_soon.html" with show_game=True see_all=True %}
+</div>
+{% endif %}
+
 {% if football %}
 <section class="home-section" aria-labelledby="football-title">
   <div class="section-head">

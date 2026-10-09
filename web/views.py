@@ -9,7 +9,8 @@ from django.templatetags.static import static
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
-from django.db.models import Case, Count, Exists, F, IntegerField, Max, OuterRef, Prefetch, Q, Value, When
+from django.db.models import Case, Count, Exists, F, IntegerField, Max, OuterRef, Prefetch, Q, Subquery, Value, When
+from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -338,6 +339,77 @@ def home_drops_new():
     return rows
 
 
+COMING_SOON_ON_HOME = 3   # the home page is the money page: only sets a visitor can pre-order now, and few
+
+
+def coming_soon_queryset(game=None):
+    """Announced sets still to come, in one query: dated today or later, or undated with a shop taking
+    pre-orders. Each carries how many shops take pre-orders and the cheapest of them.
+
+    Only a current pre-order at a shop counts: active, checked within the stale window, its price not
+    kept out, and never eBay or Amazon, whose pre-orders are resellers' guesses. The cheapest is a
+    confirmed delivered price when any shop has one, else an item price shown as plus delivery, the
+    order every list uses.
+    """
+    from catalogue.pricing import MARKETPLACES
+
+    preorders = Listing.objects.filter(
+        product__product_set=OuterRef("pk"), product__is_active=True, is_active=True, retailer__is_active=True,
+        last_checked__gte=stale_cutoff(), availability=Listing.Availability.PREORDER, sanity__in=Listing.COUNTED,
+    ).exclude(retailer__source_type__in=MARKETPLACES)
+    cheapest = preorders.annotate(
+        shown=Case(When(delivery_known=True, then=F("delivered_price")), default=F("price"))
+    ).order_by("-delivery_known", "shown", "pk")
+    shops = (
+        preorders.order_by().values("product__product_set")
+        .annotate(shops=Count("retailer", distinct=True)).values("shops")
+    )
+    sets = ProductSet.objects.filter(game__is_active=True)
+    if game is not None:
+        sets = sets.filter(game=game)
+    today = timezone.localdate()
+    return (
+        sets.select_related("game")
+        .annotate(
+            has_preorder=Exists(preorders),
+            preorder_count=Coalesce(Subquery(shops[:1]), Value(0)),
+            preorder_price=Subquery(cheapest.values("shown")[:1]),
+            preorder_known=Subquery(cheapest.values("delivery_known")[:1]),
+            preorder_slug=Subquery(cheapest.values("product__slug")[:1]),
+        )
+        .filter(Q(release_date__gte=today) | Q(release_date__isnull=True, has_preorder=True))
+        .order_by(F("release_date").asc(nulls_last=True), "name")
+    )
+
+
+def coming_soon_sets(game=None, limit=8):
+    """Sets still to come, soonest first, for the New page (limit None), a game page or the home page.
+
+    Cached with the other lists under 'web:coming-soon:v1', or ':<game>' for one game's, so every
+    clear_list_caches drops them.
+    """
+    from django.core.cache import cache
+
+    from catalogue.signals import COMING_SOON_CACHE_KEY
+
+    key = COMING_SOON_CACHE_KEY if game is None else f"{COMING_SOON_CACHE_KEY}:{game.slug}"
+    rows = cache.get(key)
+    if rows is None:
+        rows = list(coming_soon_queryset(game))
+        cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    return rows if limit is None else rows[:limit]
+
+
+def date_source_label(product_set):
+    """Where a set's date came from, for 'Date from ...': a release source's name, or nothing when the
+    owner set it, it predates the sources, or the source is a shop's title. Exclamation marks in a
+    source's name are left out, as everywhere in the site's wording."""
+    from catalogue.releases import BY_NAME
+
+    source = BY_NAME.get(product_set.release_date_source)
+    return source.label.replace("!", "") if source else ""
+
+
 @require_GET
 def latest_drops(request):
     heading = text(request, "browse.new.title")
@@ -350,6 +422,7 @@ def latest_drops(request):
             "meta_description": text(request, "meta.new.description"),
             "canonical_url": request.build_absolute_uri(reverse("web:new")),
             "structured_json": json.dumps(breadcrumbs_json(request, [(heading, reverse("web:new"))])),
+            "coming_soon": coming_soon_sets(limit=None),
         },
         base_queryset=latest_drops_queryset(),
         default_ordering=DROPS_ORDER,
@@ -400,6 +473,9 @@ def home(request):
             "restocked": restocked,
             "football": home_football(),
             "latest": home_drops_new(),
+            "coming_soon": [row for row in coming_soon_sets(limit=None) if row.preorder_price is not None][
+                :COMING_SOON_ON_HOME
+            ],
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
@@ -449,7 +525,7 @@ def games(request):
 @require_GET
 def game_detail(request, game_slug):
     game = get_object_or_404(Game, slug=game_slug, is_active=True)
-    sets = ProductSet.objects.filter(game=game, products__is_active=True).distinct()
+    sets = ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct()
     return _browse(
         request,
         {
@@ -460,6 +536,7 @@ def game_detail(request, game_slug):
             "meta_description": text(request, "meta.game.description", game=game.name),
             "canonical_url": request.build_absolute_uri(game.get_absolute_url()),
             "structured_json": json.dumps(breadcrumbs_json(request, [(game.name, game.get_absolute_url())])),
+            "coming_soon": coming_soon_sets(game),
         },
         base_queryset=Product.objects.for_lists().filter(game=game),
         fixed_game=game,
@@ -476,13 +553,18 @@ def set_detail(request, game_slug, set_slug):
     )
     game = product_set.game
     values = {"set": product_set.name, "game": game.name}
+    # A set still to come says when it is out and who said so; an undated one says so only while shops take
+    # pre-orders, since an old set entered without a date is not still to come.
+    upcoming = any(row.pk == product_set.pk for row in coming_soon_sets(game, limit=None))
     return _browse(
         request,
         {
             "heading": product_set.name,
             "game": game,
             "product_set": product_set,
-            "sets": ProductSet.objects.filter(game=game, products__is_active=True).distinct(),
+            "set_upcoming": upcoming,
+            "date_source": date_source_label(product_set) if upcoming else "",
+            "sets": ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct(),
             "meta_title": text(request, "meta.set.title", **values),
             "meta_description": text(request, "meta.set.description", **values),
             "canonical_url": request.build_absolute_uri(product_set.get_absolute_url()),

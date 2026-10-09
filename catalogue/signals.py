@@ -15,7 +15,9 @@ HOME_CACHE_KEY = "web:home-lists:v4"
 DEALS_CACHE_KEY = "web:deals:v2"
 FOOTBALL_CACHE_KEY = "web:home-football:v2"
 NEW_CACHE_KEY = "web:home-new:v2"
-LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, FOOTBALL_CACHE_KEY, NEW_CACHE_KEY)
+# Sets still to come; each game's own list is cached under this key plus ':<game>'.
+COMING_SOON_CACHE_KEY = "web:coming-soon:v1"
+LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, FOOTBALL_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY)
 
 
 # When this process last cleared the list caches (time.monotonic), for the debounce.
@@ -23,10 +25,11 @@ _last_clear = None
 
 
 def cached_list_keys():
-    """Every key clear_list_caches drops: the home, deals and new lists and each feed."""
+    """Every key clear_list_caches drops: the home, deals and new lists, each game's sets to come and each feed."""
     from web.feeds import feed_cache_keys
 
-    return [*LIST_CACHE_KEYS, *feed_cache_keys()]
+    slugs = list(Game.objects.filter(is_active=True).values_list("slug", flat=True))
+    return [*LIST_CACHE_KEYS, *(f"{COMING_SOON_CACHE_KEY}:{slug}" for slug in slugs), *feed_cache_keys(slugs)]
 
 
 def clear_list_caches(force=False):
@@ -70,6 +73,7 @@ def clear_list_caches_now(force=False):
 
 @receiver([post_save, post_delete], sender=Product)
 @receiver([post_save, post_delete], sender=Listing)
+@receiver([post_save, post_delete], sender=ProductSet)
 def clear_home_lists(sender, **kwargs):
     clear_list_caches()
 

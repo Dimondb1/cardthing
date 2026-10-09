@@ -40,6 +40,7 @@ SECTIONS = [
     ("site", "Header and search box"),
     ("deck", "Swipe page"),
     ("home", "Home page"),
+    ("new", "Coming soon sets"),
     ("deals", "Deals page"),
     ("feeds", "Feeds (RSS)"),
     ("alerts", "Back in stock emails"),
@@ -75,6 +76,7 @@ PLACEHOLDER_HELP = {
     "query": "what the visitor typed into search",
     "retailer": "a retailer name",
     "set": "a set name",
+    "source": "where a date came from, for example Scryfall",
     "site_name": "the site name, RipRaptor",
     "time": "how long ago, for example 18 minutes ago",
     "was": "the previous price, for example £59.99",
@@ -460,6 +462,50 @@ ENTRIES = [
         "Sealed products released in the last few weeks, on pre-order, or newly listed by UK shops, "
         "with the cheapest delivered price for each.",
         "Under the latest drops page heading.",
+    ),
+    Entry(
+        "new.coming_soon.title", H, "Coming soon heading",
+        "Coming soon",
+        "Heading of the list of announced sets still to come, on the latest drops page, the home page and "
+        "game pages.",
+    ),
+    Entry(
+        "new.coming_soon.out", T, "Coming soon release date",
+        "Out {date}",
+        "Next to a set still to come, and on its set page. {date} is the release date: the publisher's, two "
+        "sources that agree, or yours.",
+        placeholders=("date",),
+    ),
+    Entry(
+        "new.coming_soon.tbc", T, "Coming soon with no date",
+        "Date not announced yet",
+        "On the page of a set shops take pre-orders for before any date is published.",
+    ),
+    Entry(
+        "new.coming_soon.no_preorders", T, "No pre-orders yet",
+        "No pre-orders yet",
+        "Next to a set still to come that no shop takes pre-orders for.",
+    ),
+    Entry(
+        "new.coming_soon.preorders_from.one", T, "Pre-order price (one shop)",
+        "Pre-orders from {price} at 1 shop",
+        "Next to a set still to come that one shop takes pre-orders for. {price} is its cheapest pre-order "
+        "and links to that product.",
+        placeholders=("price",),
+    ),
+    Entry(
+        "new.coming_soon.preorders_from.other", T, "Pre-order price (more than one shop)",
+        "Pre-orders from {price} at {count} shops",
+        "Next to a set still to come that several shops take pre-orders for. {price} is the cheapest "
+        "pre-order and links to that product.",
+        placeholders=("price", "count"),
+    ),
+    Entry(
+        "new.coming_soon.source", T, "Where a set's date came from",
+        "Date from {source}",
+        "On the page of a set still to come, after its date. {source} is the release source that gave the "
+        "date. Not shown for a date you set.",
+        placeholders=("source",),
     ),
     Entry(
         "browse.filters.apply", B, "Apply filters button",

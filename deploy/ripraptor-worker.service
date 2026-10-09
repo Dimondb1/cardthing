@@ -3,7 +3,7 @@
 # when it stops, and when its heartbeat to the watchdog stops for three minutes. If it never runs, the hourly
 # cron reads the shops instead (import_prices --if-worker-dead 30). Its log: journalctl -u ripraptor-worker
 # install.sh copies this file on every update, so change nothing here by hand: the number of jobs it runs at
-# once is RIPRAPTOR_WORKER_THREADS in .env (3 unless set; 2 on a server with under 1 GB of memory).
+# once is RIPRAPTOR_WORKER_THREADS in .env (3 unless set; install.sh writes 2 on a server with under 1 GB of memory).
 [Unit]
 Description=RipRaptor background reader
 After=network.target

@@ -62,6 +62,9 @@ grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/d
 # Pre-order emails go only to alerts asked for from this install on, when the form first promised them.
 # Written once, so a later update never moves the cut-off and an earlier subscriber never hears about pre-orders.
 grep -q RIPRAPTOR_PREORDER_ALERTS_FROM .env || echo "RIPRAPTOR_PREORDER_ALERTS_FROM=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" >> .env
+# A server with under 1 GB of memory runs two background reader jobs at once instead of three, so
+# the reader stays under its 300 MB limit beside the site. Written once; a value set by hand stays.
+grep -q RIPRAPTOR_WORKER_THREADS .env || { [ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 900000 ] && echo "RIPRAPTOR_WORKER_THREADS=2" >> .env || true; }
 set -a; . ./.env; set +a
 [ -f /var/lib/ripraptor/dbip-country.mmdb ] || .venv/bin/python manage.py fetch_geoip || true
 chown -R ripraptor:ripraptor "$DIR" /var/lib/ripraptor

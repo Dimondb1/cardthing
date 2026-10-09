@@ -414,3 +414,33 @@ class ClosedRunInsightsTests(TestCase):
         close_abandoned_runs(now=self.now)
         health = {row["name"]: row for row in insights.report(30)["shops_health"]}[shop.name]
         self.assertEqual(health["problem"], STOPPED)
+
+
+class WorkerThreadsInstallTests(TestCase):
+    """install.sh gives a small server two reader jobs at once, once, and never changes a value set by hand."""
+
+    def run_line(self, env_text, mem_kb):
+        text = (DEPLOY / "install.sh").read_text()
+        [line] = [l for l in text.splitlines() if l.startswith("grep -q RIPRAPTOR_WORKER_THREADS")]
+        folder = Path(tempfile.mkdtemp(prefix="ripraptor-install-test-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        (folder / ".env").write_text(env_text)
+        (folder / "meminfo").write_text(f"MemTotal:       {mem_kb} kB\nMemFree:        1000 kB\n")
+        line = line.replace("/proc/meminfo", str(folder / "meminfo"))
+        subprocess.run(["bash", "-euo", "pipefail", "-c", line], cwd=folder, check=True)
+        return (folder / ".env").read_text()
+
+    def test_a_server_under_1_gb_gets_two_threads(self):
+        self.assertIn("RIPRAPTOR_WORKER_THREADS=2", self.run_line("DJANGO_DEBUG=0\n", 480000))
+
+    def test_a_1_gb_server_keeps_the_default(self):
+        self.assertNotIn("RIPRAPTOR_WORKER_THREADS", self.run_line("DJANGO_DEBUG=0\n", 985000))
+
+    def test_a_value_set_by_hand_stays(self):
+        env = self.run_line("RIPRAPTOR_WORKER_THREADS=3\n", 480000)
+        self.assertEqual(env.count("RIPRAPTOR_WORKER_THREADS"), 1)
+        self.assertIn("RIPRAPTOR_WORKER_THREADS=3", env)
+
+    def test_it_is_written_before_the_reader_starts(self):
+        text = (DEPLOY / "install.sh").read_text()
+        self.assertLess(text.index("grep -q RIPRAPTOR_WORKER_THREADS"), text.index("systemctl restart ripraptor-worker"))

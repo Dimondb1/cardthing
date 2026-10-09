@@ -1230,7 +1230,7 @@ site's cache.
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
 | `RIPRAPTOR_RESTOCK_HOURS`      | 48      | How long a restocked product stays under "Back in stock". |
-| `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1 GB of memory. Restart `ripraptor-worker` after changing it. |
+| `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing. Restart `ripraptor-worker` after changing it. |
 | `RIPRAPTOR_AMAZON_ACCESS_KEY`  |         | Product Advertising API key from Amazon Associates. |
 | `RIPRAPTOR_AMAZON_SECRET_KEY`  |         | Its secret. |
 | `RIPRAPTOR_AMAZON_PARTNER_TAG` |         | The Associates tracking tag, for example `ripraptor-21`. All three set means Amazon is read once a day. |

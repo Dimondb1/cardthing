@@ -38,7 +38,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from . import pricing
-from .classify import GAMES, classify, find_game, label_kind
+from .classify import GAMES, classify, find_game, variant_differs
 from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
 from .models import (
     Game, ImportRun, Listing, Product, Retailer, RetailerCollection, ShopPage, ShopProduct, stale_cutoff,
@@ -1129,14 +1129,6 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             ignored.add(url)
 
     to_stamp = []
-    types = {}
-
-    def product_types():
-        """Product pk -> product type, loaded once and only when a variant needs it."""
-        if not types:
-            types.update(Product.objects.values_list("pk", "product_type"))
-        return types
-
     # Product pk -> (first offer without a price, whether every such offer said out of stock).
     unpriced = {}
     # Set codes in pre-order titles and pre-release event tickets: the earliest sign of a new set.
@@ -1153,6 +1145,15 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             found += 1
             notice_release(shop_signals, offer, checked_at)
+            if offer.variant:
+                # "1 Pack", "18 Packs", "Half Box" or "Case" on a booster box page is another product at another
+                # price. It is judged against the page before any matching, so it can never take over the
+                # box's listing (whose address it shares) or leave a linked row behind.
+                page_title = offer.title.removesuffix(f" ({offer.variant})")
+                why = variant_differs(page_title, offer.variant, offer.shop_type)
+                if why:
+                    unmatched.append(f"{offer.title} [{why}] {offer.url}")
+                    continue
             product_pk = offer.product_pk
             if product_pk is None:
                 product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
@@ -1203,12 +1204,6 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if not offer.url.lower().startswith(("http://", "https://")):
                 unmatched.append(f"{offer.title} [link is not a web address]")
                 continue
-            if offer.variant:
-                # A "1 Pack" variant on a booster box page is a pack, not the box: it must never price the box.
-                kind = label_kind(offer.variant)
-                if kind is not None and kind != product_types().get(product_pk, kind):
-                    unmatched.append(f"{offer.title} [a variant of another kind] {offer.url}")
-                    continue
             if offer.page_pk is not None:
                 # The shop's page now names its product, so a search can find it without a fetch.
                 ShopPage.objects.filter(pk=offer.page_pk).exclude(product_id=product_pk).update(product_id=product_pk)

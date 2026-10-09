@@ -75,24 +75,55 @@ NOT_SEALED = re.compile(
     re.I,
 )
 # "Booster Box (36x Packs)" says what is inside the box, not that it is a multi-buy, but NOT_SEALED's
-# "36x" rule would refuse it. Only a count of 6 to 36 packs written straight after the box itself
-# ("Booster Box (36x Packs)", "Display - 24x Packs") is rewritten, and only once. Any other count stays
+# "36x" rule would refuse it. Only a count of 6 to 36 packs in brackets straight after the box itself
+# ("Booster Box (36x Packs)", "Display [24x Packs]") is rewritten, and only once. Any other count stays
 # and is refused: "Booster Box (36x Packs) + 6x Booster Packs", "2 Booster Boxes (36x Packs)",
-# "10x Booster Packs (Display Box)", "Mystery Box (10x Booster Packs)" are not one sealed box.
+# "10x Booster Packs (Display Box)", "Mystery Box (10x Booster Packs)", and an unbracketed
+# "Booster Box - 10x Booster Packs", which could as well be a box with packs added.
 BOX_CONTENTS = re.compile(
     r"\b((?:booster\s+)?display(?:\s+box)?|booster\s+box|elite\s+trainer\s+box|etb)\b\s*[-–:]?\s*"
-    r"(\(?)\s*(\d{1,2})\s?[x×]\s*((?:sealed\s+)?(?:booster\s*)?packs?)\b\s*(\)?)",
+    r"([(\[]?)\s*(\d{1,2})\s?[x×]\s*((?:sealed\s+)?(?:booster\s*)?packs?)\b\s*([)\]]?)",
     re.I,
 )
 
 
-def box_contents(title):
-    """The title with a box's own pack count written as a count, not a multi-buy."""
+def box_contents(title, bracketed=True):
+    """The title with a box's own pack count written as a count, not a multi-buy.
+
+    ``bracketed=False`` is for shop addresses, which never keep brackets ("...-booster-box-36x-packs").
+    """
     def rewrite(m):
-        if not 6 <= int(m.group(3)) <= 36:
+        if not 6 <= int(m.group(3)) <= 36 or (bracketed and not (m.group(2) and m.group(5))):
             return m.group(0)
         return f"{m.group(1)} {m.group(2)}{m.group(3)} {m.group(4)}{m.group(5)}"
     return BOX_CONTENTS.sub(rewrite, title or "", count=1)
+
+
+# Pack counts in a title or a variant label: "(36 Packs)", "36x Booster Packs", "18 Packs".
+PACK_COUNT = re.compile(r"\b(\d{1,3})\s?[x×]?\s*(?:sealed\s+)?(?:booster\s*)?(?:packs?|boosters?)\b", re.I)
+# Variant labels that are another amount of the same thing, never the product itself.
+OTHER_AMOUNT = re.compile(r"\b(?:case|cases|half|quarter|carton|bundle of|set of|lot of)\b|\bx\s?\d|\d\s?x\b", re.I)
+
+
+def variant_differs(page_title, label, shop_type=""):
+    """Why a variant on a product page is not the page's product ("" when it is).
+
+    A shop's page for a booster box may offer "1 Pack", "18 Packs", "Half Box" or "Case (6 Boxes)" as
+    variants. Each is a different product at a different price, so none may price the box. A variant
+    that names another kind, another amount or a pack count the page's own title does not state is
+    left out; "English", "Japanese" or the page's own count ("36 Packs" on "...(36x Packs)") are not.
+    """
+    if not label:
+        return ""
+    if OTHER_AMOUNT.search(label):
+        return "a variant of another amount"
+    kind, page_kind = label_kind(label), find_type(page_title, shop_type)
+    if kind is not None and page_kind is not None and kind != page_kind:
+        return "a variant of another kind"
+    counts = {int(n) for n in PACK_COUNT.findall(label)}
+    if counts and not counts <= {int(n) for n in PACK_COUNT.findall(page_title)}:
+        return "a variant of another amount"
+    return ""
 
 
 def label_kind(label):

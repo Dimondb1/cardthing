@@ -344,6 +344,43 @@ class NameMatchingTests(TestCase):
         self.assertEqual((listing.product, listing.price, listing.url), (self.box, Decimal("154.25"), "https://pc.example/products/ssp-box?variant=2"))
         self.assertTrue(any("a variant of another kind" in line for line in unmatched))
 
+    def box_page(self, *variants):
+        return {"handle": "dri-box", "title": "Pokemon TCG - Scarlet & Violet - Destined Rivals - Booster Box (36x Packs)",
+                "tags": [], "images": [],
+                "variants": [{"id": n, "title": title, "price": price, "available": available, "barcode": ""}
+                             for n, (title, price, available) in enumerate(variants, start=1)]}
+
+    def read_twice(self, first, second):
+        from .importers import apply_offers, product_offers
+
+        rivals = make_product(self.box.product_set, name="Destined Rivals Booster Box", slug="dri-box", product_type="booster_box")
+        for page in (first, second):
+            apply_offers(self.retailer, product_offers("https://pc.example", page), complete=False)
+        return Listing.objects.get(retailer=self.retailer, product=rivals)
+
+    def test_a_half_box_count_variant_never_prices_the_box(self):
+        page = self.box_page(("18 Packs", "79.99", True), ("36 Packs", "154.25", True))
+        listing = self.read_twice(page, page)
+        self.assertEqual((listing.price, listing.url), (Decimal("154.25"), "https://pc.example/products/dri-box?variant=2"))
+
+    def test_a_half_box_or_a_case_never_takes_over_the_box_on_a_later_read(self):
+        half = self.box_page(("Booster Box", "154.25", True), ("Half Box", "80.00", True))
+        self.assertEqual(self.read_twice(half, half).price, Decimal("154.25"))
+        Listing.objects.all().delete()
+        Product.objects.filter(slug="dri-box").delete()
+        case_in = self.box_page(("Booster Box", "154.25", True), ("Case (6 Boxes)", "899.00", True))
+        case_box_sold_out = self.box_page(("Booster Box", "154.25", False), ("Case (6 Boxes)", "899.00", True))
+        listing = self.read_twice(case_in, case_box_sold_out)
+        self.assertEqual((listing.price, listing.availability), (Decimal("154.25"), Listing.Availability.OUT_OF_STOCK))
+
+    def test_a_skipped_variant_leaves_no_linked_row_and_languages_still_count(self):
+        from .importers import apply_offers, product_offers
+
+        page = self.box_page(("1 Pack", "5.50", True), ("English", "154.25", True))
+        apply_offers(self.retailer, product_offers("https://pc.example", page), complete=False)
+        self.assertFalse(ShopProduct.objects.filter(retailer=self.retailer, price=Decimal("5.50")).exists())
+        self.assertEqual(Listing.objects.get(retailer=self.retailer).price, Decimal("154.25"))
+
     def test_a_box_sold_with_extra_packs_is_not_the_box(self):
         from .importers import Offer, apply_offers
 

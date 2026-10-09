@@ -130,11 +130,23 @@ class ClassifyLeakTests(TestCase):
                       "Pokemon TCG Mystery Box (10x Booster Packs)", "Pokemon Mystery Box (10 Booster Packs)",
                       "Destined Rivals 10x Booster Packs (Display Box)", "Lorcana Fabled 24x Booster Packs (without display box)",
                       "Pokemon 12x Booster Packs Gift Box", "Simplified Chinese Gem Pack Vol 3 Box (10x Packs)",
-                      "2x Booster Box (36x Packs)", "Pokemon Destined Rivals Booster Box (36x Packs) x2"]:
+                      "2x Booster Box (36x Packs)", "Pokemon Destined Rivals Booster Box (36x Packs) x2",
+                      # Without brackets the count could as well be packs added to the box.
+                      "Pokemon Destined Rivals Booster Box - 10x Booster Packs", "Pokemon Destined Rivals Booster Box 6x Booster Packs"]:
             self.assertIsNone(classify(title, price=100), title)
-        for title in ["Pokemon Surging Sparks Booster Pack Display (36x Packs)", "Disney Lorcana Fabled Sleeved Booster Display - 24x Packs",
+        for title in ["Pokemon Surging Sparks Booster Pack Display (36x Packs)", "Disney Lorcana Fabled Sleeved Booster Display [24x Packs]",
                       "Japanese Pokemon Terastal Festival Booster Box (30x Packs)"]:
             self.assertEqual(classify(title, price=100).product_type, "booster_box", title)
+
+    def test_a_variant_is_judged_against_its_own_page(self):
+        from .classify import variant_differs
+
+        page = "Pokemon TCG - Destined Rivals - Booster Box (36x Packs)"
+        for label in ["1 Pack", "18 Packs", "Half Box", "Case (6 Boxes)", "Case", "Booster Pack x3", "Elite Trainer Box"]:
+            self.assertTrue(variant_differs(page, label), label)
+        for label in ["", "English", "Japanese", "36 Packs", "Booster Box", "Pre-Order"]:
+            self.assertEqual(variant_differs(page, label), "", label)
+        self.assertTrue(variant_differs("Magic Duskmourn Play Booster Box (36 Packs)", "Collector Booster Box"))
 
     def test_a_word_repeated_by_the_shop_appears_once(self):
         self.assertEqual(classify("Yu-Gi-Oh! Justice Hunters Booster Booster Pack", price=3).name, "Justice Hunters Booster Pack")

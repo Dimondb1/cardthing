@@ -47,7 +47,7 @@ def fits(listing):
     if named is not None and named != product.game.slug:
         return False
     # "...-booster-box-36x-packs" says what is inside the box, the same rule classify uses.
-    if NOT_SEALED.search(box_contents(title)) and not NOT_SEALED.search(product.name):
+    if NOT_SEALED.search(box_contents(title, bracketed=False)) and not NOT_SEALED.search(product.name):
         return False
     title_text = " " + expand(title) + " "
     name_text = " " + expand(product.name) + " "

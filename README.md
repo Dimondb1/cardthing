@@ -388,7 +388,13 @@ pre-order after a single-product check too, as in a shop read, so a shop
 opening pre-orders is never shown as a restock. A listing for one variant of a Shopify product (an address
 ending `?variant=...`, for example a case rather than a box) takes that
 variant's price and stock, never the cheapest on the page, and is left as
-it is when the shop no longer has that variant. eBay and Amazon listings are
+it is when the shop no longer has that variant. In a whole-shop read, a
+variant that is another product than its page ("1 Pack", "18 Packs", "Half
+Box" or "Case" on a booster box page) is left out before any matching, so it
+never prices the box; "English", "Japanese" or the page's own count ("36
+Packs" on a "(36x Packs)" page) are not left out. A box title counts its packs
+only in brackets straight after the box ("Booster Box (36x Packs)"); any other
+"36x" is read as a multi-buy and refused. eBay and Amazon listings are
 never checked this way, and nor are feed shops: their prices come from the
 feed agreed with them, and their links are affiliate clicks a server must
 never follow.

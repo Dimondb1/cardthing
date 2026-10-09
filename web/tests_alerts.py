@@ -266,6 +266,39 @@ class PreorderAlertTests(TestCase):
         StockAlert.objects.update(created_at=self.cutoff - timedelta(days=1), confirmed_at=None)
         self.assertContains(self.client.get(reverse("web:alert_confirm", args=[alert.token])), "is back in stock at a UK shop we check")
 
+    def test_the_preorder_email_promises_nothing_the_site_will_not_do(self):
+        # Amazon in stock does not stop a shop pre-order email, so the email must not say nobody has it in stock.
+        make_listing(self.product, make_retailer("Amazon", source_type=Retailer.Source.AMAZON), price="44.00", availability="in_stock")
+        self.alert(self.now - timedelta(hours=1))
+        self.open_preorders()
+        self.assertEqual(alerts.send_due(), (1, 0))
+        message = self.outbox.sent[0]
+        self.assertTrue(message["subject"].startswith("Pre-orders open:"))
+        for body in (message["text"], message["html"]):
+            self.assertNotIn("in stock yet", body)
+            # The form is hidden while a shop has it on pre-order, so the email must not send them back to it.
+            self.assertNotIn("Ask again", body)
+            self.assertIn("The product page shows when a shop has it in stock.", body)
+        page = self.client.get(self.product.get_absolute_url())
+        self.assertContains(page, "Amazon")
+        self.assertNotContains(page, 'id="alert"')
+
+    def test_old_and_new_alerts_on_one_product_each_get_what_they_asked_for(self):
+        # send_due caches the shop check per product and per promise; whichever alert comes first, the old one
+        # (back in stock only) must not borrow the new one's pre-order answer, nor the other way round.
+        for ordering in (["-created_at"], ["created_at"]):
+            with self.subTest(ordering=ordering), mock.patch.object(StockAlert._meta, "ordering", ordering):
+                StockAlert.objects.all().delete()
+                self.outbox.sent.clear()
+                Listing.objects.filter(pk=self.listing.pk).update(availability="out_of_stock")
+                old = self.alert(self.cutoff - timedelta(days=1), email="old@example.com")
+                self.alert(self.now - timedelta(hours=1), email="new@example.com")
+                self.open_preorders()
+                self.assertEqual(alerts.send_due(), (1, 0))
+                self.assertEqual([(m["to"], m["subject"][:16]) for m in self.outbox.sent],
+                                 [("new@example.com", "Pre-orders open:")])
+                self.assertEqual(list(StockAlert.objects.all()), [old])
+
     def test_the_terms_still_describe_the_store(self):
         terms = self.client.get(reverse("web:terms"))
         for sentence in ("Nothing is sent until you confirm", "You get one email when a shop has the product, and your address is then",

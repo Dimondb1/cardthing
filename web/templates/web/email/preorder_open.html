@@ -8,11 +8,11 @@
     <p style="margin:0;font-size:13px;color:#667085;">Cheapest pre-order now</p>
     <p style="margin:2px 0 0;font-size:28px;font-weight:800;line-height:1.1;color:#107a32;">{% if listing.delivery_known %}£{{ listing.delivered_price }} <span style="font-size:15px;font-weight:bold;">delivered</span>{% else %}£{{ listing.price }} <span style="font-size:15px;font-weight:bold;">plus delivery</span>{% endif %}</p>
     <p style="margin:4px 0 0;font-weight:bold;">at {{ listing.retailer.name }}</p>
-    <p style="margin:4px 0 0;font-size:13px;color:#667085;">Checked just now. No UK shop we check has it in stock yet.</p>
+    <p style="margin:4px 0 0;font-size:13px;color:#667085;">Checked just now.</p>
   </td></tr>
 </table>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 8px;"><tr>
   <td style="border-radius:12px;background:#e5470e;"><a href="{{ product_url }}" style="display:inline-block;padding:14px 24px;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;">Compare prices</a></td>
 </tr></table>
 {% endblock %}
-{% block footer_note %}<p style="margin:0;">This was your one alert for this product, so your email address has already been deleted. Ask again on the product page if you want to hear when it is in stock.</p>{% endblock %}
+{% block footer_note %}<p style="margin:0;">This was your one alert for this product, so your email address has already been deleted. The product page shows when a shop has it in stock.</p>{% endblock %}

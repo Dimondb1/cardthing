@@ -750,9 +750,127 @@ class WebsiteTests(FinderCase):
                           ShopProduct.Status.REVIEW))
         self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.REVIEW)
         self.assertEqual(result.review, 1)
-        # Yes adds it as sold out with no price until the shop's next read prices it.
-        listing = finder.link(row)
-        self.assertEqual((listing.price, listing.availability), (0, Listing.Availability.OUT_OF_STOCK))
+
+    def test_a_yes_to_a_page_no_read_priced_shows_nothing_until_a_read_prices_it(self):
+        from .importers import apply_offers, website_offers
+
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        self.etb.refresh_from_db()
+        self.find(Shop({}))
+        row = ShopProduct.objects.get(retailer=self.site)
+        self.assertIsNone(row.price)
+        ShopPage.objects.update(last_fetched_at=timezone.now())
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.client.post(reverse("checks"), {"action": "link_found", "row": row.pk, "price": ""})
+        # No price was seen and nothing was checked, so the public page shows nothing for the shop.
+        self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
+        page = self.client.get(self.etb.get_absolute_url())
+        self.assertNotContains(page, "Fenland Cards")
+        self.assertNotContains(page, "£0.00")
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.LINKED)
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.LINKED)
+        # The Yes is kept: the page names the product and goes to the front of the shop's next read.
+        self.assertEqual((ShopPage.objects.get(url=SITE_ETB).product, ShopPage.objects.get(url=SITE_ETB).last_fetched_at),
+                         (self.etb, None))
+        sitemap = "".join(f"<url><loc>{page.url}</loc></url>" for page in self.pages.values())
+
+        def fetch(url):
+            if url.endswith("/sitemap.xml"):
+                return f"<urlset>{sitemap}</urlset>".encode()
+            if url == SITE_ETB:
+                # A title that alone would only be offered to the owner: the Yes is what links it.
+                return site_page(barcode="", price="58.00")
+            raise ImportError_("missing")
+
+        checked = timezone.now()
+        offers = list(website_offers(self.site, fetch=fetch, pause=0, limit=1))
+        self.assertEqual([offer.url for offer in offers], [SITE_ETB])
+        apply_offers(self.site, offers, checked_at=checked, complete=False)
+        listing = Listing.objects.get(product=self.etb, retailer=self.site)
+        self.assertEqual((listing.price, listing.availability, listing.last_checked),
+                         (Decimal("58.00"), Listing.Availability.IN_STOCK, checked))
+        row.refresh_from_db()
+        self.assertEqual((row.status, row.price), (ShopProduct.Status.LINKED, Decimal("58.00")))
+
+    def test_a_new_offer_never_overwrites_the_owners_no_for_another_product(self):
+        from .importers import Offer, apply_offers
+
+        centre = make_product(self.set, name="Prismatic Evolutions Pokemon Center Elite Trainer Box", slug="pe-pc-etb")
+        make_listing(centre, self.home, price="90.00")
+        ShopProduct.objects.create(retailer=self.site, url=SITE_ETB, title="Prismatic Evolutions ETB", price=Decimal("58.00"),
+                                   suggested=self.etb, product=self.etb, confidence=100, source=ShopProduct.Source.FINDER,
+                                   status=ShopProduct.Status.IGNORED)
+        StockistSearch.objects.create(product=self.etb, retailer=self.site, searched_at=self.clock(),
+                                      outcome=StockistSearch.Outcome.IGNORED)
+        shop = Shop({})
+        self.find(shop)
+        self.assertEqual(shop.calls, [])
+        self.assertEqual(list(ShopProduct.objects.values_list("status", "suggested")),
+                         [(ShopProduct.Status.IGNORED, self.etb.pk)])
+        self.assertEqual(self.search(centre, self.site).outcome, StockistSearch.Outcome.NONE)
+        # So a read still never matches the page to the product the owner refused.
+        apply_offers(self.site, [Offer(title="Pokemon Prismatic Evolutions Elite Trainer Box", url=SITE_ETB,
+                                       price=Decimal("55.00"))], complete=False)
+        self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
+        # The same holds for a page read at a Shopify shop.
+        ShopProduct.objects.update(retailer=self.gg)
+        offer = Offer(title=PE_TITLE, url=f"{GG}/products/{PE_HANDLE}", price=Decimal("58.00"))
+        ShopProduct.objects.update(url=offer.url)
+        outcome = finder.Finder(clock=self.clock).review(centre, self.gg, offer, 80)
+        self.assertEqual(outcome, StockistSearch.Outcome.NONE)
+        self.assertEqual(list(ShopProduct.objects.values_list("status", "suggested")),
+                         [(ShopProduct.Status.IGNORED, self.etb.pk)])
+
+    def test_on_equal_scores_the_page_of_our_kind_is_chosen(self):
+        ShopPage.objects.all().delete()
+        box = f"{SITE}/shop/pokemon-prismatic-evolutions-booster-box-1"
+        etb = f"{SITE}/shop/pokemon-prismatic-evolutions-elite-trainer-box-2"
+        for url in (box, etb):
+            ShopPage.objects.create(retailer=self.site, url=url, slug_words=slug_words(url))
+        # Both addresses score the same for our Elite Trainer Box, and the booster box is indexed first.
+        self.assertEqual(finder.judge(self.etb, slug_words(box)), finder.judge(self.etb, slug_words(etb)))
+        self.find(Shop({}))
+        self.assertEqual(ShopProduct.objects.get(retailer=self.site).url, etb)
+        # With our barcode the one request goes to that page too.
+        ShopProduct.objects.all().delete()
+        StockistSearch.objects.all().delete()
+        Product.objects.filter(pk=self.etb.pk).update(ean=PE_BARCODE)
+        shop = Shop({etb: site_page(url=etb)})
+        self.find(shop)
+        self.assertEqual(shop.calls, [etb])
+        self.assertTrue(Listing.objects.filter(product=self.etb, retailer=self.site).exists())
+
+    def test_a_page_whose_title_names_another_game_is_never_linked(self):
+        ShopPage.objects.all().delete()
+        url = f"{SITE}/shop/prismatic-evolutions-elite-trainer-box"
+        ShopPage.objects.create(retailer=self.site, url=url, slug_words=slug_words(url))
+        shop = Shop({url: site_page(url=url, barcode="", title="Magic The Gathering Prismatic Evolutions Elite Trainer Box")})
+        self.find(shop)
+        self.assertEqual(shop.calls, [url])
+        self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
+        self.assertFalse(ShopProduct.objects.exists())
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.NONE)
+
+    def test_a_page_the_owner_refused_or_another_listing_holds_is_not_offered_from_the_index(self):
+        ShopPage.objects.exclude(url=SITE_ETB).delete()
+        # Not one of ours at all, said of a read's row: the page names no product in the index.
+        ShopProduct.objects.create(retailer=self.site, url=SITE_ETB, title="Prismatic Evolutions ETB",
+                                   status=ShopProduct.Status.IGNORED)
+        shop = Shop({SITE_ETB: site_page()})
+        self.find(shop)
+        self.assertEqual(shop.calls, [])
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.NONE)
+        # Another product's listing, before any read has named the page.
+        ShopProduct.objects.all().delete()
+        StockistSearch.objects.all().delete()
+        bundle = make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pe-bundle", product_type="bundle")
+        make_listing(bundle, self.site, url=SITE_ETB)
+        self.assertIsNone(ShopPage.objects.get(url=SITE_ETB).product)
+        self.find(shop)
+        self.assertEqual(shop.asked(SITE), [])
+        self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.NONE)
+        self.assertFalse(ShopProduct.objects.filter(retailer=self.site).exists())
 
     def test_a_likely_slug_keeps_what_an_earlier_read_saw_on_the_page(self):
         Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")

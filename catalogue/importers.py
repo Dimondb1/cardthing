@@ -1081,7 +1081,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     and is not complete: its unseen products keep their last state.
 
     Offers match a product by barcode, or by the link of a listing that was
-    added by hand for this retailer. Returns (found, updated, unmatched titles).
+    added by hand for this retailer, or by a page the owner said Yes to before
+    any read had priced it. Returns (found, updated, unmatched titles).
 
     An offer that changes nothing on its listing is not written: its listing is only stamped as
     checked, in chunks, before each progress post and at the end, and when the read fails part way.
@@ -1106,11 +1107,21 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
     # A page the owner said is not one of ours is never matched by name. A No to the stockist finder is
     # about one product only: the page can still be matched by name to any other.
-    ignored, refused = set(), {}
-    for url, source, suggested_pk, looked_for_pk in ShopProduct.objects.filter(
-        retailer=retailer, status=ShopProduct.Status.IGNORED
-    ).values_list("url", "source", "suggested_id", "product_id"):
-        if source == ShopProduct.Source.FINDER:
+    # A page the owner said Yes to before any read had priced it (a website page the stockist finder
+    # found by its address) waits: the first read that prices it adds its listing. Read in the same query.
+    ignored, refused, waiting = set(), {}, {}
+    listed = set(products_by_link.values())
+    answers = ShopProduct.objects.filter(retailer=retailer).filter(
+        Q(status=ShopProduct.Status.IGNORED)
+        | (Q(status=ShopProduct.Status.LINKED, suggested__isnull=False) & (Q(price__isnull=True) | Q(price__lte=0)))
+    ).order_by()
+    for row_pk, status, url, source, suggested_pk, looked_for_pk in answers.values_list(
+        "pk", "status", "url", "source", "suggested_id", "product_id"
+    ):
+        if status == ShopProduct.Status.LINKED:
+            if suggested_pk not in listed:
+                waiting[link_key(url)] = (row_pk, suggested_pk)
+        elif source == ShopProduct.Source.FINDER:
             refused[url] = {suggested_pk, looked_for_pk} - {None}
         else:
             ignored.add(url)
@@ -1132,6 +1143,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
             if product_pk is None:
                 product_pk = products_by_link.get(link_key(offer.url))
+            answer = None
+            if product_pk is None and link_key(offer.url) in waiting:
+                answer, product_pk = waiting[link_key(offer.url)]
             sealed = None
             if product_pk is None and offer.url not in ignored:
                 # No barcode and no hand-made link: guess from the name, but
@@ -1186,6 +1200,12 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             listing, created = Listing.objects.get_or_create(
                 product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
             )
+            if answer is not None:
+                # Priced now, so the row no longer waits.
+                ShopProduct.objects.filter(pk=answer).update(price=offer.price, availability=offer.availability,
+                                                             last_seen=checked_at)
+                waiting.pop(link_key(offer.url), None)
+                products_by_link[link_key(offer.url)] = product_pk
             if product_pk in seen_products and listing.availability != Listing.Availability.OUT_OF_STOCK:
                 # Several variants of one product: keep the cheapest one that is in stock.
                 if offer.availability == Listing.Availability.OUT_OF_STOCK or offer.price >= listing.price:

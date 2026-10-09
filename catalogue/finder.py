@@ -782,7 +782,7 @@ class Finder:
     def from_pages(self, product, shop):
         """The unclaimed page whose address words best name this product, at SUGGEST or more, or None."""
         ours = naming_words(product.name)
-        best = None
+        best, best_rank = None, None
         for page_pk, url, words, naming in self.shop_pages(shop) or ():
             # judge() caps a title this short of our naming words below SUGGEST, so it is not judged at all.
             if ours and len(ours & naming) < NAMING_SHARE * len(ours):
@@ -792,8 +792,11 @@ class Finder:
             if (named is not None and named.game != product.game.slug) or self.is_taken(shop, url, product):
                 continue
             value = judge(product, words, sealed)
-            if value >= SUGGEST and (best is None or value > best.value):
-                best = PageHit(page_pk, url, words, value)
+            # On equal scores a page whose address names our kind of product comes first: an address with a
+            # number on the end ("...-elite-trainer-box-2") scores no more than the same set's booster box.
+            rank = (value, sealed is not None and sealed.product_type == product.product_type)
+            if value >= SUGGEST and (best is None or rank > best_rank):
+                best, best_rank = PageHit(page_pk, url, words, value), rank
         return best
 
     def search_website(self, product, shop):
@@ -808,13 +811,11 @@ class Finder:
             # Reading the page could not make it sure: the address falls short of our name and we have no
             # barcode to compare. The owner decides, and the shop is not asked.
             # A row an earlier read wrote for the page keeps what that read saw, and when.
+            # Nothing is guessed: with no read there is no price, and Yes then waits for a read to price it.
             answer = {"suggested": product, "product": product, "confidence": hit.value,
                       "status": ShopProduct.Status.REVIEW, "source": ShopProduct.Source.FINDER}
-            ShopProduct.objects.update_or_create(
-                retailer=shop, url=hit.url, defaults=answer,
-                create_defaults={**answer, "title": hit.words[:300], "last_seen": self.clock()},
-            )
-            return self.note(product, shop, StockistSearch.Outcome.REVIEW, hit.url, hit.value)
+            return self.ask_owner(product, shop, hit.url, hit.value, answer,
+                                  {**answer, "title": hit.words[:300], "last_seen": self.clock()})
         return self.decide_page(product, shop, hit)
 
     def decide_page(self, product, shop, hit):
@@ -906,15 +907,27 @@ class Finder:
         return self.note(product, shop, StockistSearch.Outcome.LINKED, offer.url, value)
 
     def review(self, product, shop, offer, value):
+        return self.ask_owner(product, shop, offer.url, value, {
+            "title": offer.title[:300], "price": offer.price, "availability": offer.availability,
+            "image_url": (offer.image or "")[:1000],
+            "suggested": product, "product": product, "confidence": value,
+            "status": ShopProduct.Status.REVIEW, "source": ShopProduct.Source.FINDER,
+            "last_seen": self.clock(),
+        })
+
+    def ask_owner(self, product, shop, url, value, defaults, create_defaults=None):
+        """Put the page on the Things to check page for the owner's Yes or No about this product.
+
+        A page whose row is already answered is left as it is and noted as not found: a No for another
+        product is how reads know never to match the page to that product, and a Yes is how they know
+        which product it is. Asking again about a new product would wipe either.
+        """
+        if ShopProduct.objects.filter(retailer=shop, url=url).exclude(status=ShopProduct.Status.REVIEW).exists():
+            return self.note(product, shop, StockistSearch.Outcome.NONE, url, value)
         ShopProduct.objects.update_or_create(
-            retailer=shop, url=offer.url,
-            defaults={"title": offer.title[:300], "price": offer.price, "availability": offer.availability,
-                      "image_url": (offer.image or "")[:1000],
-                      "suggested": product, "product": product, "confidence": value,
-                      "status": ShopProduct.Status.REVIEW, "source": ShopProduct.Source.FINDER,
-                      "last_seen": self.clock()},
+            retailer=shop, url=url, defaults=defaults, create_defaults=create_defaults or defaults,
         )
-        return self.note(product, shop, StockistSearch.Outcome.REVIEW, offer.url, value)
+        return self.note(product, shop, StockistSearch.Outcome.REVIEW, url, value)
 
     def note(self, product, shop, outcome, url="", confidence=0):
         StockistSearch.objects.update_or_create(
@@ -933,18 +946,26 @@ def find(limit=BATCH, **kwargs):
 
 def link(row):
     """Yes: add the listing for the row's product at its shop. The next read or check of the shop prices
-    it. Returns the listing, or None when the row names no product.
+    it. Returns the listing, or None when the row names no product or saw no price.
 
     The listing says what the row saw, when it saw it: its price and stock as at last_seen. A row that
     did not record the stock is linked as out of stock, so nothing is offered as buyable on a guess;
     the next read of the shop sets the real stock.
+
+    A row that saw no price (a website page found by its address and never read) adds nothing the public
+    can see, because no price was checked. The Yes stays on the row, the page goes to the front of the
+    shop's next read, and that read adds the listing once it has priced the page.
     """
     product = row.suggested
     if product is None:
         return None
+    if not (row.price and row.price > 0) and not Listing.objects.filter(product=product, retailer=row.retailer).exists():
+        ShopPage.objects.filter(retailer=row.retailer, url=row.url).update(product=product, last_fetched_at=None)
+        answered(row, ShopProduct.Status.LINKED, StockistSearch.Outcome.LINKED)
+        return None
     listing, created = Listing.objects.get_or_create(
         product=product, retailer=row.retailer,
-        defaults={"url": row.url, "price": row.price or 0,
+        defaults={"url": row.url, "price": row.price,
                   "availability": row.availability or Listing.Availability.OUT_OF_STOCK,
                   # The price and stock were seen then, not now.
                   "last_checked": min(row.last_seen, timezone.now())},
@@ -955,14 +976,7 @@ def link(row):
     if row.image_url and not product.image_src:
         product.image_url = row.image_url
         product.save(update_fields=["image_url"])
-    row.status = ShopProduct.Status.LINKED
-    row.save(update_fields=["status"])
-    if row.source == ShopProduct.Source.FINDER and row.product_id:
-        StockistSearch.objects.update_or_create(
-            product_id=row.product_id, retailer=row.retailer,
-            defaults={"searched_at": timezone.now(), "outcome": StockistSearch.Outcome.LINKED, "url": row.url[:1000],
-                      "confidence": row.confidence},
-        )
+    answered(row, ShopProduct.Status.LINKED, StockistSearch.Outcome.LINKED)
     if created:
         from .sanity import judge_product
 
@@ -975,12 +989,17 @@ def ignore(row):
     """No: the row is not this product. A row the finder found is never asked about at that shop again,
     and the No is about that product only: imports and the finder can still match the page to another.
     A row an import found is not one of ours at all, so its page is never matched by name again."""
-    row.status = ShopProduct.Status.IGNORED
+    answered(row, ShopProduct.Status.IGNORED, StockistSearch.Outcome.IGNORED)
+
+
+def answered(row, status, outcome):
+    """Keep the owner's answer on the row and, for a row the finder found, on its search."""
+    row.status = status
     row.save(update_fields=["status"])
     if row.source == ShopProduct.Source.FINDER and row.product_id:
         StockistSearch.objects.update_or_create(
             product_id=row.product_id, retailer=row.retailer,
-            defaults={"searched_at": timezone.now(), "outcome": StockistSearch.Outcome.IGNORED, "url": row.url[:1000],
+            defaults={"searched_at": timezone.now(), "outcome": outcome, "url": row.url[:1000],
                       "confidence": row.confidence},
         )
 

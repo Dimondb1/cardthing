@@ -999,10 +999,14 @@ name both ways, or we have a barcode to compare. The same rules then
 decide, and a sure match without barcodes also needs the page's own title
 to agree. A likely address that reading could not make sure is listed on
 Things to check with the address words as its title and no price (or with
-what an earlier read of the page saw, and when), so the shop is not asked;
-Yes adds it with what was seen, or as out of stock when nothing was, until
-the shop's next read prices it. A website shop not read yet has no index: it is noted as not
-found and not asked.
+what an earlier read of the page saw, and when), so the shop is not asked.
+Yes adds it with what was seen, and when. When no price was seen, Yes adds
+nothing to the site yet: the page goes to the front of the shop's next read,
+and that read adds the listing once it has priced the page. On equal scores
+a page whose address names our kind of product is read first. A page whose
+row you have already answered (Yes, or No for another product) is never
+offered again, so the answer stands. A website shop not read yet has no
+index: it is noted as not found and not asked.
 
 A title must carry at least half of the words that name our product beyond
 its kind, so another set's Elite Trainer Box is never offered for ours. A

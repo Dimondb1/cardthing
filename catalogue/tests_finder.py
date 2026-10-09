@@ -340,6 +340,16 @@ class SuggestTests(FinderCase):
         self.find(self.shop())
         self.assertFalse(Listing.objects.filter(retailer=self.gg).exists())
         self.assertEqual(self.search(self.etb, self.gg).outcome, StockistSearch.Outcome.REVIEW)
+        # The row keeps the shop's barcode, so neither the autopilot nor Claude links it on its name.
+        row = ShopProduct.objects.get(retailer=self.gg)
+        self.assertEqual((row.shop_ean, row.confidence), (PE_BARCODE, 100))
+        from . import autopilot
+
+        make_listing(self.etb, make_retailer("Other One", delivery_cost=Decimal("0")), price=str(row.price))
+        make_listing(self.etb, make_retailer("Other Two", delivery_cost=Decimal("0")), price=str(row.price))
+        autopilot.run()
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.REVIEW)
 
     def test_a_barcode_on_one_side_only_waits_for_a_tap(self):
         self.find(self.shop())

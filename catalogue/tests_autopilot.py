@@ -78,6 +78,40 @@ class FoundAtAnotherShopTests(Base):
         self.assertIsNotNone(CheckAnswer.objects.get().undone_at)
         self.assertEqual(autopilot.undo(CheckAnswer.objects.get()), "")
 
+    def test_a_found_page_whose_barcode_differs_is_never_linked_on_its_name(self):
+        Product.objects.filter(pk=self.product.pk).update(ean="0820650851230")
+        self.product.refresh_from_db()
+        self.shop(100)
+        self.shop(110)
+        other = self.found(price="104.00")
+        unread = self.found(price="104.00")
+        theirs_only = self.found(price="104.00", product=make_product(self.set, name="Surging Sparks Booster Bundle",
+                                                                     product_type="bundle"), title="Surging Sparks Booster Bundle")
+        self.shop(30, product=theirs_only.suggested, title="Surging Sparks Booster Bundle")
+        self.shop(31, product=theirs_only.suggested, title="Surging Sparks Booster Bundle")
+        ShopProduct.objects.filter(pk=other.pk).update(shop_ean="5099999999999")
+        ShopProduct.objects.filter(pk=theirs_only.pk).update(shop_ean="5099999999999", price=Decimal("30.50"))
+        autopilot.run()
+        for row, status in ((other, ShopProduct.Status.REVIEW), (unread, ShopProduct.Status.REVIEW),
+                            (theirs_only, ShopProduct.Status.LINKED)):
+            row.refresh_from_db()
+            self.assertEqual(row.status, status, row.title)
+        ShopProduct.objects.filter(pk=unread.pk).update(shop_ean="820650851230")   # the same code, a UPC
+        autopilot.run()
+        unread.refresh_from_db()
+        self.assertEqual(unread.status, ShopProduct.Status.LINKED)
+
+    def test_the_barcode_check_in_words(self):
+        mine = make_product(self.set, name="Surging Sparks Tin", product_type="tin", ean="0820650851230")
+        cases = [
+            ((mine, "820650851230"), "same"), ((mine, "5099999999999"), "different"), ((mine, ""), "shop gives none"),
+            ((self.product, "5099999999999"), "we hold none"), ((self.product, ""), "neither has one"),
+            ((mine, None), "not recorded"),
+        ]
+        for (product, shop_ean), words in cases:
+            self.assertEqual(autopilot.barcode_check(product, shop_ean), words)
+        self.assertEqual(autopilot.barcode_check(mine, "820650851230", marketplace=True), "not compared")
+
     def test_a_likely_name_or_no_shop_to_compare_waits_for_the_owner(self):
         likely = self.found(confidence=90)
         alone = self.found(product=make_product(self.set, name="Surging Sparks Elite Trainer Box"),

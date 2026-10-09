@@ -1101,6 +1101,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     a listing's link or title, never creates a listing, and can only take a listing out of stock.
     """
     checked_at = checked_at or timezone.now()
+    marketplace = retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY)
     products_by_link = {
         link_key(url): pk
         for pk, url in Listing.objects.filter(retailer=retailer).values_list("product_id", "url")
@@ -1235,13 +1236,16 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     continue
             seen_products.add(product_pk)
             title = (offer.title or "")[:300]
+            # The shop's own barcode, to compare with ours. A marketplace's is our own, copied in.
+            shop_ean = listing.shop_ean if marketplace else (offer.ean or "")[:20]
             # The shop's own publishing time is kept from the first read that gives it, so a later
             # republish cannot make a pre-order look as if it reached the site sooner than it did.
             published = offer.published_at if listing.shop_published_at is None else None
-            if created or listing.url != offer.url or listing.title != title or published:
+            if created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published:
                 listing.url = offer.url
                 listing.title = title
-                fields = ["url", "title"]
+                listing.shop_ean = shop_ean
+                fields = ["url", "title", "shop_ean"]
                 if published:
                     listing.shop_published_at = published
                     fields.append("shop_published_at")

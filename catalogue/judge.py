@@ -703,6 +703,9 @@ def ruling(row, answer, partner=None):
             return None, "no other shop sells it, so there is no price to compare"
         if autopilot.contradiction(row.product, row.shop_product.title):
             return None, "the shop's title names another kind of product"
+        barred = autopilot.barcode_bars_link(row.product, row.shop_product)
+        if barred:
+            return None, barred
         if not autopilot.LINK_LOW <= price / row.rate <= autopilot.LINK_HIGH:
             return None, "the price is far from what other shops charge"
         return "link", ""

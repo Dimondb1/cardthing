@@ -513,6 +513,11 @@ class Listing(models.Model):
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="listings")
     url = models.URLField("product link", max_length=1000)
     title = models.CharField(max_length=300, blank=True, help_text="The shop's own name for it, kept so a match can be re-judged when the rules change.")
+    shop_ean = models.CharField(
+        "shop's barcode", max_length=20, null=True, blank=True,
+        help_text="The barcode the shop gives, blank when it gives none. Empty (None) until a read records it, "
+        "and never recorded for eBay or Amazon, whose barcode is our own.",
+    )
     price = models.DecimalField(max_digits=8, decimal_places=2)
     delivery_cost = models.DecimalField(
         max_digits=6,
@@ -661,6 +666,10 @@ class ShopProduct(models.Model):
         help_text="What the shop said about stock when this row was written. Blank when it was not recorded.",
     )
     image_url = models.URLField(max_length=1000, blank=True)
+    shop_ean = models.CharField(
+        "shop's barcode", max_length=20, null=True, blank=True,
+        help_text="The barcode the shop's page gave, blank when it gave none. Empty (None) when the page was not read.",
+    )
     suggested = models.ForeignKey(
         Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
         verbose_name="our product",

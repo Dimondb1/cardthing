@@ -894,7 +894,7 @@ class Finder:
     def review(self, product, shop, offer, value):
         return self.ask_owner(product, shop, offer.url, value, {
             "title": offer.title[:300], "price": offer.price, "availability": offer.availability,
-            "image_url": (offer.image or "")[:1000],
+            "image_url": (offer.image or "")[:1000], "shop_ean": (offer.ean or "")[:20],
             "suggested": product, "product": product, "confidence": value,
             "status": ShopProduct.Status.REVIEW, "source": ShopProduct.Source.FINDER,
             "last_seen": self.clock(),

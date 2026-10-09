@@ -72,6 +72,33 @@ MULTI_PACK = re.compile(r"\d+\s*[-x×]?\s*(?:booster\s*)?packs?\b|\bpacks?\s+of\
 SET_CODE = re.compile(r"(?<![a-z0-9])(op|eb|prb|st|fb|bt)-?0*(\d{1,2})(?![0-9])", re.I)
 
 
+def barcode_check(product, shop_ean, marketplace=False):
+    """How the shop's barcode compares with ours, in words: "same", "different", "shop gives none", "we hold
+    none", "neither has one", "not recorded" (no read has recorded it yet) or "not compared" (eBay and
+    Amazon, whose barcode is our own, copied in)."""
+    from .importers import ean_key
+
+    if marketplace:
+        return "not compared"
+    if shop_ean is None:
+        return "not recorded"
+    ours, theirs = ean_key(product.ean), ean_key(shop_ean)
+    if ours and theirs:
+        return "same" if ours == theirs else "different"
+    return "we hold none" if theirs else "shop gives none" if ours else "neither has one"
+
+
+def barcode_bars_link(product, shop_row):
+    """Why a found page may not be linked on its name, or "": its barcode is not ours, or it is not
+    recorded yet while we hold one. The finder sends exactly these pages to the owner."""
+    check = barcode_check(product, shop_row.shop_ean)
+    if check == "different":
+        return "the shop's barcode is not ours, so only you can say"
+    if check == "not recorded" and product.ean:
+        return "the shop's barcode is not recorded yet. The finder records it when it looks again"
+    return ""
+
+
 class Stale(Exception):
     """The row changed between the autopilot reading it and acting on it: it is left for the next run."""
 
@@ -246,6 +273,9 @@ class Autopilot:
                 continue
             # A shop that lists the product already is the owner's to sort: linking would move its listing.
             if (product.pk, row.retailer_id) in listed:
+                continue
+            # A different barcode never links on the name alone: the finder sent it here for the owner.
+            if barcode_bars_link(product, row):
                 continue
             if row.confidence >= AUTO_LINK and ratio is not None and LINK_LOW <= ratio <= LINK_HIGH:
                 who = "the other shop charges" if len(others) == 1 else f"that {len(others)} other shops charge"

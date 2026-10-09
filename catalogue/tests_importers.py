@@ -282,6 +282,47 @@ class ImportProductsTests(TestCase):
         self.assertIn("not a web address", unmatched[0])
 
 
+class ShopBarcodeTests(TestCase):
+    def test_a_read_keeps_the_shops_barcode_and_an_unchanged_read_writes_nothing(self):
+        from .importers import Offer
+
+        retailer = make_retailer("Poke Collect", source_type=Retailer.Source.SHOPIFY, source_url="https://poke-collect.example")
+        product = make_product(make_set(make_game()), ean="0820650851230")
+        offer = Offer(title="Prismatic ETB", url="https://poke-collect.example/products/etb", price=Decimal("50"),
+                      ean="0820650851230")
+        apply_offers(retailer, [offer])
+        listing = Listing.objects.get(product=product)
+        self.assertEqual(listing.shop_ean, "0820650851230")
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as queries:
+            apply_offers(retailer, [offer])
+        self.assertFalse([q for q in queries.captured_queries if q["sql"].startswith("UPDATE") and "shop_ean" in q["sql"]])
+        self.assertEqual(Listing.objects.get(pk=listing.pk).shop_ean, "0820650851230")
+
+    def test_a_shop_that_gives_no_barcode_is_recorded_as_giving_none(self):
+        from .importers import Offer
+
+        retailer = make_retailer("Poke Collect", source_type=Retailer.Source.SHOPIFY, source_url="https://poke-collect.example")
+        product = make_product(make_set(make_game()))
+        listing = make_listing(product, retailer, price="1.00", url="https://poke-collect.example/products/etb")
+        self.assertIsNone(listing.shop_ean)
+        apply_offers(retailer, [Offer(title="Prismatic ETB", url=listing.url, price=Decimal("50"))])
+        self.assertEqual(Listing.objects.get(pk=listing.pk).shop_ean, "")
+
+    def test_ebay_and_amazon_barcodes_are_never_recorded(self):
+        from .importers import Offer
+
+        for source in (Retailer.Source.EBAY, Retailer.Source.AMAZON):
+            retailer = make_retailer(f"Market {source}", source_type=source)
+            game = make_game(name=f"Game {source}", slug=f"game-{source}")
+            product = make_product(make_set(game, slug=f"set-{source}"), name=f"ETB {source}", ean="0820650851230")
+            apply_offers(retailer, [Offer(title="ETB", url=f"https://{source}.example/itm/1", price=Decimal("50"),
+                                          ean="0820650851230", product_pk=product.pk)], complete=False)
+            self.assertIsNone(Listing.objects.get(product=product).shop_ean)
+
+
 class LinkMatchingTests(TestCase):
     def test_offer_matches_a_hand_added_listing_by_link(self):
         from .importers import Offer, link_key
@@ -993,7 +1034,8 @@ class WriteSkippingTests(TestCase):
             product = make_product(product_set, name=f"Prismatic Evolutions Box {i}", ean=f"082065085{i:04d}",
                                    image_url="https://img.example/x.jpg")
             listing = make_listing(product, self.retailer, price="40.00", delivery="2.00",
-                                   url=f"https://northgate.example/products/box-{i}", title=f"Box {i}")
+                                   url=f"https://northgate.example/products/box-{i}", title=f"Box {i}",
+                                   shop_ean=f"082065085{i:04d}")
             self.products.append(product)
             self.listings.append(listing)
         self.old = timezone.now() - timedelta(hours=5)

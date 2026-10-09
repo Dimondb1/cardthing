@@ -205,6 +205,16 @@ class FoundTests(Base):
         self.assertEqual(self.answers(), [])
         self.assertEqual(set(Ask.objects.values_list("action", flat=True)), {Ask.Action.SUGGESTED})
 
+    def test_claude_never_links_a_found_page_whose_barcode_differs(self):
+        self.switch_on()
+        Product.objects.filter(pk=self.product.pk).update(ean="0820650851230")
+        row = self.found(price="101.00")
+        ShopProduct.objects.filter(pk=row.pk).update(shop_ean="5099999999999")
+        self.ask()
+        row.refresh_from_db()
+        self.assertEqual(row.status, ShopProduct.Status.REVIEW)
+        self.assertEqual(Ask.objects.get().action, Ask.Action.SUGGESTED)
+
     def test_no_link_when_no_other_shop_sells_it(self):
         self.switch_on()
         tin = make_product(self.set, name="Surging Sparks Tin", product_type="tin")

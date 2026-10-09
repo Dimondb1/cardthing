@@ -39,7 +39,7 @@ from django.utils.dateparse import parse_datetime
 
 from . import pricing
 from .classify import GAMES, classify, find_game, variant_differs
-from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
+from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, same_language, score, shop_title
 from .models import (
     Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, stale_cutoff,
 )
@@ -1358,7 +1358,9 @@ class Catalogue:
         title = shop_title(title)
         title_words = set(self._words(title))
         for pk in self.by_key.get((game, match_key(title)), ()):
-            return (pk, self.names[pk]), AUTO_LINK
+            # The key drops set codes and language words: "151 (sv2a)" must not take our English "151".
+            if same_language(self.names[pk], title):
+                return (pk, self.names[pk]), AUTO_LINK
         counts = {}
         for word in title_words:
             for pk in self.index.get(word, ()):

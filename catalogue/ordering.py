@@ -8,22 +8,12 @@ from datetime import timedelta
 from django.db.models import Case, DecimalField, ExpressionWrapper, F, IntegerField, Min, OuterRef, Q, Subquery, Value, When
 from django.utils import timezone
 
+from . import languages
 from .models import DailyLowestPrice, Listing, stale_cutoff
 
-# Language choices. "English" means the name says no other language.
-LANGUAGES = [
-    ("en", "English"),
-    ("ja", "Japanese"),
-    ("zh", "Chinese"),
-    ("ko", "Korean"),
-    ("other", "Other languages"),
-]
-LANGUAGE_WORDS = {
-    "ja": ["japanese"],
-    "zh": ["chinese"],
-    "ko": ["korean"],
-    "other": ["german", "french", "italian", "spanish", "portuguese", "thai", "russian", "indonesian"],
-}
+# Language choices, from each product's stored language (catalogue/languages.py). "English" means
+# nothing in its name or set says otherwise.
+LANGUAGES = languages.FILTER
 
 SORTS = [
     ("newest", "Newest first"),
@@ -34,14 +24,6 @@ SORTS = [
 LOW_DAYS = 90
 
 
-def language_q(code):
-    words = LANGUAGE_WORDS.get(code, [])
-    q = Q()
-    for word in words:
-        q |= Q(name__icontains=word)
-    return q
-
-
 def apply_languages(products, codes):
     """Keep products in any of the chosen languages. No choice means every language."""
     codes = [c for c in codes if c in dict(LANGUAGES)]
@@ -50,13 +32,13 @@ def apply_languages(products, codes):
     q = Q()
     for code in codes:
         if code == "en":
-            foreign = Q()
-            for other in LANGUAGE_WORDS.values():
-                for word in other:
-                    foreign |= Q(name__icontains=word)
-            q |= ~foreign
+            q |= Q(language=languages.ENGLISH)
+        elif code == "other":
+            q |= Q(language__in=languages.OTHER)
+        elif code == "zh":
+            q |= Q(language__in=languages.CHINESE_FAMILY)
         else:
-            q |= language_q(code)
+            q |= Q(language=code)
     return products.filter(q)
 
 

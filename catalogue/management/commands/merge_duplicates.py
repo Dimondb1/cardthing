@@ -27,6 +27,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from catalogue.languages import product_language
 from catalogue.matching import match_key
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, Product, ProductAlias, Restock, ShopProduct, StockAlert,
@@ -303,7 +304,9 @@ def duplicate_groups(loose=False):
     for product in Product.objects.filter(is_active=True).select_related("game", "product_set").order_by("pk"):
         key = loose_key(product.name, product.game.slug) if loose else merge_key(product.name)
         if key:
-            groups[(product.game_id, product.product_type, key)].append(product)
+            # The key drops set codes and language words, so the language keeps a Japanese box (sv11B)
+            # from ever being merged into the English one of the same name.
+            groups[(product.game_id, product.product_type, product_language(product), key)].append(product)
     found = []
     for group in groups.values():
         if len(group) < 2:

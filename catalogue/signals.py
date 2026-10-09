@@ -8,6 +8,7 @@ from django.db import transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
+from .languages import product_language
 from .models import Game, Listing, Product, ProductSet
 from .search import build_search_text
 
@@ -79,13 +80,16 @@ def clear_home_lists(sender, **kwargs):
 
 
 def _refresh(products):
+    """Keep what a product's set and game decide up to date: its search text and its language."""
     changed = []
     for product in products.select_related("game", "product_set"):
+        language = product_language(product)
+        product.language, old = language, product.language
         text = build_search_text(product)
-        if text != product.search_text:
+        if (text, language) != (product.search_text, old):
             product.search_text = text
             changed.append(product)
-    Product.objects.bulk_update(changed, ["search_text"], batch_size=500)
+    Product.objects.bulk_update(changed, ["search_text", "language"], batch_size=500)
 
 
 @receiver(post_save, sender=Game)

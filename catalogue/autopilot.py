@@ -38,7 +38,7 @@ from django.conf import settings
 from django.db import DatabaseError, models, transaction
 from django.utils import timezone
 
-from . import checks, sanity
+from . import checks, languages, sanity
 from .classify import TYPES, box_contents, find_type
 from .matching import AUTO_LINK, expand
 from .models import CheckAnswer, Listing, Product, ProductSet, Release, ShopProduct
@@ -141,6 +141,22 @@ def contradiction(product, title):
     if mine and named and not mine & named:
         found = ", ".join(sorted(f"{family.upper()}-{number:02d}" for family, number in named))
         return f"the shop's title names {found}, another set"
+    return language_differs(product, title)
+
+
+def language_differs(product, title):
+    """Why the shop's title is plainly in another language than our product, or "": both state their
+    language and they differ, or ours is English and the title states another or names a set code only
+    another language has (sv2a). A Japanese code on our side only implies the language, so a title that
+    states Korean beside it is left alone: Korean reuses the Japanese codes."""
+    game = product.game.slug
+    ours, theirs = languages.stated(product.name), languages.stated(title)
+    if ours and theirs and not languages.same(ours, theirs):
+        return f"the shop's title says {languages.name(theirs)}, not {languages.name(ours)}"
+    if not languages.product_language(product):
+        theirs = languages.language_of(title, game)
+        if theirs:
+            return f"the shop's title says {languages.name(theirs)}, not English"
     return ""
 
 

@@ -1132,8 +1132,9 @@ def set_rules(game_slug, sets):
     filler = filler_words(game_slug)
     rules = []
     for pk, name, code in sets:
+        # A set's language is what its name says, or what a code only another language has implies.
+        language = language_of(f"{name} {code or ''}", game_slug).lower()
         code = compact_code(code) if usable_code(code) else ""
-        language = language_of(name).lower()
         name_words = {w for w in words_of(name) if w not in filler and w not in language.split()}
         rules.append((pk, code, name_words, len(name), language))
     return rules

@@ -12,6 +12,8 @@ import unicodedata
 
 from django.db.models import Case, IntegerField, Value, When
 
+from . import languages
+
 # Extra words people use for each product type.
 TYPE_ALIASES = {
     "booster_box": "display",
@@ -50,6 +52,9 @@ def build_search_text(product):
     game = product.game
     parts += [game.name, game.short_name, game.search_aliases.replace(",", " ")]
     parts += [product.get_product_type_display(), TYPE_ALIASES.get(product.product_type, "")]
+    if getattr(product, "language", ""):
+        # So "japanese 151" finds a box whose name only says sv2a.
+        parts.append(languages.name(product.language))
     parts.append(product.ean)
     return " " + normalise(" ".join(part for part in parts if part)) + " "
 

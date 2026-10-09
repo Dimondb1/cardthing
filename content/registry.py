@@ -999,6 +999,8 @@ ENTRIES = [
     Entry("product.details.set", T, "Detail: set", "Set", "Label in product details."),
     Entry("product.details.type", T, "Detail: product type", "Product type",
           "Label in product details."),
+    Entry("product.details.language", T, "Detail: language", "Language",
+          "Label in product details. The language is worked out from the product's name and set."),
     Entry("product.details.release_date", T, "Detail: release date", "Release date",
           "Label in product details."),
     Entry("product.details.barcode", T, "Detail: barcode", "Barcode",

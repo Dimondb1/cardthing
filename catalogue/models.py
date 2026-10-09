@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
+from .languages import product_language
 from .search import build_search_text
 
 
@@ -186,6 +187,9 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     search_text = models.TextField(editable=False, blank=True)
+    # Worked out from the name and the set whenever the product is saved (catalogue/languages.py). To
+    # correct it, put the language in the name, for example "(Japanese)".
+    language = models.CharField(max_length=7, blank=True, editable=False, db_index=True, help_text="Blank for English.")
 
     objects = ProductQuerySet.as_manager()
 
@@ -202,10 +206,11 @@ class Product(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)[:220]
+        self.language = product_language(self)
         self.search_text = build_search_text(self)
         update_fields = kwargs.get("update_fields")
-        if update_fields is not None and "search_text" not in update_fields:
-            kwargs["update_fields"] = list(update_fields) + ["search_text"]
+        if update_fields is not None:
+            kwargs["update_fields"] = list(set(update_fields) | {"search_text", "language"})
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
@@ -217,6 +222,13 @@ class Product(models.Model):
         from .types import type_label
 
         return type_label(self.game.slug, self.product_type)
+
+    @property
+    def language_name(self):
+        """The product's language when it is not English ("Japanese"), else ""."""
+        from .languages import name
+
+        return name(self.language) if self.language else ""
 
     @property
     def image_src(self):

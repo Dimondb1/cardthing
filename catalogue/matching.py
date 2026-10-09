@@ -10,6 +10,7 @@ Pack" or a case of six boxes.
 import re
 from html import unescape as html_unescape
 
+from . import languages
 from .search import normalise
 
 # Words in our product names that carry no meaning for matching.
@@ -155,12 +156,23 @@ def score(product_name, title):
     for word in DIFFERENT:
         if word in theirs and word not in ours_text:
             return min(value, SUGGEST - 1)
+    # A title in another language is another product, whether it says so in words, a seller's code or
+    # a set code only that language has ("151 sv2a" is Japanese, our "151" English).
+    if not same_language(product_name, title):
+        return min(value, SUGGEST - 1)
     for kind in TYPE_WORDS:
         if (kind in theirs) != (kind in ours_text):
             if kind == "display" and "booster box" in ours_text:
                 continue
             value = min(value, SUGGEST + 10)
     return value
+
+
+def same_language(product_name, title):
+    """False when the shop's title is in a language our product's name is not. A title that names no
+    language says nothing: shops selling only Japanese boxes often leave it out."""
+    theirs = languages.language_of(title or "", loose=True)
+    return not theirs or languages.same(languages.language_of(product_name or ""), theirs)
 
 
 def best_match(title, products):

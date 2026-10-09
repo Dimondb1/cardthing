@@ -13,6 +13,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
+from . import languages
 from .matching import expand
 
 # slug, name, short name, words that identify the game in a title, vendor or tag
@@ -264,21 +265,16 @@ def tidy_name(title):
     return drop_repeated_tail(drop_repeated_set(name).replace(" | ", " "))
 
 
-LANGUAGE = re.compile(
-    r"\b(traditional chinese|simplified chinese|japanese|korean|chinese|german|french|italian|spanish|portuguese|"
-    r"thai|russian|indonesian)\b",
-    re.I,
-)
+def language_of(title, game="", loose=False):
+    """The language a title is in ("Japanese", "Simplified Chinese"), or "" for English: in words, a
+    seller's code, a script, or a set code only another language has (catalogue/languages.py)."""
+    code = languages.language_of(title or "", game, loose=loose)
+    return languages.name(code) if code else ""
 
 
-def language_of(title):
-    """The language a title names ("[JAPANESE]", "Korean"), capitalised, or ""."""
-    match = LANGUAGE.search(title)
-    return match.group(1).title() if match else ""
-
-
-def clean_name(title):
-    language = language_of(title)
+def clean_name(title, game=""):
+    # A shop's title, so a seller's "JP" counts.
+    code = languages.language_of(title or "", game, loose=True)
     name = tidy_name(title)
     name = re.sub(r"\s+", " ", name).strip()
     name = drop_repeated_tail(PREFIXES.sub("", name))
@@ -290,10 +286,10 @@ def clean_name(title):
     name = re.sub(r"\s*:\s*", ": ", name)
     name = re.sub(r"\s+", " ", name).strip(" :,-")
     name = name.replace("Elite Trainer Box", "Elite Trainer Box").replace(" Etb", " ETB").replace(" ETB", " Elite Trainer Box")
-    # A language edition is a different product; keep it in the name even
-    # when the shop wrote it in brackets, which are otherwise noise.
-    if language and not LANGUAGE.search(name):
-        name = f"{name} ({language})"
+    # A language edition is a different product; keep it in the name in words even when the shop wrote
+    # it in brackets, which are otherwise noise, or gave only a set code ("151 (sv2a)" is Japanese).
+    if code and not languages.stated(name):
+        name = f"{name} ({languages.name(code)})"
     return name[:200]
 
 
@@ -319,7 +315,7 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
         return None
     if price is not None and price < MIN_PRICE:
         return None
-    name = clean_name(title)
+    name = clean_name(title, game)
     if len(name) < 6 or is_generic(name):
         return None
     return Sealed(game=game, product_type=kind, name=name)

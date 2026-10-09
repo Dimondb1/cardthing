@@ -868,7 +868,7 @@ def page_status(now=None):
     if not settings.RIPRAPTOR_CLAUDE:
         status = "Claude is switched off in the server settings."
     elif not has_key:
-        status = "Claude needs a key."
+        status = "Claude needs a key. Paste it below and tap Save key."
     elif state.problem in STOPPING and state.problem_at and now - state.problem_at < STOPPED_FOR:
         status = f"Claude has stopped. {PROBLEMS[state.problem]}"
     elif not state.enabled:

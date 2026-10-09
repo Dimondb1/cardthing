@@ -51,6 +51,15 @@
     </div>{% endif %}
     <p class="note">Claude reads the rows the free checks leave and says whether two things are the same product. In trial it only suggests: its answer shows under each row. Once you agree with its answers, tap Let Claude act. It then acts only when it is sure and the site's own checks agree, never counts a price as right and never merges by itself. Each act is listed under Sorted for you with Undo.</p>
     <details{% if not claude.has_key %} open{% endif %}><summary>Claude settings and key</summary>
+      {% if claude.env_key %}<p class="note">The key is set in the server settings.</p>{% else %}
+      <form method="post" class="addset" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="claude_key_save">
+        <label>Anthropic API key <input type="password" name="claude_key" autocomplete="off" required></label>
+        {% if claude.state.key_hint %}<p class="note">Saved key ends in {{ claude.state.key_hint }}.</p>{% endif %}
+        <input type="submit" value="Save key">
+      </form>
+      {% if claude.state.key_hint %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_key_forget"><input type="submit" value="Forget the key"></form>{% endif %}
+      <p class="note">To get a key: sign up at console.anthropic.com, buy credit under Billing, set a monthly spend limit under Limits, then create a key under API keys and paste it here. Saving it checks it with Anthropic for free. It is kept in a file only the site can read and is never shown again.</p>
+      {% endif %}
       <form method="post" class="addset">{% csrf_token %}<input type="hidden" name="action" value="claude_settings">
         <label>Model <select name="model">{% for code, label, cost in claude.models %}<option value="{{ code }}"{% if code == claude.state.model %} selected{% endif %}>{{ label }}, {{ cost }}</option>{% endfor %}</select></label>
         <label>Effort <select name="effort">
@@ -61,15 +70,6 @@
         <label>Monthly limit in US dollars, up to {{ claude.max_monthly }} <input type="number" name="budget" min="0" max="{{ claude.max_monthly }}" step="0.01" value="{{ claude.state.monthly_budget_usd }}"></label>
         <input type="submit" value="Save settings">
       </form>
-      {% if claude.env_key %}<p class="note">The key is set in the server settings.</p>{% else %}
-      <form method="post" class="addset" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="claude_key_save">
-        <label>Anthropic API key <input type="password" name="claude_key" autocomplete="off" required></label>
-        {% if claude.state.key_hint %}<p class="note">Saved key ends in {{ claude.state.key_hint }}.</p>{% endif %}
-        <input type="submit" value="Save key">
-      </form>
-      {% if claude.state.key_hint %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_key_forget"><input type="submit" value="Forget the key"></form>{% endif %}
-      <p class="note">To get a key: sign up at console.anthropic.com, buy credit under Billing, set a monthly spend limit under Limits, then create a key under API keys and paste it here. Saving it checks it with Anthropic for free. It is kept in a file only the site can read and is never shown again.</p>
-      {% endif %}
     </details>
   </section>
 

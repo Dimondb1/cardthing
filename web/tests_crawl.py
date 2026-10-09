@@ -15,7 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from catalogue import crawl
-from catalogue.models import ImportRun, Retailer
+from catalogue.models import ImportRun, Retailer, WorkerState
 from catalogue.testing import make_retailer
 
 
@@ -140,11 +140,25 @@ class CrawlPageTests(TestCase):
         shared.clear()
         self.assertIsNone(shared.get("home"))
         self.assertTrue(crawl.all_paused())
+        # Pause all is the background reader's row, which the reader and the cron both read.
+        self.assertTrue(WorkerState.objects.get().paused)
 
-    def test_a_folder_that_cannot_be_written_says_so(self):
-        with mock.patch("catalogue.crawl.pause_all", side_effect=OSError("read-only")):
+    def test_a_pause_file_left_by_the_earlier_version_still_pauses_until_resume_all(self):
+        from pathlib import Path
+
+        (Path(self.folder) / crawl.FLAG_NAME).touch()
+        self.assertTrue(crawl.all_paused())
+        self.assertEqual(self.run_due(due=True)[0], [])
+        self.client.post(self.url, {"action": "resume_all"})
+        self.assertFalse((Path(self.folder) / crawl.FLAG_NAME).exists())
+        self.assertFalse(crawl.all_paused())
+
+    def test_a_busy_database_says_so(self):
+        from django.db import OperationalError
+
+        with mock.patch("catalogue.crawl.pause_all", side_effect=OperationalError("database is locked")):
             page = self.client.post(self.url, {"action": "pause_all"}, follow=True)
-        self.assertContains(page, "The cache folder cannot be written, so nothing changed.")
+        self.assertContains(page, "The database was busy, so nothing changed.")
         self.assertFalse(crawl.all_paused())
 
     def test_each_shop_shows_its_state_and_what_went_wrong(self):
@@ -190,8 +204,9 @@ class CrawlPageTests(TestCase):
         with self.assertNumQueries(few):
             page = self.client.get(self.url)
         self.assertContains(page, "Shops (49)")
-        # Session, user, the last finished read and the shops.
-        self.assertEqual(few, 4)
+        # Session, user, the last finished read, the background reader's row, four for how hot each product
+        # is, and the shops.
+        self.assertEqual(few, 9)
 
     def test_copy_has_no_em_dashes_or_exclamation_marks(self):
         self.make_shop("Waiting Shop", backoff_until=self.now + timedelta(minutes=20), error_streak=1, last_error="Timed out")

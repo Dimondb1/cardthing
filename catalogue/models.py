@@ -833,3 +833,55 @@ class DailyVisitor(models.Model):
 
     def __str__(self):
         return f"{self.date} {self.country or '??'}"
+
+
+class WorkerState(models.Model):
+    """The one row the background reader (run_worker) keeps: whether it is alive, paused and busy.
+
+    The Crawl health page reads it and writes ``paused``; the worker writes the rest. There is no job
+    table: the worker works out what to do from the shops and listings themselves.
+    """
+
+    # A heartbeat older than this means the worker has stopped: the hourly cron reads the shops instead.
+    STALE_AFTER = timedelta(minutes=10)
+
+    paused = models.BooleanField(default=False, help_text="Pause all: no shop is read or stock checked.")
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    jobs_done = models.PositiveIntegerField(default=0)
+    last_job = models.CharField(max_length=120, blank=True)
+    requests_last_hour = models.PositiveIntegerField(default=0)
+    errors_last_hour = models.PositiveIntegerField(default=0)
+    note = models.CharField(max_length=300, blank=True)
+    # The shop reads in progress, as {"retailer": pk, "since": iso time}, written before each read so a
+    # restart can close the runs they left open.
+    in_flight = models.JSONField(default=list, blank=True)
+    # When each owner notice was last sent, {subject: iso time}, so one is sent at most once a day.
+    notices = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "background reader"
+
+    def __str__(self):
+        return "Background reader"
+
+    @classmethod
+    def current(cls):
+        """The row, or None before the worker or Pause all has ever written it. Never writes."""
+        return cls.objects.filter(pk=1).first()
+
+    @classmethod
+    def load(cls):
+        """The row, created on first use."""
+        return cls.objects.get_or_create(pk=1)[0]
+
+    def alive(self, now=None):
+        """True while the heartbeat is younger than ``STALE_AFTER``."""
+        now = now or timezone.now()
+        return self.heartbeat_at is not None and now - self.heartbeat_at < self.STALE_AFTER
+
+    @classmethod
+    def beating_within(cls, minutes, now=None):
+        """True when the worker's heartbeat is younger than ``minutes``: the cron fallback then stands aside."""
+        now = now or timezone.now()
+        return cls.objects.filter(pk=1, heartbeat_at__gt=now - timedelta(minutes=minutes)).exists()

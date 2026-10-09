@@ -241,7 +241,11 @@ def preorder_handles(base, fetch=fetch, limit=20):
     return handles
 
 
-def shopify_offers(retailer, fetch=fetch):
+# The background reader waits this long between products.json pages, on top of the shop's own rate.
+PAGE_PAUSE = 0.5
+
+
+def shopify_offers(retailer, fetch=fetch, pause=0.0):
     base = retailer.source_url.rstrip("/")
     currency = shop_currency(base, fetch=fetch)
     if currency and currency != "GBP":
@@ -253,6 +257,8 @@ def shopify_offers(retailer, fetch=fetch):
     page = 1
     first_handle = None
     while page <= MAX_SHOPIFY_PAGES:
+        if page > 1 and pause:
+            time.sleep(pause)
         try:
             raw = fetch(f"{listing}?limit=250&page={page}")
             products = json.loads(raw).get("products", [])
@@ -1047,14 +1053,15 @@ def close_abandoned_runs(older_than=ABANDONED_AFTER, now=None):
     )
 
 
-def run_import(retailer, feed_path=None, fetch=None):
+def run_import(retailer, feed_path=None, fetch=None, page_pause=0.0):
+    """Read one retailer's prices and save them. ``page_pause`` is the wait between Shopify product pages."""
     run = ImportRun.objects.create(retailer=retailer)
     fetch = retailer_fetch(retailer, fetch)
     try:
         if retailer.source_type == Retailer.Source.SHOPIFY:
             if not retailer.source_url:
                 raise ImportError_("Set the shop address on the retailer first.")
-            offers = shopify_offers(retailer, fetch=fetch)
+            offers = shopify_offers(retailer, fetch=fetch, pause=page_pause)
         elif retailer.source_type == Retailer.Source.WEBSITE:
             if not retailer.source_url:
                 raise ImportError_("Set the shop address on the retailer first.")

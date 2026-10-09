@@ -18,19 +18,19 @@ comes back is stamped, and the home page shows it under "Back in stock".
 Meant for a cron entry every ten minutes.
 """
 
-import json
 import time
 from datetime import timedelta
-from urllib.parse import urlsplit, urlunsplit
 
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
-from catalogue import crawl, pricing
-from catalogue import importers
-from catalogue.importers import ImportError_, money, page_offer
-from catalogue.models import DailyPageView, Listing, OutboundClick, Product, Retailer
+from catalogue import crawl
+from catalogue.models import DailyPageView, Listing, OutboundClick, Product, Retailer, WorkerState
+# check_listing is the probe the background reader uses too; the names stay importable from here.
+from catalogue.probe import _session_fetches, probe_listing as check_listing, record_probe, shopify_js_url
+
+__all__ = ["Command", "check_listing", "shopify_js_url", "watched_products", "_session_fetches"]
 
 WATCHED_DAYS = 2        # page views and watchlist rows this recent count as "watching"
 WATCHED_PRODUCTS = 200  # the most watched products considered each run
@@ -48,55 +48,21 @@ def watched_products(now):
     return [ids[slug] for slug in slugs if slug in ids]
 
 
-def shopify_js_url(url):
-    parts = urlsplit(url)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/") + ".js", "", ""))
-
-
-_session_fetches = {}
-
-
-def check_listing(listing, fetch=None):
-    """(price, availability) from the shop right now, or None if it could not be read."""
-    fetch = fetch or importers.fetch
-    if listing.retailer.source_type == Retailer.Source.SHOPIFY and "/products/" in listing.url:
-        try:
-            data = json.loads(fetch(shopify_js_url(listing.url)))
-        except (ImportError_, json.JSONDecodeError):
-            return None
-        variants = data.get("variants") or []
-        available = [v for v in variants if v.get("available")]
-        chosen = min(available or variants, key=lambda v: v.get("price", 0), default=None)
-        if chosen is None:
-            return None
-        price = money(chosen.get("price", 0) / 100 if isinstance(chosen.get("price"), int) else chosen.get("price"))
-        if price is None:
-            return None
-        if not available:
-            return price, Listing.Availability.OUT_OF_STOCK
-        # A pre-order stays a pre-order; the hourly import decides otherwise.
-        if listing.availability == Listing.Availability.PREORDER:
-            return price, Listing.Availability.PREORDER
-        return price, Listing.Availability.IN_STOCK
-    if listing.retailer.session_url and fetch is importers.fetch:
-        fetch = _session_fetches.setdefault(listing.retailer_id, importers.session_fetch(listing.retailer.session_url))
-    try:
-        offer = page_offer(listing.url, fetch(listing.url).decode("utf-8", "replace"))
-    except ImportError_:
-        return None
-    if offer is None:
-        return None
-    return offer.price, offer.availability
-
-
 class Command(BaseCommand):
     help = "Re-check the stock of the listings most likely to have changed."
 
     def add_arguments(self, parser):
         parser.add_argument("--limit", type=int, default=300)
         parser.add_argument("--pause", type=float, default=0.3)
+        parser.add_argument(
+            "--if-worker-dead", type=int, metavar="MINUTES",
+            help="Do nothing when the background reader's heartbeat is younger than this: it checks stock itself.",
+        )
 
-    def handle(self, *args, limit=300, pause=0.3, **options):
+    def handle(self, *args, limit=300, pause=0.3, if_worker_dead=None, **options):
+        if if_worker_dead is not None and WorkerState.beating_within(if_worker_dead):
+            self.stdout.write("The background reader is running, so it checks stock instead.")
+            return
         if crawl.all_paused():
             # Pause all on the Crawl health page stops every request to the shops, stock checks included.
             self.stdout.write("Reading is paused for every shop. Resume all on the Crawl health page starts it again.")
@@ -109,7 +75,7 @@ class Command(BaseCommand):
         # A shop the owner paused is not asked about single products either.
         base = (
             Listing.objects.filter(is_active=True, retailer__is_active=True, retailer__reading_paused=False)
-            .exclude(retailer__source_type=Retailer.Source.MANUAL)
+            .exclude(retailer__source_type__in=[Retailer.Source.MANUAL, Retailer.Source.EBAY, Retailer.Source.AMAZON])
         )
         recently_checked = Q(last_checked__gte=now - timedelta(minutes=8))
         queue = []
@@ -130,23 +96,16 @@ class Command(BaseCommand):
             if listing.pk in seen or checked >= limit:
                 continue
             seen.add(listing.pk)
-            listing = Listing.objects.select_related("retailer", "product").get(pk=listing.pk)
+            listing = Listing.objects.select_related("retailer", "product__product_set").get(pk=listing.pk)
             result = check_listing(listing)
             checked += 1
-            if result is None:
-                continue
-            price, availability = result
-            if (price is None or price <= 0) and availability != Listing.Availability.OUT_OF_STOCK:
-                # No price is not a price: the shop is not selling it, so there is nothing to save or report.
-                continue
-            if availability != listing.availability or price != listing.price:
+            outcome = record_probe(listing, result)
+            if outcome in ("changed", "restocked"):
                 changed += 1
-                if availability == Listing.Availability.IN_STOCK and listing.availability != Listing.Availability.IN_STOCK:
-                    restocked += 1
-                    self.stdout.write(f"back in stock: {listing.product.name} at {listing.retailer.name} £{price}")
-            delivery = listing.retailer.delivery_for(price)
-            pricing.record_check(listing, price=price, delivery_cost=delivery, availability=availability)
-            if pause:
+            if outcome == "restocked":
+                restocked += 1
+                self.stdout.write(f"back in stock: {listing.product.name} at {listing.retailer.name} £{result[0]}")
+            if outcome is not None and pause:
                 time.sleep(pause)
         if restocked:
             from catalogue.signals import clear_list_caches

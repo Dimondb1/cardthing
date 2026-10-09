@@ -1332,8 +1332,10 @@ def checks_page(request):
 def crawl_page(request):
     """Crawl health: whether shops are being read, with one-tap buttons to read a shop now or pause reading."""
     from django.contrib import messages
+    from django.db import DatabaseError
 
-    from catalogue import crawl
+    from catalogue import crawl, heat
+    from catalogue.models import WorkerState
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -1346,9 +1348,8 @@ def crawl_page(request):
                 else:
                     crawl.resume_all()
                     messages.success(request, "Reading has resumed. Each shop is read on its own schedule.")
-            except OSError:
-                messages.error(request, "The cache folder cannot be written, so nothing changed. "
-                                        "Check RIPRAPTOR_CACHE_DIR on the server.")
+            except (DatabaseError, OSError):
+                messages.error(request, "The database was busy, so nothing changed. Tap the button again.")
         elif action in ("read_now", "pause", "resume"):
             pk = request.POST.get("shop", "")
             if not pk.isdigit():
@@ -1361,10 +1362,14 @@ def crawl_page(request):
                 shop.backoff_until = None
                 shop.error_streak = 0
                 shop.save(update_fields=["next_read_at", "backoff_until", "error_streak"])
-                note = f"{shop.name} will be read at the next hourly read."
+                state = WorkerState.current()
+                if state is not None and state.alive():
+                    note = f"{shop.name} will be read within a few minutes."
+                else:
+                    note = f"{shop.name} will be read at the next hourly read."
                 if shop.reading_paused:
                     note += " It is paused: tap Resume as well."
-                elif crawl.all_paused():
+                elif crawl.all_paused(state):
                     note += " Reading is paused for every shop: tap Resume all as well."
                 messages.success(request, note)
             else:
@@ -1378,9 +1383,11 @@ def crawl_page(request):
         return HttpResponseRedirect(reverse("crawl"))
     now = timezone.now()
     last = crawl.last_finished()
+    state = WorkerState.current()
+    hot, warm = heat.tier_counts(heat.heat_scores(now))
     context = {
         **admin.site.each_context(request), "title": "Crawl health",
-        "all_paused": crawl.all_paused(), "last_finished": insights.clock(last, now) if last else None,
-        "shops": crawl.shops(now),
+        "all_paused": crawl.all_paused(state), "last_finished": insights.clock(last, now) if last else None,
+        "shops": crawl.shops(now, state), "worker": crawl.worker_status(state, now), "hot": hot, "warm": warm,
     }
     return render(request, "admin/crawl.html", context)

@@ -136,3 +136,19 @@ def query_string(context, **changes):
             params[key] = value
     encoded = params.urlencode()
     return f"?{encoded}" if encoded else "?"
+
+
+@register.simple_tag
+def worker_stopped():
+    """The time of the background reader's last heartbeat when it is older than ten minutes, else an empty string.
+
+    Nothing is said before the reader has ever run: the hourly schedule is then the normal way of reading.
+    """
+    from catalogue.insights import clock
+    from catalogue.models import WorkerState
+
+    state = WorkerState.current()
+    now = timezone.now()
+    if state is None or state.heartbeat_at is None or state.alive(now):
+        return ""
+    return clock(state.heartbeat_at, now)

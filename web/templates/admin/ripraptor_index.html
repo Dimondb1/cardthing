@@ -1,7 +1,8 @@
 {% extends "admin/index.html" %}
-{% load inbox %}
+{% load inbox ripraptor %}
 {% block content %}
 {% inbox_unread as unread %}
+{% worker_stopped as stopped %}
 <div class="module" style="margin-bottom: 20px;">
   <table>
     <caption><a href="{% url 'admin:inbox_conversation_changelist' %}" class="section">Messages</a></caption>
@@ -17,6 +18,7 @@
 <div class="module" style="margin-bottom: 20px;">
   <table>
     <caption><a href="{% url 'crawl' %}" class="section">Crawl health</a></caption>
+    {% if stopped %}<tr><th scope="row"><a href="{% url 'crawl' %}" style="color: var(--error-fg);"><strong>Background reader stopped at {{ stopped }}.</strong> The hourly schedule reads the shops.</a></th><td></td></tr>{% endif %}
     <tr><th scope="row"><a href="{% url 'crawl' %}">Whether each shop is being read, with buttons to read one now or pause reading</a></th><td></td></tr>
   </table>
 </div>

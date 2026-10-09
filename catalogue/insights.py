@@ -17,7 +17,9 @@ from django.utils import timezone
 from . import geo
 from .importers import STOPPED
 from .pricing import drop_if_locked, retry_locked
-from .models import DailyPageView, DailySearch, DailyVisitor, ImportRun, Listing, OutboundClick, Product, Retailer, StockAlert
+from .models import (
+    DailyPageView, DailySearch, DailyVisitor, ImportRun, Listing, OutboundClick, Product, Retailer, StockAlert, WorkerState,
+)
 
 COUNTRY_NAMES = {
     "GB": "United Kingdom", "IE": "Ireland", "US": "United States", "DE": "Germany", "FR": "France", "NL": "Netherlands",
@@ -386,6 +388,7 @@ def report(days=30):
         "watchlist_clicks": watchlist_clicks,
         "unpaid": unpaid,
         "shops_health": shops_health,
+        "worker_stopped": worker_stopped(now),
         "viewed_no_click": viewed_no_click,
         "one_shop": one_shop,
         "catalogue": catalogue_stats,
@@ -445,6 +448,15 @@ def ebay_coverage():
     }
 
 
+def worker_stopped(now):
+    """When the background reader last beat, once that is more than ten minutes ago; None while it runs or
+    before it has ever run (the hourly schedule is then the normal way shops are read)."""
+    state = WorkerState.current()
+    if state is None or state.heartbeat_at is None or state.alive(now):
+        return None
+    return state.heartbeat_at
+
+
 def stale_after(retailer):
     """How long since its last good read before a shop counts as not updating: 6 hours, or two of its reads."""
     return max(timedelta(hours=6), timedelta(minutes=2 * retailer.read_every_minutes))
@@ -480,6 +492,13 @@ def improvements(data):
 
     def add(weight, title, detail, link="", link_label=""):
         items.append({"weight": weight, "title": title, "detail": detail, "link": link, "link_label": link_label})
+
+    stopped = data.get("worker_stopped")
+    if stopped:
+        add(100, "Worker not running",
+            f"The background reader last sent a heartbeat at {clock(stopped, timezone.now())}. Shops are read on the "
+            "hourly schedule meanwhile, so prices update less often. The server restarts it on its own; if this stays, "
+            "the server needs a look.", "/admin/crawl/", "Crawl health")
 
     broken = [s for s in data["shops_health"] if s["problem"]]
     if broken:

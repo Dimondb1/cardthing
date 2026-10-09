@@ -1,31 +1,21 @@
-import re
 import time
-import traceback
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from catalogue import crawl
+from catalogue.crawl import http_status
 from catalogue.importers import close_abandoned_runs, run_import
-from catalogue.models import ImportRun, Retailer
-from catalogue.signals import clear_list_caches
+from catalogue.models import Retailer, WorkerState
 
 # The run on the hour also reads a shop whose next read falls within a quarter of an hour of the run's
 # start. Next reads are counted from the start of the run before, and a run can start a few minutes late
 # (Python starting, or the stock watch holding the lock for up to nine and a half minutes), so without it a
 # shop read every 60 minutes would be read every other hour. It never shortens a wait after errors.
 DUE_SLACK = timedelta(minutes=15)
-# "HTTP Error 429: Too Many Requests" from a shop, "eBay API 429: ..." or "Amazon API 503: ..." from a marketplace.
-STATUS_RE = re.compile(r"(?:HTTP Error|API) (\d{3})\b")
 
-
-def http_status(error):
-    """The HTTP status a failed read's error names, or None. Being throttled counts as 429."""
-    found = STATUS_RE.search(error or "")
-    if found:
-        return int(found.group(1))
-    return 429 if "kept throttling us" in (error or "") else None
+__all__ = ["Command", "DUE_SLACK", "http_status"]
 
 
 class Command(BaseCommand):
@@ -41,8 +31,15 @@ class Command(BaseCommand):
             "--due", action="store_true",
             help="Read only the shops whose next read has come, skipping paused shops and shops waiting after errors.",
         )
+        parser.add_argument(
+            "--if-worker-dead", type=int, metavar="MINUTES",
+            help="Do nothing when the background reader's heartbeat is younger than this: it reads the shops itself.",
+        )
 
-    def handle(self, *args, retailer=None, feed=None, due=False, **options):
+    def handle(self, *args, retailer=None, feed=None, due=False, if_worker_dead=None, **options):
+        if if_worker_dead is not None and WorkerState.beating_within(if_worker_dead):
+            self.stdout.write("The background reader is running, so it reads the shops instead.")
+            return
         retailers = Retailer.objects.filter(is_active=True).exclude(
             source_type=Retailer.Source.MANUAL
         )
@@ -105,35 +102,16 @@ class Command(BaseCommand):
         self.stdout.write("Reading is paused for every shop. Resume all on the Crawl health page starts it again.")
 
     def read_crashed(self, item, began, exc):
-        error = f"The read stopped on an unexpected error: {type(exc).__name__}: {exc}"[:300]
-        self.stderr.write(f"{item}: {error}\n{traceback.format_exc()}")
-        now = timezone.now()
-        # The run it opened would otherwise show as running until close_abandoned_runs finds it.
-        ImportRun.objects.filter(retailer=item, finished_at__isnull=True, started_at__gte=began).update(
-            finished_at=now, error=error
-        )
-        # Whatever it wrote before it stopped should show.
-        clear_list_caches(force=True)
-        item.refresh_from_db(fields=["read_every_minutes", "error_streak"])
-        item.read_failed(now, None, error)
+        self.stderr.write(crawl.crash_read(item, began, exc))
 
     def read(self, item, feed, since=None):
         began = timezone.now()
         started = time.monotonic()
         run = run_import(item, feed_path=feed)
         seconds = time.monotonic() - started
-        now = timezone.now()
-        # The owner may have changed the cadence while the shop was being read.
-        item.refresh_from_db(fields=["read_every_minutes", "error_streak"])
-        if run.error:
-            item.read_failed(now, http_status(run.error), run.error)
+        if not crawl.finish_read(item, run, began, seconds, since=since):
             self.stderr.write(f"{item}: {run.error}")
             return
-        if run.started_at < began:
-            # A marketplace already read today: run_import handed back that earlier run.
-            item.read_ok(now, 0, ok_at=run.finished_at, since=since)
-        else:
-            item.read_ok(now, seconds, since=since)
         line = f"{item}: {run.offers_found} offers, {run.listings_updated} listings updated"
         line += f" in {int(seconds)}s"
         if run.unmatched:

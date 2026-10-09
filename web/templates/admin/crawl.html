@@ -11,6 +11,7 @@
   .crawl li.item b { margin-right: 8px; }
   .crawl .facts { margin: 6px 0 0; color: var(--body-quiet-color); }
   .crawl .bad { color: var(--error-fg); }
+  .crawl .ok { color: var(--message-success-fg, #2a7a2a); }
   .crawl .error { margin: 6px 0 0; overflow-wrap: anywhere; }
   .crawl .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; }
   .crawl form { margin: 0; }
@@ -22,19 +23,31 @@
 <div class="crawl">
   <section>
     <h2>Status</h2>
-    <p>Hourly reads. {% if last_finished %}The last read finished at {{ last_finished }}.{% else %}No read has finished yet.{% endif %}</p>
+    {% if worker.alive %}
+    <p class="ok" id="worker-line"><strong>Background reader running.</strong> Last heartbeat at {{ worker.heartbeat }}.</p>
+    {% elif worker.known %}
+    <p class="bad" id="worker-line"><strong>Background reader stopped.</strong> Last heartbeat at {{ worker.heartbeat }}. The hourly schedule reads the shops until it is back.</p>
+    {% else %}
+    <p class="bad" id="worker-line"><strong>Background reader not started.</strong> The hourly schedule reads the shops.</p>
+    {% endif %}
+    <p>{% if last_finished %}The last read finished at {{ last_finished }}.{% else %}No read has finished yet.{% endif %}</p>
+    <p class="note">Checked every ten minutes: {{ hot }} product{{ hot|pluralize }}. Every hour: {{ warm }} product{{ warm|pluralize }}. The rest are refreshed when their shop is read.</p>
+    {% if worker.known %}
+    <p class="note">In the last hour: {{ worker.requests }} request{{ worker.requests|pluralize }} to shops, {{ worker.errors }} error{{ worker.errors|pluralize }}. Jobs done since {{ worker.started|default:"it started" }}: {{ worker.jobs_done }}{% if worker.last_job %}, the latest: {{ worker.last_job }}{% endif %}.</p>
+    {% if worker.note %}<p class="note">Last restart: {{ worker.note }}</p>{% endif %}
+    {% endif %}
     {% if all_paused %}
     <p class="bad"><strong>Paused for every shop.</strong> No shop is read or stock checked until you tap Resume all.</p>
     <form method="post">{% csrf_token %}<input type="hidden" name="action" value="resume_all"><input type="submit" value="Resume all"></form>
     {% else %}
-    <p class="note">Pause all stops every scheduled read and stock check. A read in progress stops after the shop it is on. Shops you paused one by one stay paused when you resume.</p>
+    <p class="note">Pause all stops every scheduled read and stock check. Reads already running finish first. Shops you paused one by one stay paused when you resume.</p>
     <form method="post">{% csrf_token %}<input type="hidden" name="action" value="pause_all"><input type="submit" value="Pause all"></form>
     {% endif %}
   </section>
 
   <section>
     <h2>Shops ({{ shops|length }})</h2>
-    <p class="note">Read now adds a shop to the next hourly read and forgets its errors. Pause stops reading and stock checks for one shop until you tap Resume.</p>
+    <p class="note">Read now makes a shop due at once and forgets its errors: the background reader takes it within a few minutes, or the next hourly read does. Pause stops reading and stock checks for one shop until you tap Resume.</p>
     {% if shops %}<ul>
       {% for row in shops %}{% with shop=row.retailer %}
       <li class="item" id="shop-{{ shop.slug }}"><b>{{ shop.name }}</b><span{% if row.problem %} class="bad"{% endif %}>{{ row.state }}</span>

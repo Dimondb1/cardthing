@@ -91,6 +91,31 @@ class InsightsPageTests(TestCase):
         self.assertEqual(self.client.get(reverse("insights"), {"days": "nonsense"}).status_code, 200)
         self.assertEqual(self.client.get(reverse("insights"), {"days": "99999"}).status_code, 200)
 
+    def test_page_fits_a_phone_screen(self):
+        # Checked in a browser at 375, 768 and 1280: these are the pieces that stop the page scrolling sideways.
+        import re
+
+        from catalogue.models import DailyVisitor
+
+        long_query = "https://www.shop.example/" + "x" * 70
+        DailySearch.objects.create(date=timezone.localdate(), query=long_query, results=0, hits=2)
+        DailyVisitor.objects.create(date=timezone.localdate(), token="a", source="l.long-referrer.example", views=1)
+        self.client.force_login(self.staff)
+        html = self.client.get(reverse("insights")).content.decode()
+        # The page column and the module grid shrink to the screen, not to their widest table.
+        self.assertIn(".ins { display: grid; grid-template-columns: minmax(0, 1fr);", html)
+        self.assertIn("minmax(min(20rem, 100%), 1fr)", html)
+        # A table with three or more columns scrolls inside its own box.
+        tables = re.findall(r'(<div class="ins__wide">)?<table>\s*<thead><tr>((?:<th>[^<]*</th>)+)</tr>', html)
+        wide = [(box, head) for box, head in tables if head.count("<th>") >= 3]
+        self.assertGreaterEqual(len(wide), 4)
+        for box, head in wide:
+            self.assertTrue(box, head)
+        # Searches and referring sites come from visitors, so one long word has to wrap.
+        self.assertEqual(html.count(f'<td class="wrap">{long_query}</td>'), 2)
+        self.assertIn('<td class="wrap">l.long-referrer.example</td>', html)
+        self.assertRegex(html, r"\.ins__todo \{[^}]*overflow-wrap: anywhere;")
+
     def test_admin_index_links_to_insights(self):
         self.client.force_login(self.staff)
         self.assertContains(self.client.get("/admin/"), reverse("insights"))

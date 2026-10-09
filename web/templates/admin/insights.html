@@ -1,18 +1,20 @@
 {% extends "admin/base_site.html" %}
 {% block title %}Insights | {{ site_title }}{% endblock %}
 {% block extrastyle %}{{ block.super }}<style>
-  .ins { display: grid; gap: 24px; max-width: 70rem; }
+  .ins { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; max-width: 70rem; }
   .ins__totals { display: flex; flex-wrap: wrap; gap: 16px; }
   .ins__total { padding: 12px 16px; border: 1px solid var(--hairline-color, #ddd); border-radius: 8px; min-width: 10rem; }
   .ins__total b { display: block; font-size: 1.6rem; }
-  .ins__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 24px; }
+  .ins__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr)); gap: 24px; }
   .ins table { width: 100%; }
+  .ins__wide { overflow-x: auto; }
+  .ins__wide td.wrap { min-width: 14rem; }
   .ins td.wrap { overflow-wrap: anywhere; }
   .ins td.wrap .bad { display: block; }
   .ins td.n { text-align: right; white-space: nowrap; }
   .ins .bar { display: inline-block; height: 0.6rem; background: var(--primary, #417690); vertical-align: middle; }
   .ins form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .ins__todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .ins__todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; overflow-wrap: anywhere; }
   .ins__todo li { padding: 12px 16px; border: 1px solid var(--hairline-color, #ddd); border-left: 4px solid var(--primary, #417690); border-radius: 6px; }
   .ins__todo b { display: block; font-size: 1.05rem; margin-bottom: 4px; }
   .ins__todo p { margin: 0; }
@@ -63,10 +65,10 @@
 
   <div class="module">
     <h2>By day</h2>
-    <table>
+    <div class="ins__wide"><table>
       <thead><tr><th>Day</th><th>Visitors</th><th>Returning</th><th>Page views</th><th>Clicks</th></tr></thead>
       <tbody>{% for d in by_day reversed %}<tr><td>{{ d.date|date:"D j M" }}</td><td class="n">{{ d.visitors }}</td><td class="n">{{ d.returning }}</td><td class="n">{{ d.views }}</td><td class="n">{{ d.clicks }}</td></tr>{% endfor %}</tbody>
-    </table>
+    </table></div>
   </div>
 
   <div class="ins__grid">
@@ -93,7 +95,7 @@
       <h2>Where visitors come from</h2>
       <table><tbody>{% for s in sources %}<tr><td>{{ s.name }}</td><td class="n">{{ s.visitors }}</td><td class="n">{{ s.share }}%</td></tr>{% empty %}<tr><td>No visitors yet.</td></tr>{% endfor %}</tbody></table>
       {% if top_hosts %}<h3>Sites that sent visitors</h3>
-      <table><tbody>{% for host, n in top_hosts %}<tr><td>{{ host }}</td><td class="n">{{ n }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+      <table><tbody>{% for host, n in top_hosts %}<tr><td class="wrap">{{ host }}</td><td class="n">{{ n }}</td></tr>{% endfor %}</tbody></table>{% endif %}
     </div>
     <div class="module">
       <h2>Devices</h2>
@@ -124,10 +126,10 @@
 
   <div class="module">
     <h2>Most viewed products</h2>
-    <table>
+    <div class="ins__wide"><table>
       <thead><tr><th>Product</th><th>Game</th><th>Views</th><th>Clicks</th></tr></thead>
       <tbody>{% for row in top_products %}<tr><td><a href="{{ row.product.get_absolute_url }}">{{ row.product.name }}</a></td><td>{{ row.product.game.name }}</td><td class="n">{{ row.views }}</td><td class="n">{{ row.clicks }}</td></tr>{% empty %}<tr><td>No product views yet.</td></tr>{% endfor %}</tbody>
-    </table>
+    </table></div>
   </div>
 
   <div class="ins__grid">
@@ -139,8 +141,8 @@
     <div class="module">
       <h2>Viewed, never clicked</h2>
       <p>Three or more views and no click.</p>
-      <table><thead><tr><th>Product</th><th>Views</th><th>Shops in stock</th></tr></thead>
-      <tbody>{% for r in viewed_no_click %}<tr><td><a href="{{ r.product.get_absolute_url }}">{{ r.product.name }}</a></td><td class="n">{{ r.views }}</td><td class="n">{{ r.shops }}</td></tr>{% empty %}<tr><td>None.</td></tr>{% endfor %}</tbody></table>
+      <div class="ins__wide"><table><thead><tr><th>Product</th><th>Views</th><th>Shops in stock</th></tr></thead>
+      <tbody>{% for r in viewed_no_click %}<tr><td><a href="{{ r.product.get_absolute_url }}">{{ r.product.name }}</a></td><td class="n">{{ r.views }}</td><td class="n">{{ r.shops }}</td></tr>{% empty %}<tr><td>None.</td></tr>{% endfor %}</tbody></table></div>
     </div>
     <div class="module">
       <h2>Popular with only one shop</h2>
@@ -185,23 +187,23 @@
 
   <div class="module">
     <h2>Shop health</h2>
-    <table>
+    <div class="ins__wide"><table>
       <thead><tr><th>Shop</th><th>Last read</th><th>In stock</th><th>Pre-orders</th><th>Last pulse</th><th>Earns</th><th>Reading</th></tr></thead>
       <tbody>{% for s in shops_health %}<tr><td><a href="{% url 'crawl' %}#shop-{{ s.slug }}">{{ s.name }}</a></td><td>{% if s.last_ok %}{{ s.last_ok|date:"j M H:i" }}{% else %}never{% endif %}</td><td class="n">{{ s.in_stock }}</td><td class="n">{{ s.preorders }}</td><td>{{ s.pulse|default:"" }}</td><td>{% if s.earns %}<span class="ok">yes</span>{% else %}no{% endif %}</td><td class="wrap">{{ s.reading }}{% if s.problem %}<span class="bad">{{ s.problem }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
-    </table>
+    </table></div>
   </div>
 
   <div class="ins__grid">
     <div class="module">
       <h2>Top searches</h2>
       <table><thead><tr><th>Search</th><th>Times</th></tr></thead>
-      <tbody>{% for s in top_searches %}<tr><td>{{ s.query }}</td><td class="n">{{ s.hits }}</td></tr>{% empty %}<tr><td>No searches yet.</td></tr>{% endfor %}</tbody></table>
+      <tbody>{% for s in top_searches %}<tr><td class="wrap">{{ s.query }}</td><td class="n">{{ s.hits }}</td></tr>{% empty %}<tr><td>No searches yet.</td></tr>{% endfor %}</tbody></table>
     </div>
     <div class="module">
       <h2>Searches that found nothing</h2>
       <p>Products to add, or names to fix.</p>
       <table><thead><tr><th>Search</th><th>Times</th></tr></thead>
-      <tbody>{% for s in empty_searches %}<tr><td>{{ s.query }}</td><td class="n">{{ s.hits }}</td></tr>{% empty %}<tr><td>None.</td></tr>{% endfor %}</tbody></table>
+      <tbody>{% for s in empty_searches %}<tr><td class="wrap">{{ s.query }}</td><td class="n">{{ s.hits }}</td></tr>{% empty %}<tr><td>None.</td></tr>{% endfor %}</tbody></table>
     </div>
   </div>
 </div>

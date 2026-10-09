@@ -865,6 +865,18 @@ it is over ten minutes old or there has never been one; cron runs it hourly
 so the log shows when the reader stopped. Insights lists "Worker not
 running" first among the things to improve while the heartbeat is stale.
 
+Crawl problems reach your phone through the same ntfy topic and email
+address as new messages: "RipRaptor crawl stopped" when `check_worker`
+finds a heartbeat over ten minutes old (not when the reader has never
+run), "A shop keeps failing" when a shop that is not paused has failed
+every read for more than a day, and "Prices to check" when more than 10
+doubtful prices are waiting on Things to check. The reader looks for the
+last two on each planning pass, except while Pause all is on. Each is sent
+at most once a day, noted on the background reader row. The push is only a
+title and a link to Crawl health or Things to check; the email names the
+shops and their errors. `RIPRAPTOR_CRAWL_PUSHES=0` in `.env` turns them
+off. Insights also lists "N doubtful prices waiting" while any wait.
+
 What cron still does: if the reader stops or never starts, the hourly
 `import_prices --due --if-worker-dead 30` and the ten-minute
 `watch_stock --if-worker-dead 30` read the shops as before once its
@@ -985,9 +997,10 @@ site's cache.
 | `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
 | `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
-| `RIPRAPTOR_INBOX_NOTIFY_EMAIL` |         | Your own address. Each new Message us message is emailed to it through ZeptoMail with a link to reply in admin. Never shown on the site. |
-| `RIPRAPTOR_NTFY_TOPIC`         |         | A long, unguessable ntfy topic name. Each new message sends a push to the free ntfy phone app subscribed to it. The push holds only a link to admin, never the name or the words. |
+| `RIPRAPTOR_INBOX_NOTIFY_EMAIL` |         | Your own address. Each new Message us message is emailed to it through ZeptoMail with a link to reply in admin, and so are crawl problems (see below). Never shown on the site. |
+| `RIPRAPTOR_NTFY_TOPIC`         |         | A long, unguessable ntfy topic name. Each new message, and each crawl problem, sends a push to the free ntfy phone app subscribed to it. The push holds only a title and a link to admin, never a name, the words, a shop, a product or a price. |
 | `RIPRAPTOR_NTFY_URL`           | `https://ntfy.sh` | The ntfy server, if you run your own. |
+| `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 
 ## Games
@@ -1095,9 +1108,11 @@ back. The email's Unsubscribe opens their page with a button that deletes
 the address (a button, because mail scanners open links). Tick Closed to
 stop follow-ups.
 
-You hear about new messages by email to `RIPRAPTOR_INBOX_NOTIFY_EMAIL`,
-by phone push through ntfy (install the ntfy app, subscribe to the topic
-in `RIPRAPTOR_NTFY_TOPIC`), or both. The push says only that a message
+You hear about new messages, and about crawl problems (see the background
+reader section), by email to `RIPRAPTOR_INBOX_NOTIFY_EMAIL`, by phone push
+through ntfy (install the ntfy app, subscribe to the topic in
+`RIPRAPTOR_NTFY_TOPIC`), or both. Every new message is sent; crawl
+problems at most once a day each. The push says only that a message
 came in, with a link to admin, because anyone who guesses an ntfy.sh topic
 can read it. A failed notification never loses the message. Limits: 3,000
 characters a message, six follow-ups an hour per thread, 40 new threads an

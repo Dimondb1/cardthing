@@ -34,6 +34,11 @@ def sanity_counts():
     )
 
 
+def doubtful_count():
+    """How many doubtful prices wait for the owner, counted as the page counts them."""
+    return judged().filter(sanity=Listing.Sanity.DOUBTFUL).count()
+
+
 def doubtful_prices(now=None):
     """Listings whose price the other shops make doubtful, most clicked products first, then oldest verdict."""
     since = (now or timezone.now()) - timedelta(days=CLICK_DAYS)

@@ -71,7 +71,7 @@ def finish_read(item, run, began, seconds, since=None, now=None):
     """
     now = now or timezone.now()
     # The owner may have changed the cadence while the shop was being read.
-    item.refresh_from_db(fields=["read_every_minutes", "error_streak"])
+    item.refresh_from_db(fields=["read_every_minutes", "error_streak", "failing_since"])
     if run.error:
         item.read_failed(now, http_status(run.error), run.error)
         return False
@@ -98,7 +98,7 @@ def crash_read(item, began, exc):
     )
     # Whatever it wrote before it stopped should show.
     clear_list_caches(force=True)
-    item.refresh_from_db(fields=["read_every_minutes", "error_streak"])
+    item.refresh_from_db(fields=["read_every_minutes", "error_streak", "failing_since"])
     item.read_failed(now, None, error)
     return logged
 

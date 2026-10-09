@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from catalogue import mail
+from catalogue import mail, notify
 
 from . import service
 from .models import Conversation, Message
@@ -40,7 +40,7 @@ class MessageUsTests(TestCase):
         self.outbox = Outbox()
         self.pushes = Pushes()
         for patcher in (mock.patch.object(mail, "send", self.outbox),
-                        mock.patch.object(service.urllib.request, "urlopen", self.pushes)):
+                        mock.patch.object(notify.urllib.request, "urlopen", self.pushes)):
             patcher.start()
             self.addCleanup(patcher.stop)
 
@@ -81,7 +81,7 @@ class MessageUsTests(TestCase):
     def test_a_failed_notification_keeps_the_message(self):
         def broken(*args, **kwargs):
             raise mail.MailError("down")
-        with mock.patch.object(mail, "send", broken), mock.patch.object(service.urllib.request, "urlopen", side_effect=OSError("no")):
+        with mock.patch.object(mail, "send", broken), mock.patch.object(notify.urllib.request, "urlopen", side_effect=OSError("no")):
             self.send()
         self.assertEqual(Message.objects.count(), 1)
 
@@ -89,6 +89,19 @@ class MessageUsTests(TestCase):
         with self.settings(RIPRAPTOR_INBOX_NOTIFY_EMAIL="", RIPRAPTOR_NTFY_TOPIC=""):
             self.send()
         self.assertEqual((self.outbox.sent, self.pushes.sent, Message.objects.count()), ([], [], 1))
+
+    def test_every_message_is_sent_even_with_crawl_pushes_off(self):
+        # Messages are not crawl problems: neither the once-a-day rule nor RIPRAPTOR_CRAWL_PUSHES holds them back.
+        with self.settings(RIPRAPTOR_CRAWL_PUSHES=False):
+            self.send(name="Sam")
+            self.client.post(Conversation.objects.get().get_absolute_url(), {"body": "Also Zatu has it cheaper"})
+        self.assertEqual([p.get_header("Title") for p in self.pushes.sent], ["New RipRaptor message"] * 2)
+        self.assertEqual(len(self.outbox.sent), 2)
+        self.assertEqual(self.outbox.sent[0]["subject"], "New message from Sam")
+        self.assertIn("Read and reply: https://ripraptor.com/admin/inbox/conversation/", self.outbox.sent[0]["text"])
+        for push in self.pushes.sent:
+            self.assertEqual(push.data, b"Open admin to read it.")
+            self.assertNotIn("Zatu", push.get_header("Title"))
 
     def test_bad_input_is_refused_and_kept(self):
         self.assertContains(self.send(body="  "), "Write a message first.")

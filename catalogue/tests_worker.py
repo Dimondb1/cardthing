@@ -6,7 +6,7 @@ import os
 import socket
 import tempfile
 import threading
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from io import StringIO
 from pathlib import Path
@@ -19,7 +19,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from . import heat, insights, probe, worker
+from . import heat, insights, mail, notify, probe, worker
 from .importers import STOPPED, ImportError_
 from .models import DailyPageView, ImportRun, Listing, Product, Retailer, StockAlert, WorkerState
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
@@ -927,6 +927,180 @@ class SettingsTests(WorkerTestCase):
             call_command("run_worker", "--once", stdout=StringIO())
             call_command("run_worker", "--once", "--max-threads", "1", stdout=StringIO())
         self.assertEqual(built, [2, 1])
+
+
+NOTIFY = {"RIPRAPTOR_ZEPTOMAIL_TOKEN": "tok", "RIPRAPTOR_MAIL_FROM": "alerts@ripraptor.com",
+          "RIPRAPTOR_SITE_URL": "https://ripraptor.com", "RIPRAPTOR_INBOX_NOTIFY_EMAIL": "owner@example.com",
+          "RIPRAPTOR_NTFY_TOPIC": "rr-test-topic", "RIPRAPTOR_NTFY_URL": "https://ntfy.sh",
+          "RIPRAPTOR_CRAWL_PUSHES": True}
+
+
+@override_settings(**NOTIFY)
+class NoticeTests(WorkerTestCase):
+    """The owner hears about crawl problems on their phone, once a day each, with no shop, product or price in the push."""
+
+    def setUp(self):
+        super().setUp()
+        self.pushes, self.emails = [], []
+        for patcher in (
+            mock.patch.object(notify.urllib.request, "urlopen", lambda request, timeout=None: self.pushes.append(request) or mock.MagicMock()),
+            mock.patch.object(mail, "send", lambda to, subject, text, html, **kw: self.emails.append((to, subject, text))),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def failing_shop(self, name, hours, **kwargs):
+        return self.shop(name, error_streak=9, last_error="HTTP 503", failing_since=self.clock() - timedelta(hours=hours),
+                         backoff_until=self.clock() + timedelta(hours=1), **kwargs)
+
+    def doubtful(self, n):
+        shop = self.shop("Doubt Shop")
+        for i in range(n):
+            listing = make_listing(self.product(f"doubt-{i}"), shop, price="1.99")
+            Listing.objects.filter(pk=listing.pk).update(sanity=Listing.Sanity.DOUBTFUL)
+
+    def titles(self):
+        return [request.get_header("Title") for request in self.pushes]
+
+    def assert_nothing_named(self, request, *names):
+        for text in (request.get_header("Title"), request.data.decode()):
+            for name in names:
+                self.assertNotIn(name, text)
+        self.assertEqual(request.data, b"Open admin to read it.")
+
+    def test_a_shop_25_hours_into_back_off_pushes_once_without_its_name(self):
+        began = self.failing_shop("Grimm Cards", 25).failing_since
+        self.failing_shop("Fresh Fail", 23)                      # not a day yet
+        self.failing_shop("Paused Fail", 30, reading_paused=True)  # the owner already knows
+
+        def still_down(url, *args, **kwargs):
+            raise ImportError_(f"Could not fetch {url}: HTTP Error 503: Service Unavailable")
+
+        # Each pass reads the shops whose wait is over, and they fail again.
+        reader = self.make_worker(fetch=still_down)
+        reader.run_once()
+        self.assertEqual(self.titles(), ["A shop keeps failing"])
+        push = self.pushes[0]
+        self.assertEqual(push.full_url, "https://ntfy.sh/rr-test-topic")
+        self.assertEqual(push.get_header("Click"), "https://ripraptor.com/admin/crawl/")
+        self.assert_nothing_named(push, "Grimm", "503")
+        # The email goes to the owner alone, so it says which shop and why.
+        self.assertEqual(len(self.emails), 1)
+        to, subject, text = self.emails[0]
+        self.assertEqual((to, subject), ("owner@example.com", "A shop keeps failing"))
+        self.assertIn("Grimm Cards: HTTP 503", text)
+        self.assertNotIn("Fresh Fail", text)
+        self.assertNotIn("Paused Fail", text)
+        self.clock.advance(hours=1)
+        reader.run_once()
+        self.assertEqual(len(self.pushes), 1)
+        self.clock.advance(hours=23, minutes=1)
+        reader.run_once()
+        self.assertEqual(self.titles(), ["A shop keeps failing"] * 2)
+        # Failing again kept the day it began.
+        self.assertEqual(Retailer.objects.get(name="Grimm Cards").failing_since, began)
+
+    def test_failing_since_starts_with_the_first_failure_and_ends_with_a_good_read(self):
+        shop = self.shop("Shop")
+        first = self.clock()
+        shop.read_failed(first, 503, "HTTP 503")
+        self.clock.advance(hours=3)
+        shop.read_failed(self.clock(), 503, "HTTP 503")
+        shop.refresh_from_db()
+        self.assertEqual((shop.error_streak, shop.failing_since), (2, first))
+        shop.read_ok(self.clock(), 30)
+        shop.refresh_from_db()
+        self.assertIsNone(shop.failing_since)
+
+    def test_a_stale_heartbeat_makes_check_worker_push_once_a_day(self):
+        def check():
+            out = StringIO()
+            with self.assertRaises(SystemExit):
+                call_command("check_worker", stdout=out)
+            return out.getvalue()
+
+        check()                                   # never ran: the hourly cron is the normal schedule
+        self.assertEqual(self.pushes, [])
+        WorkerState.objects.update_or_create(pk=1, defaults={"heartbeat_at": timezone.now() - timedelta(minutes=5)})
+        call_command("check_worker", stdout=StringIO())
+        self.assertEqual(self.pushes, [])
+        WorkerState.objects.filter(pk=1).update(heartbeat_at=timezone.now() - timedelta(minutes=15))
+        self.assertIn("The owner has been told.", check())
+        self.assertNotIn("The owner has been told.", check())
+        self.assertEqual(self.titles(), ["RipRaptor crawl stopped"])
+        self.assertEqual(self.pushes[0].get_header("Click"), "https://ripraptor.com/admin/crawl/")
+        self.assertEqual(self.pushes[0].data, b"Open admin to read it.")
+        sent = WorkerState.objects.get().notices[notify.WORKER_STOPPED]
+        WorkerState.objects.filter(pk=1).update(notices={
+            notify.WORKER_STOPPED: (datetime.fromisoformat(sent) - timedelta(hours=25)).isoformat(),
+        })
+        check()
+        self.assertEqual(self.titles(), ["RipRaptor crawl stopped"] * 2)
+
+    def test_eleven_doubtful_prices_push_once_and_nine_do_not(self):
+        self.doubtful(9)
+        reader = self.make_worker()
+        reader.notice_problems(self.clock())
+        self.assertEqual(self.pushes, [])
+        for i in range(9, 11):
+            listing = make_listing(self.product(f"doubt-{i}"), Retailer.objects.get(name="Doubt Shop"), price="1.99")
+            Listing.objects.filter(pk=listing.pk).update(sanity=Listing.Sanity.DOUBTFUL)
+        reader.notice_problems(self.clock())
+        reader.notice_problems(self.clock())
+        self.assertEqual(self.titles(), ["Prices to check"])
+        self.assertEqual(self.pushes[0].get_header("Click"), "https://ripraptor.com/admin/checks/")
+        self.assert_nothing_named(self.pushes[0], "Doubt", "1.99", "11")
+        self.assertIn("11 doubtful prices", self.emails[0][2])
+
+    def test_notices_are_checked_once_a_planning_pass_and_never_while_paused(self):
+        reader = self.make_worker(executor=HeldExecutor())
+        with mock.patch.object(reader, "notice_problems") as noticed:
+            reader.tick(self.clock())
+            self.clock.advance(seconds=5)
+            reader.tick(self.clock())
+            self.assertEqual(noticed.call_count, 1)
+            self.clock.advance(seconds=60)
+            reader.tick(self.clock())
+            self.assertEqual(noticed.call_count, 2)
+        self.failing_shop("Grimm Cards", 25)
+        self.doubtful(11)
+        WorkerState.objects.update_or_create(pk=1, defaults={"paused": True})
+        reader.notice_problems(self.clock())
+        self.assertEqual(self.pushes, [])
+
+    def test_doubtful_prices_waiting_is_an_improvement_at_weight_72(self):
+        self.doubtful(11)
+        items = {item["title"]: item for item in insights.report(30)["improvements"]}
+        self.assertEqual(items["11 doubtful prices waiting"]["weight"], 72)
+        self.assertEqual(items["11 doubtful prices waiting"]["link"], "/admin/checks/")
+
+    def test_ntfy_down_still_emails_and_never_raises(self):
+        self.failing_shop("Grimm Cards", 25)
+        with mock.patch.object(notify.urllib.request, "urlopen", side_effect=OSError("down")):
+            self.make_worker().notice_problems(self.clock())
+        self.assertEqual(len(self.emails), 1)
+
+    @override_settings(RIPRAPTOR_NTFY_TOPIC="", RIPRAPTOR_INBOX_NOTIFY_EMAIL="")
+    def test_no_settings_sends_nothing_and_raises_nothing(self):
+        self.failing_shop("Grimm Cards", 25)
+        self.doubtful(11)
+        self.make_worker().run_once()
+        WorkerState.objects.filter(pk=1).update(heartbeat_at=timezone.now() - timedelta(minutes=15))
+        with self.assertRaises(SystemExit):
+            call_command("check_worker", stdout=StringIO())
+        self.assertEqual((self.pushes, self.emails), ([], []))
+        # Nothing was sent, so nothing is noted: setting a topic later sends at once.
+        self.assertEqual(WorkerState.objects.get().notices, {})
+
+    @override_settings(RIPRAPTOR_CRAWL_PUSHES=False)
+    def test_crawl_pushes_off_sends_nothing_about_crawling(self):
+        self.failing_shop("Grimm Cards", 25)
+        self.doubtful(11)
+        self.make_worker().notice_problems(self.clock())
+        WorkerState.objects.filter(pk=1).update(heartbeat_at=timezone.now() - timedelta(minutes=15))
+        with self.assertRaises(SystemExit):
+            call_command("check_worker", stdout=StringIO())
+        self.assertEqual((self.pushes, self.emails), ([], []))
 
 
 class SharedDatabaseTests(TestCase):

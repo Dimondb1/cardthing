@@ -321,6 +321,9 @@ class Retailer(models.Model):
     last_error = models.CharField(max_length=300, blank=True)
     error_streak = models.PositiveSmallIntegerField("failed reads in a row", default=0)
     backoff_until = models.DateTimeField("waiting after errors until", null=True, blank=True)
+    # When the failed reads that have not yet been followed by a good one began, so the owner can be told
+    # once a shop has kept failing for a day. Cleared by a read that works.
+    failing_since = models.DateTimeField("failing since", null=True, blank=True)
     reading_paused = models.BooleanField("reading paused", default=False)
 
     # A failed read waits 5 minutes, then 10, 20 and so on up to 6 hours. A shop that says it is being
@@ -375,12 +378,14 @@ class Retailer(models.Model):
         """Record a read that worked: errors forgotten, next read set by the cadence."""
         self.error_streak = 0
         self.backoff_until = None
+        self.failing_since = None
         self.last_error = ""
         self.last_ok_at = ok_at or now
         self.last_read_seconds = int(seconds)
         self.next_read_at = self.cadence_for(now, seconds, since=since)
         self.save(update_fields=[
-            "error_streak", "backoff_until", "last_error", "last_ok_at", "last_read_seconds", "next_read_at",
+            "error_streak", "backoff_until", "failing_since", "last_error", "last_ok_at", "last_read_seconds",
+            "next_read_at",
         ])
 
     def read_failed(self, now, status=None, error=""):
@@ -390,9 +395,11 @@ class Retailer(models.Model):
         if status == 429:
             wait = max(wait, self.BACKOFF_TOO_MANY)
         self.backoff_until = now + wait
+        if self.failing_since is None:
+            self.failing_since = now
         if error:
             self.last_error = error[:300]
-        self.save(update_fields=["error_streak", "backoff_until", "last_error"])
+        self.save(update_fields=["error_streak", "backoff_until", "failing_since", "last_error"])
 
     def delivery_for(self, price):
         """Delivery charge for one item at ``price`` under this retailer's rules, or None when not known.

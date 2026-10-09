@@ -1,21 +1,20 @@
 """
 Message us: visitors write, the owner reads and replies in Django Admin.
 
-New messages reach the owner by an email to their own address through
-ZeptoMail (RIPRAPTOR_INBOX_NOTIFY_EMAIL) and, if set, a phone push through
-ntfy (RIPRAPTOR_NTFY_TOPIC). The push carries no name and no message text,
-only a link to admin, because ntfy.sh topics are public to anyone who guesses
-the name. Either can be left blank.
+New messages reach the owner through catalogue/notify.py: an email to their
+own address through ZeptoMail (RIPRAPTOR_INBOX_NOTIFY_EMAIL) and, if set, a
+phone push through ntfy (RIPRAPTOR_NTFY_TOPIC). The push carries no name and
+no message text, only a link to admin, because ntfy.sh topics are public to
+anyone who guesses the name. Either can be left blank.
 """
 
-import urllib.request
 from datetime import timedelta
 
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 
-from catalogue import mail
+from catalogue import mail, notify
 
 from .models import Conversation, Message
 
@@ -75,39 +74,18 @@ def reply(conversation, body, now=None):
     return True
 
 
-def admin_url(conversation):
-    return settings.RIPRAPTOR_SITE_URL + reverse("admin:inbox_conversation_change", args=[conversation.pk])
-
-
 def tell_owner(conversation, message, opener=None):
-    """Best effort: a failed notification never loses the message, which is already saved."""
+    """Best effort: a failed notification never loses the message, which is already saved.
+
+    Every message is sent, not once a day: the push names no one and carries no words (catalogue/notify.py).
+    """
     who = conversation.name or "A visitor"
-    link = admin_url(conversation)
-    if settings.RIPRAPTOR_NTFY_TOPIC:
-        request = urllib.request.Request(
-            settings.RIPRAPTOR_NTFY_URL.rstrip("/") + "/" + settings.RIPRAPTOR_NTFY_TOPIC,
-            data=b"Open admin to read it.",
-            headers={"Title": f"New {settings.RIPRAPTOR_SITE_NAME} message", "Click": link, "Tags": "speech_balloon"},
-            method="POST",
-        )
-        try:
-            with (opener or urllib.request.urlopen)(request, timeout=10):
-                pass
-        except OSError:
-            pass
-    if settings.RIPRAPTOR_INBOX_NOTIFY_EMAIL and mail.enabled():
-        text = f"{who} wrote:\n\n{message.body}\n\nRead and reply: {link}\n"
-        html = f"<p><strong>{escape(who)}</strong> wrote:</p><p style=\"white-space:pre-wrap\">{escape(message.body)}</p><p><a href=\"{link}\">Read and reply</a></p>"
-        try:
-            mail.send(settings.RIPRAPTOR_INBOX_NOTIFY_EMAIL, f"New message from {who}", text, html)
-        except mail.MailError:
-            pass
-
-
-def escape(value):
-    from django.utils.html import escape as html_escape
-
-    return html_escape(value)
+    notify.owner(
+        f"New message from {who}", f"New {settings.RIPRAPTOR_SITE_NAME} message",
+        reverse("admin:inbox_conversation_change", args=[conversation.pk]),
+        detail=f"{who} wrote:\n\n{message.body}", once_a_day=False, link_label="Read and reply",
+        tags="speech_balloon", opener=opener,
+    )
 
 
 def forget_email(conversation):

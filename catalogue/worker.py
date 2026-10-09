@@ -32,6 +32,10 @@ Safety:
 - a heartbeat goes to WorkerState and to systemd's watchdog every 30 seconds. When it stops, the
   hourly cron (import_prices --if-worker-dead 30, watch_stock --if-worker-dead 30) reads the shops.
 
+The owner is told on their phone (catalogue/notify.py, at most once a day each) when a shop has failed
+every read for more than a day or more than 10 doubtful prices are waiting; check_worker tells them when
+the heartbeat stops.
+
 Everything takes an injected clock, sleep and fetch, and run_once() does one planning pass in the
 calling thread, so the tests need no threads and no waiting.
 """
@@ -50,7 +54,7 @@ from django.db import connections
 from django.db.models import Q
 from django.utils import timezone
 
-from . import crawl, heat, importers, probe
+from . import checks, crawl, heat, importers, notify, probe
 from .models import ImportRun, Listing, Retailer, WorkerState
 
 logger = logging.getLogger(__name__)
@@ -103,6 +107,10 @@ RATES = {
 }
 GLOBAL_RATE = (2.0, 2)
 STUCK = "Stuck, restarting"
+# The owner hears about a shop that has failed every read for this long, and about doubtful prices once
+# there are more than this many: enough to act on, never a stream.
+FAILING_FOR = timedelta(hours=24)
+DOUBTFUL_PILE = 10
 
 
 def minutes(delta):
@@ -402,6 +410,21 @@ class Worker:
             ))
         return tasks
 
+    def notice_problems(self, now):
+        """Tell the owner about a shop failing for a day or doubtful prices piling up. Never while Pause all is on."""
+        if crawl.all_paused():
+            return
+        failing = list(
+            Retailer.objects.filter(
+                is_active=True, reading_paused=False, error_streak__gt=0, failing_since__lte=now - FAILING_FOR,
+            ).exclude(source_type=Retailer.Source.MANUAL).order_by("name").values_list("name", "last_error")
+        )
+        if failing:
+            notify.shops_failing(failing, now=now)
+        doubtful = checks.doubtful_count()
+        if doubtful > DOUBTFUL_PILE:
+            notify.prices_to_check(doubtful, now=now)
+
     # Dispatch ---------------------------------------------------------------------------------
 
     def dispatch(self, now):
@@ -677,9 +700,22 @@ class Worker:
             if self.last_plan is None or now - self.last_plan >= PLAN_EVERY:
                 self.last_plan = now
                 self.queue = self.plan(now)
+                planned = True
+            else:
+                planned = False
             self.dispatch(now)
         except Exception:  # noqa: BLE001 - tried again on the next turn
             logger.exception("The planning pass failed")
+            return
+        if planned:
+            self.notify_safely(now)
+
+    def notify_safely(self, now):
+        """A notice that cannot be sent or noted waits for the next planning pass; it never stops the reader."""
+        try:
+            self.notice_problems(now)
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not tell the owner about a problem")
 
     def run_once(self):
         """One planning pass, every job run to the end in this thread, then a heartbeat. For tests and checks."""
@@ -690,6 +726,7 @@ class Worker:
         self.queue = self.plan(now)
         while self.dispatch(self.clock()):
             pass
+        self.notify_safely(self.clock())
         self.beat(self.clock())
 
     def run_forever(self):

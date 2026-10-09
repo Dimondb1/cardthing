@@ -243,6 +243,9 @@ RIPRAPTOR_SITE_URL = os.environ.get("RIPRAPTOR_SITE_URL", "https://ripraptor.com
 RIPRAPTOR_INBOX_NOTIFY_EMAIL = os.environ.get("RIPRAPTOR_INBOX_NOTIFY_EMAIL", "").strip()
 RIPRAPTOR_NTFY_TOPIC = os.environ.get("RIPRAPTOR_NTFY_TOPIC", "").strip()
 RIPRAPTOR_NTFY_URL = os.environ.get("RIPRAPTOR_NTFY_URL", "https://ntfy.sh").strip()
+# The owner is also told when the background reader stops, a shop keeps failing for a day or doubtful
+# prices pile up, at most once a day each. Off sends nothing about crawling; new messages are still sent.
+RIPRAPTOR_CRAWL_PUSHES = env_bool("RIPRAPTOR_CRAWL_PUSHES", default=True)
 
 RIPRAPTOR_EBAY_APP_ID = os.environ.get("RIPRAPTOR_EBAY_APP_ID", "").strip()
 RIPRAPTOR_EBAY_CERT_ID = os.environ.get("RIPRAPTOR_EBAY_CERT_ID", "").strip()

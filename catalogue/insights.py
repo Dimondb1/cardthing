@@ -14,7 +14,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Max, Q, Sum
 from django.utils import timezone
 
-from . import geo
+from . import checks, geo
 from .importers import STOPPED
 from .pricing import drop_if_locked, retry_locked
 from .models import (
@@ -389,6 +389,7 @@ def report(days=30):
         "unpaid": unpaid,
         "shops_health": shops_health,
         "worker_stopped": worker_stopped(now),
+        "doubtful_waiting": checks.doubtful_count(),
         "viewed_no_click": viewed_no_click,
         "one_shop": one_shop,
         "catalogue": catalogue_stats,
@@ -530,6 +531,13 @@ def improvements(data):
         top = ", ".join(f"'{s['query']}'" for s in data["empty_searches"][:5])
         add(75, f"{plural(len(data['empty_searches']), 'search', 'searches')} found nothing",
             f"Visitors looked for {top}. Each is a product to add or a name to fix.")
+
+    doubtful = data.get("doubtful_waiting")
+    if doubtful:
+        add(72, f"{plural(doubtful, 'doubtful price', 'doubtful prices')} waiting",
+            "These prices look wrong next to other shops, the shop's own history or similar products, so they are "
+            "never claimed as a saving. One tap on "
+            "Things to check says a price is right or hides it.", "/admin/checks/", "Things to check")
 
     if data["one_shop"]:
         top = ", ".join(r["product"].name for r in data["one_shop"][:3])

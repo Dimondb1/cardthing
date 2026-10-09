@@ -480,6 +480,46 @@ class WebsiteCrawlIsNotCompleteTests(TestCase):
         self.assertEqual(Listing.objects.get(product=unseen).availability, "in_stock")
 
 
+class UnreachableWebsiteTests(TestCase):
+    """A website shop that answers nothing is a failed read that backs off, not a read that found nothing."""
+
+    def setUp(self):
+        self.shop = make_retailer("Shop", source_type=Retailer.Source.WEBSITE, source_url="https://shop.example/")
+
+    def test_a_shop_that_answers_nothing_fails_its_read_and_backs_off(self):
+        from . import crawl
+
+        def fetch(url):
+            raise ImportError_(f"Could not fetch {url}: <urlopen error [Errno 111] Connection refused>")
+
+        began = timezone.now()
+        run = run_import(self.shop, fetch=fetch)
+        self.assertIn("Connection refused", run.error)
+        self.assertFalse(crawl.finish_read(self.shop, run, began, 1.0, now=began))
+        self.shop.refresh_from_db()
+        self.assertEqual(self.shop.error_streak, 1)
+        self.assertGreater(self.shop.backoff_until, began)
+        self.assertIsNone(self.shop.last_ok_at)
+
+    def test_a_shop_that_answers_robots_but_has_no_sitemap_still_reads_as_empty(self):
+        def fetch(url):
+            if url.endswith("/robots.txt"):
+                return b"User-agent: *\n"
+            raise ImportError_(f"Could not fetch {url}: HTTP Error 404")
+
+        run = run_import(self.shop, fetch=fetch)
+        self.assertEqual(run.error, "")
+        self.assertEqual(run.offers_found, 0)
+
+    def test_discover_shops_still_gets_an_empty_list_for_a_site_that_answers_nothing(self):
+        from .importers import sitemap_urls
+
+        def fetch(url):
+            raise ImportError_("Connection refused")
+
+        self.assertEqual(sitemap_urls("https://shop.example", fetch=fetch), [])
+
+
 class SitemapRankingTests(TestCase):
     def test_pages_are_ranked_by_what_their_address_says(self):
         from .importers import page_rank

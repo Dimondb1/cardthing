@@ -656,26 +656,33 @@ def sitemap_lastmod(text):
         return None
 
 
-def sitemap_pages(base, fetch=fetch, limit=MAX_PAGES):
+def sitemap_pages(base, fetch=fetch, limit=MAX_PAGES, must_answer=False):
     """(address, lastmod) for every page the site's sitemap(s) list, product-looking ones first.
 
-    lastmod is None when the sitemap does not date the page.
+    lastmod is None when the sitemap does not date the page. With ``must_answer``, a site that
+    answered neither robots.txt nor any sitemap raises ImportError_, so a shop that cannot be reached
+    counts as a failed read instead of a read that found nothing.
     """
     found, seen, queue = {}, set(), [f"{base}/sitemap.xml", f"{base}/sitemap_index.xml", f"{base}/xmlsitemap.php"]
+    answered, failed = [], []
     try:
         robots = fetch(f"{base}/robots.txt").decode("utf-8", "replace")
+        answered.append(True)
         queue = [line.split(":", 1)[1].strip() for line in robots.splitlines() if line.lower().startswith("sitemap:")] + queue
-    except ImportError_:
-        pass
+    except ImportError_ as exc:
+        failed.append(exc)
     # Read every sitemap file (up to MAX_SITEMAPS of them) before ranking, so
     # a shop that lists its accessories first still gets its sealed products
     # fetched. The page limit is applied after ranking. Sitemap files are
     # static and large, so a few are read at once.
     def read(url):
         try:
-            return fetch(url).decode("utf-8", "replace")
-        except ImportError_:
+            text = fetch(url).decode("utf-8", "replace")
+        except ImportError_ as exc:
+            failed.append(exc)
             return ""
+        answered.append(True)
+        return text
 
     with ThreadPoolExecutor(max_workers=SITEMAP_WORKERS) as pool:
         while queue and len(seen) < MAX_SITEMAPS:
@@ -697,6 +704,8 @@ def sitemap_pages(base, fetch=fetch, limit=MAX_PAGES):
                             queue.append(loc)
                         elif loc not in found or (lastmod and (found[loc] is None or lastmod > found[loc])):
                             found[loc] = lastmod
+    if must_answer and not answered and failed:
+        raise ImportError_(str(failed[-1]))
     found = [(u, lastmod) for u, lastmod in found.items() if not u.lower().endswith((".jpg", ".png", ".webp", ".pdf"))]
     ranked = [(rank, i, page) for i, page in enumerate(found) if (rank := page_rank(page[0])) is not None]
     ranked.sort(key=lambda row: row[:2])
@@ -883,7 +892,7 @@ def website_offers(retailer, fetch=fetch, pause=0.5, limit=PAGES_PER_READ):
     carries on where this one stopped.
     """
     base = retailer.source_url.rstrip("/")
-    for page_pk, url in pages_to_read(retailer, sitemap_pages(base, fetch=fetch), limit=limit):
+    for page_pk, url in pages_to_read(retailer, sitemap_pages(base, fetch=fetch, must_answer=True), limit=limit):
         try:
             html = fetch(url).decode("utf-8", "replace")
         except ImportError_:

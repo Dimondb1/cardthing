@@ -367,7 +367,8 @@ def product_offers(base, product, preorder=False):
             vendor=product.get("vendor", "") or "",
             tags=tuple(product.get("tags", []) or []),
             published_at=published_at,
-            variant=variant["title"] if variant.get("title") and variant["title"] != "Default Title" else "",
+            # Only a page with several variants can mix products up; a lone "6 Packs" variant is the page itself.
+            variant=variant["title"] if len(product.get("variants") or []) > 1 and variant.get("title") not in (None, "", "Default Title") else "",
         )
 
 

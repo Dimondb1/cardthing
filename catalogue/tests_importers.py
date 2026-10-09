@@ -381,6 +381,15 @@ class NameMatchingTests(TestCase):
         self.assertFalse(ShopProduct.objects.filter(retailer=self.retailer, price=Decimal("5.50")).exists())
         self.assertEqual(Listing.objects.get(retailer=self.retailer).price, Decimal("154.25"))
 
+    def test_a_page_with_one_variant_is_that_product_whatever_its_label(self):
+        from .importers import apply_offers, product_offers
+
+        bundle = make_product(self.box.product_set, name="Surging Sparks Booster Bundle", slug="ssp-bundle", product_type="bundle")
+        page = {"handle": "ssp-bundle", "title": "Pokemon Surging Sparks Booster Bundle", "tags": [], "images": [],
+                "variants": [{"id": 7, "title": "6 Packs", "price": "29.99", "available": True, "barcode": ""}]}
+        apply_offers(self.retailer, product_offers("https://pc.example", page), complete=False)
+        self.assertEqual(Listing.objects.get(retailer=self.retailer).product, bundle)
+
     def test_a_box_sold_with_extra_packs_is_not_the_box(self):
         from .importers import Offer, apply_offers
 

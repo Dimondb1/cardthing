@@ -174,6 +174,25 @@ def release_disagreements(now=None):
     return found[:RELEASE_ROWS]
 
 
+def name_sources(rows):
+    """Give each Release row a source_label the owner can read: the source's own name ("TCGdex"), or "a
+    Total Cards product title" for a shop's title. One query for the shops, however many rows."""
+    from .releases import BY_NAME, SHOP_PREFIX
+
+    rows = list(rows)
+    slugs = {row.source[len(SHOP_PREFIX):] for row in rows if row.source.startswith(SHOP_PREFIX)}
+    shops = dict(Retailer.objects.filter(slug__in=slugs).values_list("slug", "name")) if slugs else {}
+    for row in rows:
+        if row.source in BY_NAME:
+            row.source_label = BY_NAME[row.source].label
+        elif row.source.startswith(SHOP_PREFIX):
+            slug = row.source[len(SHOP_PREFIX):]
+            row.source_label = f"a {shops.get(slug, slug)} product title"
+        else:
+            row.source_label = row.source
+    return rows
+
+
 def stale_release_sources(now=None):
     """Release sources with no good read in STALE_SOURCE_DAYS days, counted from when first tried."""
     from .releases import BY_NAME, STALE_SOURCE_DAYS

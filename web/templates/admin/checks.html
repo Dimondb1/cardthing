@@ -110,7 +110,7 @@
     {% if releases %}<ul>
       {% for row in releases %}
       <li class="item"><b>{{ row.name }}{% if row.code and row.code != row.name %} ({{ row.code }}){% endif %}</b>
-        {{ row.game.name }}, from {% if row.source_url %}<a href="{{ row.source_url }}" target="_blank" rel="noopener noreferrer">{{ row.source }}</a>{% else %}{{ row.source }}{% endif %}.
+        {{ row.game.name }}, from {% if row.source_url %}<a href="{{ row.source_url }}" target="_blank" rel="noopener noreferrer">{{ row.source_label }}</a>{% else %}{{ row.source_label }}{% endif %}.
         {% if row.precision == "day" %}Out {{ row.release_date|date:"j F Y" }}.{% elif row.precision == "month" %}Out in {{ row.release_date|date:"F Y" }}, day not given.{% else %}No date given.{% endif %}
         {% if row.note %}Shop title: "{{ row.note }}".{% endif %}
         {% if row.product_set %}The site has this set, as {{ row.product_set.name }}, with no date yet.{% endif %}
@@ -137,7 +137,7 @@
       <li class="item"><b>{% if group.set %}<a href="{{ group.set.get_absolute_url }}" target="_blank" rel="noopener">{{ group.name }}</a>{% else %}{{ group.name }}{% endif %}</b>
         {{ group.game.name }}{% if group.set and group.set.release_date %}, shown as out {{ group.set.release_date|date:"j F Y" }}{% endif %}.
         {% for row in group.rows %}
-        <div class="row">{% if row.source_url %}<a href="{{ row.source_url }}" target="_blank" rel="noopener noreferrer">{{ row.source }}</a>{% else %}{{ row.source }}{% endif %}: {{ row.release_date|date:"j F Y" }}
+        <div class="row">{% if row.source_url %}<a href="{{ row.source_url }}" target="_blank" rel="noopener noreferrer">{{ row.source_label }}</a>{% else %}{{ row.source_label }}{% endif %}: {{ row.release_date|date:"j F Y" }}
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="use_release_date"><input type="hidden" name="release" value="{{ row.pk }}"><input type="hidden" name="date" value="{{ row.release_date|date:'Y-m-d' }}"><input type="submit" value="Use this date"></form></div>
         {% endfor %}
         {% if group.hand_date %}

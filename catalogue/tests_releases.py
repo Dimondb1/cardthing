@@ -965,3 +965,17 @@ class ChecksPageQueryTests(TestCase):
         response, six = self.queries()
         self.assertContains(response, "Release dates to confirm (6)")
         self.assertEqual(one, six)
+
+    def test_sources_are_named_as_the_owner_knows_them(self):
+        """The page says TCGdex and the shop's name, never an internal key such as tcgdex_sets."""
+        make_retailer("Total Cards")
+        Release.objects.create(game=self.pokemon, name="Delta Reign", source="tcgdex_sets", release_date=self.day,
+                               precision=DAY)
+        Release.objects.create(game=self.pokemon, name="ME03", code="ME03", source="shop:total-cards")
+        self.groups(0, 1)
+        response = self.client.get(reverse("checks"))
+        self.assertContains(response, "from TCGdex.")
+        self.assertContains(response, "from a Total Cards product title.")
+        self.assertContains(response, "pokemon.com UK news")
+        for key in ("tcgdex_sets", "shop:total-cards", "pokemon_uk_news"):
+            self.assertNotContains(response, key)

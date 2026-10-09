@@ -1438,6 +1438,8 @@ def checks_page(request):
         "releases": checks.release_candidates(), "disagreements": checks.release_disagreements(),
         "stale_sources": checks.stale_release_sources(),
     }
+    # The owner reads a source's name, never its internal key (tcgdex_sets, shop:total-cards).
+    checks.name_sources(context["releases"] + [row for group in context["disagreements"] for row in group["rows"]])
     return render(request, "admin/checks.html", context)
 
 

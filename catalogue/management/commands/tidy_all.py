@@ -7,7 +7,8 @@ tidy_listings (a shop item linked to the wrong product), merge_duplicates
 (one product under two names), tidy_catalogue (products that no longer pass
 the rules), then files products without a set under the set their name or
 code names (catalogue/releases.py attach_sets), sets each product's language from its name and set
-(catalogue/languages.py), forgets website shop pages
+(catalogue/languages.py), retypes products whose name plainly says another type (catalogue/types.py),
+forgets website shop pages
 no sitemap has listed for 30 days, clears old import records (catalogue/housekeeping.py) so
 the database stays small, and lets the autopilot answer the Things to check rows the evidence
 settles (catalogue/autopilot.py). Run by start.bat, update_prices and the server's hourly import,
@@ -50,6 +51,12 @@ class Command(BaseCommand):
         self.stdout.write("== languages")
         changed = refresh_languages(dry_run=dry_run)
         self.stdout.write(f"{changed} product languages {'would change' if dry_run else 'set'}.")
+
+        from catalogue.types import refresh_types
+
+        self.stdout.write("== types")
+        changed = refresh_types(dry_run=dry_run)
+        self.stdout.write(f"{changed} product types {'would change' if dry_run else 'set'}.")
 
         self.stdout.write("== shop pages")
         gone = forget_pages(dry_run=dry_run)

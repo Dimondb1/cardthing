@@ -150,3 +150,43 @@ def type_label(game_slug, code):
         if known == code:
             return label
     return code.replace("_", " ").capitalize()
+
+
+def owner_typed():
+    """Products whose type the owner changed in Django Admin. Their type is his, never changed here."""
+    from django.contrib.admin.models import CHANGE, LogEntry
+    from django.contrib.contenttypes.models import ContentType
+
+    from .models import Product
+
+    return {
+        int(pk) for pk in LogEntry.objects.filter(
+            content_type=ContentType.objects.get_for_model(Product), action_flag=CHANGE,
+            change_message__contains="Product type",
+        ).values_list("object_id", flat=True)
+        if pk and pk.isdigit()
+    }
+
+
+def refresh_types(dry_run=False, log=None):
+    """Retype every product whose name plainly says another type (classify.plain_type), so the type
+    filter shows only that type. A type the game does not use, and one the owner set, stay as they are.
+    Returns how many changed."""
+    from .classify import plain_type
+    from .models import Product
+    from .search import build_search_text
+
+    keep = owner_typed()
+    changed = []
+    for product in Product.objects.select_related("game", "product_set").exclude(pk__in=keep):
+        kind = plain_type(product.name, product.product_type)
+        if kind is None or kind not in {code for code, _label in GAME_TYPES.get(product.game.slug, DEFAULT)}:
+            continue
+        if log:
+            log(f"{'would retype' if dry_run else 'retyped'}: {product.name} -> {kind}")
+        product.product_type = kind
+        product.search_text = build_search_text(product)
+        changed.append(product)
+    if not dry_run:
+        Product.objects.bulk_update(changed, ["product_type", "search_text"], batch_size=500)
+    return len(changed)

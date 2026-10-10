@@ -39,8 +39,8 @@ from django.db import DatabaseError, models, transaction
 from django.utils import timezone
 
 from . import checks, languages, sanity
-from .classify import TYPES, box_contents, find_type
-from .matching import AUTO_LINK, expand
+from .classify import MULTI_PACK, PACK_WORDS, box_contents, find_type, says_kind
+from .matching import AUTO_LINK
 from .models import CheckAnswer, Listing, Product, ProductSet, Release, ShopProduct
 from .types import type_label
 
@@ -60,12 +60,6 @@ REFUSE_PEERS = 2
 # tins and decks are left out: shops call one product a "Box Set", a "Gift Set" or a "Display".
 CLEAR_KINDS = {"booster_box", "booster_pack", "elite_trainer_box", "bundle", "collector_booster_box",
                "collector_booster_pack"}
-# What says a title is of a kind. A bare "booster" says nothing: nearly every title carries it.
-KIND_PHRASES = {kind: tuple(p for p in phrases if p != "booster") for kind, phrases in TYPES}
-# A title read as a pack must say pack, and one pack: "Blazing Dominion Booster" is as often the box,
-# and "3-Pack" or "3 x Booster Packs" is a bundle.
-PACK_WORDS = re.compile(r"\bpacks?\b|\bpacket\b|\bchecklane\b|\bsleeved\b", re.I)
-MULTI_PACK = re.compile(r"\d+\s*[-x×]?\s*(?:booster\s*)?packs?\b|\bpacks?\s+of\s+\d", re.I)
 
 # A title that says the price is only part of it.
 DEPOSIT = re.compile(r"\b(deposit|reservation|part[\s-]?payment)\b", re.I)
@@ -112,11 +106,6 @@ def money(value):
 
 def codes(text):
     return {(family.lower(), int(number)) for family, number in SET_CODE.findall(text or "")}
-
-
-def says_kind(title, kind):
-    text = " " + expand(box_contents(title)) + " "
-    return any(f" {phrase} " in text for phrase in KIND_PHRASES.get(kind, ()))
 
 
 def contradiction(product, title):

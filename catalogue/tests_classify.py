@@ -279,3 +279,96 @@ class TidyAllTests(TestCase):
         make_listing(box, make_retailer("Shop", source_type="website"), url="https://shop.example/gb-posters-pokemon-pikachu-gift-box")
         call_command("tidy_all", stdout=StringIO())
         self.assertFalse(Product.objects.filter(pk=box.pk).exists())
+
+
+class PlainTypeTests(TestCase):
+    """A name that plainly says its type outranks the shop's category, so the type filter is exact."""
+
+    def test_names_that_plainly_say_another_type(self):
+        from .classify import plain_type
+
+        for name, current, expected in [
+            ("Disney Lorcana TCG Archazia's Island Booster Pack", "booster_box", "booster_pack"),
+            ("30th Celebration Booster Pack (Korean)", "booster_box", "booster_pack"),
+            ("Destined Rivals Booster Bundle", "booster_box", "bundle"),
+            ("Paldean Fates 5 Booster Tin Shiny Charizard", "collection_box", "tin"),
+            ("Mega Evolution Chaos Rising Boosters Display Box", "elite_trainer_box", "booster_box"),
+            # The name says the stored type too, or is not plain: left alone.
+            ("Surging Sparks Booster Box (36 Packs)", "booster_box", None),
+            ("Disney Lorcana: Into the Inklands Booster Box (Set 3)", "booster_box", None),
+            ("Mega Tin Charizard", "collection_box", None),
+            ("Prismatic Evolutions Premium Checklane Blister", "bundle", None),
+            ("Prismatic Evolutions Premium Checklane", "bundle", None),
+            ("Fusion World DP Double Pack Set", "booster_box", None),
+            ("Korean Booster Mega Mystery Bundle 2 Booster Boxes", "booster_box", None),
+            ("Topps SPFL Match Attax 2023 Starter Game Pack", "collection_box", None),
+            ("Deluxe Battle Decks Meowscarada ex & Quaquaval ex Bundle", "deck", None),
+            ("Surging Sparks Booster Pack x 3", "booster_box", None),
+            ("Blazing Dominion Booster", "booster_box", None),
+            ("Paldea Evolved Ultra Premium Collection", "booster_box", None),
+        ]:
+            with self.subTest(name=name):
+                self.assertEqual(plain_type(name, current), expected)
+
+    def test_a_shop_category_does_not_make_a_pack_a_box(self):
+        sealed = classify("Disney Lorcana TCG: Archazia's Island Booster Pack", "Booster Boxes", price=5)
+        self.assertEqual(sealed.product_type, "booster_pack")
+        sealed = classify("Pokemon Destined Rivals Booster Bundle", "Booster Box", price=30)
+        self.assertEqual(sealed.product_type, "bundle")
+        sealed = classify("Pokemon Surging Sparks Booster Box (36 Packs)", "Booster Box", price=100)
+        self.assertEqual(sealed.product_type, "booster_box")
+
+
+class RefreshTypesTests(TestCase):
+    def setUp(self):
+        from .testing import make_game, make_set
+
+        self.set = make_set(make_game(name="Disney Lorcana", slug="lorcana"), name="Archazia's Island", slug="archazias-island")
+
+    def test_products_saved_with_the_wrong_type_are_retyped_once(self):
+        from django.urls import reverse
+
+        from .models import Product
+        from .testing import make_listing, make_product, make_retailer
+        from .types import refresh_types
+
+        pack = make_product(self.set, name="Archazia's Island Booster Pack", product_type="booster_box")
+        box = make_product(self.set, name="Archazia's Island Booster Box", product_type="booster_box")
+        shop = make_retailer()
+        make_listing(pack, shop, price=Decimal("5.00"))
+        make_listing(box, shop, price=Decimal("120.00"))
+        self.assertEqual(refresh_types(dry_run=True), 1)
+        self.assertEqual(Product.objects.get(pk=pack.pk).product_type, "booster_box")
+        self.assertEqual(refresh_types(), 1)
+        pack.refresh_from_db()
+        self.assertEqual(pack.product_type, "booster_pack")
+        self.assertIn(" booster pack ", pack.search_text)
+        self.assertEqual(refresh_types(), 0)
+        page = self.client.get(reverse("web:search"), {"type": "booster_pack", "q": "archazia"})
+        self.assertContains(page, "Archazia&#x27;s Island Booster Pack")
+        self.assertNotContains(page, "Archazia&#x27;s Island Booster Box")
+
+    def test_a_type_the_owner_set_or_the_game_does_not_use_stays(self):
+        from django.contrib.admin.models import CHANGE, LogEntry
+        from django.contrib.admin.utils import construct_change_message
+        from django.contrib.auth import get_user_model
+        from django.contrib.contenttypes.models import ContentType
+        from django.forms import modelform_factory
+
+        from .models import Product
+        from .testing import make_product
+        from .types import refresh_types
+
+        pack = make_product(self.set, name="Archazia's Island Booster Pack", product_type="booster_box")
+        tin = make_product(self.set, name="Archazia's Island Tin", product_type="collection_box")
+        # The owner sets the type in Django Admin: the change is logged as Admin logs it.
+        form = modelform_factory(Product, fields=["product_type"])({"product_type": "booster_box"}, instance=pack)
+        form.changed_data.append("product_type")
+        owner = get_user_model().objects.create_superuser("owner", "owner@example.com", "x")
+        LogEntry.objects.create(
+            user=owner, content_type=ContentType.objects.get_for_model(Product), object_id=str(pack.pk),
+            object_repr=pack.name, action_flag=CHANGE, change_message=construct_change_message(form, [], False),
+        )
+        self.assertEqual(refresh_types(), 0)
+        self.assertEqual(Product.objects.get(pk=pack.pk).product_type, "booster_box")
+        self.assertEqual(Product.objects.get(pk=tin.pk).product_type, "collection_box")   # Lorcana sells no tins

@@ -203,6 +203,43 @@ def find_type(title, shop_type=""):
     return None
 
 
+# What says a title is of a kind. A bare "booster" says nothing: nearly every title carries it.
+KIND_PHRASES = {kind: tuple(p for p in phrases if p != "booster") for kind, phrases in TYPES}
+# A title read as a pack must say pack, and one pack: "Blazing Dominion Booster" is as often the box,
+# and "3-Pack", "3 x Booster Packs" or "Booster Pack x 3" is a bundle.
+PACK_WORDS = re.compile(r"\bpacks?\b|\bpacket\b|\bchecklane\b|\bsleeved\b", re.I)
+MULTI_PACK = re.compile(r"\d+\s*[-x×]?\s*(?:booster\s*)?packs?\b|\bpacks?\s+of\s+\d|\bpacks?\s*[x×]\s*\d", re.I)
+# Kinds a name states so plainly that it outranks the shop's category. Collection boxes, gift sets and
+# decks are left out: shops call one product a "Box Set", a "Gift Set" or a "Display".
+PLAIN_KINDS = ("booster_box", "booster_pack", "elite_trainer_box", "bundle", "tin")
+# Names no rule reads safely: a checklane blister or a double pack set is a few packs and a promo, a
+# starter pack is a binder and cards, "Battle Decks ... Bundle" is two decks, a mystery box is anything.
+UNSURE_KIND = re.compile(r"\bcheck\s?lane\b|\bdouble\s+pack\b|\bdisplay\s+set\b|\bstarter\b|\bdecks\b|\bmystery\b",
+                         re.I)
+
+
+def says_kind(title, kind):
+    text = " " + expand(box_contents(title)) + " "
+    return any(f" {phrase} " in text for phrase in KIND_PHRASES.get(kind, ()))
+
+
+def plain_type(name, current):
+    """The type a product's name plainly states when it is not ``current``, or None.
+
+    A shop files a pack under "Booster Boxes" and the product is made a booster box. The type filter
+    then shows a pack among the boxes. A name that says one kind plainly, and not ``current``, wins.
+    """
+    kind = find_type(box_contents(name))
+    if kind not in PLAIN_KINDS or kind == current or says_kind(name, current) or UNSURE_KIND.search(name):
+        return None
+    if kind == "booster_pack" and (not PACK_WORDS.search(name) or MULTI_PACK.search(name)):
+        return None
+    # A name naming two kinds ("Bundle: 2 Booster Boxes") is not plain. A box may list its packs.
+    if any(says_kind(name, other) for other in PLAIN_KINDS if other not in (kind, "booster_pack")):
+        return None
+    return kind
+
+
 # Nothing sealed sells for less than this. Cheaper things are single cards,
 # tokens, code sheets and other loose parts.
 MIN_PRICE = 2
@@ -312,6 +349,8 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
     kind = find_type(title, shop_type)
     if kind is None:
         return None
+    # The shop's category goes first, but a title that plainly says another type is right.
+    kind = plain_type(title, kind) or kind
     if price is not None and price < MIN_PRICE:
         return None
     name = clean_name(title, game)

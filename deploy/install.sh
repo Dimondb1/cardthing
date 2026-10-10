@@ -74,6 +74,7 @@ ROTATE
 .venv/bin/python manage.py migrate -v0
 .venv/bin/python manage.py backfill_restocks >/dev/null
 .venv/bin/python manage.py set_languages >/dev/null
+.venv/bin/python manage.py set_types >/dev/null
 .venv/bin/python manage.py collectstatic --noinput -v0
 .venv/bin/python manage.py setup_shops
 grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb" >> .env

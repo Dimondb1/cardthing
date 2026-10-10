@@ -1547,6 +1547,17 @@ collector boosters are their own types, and `tidy_catalogue` retypes any
 that were filed as play boosters. Browsing also filters by price band and
 by products compared at two or more shops.
 
+The type filter is exact, so a product's type must be right. A shop's
+category can be wrong (a pack filed under "Booster Boxes"), so a name that
+plainly says another type wins (`plain_type` in `catalogue/classify.py`):
+booster pack, booster box, Elite Trainer Box, bundle or tin. Names that
+say two types, or that no rule reads safely (checklane, double pack set,
+starter pack, mystery box), keep their type. This is applied when a
+product is made from a shop title, by `python manage.py set_types` (the
+update runs it; `--dry-run` lists what would change), and every hour by
+`tidy_all`. A type you set in Django Admin is never changed, and a product
+is only given a type its game uses.
+
 ## Latest drops
 
 `/new/` lists sealed products released in the last 45 days, on pre-order,

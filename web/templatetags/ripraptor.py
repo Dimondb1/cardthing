@@ -1,3 +1,4 @@
+import re
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django import template
@@ -12,6 +13,21 @@ from content import service
 register = template.Library()
 
 PENNY = Decimal("0.01")
+
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+@register.filter
+def accent_last(text):
+    """The headline with its last sentence on a line of its own, in the brand colour.
+
+    "Hunt the best prices. Rip more packs." becomes the first sentence, then the second in a span.
+    A headline of one sentence is left as it is, so the owner's wording decides.
+    """
+    parts = SENTENCE_END.split(str(text or "").strip())
+    if len(parts) < 2:
+        return text
+    return format_html('{} <span class="hero__accent">{}</span>', " ".join(parts[:-1]), parts[-1])
 
 
 def _money(value):

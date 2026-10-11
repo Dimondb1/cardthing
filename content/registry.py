@@ -195,14 +195,9 @@ ENTRIES = [
     ),
     Entry(
         "home.hero.title", H, "Home page headline",
-        "Hunt the best prices.",
-        "The strong line at the top of the home page, above the search box. The second headline line follows it.",
-    ),
-    Entry(
-        "home.hero.accent", T, "Second headline line",
-        "Rip more packs.",
-        "Shown in orange on its own line under the headline. Leave empty for one line.",
-        optional=True,
+        "Hunt the best prices. Rip more packs.",
+        "The strong lines at the top of the home page, above the search box. The last sentence is shown in "
+        "orange on a line of its own; one sentence stays on one line.",
     ),
     Entry(
         "home.hero.subtitle", T, "Line under the headline",

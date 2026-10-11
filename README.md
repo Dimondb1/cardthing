@@ -1618,9 +1618,10 @@ rows; the installer runs it, and it is safe to run again.
 
 ## Home page and product cards
 
-The home page opens with a short line above the headline, the headline with
-its second line in orange (all three are registry entries; the line above and
-the orange line can be left empty), the search box, when prices were last
+The home page opens with a short line above the headline (optional) and the
+headline, whose last sentence is shown in orange on a line of its own
+(`accent_last` in `web/templatetags/ripraptor.py`; a one-sentence headline
+stays on one line), then the search box, when prices were last
 checked, and "Find your game": a tile per game with its product count, four
 on a phone and up to six on wider screens, then "More games". After that come
 Picked for you and Pick up where you left off (for a browser with history),

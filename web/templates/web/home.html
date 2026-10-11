@@ -4,7 +4,7 @@
 {% block content %}
 <section class="hero" aria-labelledby="hero-title">
   {% copy "home.hero.eyebrow" as eyebrow %}{% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
-  <h1 id="hero-title" class="hero__title">{% copy "home.hero.title" %}{% copy "home.hero.accent" as accent %}{% if accent %} <span class="hero__accent">{{ accent }}</span>{% endif %}</h1>
+  {% copy "home.hero.title" as title %}<h1 id="hero-title" class="hero__title">{{ title|accent_last }}</h1>
   {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}

@@ -1874,3 +1874,21 @@ class RedesignTests(PageTestCase):
         self.assertIn('<a href="/games/pokemon/">All sets</a>', row)
         self.assertIn(f'<a href="{self.pre.get_absolute_url()}" aria-current="page">Prismatic Evolutions</a>', row)
         self.assertNotIn('aria-current="page">Surging Sparks', row)
+
+    def test_the_headline_puts_its_last_sentence_in_orange_whatever_it_says(self):
+        from content.models import SiteContent
+
+        from web.templatetags.ripraptor import accent_last
+
+        self.assertEqual(accent_last("Hunt the best prices. Rip more packs."), 'Hunt the best prices. <span class="hero__accent">Rip more packs.</span>')
+        self.assertEqual(accent_last("Better prices"), "Better prices")
+        self.assertEqual(accent_last("One. Two. Three."), 'One. Two. <span class="hero__accent">Three.</span>')
+        self.assertEqual(accent_last("A <b>x</b>. B."), 'A &lt;b&gt;x&lt;/b&gt;. <span class="hero__accent">B.</span>')
+        # The owner's own wording in admin gets the same treatment, with nothing repeated.
+        from content import service
+
+        service.sync_defaults()
+        SiteContent.objects.filter(key="home.hero.title").update(content="Find it cheaper. Open more.")
+        html = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('<h1 id="hero-title" class="hero__title">Find it cheaper. <span class="hero__accent">Open more.</span></h1>', html)
+        self.assertEqual(html.count("Open more."), 1)

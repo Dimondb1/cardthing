@@ -235,6 +235,11 @@ RIPRAPTOR_GEOIP_DB = os.environ.get("RIPRAPTOR_GEOIP_DB", "").strip()
 # through Awin shops are tracked. Empty means no Awin script.
 RIPRAPTOR_AWIN_PUBLISHER_ID = os.environ.get("RIPRAPTOR_AWIN_PUBLISHER_ID", "3111686").strip()
 
+# Google Analytics 4 measurement id (G-...). Google's tag loads only after a visitor allows analytics on the
+# card, and never on pages whose address is a private link. Empty means no card and no Google script. Off
+# on a development machine (DJANGO_DEBUG on) unless set, so testing never counts as a visit.
+RIPRAPTOR_GA_ID = os.environ.get("RIPRAPTOR_GA_ID", "" if DEBUG else "G-TZW5ZVM9H8").strip()
+
 # Amazon Associates: Product Advertising API keys and the tracking tag
 # (ripraptor-21). All three empty means Amazon is not read.
 RIPRAPTOR_AMAZON_ACCESS_KEY = os.environ.get("RIPRAPTOR_AMAZON_ACCESS_KEY", "").strip()

@@ -306,6 +306,7 @@ ul, ol { margin: 0; padding: 0; }
 .site-footer__nav { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
 .site-footer__nav a { display: inline-block; padding-block: var(--space-1); color: var(--color-ink); font-weight: var(--weight-strong); }
 .site-footer__line a { display: inline-block; padding-block: var(--space-1); }
+.site-footer__choice { padding: var(--space-1) 0; border: 0; background: none; color: var(--color-ink); font: inherit; font-weight: var(--weight-strong); cursor: pointer; }
 @media (min-width: 48rem) {
   .site-footer__inner { max-width: calc(var(--page-width) + 2 * var(--gutter-wide)); padding-inline: var(--gutter-wide); }
 }
@@ -788,6 +789,7 @@ ul, ol { margin: 0; padding: 0; }
 .install__text { font-size: var(--text-sm); line-height: var(--leading-body); }
 .install__actions { display: flex; gap: var(--space-2); }
 @media (prefers-reduced-motion: reduce) { .install { transition: none; transform: none; } }
+@media (min-width: 48rem) { .consent { right: auto; max-width: var(--panel-width); } }
 
 /* Watchlist ---------------------------------------------------------------- */
 

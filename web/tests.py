@@ -1686,3 +1686,65 @@ class PicksTests(TestCase):
         page = self.client.get(reverse("web:home")).content.decode()
         self.assertIn(f'data-picks data-endpoint="{reverse("web:picks_api")}" hidden', page)
         self.assertLess(page.index("data-picks"), page.index("data-resume"))
+
+
+class AnalyticsTests(PageTestCase):
+    """Google Analytics loads only after the visitor allows it, and never on a private link."""
+
+    GA = {"RIPRAPTOR_GA_ID": "G-TEST123"}
+
+    def test_public_pages_ask_first_and_load_nothing_of_googles(self):
+        with self.settings(**self.GA):
+            for url in self.public_urls() + [reverse("web:terms")]:
+                html = self.client.get(url).content.decode()
+                with self.subTest(url=url):
+                    self.assertIn('src="/static/js/analytics.js" data-ga-id="G-TEST123" defer', html)
+                    self.assertIn('data-consent hidden', html)
+                    self.assertIn("Allow analytics", html)
+                    self.assertIn("No analytics", html)
+                    self.assertIn("data-consent-open hidden", html)
+                    # Google's own script is added by analytics.js once the visitor allows it.
+                    self.assertNotIn("googletagmanager", html)
+                    self.assertNotIn("!", re.sub(r"<[^>]*>", " ", html))
+                    for phrase in CopyStyleTests.BANNED:
+                        self.assertNotIn(phrase, html.lower())
+
+    def test_the_terms_page_explains_it_while_it_is_set_up(self):
+        with self.settings(**self.GA):
+            self.assertContains(self.client.get(reverse("web:terms")), "We use Google Analytics only if you allow it")
+        with self.settings(RIPRAPTOR_GA_ID=""):
+            html = self.client.get(reverse("web:terms")).content.decode()
+            self.assertNotIn("Google Analytics", html)
+            self.assertNotIn("analytics.js", html)
+            self.assertNotIn("data-consent", self.client.get(reverse("web:home")).content.decode())
+
+    def test_private_links_never_load_it(self):
+        from catalogue.models import StockAlert
+        from inbox import service as inbox
+
+        alert = StockAlert.objects.create(product=self.sold_out, email="someone@example.com")
+        conversation = inbox.start("Is the bundle coming back?")
+        with self.settings(**self.GA):
+            for url in (reverse("web:alert_confirm", args=[alert.token]), reverse("web:alert_stop", args=[alert.token]),
+                        conversation.get_absolute_url()):
+                html = self.client.get(url).content.decode()
+                with self.subTest(url=url):
+                    self.assertNotIn("analytics.js", html)
+                    self.assertNotIn("data-consent", html)
+                    self.assertNotIn("G-TEST123", html)
+
+    def test_the_script_keeps_private_links_out_and_asks_first(self):
+        from django.contrib.staticfiles import finders
+
+        script = open(finders.find("js/analytics.js"), encoding="utf-8").read()
+        self.assertIn(r"/^\/(?:contact\/c|alerts\/(?:confirm|stop))\//", script)
+        self.assertIn("config.page_referrer", script)
+        self.assertIn("allow_google_signals: false", script)
+        self.assertIn("ad_storage: \"denied\"", script)
+        # The tag is only ever added by start(), which runs on "granted" alone.
+        self.assertEqual(script.count("googletagmanager.com/gtag/js"), 1)
+        self.assertIn('if (choice === "granted") start();', script)
+        for route in ("contact_thread", "alert_confirm", "alert_stop"):
+            path = reverse(f"web:{route}", args=["abc123"])
+            with self.subTest(path=path):
+                self.assertRegex(path, r"^/(?:contact/c|alerts/(?:confirm|stop))/")

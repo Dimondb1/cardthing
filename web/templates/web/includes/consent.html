@@ -1,0 +1,7 @@
+{% load sitecopy %}<aside class="install consent" data-consent hidden aria-label="{% copy 'site.consent.label' %}">
+  <p class="install__text">{% copy "site.consent.text" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.consent.more" %}</a></p>
+  <div class="install__actions">
+    <button type="button" class="button button--quiet button--small" data-consent-choice="granted">{% copy "site.consent.allow" %}</button>
+    <button type="button" class="button button--quiet button--small" data-consent-choice="denied">{% copy "site.consent.refuse" %}</button>
+  </div>
+</aside>

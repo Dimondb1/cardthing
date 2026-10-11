@@ -27,6 +27,7 @@
   --page-width: 70rem;           /* 1120px: wide enough for six cards, narrow enough to feel dense */
   --gutter: 1rem;
   --gutter-wide: 2rem;
+  --panel-width: 30rem;          /* a card pinned to the screen corner on wide screens, such as the analytics question */
   --density: 1;
 
   /* Spacing scale -------------------------------------------------------- */

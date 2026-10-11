@@ -1194,7 +1194,7 @@ def alert_confirm(request, token):
                        product=alert.product.name)
         product = alert.product
     return render(request, "web/alert_done.html", {"heading": heading, "message": message, "product": product,
-                                                    "meta_title": heading, "noindex": True})
+                                                    "meta_title": heading, "noindex": True, "private_link": True})
 
 
 @require_GET
@@ -1203,7 +1203,7 @@ def alert_stop(request, token):
     heading = text(request, "alerts.stopped.title")
     message = text(request, "alerts.stopped.body")
     return render(request, "web/alert_done.html", {"heading": heading, "message": message, "product": product,
-                                                    "meta_title": heading, "noindex": True})
+                                                    "meta_title": heading, "noindex": True, "private_link": True})
 
 
 INBOX_COOKIE = "rr_inbox"
@@ -1279,7 +1279,7 @@ def contact_thread(request, token):
     response = render(request, "web/contact_thread.html", {
         "conversation": conversation, "thread": messages_list, "state": state, "max_length": inbox.MAX_LENGTH,
         "waiting": bool(messages_list) and messages_list[-1].from_visitor,
-        "meta_title": text(request, "contact.thread.title"), "noindex": True,
+        "meta_title": text(request, "contact.thread.title"), "noindex": True, "private_link": True,
     })
     response["Cache-Control"] = "no-store"
     if request.user.is_staff:

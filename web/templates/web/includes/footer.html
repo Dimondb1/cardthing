@@ -9,6 +9,7 @@
       <a href="{% url 'web:games' %}">{% copy "site.nav.games" %}</a>
       <a href="{% url 'web:contact' %}">{% copy "site.nav.contact" %}</a>
       <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a>
+      {% if ga_id and not private_link %}<button type="button" class="site-footer__choice" data-consent-open hidden>{% copy "site.nav.consent" %}</button>{% endif %}
       <span>&copy; {% now "Y" %} {{ site_name }}</span>
     </nav>
   </div>

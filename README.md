@@ -1468,6 +1468,7 @@ site's cache.
 | `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` | `25` | The highest monthly limit the page accepts, in US dollars. |
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
+| `RIPRAPTOR_GA_ID`              | `G-TZW5ZVM9H8` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |
 
 ## Games
 
@@ -1731,6 +1732,27 @@ confirmed saving of at least 15% on the next shop, or the lowest price of
 the week), then the closest match (same set, same language), then the most
 widely stocked. It keeps nothing about the visitor, and the request is never
 cached.
+
+## Google Analytics
+
+Google Analytics 4 (`RIPRAPTOR_GA_ID`) counts visits, pages, searches (the
+`q` in search addresses) and presses on Buy and shop links (a `buy_click`
+event). UK law needs a visitor's permission before analytics cookies are
+set, so a small card asks on the first visit: Allow analytics or No
+analytics, equally plain. Until a visitor allows it no Google script
+loads and nothing is stored but the answer, which is kept in the browser
+(`ripraptor.analytics`) and asked again after six months. Analytics
+cookies at the foot of every page shows the card again; No analytics
+switches the tag off and deletes Google's cookies. Google signals and
+advertising features are off. Message threads and stock alert links
+(`/contact/c/`, `/alerts/confirm/`, `/alerts/stop/`) are private, so those
+pages never load it and a visitor arriving from one is passed on as coming
+from the home page. Without JavaScript there is no card and no analytics.
+The Terms page explains it in its data section while it is set up.
+
+To count Buy presses as conversions, mark `buy_click` as a key event in
+Google Analytics (Admin, Events). Google's own data settings, such as how
+long data is kept, are set in Google Analytics, not here.
 
 ## Add to home screen
 

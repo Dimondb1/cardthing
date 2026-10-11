@@ -26,7 +26,13 @@
   if (pages < ASK_AFTER || !matchMedia("(max-width: 47.99rem)").matches) return;
 
   const finish = (what) => { set(DONE, "done"); card.hidden = true; note(what); };
-  const show = () => { card.hidden = false; requestAnimationFrame(() => card.classList.add("is-shown")); note("shown"); };
+  // The analytics card asks first; this one waits for a later page.
+  const show = () => {
+    if (document.querySelector("[data-consent]:not([hidden])")) return;
+    card.hidden = false;
+    requestAnimationFrame(() => card.classList.add("is-shown"));
+    note("shown");
+  };
   card.querySelector("[data-install-dismiss]").addEventListener("click", () => finish("dismissed"));
   addEventListener("appinstalled", () => finish("added"));
 

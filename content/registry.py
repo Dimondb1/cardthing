@@ -134,6 +134,21 @@ ENTRIES = [
     ),
     Entry("site.install.add", B, "Add to home screen button", "Add to home screen", "On the card, Android only."),
     Entry("site.install.dismiss", B, "Not now button", "Not now", "On the card. Pressing it means the card never shows again in that browser."),
+    Entry("site.consent.label", T, "Analytics card name", "Analytics cookies", "Name of the analytics card for screen readers."),
+    Entry(
+        "site.consent.text", T, "Analytics question",
+        "Can we use Google Analytics cookies to see which pages help? The site works the same either way.",
+        "The card asking each visitor before Google Analytics loads. Shown until they answer, and again after six months.",
+        legal=True,
+    ),
+    Entry("site.consent.more", B, "Analytics details link", "How we use it", "Link on the analytics card to the data section of the terms page."),
+    Entry("site.consent.allow", B, "Allow analytics button", "Allow analytics", "On the analytics card. Loads Google Analytics."),
+    Entry("site.consent.refuse", B, "Refuse analytics button", "No analytics", "On the analytics card. Google Analytics never loads."),
+    Entry(
+        "site.nav.consent", B, "Analytics choice link",
+        "Analytics cookies",
+        "Footer button that shows the analytics card again, so a visitor can change their answer.",
+    ),
     Entry(
         "site.nav.swipe", B, "Swipe link",
         "Swipe",
@@ -1402,6 +1417,18 @@ ENTRIES = [
         "months after its last message. A cookie in your browser remembers the private "
         "link to your conversation.",
         "Data section of the terms page.",
+        legal=True,
+    ),
+    Entry(
+        "terms.analytics", P, "Analytics explanation",
+        "We use Google Analytics only if you allow it, on the card shown on your first visit. It tells "
+        "us how many people visit, which pages and searches they use and how often they go to a shop. "
+        "Google sets cookies to tell visits apart and sees the address of each page you open. Google "
+        "says it does not store your IP address. We have turned off Google signals and advertising "
+        "features. Links to your messages and stock alerts are private and are never sent to Google. "
+        "Without your permission no Google script loads. To change your answer, use Analytics cookies "
+        "at the foot of any page.",
+        "Data section of the terms page, shown while Google Analytics is set up.",
         legal=True,
     ),
 

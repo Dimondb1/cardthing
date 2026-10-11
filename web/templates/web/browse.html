@@ -74,11 +74,8 @@
     {{ form.price }}
   </div>
   <div class="pill">
-    <label class="visually-hidden" for="filter-lang">{{ form.lang.label }}</label>
-    <select id="filter-lang" name="lang">
-      <option value="">{{ form.lang.label }}</option>
-      {% for choice in form.lang %}<option value="{{ choice.data.value }}"{% if choice.data.selected %} selected{% endif %}>{{ choice.choice_label }}</option>{% endfor %}
-    </select>
+    <label class="visually-hidden" for="{{ form.lang.id_for_label }}">{{ form.lang.label }}</label>
+    {{ form.lang }}
   </div>
   <label class="toggle">{{ form.in_stock }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.in_stock.label }}</span></label>
   <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>

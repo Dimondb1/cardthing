@@ -196,7 +196,7 @@ ENTRIES = [
     Entry(
         "home.hero.title", H, "Home page headline",
         "Hunt the best prices.",
-        "The one strong line at the top of the home page, above the search box.",
+        "The strong line at the top of the home page, above the search box. The second headline line follows it.",
     ),
     Entry(
         "home.hero.accent", T, "Second headline line",
@@ -206,7 +206,7 @@ ENTRIES = [
     ),
     Entry(
         "home.hero.subtitle", T, "Line under the headline",
-        "Compare sealed TCG products across UK shops.",
+        "Sealed TCG products from UK shops, cheapest delivered price first.",
         "One sentence under the headline, above the search box. Leave empty to hide it.",
         optional=True,
     ),
@@ -247,7 +247,12 @@ ENTRIES = [
     Entry(
         "home.card.compare", B, "Card button",
         "Compare prices",
-        "Button at the foot of every product card in the home page rows.",
+        "Button at the foot of every product card in the home page rows that has a price.",
+    ),
+    Entry(
+        "home.card.view", B, "Card button with no price",
+        "See product",
+        "Button at the foot of a product card in the home page rows when no shop has a price for it.",
     ),
     Entry(
         "home.watch.title", H, "Watchlist card heading",
@@ -256,7 +261,7 @@ ENTRIES = [
     ),
     Entry(
         "home.watch.body", T, "Watchlist card text",
-        "Save products to your watchlist and see when their prices move.",
+        "Save products to your watchlist and see how their prices have moved since.",
         "One line under the watchlist card heading.",
     ),
     Entry(
@@ -267,7 +272,7 @@ ENTRIES = [
     Entry(
         "home.games.more", B, "More games link",
         "More games",
-        "Link at the end of the game shortcuts, leading to the full list of games.",
+        "Link beside the Find your game heading, leading to the full list of games.",
     ),
     Entry(
         "home.focal.drop.title", H, "Biggest price drop heading",
@@ -622,6 +627,11 @@ ENTRIES = [
         "Stock line in search results when no retailer has the product.",
     ),
     Entry(
+        "browse.card.shops", T, "Card shop list name",
+        "Cheapest shops",
+        "Name of the two shop rows on a product card, read out by screen readers.",
+    ),
+    Entry(
         "browse.no_prices", T, "No prices yet",
         "No prices yet",
         "Shown in place of a price when a product has no listings.",
@@ -661,8 +671,7 @@ ENTRIES = [
     Entry(
         "browse.game.all_sets", B, "All sets link",
         "All sets",
-        "Link on a set page back to every product for that game.",
-        placeholders=("game",),
+        "First chip in the row of sets on game and set pages: every product for the game.",
     ),
 
     # Swipe page --------------------------------------------------------------
@@ -855,7 +864,7 @@ ENTRIES = [
     Entry(
         "product.compare.cheapest", T, "Cheapest marker",
         "Cheapest",
-        "Small marker on the cheapest row in the price list.",
+        "Small marker on the cheapest row in the price list, and on the first shop row of a product card.",
     ),
     Entry(
         "product.compare.free_delivery", T, "Free delivery",
@@ -876,7 +885,8 @@ ENTRIES = [
     Entry(
         "product.compare.shops", T, "Shop count link",
         "Compare {count} shops",
-        "Next to the stock line on a product page; jumps to the price list.",
+        "Next to the stock line on a product page, and at the foot of a product card with two or more shops; "
+        "jumps to the price list.",
         placeholders=("count",),
     ),
     Entry(

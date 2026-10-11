@@ -519,6 +519,7 @@ ul, ol { margin: 0; padding: 0; }
 .saving__chev { display: none; }
 @media (max-width: 40rem) {
   .saving { grid-template-columns: 1fr; padding: 0 var(--card-pad) var(--space-3); }
+  .saving__retailer { white-space: normal; }
   .saving__link { padding-inline: 0; }
   .saving__buy { justify-self: end; }
 }
@@ -614,7 +615,6 @@ ul, ol { margin: 0; padding: 0; }
   border: 1.5px solid var(--color-line); border-radius: var(--radius-pill); background: var(--color-paper);
   font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink);
 }
-.pill__icon { width: 1.25rem; height: 1.25rem; flex: none; }
 .pill select, .pill__select {
   appearance: none; -webkit-appearance: none; border: 0; background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%231f2430' stroke-width='1.8'/%3E%3C/svg%3E") no-repeat right center / 0.7rem;
   padding: 0 1.2rem 0 0; font: inherit; color: inherit; cursor: pointer; max-width: 12rem;
@@ -623,11 +623,7 @@ ul, ol { margin: 0; padding: 0; }
 .pill { transition: border-color var(--motion-fast), box-shadow var(--motion-fast); }
 .pill:focus-within { border-color: var(--color-brand); box-shadow: 0 0 0 3px var(--color-brand-soft); }
 @media (hover: hover) { .pill:hover { border-color: var(--color-ink-subtle); } }
-.pill--check { cursor: pointer; }
-.pill--check input { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--color-brand); }
 .filters__actions { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-sm); }
-.langs { display: contents; border: 0; margin: 0; padding: 0; min-width: 0; }
-.pill--small { height: 2.25rem; padding: 0 var(--space-3); font-size: var(--text-xs); }
 .filters__clear { color: var(--color-brand-text); }
 /* On and off filters as switches. The real checkbox stays in the page for the keyboard and for forms without JavaScript. */
 .toggle {
@@ -685,9 +681,9 @@ ul, ol { margin: 0; padding: 0; }
 .shops__price { flex: none; font-weight: var(--weight-price); color: var(--color-price); font-variant-numeric: tabular-nums; }
 .shops__price--more { color: var(--color-more); }
 .card__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.card__compare { position: relative; z-index: 1; display: inline-block; padding-block: var(--space-1); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-brand-text); text-decoration: none; }
+.card__compare { position: relative; z-index: 1; display: inline-flex; align-items: center; min-height: 2.5rem; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-brand-text); text-decoration: none; }
 .card__compare:hover { text-decoration: underline; }
-.card__check { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.35em; padding-block: var(--space-1); font-size: var(--text-sm); color: var(--color-ink-muted); text-decoration: none; white-space: nowrap; transition: color var(--motion-fast); }
+.card__check { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.35em; min-height: 2.5rem; font-size: var(--text-sm); color: var(--color-ink-muted); text-decoration: none; white-space: nowrap; transition: color var(--motion-fast); }
 .card__check svg { width: 1em; height: 1em; color: var(--color-brand-text); }
 .card__check:hover { color: var(--color-ink); }
 @media (min-width: 48rem) {
@@ -946,9 +942,7 @@ ul, ol { margin: 0; padding: 0; }
   .body--deck .masthead__inner { grid-template-areas: "back brand nav"; }
   .deck-hint { display: none; }
   .deck-title { font-size: var(--text-base); }
-  .filters--deck { flex-wrap: nowrap; overflow-x: auto; padding-top: var(--space-1); padding-bottom: var(--space-1); scrollbar-width: none; }
-  .filters--deck::-webkit-scrollbar { display: none; }
-  .filters--deck .pill { flex: none; }
+  .filters--deck { padding-top: var(--space-1); padding-bottom: var(--space-1); }
   /* The deck screen is a column exactly the height of the screen: heading,
      filters, the card taking all that is left, then the two buttons. The
      saved list sits below the fold and never squeezes the card. */

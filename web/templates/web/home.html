@@ -254,7 +254,7 @@
             {% else %}<span class="trending__move trending__move--up"><span aria-hidden="true">↑</span> {% copy "home.trending.up" amount=product.movement|gbp %}</span>{% endif %}
           {% endif %}
         {% endif %}
-        <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
+        <span class="trending__cta">{% if product.lowest_price is not None %}{% copy "home.card.compare" %}{% else %}{% copy "home.card.view" %}{% endif %}<span aria-hidden="true"> →</span></span>
       </a>
     </li>
     {% endfor %}

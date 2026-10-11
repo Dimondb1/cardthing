@@ -11,7 +11,7 @@
       {% else %}
         <span class="trending__retailer">{% copy "browse.availability.none" %}</span>
       {% endif %}
-      <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
+      <span class="trending__cta">{% if summary.best %}{% copy "home.card.compare" %}{% else %}{% copy "home.card.view" %}{% endif %}<span aria-hidden="true"> →</span></span>
     </a>
   </li>
 {% endfor %}

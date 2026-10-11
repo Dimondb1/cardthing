@@ -283,8 +283,8 @@ class DeckTests(PageTestCase):
         self.assertContains(response, '<span class="shops__name">Northgate Cards</span><span class="shops__price shops__price--more">£58.00 <span aria-hidden="true">↑</span></span>')
         self.assertContains(response, '<p class="card__meta">Pokémon<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>Elite Trainer Box</p>')
         # The filters are one select each and two switches, not a row of checkboxes.
-        self.assertContains(response, '<select id="filter-lang" name="lang">')
-        self.assertContains(response, '<option value="">Language</option>')
+        self.assertContains(response, '<select name="lang" id="id_lang">')
+        self.assertContains(response, '<option value="" selected>Language</option>')
         self.assertContains(response, '<label class="toggle"><input type="checkbox" name="in_stock" id="id_in_stock">')
         self.assertNotContains(response, 'class="pill pill--check')
 
@@ -1774,3 +1774,73 @@ class AnalyticsTests(PageTestCase):
             path = reverse(f"web:{route}", args=["abc123"])
             with self.subTest(path=path):
                 self.assertRegex(path, r"^/(?:contact/c|alerts/(?:confirm|stop))/")
+
+
+class RedesignTests(PageTestCase):
+    """The home page tiles and cards, and the product card on listing pages."""
+
+    def test_the_home_page_has_the_tiles_the_watchlist_card_and_the_two_line_headline(self):
+        from django.core.cache import cache
+
+        hidden = make_game(name="Hidden game", slug="hidden", is_active=False)
+        tin = make_product(make_set(hidden, name="Old", slug="old", code="OLD"), name="Old Tin", slug="old-tin", product_type="tin")
+        make_listing(tin, self.harbour, price="9.99")
+        cache.clear()
+        html = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('<p class="hero__eyebrow">UK price comparison</p>', html)
+        self.assertIn('Hunt the best prices. <span class="hero__accent">Rip more packs.</span></h1>', html)
+        self.assertIn('<span class="search__button-text">Find best price</span>', html)
+        self.assertIn('<a class="tile" href="/games/pokemon/"><span class="tile__name">Pokémon</span><span class="tile__meta">3 products</span></a>', html)
+        # Browse by product: a tile per type the search page can filter to, with the type's outline drawing.
+        types = html[html.index('class="tiles tiles--types"'):html.index("</ul>", html.index('class="tiles tiles--types"'))]
+        self.assertIn('href="/search/?type=elite_trainer_box"', types)
+        self.assertIn('<span class="tile__name">Elite Trainer Box</span><span class="tile__meta">1 product</span>', types)
+        self.assertIn('<span class="tile__name">Collection box</span>', types)
+        self.assertIn('class="placeholder"', types)
+        self.assertNotIn("type=tin", types)   # a product of a hidden game is not listed, so it is not counted
+        self.assertIn('<a class="promo" href="/watchlist/">', html)
+        self.assertIn("Keep an eye on your next rip", html)
+        # Every row card ends with the same button.
+        featured = html[html.index('id="featured-title"'):]
+        self.assertIn('<span class="trending__cta">Compare prices<span aria-hidden="true"> →</span></span>', featured)
+
+    def test_row_cards_say_see_product_when_no_shop_has_a_price(self):
+        html = self.client.get(reverse("web:recent_api"), {"p": f"{self.etb.slug},{self.sold_out.slug}"}).content.decode()
+        self.assertEqual(html.count("Compare prices"), 1)
+        self.assertEqual(html.count("See product"), 1)
+        self.assertLess(html.index("Compare prices"), html.index("See product"))
+
+    def test_a_card_names_the_language_when_it_is_not_english(self):
+        japanese = make_product(self.pre, name="Prismatic Evolutions Booster Box (Japanese)", slug="pev-box-ja", product_type="booster_box")
+        make_listing(japanese, self.harbour, price="70.00")
+        html = self.client.get(reverse("web:search"), {"q": "prismatic"}).content.decode()
+        self.assertEqual(html.count('<span class="card__lang">Japanese</span>'), 1)
+        self.assertEqual(html.count('<span class="card__lang">'), 1)
+        # One language at a time: the select shows the choice, and an old link with two keeps the last one.
+        response = self.client.get(reverse("web:search"), {"lang": "ja"})
+        self.assertContains(response, '<option value="ja" selected>')
+        self.assertContains(response, japanese.name)
+        self.assertNotContains(response, self.etb.name)
+        response = self.client.get(reverse("web:search") + "?lang=ja&lang=en")
+        self.assertContains(response, '<option value="en" selected>')
+        self.assertContains(response, self.etb.name)
+        self.assertNotContains(response, japanese.name)
+
+    def test_a_sold_out_card_keeps_its_check_prices_link_and_has_nothing_to_compare(self):
+        html = self.client.get(reverse("web:search"), {"q": "super-premium"}).content.decode()
+        card = html[html.index('<li class="card'):html.index("</li>", html.index('<li class="card'))]
+        self.assertIn("Out of stock", card)
+        self.assertIn("Last seen at £140.00", card)
+        self.assertIn('class="card__check"', card)
+        self.assertNotIn("card__compare", card)
+        self.assertNotIn('class="shops"', card)
+        self.assertNotIn("Buy now", card)
+
+    def test_the_set_row_marks_the_current_set_and_starts_with_all_sets(self):
+        later = make_set(self.game, name="Surging Sparks", slug="surging-sparks", code="SSP")
+        make_listing(make_product(later, name="Surging Sparks Booster Box", slug="ssp-box", product_type="booster_box"), self.harbour, price="120.00")
+        html = self.client.get(self.pre.get_absolute_url()).content.decode()
+        row = html[html.index('<nav class="set-nav"'):html.index("</nav>", html.index('<nav class="set-nav"'))]
+        self.assertIn('<a href="/games/pokemon/">All sets</a>', row)
+        self.assertIn(f'<a href="{self.pre.get_absolute_url()}" aria-current="page">Prismatic Evolutions</a>', row)
+        self.assertNotIn('aria-current="page">Surging Sparks', row)

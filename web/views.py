@@ -72,9 +72,7 @@ class FilterForm(forms.Form):
     in_stock = forms.BooleanField(label="In stock", required=False)
     compared = forms.BooleanField(label="2+ shops", required=False)
     price = forms.ChoiceField(label="Price", choices=PRICE_BANDS, required=False)
-    lang = forms.MultipleChoiceField(
-        label="Language", choices=LANGUAGES, required=False, widget=forms.CheckboxSelectMultiple
-    )
+    lang = forms.ChoiceField(label="Language", choices=[("", "Language")] + LANGUAGES, required=False)
 
     def __init__(self, *args, fixed_game=None, has_query=False, type_options=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -131,7 +129,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         products = products.filter(lowest_price__gte=low)
         if high:
             products = products.filter(lowest_price__lt=high)
-    languages = form.value("lang") or []
+    languages = [form.value("lang")] if form.value("lang") else []
     products = apply_languages(products, languages)
 
     sort = form.value("sort", form.default_sort)
@@ -438,7 +436,7 @@ def latest_drops(request):
 def home_types(limit=6):
     """The product types with the most listed products, for the Browse by product tiles: (code, label, count)."""
     rows = (
-        Product.objects.filter(is_active=True).exclude(product_type=Product.Type.OTHER)
+        Product.objects.active().exclude(product_type=Product.Type.OTHER)
         .values("product_type").annotate(n=Count("id")).order_by("-n", "product_type")[:limit]
     )
     return [(row["product_type"], type_label(None, row["product_type"]), row["n"]) for row in rows]
@@ -1006,7 +1004,7 @@ def deck_api(request):
 @require_GET
 def deck(request):
     products = deck_products(request)
-    chosen = request.GET.getlist("lang")
+    chosen = request.GET.getlist("lang")[:1]   # the page offers one language at a time
     game = Game.objects.filter(slug=request.GET.get("game", ""), is_active=True).first()
     scope = Product.objects.for_lists().filter(lowest_price__isnull=False)
     if game:

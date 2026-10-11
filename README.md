@@ -1616,8 +1616,8 @@ rows; the installer runs it, and it is safe to run again.
 ## Home page and product cards
 
 The home page opens with a short line above the headline, the headline with
-its second line in orange (all three are registry entries, and the first and
-the second line can be left empty), the search box, when prices were last
+its second line in orange (all three are registry entries; the line above and
+the orange line can be left empty), the search box, when prices were last
 checked, and "Find your game": a tile per game with its product count, four
 on a phone and up to six on wider screens, then "More games". After that come
 Picked for you and Pick up where you left off (for a browser with history),
@@ -1632,8 +1632,10 @@ badge and a bookmark to save it; the cheapest delivered price with the shop
 and Buy now; the two cheapest shops as rows, the cheapest flagged; then
 "Compare N shops" and "Check prices", both opening the product's price list.
 The filters above are one select each for sort, game, type, price and
-language, and two switches, In stock and 2+ shops; a set page's sets are
-chips with "All sets" first. The swipe page's filters match.
+language, and two switches, In stock and 2+ shops; the sets are chips with
+"All sets" first, scrolled to the current set on a phone. The swipe page uses
+the same selects for game, type, sort and language, without the price select
+or the switches.
 
 ## Featured deals and sold-out pages
 

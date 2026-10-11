@@ -1,0 +1,12 @@
+{% load sitecopy %}{# The last row of the price list: a tagged Amazon search, shown while we have no Amazon price. Takes amazon_search. #}
+<li class="offer offer--amazon">
+  <div class="offer__retailer"><span class="offer__name">Amazon</span></div>
+  <div class="offer__stock"><span class="offer__check">{% copy "product.compare.amazon" %}</span></div>
+  <div class="offer__price num"></div>
+  <div class="offer__delivery num"></div>
+  <div class="offer__total num"></div>
+  <div class="offer__checked"></div>
+  <div class="offer__action">
+    <a class="button button--small" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.amazon_button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+  </div>
+</li>

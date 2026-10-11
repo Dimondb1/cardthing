@@ -72,21 +72,23 @@
   </section>
 </div>
 
-{% if has_listings %}
+{% if has_listings or amazon_search %}
 <section class="block offers-section" aria-labelledby="offers-title">
   <div class="section-head section-head--tight">
     <h2 id="offers-title" class="section-title">{% copy "product.compare.title" %}</h2>
-    <button type="button" class="refresh" data-refresh="{% url 'web:product_prices_api' product.slug %}" data-done="{% copy 'product.refresh.done' %}" data-failed="{% copy 'product.refresh.failed' %}">
+    {% if has_listings %}<button type="button" class="refresh" data-refresh="{% url 'web:product_prices_api' product.slug %}" data-done="{% copy 'product.refresh.done' %}" data-failed="{% copy 'product.refresh.failed' %}">
       <span class="icon icon--refresh" aria-hidden="true"></span><span class="refresh__label">{% copy "product.reload_prices" %}</span>
-    </button>
+    </button>{% endif %}
   </div>
   <p class="refresh__status" role="status" aria-live="polite" data-refresh-status></p>
+  {# Amazon is always the last choice in the list: a tagged search until we hold an Amazon price. #}
   {% if current %}
   <ul class="offers">
     {% include "web/includes/offers_head.html" %}
     {% for listing in current %}
       {% include "web/includes/offer_row.html" with cheapest_row=forloop.first muted=False %}
     {% endfor %}
+    {% if amazon_search %}{% include "web/includes/offer_amazon.html" %}{% endif %}
   </ul>
     {% if unavailable %}
     <details class="offers-more">
@@ -104,6 +106,7 @@
     {% for listing in unavailable %}
       {% include "web/includes/offer_row.html" with cheapest_row=False muted=True %}
     {% endfor %}
+    {% if amazon_search %}{% include "web/includes/offer_amazon.html" %}{% endif %}
   </ul>
   {% endif %}
   {% if restocks %}

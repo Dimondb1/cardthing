@@ -171,9 +171,12 @@ RIPRAPTOR_AMAZON_PARTNER_TAG=ripraptor-21
 
 then run `setup_shops`, which adds Amazon as a shop only when the keys are
 set. Amazon grants the API only to approved accounts with recent sales, so
-until then set just the tag: every product page then carries a "Check price
-on Amazon" link, a tagged Amazon search shown below the real prices and
-hidden once we have an Amazon price for the product. The hourly import reads Amazon once a day: every product already
+until then set just the tag: every product page's price list then ends with
+an Amazon row, "Check price and stock on Amazon", whose button opens a tagged
+Amazon search, and the price box keeps its "Compare on Amazon" button. A
+product with no prices at all still gets the list with that one row. Both go
+once we have an Amazon price for the product, which then sits in the list
+like any other shop. The hourly import reads Amazon once a day: every product already
 found there is refreshed in batches of ten, then up to
 `RIPRAPTOR_AMAZON_DAILY_LIMIT` products are looked up, by barcode where we
 have one and otherwise by name. The products visitors want most go first

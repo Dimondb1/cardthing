@@ -421,9 +421,12 @@ class AwinTagTests(PageTestCase):
 
 
 class AmazonLinkTests(PageTestCase):
+    ROW = "Check price and stock on Amazon"
+
     def test_no_link_without_a_tracking_tag(self):
         response = self.client.get(self.etb.get_absolute_url())
         self.assertNotContains(response, "Compare on Amazon")
+        self.assertNotContains(response, self.ROW)
 
     def test_tagged_search_link_when_we_have_no_amazon_price(self):
         from django.test import override_settings
@@ -433,6 +436,32 @@ class AmazonLinkTests(PageTestCase):
         self.assertContains(response, "Compare on Amazon")
         self.assertContains(response, 'href="https://www.amazon.co.uk/s?k=Pok%C3%A9mon+Prismatic+Evolutions+Elite+Trainer+Box&amp;tag=ripraptor-21"')
         self.assertContains(response, 'rel="sponsored nofollow noopener"')
+
+    def test_amazon_is_the_last_row_of_every_price_list(self):
+        from django.test import override_settings
+
+        with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            html = self.client.get(self.etb.get_absolute_url()).content.decode()
+            # Two real shops, then the Amazon row, in the visible list.
+            rows = html[html.index('<ul class="offers">'):html.index("</ul>", html.index('<ul class="offers">'))]
+            self.assertEqual(rows.count('data-listing="'), 2)
+            self.assertEqual(rows.count("offer--amazon"), 1)
+            self.assertLess(rows.index("Northgate Cards"), rows.index(self.ROW))
+            self.assertIn('<li class="offer offer--amazon">', rows)
+            self.assertIn(self.ROW, rows)
+            self.assertIn('Check on Amazon<span class="visually-hidden"> (opens in a new tab)</span></a>', rows)
+            self.assertIn('href="https://www.amazon.co.uk/s?k=Pok%C3%A9mon+Prismatic+Evolutions+Elite+Trainer+Box&amp;tag=ripraptor-21" target="_blank" rel="sponsored nofollow noopener">Check on Amazon', rows)
+            self.assertEqual(html.count(self.ROW), 1)
+            # Sold out everywhere: the row follows the out-of-stock shop.
+            sold = self.client.get(self.sold_out.get_absolute_url()).content.decode()
+            rows = sold[sold.index('<ul class="offers">'):sold.index("</ul>", sold.index('<ul class="offers">'))]
+            self.assertLess(rows.index("Harbour Games"), rows.index(self.ROW))
+            # No prices at all: the list is the Amazon row alone, with nothing to reload.
+            none = self.client.get(self.unpriced.get_absolute_url()).content.decode()
+            self.assertIn(self.ROW, none)
+            self.assertIn('<h2 id="offers-title"', none)
+            self.assertNotIn("Reload prices", none)
+        self.assertNotIn('id="offers-title"', self.client.get(self.unpriced.get_absolute_url()).content.decode())
 
     def test_no_search_link_once_amazon_has_a_real_price(self):
         from django.test import override_settings
@@ -444,7 +473,8 @@ class AmazonLinkTests(PageTestCase):
         with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
             response = self.client.get(self.etb.get_absolute_url())
         self.assertNotContains(response, "Compare on Amazon")
-        self.assertContains(response, "Amazon")
+        self.assertNotContains(response, self.ROW)   # Amazon's real price is in the list instead
+        self.assertContains(response, '<span class="offer__name">Amazon</span>')
 
 
 class LanguageAndSortTests(PageTestCase):

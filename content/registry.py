@@ -993,6 +993,17 @@ ENTRIES = [
         "tag is set and we have no Amazon price for the product. Opens Amazon in a new tab.",
     ),
     Entry(
+        "product.compare.amazon", T, "Amazon row in the price list",
+        "Check price and stock on Amazon",
+        "The last row of the price list on every product page while an Amazon tracking tag is set and we "
+        "have no Amazon price for the product. The row opens a tagged Amazon search in a new tab.",
+    ),
+    Entry(
+        "product.compare.amazon_button", B, "Amazon row button",
+        "Check on Amazon",
+        "Button on the Amazon row at the foot of the price list.",
+    ),
+    Entry(
         "product.small_print", T, "Small print under the price list",
         "Affiliate links. Prices can change before you pay.",
         "One line under the price list, followed by the Terms link.",

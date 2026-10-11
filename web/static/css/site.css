@@ -816,6 +816,14 @@ ul, ol { margin: 0; padding: 0; }
 .offer__link { display: inline-block; padding: var(--space-1) var(--space-2); font-size: var(--text-sm); font-weight: var(--weight-strong); }
 .offer--muted .offer__name, .offer--muted .offer__total { color: var(--color-ink-muted); }
 .offer--muted .offer__total { font-weight: var(--weight-strong); }
+.offer--amazon { background: var(--color-shelf); }
+.offer--amazon .offer__action .button { white-space: nowrap; }
+.offer__check { font-size: var(--text-sm); color: var(--color-ink-muted); }
+@media (min-width: 60rem) {
+  /* The Amazon row has no price columns: the sentence takes their room and the button keeps to one line. */
+  .offer--amazon .offer__stock { grid-column: stock / checked; }
+  .offer--amazon .offer__price, .offer--amazon .offer__delivery, .offer--amazon .offer__total, .offer--amazon .offer__checked { display: none; }
+}
 @media (min-width: 60rem) {
   .offers__head, .offer { grid-template-columns: minmax(8rem, 1.6fr) minmax(7rem, 1fr) 5.5rem 5.5rem 6.5rem minmax(6.5rem, 1fr) 6rem; grid-template-areas: "retailer stock price delivery total checked action"; column-gap: var(--space-4); }
   .offers__head { display: grid; padding: var(--space-2) var(--space-3); background: var(--color-shelf); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-ink-subtle); }

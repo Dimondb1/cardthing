@@ -3,11 +3,12 @@
   <li class="trending__item">
     <a class="trending__link" href="{{ product.get_absolute_url }}">
       {% product_image product "trend" %}
-      {% if hot %}<span class="badge badge--good">{% copy "home.picks.hot" %}</span>{% endif %}
+      {% if hot %}<span class="badge badge--good trending__badge">{% copy "home.picks.hot" %}</span>{% endif %}
       <span class="trending__name">{{ product.name }}</span>
       <span class="trending__price">{% price summary.best.shown_price %}</span>
       <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=summary.best %}</span> · {{ summary.best.retailer.name }}</span>
       {% if summary.saving %}<span class="trending__move trending__move--down">{% copy "home.savings.save" amount=summary.saving|gbp %}</span>{% endif %}
+      <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
     </a>
   </li>
 {% endfor %}

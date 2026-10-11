@@ -3,7 +3,8 @@
 
 {% block content %}
 <section class="hero" aria-labelledby="hero-title">
-  <h1 id="hero-title" class="hero__title">{% copy "home.hero.title" %}</h1>
+  {% copy "home.hero.eyebrow" as eyebrow %}{% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
+  <h1 id="hero-title" class="hero__title">{% copy "home.hero.title" %}{% copy "home.hero.accent" as accent %}{% if accent %} <span class="hero__accent">{{ accent }}</span>{% endif %}</h1>
   {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
@@ -13,16 +14,21 @@
     <span class="hero__checked"><svg class="hero__icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.6 1.8v3.2h-3.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "home.search.checked" time=last_checked|ago %}</span>
   </p>
   {% endif %}
-  {% if games %}
-    <nav class="chips" aria-label="{% copy 'site.nav.games' %}">
-      <ul class="chips__list">
-        {% for game in games|slice:":6" %}<li><a class="chip" href="{{ game.get_absolute_url }}">{{ game.display_short }}</a></li>{% endfor %}
-        {% for game in games|slice:"6:" %}<li class="chips__extra"><a class="chip" href="{{ game.get_absolute_url }}">{{ game.display_short }}</a></li>{% endfor %}
-        <li class="chips__more"><a class="chip chip--more" href="{% url 'web:games' %}">{% copy "home.games.more" %} <span aria-hidden="true">›</span></a></li>
-      </ul>
-    </nav>
-  {% endif %}
 </section>
+
+{% if games %}
+<section class="home-section home-section--games" aria-labelledby="games-title">
+  <div class="section-head">
+    <h2 id="games-title" class="section-head__title">{% copy "home.games.label" %}</h2>
+    <a class="section-head__all" href="{% url 'web:games' %}">{% copy "home.games.more" %} <span aria-hidden="true">›</span></a>
+  </div>
+  <ul class="tiles tiles--games">
+    {% for game in games|slice:":6" %}
+    <li class="tiles__item{% if forloop.counter > 4 %} tiles__extra{% endif %}"><a class="tile" href="{{ game.get_absolute_url }}"><span class="tile__name">{{ game.display_short }}</span><span class="tile__meta">{% copy_count "browse.count" game.product_count %}</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 <section class="home-section" aria-labelledby="picks-title" data-picks data-endpoint="{% url 'web:picks_api' %}" hidden>
   <div class="section-head">
@@ -63,6 +69,7 @@
         <span class="trending__price">{% price summary.best.shown_price %}</span>
         <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=summary.best %}</span> · {{ summary.best.retailer.name }}</span>
         {% if summary.saving %}<span class="trending__move trending__move--down">{% copy "home.savings.save_vs" amount=summary.saving|gbp retailer=summary.second.retailer.name %}</span>{% elif summary.badge == "best_week" %}<span class="trending__move trending__move--down">{% copy "product.badge.best_week" %}</span>{% elif summary.badge %}<span class="trending__move trending__move--down">{% copy "product.badge.lowest_today" %}</span>{% endif %}
+        <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
       </a>
     </li>
     {% endfor %}
@@ -123,6 +130,25 @@
 </section>
 {% endif %}
 
+<section class="home-section" aria-labelledby="watch-title">
+  <a class="promo" href="{% url 'web:watchlist' %}">
+    <svg class="promo__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 3.5h12v17l-6-4.5-6 4.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    <span class="promo__body"><strong id="watch-title" class="promo__title">{% copy "home.watch.title" %}</strong><span class="promo__text">{% copy "home.watch.body" %}</span></span>
+    <span class="promo__arrow" aria-hidden="true">→</span>
+  </a>
+</section>
+
+{% if product_types %}
+<section class="home-section" aria-labelledby="types-title">
+  <div class="section-head"><h2 id="types-title" class="section-head__title">{% copy "home.types.title" %}</h2></div>
+  <ul class="tiles tiles--types">
+    {% for code, label, count in product_types %}
+    <li class="tiles__item"><a class="tile tile--type" href="{% url 'web:search' %}?type={{ code }}"><span class="tile__art">{% include "web/includes/placeholder.svg" with type=code %}</span><span class="tile__name">{{ label }}</span><span class="tile__meta">{% copy_count "browse.count" count %}</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if latest %}
 <section class="home-section" aria-labelledby="latest-title">
   <div class="section-head">
@@ -142,6 +168,7 @@
         <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=product.best_offer %}</span> · {{ product.best_offer.retailer.name }}</span>
         {% endif %}
         {% if product.release %}<span class="trending__move trending__move--down">{% if product.best_offer.availability == "preorder" %}{% copy "home.new.out" date=product.release|short_date %}{% else %}{% copy "home.new.released" date=product.release|short_date %}{% endif %}</span>{% endif %}
+        <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
       </a>
     </li>
     {% endfor %}
@@ -172,6 +199,7 @@
           <span class="trending__price">{% price product.best_offer.shown_price %}</span>
         <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=product.best_offer %}</span> · {{ product.best_offer.retailer.name }}</span>
         {% endif %}
+        <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
       </a>
     </li>
     {% endfor %}
@@ -194,6 +222,7 @@
         <span class="trending__price">{% price listing.shown_price %}</span>
         <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" %}</span> · {{ listing.retailer.name }}</span>
         <span class="trending__move trending__move--down">{% copy "home.restock.when" time=listing.back_in_stock_at|ago %}</span>
+        <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
       </a>
     </li>
     {% endfor %}
@@ -225,6 +254,7 @@
             {% else %}<span class="trending__move trending__move--up"><span aria-hidden="true">↑</span> {% copy "home.trending.up" amount=product.movement|gbp %}</span>{% endif %}
           {% endif %}
         {% endif %}
+        <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
       </a>
     </li>
     {% endfor %}

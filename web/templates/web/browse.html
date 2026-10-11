@@ -39,7 +39,7 @@
 
 {% if sets %}
 <nav class="set-nav" aria-label="{% copy 'browse.game.sets_title' %}">
-  <h2 class="set-nav__title">{% copy "browse.game.sets_title" %}</h2>
+  <h2 class="visually-hidden">{% copy "browse.game.sets_title" %}</h2>
   <ul>
     <li><a href="{{ game.get_absolute_url }}"{% if not product_set %} aria-current="page"{% endif %}>{% copy "browse.game.all_sets" game=game.display_short %}</a></li>
     {% for item in sets %}
@@ -56,7 +56,6 @@
 <form class="filters" method="get" action="" data-autosubmit>
   {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
   <div class="pill pill--sort">
-    <svg class="pill__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 3h10v4a5 5 0 0 1-10 0zM5 5h2v3H5zM17 5h2v3h-2zM10 12h4v5h-4zM8 17h8v3H8z" fill="currentColor"/></svg>
     <label class="visually-hidden" for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
     {{ form.sort }}
   </div>
@@ -67,7 +66,6 @@
   </div>
   {% endif %}
   <div class="pill">
-    <svg class="pill__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
     <label class="visually-hidden" for="{{ form.type.id_for_label }}">{{ form.type.label }}</label>
     {{ form.type }}
   </div>
@@ -75,17 +73,15 @@
     <label class="visually-hidden" for="{{ form.price.id_for_label }}">{{ form.price.label }}</label>
     {{ form.price }}
   </div>
-  <label class="pill pill--check">
-    <svg class="pill__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 20V10M12 20V4M19 20v-8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-    {{ form.in_stock }}<span>{{ form.in_stock.label }}</span>
-  </label>
-  <label class="pill pill--check">
-    {{ form.compared }}<span>{{ form.compared.label }}</span>
-  </label>
-  <fieldset class="langs">
-    <legend class="visually-hidden">{{ form.lang.label }}</legend>
-    {% for choice in form.lang %}<label class="pill pill--check pill--small">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}
-  </fieldset>
+  <div class="pill">
+    <label class="visually-hidden" for="filter-lang">{{ form.lang.label }}</label>
+    <select id="filter-lang" name="lang">
+      <option value="">{{ form.lang.label }}</option>
+      {% for choice in form.lang %}<option value="{{ choice.data.value }}"{% if choice.data.selected %} selected{% endif %}>{{ choice.choice_label }}</option>{% endfor %}
+    </select>
+  </div>
+  <label class="toggle">{{ form.in_stock }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.in_stock.label }}</span></label>
+  <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>
   <div class="filters__actions">
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
     {% if filters_active %}<a class="filters__clear" href="?{% if query %}q={{ query|urlencode }}{% endif %}">{% copy "browse.filters.clear" %}</a>{% endif %}

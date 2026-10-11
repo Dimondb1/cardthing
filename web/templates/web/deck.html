@@ -27,7 +27,7 @@
     <div class="pill">
       <label class="visually-hidden" for="deck-type">Product type</label>
       <select id="deck-type" name="type" class="pill__select">
-        <option value="">All types</option>
+        <option value="">Type</option>
         {% for code, label in types %}<option value="{{ code }}"{% if type == code %} selected{% endif %}>{{ label }}</option>{% endfor %}
       </select>
     </div>
@@ -37,10 +37,13 @@
         {% for code, label in sorts %}<option value="{{ code }}"{% if sort == code %} selected{% endif %}>{{ label }}</option>{% endfor %}
       </select>
     </div>
-    <fieldset class="langs">
-      <legend class="visually-hidden">Language</legend>
-      {% for code, label, on in languages %}<label class="pill pill--check pill--small"><input type="checkbox" name="lang" value="{{ code }}"{% if on %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
-    </fieldset>
+    <div class="pill">
+      <label class="visually-hidden" for="deck-lang">Language</label>
+      <select id="deck-lang" name="lang" class="pill__select">
+        <option value="">Language</option>
+        {% for code, label, on in languages %}<option value="{{ code }}"{% if on %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
   </form>
   <p class="deck-hint" data-deck-hint>{% copy "deck.hint" %}</p>

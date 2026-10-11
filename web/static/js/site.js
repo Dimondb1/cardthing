@@ -15,6 +15,23 @@ document.querySelectorAll("form[data-autosubmit]").forEach((form) => {
   });
 });
 
+// A filter pill is as wide as its chosen option, not its widest one: "Type" stays short until a type is picked.
+// Without this the browser sizes each select to its longest option and the pills take a row each on a phone.
+const fitPills = () => {
+  document.querySelectorAll(".pill select").forEach((select) => {
+    const option = select.options[select.selectedIndex];
+    if (!option) return;
+    const probe = document.createElement("span");
+    probe.textContent = option.text;
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:inherit";
+    select.parentNode.append(probe);
+    select.style.width = `calc(${Math.ceil(probe.getBoundingClientRect().width)}px + 1.2rem + 4px)`;
+    probe.remove();
+  });
+};
+fitPills();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitPills);
+
 // Results as you type. The form still submits normally to the full results
 // page, so nothing here is required.
 document.querySelectorAll("form[data-live-search]").forEach((form) => {

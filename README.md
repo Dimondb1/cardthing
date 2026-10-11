@@ -1613,9 +1613,31 @@ restocks in 90 days the line adds the two-hour window most of them landed
 in. `backfill_restocks` turns the stamps listings already carried into
 rows; the installer runs it, and it is safe to run again.
 
+## Home page and product cards
+
+The home page opens with a short line above the headline, the headline with
+its second line in orange (all three are registry entries, and the first and
+the second line can be left empty), the search box, when prices were last
+checked, and "Find your game": a tile per game with its product count, four
+on a phone and up to six on wider screens, then "More games". After that come
+Picked for you and Pick up where you left off (for a browser with history),
+then the deal rows. Every product card in a row ends with the same "Compare
+prices" button. Between Biggest savings and Latest drops sit a card leading
+to the watchlist and "Browse by product": a tile per product type, drawn
+with the type's outline, linking to the search page filtered to it.
+
+Search, game and set pages share one card (`includes/product_card.html`):
+the picture, the language when it is not English, the name, the type, the
+badge and a bookmark to save it; the cheapest delivered price with the shop
+and Buy now; the two cheapest shops as rows, the cheapest flagged; then
+"Compare N shops" and "Check prices", both opening the product's price list.
+The filters above are one select each for sort, game, type, price and
+language, and two switches, In stock and 2+ shops; a set page's sets are
+chips with "All sets" first. The swipe page's filters match.
+
 ## Featured deals and sold-out pages
 
-The home page opens with "Featured deals": up to eight in-stock products
+"Featured deals" is the first deal row on the home page: up to eight in-stock products
 whose cheapest price is a real saving on the next shop or the week's
 lowest. Six of the eight places go to deals whose cheapest shop pays a
 commission (an affiliate link format, eBay or Amazon), the best of the
@@ -1721,7 +1743,7 @@ the same for everyone and the recent things are simply there.
 
 ## Picked for you
 
-The first row under the home page's search box, for anyone who has viewed,
+The first row under the home page's game tiles, for anyone who has viewed,
 saved or searched for something. The same script sends the viewed and saved
 slugs and up to three recent searches to `/api/picks/?p=slug,slug&s=a|b` as
 the page loads, and shows the row it gets back; with nothing known, or with

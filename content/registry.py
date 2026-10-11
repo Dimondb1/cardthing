@@ -188,13 +188,25 @@ ENTRIES = [
 
     # Home page ------------------------------------------------------------
     Entry(
+        "home.hero.eyebrow", T, "Line above the headline",
+        "UK price comparison",
+        "Small capitals above the home page headline. Leave empty to hide it.",
+        optional=True,
+    ),
+    Entry(
         "home.hero.title", H, "Home page headline",
-        "Better prices. More packs.",
+        "Hunt the best prices.",
         "The one strong line at the top of the home page, above the search box.",
     ),
     Entry(
+        "home.hero.accent", T, "Second headline line",
+        "Rip more packs.",
+        "Shown in orange on its own line under the headline. Leave empty for one line.",
+        optional=True,
+    ),
+    Entry(
         "home.hero.subtitle", T, "Line under the headline",
-        "Compare sealed TCG products across UK retailers and buy at the best price.",
+        "Compare sealed TCG products across UK shops.",
         "One sentence under the headline, above the search box. Leave empty to hide it.",
         optional=True,
     ),
@@ -205,7 +217,7 @@ ENTRIES = [
     ),
     Entry(
         "home.search.placeholder", T, "Home search box hint",
-        "Search “Prismatic Evolutions ETB”",
+        "Search sets, boxes and packs",
         "Grey hint text inside the large search box on the home page.",
     ),
     Entry(
@@ -227,9 +239,30 @@ ENTRIES = [
         placeholders=("query",),
     ),
     Entry(
-        "home.games.label", T, "Game shortcuts label",
-        "Browse by game",
-        "Small label before the list of game links under the home page search box.",
+        "home.games.label", T, "Game tiles heading",
+        "Find your game",
+        "Heading above the game tiles under the home page search box, and the label before the game links "
+        "when a search finds nothing.",
+    ),
+    Entry(
+        "home.card.compare", B, "Card button",
+        "Compare prices",
+        "Button at the foot of every product card in the home page rows.",
+    ),
+    Entry(
+        "home.watch.title", H, "Watchlist card heading",
+        "Keep an eye on your next rip",
+        "Heading on the home page card that leads to the watchlist.",
+    ),
+    Entry(
+        "home.watch.body", T, "Watchlist card text",
+        "Save products to your watchlist and see when their prices move.",
+        "One line under the watchlist card heading.",
+    ),
+    Entry(
+        "home.types.title", H, "Browse by product heading",
+        "Browse by product",
+        "Heading for the product type tiles on the home page.",
     ),
     Entry(
         "home.games.more", B, "More games link",
@@ -627,7 +660,7 @@ ENTRIES = [
     ),
     Entry(
         "browse.game.all_sets", B, "All sets link",
-        "All {game} products",
+        "All sets",
         "Link on a set page back to every product for that game.",
         placeholders=("game",),
     ),

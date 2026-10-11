@@ -277,7 +277,16 @@ class DeckTests(PageTestCase):
         response = self.client.get(reverse("web:search"), {"q": "etb"})
         self.assertContains(response, "Best in 7 days")
         self.assertContains(response, "Check prices")
-        self.assertContains(response, "#2")
+        self.assertContains(response, "Compare 2 shops")
+        # The two cheapest shops as rows: the cheapest flagged, the dearer in red with an arrow.
+        self.assertContains(response, '<span class="shops__name">Harbour Games</span><span class="shops__flag">Cheapest</span><span class="shops__price">£54.99</span>')
+        self.assertContains(response, '<span class="shops__name">Northgate Cards</span><span class="shops__price shops__price--more">£58.00 <span aria-hidden="true">↑</span></span>')
+        self.assertContains(response, '<p class="card__meta">Pokémon<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>Elite Trainer Box</p>')
+        # The filters are one select each and two switches, not a row of checkboxes.
+        self.assertContains(response, '<select id="filter-lang" name="lang">')
+        self.assertContains(response, '<option value="">Language</option>')
+        self.assertContains(response, '<label class="toggle"><input type="checkbox" name="in_stock" id="id_in_stock">')
+        self.assertNotContains(response, 'class="pill pill--check')
 
 
 class TermsAndRefreshTests(PageTestCase):
@@ -479,7 +488,7 @@ class LanguageAndSortTests(PageTestCase):
 
     def test_deck_page_offers_sort_and_language_choices(self):
         response = self.client.get(reverse("web:deck"), {"lang": "ja", "sort": "saving"})
-        self.assertContains(response, 'value="ja" checked')
+        self.assertContains(response, '<option value="ja" selected>')
         self.assertContains(response, '<option value="saving" selected>')
         self.assertContains(response, "Lowest in 90 days")
 
@@ -622,7 +631,9 @@ class WatchlistTests(PageTestCase):
         self.assertIn(f'data-watch="{self.sold_out.slug}"', sold)
         self.assertIn('data-watch-price=""', sold)
         results = self.client.get(reverse("web:search") + "?q=etb").content.decode()
-        self.assertIn(f'button--save button--small" href="/watchlist/?p={self.etb.slug}"', results)
+        # On a card the button is the bookmark alone; its words stay for screen readers and the script.
+        self.assertIn(f'button--save button--icon" href="/watchlist/?p={self.etb.slug}"', results)
+        self.assertIn('<span data-watch-label class="visually-hidden">Save</span>', results)
         self.assertIn('data-watch-link="/watchlist/"', page)
         self.assertIn('<span data-watch-count></span>', page)
 
@@ -1045,8 +1056,8 @@ class HomeFootballTests(PageTestCase):
         cache.clear()
         response = self.client.get(reverse("web:home"))
         html = response.content.decode()
-        chips = html[html.index('class="chips"'):html.index("</nav>", html.index('class="chips"'))]
-        self.assertIn("/games/football/", chips.split("chips__extra")[0])
+        tiles = html[html.index('class="tiles tiles--games"'):html.index("</ul>", html.index('class="tiles tiles--games"'))]
+        self.assertIn("/games/football/", tiles.split("tiles__extra")[0])
         self.assertContains(response, "Football and sports cards")
         self.assertContains(response, "Match Attax 2026/27 Mega Tin")
 

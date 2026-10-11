@@ -22,7 +22,7 @@ from catalogue import alerts, insights, mail, offers, pricing
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Retailer, stale_cutoff
 from catalogue.search import apply_search
-from catalogue.types import type_choices
+from catalogue.types import type_choices, type_label
 from content import service as copy
 from inbox import service as inbox
 from inbox.models import Conversation
@@ -39,7 +39,7 @@ def text(request, key, **values):
 
 
 PRICE_BANDS = [
-    ("", "Any price"),
+    ("", "Price"),
     ("0-10", "Under £10"),
     ("10-25", "£10 to £25"),
     ("25-50", "£25 to £50"),
@@ -61,15 +61,15 @@ class FilterForm(forms.Form):
         queryset=Game.objects.filter(is_active=True),
         to_field_name="slug",
         required=False,
-        empty_label="All games",
+        empty_label="Game",
     )
     type = forms.ChoiceField(
         label="Product type",
-        choices=[("", "All types")] + Product.Type.choices,
+        choices=[("", "Type")] + Product.Type.choices,
         required=False,
     )
     sort = forms.ChoiceField(label="Sort by", choices=SEARCH_SORTS, required=False)
-    in_stock = forms.BooleanField(label="In stock only", required=False)
+    in_stock = forms.BooleanField(label="In stock", required=False)
     compared = forms.BooleanField(label="2+ shops", required=False)
     price = forms.ChoiceField(label="Price", choices=PRICE_BANDS, required=False)
     lang = forms.MultipleChoiceField(
@@ -81,7 +81,7 @@ class FilterForm(forms.Form):
         if fixed_game is not None:
             del self.fields["game"]
         if type_options is not None:
-            self.fields["type"].choices = [("", "All types")] + list(type_options)
+            self.fields["type"].choices = [("", "Type")] + list(type_options)
         if not has_query:
             self.fields["sort"].choices = self.BROWSE_SORTS
         self.default_sort = "best" if has_query else "newest"
@@ -435,6 +435,15 @@ def latest_drops(request):
     )
 
 
+def home_types(limit=6):
+    """The product types with the most listed products, for the Browse by product tiles: (code, label, count)."""
+    rows = (
+        Product.objects.filter(is_active=True).exclude(product_type=Product.Type.OTHER)
+        .values("product_type").annotate(n=Count("id")).order_by("-n", "product_type")[:limit]
+    )
+    return [(row["product_type"], type_label(None, row["product_type"]), row["n"]) for row in rows]
+
+
 @require_GET
 def home(request):
     games = list(
@@ -468,6 +477,7 @@ def home(request):
         "web/home.html",
         {
             "games": games,
+            "product_types": home_types(),
             "last_checked": last_checked,
             "retailer_count": retailer_count,
             "focal": focal,

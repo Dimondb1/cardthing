@@ -1401,9 +1401,9 @@ ENTRIES = [
     Entry(
         "terms.data.body", P, "Data explanation",
         "RipRaptor does not ask you to create an account. Products you save, "
-        "products you view and searches you make are stored in your browser "
-        "only, and you can clear them from the home page. We count clicks to retailers without "
-        "recording who clicked. One small cookie remembers only that your browser "
+        "products you view and searches you make are kept in your browser, not "
+        "by us, and you can clear them from the home page. Our own count of clicks to retailers "
+        "does not record who clicked. One small cookie of ours remembers only that your browser "
         "has visited before, so we can count returning visitors. It holds nothing "
         "about you.\n\n"
         "If you ask to be emailed when a product is back in stock, we keep your email "
@@ -1421,13 +1421,15 @@ ENTRIES = [
     ),
     Entry(
         "terms.analytics", P, "Analytics explanation",
-        "We use Google Analytics only if you allow it, on the card shown on your first visit. It tells "
-        "us how many people visit, which pages and searches they use and how often they go to a shop. "
-        "Google sets cookies to tell visits apart and sees the address of each page you open. Google "
-        "says it does not store your IP address. We have turned off Google signals and advertising "
-        "features. Links to your messages and stock alerts are private and are never sent to Google. "
-        "Without your permission no Google script loads. To change your answer, use Analytics cookies "
-        "at the foot of any page.",
+        "We use Google Analytics only if you allow it, on the card that asks you. It tells us how many "
+        "people visit, which pages and searches they use and how often they go to a shop. Google then "
+        "receives the address of each page you open, including your searches and watchlist, and sets "
+        "cookies that last up to two years to tell visits apart. Google says it does not store your IP "
+        "address. It keeps the detailed records for at most 14 months and may process them in the "
+        "United States. We have turned off Google signals and advertising features. Links to your "
+        "messages and stock alerts are private and are never sent to Google. Without your permission "
+        "Google Analytics does not load. To change your answer, use Analytics cookies at the foot of "
+        "the site's pages.",
         "Data section of the terms page, shown while Google Analytics is set up.",
         legal=True,
     ),

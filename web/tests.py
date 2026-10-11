@@ -285,7 +285,7 @@ class TermsAndRefreshTests(PageTestCase):
         response = self.client.get(reverse("web:terms"))
         self.assertContains(response, "commission")
         self.assertContains(response, "independent")
-        self.assertContains(response, "stored in your browser")
+        self.assertContains(response, "kept in your browser, not by us")
 
     def test_footer_is_one_line_with_a_terms_link(self):
         html = self.client.get(reverse("web:home")).content.decode()
@@ -666,7 +666,7 @@ class PickUpTests(PageTestCase):
         self.assertIn("Clear history", home)
         self.assertIn('data-endpoint="/api/recent/"', home)
         self.assertIn('data-recent="Recent searches"', home)
-        self.assertContains(self.client.get(reverse("web:terms")), "searches you make are stored in your browser")
+        self.assertContains(self.client.get(reverse("web:terms")), "searches you make are kept in your browser")
 
 
 class AmazonLeadTests(PageTestCase):
@@ -1724,26 +1724,41 @@ class AnalyticsTests(PageTestCase):
 
         alert = StockAlert.objects.create(product=self.sold_out, email="someone@example.com")
         conversation = inbox.start("Is the bundle coming back?")
-        with self.settings(**self.GA):
+        with self.settings(RIPRAPTOR_ADSENSE_CLIENT="ca-pub-1", **self.GA):
+            # A mistyped thread link is a 404 whose address still holds what may be most of a token.
             for url in (reverse("web:alert_confirm", args=[alert.token]), reverse("web:alert_stop", args=[alert.token]),
-                        conversation.get_absolute_url()):
+                        conversation.get_absolute_url(), "/contact/c/mistyped-token/"):
                 html = self.client.get(url).content.decode()
                 with self.subTest(url=url):
                     self.assertNotIn("analytics.js", html)
                     self.assertNotIn("data-consent", html)
                     self.assertNotIn("G-TEST123", html)
+                    self.assertNotIn("dwin2.com", html)
+                    self.assertNotIn("googlesyndication", html)
+                    # Leaving the page passes on only the site's address, never the token.
+                    self.assertIn('<meta name="referrer" content="strict-origin">', html)
+            self.assertNotIn('name="referrer"', self.client.get(reverse("web:home")).content.decode())
 
     def test_the_script_keeps_private_links_out_and_asks_first(self):
         from django.contrib.staticfiles import finders
 
         script = open(finders.find("js/analytics.js"), encoding="utf-8").read()
-        self.assertIn(r"/^\/(?:contact\/c|alerts\/(?:confirm|stop))\//", script)
         self.assertIn("config.page_referrer", script)
         self.assertIn("allow_google_signals: false", script)
         self.assertIn("ad_storage: \"denied\"", script)
-        # The tag is only ever added by start(), which runs on "granted" alone.
+        # The tag is only ever added by start(), and start() is called from one place, on "granted" alone.
         self.assertEqual(script.count("googletagmanager.com/gtag/js"), 1)
-        self.assertIn('if (choice === "granted") start();', script)
+        self.assertEqual(script.count("start()"), 1)
+        self.assertIn('    if (answer === "granted") start();\n    if (answer !== "denied") return;\n', script)
+        self.assertIn("if (from.origin === location.origin && PRIVATE.test(from.pathname)) config.page_referrer = `${from.origin}/`;", script)
+        # Refusing reloads a page whose tag is running, here or in another tab or a page kept for Back.
+        self.assertIn("if (started) location.reload();", script)
+        self.assertIn('addEventListener("storage"', script)
+        self.assertIn('addEventListener("pageshow"', script)
+        # The server and the script agree on which addresses are private.
+        from web.context_processors import PRIVATE_LINK
+
+        self.assertIn(PRIVATE_LINK.pattern.replace("/", r"\/"), script)
         for route in ("contact_thread", "alert_confirm", "alert_stop"):
             path = reverse(f"web:{route}", args=["abc123"])
             with self.subTest(path=path):

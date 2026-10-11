@@ -1738,21 +1738,32 @@ cached.
 Google Analytics 4 (`RIPRAPTOR_GA_ID`) counts visits, pages, searches (the
 `q` in search addresses) and presses on Buy and shop links (a `buy_click`
 event). UK law needs a visitor's permission before analytics cookies are
-set, so a small card asks on the first visit: Allow analytics or No
-analytics, equally plain. Until a visitor allows it no Google script
-loads and nothing is stored but the answer, which is kept in the browser
-(`ripraptor.analytics`) and asked again after six months. Analytics
-cookies at the foot of every page shows the card again; No analytics
-switches the tag off and deletes Google's cookies. Google signals and
-advertising features are off. Message threads and stock alert links
-(`/contact/c/`, `/alerts/confirm/`, `/alerts/stop/`) are private, so those
-pages never load it and a visitor arriving from one is passed on as coming
-from the home page. Without JavaScript there is no card and no analytics.
-The Terms page explains it in its data section while it is set up.
+set, so a small card asks: Allow analytics or No analytics, equally plain.
+Until a visitor allows it no Google Analytics script loads and nothing is
+stored but the answer, which is kept in the browser (`ripraptor.analytics`)
+and asked again after six months. The swipe page fills a phone's screen,
+so there the card waits for the next page. Analytics cookies at the foot
+of the site's pages shows the card again. No analytics deletes Google's
+cookies, and a page whose tag is already running reloads without it, as
+do the visitor's other open tabs and a page kept for the Back button.
+Google signals and advertising features are off.
 
-To count Buy presses as conversions, mark `buy_click` as a key event in
-Google Analytics (Admin, Events). Google's own data settings, such as how
-long data is kept, are set in Google Analytics, not here.
+Message threads and stock alert links (`/contact/c/`, `/alerts/confirm/`,
+`/alerts/stop/`, matched by address in `web/context_processors.py` and in
+`analytics.js`, so a mistyped one is covered too) are private: no Google
+Analytics, Awin or AdSense script loads there, and leaving one passes on
+only the site's address as the referrer. Without JavaScript there is no
+card and no analytics. The Terms page explains it in its data section
+while it is set up.
+
+In Google Analytics, keep data retention at 14 months or less (Admin,
+Data retention): the Terms page says Google keeps the detailed records
+for at most 14 months. To count Buy presses as conversions, mark
+`buy_click` as a key event (Admin, Events).
+
+`python scripts/analytics_check.py` checks all of this in Chromium against
+a dev server on port 8000 started with `RIPRAPTOR_GA_ID=G-TEST123` and
+demo data. Google is never reached.
 
 ## Add to home screen
 

@@ -7,6 +7,7 @@
   <meta name="description" content="{% if meta_description %}{{ meta_description }}{% else %}{% copy "meta.default.description" %}{% endif %}">
   {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
   {% if noindex %}<meta name="robots" content="noindex, follow">{% endif %}
+  {% if private_link %}<meta name="referrer" content="strict-origin">{% endif %}
   <meta property="og:site_name" content="{{ site_name }}">
   <meta property="og:type" content="{% if meta_type %}{{ meta_type }}{% else %}website{% endif %}">
   <meta property="og:title" content="{% if meta_full_title %}{{ meta_full_title }}{% elif meta_title %}{{ meta_title }}{% else %}{{ site_name }}{% endif %}">
@@ -31,7 +32,7 @@
   <script src="{% static 'js/history.js' %}" defer></script>
   {% if ga_id and not private_link %}<script src="{% static 'js/analytics.js' %}" data-ga-id="{{ ga_id }}" defer></script>{% endif %}
   <script src="{% static 'js/install.js' %}" defer></script>
-  {% if adsense_client and not noindex %}<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_client }}" crossorigin="anonymous"></script>{% endif %}
+  {% if adsense_client and not noindex and not private_link %}<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_client }}" crossorigin="anonymous"></script>{% endif %}
   {% block scripts %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -43,6 +44,6 @@
   {% include "web/includes/footer.html" %}
   {% include "web/includes/install.html" %}
   {% if ga_id and not private_link %}{% include "web/includes/consent.html" %}{% endif %}
-  {% if awin_publisher_id %}<script src="https://www.dwin2.com/pub.{{ awin_publisher_id }}.min.js"></script>{% endif %}
+  {% if awin_publisher_id and not private_link %}<script src="https://www.dwin2.com/pub.{{ awin_publisher_id }}.min.js"></script>{% endif %}
 </body>
 </html>

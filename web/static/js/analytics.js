@@ -18,13 +18,10 @@
   };
   const store = (choice) => { try { localStorage.setItem(KEY, JSON.stringify({ choice, at: Date.now() })); } catch (e) { /* private mode */ } };
 
+  let answer = read();   // this page's answer, so it holds even where the browser keeps no storage
   let started = false;
   const start = () => {
-    window[`ga-disable-${id}`] = false;
-    if (started) {
-      window.gtag("consent", "update", { analytics_storage: "granted" });
-      return;
-    }
+    if (started) return;
     started = true;
     window.dataLayer = window.dataLayer || [];
     window.gtag = function gtag() { window.dataLayer.push(arguments); };
@@ -44,37 +41,66 @@
     document.head.append(script);
   };
 
-  // Turning analytics off stops anything more being sent and removes Google's cookies.
-  const stop = () => {
-    window[`ga-disable-${id}`] = true;   // Google's own switch: the tag sends nothing at all, not even cookieless pings
-    if (started) window.gtag("consent", "update", { analytics_storage: "denied" });
+  // Google's cookies (_ga and _ga_<id>), on this host and on each parent domain Google may have used.
+  const forget = () => {
     const parts = location.hostname.split(".");
     const domains = ["", ...parts.map((_, i) => `; domain=.${parts.slice(i).join(".")}`)];
     document.cookie.split(";").map((c) => c.split("=")[0].trim()).filter((name) => /^_ga(?:_|$)/.test(name))
       .forEach((name) => domains.forEach((domain) => { document.cookie = `${name}=; Max-Age=0; path=/${domain}`; }));
   };
 
+  // A running tag cannot be fully switched off, so a page that has one reloads without it.
+  const apply = () => {
+    if (answer === "granted") start();
+    if (answer !== "denied") return;
+    forget();
+    if (started) location.reload();
+  };
+
   // A press on a Buy button or a shop's link, so Analytics can count how often a visit ends at a shop.
   document.addEventListener("click", (e) => {
     const link = e.target.closest && e.target.closest('a[rel~="sponsored"]');
-    if (link && started && read() === "granted") window.gtag("event", "buy_click", { link_url: link.href });
+    if (link && started && answer === "granted") window.gtag("event", "buy_click", { link_url: link.href });
   });
 
-  const show = () => { card.hidden = false; requestAnimationFrame(() => card.classList.add("is-shown")); };
-  const hide = () => { card.classList.remove("is-shown"); card.hidden = true; };
-  card.querySelectorAll("[data-consent-choice]").forEach((button) => button.addEventListener("click", () => {
-    const choice = button.dataset.consentChoice;
-    store(choice);
-    hide();
-    if (choice === "granted") start(); else stop();
-  }));
   const again = document.querySelector("[data-consent-open]");
+  // While the card is up, keyboard focus scrolls to just above it rather than underneath it.
+  const show = (focus) => {
+    card.hidden = false;
+    document.documentElement.style.scrollPaddingBottom = `${innerHeight - card.offsetTop}px`;   // offsetTop ignores the entrance transform
+    requestAnimationFrame(() => card.classList.add("is-shown"));
+    if (focus) card.querySelector("[data-consent-choice]").focus();
+  };
+  const hide = () => {
+    const hadFocus = card.contains(document.activeElement);
+    card.classList.remove("is-shown");
+    card.hidden = true;
+    document.documentElement.style.scrollPaddingBottom = "";
+    if (hadFocus && again) again.focus();
+  };
+  card.querySelectorAll("[data-consent-choice]").forEach((button) => button.addEventListener("click", () => {
+    answer = button.dataset.consentChoice;
+    store(answer);
+    hide();
+    apply();
+  }));
   if (again) {
     again.hidden = false;
-    again.addEventListener("click", show);
+    again.addEventListener("click", () => show(true));
   }
 
-  const choice = read();
-  if (choice === "granted") start();
-  else if (choice === null) show();
+  // An answer given in another tab, or after this page was kept for the Back button, applies here too.
+  const sync = () => {
+    const now = read();
+    if (now === null || now === answer) return;
+    answer = now;
+    hide();
+    apply();
+  };
+  addEventListener("storage", (e) => { if (e.key === KEY) sync(); });
+  addEventListener("pageshow", (e) => { if (e.persisted) sync(); });
+
+  apply();
+  // The swipe page fills a phone's screen and the card would cover Skip and Save: it asks on the next page.
+  if (answer === null && !document.body.classList.contains("body--deck")) show(false);
 })();

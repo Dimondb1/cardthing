@@ -8,6 +8,7 @@ Pack" or a case of six boxes.
 """
 
 import re
+from functools import lru_cache
 from html import unescape as html_unescape
 
 from . import languages
@@ -34,6 +35,9 @@ SUGGEST = 60
 ABBREVIATIONS = {" etb ": " elite trainer box ", " bb ": " booster box ", " upc ": " ultra premium collection "}
 
 
+# Remembered: one eBay run scores each of up to 200,000 titles against hundreds of our product names, and
+# cleaning the same name again each time was nearly all of its work. Both depend only on the text.
+@lru_cache(maxsize=65536)
 def expand(text):
     text = " " + normalise(text) + " "
     for short, full in ABBREVIATIONS.items():
@@ -41,8 +45,13 @@ def expand(text):
     return text.strip()
 
 
+@lru_cache(maxsize=65536)
+def _words(text):
+    return tuple(w for w in expand(text).split() if w not in STOP)
+
+
 def words(text):
-    return [w for w in expand(text).split() if w not in STOP]
+    return list(_words(text))
 
 
 # Words shops add or drop at will: two names that differ only by these are one product.

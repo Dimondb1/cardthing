@@ -207,7 +207,12 @@ RIPRAPTOR_EBAY_CAMPAIGN_ID=...
 then run `setup_shops`, which adds eBay as a shop only when the keys are
 set. The hourly import reads eBay once a day, up to
 `RIPRAPTOR_EBAY_DAILY_LIMIT` products a run: those already listed first,
-then the rest, by barcode where we have one and otherwise by name. Of the
+then the rest, by barcode where we have one and otherwise by name. A run stops
+starting lookups after 45 minutes (`RUN_SECONDS` in `catalogue/ebay.py`) and
+finishes as a good read with what it found, inside the background reader's
+60 minute limit for a marketplace and the hourly import's 55; the products
+it did not reach go first the next day. Cut off by either limit, a run would
+count as failed, be tried again and spend more of the day's searches. Of the
 rest, the products visitors want most go first (counted as for Amazon
 above, and waiting their normal turn for three days after a search), then
 those never tried or tried longest ago, then those most shops stock. The

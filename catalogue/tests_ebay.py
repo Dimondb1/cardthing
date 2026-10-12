@@ -786,3 +786,56 @@ class SaveAsFoundTests(TestCase):
         self.assertEqual(Listing.objects.get(retailer=self.retailer).product, self.bundle)
         # The interrupted run did not finish, so it does not count as today's fetch.
         self.assertFalse(ImportRun.objects.filter(retailer=self.retailer, finished_at__isnull=False).exists())
+
+
+@override_settings(**KEYS)
+class RunTimeTests(TestCase):
+    """A run stops by itself before the background reader's limit, so it never counts as failed."""
+
+    def setUp(self):
+        self.set = make_set(make_game())
+        self.retailer = Retailer.objects.create(
+            name="eBay", slug="ebay", website="https://www.ebay.co.uk/", source_type=Retailer.Source.EBAY
+        )
+        for n in range(6):
+            make_product(self.set, name=f"Set {n} Booster Box", slug=f"set-{n}-box")
+
+    def test_a_run_stops_starting_lookups_once_its_time_is_used_and_keeps_what_it_found(self):
+        api = FakeApi([])
+        ticks = iter(range(0, 10_000, 600))   # ten minutes pass between each look at the clock
+        offers = ebay.ebay_offers(self.retailer, limit=100, request=api, pause=0, clock=lambda: next(ticks))
+        self.assertEqual(offers, [])
+        # 45 minutes: the start, then products at 10, 20, 30 and 40 minutes; the clock reads 50 before the fifth.
+        # Each is searched by name, then by its plainer name when eBay finds nothing.
+        self.assertEqual(Product.objects.filter(ebay_checked_at__isnull=False).count(), 4)
+        self.assertEqual(len(api.searches()), 8)
+
+    def test_the_run_finishes_as_a_good_read_and_tomorrow_starts_with_the_rest(self):
+        api = FakeApi([])
+        ticks = iter(range(0, 10_000, 600))
+        with mock.patch.object(ebay, "http", api), mock.patch.object(ebay.time, "monotonic", lambda: next(ticks)), \
+                mock.patch.object(ebay, "PAUSE", 0):
+            run = run_import(self.retailer)
+        self.assertEqual(run.error, "")
+        self.assertIsNotNone(run.finished_at)
+        from urllib.parse import parse_qs, urlsplit
+
+        looked_up = set(Product.objects.filter(ebay_checked_at__isnull=False).values_list("name", flat=True))
+        self.assertEqual(len(looked_up), 4)
+        api = FakeApi([])
+        ebay.ebay_offers(self.retailer, limit=4, request=api, pause=0)   # the limit counts searches: two each
+        searched = {parse_qs(urlsplit(url).query)["q"][0].removeprefix("Pokemon ") for url in api.searches()}
+        not_reached = set(Product.objects.values_list("name", flat=True)) - looked_up
+        self.assertEqual(len(not_reached), 2)
+        self.assertEqual(searched, not_reached)
+
+    def test_name_cleaning_is_remembered_and_gives_the_same_answers(self):
+        from .matching import expand, score, words
+
+        expand.cache_clear()
+        self.assertEqual(words("Pokémon Surging Sparks ETB"), ["surging", "sparks", "elite", "trainer", "box"])
+        listed = words("Pokémon Surging Sparks ETB")
+        listed.append("changed")   # a caller changing its copy never changes the next answer
+        self.assertEqual(words("Pokémon Surging Sparks ETB"), ["surging", "sparks", "elite", "trainer", "box"])
+        self.assertEqual(score("Surging Sparks Elite Trainer Box", "Pokemon Surging Sparks ETB New"), 100)
+        self.assertGreater(expand.cache_info().hits, 0)

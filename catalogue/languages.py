@@ -278,6 +278,7 @@ def implied(text, game=""):
     return ENGLISH
 
 
+@lru_cache(maxsize=65536)   # a matcher asks for the same title's language once per product it compares
 def language_of(text, game="", loose=False):
     """The language ``text`` is in, as a code from NAMES, or "" for English. ``game`` is the game's slug:
     the code and set rules hold only inside their game, so pass it whenever it is known. ``loose`` reads
@@ -291,6 +292,7 @@ def language_of(text, game="", loose=False):
     return implied(text, game)
 
 
+@lru_cache(maxsize=65536)
 def mixed(text, game=""):
     """Whether ``text`` states two languages that cannot be one product's, or joins a Japanese-only set to
     another set: a mixed bundle, or a title too unclear to act on."""

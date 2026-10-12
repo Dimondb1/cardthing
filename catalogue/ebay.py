@@ -49,6 +49,11 @@ FILTER = "conditions:{NEW},buyingOptions:{FIXED_PRICE},itemLocationCountry:GB,de
 MIN_FEEDBACK = 95.0
 PAUSE = 0.2
 GIVE_UP_AFTER = 5  # failed lookups in a row before a run stops and keeps what it found
+# A run stops starting lookups after this and finishes normally with what it found, well inside the background
+# reader's 60 minute limit for a marketplace read (catalogue/worker.py) and the hourly import's 55. Cut off by
+# either, a run counts as failed and is tried again, spending the day's searches. Tomorrow's run starts with the
+# products this one did not reach, as they were looked up longest ago.
+RUN_SECONDS = 45 * 60
 
 
 class EbayError(Exception):
@@ -385,12 +390,12 @@ def verdict(product, item, Offer, catalogue, specifics, shops):
     return offer, "a different product, a part or a multi-buy"
 
 
-def ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
+def ebay_offers(retailer, limit=None, request=None, pause=None, run=None, clock=None):
     """All the offers of one run, as a list. See iter_ebay_offers."""
-    return list(iter_ebay_offers(retailer, limit=limit, request=request, pause=pause, run=run))
+    return list(iter_ebay_offers(retailer, limit=limit, request=request, pause=pause, run=run, clock=clock))
 
 
-def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
+def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, clock=None):
     """Offers for every product already on eBay, then up to ``limit`` new lookups.
 
     Credentials and allowances are checked straight away; the offers then
@@ -399,14 +404,16 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
 
     Known listings are refreshed through eBay's bulk item lookup, which has
     its own daily allowance, so the search allowance goes on new products.
-    When an allowance runs out the run stops and keeps what it found.
-    ``run`` is the ImportRun to keep posted so admin shows progress.
+    When an allowance runs out, or RUN_SECONDS have passed, the run stops and keeps what it found.
+    ``run`` is the ImportRun to keep posted so admin shows progress. ``clock`` gives seconds (for tests).
     """
     from .finder import interest_first
     from .importers import Catalogue, Offer
 
     request = request or http
     pause = PAUSE if pause is None else pause
+    clock = clock or time.monotonic
+    began = clock()
     app, cert, campaign = credentials()
     limit = limit if limit is not None else getattr(settings, "RIPRAPTOR_EBAY_DAILY_LIMIT", 4000)
     token = access_token(app, cert, request=request)
@@ -465,9 +472,15 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         done = 0
         if ids:
             logger.info("eBay: refreshing %d known listings", len(ids))
+        def out_of_time():
+            return clock() - began >= RUN_SECONDS
+
         while done < len(batches):
             batch = batches[done]
             if bulk_left is not None and bulk_left <= 0:
+                break
+            if out_of_time():
+                logger.warning("eBay: %d minutes used, stopping the refresh and keeping what was found", RUN_SECONDS // 60)
                 break
             try:
                 answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
@@ -541,6 +554,10 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None):
         searches = 0
         for product in (gone + fresh)[:limit]:
             if searches >= limit:
+                break
+            if out_of_time():
+                logger.warning("eBay: %d minutes used after %d products, stopping and keeping what was found; "
+                               "the rest go first tomorrow", RUN_SECONDS // 60, len(checked))
                 break
             try:
                 urls = ([search_url(product)] if product.ean else []) + [search_url(product, q) for q in search_queries(product)]

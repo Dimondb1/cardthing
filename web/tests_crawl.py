@@ -205,8 +205,8 @@ class CrawlPageTests(TestCase):
             page = self.client.get(self.url)
         self.assertContains(page, "Shops (49)")
         # Session, user, the last finished read, the background reader's row, four for how hot each product
-        # is, and the shops.
-        self.assertEqual(few, 9)
+        # is, the shops, and three to renew the admin sign-in (SESSION_SAVE_EVERY_REQUEST).
+        self.assertEqual(few, 12)
 
     def test_copy_has_no_em_dashes_or_exclamation_marks(self):
         self.make_shop("Waiting Shop", backoff_until=self.now + timedelta(minutes=20), error_streak=1, last_error="Timed out")

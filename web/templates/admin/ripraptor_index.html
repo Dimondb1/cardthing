@@ -28,5 +28,34 @@
     <tr><th scope="row"><a href="{% url 'insights' %}">What visitors look at, search for and click</a></th><td></td></tr>
   </table>
 </div>
+{# Hidden once the admin is opened from its home screen icon. #}
+<div class="module" style="margin-bottom: 20px;" data-admin-app>
+  <table>
+    <caption>Admin app</caption>
+    <tr><th scope="row">
+      <p style="margin: 0 0 8px;">Put the admin on your phone's home screen. It opens here, stays signed in while you use it at least once a fortnight, and a long press on its icon goes straight to Things to check, Messages, Crawl health or Insights.</p>
+      <p style="margin: 0;" data-admin-app-how>Android: open Chrome's menu and tap Add to home screen. iPhone: tap Share in Safari, then Add to Home Screen.</p>
+      <p style="margin: 8px 0 0;"><button type="button" class="button" data-admin-app-add hidden>Add to home screen</button></p>
+    </th><td></td></tr>
+  </table>
+</div>
+<script>
+(() => {
+  const box = document.querySelector("[data-admin-app]");
+  if (matchMedia("(display-mode: standalone)").matches || navigator.standalone === true) { box.hidden = true; return; }
+  const add = box.querySelector("[data-admin-app-add]");
+  let prompt = null;
+  addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); prompt = e; add.hidden = false; });
+  add.addEventListener("click", async () => {
+    if (!prompt) return;
+    prompt.prompt();
+    const choice = await prompt.userChoice.catch(() => ({ outcome: "dismissed" }));
+    if (choice.outcome === "accepted") box.hidden = true;
+    prompt = null;
+    add.hidden = true;
+  });
+  addEventListener("appinstalled", () => { box.hidden = true; });
+})();
+</script>
 {{ block.super }}
 {% endblock %}

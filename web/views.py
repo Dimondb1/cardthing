@@ -1320,6 +1320,40 @@ def manifest(request):
 
 
 @require_GET
+def admin_manifest(request):
+    """The admin as its own home screen app: opens on the admin home, stays inside /admin/, and offers the
+    owner's daily pages as shortcuts. Public, like any manifest: the browser fetches it without a login, and
+    every page it names still asks for one."""
+    shortcuts = [
+        ("Things to check", "Checks", reverse("checks")),
+        ("Messages", "Messages", reverse("admin:inbox_conversation_changelist") + "?unread__exact=1"),
+        ("Crawl health", "Crawl", reverse("crawl")),
+        ("Insights", "Insights", reverse("insights")),
+    ]
+    icon = [{"src": static("img/admin-icon-96.png"), "sizes": "96x96", "type": "image/png"}]
+    data = {
+        "id": "/admin/",
+        "name": f"{settings.RIPRAPTOR_SITE_NAME} admin",
+        "short_name": "RR admin",
+        "description": f"Run {settings.RIPRAPTOR_SITE_NAME}: things to check, messages, shops and insights.",
+        "start_url": reverse("admin:index"),
+        "scope": reverse("admin:index"),
+        "display": "standalone",
+        "background_color": "#1f2430",
+        "theme_color": "#417690",   # the admin header, so the status bar runs into it
+        "icons": [
+            {"src": static("img/admin-icon-192.png"), "sizes": "192x192", "type": "image/png"},
+            {"src": static("img/admin-icon-512.png"), "sizes": "512x512", "type": "image/png"},
+            {"src": static("img/admin-icon-maskable-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+        "shortcuts": [{"name": name, "short_name": short, "url": url, "icons": icon} for name, short, url in shortcuts],
+    }
+    response = JsonResponse(data, content_type="application/manifest+json")
+    response["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
+@require_GET
 def robots_txt(request):
     private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/", "Disallow: /watchlist/",
                "Disallow: /alerts/", "Disallow: /contact/c/"]

@@ -14,6 +14,7 @@ urlpatterns = [
     path("admin/insights/", web_views.insights_page, name="insights"),
     path("admin/checks/", web_views.checks_page, name="checks"),
     path("admin/crawl/", web_views.crawl_page, name="crawl"),
+    path("admin/manifest.webmanifest", web_views.admin_manifest, name="admin_manifest"),
     path("admin/", admin.site.urls),
     path("", include("web.urls")),
 ]

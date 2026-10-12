@@ -1811,6 +1811,24 @@ events are counted with no record of who, through `/api/note/`: shown,
 added, dismissed, and opened from the icon (once per browser per day).
 Insights shows them under "Home screen".
 
+## Admin app
+
+The admin is a home screen app of its own, separate from the public one.
+`/admin/manifest.webmanifest` (a view, `admin_manifest`) names it "RipRaptor
+admin", gives it the raptor on a dark icon (`admin-icon-*.png`), starts it on
+the admin home and keeps it inside `/admin/`, so a link to a public page
+opens in the browser. A long press on the icon offers four shortcuts: Things
+to check, Messages (unread), Crawl health and Insights. Every admin page,
+the login page included, links the manifest through
+`templates/admin/base_site.html` (the project templates folder, searched before
+the apps so it replaces Django's own). The admin home has an Admin app box
+with an Add to home screen button where Chrome offers one, and the steps for
+an iPhone; it hides once the app is opened from its icon.
+
+The sign-in renews each time the admin is used (`SESSION_SAVE_EVERY_REQUEST`),
+so the app stays signed in while it is opened at least once a fortnight.
+Public pages never start a session, so this writes nothing for visitors.
+
 ## Feeds
 
 `/feeds/deals.xml` is an RSS feed of restocks, pre-order openings and price drops across the

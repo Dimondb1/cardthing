@@ -1892,3 +1892,61 @@ class RedesignTests(PageTestCase):
         html = self.client.get(reverse("web:home")).content.decode()
         self.assertIn('<h1 id="hero-title" class="hero__title">Find it cheaper. <span class="hero__accent">Open more.</span></h1>', html)
         self.assertEqual(html.count("Open more."), 1)
+
+
+class AdminAppTests(TestCase):
+    """The admin as its own home screen app."""
+
+    def test_the_manifest_opens_the_admin_and_offers_the_daily_pages(self):
+        from django.contrib.staticfiles import finders
+
+        response = self.client.get("/admin/manifest.webmanifest")   # no sign-in: the browser fetches it without one
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/manifest+json")
+        data = response.json()
+        self.assertEqual((data["id"], data["start_url"], data["scope"]), ("/admin/", "/admin/", "/admin/"))
+        self.assertEqual(data["name"], "RipRaptor admin")
+        self.assertEqual(data["display"], "standalone")
+        self.assertEqual([s["url"] for s in data["shortcuts"]],
+                         ["/admin/checks/", "/admin/inbox/conversation/?unread__exact=1", "/admin/crawl/", "/admin/insights/"])
+        sizes = {(icon["sizes"], icon.get("purpose", "any")) for icon in data["icons"]}
+        self.assertEqual(sizes, {("192x192", "any"), ("512x512", "any"), ("512x512", "maskable")})
+        for icon in data["icons"] + data["shortcuts"][0]["icons"]:
+            self.assertTrue(finders.find(icon["src"].removeprefix("/static/")), icon["src"])
+        # The public app is unchanged and separate.
+        public = self.client.get("/manifest.webmanifest").json()
+        self.assertEqual((public["id"], public["start_url"], public["scope"]), ("/", "/", "/"))
+
+    def test_every_admin_page_links_it_and_the_home_offers_to_add_it(self):
+        from django.contrib.auth import get_user_model
+
+        login = self.client.get("/admin/login/").content.decode()
+        self.assertIn('<link rel="manifest" href="/admin/manifest.webmanifest">', login)
+        self.assertIn('<link rel="apple-touch-icon" href="/static/img/admin-apple-touch-icon.png">', login)
+        owner = get_user_model().objects.create_superuser("owner", "owner@example.com", "x")
+        self.client.force_login(owner)
+        for url in ("/admin/", "/admin/checks/", "/admin/insights/", "/admin/catalogue/product/"):
+            html = self.client.get(url).content.decode()
+            with self.subTest(url=url):
+                self.assertEqual(html.count('rel="manifest"'), 1)
+                self.assertIn('href="/admin/manifest.webmanifest"', html)
+                self.assertNotIn('href="/manifest.webmanifest"', html)
+                self.assertIn('<div id="site-name"><a href="/admin/">RipRaptor admin</a></div>', html)
+        home = self.client.get("/admin/").content.decode()
+        self.assertIn("data-admin-app", home)
+        self.assertIn('<button type="button" class="button" data-admin-app-add hidden>Add to home screen</button>', home)
+        # Public pages keep the public app.
+        self.assertIn('<link rel="manifest" href="/manifest.webmanifest">', self.client.get("/").content.decode())
+
+    def test_the_admin_sign_in_renews_while_it_is_used_and_visitors_get_no_session(self):
+        from django.conf import settings
+        from django.contrib.auth import get_user_model
+
+        self.assertTrue(settings.SESSION_SAVE_EVERY_REQUEST)
+        self.client.get("/")
+        self.assertNotIn(settings.SESSION_COOKIE_NAME, self.client.cookies)
+        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.com", "x"))
+        response = self.client.get("/admin/")
+        # The session is untouched by this page, yet its cookie is sent again with a fresh two-week expiry.
+        self.assertIn(settings.SESSION_COOKIE_NAME, response.cookies)
+        self.assertEqual(response.cookies[settings.SESSION_COOKIE_NAME]["max-age"], settings.SESSION_COOKIE_AGE)

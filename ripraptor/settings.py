@@ -81,12 +81,18 @@ MIDDLEWARE = [
     "web.middleware.PageViewMiddleware",
 ]
 
+# The admin sign-in lasts two weeks (Django's default) from the last time it was used, so the admin
+# home screen app stays signed in while it is opened at least once a fortnight. Only the admin has a
+# session: public pages never start one, so this writes nothing for visitors.
+SESSION_SAVE_EVERY_REQUEST = True
+
 ROOT_URLCONF = "ripraptor.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # Searched before the apps, so templates/admin/base_site.html replaces Django's own (the admin app is first).
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

@@ -1,0 +1,23 @@
+{% extends "admin/base.html" %}
+{% load static %}
+{# Django's own base_site, plus what makes the admin its own home screen app (see the manifest view). #}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrahead %}
+<link rel="manifest" href="{% url 'admin_manifest' %}">
+<meta name="theme-color" content="#417690">
+<link rel="apple-touch-icon" href="{% static 'img/admin-apple-touch-icon.png' %}">
+<meta name="apple-mobile-web-app-title" content="RR admin">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+{% endblock %}
+
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

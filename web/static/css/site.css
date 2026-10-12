@@ -56,6 +56,7 @@ ul, ol { margin: 0; padding: 0; }
 .icon { display: inline-block; width: 1.25em; height: 1.25em; flex: none; background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
 .icon--search { --icon: url("../img/icon-search.png"); }
 .icon--bag { --icon: url("../img/icon-bag.png"); }
+.icon--refresh { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 12a8 8 0 1 1-2.3-5.7' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M20 4v5h-5' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 /* The raptor head: web/static/img/raptor.png through a mask, like the icons, so it takes any token colour at any size
    from the one file. Orange (--color-brand) when it points you somewhere, ink when it looked and found nothing.
    Width and height come from --mark-size and the ratio tokens; the default is the floor, below which the crest smudges. */
@@ -64,7 +65,6 @@ ul, ol { margin: 0; padding: 0; }
 .mark--hero { --mark-size: var(--mark-hero); }
 /* Leaning in from an edge: the right 80% of the head, height led, so the crest tips are cut by the edge it leans out of. */
 .mark--lean { width: calc(var(--mark-size) * (var(--mark-ratio-lean))); height: var(--mark-size); -webkit-mask-size: auto 100%; mask-size: auto 100%; -webkit-mask-position: right center; mask-position: right center; }
-.icon--refresh { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 12a8 8 0 1 1-2.3-5.7' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M20 4v5h-5' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 
 .page {
   flex: 1 0 auto; width: 100%;
@@ -337,7 +337,7 @@ ul, ol { margin: 0; padding: 0; }
 .hero__copy { min-width: 0; }
 /* The raptor lifts a little while you are in the search box: it is listening. Transform only. */
 .hero__mark { color: var(--color-brand); transition: transform var(--motion-normal) var(--ease-out); }
-.hero:focus-within .hero__mark { transform: translateY(calc(2 * var(--lift))); }
+.hero:focus-within .hero__mark { transform: translateY(var(--lift-mark)); }
 .hero + .home-section { margin-top: var(--rhythm-hero); }
 .hero + .home-section--games { margin-top: var(--space-6); }
 /* The hero does not animate on load: text arriving in sequence is decoration, not information. */

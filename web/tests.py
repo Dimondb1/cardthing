@@ -1929,7 +1929,7 @@ class RedesignTests(PageTestCase):
 
         from web.templatetags.ripraptor import accent_last
 
-        self.assertEqual(accent_last("Hunt the best prices. Rip more packs."), 'Hunt the best prices. <span class="hero__accent">Rip more packs.</span>')
+        self.assertEqual(accent_last("Bad prices. Binned."), 'Bad prices. <span class="hero__accent">Binned.</span>')
         self.assertEqual(accent_last("Better prices"), "Better prices")
         self.assertEqual(accent_last("One. Two. Three."), 'One. Two. <span class="hero__accent">Three.</span>')
         self.assertEqual(accent_last("A <b>x</b>. B."), 'A &lt;b&gt;x&lt;/b&gt;. <span class="hero__accent">B.</span>')
@@ -2001,7 +2001,6 @@ class AdminAppTests(TestCase):
         self.assertEqual(response.cookies[settings.SESSION_COOKIE_NAME]["max-age"], settings.SESSION_COOKIE_AGE)
 
 
-
 class RaptorMarkTests(PageTestCase):
     """The raptor head stands where it has something to say, and never on the money page."""
 
@@ -2022,17 +2021,19 @@ class RaptorMarkTests(PageTestCase):
         # Filtered down to nothing is not a miss the raptor reports; the clear-filters link does the job.
         self.assertNotContains(self.client.get(reverse("web:search"), {"q": "etb", "type": "tin"}), "empty-mark")
         # Not a page-title ornament: the Deals heading stands on its own.
-        self.assertNotContains(self.client.get(reverse("web:deals")), 'class="mark')
+        self.assertNotContains(self.client.get(reverse("web:deals")), 'class="mark ')
+        self.assertNotContains(self.client.get(reverse("web:deals")), 'class="mark"')
 
     def test_the_money_page_has_no_raptor(self):
         for product in (self.etb, self.sold_out, self.unpriced):
             html = self.client.get(product.get_absolute_url()).content.decode()
-            self.assertNotIn('class="mark', html)
+            self.assertNotIn('class="mark ', html)
+            self.assertNotIn('class="mark"', html)
             self.assertNotIn("empty-mark", html)
 
     def test_every_raptor_is_hidden_from_screen_readers(self):
         # A head on its own carries aria-hidden; one inside an empty-mark wrapper inherits the wrapper's.
-        head = re.compile(r'(<div class="empty-mark"[^>]*>)?<span class="mark[^"]*"([^>]*)>')
+        head = re.compile(r'(<div class="empty-mark"[^>]*>\s*)?<span class="mark(?: [^"]*)?"([^>]*)>')
         wrapper = re.compile(r'<div class="empty-mark"[^>]*>')
         for url in self.public_urls() + ["/no-such-page/"]:
             html = self.client.get(url).content.decode()

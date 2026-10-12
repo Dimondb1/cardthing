@@ -197,8 +197,8 @@ ENTRIES = [
         "home.hero.title", H, "Home page headline",
         "Bad prices. Binned.",
         "The strong lines at the top of the home page, beside the raptor and above the search box. The last "
-        "sentence is shown in orange on a line of its own; one sentence stays on one line. Keep each sentence to "
-        "two or three short words so it stays on one line on a phone.",
+        "sentence is shown in orange on a line of its own; one sentence is not split. On a phone the headline "
+        "shares its width with the raptor, so keep each sentence to two or three short words or it wraps.",
     ),
     Entry(
         "home.hero.subtitle", T, "Line under the headline",

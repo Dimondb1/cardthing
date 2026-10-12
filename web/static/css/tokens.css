@@ -93,7 +93,7 @@
   --color-line-strong: #cfd4dc;  /* the search box */
   --color-placeholder: #c9cdd4;  /* outline drawings when there is no image */
 
-  --color-brand: #ff5a1f;        /* logo and large headings only */
+  --color-brand: #ff5a1f;        /* logo, the raptor mark and large headings only */
   --color-brand-ink: #ffffff;
   --color-brand-action: #e5470e; /* buttons: 4:1 with white text */
   --color-brand-text: #cc4410;   /* orange words at small sizes: 4.8:1 on white */
@@ -127,6 +127,7 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);      /* entrances and movement */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);     /* buttons and small state changes */
   --lift: -2px;              /* hover lift for cards and rows */
+  --lift-mark: -4px;         /* the raptor's nod while the search box has focus */
 
   /* The raptor mark (web/static/img/raptor.png, 417 x 400, drawn through a CSS mask) ------- */
   --mark-sm: 2.5rem;             /* the floor: under 40px the crest smudges, so the head is never a 1em icon */

@@ -1834,7 +1834,7 @@ class RedesignTests(PageTestCase):
         cache.clear()
         html = self.client.get(reverse("web:home")).content.decode()
         self.assertIn('<p class="hero__eyebrow">UK price comparison</p>', html)
-        self.assertIn('Hunt the best prices. <span class="hero__accent">Rip more packs.</span></h1>', html)
+        self.assertIn('Bad prices. <span class="hero__accent">Binned.</span></h1>', html)
         self.assertIn('<span class="search__button-text">Find best price</span>', html)
         self.assertIn('<a class="tile tile--game" href="/games/pokemon/"><span class="tile__cover" aria-hidden="true">', html)
         self.assertIn('<span class="tile__name">Pokémon</span><span class="tile__meta">3 products</span></a>', html)
@@ -1999,3 +1999,53 @@ class AdminAppTests(TestCase):
         # The session is untouched by this page, yet its cookie is sent again with a fresh two-week expiry.
         self.assertIn(settings.SESSION_COOKIE_NAME, response.cookies)
         self.assertEqual(response.cookies[settings.SESSION_COOKIE_NAME]["max-age"], settings.SESSION_COOKIE_AGE)
+
+
+
+class RaptorMarkTests(PageTestCase):
+    """The raptor head stands where it has something to say, and never on the money page."""
+
+    PUZZLED = '<div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span><span class="empty-mark__ask">?</span></div>'
+    PLAIN = '<div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span></div>'
+
+    def test_the_raptor_stands_where_it_has_something_to_say(self):
+        home = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('<span class="mark mark--hero hero__mark" aria-hidden="true"></span>', home)
+        self.assertIn('<span class="mark mark--md mark--lean promo__mark" aria-hidden="true"></span>', home)
+        # Something went wrong: the ink head with a question mark.
+        self.assertContains(self.client.get(reverse("web:search"), {"q": "nothing matches this"}), self.PUZZLED)
+        self.assertContains(self.client.get("/no-such-page/"), self.PUZZLED, status_code=404)
+        # Nothing is wrong, just nothing here: the head on its own.
+        empty = self.client.get(reverse("web:watchlist")).content.decode()
+        self.assertIn(self.PLAIN, empty)
+        self.assertNotIn("empty-mark__ask", empty)
+        # Filtered down to nothing is not a miss the raptor reports; the clear-filters link does the job.
+        self.assertNotContains(self.client.get(reverse("web:search"), {"q": "etb", "type": "tin"}), "empty-mark")
+        # Not a page-title ornament: the Deals heading stands on its own.
+        self.assertNotContains(self.client.get(reverse("web:deals")), 'class="mark')
+
+    def test_the_money_page_has_no_raptor(self):
+        for product in (self.etb, self.sold_out, self.unpriced):
+            html = self.client.get(product.get_absolute_url()).content.decode()
+            self.assertNotIn('class="mark', html)
+            self.assertNotIn("empty-mark", html)
+
+    def test_every_raptor_is_hidden_from_screen_readers(self):
+        # A head on its own carries aria-hidden; one inside an empty-mark wrapper inherits the wrapper's.
+        head = re.compile(r'(<div class="empty-mark"[^>]*>)?<span class="mark[^"]*"([^>]*)>')
+        wrapper = re.compile(r'<div class="empty-mark"[^>]*>')
+        for url in self.public_urls() + ["/no-such-page/"]:
+            html = self.client.get(url).content.decode()
+            for found in wrapper.findall(html):
+                self.assertIn('aria-hidden="true"', found, url)
+            for parent, attrs in head.findall(html):
+                self.assertIn('aria-hidden="true"', parent or attrs, url)
+
+    def test_the_end_of_the_swipe_deck_shows_the_raptor(self):
+        from django.contrib.staticfiles import finders
+
+        script = open(finders.find("js/deck.js"), encoding="utf-8").read()
+        finished = script[script.index("if (finished) {"):script.index("} else {", script.index("if (finished) {"))]
+        self.assertIn('el("span", "mark mark--md")', finished)
+        self.assertIn('setAttribute("aria-hidden", "true")', finished)
+        self.assertIn("words.finished", finished)

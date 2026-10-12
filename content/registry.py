@@ -195,13 +195,14 @@ ENTRIES = [
     ),
     Entry(
         "home.hero.title", H, "Home page headline",
-        "Hunt the best prices. Rip more packs.",
-        "The strong lines at the top of the home page, above the search box. The last sentence is shown in "
-        "orange on a line of its own; one sentence stays on one line.",
+        "Bad prices. Binned.",
+        "The strong lines at the top of the home page, beside the raptor and above the search box. The last "
+        "sentence is shown in orange on a line of its own; one sentence stays on one line. Keep each sentence to "
+        "two or three short words so it stays on one line on a phone.",
     ),
     Entry(
         "home.hero.subtitle", T, "Line under the headline",
-        "Sealed TCG products from UK shops, cheapest delivered price first.",
+        "Compare sealed TCG prices from UK shops, cheapest delivered price first.",
         "One sentence under the headline, above the search box. Leave empty to hide it.",
         optional=True,
     ),

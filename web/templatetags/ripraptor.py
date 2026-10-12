@@ -21,7 +21,7 @@ SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 def accent_last(text):
     """The headline with its last sentence on a line of its own, in the brand colour.
 
-    "Hunt the best prices. Rip more packs." becomes the first sentence, then the second in a span.
+    "Bad prices. Binned." becomes the first sentence, then the second in a span.
     A headline of one sentence is left as it is, so the owner's wording decides.
     """
     parts = SENTENCE_END.split(str(text or "").strip())

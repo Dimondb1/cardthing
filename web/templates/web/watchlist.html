@@ -40,6 +40,7 @@
 <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
 {% else %}
 <div class="empty">
+  <div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span></div>
   <h2 class="empty__title">{% copy "watchlist.empty.title" %}</h2>
   <p>{% copy "watchlist.empty.body" %}</p>
   <p class="empty__action"><a class="button" href="{% url 'web:deals' %}">{% copy "watchlist.empty.button" %}</a></p>

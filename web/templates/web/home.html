@@ -3,9 +3,15 @@
 
 {% block content %}
 <section class="hero" aria-labelledby="hero-title">
-  {% copy "home.hero.eyebrow" as eyebrow %}{% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
-  {% copy "home.hero.title" as title %}<h1 id="hero-title" class="hero__title">{{ title|accent_last }}</h1>
-  {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
+  {# The words with the raptor beside them: it is the one doing the binning. Decorative, so hidden from screen readers. #}
+  <div class="hero__top">
+    <div class="hero__copy">
+      {% copy "home.hero.eyebrow" as eyebrow %}{% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
+      {% copy "home.hero.title" as title %}<h1 id="hero-title" class="hero__title">{{ title|accent_last }}</h1>
+      {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
+    </div>
+    <span class="mark mark--hero hero__mark" aria-hidden="true"></span>
+  </div>
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
   </div>
@@ -113,7 +119,7 @@
 
 <section class="home-section" aria-labelledby="watch-title">
   <a class="promo" href="{% url 'web:watchlist' %}">
-    <svg class="promo__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 3.5h12v17l-6-4.5-6 4.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    <span class="mark mark--md mark--lean promo__mark" aria-hidden="true"></span>
     <span class="promo__body"><strong id="watch-title" class="promo__title">{% copy "home.watch.title" %}</strong><span class="promo__text">{% copy "home.watch.body" %}</span></span>
     <span class="promo__arrow" aria-hidden="true">→</span>
   </a>

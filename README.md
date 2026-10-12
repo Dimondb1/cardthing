@@ -1656,6 +1656,24 @@ savings, price drops, trending and restocks are on the Deals page and every
 set is on the Games page. Every product card in a row ends with the same
 "Compare prices" button.
 
+### The raptor
+
+The head from the logo appears where it has something to say, and nowhere
+else. It is `web/static/img/raptor.png` (the head from the app icon, on a
+transparent background) drawn through a CSS mask, like the search and bag
+icons, so it takes any token colour at any size. Orange beside the home page
+headline (it lifts a little while the search box has focus) and leaning in
+from the left edge of the watchlist card, because it points you somewhere.
+Ink above the heading where it looked and found nothing: a search with no
+results, a broken link, the empty watchlist and the end of the swipe deck,
+with an orange question mark on the two where something went wrong. It never
+appears on a product page, beside section headings or in the footer. Sizes
+are the `--mark-*` tokens: `--mark-sm` is the floor, below which the crest
+smudges, and `--mark-hero` is capped at 12rem while the mark is a bitmap.
+The mockups' dark and orange bands were weighed and left out: orange means
+act on this site, and a dark band would make the home page a different site
+from the product pages people land on.
+
 ### When a price was checked
 
 A product page's headline price says which shop it is from and when that

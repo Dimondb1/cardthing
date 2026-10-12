@@ -140,7 +140,11 @@
     if (!queue.length) {
       const status = el("div", "deck__status");
       if (finished) {
-        status.append(el("p", "", words.finished));
+        // The raptor reporting nothing left, as on the other empty states.
+        const mark = el("div", "empty-mark");
+        mark.setAttribute("aria-hidden", "true");
+        mark.append(el("span", "mark mark--md"));
+        status.append(mark, el("p", "", words.finished));
         const again = el("button", "button button--quiet button--small", words.restartLabel || "Start again");
         again.type = "button";
         again.addEventListener("click", () => { seen = new Set(); store(SEEN, []); nextOffset = 0; finished = false; fetchMore(); });

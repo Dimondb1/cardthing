@@ -98,7 +98,7 @@
   --color-brand-action: #e5470e; /* buttons: 4:1 with white text */
   --color-brand-text: #cc4410;   /* orange words at small sizes: 4.8:1 on white */
   --color-brand-hover: #cc4410;
-  --color-brand-soft: #fff1ea;   /* card borders and tints */
+  --color-brand-soft: #fff1ea;   /* card borders and tints. Plain --color-brand text on it is 2.8:1, so words use --color-brand-text */
   --color-brand-line: #ffd6c4;
 
   --color-price: #107a32;        /* cheapest price, 5.4:1 on white */
@@ -127,4 +127,12 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);      /* entrances and movement */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);     /* buttons and small state changes */
   --lift: -2px;              /* hover lift for cards and rows */
+
+  /* The raptor mark (web/static/img/raptor.png, 417 x 400, drawn through a CSS mask) ------- */
+  --mark-sm: 2.5rem;             /* the floor: under 40px the crest smudges, so the head is never a 1em icon */
+  --mark-md: 3.5rem;             /* empty states and the watchlist card */
+  --mark-hero: clamp(6rem, 0.72rem + 22.5vw, 12rem);  /* home page: 96px at 375, 184px at 768, 192px from 800px.
+                                    12rem is the ceiling while the mark is a bitmap; raise it once it is traced to SVG */
+  --mark-ratio: 417 / 400;       /* the image's own proportions, width to height */
+  --mark-ratio-lean: 334 / 400;  /* the right 80% of it: the crest tips are cut by whatever it leans out of */
 }

@@ -6,6 +6,7 @@
 {% if no_matches %}
 {# A plain search found nothing: lead with that and offer a way forward. #}
 <div class="browse-head browse-head--empty">
+  <div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span><span class="empty-mark__ask">?</span></div>
   <h1 class="browse-head__title">{% copy "browse.no_results.title" query=query %}</h1>
   <div class="prose">{% copy "browse.no_results.body" %}</div>
   {% if games %}

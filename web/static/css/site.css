@@ -56,6 +56,14 @@ ul, ol { margin: 0; padding: 0; }
 .icon { display: inline-block; width: 1.25em; height: 1.25em; flex: none; background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
 .icon--search { --icon: url("../img/icon-search.png"); }
 .icon--bag { --icon: url("../img/icon-bag.png"); }
+/* The raptor head: web/static/img/raptor.png through a mask, like the icons, so it takes any token colour at any size
+   from the one file. Orange (--color-brand) when it points you somewhere, ink when it looked and found nothing.
+   Width and height come from --mark-size and the ratio tokens; the default is the floor, below which the crest smudges. */
+.mark { --mark-size: var(--mark-sm); display: inline-block; flex: none; width: var(--mark-size); height: calc(var(--mark-size) / (var(--mark-ratio))); background: currentColor; -webkit-mask: url("../img/raptor.png") center / contain no-repeat; mask: url("../img/raptor.png") center / contain no-repeat; }
+.mark--md { --mark-size: var(--mark-md); }
+.mark--hero { --mark-size: var(--mark-hero); }
+/* Leaning in from an edge: the right 80% of the head, height led, so the crest tips are cut by the edge it leans out of. */
+.mark--lean { width: calc(var(--mark-size) * (var(--mark-ratio-lean))); height: var(--mark-size); -webkit-mask-size: auto 100%; mask-size: auto 100%; -webkit-mask-position: right center; mask-position: right center; }
 .icon--refresh { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 12a8 8 0 1 1-2.3-5.7' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round'/%3E%3Cpath d='M20 4v5h-5' fill='none' stroke='%23000' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 
 .page {
@@ -321,9 +329,15 @@ ul, ol { margin: 0; padding: 0; }
 
 /* Home -------------------------------------------------------------------- */
 
-/* Hero: one unit. A line above, the headline with its orange second line, one line under, the search box and when
-   prices were checked. Left aligned on a phone, centred on larger screens. */
+/* Hero: one unit. The words on the left with the raptor beside them, the search box under both at its full width,
+   then when prices were checked. Left aligned on a phone with the head at the right edge; from 48rem the words and
+   the head are centred as a pair and the search box is centred under them. */
 .hero { padding: var(--space-3) 0 0; }
+.hero__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.hero__copy { min-width: 0; }
+/* The raptor lifts a little while you are in the search box: it is listening. Transform only. */
+.hero__mark { color: var(--color-brand); transition: transform var(--motion-normal) var(--ease-out); }
+.hero:focus-within .hero__mark { transform: translateY(calc(2 * var(--lift))); }
 .hero + .home-section { margin-top: var(--rhythm-hero); }
 .hero + .home-section--games { margin-top: var(--space-6); }
 /* The hero does not animate on load: text arriving in sequence is decoration, not information. */
@@ -344,7 +358,9 @@ ul, ol { margin: 0; padding: 0; }
 .masthead--home .masthead__inner { padding-bottom: var(--space-2); }
 @media (min-width: 48rem) {
   .hero { padding: var(--space-5) 0 0; text-align: center; }
-  .hero__title, .hero__subtitle, .hero__search, .hero .live { margin-inline: auto; }
+  .hero__top { justify-content: center; gap: var(--space-6); }
+  .hero__copy { text-align: left; }
+  .hero__search, .hero .live { margin-inline: auto; }
   .hero__meta { justify-content: center; }
   .hero__subtitle { font-size: var(--text-lg); }
   .hero__search { margin-top: var(--space-5); }
@@ -385,12 +401,14 @@ ul, ol { margin: 0; padding: 0; }
 
 /* The watchlist card between the home page rows */
 .promo {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--card-pad);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
+  padding: var(--card-pad) var(--card-pad) var(--card-pad) 0;   /* no left padding: the raptor's crest is cut by the border */
   border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-brand-soft); text-decoration: none; color: inherit;
   transition: transform var(--motion-normal) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out);
 }
 @media (hover: hover) { .promo:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); } }
-.promo__icon { width: 1.75rem; height: 1.75rem; color: var(--color-brand); }
+/* The raptor leans in from the card's left edge to keep an eye on things: orange on the soft tint, as the bookmark was. */
+.promo__mark { color: var(--color-brand); }
 .promo__body { display: grid; gap: 2px; min-width: 0; }
 .promo__title { font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-snug); }
 .promo__text { font-size: var(--text-sm); color: var(--color-ink-muted); }
@@ -681,6 +699,11 @@ ul, ol { margin: 0; padding: 0; }
 .empty { padding: var(--space-6) 0; }
 .empty__title { font-size: var(--text-xl); margin-bottom: var(--space-3); overflow-wrap: anywhere; }
 .empty p { color: var(--color-ink-muted); }
+/* Empty states: the raptor looked and found nothing. Ink, above the heading, the same on every page. Where something
+   went wrong (no results, page not found) an orange question mark stands beside it; where nothing is wrong (empty
+   watchlist, end of the deck) the head is on its own. Added as an element, so the mid-page filtered-out state is untouched. */
+.empty-mark { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); color: var(--color-ink); }
+.empty-mark__ask { font-size: var(--mark-md); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-tight); color: var(--color-brand); }
 
 /* Product page ------------------------------------------------------------- */
 
@@ -887,6 +910,8 @@ ul, ol { margin: 0; padding: 0; }
 .retailer-list__domain, .retailer-list__note { font-size: var(--text-sm); color: var(--color-ink-subtle); }
 @media (min-width: 40rem) { .retailer-list li { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--space-4); align-items: baseline; } }
 .not-found .search { margin-top: var(--space-5); }
+.not-found .empty-mark { margin-top: var(--space-6); }
+.not-found .empty-mark + .page-title { margin-top: 0; }
 
 /* Swipe deck --------------------------------------------------------------- */
 
@@ -923,8 +948,9 @@ ul, ol { margin: 0; padding: 0; }
 
 .deck { position: relative; height: min(70vh, 34rem); margin-top: var(--space-4); touch-action: pan-y; user-select: none; -webkit-user-select: none; }
 .deck__nojs { padding: var(--space-4); }
-.deck__status { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--color-ink-subtle); padding: var(--space-4); }
+.deck__status { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; text-align: center; color: var(--color-ink-subtle); padding: var(--space-4); }
 .deck__status .button { margin-top: var(--space-3); }
+.deck__status .empty-mark { margin-bottom: var(--space-2); }
 
 .swipe {
   position: absolute; inset: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--space-3);
@@ -982,6 +1008,7 @@ ul, ol { margin: 0; padding: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; animation-delay: 0ms !important; }
   .reveal { opacity: 1; transform: none; }
+  .hero:focus-within .hero__mark { transform: none; }
   .swipe--settle, .swipe--fly { transition-duration: 1ms !important; }
 }
 

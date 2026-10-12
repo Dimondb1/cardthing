@@ -82,22 +82,22 @@ class SyncTests(TestCase):
 
 class LookupTests(TestCase):
     def test_edited_wording_is_used(self):
-        SiteContent.objects.filter(key="home.popular.title").update(content="Most clicked")
-        self.assertEqual(service.get("home.popular.title"), "Most clicked")
+        SiteContent.objects.filter(key="home.trending.title").update(content="Most clicked")
+        self.assertEqual(service.get("home.trending.title"), "Most clicked")
 
     def test_missing_row_falls_back_to_default(self):
-        SiteContent.objects.filter(key="home.popular.title").delete()
-        self.assertEqual(service.get("home.popular.title"), "Popular this week")
+        SiteContent.objects.filter(key="home.trending.title").delete()
+        self.assertEqual(service.get("home.trending.title"), "Trending now")
 
     def test_switched_off_row_uses_default(self):
-        SiteContent.objects.filter(key="home.popular.title").update(
+        SiteContent.objects.filter(key="home.trending.title").update(
             content="Most clicked", active=False
         )
-        self.assertEqual(service.get("home.popular.title"), "Popular this week")
+        self.assertEqual(service.get("home.trending.title"), "Trending now")
 
     def test_blank_required_text_falls_back(self):
-        SiteContent.objects.filter(key="home.popular.title").update(content="")
-        self.assertEqual(service.get("home.popular.title"), "Popular this week")
+        SiteContent.objects.filter(key="home.trending.title").update(content="")
+        self.assertEqual(service.get("home.trending.title"), "Trending now")
 
     def test_blank_optional_text_is_hidden(self):
         SiteContent.objects.filter(key="home.hero.subtitle").update(content="")
@@ -113,8 +113,8 @@ class LookupTests(TestCase):
         self.assertNotIn("<script>", html)
 
     def test_tag_escapes_stored_text(self):
-        SiteContent.objects.filter(key="home.popular.title").update(content="<b>Hi</b>")
-        self.assertIn("&lt;b&gt;", render('{% copy "home.popular.title" %}'))
+        SiteContent.objects.filter(key="home.trending.title").update(content="<b>Hi</b>")
+        self.assertIn("&lt;b&gt;", render('{% copy "home.trending.title" %}'))
 
     def test_paragraph_text_becomes_paragraphs(self):
         SiteContent.objects.filter(key="about.introduction").update(content="One.\n\nTwo.")
@@ -123,8 +123,8 @@ class LookupTests(TestCase):
         )
 
     def test_as_variable(self):
-        html = render('{% copy "home.popular.title" as t %}[{{ t }}]')
-        self.assertEqual(html, "[Popular this week]")
+        html = render('{% copy "home.trending.title" as t %}[{{ t }}]')
+        self.assertEqual(html, "[Trending now]")
 
     def test_one_query_per_request(self):
         from django.db import connection
@@ -143,10 +143,10 @@ class AdminFormTests(TestCase):
         return SiteContentForm(data=data, instance=row)
 
     def test_accepts_plain_wording(self):
-        self.assertTrue(self.form("home.popular.title", "Most clicked this week").is_valid())
+        self.assertTrue(self.form("home.trending.title", "Most clicked this week").is_valid())
 
     def test_rejects_em_dash(self):
-        form = self.form("home.popular.title", "Popular — this week")
+        form = self.form("home.trending.title", "Popular — this week")
         self.assertFalse(form.is_valid())
         self.assertIn("em dash", str(form.errors))
 
@@ -159,10 +159,10 @@ class AdminFormTests(TestCase):
         self.assertFalse(self.form("product.buy.button", "Buy for {price").is_valid())
 
     def test_rejects_line_breaks_in_short_text(self):
-        self.assertFalse(self.form("home.popular.title", "Popular\nthis week").is_valid())
+        self.assertFalse(self.form("home.trending.title", "Popular\nthis week").is_valid())
 
     def test_rejects_html(self):
-        self.assertFalse(self.form("home.popular.title", "<b>Popular</b>").is_valid())
+        self.assertFalse(self.form("home.trending.title", "<b>Popular</b>").is_valid())
 
     def test_legal_text_cannot_be_empty(self):
         self.assertFalse(self.form("footer.affiliate_disclosure", "").is_valid())
@@ -174,10 +174,10 @@ class AdminFormTests(TestCase):
         self.assertTrue(row.active)
 
     def test_restore_default(self):
-        SiteContent.objects.filter(key="home.popular.title").update(content="Edited")
-        form = self.form("home.popular.title", "Edited again", restore_default="on")
+        SiteContent.objects.filter(key="home.trending.title").update(content="Edited")
+        form = self.form("home.trending.title", "Edited again", restore_default="on")
         self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.save().content, "Popular this week")
+        self.assertEqual(form.save().content, "Trending now")
 
 
 class AdminViewTests(TestCase):
@@ -195,7 +195,7 @@ class AdminViewTests(TestCase):
     def test_search_and_filter(self):
         url = reverse("admin:content_sitecontent_changelist")
         response = self.client.get(url, {"q": "price_drops", "section": "home"})
-        self.assertContains(response, "home.price_drops.title")
+        self.assertContains(response, "home.price_drops.intro")
         self.assertNotContains(response, "product.cheapest.label")
 
     def test_change_page_shows_default_and_placeholders(self):

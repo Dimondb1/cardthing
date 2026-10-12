@@ -270,29 +270,6 @@ def restock_log(days=7, per_day=30, now=None):
     return sorted(grouped.items(), key=lambda item: item[0], reverse=True)
 
 
-def back_in_stock(limit=8, hours=None):
-    """Products a shop has just restocked, newest first, as (product, listing)."""
-    hours = hours or settings.RIPRAPTOR_RESTOCK_HOURS
-    since = timezone.now() - timedelta(hours=hours)
-    rows = (
-        Listing.objects.live()
-        .filter(availability=Listing.Availability.IN_STOCK, back_in_stock_at__gte=since)
-        .exclude(sanity=Listing.Sanity.EXCLUDED)
-        .select_related("retailer")
-        .order_by("-back_in_stock_at")
-    )
-    seen, picked = set(), []
-    for listing in rows:
-        if listing.product_id in seen:
-            continue
-        seen.add(listing.product_id)
-        picked.append(listing)
-        if len(picked) >= limit:
-            break
-    products = {p.pk: p for p in Product.objects.for_lists().filter(pk__in=[l.product_id for l in picked])}
-    return [(products[l.product_id], l) for l in picked if l.product_id in products]
-
-
 def update_daily_lowest(product, date=None):
     """Store the product's current cheapest delivered price against ``date`` if it is lower.
 

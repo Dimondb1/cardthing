@@ -216,10 +216,10 @@ ENTRIES = [
         "Grey hint text inside the large search box on the home page.",
     ),
     Entry(
-        "home.search.checked", T, "Prices last checked",
-        "Prices checked {time}",
-        "Under the home page search box. Uses the most recent check across every retailer. "
-        "Hidden until a price has been checked.",
+        "home.search.checked", T, "Latest price check",
+        "Latest shop price check {time}",
+        "Under the home page search box. The most recent time any shop's price was checked; each product "
+        "page says when its own prices were. Hidden until a price has been checked.",
         placeholders=("time",),
     ),
     Entry(
@@ -242,12 +242,12 @@ ENTRIES = [
     Entry(
         "home.card.compare", B, "Card button",
         "Compare prices",
-        "Button at the foot of every product card in the home page rows that has a price.",
+        "Button at the foot of every product card in the home and deals page rows that has a price.",
     ),
     Entry(
         "home.card.view", B, "Card button with no price",
         "See product",
-        "Button at the foot of a product card in the home page rows when no shop has a price for it.",
+        "Button at the foot of a recently viewed card when no shop has a price for it.",
     ),
     Entry(
         "home.watch.title", H, "Watchlist card heading",
@@ -268,29 +268,6 @@ ENTRIES = [
         "home.games.more", B, "More games link",
         "More games",
         "Link beside the Find your game heading, leading to the full list of games.",
-    ),
-    Entry(
-        "home.focal.drop.title", H, "Biggest price drop heading",
-        "Biggest price drop today",
-        "Heading on the large highlight under the search box when a price has fallen this week.",
-    ),
-    Entry(
-        "home.focal.saving.title", H, "Biggest saving heading",
-        "Biggest saving right now",
-        "Heading on the large highlight under the search box when no price has fallen this week. "
-        "It shows the product where the cheapest shop beats the next one by the most.",
-    ),
-    Entry(
-        "home.focal.was", T, "Highlight old price label",
-        "was {price}",
-        "Old price on the highlight, shown crossed out.",
-        placeholders=("price",),
-    ),
-    Entry(
-        "home.focal.next", T, "Highlight next best price",
-        "Next best {price} at {retailer}",
-        "Runner-up shop on the highlight.",
-        placeholders=("price", "retailer"),
     ),
     Entry(
         "home.trending.down", T, "Price fell this week",
@@ -336,53 +313,10 @@ ENTRIES = [
         placeholders=("date",),
     ),
     Entry(
-        "home.football.title", H, "Football row heading",
-        "Football and sports cards",
-        "Home page heading above the football row. Shown only while football products are in stock.",
-    ),
-    Entry(
-        "home.football.intro", T, "Football row note",
-        "Match Attax, Topps and Panini boxes, tins and packs, with the cheapest delivered price.",
-        "One line under the football heading. Leave empty to hide it.",
-        optional=True,
-    ),
-    Entry(
-        "home.restock.title", H, "Back in stock heading",
-        "Back in stock",
-        "Heading for the row of products a shop has just restocked.",
-    ),
-    Entry(
-        "home.restock.intro", T, "Back in stock explanation",
-        "Sold out, and now a shop has it again. Checked every few minutes.",
-        "Short line under the back in stock heading. Leave empty to hide it.",
-        optional=True,
-    ),
-    Entry(
-        "home.restock.when", T, "Restocked time",
-        "Restocked {time}",
-        "Under each product on the back in stock row.",
-        placeholders=("time",),
-    ),
-    Entry(
-        "home.recent.title", H, "Recently released heading",
-        "Recently released",
-        "Heading for the row of the newest sets.",
-    ),
-    Entry(
-        "home.recent.count", T, "Products in a set",
-        "{count} products",
-        "Under each set on the recently released row.",
-        placeholders=("count",),
-    ),
-    Entry(
         "home.trending.title", H, "Trending heading",
         "Trending now",
-        "Heading for the row of most viewed products.",
-    ),
-    Entry(
-        "home.savings.title", H, "Biggest savings heading",
-        "Biggest savings",
-        "Heading for products where the cheapest retailer beats the next one by the most.",
+        "Heading on the deals page for the in-stock products most clicked through to a shop this week, or the "
+        "newest releases until there are clicks.",
     ),
     Entry(
         "home.savings.save", T, "Saving amount",
@@ -403,11 +337,6 @@ ENTRIES = [
         placeholders=("percent",),
     ),
     Entry(
-        "home.price_drops.title", H, "Price drops heading",
-        "Price drops this week",
-        "Heading for the list of products whose cheapest price has fallen.",
-    ),
-    Entry(
         "home.price_drops.intro", T, "Price drops explanation",
         "Cheapest delivered price now, compared with {days} days ago.",
         "Short line under the price drops heading explaining the comparison. "
@@ -420,19 +349,6 @@ ENTRIES = [
         "was {price}",
         "Shown next to each price drop with the old price crossed out.",
         placeholders=("price",),
-    ),
-    Entry(
-        "home.popular.title", H, "Popular products heading",
-        "Popular this week",
-        "Heading for the most clicked products.",
-    ),
-    Entry(
-        "home.popular.intro", T, "Popular products explanation",
-        "Most clicks through to a retailer in the last {days} days.",
-        "Short line under the popular heading explaining how it is worked out. "
-        "Leave empty to hide it.",
-        placeholders=("days",),
-        optional=True,
     ),
     Entry(
         "home.resume.title", H, "Pick up heading",
@@ -466,11 +382,6 @@ ENTRIES = [
         "Every featured deal is a real saving on the next shop or this week's lowest price. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price.",
         "On the terms page, under Independence. Says how the home page's featured deals row is chosen.",
         legal=True,
-    ),
-    Entry(
-        "home.games.title", H, "All games heading",
-        "Browse by game",
-        "Heading for the list of games and their newest sets at the bottom of the home page.",
     ),
 
     # Search results and browsing -----------------------------------------
@@ -820,7 +731,8 @@ ENTRIES = [
     Entry(
         "product.last_checked", T, "Last checked",
         "Last checked {time}.",
-        "Under the main buy button. Uses the most recent check across all retailers.",
+        "On a sold-out product page, the most recent check across its shops. On the watchlist and recently viewed "
+        "cards, when the price shown was checked.",
         placeholders=("time",),
     ),
     Entry(
@@ -1011,8 +923,15 @@ ENTRIES = [
     ),
     Entry(
         "product.refresh.done", T, "Prices reloaded message",
-        "Prices are current.",
-        "Shown for a moment after Reload prices finishes.",
+        "Showing our latest checks. Each shop's time is beside its price.",
+        "Shown for a moment after Reload prices finishes. The button reloads the latest prices we hold; it "
+        "does not ask the shops again, so this must not say the prices are current.",
+    ),
+    Entry(
+        "product.cheapest.checked", T, "When the main price was checked",
+        "Price checked at {retailer} {time}.",
+        "Under the main price on a product page: when that shop's price was last checked, not any other shop's.",
+        placeholders=("retailer", "time"),
     ),
     Entry(
         "product.refresh.failed", T, "Prices reload failed",
@@ -1233,8 +1152,8 @@ ENTRIES = [
     ),
     Entry(
         "deals.intro", T, "Deals page introduction",
-        "The biggest gaps between the cheapest shop and the next one, the biggest price drops this "
-        "week and what just came back in stock. Delivered prices, checked {time}.",
+        "The biggest gaps between the cheapest shop and the next one, this week's price drops, the most "
+        "clicked products and what just came back in stock. Delivered prices, latest shop check {time}.",
         "Under the deals page heading.",
         placeholders=("time",),
     ),

@@ -26,20 +26,17 @@ class BackInStockTests(TestCase):
         pricing.record_check(listing, price=Decimal("139.99"), delivery_cost=Decimal("0"), availability="in_stock")
         listing.refresh_from_db()
         self.assertIsNotNone(listing.back_in_stock_at)
-        self.assertEqual([p.pk for p, _ in pricing.back_in_stock()], [self.product.pk])
-        self.assertContains(self.client.get(reverse("web:home")), "Back in stock")
+        self.assertEqual(list(Restock.objects.values_list("product", flat=True)), [self.product.pk])
+        # The deals page carries restocks now; the home page stays short.
+        self.assertContains(self.client.get(reverse("web:deals")), "Back in stock")
+        self.assertNotContains(self.client.get(reverse("web:home")), "Back in stock")
 
     def test_staying_in_stock_or_a_new_listing_is_not_a_restock(self):
         listing = make_listing(self.product, self.shop, availability="in_stock")
         pricing.record_check(listing, price=Decimal("1"), delivery_cost=Decimal("0"), availability="in_stock")
         listing.refresh_from_db()
         self.assertIsNone(listing.back_in_stock_at)
-        self.assertEqual(pricing.back_in_stock(), [])
-
-    def test_old_restocks_drop_off(self):
-        listing = make_listing(self.product, self.shop, availability="in_stock")
-        Listing.objects.filter(pk=listing.pk).update(back_in_stock_at=timezone.now() - timedelta(hours=72))
-        self.assertEqual(pricing.back_in_stock(), [])
+        self.assertFalse(Restock.objects.exists())
 
 
 class RestockRecordTests(TestCase):

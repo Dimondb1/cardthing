@@ -413,18 +413,17 @@ class RestockAtAnExcludedPriceTests(Shops, TestCase):
         self.check(self.odd, "9.99")
         self.assertEqual(self.verdicts(self.odd), [EXCLUDED])
         self.assertFalse(Restock.objects.exists())
-        self.assertEqual(pricing.back_in_stock(), [])
+        self.assertEqual(pricing.restock_log(), [])
 
     def test_a_restock_whose_price_was_kept_out_later_is_not_repeated(self):
         from web.feeds import restock_entries
 
         self.check(self.odd, 130)
         self.assertEqual(len(restock_entries(None, None, timezone.now())), 1)
-        self.assertEqual([listing.pk for _, listing in pricing.back_in_stock()], [self.odd.pk])
+        self.assertEqual(len(pricing.restock_log()), 1)
         Listing.objects.filter(pk=self.odd.pk).update(sanity=EXCLUDED, price=Decimal("9.99"))
         self.assertEqual(restock_entries(None, None, timezone.now()), [])
         self.assertEqual(pricing.restock_log(), [])
-        self.assertEqual(pricing.back_in_stock(), [])
         for url in ("/", reverse("web:deals")):
             self.assertNotContains(self.client.get(url), "9.99")
 

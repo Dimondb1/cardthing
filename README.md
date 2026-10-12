@@ -590,9 +590,9 @@ watching: the most viewed and most saved to a watchlist over the last two
 days, in or out of stock. The rest starts with in-stock items people
 click, then sold-out items people click, then everything else by age. The
 "Reload prices" button on a product page only re-reads what the site
-holds; it never asks a shop. Anything that comes back is
-stamped and shown on the home page under "Back in stock" for
-`RIPRAPTOR_RESTOCK_HOURS` (48). A pre-order a shop marks as available stays
+holds; it never asks a shop, and its message says so ("Showing our latest
+checks"). Anything that comes back is stamped and kept as a restock, which
+the Deals page lists under "Back in stock". A pre-order a shop marks as available stays
 a pre-order after a single-product check until the product's release date
 (or its set's) is known and has come; the next whole-shop read decides
 otherwise. A Shopify product whose own title or tags say pre-order is a
@@ -1460,7 +1460,6 @@ site's cache.
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
-| `RIPRAPTOR_RESTOCK_HOURS`      | 48      | How long a restocked product stays under "Back in stock". |
 | `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing. Restart `ripraptor-worker` after changing it. |
 | `RIPRAPTOR_AMAZON_ACCESS_KEY`  |         | Product Advertising API key from Amazon Associates. |
 | `RIPRAPTOR_AMAZON_SECRET_KEY`  |         | Its secret. |
@@ -1617,9 +1616,11 @@ Site wording.
 
 `/deals/` is the page to link from social posts: the biggest savings
 between the cheapest shop and the next, the biggest price drops this
-week and what just came back in stock, server rendered and in the
-sitemap. Its lists are cached like the home page's and cleared by
-imports.
+week, "Trending now" (the most clicked products, with how far each price
+moved this week) and what came back in stock over the last seven days,
+server rendered and in the sitemap. These used to sit on the home page;
+they moved here so the home page stays short. Its lists are cached like
+the home page's and cleared by imports.
 
 ## Restock record
 
@@ -1640,14 +1641,28 @@ rows; the installer runs it, and it is safe to run again.
 The home page opens with a short line above the headline (optional) and the
 headline, whose last sentence is shown in orange on a line of its own
 (`accent_last` in `web/templatetags/ripraptor.py`; a one-sentence headline
-stays on one line), then the search box, when prices were last
-checked, and "Find your game": a tile per game with its product count, four
-on a phone and up to six on wider screens, then "More games". After that come
+stays on one line), then the search box, the latest shop price check, and
+"Find your game": a tile per game with its product count, four on a phone,
+three a row on a tablet and all six on one row on a computer, then "More
+games". Each tile shows the box art of one of the game's own products, the
+newest booster box with a picture, or else an elite trainer box, bundle and
+so on (`game_covers` in `web/views.py`), so no game logo is borrowed; a
+game with no pictures yet shows the booster box outline. After that come
 Picked for you and Pick up where you left off (for a browser with history),
-then the deal rows. Every product card in a row ends with the same "Compare
-prices" button. Between Biggest savings and Latest drops sit a card leading
-to the watchlist and "Browse by product": a tile per product type, drawn
-with the type's outline, linking to the search page filtered to it.
+Featured deals, Latest drops and Coming soon, a card leading to the
+watchlist, and "Browse by product": a tile per product type, drawn with
+the type's outline, linking to the search page filtered to it. That is all:
+savings, price drops, trending and restocks are on the Deals page and every
+set is on the Games page. Every product card in a row ends with the same
+"Compare prices" button.
+
+### When a price was checked
+
+A product page's headline price says which shop it is from and when that
+shop's price was checked ("Price checked at Harbour Games 2 hours ago"),
+never the newest check of some other shop, and each row in the price list
+carries its own time. Reload prices updates the line with the rest. Only a
+sold-out product shows "Last checked", the newest check across its shops.
 
 Search, game and set pages share one card (`includes/product_card.html`):
 the picture, the language when it is not English, the name, the type, the

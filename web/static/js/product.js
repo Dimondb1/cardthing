@@ -53,6 +53,8 @@
         if (main) swap(main, row.price);
         const note = document.querySelector(`[data-note-for="${row.id}"]`);
         if (note) swap(note, row.note);
+        const line = document.querySelector(`[data-checked-for="${row.id}"]`);
+        if (line) line.textContent = row.checked_line;
       });
       say(button.dataset.done, false);
     } catch (err) {

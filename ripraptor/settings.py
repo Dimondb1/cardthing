@@ -224,7 +224,6 @@ RIPRAPTOR_PAGE_SIZE = 24
 RIPRAPTOR_HOME_CACHE_SECONDS = int(os.environ.get("RIPRAPTOR_HOME_CACHE_SECONDS", "300"))
 
 # A product counts as "back in stock" for this long after a shop restocks it.
-RIPRAPTOR_RESTOCK_HOURS = int(os.environ.get("RIPRAPTOR_RESTOCK_HOURS", "48"))
 
 # Jobs the background reader (manage.py run_worker) runs at once. 2 suits a server with under 1 GB of memory.
 RIPRAPTOR_WORKER_THREADS = int(os.environ.get("RIPRAPTOR_WORKER_THREADS", "3"))

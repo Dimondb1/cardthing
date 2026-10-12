@@ -42,7 +42,8 @@
       </p>
       <p class="buybox__summary">
         {% if in_stock_count %}{% copy_count "product.availability.in_stock" in_stock_count %}{% elif preorder_count %}{% copy_count "product.availability.preorder" preorder_count %}{% endif %}
-        {% if last_checked %}{% copy "product.last_checked" time=last_checked|ago %}{% endif %}
+        {# The time of the price shown above, at its own shop: never a newer check of some other shop. #}
+        <span data-checked-for="{{ cheapest.pk }}">{% copy "product.cheapest.checked" retailer=cheapest.retailer.name time=cheapest.last_checked|ago %}</span>
       </p>
     {% elif has_listings %}
       <p class="buybox__none">{% copy "product.out_of_stock.message" %}</p>

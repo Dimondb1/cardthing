@@ -70,7 +70,6 @@
   --text-price-lg: clamp(2.75rem, 2.2rem + 2vw, 3.75rem);
   --text-price-card: 2rem;
   --text-price-md: 1.25rem;
-  --text-price-focal: clamp(2rem, 1.5rem + 2vw, 3rem);
   --text-headline: clamp(1.75rem, 1.2rem + 2.4vw, 2.75rem);   /* home page headline */
 
   --weight-body: 400;

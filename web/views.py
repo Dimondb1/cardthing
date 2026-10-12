@@ -166,7 +166,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
 
 
 def home_lists():
-    """Biggest savings, trending and the newest sets, cached because they read every priced product."""
+    """Featured deals (home page) and trending (deals page), cached because they read every priced product."""
     from django.core.cache import cache
 
     from catalogue.signals import HOME_CACHE_KEY as key
@@ -175,9 +175,6 @@ def home_lists():
         return cached
     priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
     featured = featured_deals(priced)
-    # Biggest savings leaves out what featured deals already show, so the two rows do not repeat.
-    shown = {product.pk for product, _ in featured}
-    savings = [row for row in offers.biggest_savings(priced, limit=9 + len(shown)) if row[0].pk not in shown][:9]
     popular = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
     ids = [product.pk for product in popular]
     with_offers = {
@@ -196,18 +193,8 @@ def home_lists():
         if before is not None and product.lowest_known is not None and before != product.lowest_known:
             product.movement = product.lowest_known - before
         trending.append(product)
-    recent = list(
-        ProductSet.objects.filter(products__is_active=True)
-        .select_related("game")
-        .annotate(
-            product_count=Count("products", filter=Q(products__is_active=True), distinct=True),
-            newest=Max("products__created_at"),
-        )
-        .order_by(F("release_date").desc(nulls_last=True), "-newest")[:8]
-    )
-    retailer_count = Listing.objects.live().values("retailer_id").distinct().count()
-    cache.set(key, (savings, trending, recent, retailer_count, featured), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
-    return savings, trending, recent, retailer_count, featured
+    cache.set(key, (featured, trending), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    return featured, trending
 
 
 FEATURED_SLOTS = 8
@@ -258,27 +245,6 @@ def featured_deals(products):
 
 # Games shown first on the home page, in this order; the rest follow by size.
 PINNED_GAMES = ["pokemon", "magic-the-gathering", "football", "one-piece", "yu-gi-oh", "lorcana"]
-
-
-def home_football():
-    """In-stock football products for the home row, most widely stocked first."""
-    from django.core.cache import cache
-
-    from catalogue.signals import FOOTBALL_CACHE_KEY as key
-
-    cached = cache.get(key)
-    if cached is not None:
-        return cached
-    rows = list(
-        Product.objects.for_lists()
-        .filter(game__slug="football", in_stock_count__gte=1)
-        .prefetch_related(offers.buyable_prefetch())
-        .order_by("-in_stock_count", F("lowest_price").asc(nulls_last=True))[:10]
-    )
-    for product in rows:
-        product.best_offer = product.offers[0] if product.offers else None
-    cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
-    return rows
 
 
 NEW_RELEASE_DAYS = 45    # a product counts as a drop while its release is this recent or still to come
@@ -442,34 +408,43 @@ def home_types(limit=6):
     return [(row["product_type"], type_label(None, row["product_type"]), row["n"]) for row in rows]
 
 
+# The kinds of product whose box art says most about a game, best first, for its tile on the home page.
+COVER_TYPES = ["booster_box", "elite_trainer_box", "collector_booster_box", "bundle", "collection_box", "booster_pack"]
+
+
+def game_covers(games):
+    """Attach ``cover`` to each game: its newest boxed product with a picture, for the game's tile. Two queries."""
+    rank = Case(*[When(product_type=kind, then=Value(i)) for i, kind in enumerate(COVER_TYPES)],
+                default=Value(len(COVER_TYPES)), output_field=IntegerField())
+    newest_with_art = (
+        Product.objects.filter(game=OuterRef("pk"), is_active=True).exclude(image="", image_url="")
+        .annotate(kind_rank=rank, out=Coalesce("release_date", "product_set__release_date"))
+        .order_by("kind_rank", F("out").desc(nulls_last=True), "-created_at")
+        .values("pk")[:1]
+    )
+    ids = dict(Game.objects.filter(pk__in=[g.pk for g in games]).annotate(cover=Subquery(newest_with_art))
+               .values_list("pk", "cover"))
+    covers = Product.objects.in_bulk([pk for pk in ids.values() if pk])
+    for game in games:
+        game.cover = covers.get(ids.get(game.pk))
+    return games
+
+
 @require_GET
 def home(request):
+    """The money page kept short: search, the games, the visitor's own picks, deals worth having and new
+    releases. Savings, price drops, restocks and trending live on the Deals page; every set on Games."""
     games = list(
         Game.objects.filter(is_active=True)
         .annotate(product_count=Count("products", filter=Q(products__is_active=True)))
         .filter(product_count__gt=0)
         .order_by("-product_count", "name")
-        .prefetch_related(
-            Prefetch(
-                "sets",
-                queryset=ProductSet.objects.filter(products__is_active=True).distinct(),
-                to_attr="listed_sets",
-            )
-        )
     )
     rank = {slug: i for i, slug in enumerate(PINNED_GAMES)}
     games.sort(key=lambda g: (rank.get(g.slug, len(PINNED_GAMES)), -g.product_count, g.name))
+    game_covers(games[:6])
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
-    savings, trending, recent, retailer_count, featured = home_lists()
-    drops = list(pricing.price_drops(limit=6))
-    restocked = pricing.back_in_stock(limit=8)
-    focal = None
-    if drops:
-        focal = {"kind": "drop", "product": drops[0]}
-        drops = drops[1:]
-    elif savings:
-        focal = {"kind": "saving", "product": savings[0][0], "summary": savings[0][1]}
-        savings = savings[1:]
+    featured = home_lists()[0]
     return render(
         request,
         "web/home.html",
@@ -477,15 +452,7 @@ def home(request):
             "games": games,
             "product_types": home_types(),
             "last_checked": last_checked,
-            "retailer_count": retailer_count,
-            "focal": focal,
-            "savings": savings[:8],
             "featured": featured,
-            "trending": trending,
-            "recent": recent,
-            "drops": drops,
-            "restocked": restocked,
-            "football": home_football(),
             "latest": home_drops_new(),
             "coming_soon": [row for row in coming_soon_sets(limit=None) if row.preorder_price is not None][
                 :COMING_SOON_ON_HOME
@@ -862,6 +829,9 @@ def product_prices_api(request, slug):
             "price": gbp(listing.shown_price),
             "note": price_note(request, listing),
             "checked": ago(listing.last_checked),
+            # The line under the main price, for the cheapest offer: whose price was checked, and when.
+            "checked_line": text(request, "product.cheapest.checked", retailer=listing.retailer.name,
+                                 time=ago(listing.last_checked)),
             "buyable": listing.is_buyable,
         })
     response = JsonResponse({"listings": rows})
@@ -1059,6 +1029,8 @@ def deals(request):
         "web/deals.html",
         {
             **lists,
+            # Only what a shop has in stock: this page is for buying, and a click count alone is no deal.
+            "trending": [product for product in home_lists()[1] if product.best_offer],
             "last_checked": last_checked,
             "meta_title": text(request, "meta.deals.title"),
             "meta_description": text(request, "meta.deals.description"),

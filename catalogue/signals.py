@@ -12,13 +12,12 @@ from .languages import product_language
 from .models import Game, Listing, Product, ProductSet
 from .search import build_search_text
 
-HOME_CACHE_KEY = "web:home-lists:v4"
+HOME_CACHE_KEY = "web:home-lists:v5"
 DEALS_CACHE_KEY = "web:deals:v2"
-FOOTBALL_CACHE_KEY = "web:home-football:v2"
 NEW_CACHE_KEY = "web:home-new:v2"
 # Sets still to come; each game's own list is cached under this key plus ':<game>'.
 COMING_SOON_CACHE_KEY = "web:coming-soon:v1"
-LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, FOOTBALL_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY)
+LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY)
 
 
 # When this process last cleared the list caches (time.monotonic), for the debounce.

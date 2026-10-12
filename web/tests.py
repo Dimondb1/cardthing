@@ -78,10 +78,17 @@ class PageTests(PageTestCase):
 
     def test_home_shows_every_section(self):
         response = self.client.get(reverse("web:home"))
-        for heading in ("Trending now", "Featured deals", "Save £3.01 vs Northgate Cards", "Biggest price drop today", "Recently released", "Browse by game"):
+        for heading in ("Find your game", "Featured deals", "Save £3.01 vs Northgate Cards", "Browse by product"):
             self.assertContains(response, heading)
-        # The only saving is already a featured deal, so Biggest savings does not repeat it.
-        self.assertNotContains(response, "Biggest savings")
+        # The deeper lists live on the Deals and Games pages so the home page stays short.
+        for moved in ("Trending now", "Biggest savings", "Biggest price drop", "Recently released", "Browse by game", "Back in stock"):
+            self.assertNotContains(response, moved)
+
+    def test_deals_page_carries_what_left_the_home_page(self):
+        response = self.client.get(reverse("web:deals"))
+        self.assertContains(response, "Trending now")
+        self.assertContains(response, "Biggest savings right now")
+        self.assertContains(response, self.etb.name)
 
     def test_product_page_leads_with_the_cheapest_delivered_price(self):
         response = self.client.get(self.etb.get_absolute_url())
@@ -93,7 +100,9 @@ class PageTests(PageTestCase):
         self.assertContains(response, "Best in 7 days")
         self.assertContains(response, 'rank__pos--2">#2</span><span class="rank__name">Northgate Cards')
         self.assertContains(response, "2 retailers have this in stock.")
-        self.assertContains(response, "Last checked 1 hour ago.")
+        # The time under the headline price is that shop's, not the newest check of any shop.
+        self.assertContains(response, "Price checked at Harbour Games 1 hour ago.")
+        self.assertNotContains(response, "Last checked")
         self.assertContains(response, self.cheap.get_outbound_url())
 
     def test_out_of_stock_product(self):
@@ -131,14 +140,15 @@ class PageTests(PageTestCase):
         self.assertContains(response, "No products match ‘charizard’")
         self.assertContains(response, self.game.get_absolute_url())
 
-    def test_home_shows_price_drops(self):
+    def test_deals_page_shows_price_drops(self):
         make_listing(self.unpriced, self.harbour, price="30.00")
         DailyLowestPrice.objects.create(
             product=self.unpriced, date=timezone.localdate() - timedelta(days=7), price="36.00"
         )
-        response = self.client.get(reverse("web:home"))
-        self.assertContains(response, "Price drops this week")
+        response = self.client.get(reverse("web:deals"))
+        self.assertContains(response, "Biggest price drops")
         self.assertContains(response, "was £36.00")
+        self.assertNotContains(self.client.get(reverse("web:home")), "was £36.00")
 
     def test_robots_txt(self):
         response = self.client.get("/robots.txt")
@@ -252,7 +262,7 @@ class SearchApiTests(PageTestCase):
         self.assertEqual(self.client.get(reverse("web:search_api")).json()["results"], [])
 
     def test_home_shows_when_prices_were_last_checked(self):
-        self.assertContains(self.client.get(reverse("web:home")), "Prices checked 1 hour ago")
+        self.assertContains(self.client.get(reverse("web:home")), "Latest shop price check 1 hour ago")
 
 
 class DeckTests(PageTestCase):
@@ -307,6 +317,8 @@ class TermsAndRefreshTests(PageTestCase):
         row = next(r for r in data["listings"] if r["id"] == self.cheap.pk)
         self.assertEqual(row["total"], "£54.99")
         self.assertTrue(row["buyable"])
+        # Reload prices replaces the line under the headline price with this, so it keeps naming its own shop.
+        self.assertEqual(row["checked_line"], "Price checked at Harbour Games 1 hour ago.")
 
     def test_product_page_has_refresh_control(self):
         response = self.client.get(self.etb.get_absolute_url())
@@ -314,6 +326,9 @@ class TermsAndRefreshTests(PageTestCase):
         self.assertContains(response, "Reload prices")
         self.assertNotContains(response, "Check prices")
         self.assertContains(response, f'data-listing="{self.cheap.pk}"')
+        self.assertContains(response, f'data-checked-for="{self.cheap.pk}"')
+        # Reloading reads what we hold; it must not claim the shops were just asked.
+        self.assertContains(response, 'data-done="Showing our latest checks. Each shop&#x27;s time is beside its price."')
 
 
 class SeoAndEdgeCaseTests(PageTestCase):
@@ -353,7 +368,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
 
         cache.clear()
         self.client.get(reverse("web:home"))
-        self.assertIsNotNone(cache.get("web:home-lists:v4"))
+        self.assertIsNotNone(cache.get("web:home-lists:v5"))
         from catalogue.importers import run_import
         from catalogue.models import Retailer
 
@@ -361,7 +376,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
         self.harbour.source_url = "https://h.example/"
         self.harbour.save()
         run_import(self.harbour, fetch=lambda url: b'{"products": []}')
-        self.assertIsNone(cache.get("web:home-lists:v4"))
+        self.assertIsNone(cache.get("web:home-lists:v5"))
 
     def test_long_names_unicode_search_and_bad_pages(self):
         long_name = "Pokémon TCG: Scarlet & Violet " + "Ultra Premium Collection " * 5
@@ -754,7 +769,7 @@ class FeaturedAndMarketplaceTests(TestCase):
             self.deal(n, self.plain)
         no_saving = make_product(self.set, name="Lonely Booster Box", slug="lonely", product_type="booster_box")
         make_listing(no_saving, self.paying, price="40.00")
-        featured = home_lists()[4]
+        featured = home_lists()[0]
         self.assertEqual(len(featured), 8)
         self.assertEqual(sum(1 for _, s in featured if earns(s.best)), 6)
         self.assertNotIn(no_saving.pk, [p.pk for p, _ in featured])
@@ -1076,7 +1091,7 @@ class GameTypesAndFilterTests(PageTestCase):
 
 
 class HomeFootballTests(PageTestCase):
-    def test_football_is_pinned_among_the_first_chips_and_has_its_own_row(self):
+    def test_football_is_pinned_among_the_first_tiles(self):
         from django.core.cache import cache
 
         football = make_game(name="Football cards", slug="football", search_aliases="")
@@ -1088,8 +1103,9 @@ class HomeFootballTests(PageTestCase):
         html = response.content.decode()
         tiles = html[html.index('class="tiles tiles--games"'):html.index("</ul>", html.index('class="tiles tiles--games"'))]
         self.assertIn("/games/football/", tiles.split("tiles__extra")[0])
-        self.assertContains(response, "Football and sports cards")
-        self.assertContains(response, "Match Attax 2026/27 Mega Tin")
+        # The football row moved off the home page; its game page lists the range.
+        self.assertNotContains(response, "Football and sports cards")
+        self.assertContains(self.client.get(football.get_absolute_url()), "Match Attax 2026/27 Mega Tin")
 
 
 class LatestDropsTests(PageTestCase):
@@ -1820,7 +1836,10 @@ class RedesignTests(PageTestCase):
         self.assertIn('<p class="hero__eyebrow">UK price comparison</p>', html)
         self.assertIn('Hunt the best prices. <span class="hero__accent">Rip more packs.</span></h1>', html)
         self.assertIn('<span class="search__button-text">Find best price</span>', html)
-        self.assertIn('<a class="tile" href="/games/pokemon/"><span class="tile__name">Pokémon</span><span class="tile__meta">3 products</span></a>', html)
+        self.assertIn('<a class="tile tile--game" href="/games/pokemon/"><span class="tile__cover" aria-hidden="true">', html)
+        self.assertIn('<span class="tile__name">Pokémon</span><span class="tile__meta">3 products</span></a>', html)
+        # No product has a picture here, so the tile shows the booster box outline instead.
+        self.assertIn('<span class="product-image product-image--cover"><svg', html)
         # Browse by product: a tile per type the search page can filter to, with the type's outline drawing.
         types = html[html.index('class="tiles tiles--types"'):html.index("</ul>", html.index('class="tiles tiles--types"'))]
         self.assertIn('href="/search/?type=elite_trainer_box"', types)
@@ -1833,6 +1852,36 @@ class RedesignTests(PageTestCase):
         # Every row card ends with the same button.
         featured = html[html.index('id="featured-title"'):]
         self.assertIn('<span class="trending__cta">Compare prices<span aria-hidden="true"> →</span></span>', featured)
+
+    def test_each_game_tile_shows_box_art_from_its_own_products(self):
+        from django.core.cache import cache
+
+        from web.views import game_covers
+
+        old_box = make_product(self.pre, name="Old Booster Box", slug="old-box", product_type="booster_box",
+                               image_url="https://img.example/old-box.png", release_date=timezone.localdate() - timedelta(days=900))
+        new_box = make_product(self.pre, name="New Booster Box", slug="new-box", product_type="booster_box",
+                               image_url="https://img.example/new-box.png", release_date=timezone.localdate() - timedelta(days=30))
+        make_product(self.pre, name="Newest Booster Box", slug="newest-box", product_type="booster_box",
+                     release_date=timezone.localdate())   # no picture, so never the cover
+        Product.objects.filter(pk=self.etb.pk).update(image_url="https://img.example/etb.png")
+        hidden = make_product(self.pre, name="Hidden Booster Box", slug="hidden-box", product_type="booster_box",
+                              image_url="https://img.example/hidden.png", release_date=timezone.localdate(), is_active=False)
+        other = make_game(name="Disney Lorcana", slug="lorcana", short_name="Lorcana")
+        make_product(make_set(other, name="First Chapter", slug="first-chapter", code="TFC"), name="Lorcana Booster Box",
+                     slug="lorcana-box", product_type="booster_box", image_url="https://img.example/lorcana.png")
+        games = [self.game, other]
+        with self.assertNumQueries(2):
+            game_covers(games)
+        # A booster box beats the elite trainer box, the newest boxed picture wins, hidden products never show.
+        self.assertEqual(self.game.cover.pk, new_box.pk)
+        self.assertNotIn(self.game.cover.pk, (old_box.pk, hidden.pk))
+        self.assertEqual(other.cover.name, "Lorcana Booster Box")
+        cache.clear()
+        html = self.client.get(reverse("web:home")).content.decode()
+        tiles = html[html.index('class="tiles tiles--games"'):html.index("</ul>", html.index('class="tiles tiles--games"'))]
+        self.assertIn('src="https://img.example/new-box.png"', tiles)
+        self.assertIn('src="https://img.example/lorcana.png"', tiles)
 
     def test_row_cards_say_see_product_when_no_shop_has_a_price(self):
         html = self.client.get(reverse("web:recent_api"), {"p": f"{self.etb.slug},{self.sold_out.slug}"}).content.decode()

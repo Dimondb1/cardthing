@@ -5,7 +5,7 @@ Every shop read saves the shop products it could not match on its ImportRun. Kep
 read of every shop, that text filled a 23 GB disk with 6.5 GB of import records in two weeks, while
 the products and prices themselves took about 30 MB. Only each shop's latest whole read needs the
 list (the stockist finder reads it), so the text is cleared from every other run, and runs older
-than RUNS_KEPT_DAYS are deleted.
+than RUNS_KEPT_DAYS are deleted. What a failed read logged (catalogue/runlog.py) is cleared after a week.
 
 Written in plain SQL against columns every version of the table has, so the update can run it on a
 database from before its migrations, ahead of the backup.
@@ -35,6 +35,10 @@ def prune_runs(now=None, keep_days=RUNS_KEPT_DAYS):
         latest = f"SELECT MAX(id) FROM {TABLE} GROUP BY retailer_id"
         cursor.execute(f"UPDATE {TABLE} SET unmatched = '' WHERE unmatched != '' AND id NOT IN ({good})")
         cleared = cursor.rowcount
+        if "log" in columns:
+            from .runlog import KEPT_DAYS
+
+            cursor.execute(f"UPDATE {TABLE} SET log = '' WHERE log != '' AND started_at < %s", [now - timedelta(days=KEPT_DAYS)])
         cursor.execute(
             f"DELETE FROM {TABLE} WHERE started_at < %s AND id NOT IN ({good}) AND id NOT IN ({latest})",
             [now - timedelta(days=keep_days)],

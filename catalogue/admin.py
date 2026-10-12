@@ -206,8 +206,21 @@ class ListingAdmin(admin.ModelAdmin):
 class ImportRunAdmin(admin.ModelAdmin):
     list_display = ("retailer", "started_at", "status", "offers_found", "listings_updated", "unmatched_count")
     list_filter = ("retailer",)
-    readonly_fields = ("retailer", "note", "started_at", "finished_at", "offers_found", "listings_updated", "unmatched", "error")
+    readonly_fields = ("retailer", "note", "started_at", "finished_at", "offers_found", "listings_updated", "error",
+                       "what_happened", "unmatched")
+    exclude = ("log",)
     date_hierarchy = "started_at"
+
+    @admin.display(description="What happened")
+    def what_happened(self, obj):
+        from django.utils.html import format_html
+
+        if not obj.log:
+            return "Nothing logged. A read keeps its log only when it fails or warns, for a week."
+        return format_html(
+            '<pre style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-size: 12px; line-height: 1.5;">{}</pre>',
+            obj.log,
+        )
 
     @admin.display(description="Result")
     def status(self, obj):

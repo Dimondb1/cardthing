@@ -802,9 +802,11 @@ class Worker:
                 os._exit(1)
             shop = Retailer.objects.get(pk=task.retailer_id)
             if task.kind in (SHOP_READ, PULSE):
-                ImportRun.objects.filter(
-                    retailer=shop, finished_at__isnull=True, started_at__gte=job.runs_from
-                ).update(finished_at=now, error=importers.STOPPED)
+                from . import runlog
+
+                cut = ImportRun.objects.filter(retailer=shop, finished_at__isnull=True, started_at__gte=job.runs_from)
+                runlog.add(cut, f"{timezone.localtime(now):%H:%M:%S} ERROR {note}")
+                cut.update(finished_at=now, error=importers.STOPPED)
             # A stuck probe backs its shop off too, so the fresh process does not pick the same shop
             # straight away and restart again every few seconds with a heartbeat that looks healthy.
             shop.read_failed(now, None, STUCK)

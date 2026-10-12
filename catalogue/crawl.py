@@ -89,13 +89,15 @@ def crash_read(item, began, exc):
     """
     from .signals import clear_list_caches
 
+    from . import runlog
+
     error = f"The read stopped on an unexpected error: {type(exc).__name__}: {exc}"[:300]
     logged = f"{item}: {error}\n{traceback.format_exc()}"
     now = timezone.now()
     # The run it opened would otherwise show as running until close_abandoned_runs finds it.
-    ImportRun.objects.filter(retailer=item, finished_at__isnull=True, started_at__gte=began).update(
-        finished_at=now, error=error
-    )
+    open_runs = ImportRun.objects.filter(retailer=item, finished_at__isnull=True, started_at__gte=began)
+    runlog.add(open_runs, f"{timezone.localtime(now):%H:%M:%S} ERROR {logged}")
+    open_runs.update(finished_at=now, error=error)
     # Whatever it wrote before it stopped should show.
     clear_list_caches(force=True)
     item.refresh_from_db(fields=["read_every_minutes", "error_streak", "failing_since"])
@@ -136,10 +138,14 @@ def shops(now, state=_UNREAD):
         .annotate(open=ExpressionWrapper(Q(finished_at__isnull=True), output_field=BooleanField()))
         .values("open")[:1]
     )
+    latest_failed = ImportRun.objects.filter(retailer=OuterRef("pk")).exclude(error="").order_by("-started_at", "-pk")
     retailers = (
         Retailer.objects.filter(is_active=True)
         .exclude(source_type=Retailer.Source.MANUAL)
-        .annotate(reading=Subquery(latest_open, output_field=BooleanField()))
+        .annotate(
+            reading=Subquery(latest_open, output_field=BooleanField()),
+            failed_run=Subquery(latest_failed.values("pk")[:1]),
+        )
         .order_by("name")
     )
     everything_paused = all_paused(state)
@@ -162,6 +168,7 @@ def shops(now, state=_UNREAD):
             "last_ok": clock(retailer.last_ok_at, now) if retailer.last_ok_at else "never",
             "next_read": next_read,
             "last_error": retailer.last_error[:160],
+            "failed_run": retailer.failed_run,
             "order": (0 if backing_off or retailer.error_streak else 1 if retailer.reading_paused else 2, retailer.name.lower()),
         })
     rows.sort(key=lambda row: row["order"])

@@ -1452,8 +1452,23 @@ def close_abandoned_runs(older_than=ABANDONED_AFTER, now=None):
 
 
 def run_import(retailer, feed_path=None, fetch=None, page_pause=0.0):
-    """Read one retailer's prices and save them. ``page_pause`` is the wait between Shopify product pages."""
-    run = ImportRun.objects.create(retailer=retailer)
+    """Read one retailer's prices and save them. ``page_pause`` is the wait between Shopify product pages.
+
+    What the read logs is kept on the run when it fails or warns (catalogue/runlog.py)."""
+    from . import runlog
+
+    created = ImportRun.objects.create(retailer=retailer)
+    with runlog.capture(created) as captured:
+        run = _run_import(created, retailer, feed_path, fetch, page_pause)
+    # A marketplace already read today hands back its earlier run, whose log is not this one's.
+    if run is created:
+        run.log = captured.text() if run.error or captured.warned else ""
+        if run.log or captured.saved:
+            ImportRun.objects.filter(pk=run.pk).update(log=run.log)
+    return run
+
+
+def _run_import(run, retailer, feed_path, fetch, page_pause):
     fetch = retailer_fetch(retailer, fetch)
     try:
         if retailer.source_type == Retailer.Source.SHOPIFY:

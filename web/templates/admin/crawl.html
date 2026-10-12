@@ -59,7 +59,7 @@
       {% for row in shops %}{% with shop=row.retailer %}
       <li class="item" id="shop-{{ shop.slug }}"><b>{{ shop.name }}</b><span{% if row.problem %} class="bad"{% endif %}>{{ row.state }}</span>
         <p class="facts">Last read that worked: {{ row.last_ok }}{% if shop.last_read_seconds is not None %}, took {{ shop.last_read_seconds }} s{% endif %}. Next read: {{ row.next_read }}. Errors in a row: {{ shop.error_streak }}.</p>
-        {% if row.last_error %}<p class="error{% if shop.error_streak %} bad{% endif %}">Last error: {{ row.last_error }}</p>{% endif %}
+        {% if row.last_error %}<p class="error{% if shop.error_streak %} bad{% endif %}">Last error: {{ row.last_error }}{% if row.failed_run %} <a href="{% url 'admin:catalogue_importrun_change' row.failed_run %}">See what happened</a>{% endif %}</p>{% endif %}
         <div class="row">
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="read_now"><input type="hidden" name="shop" value="{{ shop.pk }}"><input type="submit" value="Read now"></form>
           {% if shop.reading_paused %}

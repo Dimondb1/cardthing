@@ -1019,12 +1019,26 @@ read and lets you change it with one tap, from a phone:
   finished), Paused, Backing off until a time, or Idle, then its last read
   that worked, how long that took, its next read (paused while it or every
   shop is paused, and never before a wait after errors ends), its errors in
-  a row and its last error.
+  a row and its last error, with **See what happened**: the log of the
+  shop's latest failed read.
 - **Read now** makes the shop due at once and forgets its errors and its
   wait, so the background reader takes it within a few minutes (or the next
   hourly read does when the reader is not running). **Pause** and
   **Resume** set the shop's Reading paused box, which stops its stock
   checks too.
+
+### What a failed read logged
+
+Every read, by the background reader or the hourly import, collects what it
+logs in its own thread (`catalogue/runlog.py`): pages read, retries, eBay's
+progress, warnings and errors. A read that fails or warns keeps its last 200
+lines on its run (`ImportRun.log`), shown under What happened on the run's
+admin page (Price imports); a clean read keeps nothing. The lines are saved
+every 30 seconds while the read runs and at once on an error, so a read the
+background reader cuts off at its time limit still shows how far it got,
+followed by the cut-off note; a read that crashes gets its traceback added.
+Keys and tokens in addresses (`apikey=`, `/apikey/...`, `token=`) are blanked
+first. Logs are cleared after a week by `tidy_all`.
 
 ## Background reader
 

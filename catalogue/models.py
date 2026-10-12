@@ -638,6 +638,10 @@ class ImportRun(models.Model):
     # Set on a run that read only part of a shop, such as the pre-order pulse reading changed collections.
     # Such a run is not a read of the whole shop, so it never counts as the shop's last read.
     note = models.CharField(max_length=200, blank=True)
+    log = models.TextField(
+        blank=True,
+        help_text="What the read logged, kept only when it failed or warned (catalogue/runlog.py).",
+    )
 
     class Meta:
         ordering = ["-started_at"]

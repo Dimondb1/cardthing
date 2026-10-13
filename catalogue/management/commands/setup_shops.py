@@ -118,6 +118,11 @@ SHOPS = [
      "Standard £3.65 (basket check), read 7 Oct 2026"),
     ("gecko-cards", "Gecko Cards", "https://geckocards.co.uk/", S.SHOPIFY, "1.50", '25',
      "Standard £1.50, free over £25 (delivery page), read 7 Oct 2026"),
+    # Added at the owner's request: a Shopify shop selling Simplified Chinese Pokémon. Its policy prices by
+    # weight; £3.95 is the rate for the booster and gift boxes it sells, and the basket check refines it.
+    ("tcg-box", "TCG Box", "https://tcgbox.co.uk/", S.SHOPIFY, "3.95", None,
+     "Royal Mail Tracked 48: £2.95 for packs, £3.95 for 1 to 2 booster boxes, £5.49 for 3 to 6 (shipping "
+     "policy page; the shop's banner says £2.99), no free threshold, read 13 Oct 2026"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's

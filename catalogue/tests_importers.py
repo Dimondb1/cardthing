@@ -562,6 +562,49 @@ class AutoCatalogueTests(TestCase):
         self.assertEqual(Product.objects.get().product_set, phoenix)
 
 
+class ChineseShopTests(TestCase):
+    """TCG Box sells Simplified Chinese Pokémon, titled with a long dash, beside parody packs, binders and
+    coin sets. Titles and fields are copied from its products.json on 13 Oct 2026."""
+
+    def item(self, title, product_type, price, vendor="The Pokémon Company", tags=("pokemon", "sealed"), handle=None):
+        return {"handle": handle or title.lower().replace(" ", "-")[:60], "title": title, "product_type": product_type,
+                "vendor": vendor, "tags": list(tags), "variants": [{"price": price, "available": True, "barcode": None}]}
+
+    def test_simplified_chinese_boxes_come_in_under_the_chinese_filter(self):
+        from .ordering import apply_languages
+
+        game = make_game()
+        # Another shop's jumbo box of the same set: TCG Box's slim box must not land on it.
+        jumbo = Product.objects.create(game=game, name="Chasing Glory Together CSV10 C Jumbo Booster Box (Simplified Chinese)",
+                                       product_type=Product.Type.BOOSTER_BOX, language="zh-hans")
+        shop = make_retailer("TCG Box", source_type=Retailer.Source.SHOPIFY, source_url="https://tcgbox.co.uk/",
+                             delivery_cost=Decimal("3.95"))
+        page = shopify_page([
+            self.item("Pokémon Gem Pack Vol.5 Booster Box — Simplified Chinese (CBB5C)", "Booster Box", "31.99"),
+            self.item("Pokémon Chasing Glory Together Booster Box — Simplified Chinese (CSV10C) SLIM", "Booster Box", "23.99"),
+            self.item("Pokémon Team Rocket's Grand Ambition Exclusive Gift Box — Simplified Chinese (CSV10C)", "Gift Box", "249.99"),
+            self.item("Terastal Grand Gathering - Collector Binder Random Style (Simplified Chinese)", "Binder", "84.99"),
+            self.item("Terastal Grand Gathering - Collector Coin Set Random Style (Simplified Chinese)", "Collectible Coin", "10.95"),
+            self.item("Pokenots 151 Fundle Bundle Pack", "Trading Cards (Parody)", "15.00", vendor="TCGBOX",
+                      tags=("other-tcg", "parody", "pokenot")),
+        ])
+        run = run_import(shop, fetch=lambda url: page if "page=1" in url else shopify_page([]))
+        self.assertTrue(run.ok, run.error)
+
+        listed = Product.objects.filter(listings__retailer=shop).order_by("name")
+        self.assertEqual([p.name for p in listed], [
+            "Chasing Glory Together Booster Box Simplified Chinese SLIM",
+            "Gem Pack Vol.5 Booster Box Simplified Chinese (CBB5C)",
+            "Team Rocket's Grand Ambition Exclusive Gift Box Simplified Chinese",
+        ])
+        self.assertEqual({p.language for p in listed}, {"zh-hans"})
+        self.assertFalse(any("—" in p.name for p in Product.objects.all()))
+        self.assertFalse(jumbo.listings.exists())
+        chinese = apply_languages(Product.objects.all(), ["zh"])
+        self.assertEqual(set(chinese), set(listed) | {jumbo})
+        self.assertFalse(apply_languages(Product.objects.all(), ["en"]).exists())
+
+
 class SetupShopsTests(TestCase):
     def test_setup_shops_is_idempotent_and_renames(self):
         from io import StringIO
@@ -578,6 +621,9 @@ class SetupShopsTests(TestCase):
         self.assertEqual(Retailer.objects.count(), len(SHOPS) + 1)
         self.assertEqual(Retailer.objects.get(website="https://totalcards.net/").name, "Total Cards")
         self.assertEqual(Retailer.objects.get(name="Gathering Games").delivery_cost, Decimal("3.99"))
+        tcg_box = Retailer.objects.get(slug="tcg-box")
+        self.assertEqual((tcg_box.source_type, tcg_box.source_url, tcg_box.delivery_cost),
+                         (Retailer.Source.SHOPIFY, "https://tcgbox.co.uk/", Decimal("3.95")))
         dollars.refresh_from_db()
         self.assertFalse(dollars.is_active)
         self.assertEqual(dollars.listings.count(), 0)

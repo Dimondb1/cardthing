@@ -294,6 +294,9 @@ SHOP_HEADS = re.compile(r"^\s*pre[- ]?order\b(?:.*?delivery time)?\s*[:\-–]?\s
 def tidy_name(title):
     """The light fixes safe to apply to a name that is already in the catalogue."""
     name = re.sub(r"\s+", " ", html.unescape(title)).strip()
+    # A long dash between words is a shop's separator ("Booster Box — Simplified Chinese"), and the site
+    # never shows one: it becomes the plain " - " every other rule here already treats as a separator.
+    name = re.sub(r"\s*[‒—―]\s*", " - ", name)
     name = name.lstrip("!¡*#~ ").replace("!", "")          # "! Duelist Nexus", "Sealed Box!"
     name = re.sub(r"\s*:\s*:\s*", ": ", name)               # "Tin: : Brand New" from an empty shop field
     for _ in range(2):

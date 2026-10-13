@@ -221,6 +221,15 @@ class TidyNameTests(TestCase):
         self.assertEqual(tidy_name("Detective Pikachu 1 Booster Pack Brand New And Sealed"), "Detective Pikachu 1 Booster Pack")
         self.assertEqual(tidy_name("Starter Deck: Dawn of the Xyz 1st Edition Brand New and Sealed Box"), "Starter Deck: Dawn of the Xyz 1st Edition")
 
+    def test_a_long_dash_is_a_separator_and_never_kept(self):
+        self.assertEqual(tidy_name("Pokémon Gem Pack Vol.5 Booster Box — Simplified Chinese (CBB5C)"),
+                         "Pokémon Gem Pack Vol.5 Booster Box - Simplified Chinese (CBB5C)")
+        self.assertEqual(clean_name("Pokémon Gem Pack Vol.5 Booster Box — Simplified Chinese (CBB5C)", "pokemon"),
+                         "Gem Pack Vol.5 Booster Box Simplified Chinese (CBB5C)")
+        self.assertEqual(clean_name("Pokémon—Surging Sparks―Booster Box", "pokemon"), "Surging Sparks Booster Box")
+        # A hyphen inside a word is not a separator.
+        self.assertEqual(tidy_name("Yu-Gi-Oh Rarity Collection"), "Yu-Gi-Oh Rarity Collection")
+
     def test_ordinary_names_are_left_alone(self):
         self.assertEqual(tidy_name("Scarlet & Violet 8: Surging Sparks Booster Box"), "Scarlet & Violet 8: Surging Sparks Booster Box")
         self.assertEqual(tidy_name("Yu-Gi-Oh! Rarity Collection"), "Yu-Gi-Oh Rarity Collection")

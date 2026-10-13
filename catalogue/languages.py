@@ -260,9 +260,15 @@ def _letter(match):
 
 
 def stated(text, game="", loose=False):
-    """The first language ``text`` states, or "" (see stated_all)."""
+    """The first language ``text`` states, or "" (see stated_all). "Chinese" that something else in the title
+    makes exact ("Chinese Gem Pack Vol 4", "(csv9C) Slim Booster Box Chinese") is that exact Chinese."""
     found = stated_all(text or "", game, loose)
-    return found[0] if found else ENGLISH
+    if not found:
+        return ENGLISH
+    exact = {code for code in found[1:] if code in (SIMPLIFIED, TRADITIONAL)}
+    if found[0] == CHINESE and len(exact) == 1:
+        return exact.pop()
+    return found[0]
 
 
 @lru_cache(maxsize=65536)

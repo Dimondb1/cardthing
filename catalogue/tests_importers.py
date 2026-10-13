@@ -605,6 +605,71 @@ class ChineseShopTests(TestCase):
         self.assertFalse(apply_languages(Product.objects.all(), ["en"]).exists())
 
 
+class UnionArenaTests(TestCase):
+    """Union Arena joined the games on 13 Oct 2026, with five products a visitor asked for."""
+
+    def test_shop_titles_are_union_arena(self):
+        for title, kind, name in [
+            ("Union Arena TCG: Hunter x Hunter [UE02BT] Booster Box", "booster_box", "Hunter x Hunter Booster Box"),
+            ("Union Arena TCG: Tokyo Ghoul UE18ST - Starter Deck", "deck", "Tokyo Ghoul UE18ST Starter Deck"),
+            ("Union Arena - BLEACH Thousand-Year Blood War Starter Deck UE01ST - ENGLISH", "deck",
+             "BLEACH Thousand Year Blood War Starter Deck UE01ST"),
+        ]:
+            with self.subTest(title=title):
+                sealed = classify(title, price=Decimal("30"))
+                self.assertEqual((sealed.game, sealed.product_type, sealed.name), ("union-arena", kind, name))
+        self.assertIsNone(classify("Union Arena - Goddess of Victory: NIKKE - soda - UA18BT/NIK-1-081 (PSA 10 Graded Slab)",
+                                   price=Decimal("149.95")))
+
+    def test_the_requested_products_load_stay_and_take_shop_prices(self):
+        from io import StringIO
+        from pathlib import Path
+
+        from django.conf import settings
+        from django.core.management import call_command
+
+        from .ebay import search_queries
+
+        out = StringIO()
+        call_command("import_products", str(Path(settings.BASE_DIR) / "catalogue" / "data" / "union_arena.csv"), stdout=out)
+        self.assertIn("5 products added, 0 updated.", out.getvalue())
+        products = Product.objects.filter(game__slug="union-arena")
+        self.assertEqual(products.count(), 5)
+        game = products.first().game
+        self.assertEqual((game.name, game.short_name), ("Union Arena", "Union Arena"))
+        hxh = products.get(name="Hunter x Hunter Booster Box")
+        self.assertEqual((hxh.product_type, str(hxh.release_date), hxh.product_set.name),
+                         (Product.Type.BOOSTER_BOX, "2024-10-04", "Hunter x Hunter"))
+        self.assertEqual(search_queries(hxh)[0], "Union Arena Hunter x Hunter Booster Box")
+
+        # No shop lists them yet: tidy_catalogue leaves products added by hand alone.
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertEqual(Product.objects.filter(game__slug="union-arena").count(), 5)
+
+        shop = make_retailer("Shop A", source_type=Retailer.Source.SHOPIFY, source_url="https://a.example/",
+                             delivery_cost=Decimal("3.00"))
+        page = shopify_page([
+            {"handle": "hxh", "title": "Union Arena TCG: Hunter x Hunter [UE02BT] Booster Box", "product_type": "Booster Box",
+             "vendor": "Bandai", "tags": [], "variants": [{"price": "64.99", "available": True, "barcode": ""}]},
+            {"handle": "hxh-jp", "title": "Union Arena Japanese Hunter x Hunter Booster Box UA02BT", "product_type": "Booster Box",
+             "vendor": "Bandai", "tags": [], "variants": [{"price": "39.99", "available": True, "barcode": ""}]},
+        ])
+        run_import(shop, fetch=lambda url: page if "page=1" in url else shopify_page([]))
+        self.assertEqual(hxh.listings.get().price, Decimal("64.99"))
+        japanese = Product.objects.get(game__slug="union-arena", language="ja")
+        self.assertNotEqual(japanese.pk, hxh.pk)
+
+    def test_tidy_still_removes_a_shop_made_product_no_shop_lists(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        game = make_game(name="Union Arena", slug="union-arena")
+        Product.objects.create(game=game, name="Tokyo Ghoul UE18ST Starter Deck", product_type="deck")
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(game=game).exists())
+
+
 class SetupShopsTests(TestCase):
     def test_setup_shops_is_idempotent_and_renames(self):
         from io import StringIO

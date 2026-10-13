@@ -175,3 +175,82 @@ class BoxContentsKeyTests(TestCase):
         # Extra packs sold with the box keep their count and mark, so they never share the plain box's key.
         self.assertNotEqual(match_key("Destined Rivals Booster Box (36x Packs) + 6x Booster Packs"),
                             match_key("Destined Rivals Booster Box"))
+
+
+class ChineseDuplicateTests(TestCase):
+    """Titles copied from the Chinese booster boxes listed on ripraptor.com on 13 Oct 2026, where one box
+    had a page per shop."""
+
+    def setUp(self):
+        self.game = make_game()
+
+    def box(self, name, shop):
+        product = Product.objects.create(game=self.game, name=name, product_type="booster_box")
+        make_listing(product, make_retailer(shop) if isinstance(shop, str) else shop)
+        return product
+
+    def test_one_code_however_a_shop_spells_it(self):
+        for a, b in [
+            ("Blade Awakening Simplified Chinese JUMBO Booster Box (csv7C)", "Blade Awakening csv7 C Simplified Chinese Jumbo Booster Box"),
+            ("Terastal Grand Gathering (csv9.5C) Booster Box Chinese", "Terastal Grand Gathering Simplified Chinese Booster Box (csv9.5 C)"),
+            ("Gem Pack Vol. 2 (cbb2C) Booster Box Chinese", "Gem Pack Vol. 2 CBB2 C Simplified Chinese Booster Box"),
+            ("Simplified Chinese Pokemon TCG: Gem Pack Volume 4 Booster Box", "Chinese Gem Pack Vol 4 Booster Box"),
+            ("Collect 151 Journey 151C Simplified Chinese Slim Booster Box", "Collect 151 Journey 151 C Simplified Chinese Slim Booster Box"),
+        ]:
+            with self.subTest(a=a):
+                self.assertEqual(match_key(a), match_key(b))
+
+    def test_codes_and_sizes_still_tell_boxes_apart(self):
+        for a, b in [
+            ("Storming Emergence csm1b C Simplified Chinese Jumbo Booster Box", "Storming Emergence csm1c C Simplified Chinese Jumbo Booster Box"),
+            ("Blade Awakening csv7 C Simplified Chinese Slim Booster Box", "Blade Awakening csv7 C Simplified Chinese Jumbo Booster Box"),
+            ("Gem Pack Vol. 2 CBB2 C Simplified Chinese Booster Box", "Gem Pack Vol. 3 CBB3 C Simplified Chinese Booster Box"),
+            ("Collect 151 Journey 151 C Simplified Chinese Jumbo Booster Box", "Collect 151 Hope 151 C Simplified Chinese Jumbo Booster Box"),
+        ]:
+            with self.subTest(a=a):
+                self.assertNotEqual(match_key(a), match_key(b))
+
+    def test_chinese_said_with_a_simplified_code_is_simplified(self):
+        from .languages import language_of
+
+        self.assertEqual(language_of("Chinese Gem Pack Vol 4 Booster Box", "pokemon"), "zh-hans")
+        self.assertEqual(language_of("Stellar Crystal (csv9C) Slim Booster Box Chinese", "pokemon"), "zh-hans")
+        self.assertEqual(language_of("Chinese Terastal Gathering Booster Box", "pokemon"), "zh")
+        self.assertEqual(language_of("(TRADITIONAL CHINESE) Pokemon 2023 Shiny Treasure Gift Box", "pokemon"), "zh-hant")
+
+    def test_same_box_two_shops_merge_and_others_stay(self):
+        from .management.commands.merge_duplicates import duplicate_groups
+
+        japan2uk = make_retailer("Japan2UK")
+        jumbo = self.box("Blade Awakening csv7 C Simplified Chinese Jumbo Booster Box", japan2uk)
+        jumbo_too = self.box("Blade Awakening Simplified Chinese JUMBO Booster Box (csv7C)", "Best Booster Boxes")
+        self.box("Blade Awakening csv7 C Simplified Chinese Slim Booster Box", japan2uk)
+        self.box("Storming Emergence csm1b C Simplified Chinese Jumbo Booster Box", japan2uk)
+        self.box("Storming Emergence csm1c C Simplified Chinese Jumbo Booster Box", japan2uk)
+        gem = self.box("Gem Pack Vol. 2 (cbb2C) Booster Box Chinese", "The Poke Store")
+        gem_too = self.box("Gem Pack Vol. 2 CBB2 C Simplified Chinese Booster Box", japan2uk)
+        self.box("Prismatic Evolutions Booster Box", "Total Cards")
+        groups = {keep.pk: {o.pk for o in others} for keep, others in duplicate_groups()}
+        self.assertEqual(sorted(map(sorted, ({k, *o} for k, o in groups.items()))),
+                         sorted([sorted([jumbo.pk, jumbo_too.pk]), sorted([gem.pk, gem_too.pk])]))
+
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        self.assertIn("2 products merged", out.getvalue())
+        self.assertEqual(Product.objects.filter(name__startswith="Blade Awakening").count(), 2)
+
+    def test_a_box_without_its_code_or_with_another_name_is_suggested_not_merged(self):
+        from . import checks
+        from .management.commands.merge_duplicates import duplicate_groups
+
+        coded = self.box("Gem Pack Vol. 6 CBB6 C Simplified Chinese Booster Box", "Japan2UK")
+        bare = self.box("Gem Pack Vol 6 Booster Box (Simplified Chinese)", "Eterna Cards")
+        plain = self.box("Chinese Terastal Gathering Booster Box", "MaxOnCards")
+        said = self.box("Terastal Gathering Booster Box (Simplified Chinese)", "Eterna Cards 2")
+        chasing = self.box("Chasing Glory Together CSV10 C Slim Booster Box (Simplified Chinese)", "Eterna Cards 3")
+        pursue = self.box("Pursue Glory Together csv10 C Simplified Chinese Slim Booster Box", "eBay")
+        self.box("Pursue Glory Together csv10 C Simplified Chinese Jumbo Booster Box", "Japan2UK 2")
+        self.assertEqual(duplicate_groups(), [])
+        pairs = {frozenset([keep.pk, *(o.pk for o in others)]) for keep, others in checks.duplicates()}
+        self.assertEqual(pairs, {frozenset([coded.pk, bare.pk]), frozenset([plain.pk, said.pk]),
+                                 frozenset([chasing.pk, pursue.pk])})

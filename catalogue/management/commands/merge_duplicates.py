@@ -27,8 +27,8 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from catalogue.languages import product_language
-from catalogue.matching import match_key
+from catalogue.languages import CHINESE, SIMPLIFIED, product_language
+from catalogue.matching import chinese_code, match_key
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, Product, ProductAlias, Restock, ShopProduct, StockAlert,
 )
@@ -60,9 +60,14 @@ def merge_key(name):
 
 def loose_key(name, game_slug):
     """``merge_key`` without filler and series words, or "" when nothing identifying is left
-    (a bare "Scarlet & Violet Elite Trainer Box" must never meet "Sword & Shield Elite Trainer Box")."""
-    noise = FILLER | (POKEMON_SERIES if game_slug == "pokemon" else set())
-    words = [w for w in merge_key(name).split() if w not in noise]
+    (a bare "Scarlet & Violet Elite Trainer Box" must never meet "Sword & Shield Elite Trainer Box").
+
+    For Pokémon, also without the word Chinese and the Simplified Chinese set codes, which some shops leave
+    out ("Gem Pack Vol 6 Booster Box (Simplified Chinese)" and "Gem Pack Vol. 6 CBB6 C Simplified Chinese
+    Booster Box"). The products are grouped by language, so an English box is never among them; two boxes
+    only a code tells apart are, and the owner or Claude says which they are."""
+    noise = FILLER | (POKEMON_SERIES | {"chinese"} if game_slug == "pokemon" else set())
+    words = [w for w in merge_key(name).split() if w not in noise and not (game_slug == "pokemon" and chinese_code(w))]
     if not identifying(words):
         return ""
     return " ".join(sorted(set(words)))
@@ -297,18 +302,63 @@ def unmerge(note):
     return restored
 
 
+# Sizes of one set's booster box: a slim box and a jumbo box of the same code are two products.
+BOX_SIZES = {"slim", "jumbo", "standard", "mini", "half"}
+
+
+def chinese_code_key(name, game_slug):
+    """For a Pokémon name carrying one Simplified Chinese set code, the code with the box size and the kind of
+    product, else "". Shops translate set names differently ("Pursue Glory Together" and "Chasing Glory
+    Together csv10", "Dark" and "Black Crystal Blaze csv5"), so for a suggestion the code is the surer
+    guide. Never used for a merge on its own."""
+    if game_slug != "pokemon":
+        return ""
+    words = match_key(name).split()
+    codes = {w for w in words if chinese_code(w)}
+    if len(codes) != 1:
+        return ""
+    return " ".join([*codes, *sorted(BOX_SIZES & set(words)), *(w for w in words if w.startswith("#"))])
+
+
 def duplicate_groups(loose=False):
     """[(keep, [others])] for every group of products that name the same thing, the one to keep first:
-    most listings, then one with an image, then the shortest name."""
+    most listings, then one with an image, then the shortest name.
+
+    The loose rule gives a product two keys when it carries a Simplified Chinese code (its words, and its
+    code), and products sharing either are one group."""
     groups = defaultdict(list)
+    products = {}
     for product in Product.objects.filter(is_active=True).select_related("game", "product_set").order_by("pk"):
-        key = loose_key(product.name, product.game.slug) if loose else merge_key(product.name)
-        if key:
-            # The key drops set codes and language words, so the language keeps a Japanese box (sv11B)
-            # from ever being merged into the English one of the same name.
-            groups[(product.game_id, product.product_type, product_language(product), key)].append(product)
+        keys = [loose_key(product.name, product.game.slug) if loose else merge_key(product.name)]
+        if loose:
+            keys.append(chinese_code_key(product.name, product.game.slug))
+        # The key drops set codes and language words, so the language keeps a Japanese box (sv11B)
+        # from ever being merged into the English one of the same name.
+        language = product_language(product)
+        if loose and language == CHINESE:
+            # "Chinese" that says no more is nearly always Simplified at UK shops: suggested beside the
+            # Simplified boxes, never merged with them unasked.
+            language = SIMPLIFIED
+        for kind, key in enumerate(keys):
+            if key:
+                products[product.pk] = product
+                groups[(kind, product.game_id, product.product_type, language, key)].append(product.pk)
+    # Products sharing any key are one group. With one key each (the strict rule) that is each key's group.
+    parent = {}
+
+    def root(pk):
+        while parent.get(pk, pk) != pk:
+            pk = parent[pk]
+        return pk
+
+    for pks in groups.values():
+        for pk in pks[1:]:
+            parent[root(pk)] = root(pks[0])
+    members = defaultdict(list)
+    for pk in products:
+        members[root(pk)].append(products[pk])
     found = []
-    for group in groups.values():
+    for group in members.values():
         if len(group) < 2:
             continue
         group.sort(key=lambda p: (-p.listings.count(), not p.image, not p.image_url, len(p.name), p.pk))

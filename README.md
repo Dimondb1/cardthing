@@ -68,7 +68,12 @@ python manage.py import_products products.csv
 takes columns `name`, `game`, `type` (booster_box, elite_trainer_box, bundle,
 collection_box, deck, tin, booster_pack, gift_set, other, or ETB) and
 optionally `set`, `set_code`, `ean`, `release_date` (YYYY-MM-DD) and
-`image_url`. Loading the same file again updates the details.
+`image_url`. Loading the same file again updates the details. A game the
+classifier knows is created if no shop has brought one of its products in
+yet. A product given a release date in the file is kept while no shop lists
+it, so eBay, Amazon and the stockist finder can look for it: `tidy_catalogue`
+only removes products that shops brought in. `catalogue/data/union_arena.csv`
+holds the Union Arena products a visitor asked for.
 
 `scripts/browser_sweep.py` drives every public page in a real browser and
 reports script errors, horizontal overflow, unlabelled controls and tap
@@ -1496,7 +1501,7 @@ site's cache.
 The games the classifier recognises are listed in `catalogue/classify.py`
 (`GAMES`): Pokémon, Magic, One Piece, Lorcana, Yu-Gi-Oh, Star Wars
 Unlimited, Flesh and Blood, Digimon, Dragon Ball Super, Riftbound,
-Cardfight!! Vanguard, Weiss Schwarz and football cards. A game is created
+Cardfight!! Vanguard, Weiss Schwarz, Union Arena and football cards. A game is created
 in the database the first time a shop product of it is imported, so adding
 one means adding its words there, its filter labels in
 `catalogue/types.py`, its eBay search word in `catalogue/ebay.py` and its
@@ -1541,6 +1546,9 @@ What counts, in order:
   Traditional Chinese reuse the codes but say so. English numbering (SV3.5,
   SV08, SWSH12.5), bare codes English shares (SV8, SM6, M2) and set names
   English shares (Black Bolt, White Flare, 151) say nothing.
+
+"Chinese" with something that says which Chinese ("Chinese Gem Pack Vol 4",
+"(csv9C) Slim Booster Box Chinese") is that one, here Simplified Chinese.
 
 Football boxes are read by language words and scripts only: JPN, KOR and
 GER are team codes there. A title that states two languages, or joins a
@@ -1908,7 +1916,12 @@ admin under "Old product addresses". Price history, restocks, clicks and
 stock alerts move to the kept product. A count with and without its noun
 ("Display (10 Bundles)" and "Display (10)") counts as the same name; a name
 with nothing but the kind of product left ("Scarlet & Violet Elite Trainer
-Box") is never merged.
+Box") is never merged. A Simplified Chinese set code counts however a shop
+spells it ("csv7C", "csv7 C", "CSV9.5 C", "CBB2 C"), and "Simplified" and
+"Vol" never change which product it is ("Gem Pack Vol. 2" and "Gem 2"), so
+one Chinese box at two shops is one page. The code itself still counts
+("Storming Emergence csm1b" and "csm1c" are two boxes), and so does the
+size (slim and jumbo boxes stay apart).
 
 ```sh
 python manage.py merge_duplicates --loose --dry-run
@@ -1917,7 +1930,11 @@ python manage.py merge_duplicates --loose --dry-run
 also ignores filler words ("Exclusive", "English", "TCG") and, for
 Pokémon, series names, so "Pitch Black Pokémon Center Elite Trainer Box
 (Exclusive)" meets "Mega Evolution Pitch Black Pokemon Center Elite Trainer
-Box". It never runs on its own: read the dry run, and run it without
+Box". For Pokémon it also pairs a Chinese box with the same box named
+without its code, a box called only "Chinese" with the Simplified one, and
+two boxes of one code and size whose shops translate the set name
+differently ("Pursue Glory Together" and "Chasing Glory Together csv10").
+Things to check shows these pairs for a yes or no. It never runs on its own: read the dry run, and run it without
 `--dry-run` only when every group is right.
 
 ## Search engines and AI crawlers

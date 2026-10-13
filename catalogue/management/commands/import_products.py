@@ -7,7 +7,12 @@ Columns: name, game (name or slug), type (booster_box, elite_trainer_box,
 bundle, collection_box, deck, tin, booster_pack, gift_set, other), and
 optionally set, set_code, ean, release_date (YYYY-MM-DD), image_url.
 Products are matched by slug (made from the name) so a file can be loaded
-again to correct details.
+again to correct details. A game the classifier knows (catalogue/classify.py)
+is created if no shop has brought one of its products in yet.
+
+A product given a release date here is kept while no shop lists it, so eBay,
+Amazon and the stockist finder can look for it (tidy_catalogue removes only
+the products shops brought in).
 """
 
 import csv
@@ -16,8 +21,22 @@ from datetime import date
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.text import slugify
 
+from catalogue.classify import GAMES
 from catalogue.importers import clean_ean
 from catalogue.models import Game, Product, ProductSet
+
+
+def find_game(name):
+    """The game a row names, by slug or name, created when the classifier knows it but no shop has brought
+    one of its products in yet. None for a game the site does not know."""
+    game = Game.objects.filter(slug=slugify(name)).first() or Game.objects.filter(name__iexact=name).first()
+    if game is not None:
+        return game
+    for slug, full, short, words in GAMES:
+        if slugify(name) == slug or name.lower() in (full.lower(), short.lower()):
+            return Game.objects.create(name=full, short_name=short, slug=slug, search_aliases=", ".join(words),
+                                       sort_order=Game.objects.count() + 1)
+    return None
 
 TYPES = {value: value for value, _ in Product.Type.choices}
 TYPES.update({label.lower(): value for value, label in Product.Type.choices})
@@ -53,7 +72,7 @@ class Command(BaseCommand):
             if not name or not game_name or not product_type:
                 problems.append(f"row {number}: needs a name, game and a known type")
                 continue
-            game = Game.objects.filter(slug=slugify(game_name)).first() or Game.objects.filter(name__iexact=game_name).first()
+            game = find_game(game_name)
             if game is None:
                 problems.append(f"row {number}: no game called '{game_name}'")
                 continue

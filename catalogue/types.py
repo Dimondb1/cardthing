@@ -111,6 +111,12 @@ GAME_TYPES = {
         ("collection_box", "Special set"),
         ("other", "Other"),
     ],
+    "union-arena": [
+        ("booster_box", "Booster box"),
+        ("booster_pack", "Booster pack"),
+        ("deck", "Starter deck"),
+        ("other", "Other"),
+    ],
     "weiss-schwarz": [
         ("booster_box", "Booster box"),
         ("booster_pack", "Booster pack"),

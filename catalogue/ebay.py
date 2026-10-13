@@ -135,7 +135,8 @@ QUERY_NOISE = re.compile(
 GAME_IN_QUERY = {"pokemon": "Pokemon", "magic-the-gathering": "MTG", "one-piece": "One Piece", "yu-gi-oh": "Yu-Gi-Oh",
                  "lorcana": "Lorcana", "star-wars-unlimited": "Star Wars Unlimited", "flesh-and-blood": "Flesh and Blood",
                  "digimon": "Digimon", "dragon-ball": "Dragon Ball", "riftbound": "Riftbound",
-                 "cardfight-vanguard": "Cardfight Vanguard", "weiss-schwarz": "Weiss Schwarz"}
+                 "cardfight-vanguard": "Cardfight Vanguard", "weiss-schwarz": "Weiss Schwarz",
+                 "union-arena": "Union Arena"}
 
 
 def search_queries(product):

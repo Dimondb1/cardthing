@@ -51,7 +51,9 @@ class Command(BaseCommand):
         reason = None
         # The count was taken before the walk; a product merged into this one earlier in the run now
         # has its listings, so ask again before removing it and taking a live price with it.
-        if product.listing_count == 0 and not product.listings.exists():
+        # A product given its own release date was added by hand (admin or import_products), not by a shop
+        # read: it waits for a shop, eBay or Amazon to list it rather than being removed.
+        if product.listing_count == 0 and product.release_date is None and not product.listings.exists():
             reason = "no shop lists it"
         elif NOT_SEALED.search(product.name):
             reason = "not sealed"

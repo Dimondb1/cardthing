@@ -54,11 +54,14 @@ def words(text):
     return list(_words(text))
 
 
-# Words shops add or drop at will: two names that differ only by these are one product.
+# Words shops add or drop at will: two names that differ only by these are one product. "Vol" goes and
+# its number stays ("Gem Pack Vol. 2" and "Gem 2"). "Simplified" goes too: whether a box is Simplified
+# Chinese is the product's language, which every use of the key checks apart, and shops write "Chinese"
+# for the same box.
 LOOSE = STOP | {"edition", "reprint", "reprinted", "sealed", "new", "official", "version", "ver", "release",
                 "structure", "starter", "theme", "preconstructed", "precon", "box", "boxes", "set", "sets",
                 "pack", "packs", "yugioh", "yu", "gi", "oh", "digimon", "riftbound",
-                "star", "wars", "flesh", "blood", "tm"}
+                "star", "wars", "flesh", "blood", "tm", "vol", "volume", "simplified"}
 PHRASES = ("universes beyond", "trading card game", "card game", "dragon ball super", "dragon ball",
            "sealed tcg collection")
 # Series prefixes shops add or drop, with any set number after them:
@@ -70,8 +73,21 @@ SERIES = re.compile(
 )
 # Counts and codes that describe the same product: "36 packs", "(10)", "OP-10", "BT-22", "ST13".
 # "set of 4" stays: a set of four decks is not one deck.
+# Union Arena's codes too ("UE02BT", "UE18ST", Japanese "UA18BT"), but not an EX set's ("UEX01BT"), which
+# shops sometimes write instead of "Vol. 2" and must never meet the first volume.
 COUNTS = re.compile(r"\b\d+ (?:sealed )?(?:booster )?packs?\b|\(\d+\)|\bx\s?\d+\b|"
-                    r"\b(?:op|st|bt|ex|eb|lm|pb|fb)[- ]?\d{1,3}\b")
+                    r"\b(?:op|st|bt|ex|eb|lm|pb|fb)[- ]?\d{1,3}\b|\bu[ae]\d{1,2} ?(?:bt|st)\b")
+# Simplified Chinese Pokémon codes, read on normalised text ("csv9.5C" is "csv9 5c"), with the language
+# letter shops glue on, leave apart or leave out ("csv7C", "csv7 C", "CBB2 C"): one spelling each, so two
+# shops' titles for one box share a key. The code stays, because one name can cover two boxes that only
+# the code tells apart ("Storming Emergence csm1b" and "csm1c"); only the letter C goes.
+CHINESE_CODE = re.compile(
+    r"\b(csv(?:10|[1-9])(?: 5)?|csm[12](?: 5|[abc])|cs[1-6](?: 5|[ab])|cbb[1-6]|csvl[12]|csvm2a|csvh5|cs[eqp]1)"
+    r"(?: ?c)?\b")
+# "151C" and "30th C" are codes many products share, so only the number is kept: it is in the name already.
+SHARED_CHINESE_CODE = re.compile(r"\b(30th|151) ?c\b")
+CHINESE_CODE_WORD = re.compile(
+    r"^(?:csv(?:10|[1-9])(?:\.5)?|csm[12](?:\.5|[abc])|cs[1-6](?:\.5|[ab])|cbb[1-6]|csvl[12]|csvm2a|csvh5|cs[eqp]1)$")
 BOX_PACKS = re.compile(r"\b((?:booster )?display(?: box)?|booster box|elite trainer box) +(\d{1,2}) ?x (?:sealed )?(?:booster )?packs?\b")
 SET_CODE = re.compile(r"^(?:sv|swsh|sm|xy|op|st|bt|ex|eb|lm|pb|b|fb)-?\d{1,3}(?:\.\d)?[a-z]?$")
 KIND_MARKS = (
@@ -120,7 +136,14 @@ def key_text(text):
     # straight after the box, once. "3x Booster Packs" and "+ 6x Booster Packs" keep their counts and marks.
     expanded = BOX_PACKS.sub(lambda m: f"{m.group(1)} " if 6 <= int(m.group(2)) <= 36 else m.group(0), expanded, count=1)
     expanded = COUNTS.sub(" ", expanded)
+    expanded = CHINESE_CODE.sub(lambda m: m.group(1).replace(" ", "."), expanded)
+    expanded = SHARED_CHINESE_CODE.sub(r"\1", expanded)
     return expanded
+
+
+def chinese_code(word):
+    """Whether a word of a key is a Simplified Chinese set code, as ``key_text`` spells them ("csv9.5")."""
+    return bool(CHINESE_CODE_WORD.match(word))
 
 
 def key_words(text):

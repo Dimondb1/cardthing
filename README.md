@@ -1662,9 +1662,9 @@ The home page opens with a short line above the headline (optional) and the
 headline, whose last sentence is shown in orange on a line of its own
 (`accent_last` in `web/templatetags/ripraptor.py`; a one-sentence headline
 stays on one line), then the search box, the latest shop price check, and
-"Find your game": a tile per game with its product count, four on a phone,
-three a row on a tablet and all six on one row on a computer, then "More
-games". Each tile shows the box art of one of the game's own products, the
+"Find your game": a tile per game with its product count, every game in one
+row that swipes sideways (two and a bit on a phone, so the next tile peeks
+in; five and a half on a computer), then "More games". Each tile shows the box art of one of the game's own products, the
 newest booster box with a picture, or else an elite trainer box, bundle and
 so on (`game_covers` in `web/views.py`), so no game logo is borrowed; a
 game with no pictures yet shows the booster box outline. After that come
@@ -1677,6 +1677,11 @@ set is on the Games page. Every product card in a row ends with the same
 "Compare prices" button.
 
 ### The raptor
+
+On the home page the masthead shows the logo's lettering alone
+(`web/static/img/logo-lettering.png`, cut from `logo.png`; cut it again if the
+logo changes) and the head stands beside the headline, so the page never
+shows the head twice. Every other page shows the whole logo.
 
 The head from the logo appears where it has something to say, and nowhere
 else. It is `web/static/img/raptor.png` drawn through a CSS mask, like the

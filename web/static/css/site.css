@@ -369,7 +369,6 @@ ul, ol { margin: 0; padding: 0; }
 
 /* Tiles: the games under the search box and the product types lower down */
 .tiles { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
-.tiles__extra { display: none; }
 .tile {
   display: grid; gap: 2px; height: 100%; padding: var(--space-4); border: 1px solid var(--color-line); border-radius: var(--radius-card);
   background: var(--color-paper); text-decoration: none; color: inherit;
@@ -393,11 +392,21 @@ ul, ol { margin: 0; padding: 0; }
 @media (hover: hover) { .tile--game .product-image img { transition: opacity var(--motion-normal), transform var(--motion-normal) var(--ease-out); } .tile--game:hover .product-image img { transform: scale(1.03); } }
 @media (min-width: 40rem) {
   .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .tiles__extra { display: block; }
   .tile--type { grid-template-columns: 3.25rem minmax(0, 1fr); column-gap: var(--space-3); }
 }
-/* Wide screens: every game on one row, however many there are. */
-@media (min-width: 60rem) { .tiles--games { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); } }
+/* The games: one row that swipes sideways, like the product rows, with the next tile peeking in so it is plain there
+   is more. Scrolled by the browser, so it works without JavaScript. */
+.tiles--games {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none;
+  padding: var(--space-1) var(--gutter) var(--space-3); margin: 0 calc(-1 * var(--gutter)); scroll-padding-inline: var(--gutter);
+}
+.tiles--games::-webkit-scrollbar { display: none; }
+.tiles--games .tiles__item { flex: 0 0 calc((100% - 2 * var(--space-3)) / 2.4); scroll-snap-align: start; }
+@media (min-width: 48rem) {
+  .tiles--games { margin: 0; padding-inline: 0; scroll-padding-inline: 0; }
+  .tiles--games .tiles__item { flex-basis: calc((100% - 3 * var(--space-3)) / 3.5); }
+}
+@media (min-width: 60rem) { .tiles--games .tiles__item { flex-basis: calc((100% - 5 * var(--space-3)) / 5.5); } }
 
 /* The watchlist card between the home page rows */
 .promo {

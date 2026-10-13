@@ -1102,7 +1102,9 @@ class HomeFootballTests(PageTestCase):
         response = self.client.get(reverse("web:home"))
         html = response.content.decode()
         tiles = html[html.index('class="tiles tiles--games"'):html.index("</ul>", html.index('class="tiles tiles--games"'))]
-        self.assertIn("/games/football/", tiles.split("tiles__extra")[0])
+        # Pinned: among the first tiles of the row, so it shows without swiping.
+        links = re.findall(r'href="(/games/[^"]+/)"', tiles)
+        self.assertIn("/games/football/", links[:4])
         # The football row moved off the home page; its game page lists the range.
         self.assertNotContains(response, "Football and sports cards")
         self.assertContains(self.client.get(football.get_absolute_url()), "Match Attax 2026/27 Mega Tin")
@@ -1852,6 +1854,32 @@ class RedesignTests(PageTestCase):
         # Every row card ends with the same button.
         featured = html[html.index('id="featured-title"'):]
         self.assertIn('<span class="trending__cta">Compare prices<span aria-hidden="true"> →</span></span>', featured)
+
+    def test_every_game_is_in_the_swipe_row_with_its_box_art(self):
+        from django.core.cache import cache
+
+        for n in range(8):
+            game = make_game(name=f"Game {n}", slug=f"game-{n}", search_aliases="")
+            make_product(make_set(game, name=f"Set {n}", slug=f"set-{n}", code=f"S{n}"), name=f"Game {n} Booster Box",
+                         slug=f"game-{n}-box", product_type="booster_box", image_url=f"https://img.example/{n}.png")
+        cache.clear()
+        html = self.client.get(reverse("web:home")).content.decode()
+        tiles = html[html.index('class="tiles tiles--games"'):html.index("</ul>", html.index('class="tiles tiles--games"'))]
+        # Nine games, not the first six: the row swipes, so none is cut.
+        self.assertEqual(tiles.count('class="tile tile--game"'), 9)
+        for n in range(8):
+            self.assertIn(f'src="https://img.example/{n}.png"', tiles)
+
+    def test_the_home_masthead_shows_the_lettering_and_the_hero_the_head(self):
+        home = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('src="/static/img/logo-lettering.png"', home)
+        self.assertNotIn('src="/static/img/logo.png"', home)
+        self.assertIn('class="mark mark--hero hero__mark"', home)
+        # Every other page keeps the whole logo.
+        for url in (reverse("web:deals"), self.etb.get_absolute_url()):
+            html = self.client.get(url).content.decode()
+            self.assertIn('src="/static/img/logo.png"', html)
+            self.assertNotIn("logo-lettering", html)
 
     def test_each_game_tile_shows_box_art_from_its_own_products(self):
         from django.core.cache import cache

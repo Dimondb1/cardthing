@@ -28,10 +28,10 @@
     <h2 id="games-title" class="section-head__title">{% copy "home.games.label" %}</h2>
     <a class="section-head__all" href="{% url 'web:games' %}">{% copy "home.games.more" %} <span aria-hidden="true">›</span></a>
   </div>
+  {# Every game, in a row that swipes sideways; each is shown by the box art of one of its own products, so the tiles are recognisable without borrowing any logo. #}
   <ul class="tiles tiles--games">
-    {% for game in games|slice:":6" %}
-    {# Each game is shown by the box art of one of its own products, so the tiles are recognisable without borrowing any logo. #}
-    <li class="tiles__item{% if forloop.counter > 4 %} tiles__extra{% endif %}"><a class="tile tile--game" href="{{ game.get_absolute_url }}"><span class="tile__cover" aria-hidden="true">{% if game.cover %}{% product_image game.cover "cover" %}{% else %}<span class="product-image product-image--cover">{% include "web/includes/placeholder.svg" with type="booster_box" %}</span>{% endif %}</span><span class="tile__name">{{ game.display_short }}</span><span class="tile__meta">{% copy_count "browse.count" game.product_count %}</span></a></li>
+    {% for game in games %}
+    <li class="tiles__item"><a class="tile tile--game" href="{{ game.get_absolute_url }}"><span class="tile__cover" aria-hidden="true">{% if game.cover %}{% product_image game.cover "cover" %}{% else %}<span class="product-image product-image--cover">{% include "web/includes/placeholder.svg" with type="booster_box" %}</span>{% endif %}</span><span class="tile__name">{{ game.display_short }}</span><span class="tile__meta">{% copy_count "browse.count" game.product_count %}</span></a></li>
     {% endfor %}
   </ul>
 </section>

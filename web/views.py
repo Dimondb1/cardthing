@@ -442,7 +442,7 @@ def home(request):
     )
     rank = {slug: i for i, slug in enumerate(PINNED_GAMES)}
     games.sort(key=lambda g: (rank.get(g.slug, len(PINNED_GAMES)), -g.product_count, g.name))
-    game_covers(games[:6])
+    game_covers(games)
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
     featured = home_lists()[0]
     return render(

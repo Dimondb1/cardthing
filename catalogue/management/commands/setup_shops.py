@@ -123,6 +123,16 @@ SHOPS = [
     ("tcg-box", "TCG Box", "https://tcgbox.co.uk/", S.SHOPIFY, "3.95", None,
      "Royal Mail Tracked 48: £2.95 for packs, £3.95 for 1 to 2 booster boxes, £5.49 for 3 to 6 (shipping "
      "policy page; the shop's banner says £2.99), no free threshold, read 13 Oct 2026"),
+    # Added at the owner's request for Union Arena: English boxes and decks (Collectors Kingdom, Transcendent
+    # Cards) and Japanese boxes (Attic Cards). All three also sell other games, which come in as usual.
+    ("collectors-kingdom", "Collectors Kingdom", "https://collectorskingdom.co.uk/", S.SHOPIFY, "4.49", "100",
+     "Standard £4.49, free (express) over £100 (shipping policy page; the basket check was refused), "
+     "read 13 Oct 2026"),
+    ("transcendent-cards", "Transcendent Cards", "https://transcendentcards.co.uk/", S.SHOPIFY, "4.50", None,
+     "Standard £4.50 (basket check); orders over £100 get reduced, not free, shipping (shipping policy "
+     "page), read 13 Oct 2026"),
+    ("attic-cards", "Attic Cards", "https://atticcards.co.uk/", S.SHOPIFY, "3.99", None,
+     "Standard £3.99 (basket check), no free threshold published, read 13 Oct 2026"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's

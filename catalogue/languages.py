@@ -51,6 +51,7 @@ FILTER = [("en", "English"), ("ja", "Japanese"), ("zh", "Chinese"), ("ko", "Kore
 OTHER = [code for code in NAMES if code not in ("ja", "ko", *CHINESE_FAMILY)]
 
 POKEMON, ONE_PIECE, FOOTBALL, MAGIC = "pokemon", "one-piece", "football", "magic-the-gathering"
+UNION_ARENA = "union-arena"
 
 
 def plain(text):
@@ -166,6 +167,8 @@ ASIAN_SET = re.compile(rf"{_B}(?:sc[1-3][ab]|ac[1-3][ab])(?:[\s-]?(?P<l>[ti]))?{
 INDONESIAN_NAMES = re.compile(r"\bbonds of destiny\b|\bpresence of champions\b")
 # One Piece's Simplified Chinese and Korean codes.
 ONE_PIECE_CODE = re.compile(r"(?<![\w.])(?:op|eb|prb)([ck])[\s-]?\d{1,2}(?![0-9])")
+# Union Arena's set codes say the edition: UA18BT is the Japanese release, UE18BT (and UEX) the English one.
+UNION_ARENA_JAPANESE = re.compile(r"(?<![\w.])ua\d{1,2}[\s-]?(?:bt|st)\b")
 
 # Kinds of product sold only in Japan.
 JAPANESE_KINDS = re.compile(
@@ -247,6 +250,8 @@ def stated_all(text, game="", loose=False):
         found += [(m.start(), "id") for m in INDONESIAN_NAMES.finditer(low)]
     if game == ONE_PIECE:
         found += [(m.start(), SIMPLIFIED if m.group(1) == "c" else KOREAN) for m in ONE_PIECE_CODE.finditer(low)]
+    if game == UNION_ARENA:
+        found += [(m.start(), "ja") for m in UNION_ARENA_JAPANESE.finditer(low)]
     seen = []
     for _, code in sorted(found):
         if code not in seen:

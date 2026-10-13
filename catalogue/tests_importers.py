@@ -611,9 +611,9 @@ class UnionArenaTests(TestCase):
     def test_shop_titles_are_union_arena(self):
         for title, kind, name in [
             ("Union Arena TCG: Hunter x Hunter [UE02BT] Booster Box", "booster_box", "Hunter x Hunter Booster Box"),
-            ("Union Arena TCG: Tokyo Ghoul UE18ST - Starter Deck", "deck", "Tokyo Ghoul UE18ST Starter Deck"),
+            ("Union Arena TCG: Tokyo Ghoul UE18ST - Starter Deck", "deck", "Tokyo Ghoul Starter Deck"),
             ("Union Arena - BLEACH Thousand-Year Blood War Starter Deck UE01ST - ENGLISH", "deck",
-             "BLEACH Thousand Year Blood War Starter Deck UE01ST"),
+             "BLEACH Thousand Year Blood War Starter Deck"),
             ("Union-Arena Hunter x Hunter Booster Box", "booster_box", "Hunter x Hunter Booster Box"),
         ]:
             with self.subTest(title=title):
@@ -623,6 +623,41 @@ class UnionArenaTests(TestCase):
         self.assertEqual(classify("Weiss Schwarz Hunter x Hunter Booster Box", price=Decimal("60")).game, "weiss-schwarz")
         self.assertIsNone(classify("Union Arena - Goddess of Victory: NIKKE - soda - UA18BT/NIK-1-081 (PSA 10 Graded Slab)",
                                    price=Decimal("149.95")))
+
+    def test_two_shops_spellings_of_one_box_give_one_name(self):
+        """Titles as Collectors Kingdom and Transcendent Cards wrote them on 13 Oct 2026."""
+        from .matching import match_key
+
+        for (a, kind_a), (b, kind_b), name in [
+            (("Jujutsu Kaisen - [UE03BT] - Union Arena English Version Booster Box", "Booster Box"),
+             ("Union Arena TCG UE03BT Jujutsu Kaisen Booster Box", "Booster Box"), "Jujutsu Kaisen Booster Box"),
+            (("Code Geass Lelouch Of The Rebellion - [UE04BT] - Union Arena English Version Booster Box", "Booster Box"),
+             ("Union Arena TCG UE04BT CODE GEASS: Lelouch of the Rebellion (16 Booster Packs)", "Booster Box"), None),
+            (("Hunter X Hunter Vol 1 Union Arena English Version Booster Box", "Booster Box"),
+             ("Union Arena TCG: Hunter x Hunter [UE02BT] Booster Box", "Booster Box"), None),
+            (("Demon Slayer: Kimetsu no Yaiba Vol.2 - [UEX05BT] - Union Arena English Version Booster Box", "Booster Box"),
+             ("Union Arena TCG UEX05T Demon Slayer: Kimetsu no Yaiba Vol.2 (16 Booster Packs)", "Booster Box"), None),
+        ]:
+            with self.subTest(a=a):
+                first, second = classify(a, shop_type=kind_a, price=Decimal("80")), classify(b, shop_type=kind_b, price=Decimal("80"))
+                self.assertEqual(match_key(first.name), match_key(second.name))
+                for sealed in (first, second):
+                    self.assertNotRegex(sealed.name, r"(?i)union arena|english version|\bU[AE]X?\d")
+                if name:
+                    self.assertEqual(first.name, name)
+        # A code-only title gets its kind back, and the second volume never meets the first.
+        self.assertEqual(classify("Union Arena TCG UE04BT CODE GEASS: Lelouch of the Rebellion (16 Booster Packs)",
+                                  shop_type="Booster Box", price=Decimal("80")).name,
+                         "CODE GEASS: Lelouch of the Rebellion Booster Box")
+        self.assertNotEqual(match_key("Hunter X Hunter Vol 2 Booster Box"), match_key("Hunter x Hunter Booster Box"))
+
+    def test_a_japanese_code_is_japanese_without_the_word(self):
+        from .languages import language_of
+
+        self.assertEqual(language_of("Union Arena Chainsaw Man UA53BT Booster Box", "union-arena"), "ja")
+        self.assertEqual(language_of("Union Arena Chainsaw Man UE53BT Booster Box", "union-arena"), "")
+        sealed = classify("Union Arena Chainsaw Man UA53BT Booster Box", shop_type="Booster Box", price=Decimal("80"))
+        self.assertEqual(sealed.name, "Chainsaw Man Booster Box (Japanese)")
 
     def test_the_requested_products_load_stay_and_take_shop_prices(self):
         from io import StringIO
@@ -694,6 +729,13 @@ class SetupShopsTests(TestCase):
         self.assertEqual(Retailer.objects.count(), len(SHOPS) + 1)
         self.assertEqual(Retailer.objects.get(website="https://totalcards.net/").name, "Total Cards")
         self.assertEqual(Retailer.objects.get(name="Gathering Games").delivery_cost, Decimal("3.99"))
+        # The Union Arena shops the owner asked for, with the delivery read from each shop.
+        self.assertEqual(
+            {r.slug: (r.source_type, r.delivery_cost, r.free_delivery_over)
+             for r in Retailer.objects.filter(slug__in=["collectors-kingdom", "transcendent-cards", "attic-cards"])},
+            {"collectors-kingdom": (Retailer.Source.SHOPIFY, Decimal("4.49"), Decimal("100")),
+             "transcendent-cards": (Retailer.Source.SHOPIFY, Decimal("4.50"), None),
+             "attic-cards": (Retailer.Source.SHOPIFY, Decimal("3.99"), None)})
         tcg_box = Retailer.objects.get(slug="tcg-box")
         self.assertEqual((tcg_box.source_type, tcg_box.source_url, tcg_box.delivery_cost),
                          (Retailer.Source.SHOPIFY, "https://tcgbox.co.uk/", Decimal("3.95")))

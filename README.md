@@ -1552,6 +1552,16 @@ What counts, in order:
 "Chinese" with something that says which Chinese ("Chinese Gem Pack Vol 4",
 "(csv9C) Slim Booster Box Chinese") is that one, here Simplified Chinese.
 
+Union Arena's set codes say the edition: UA53BT is the Japanese release,
+UE53BT (and UEX) the English one, so a title with only a UA code is
+Japanese. Its names drop the game's name, "English Version", the set code
+and "Vol 1" (`union_arena_name` in `catalogue/classify.py`), so "Jujutsu
+Kaisen Union Arena English Version Booster Box" at Collectors Kingdom and
+"UE03BT Jujutsu Kaisen Booster Box" at Transcendent Cards are one product.
+A title that is only a code and a set gets its kind from the code (BT a
+booster box, ST a starter deck). Collectors Kingdom, Transcendent Cards and
+Attic Cards were added on 13 Oct 2026 for Union Arena.
+
 Football boxes are read by language words and scripts only: JPN, KOR and
 GER are team codes there. A title that states two languages, or joins a
 Japanese-only set to another ("Destined Rivals / Glory of Team Rocket"), is

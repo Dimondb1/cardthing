@@ -314,6 +314,33 @@ def language_of(title, game="", loose=False):
     return languages.name(code) if code else ""
 
 
+# Union Arena titles carry the game's name, "English Version" and the set code anywhere in them
+# ("Jujutsu Kaisen Union Arena English Version Booster Box", "UE03BT Jujutsu Kaisen Booster Box"). English is
+# the default and the language is read from the title before this, so none of it belongs in the name.
+# "Vol 1" goes too: the first volume of a set is its plain name ("Hunter x Hunter" and "Hunter x Hunter Vol 1").
+UNION_ARENA_NOISE = re.compile(
+    r"\bunion[\s-]*arena\b(?:\s+(?:tcg|trading card game|card game))?|\benglish\s+ver(?:sion|\.)?(?!\w)"
+    r"|\bvol(?:ume)?\.?\s*1(?!\d)\b", re.I)
+# UE02BT, UA53BT, UE24ST, and an EX set's UEX01BT (a shop's slip "UEX05T" too). An EX code goes only when the
+# name says its volume, since the code is otherwise all that tells it from the first set.
+UNION_ARENA_CODE = re.compile(r"\bu(?:a|e|ex)\d{1,2}\s?(st|b?t)\b\s*:?", re.I)
+KIND_WORD = re.compile(r"\b(?:booster|deck|pack|box|bundle|display|case)\b", re.I)
+
+
+def union_arena_name(name):
+    """A Union Arena name without the game's name, "English Version" or its set code. A title that is only a
+    code and a set ("UE04BT CODE GEASS: Lelouch of the Rebellion") gets its kind from the code."""
+    codes = [m.group(1).lower() for m in UNION_ARENA_CODE.finditer(name)]
+    name = UNION_ARENA_NOISE.sub(" ", name)
+    has_volume = re.search(r"\bvol", name, re.I)
+    name = UNION_ARENA_CODE.sub(lambda m: m.group(0) if m.group(0).lower().startswith("uex") and not has_volume else " ",
+                                name)
+    name = re.sub(r"\s+", " ", name).strip(" :,-")
+    if codes and not KIND_WORD.search(name):
+        name = f"{name} {'Starter Deck' if codes[0] == 'st' else 'Booster Box'}"
+    return name
+
+
 def clean_name(title, game=""):
     code = languages.language_of(title or "", game)
     name = tidy_name(title)
@@ -326,6 +353,8 @@ def clean_name(title, game=""):
     name = re.sub(r"\s*[-–|]\s*", " ", name)  # shop-style " - " separators become spaces
     name = re.sub(r"\s*:\s*", ": ", name)
     name = re.sub(r"\s+", " ", name).strip(" :,-")
+    if game == "union-arena":
+        name = union_arena_name(name)
     name = name.replace("Elite Trainer Box", "Elite Trainer Box").replace(" Etb", " ETB").replace(" ETB", " Elite Trainer Box")
     # A language edition is a different product; keep it in the name in words even when the shop wrote
     # it in brackets, which are otherwise noise, or gave only a set code ("151 (sv2a)" is Japanese).

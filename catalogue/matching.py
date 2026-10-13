@@ -62,7 +62,7 @@ LOOSE = STOP | {"edition", "reprint", "reprinted", "sealed", "new", "official", 
                 "structure", "starter", "theme", "preconstructed", "precon", "box", "boxes", "set", "sets",
                 "pack", "packs", "yugioh", "yu", "gi", "oh", "digimon", "riftbound",
                 "star", "wars", "flesh", "blood", "tm", "vol", "volume", "simplified"}
-PHRASES = ("universes beyond", "trading card game", "card game", "dragon ball super", "dragon ball",
+PHRASES = ("universes beyond", "trading card game", "card game", "dragon ball super", "dragon ball", "union arena",
            "sealed tcg collection")
 # Series prefixes shops add or drop, with any set number after them:
 # "Scarlet & Violet 8 Surging Sparks", "SV8.5 Prismatic Evolutions", "SWSH Evolving Skies".

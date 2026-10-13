@@ -1849,8 +1849,8 @@ class RedesignTests(PageTestCase):
         self.assertIn('<span class="tile__name">Collection box</span>', types)
         self.assertIn('class="placeholder"', types)
         self.assertNotIn("type=tin", types)   # a product of a hidden game is not listed, so it is not counted
-        self.assertIn('<a class="promo" href="/watchlist/">', html)
-        self.assertIn("Keep an eye on your next rip", html)
+        self.assertIn('<a class="poster poster--watch" href="/watchlist/">', html)
+        self.assertIn("Keep an eye on it.", html)
         # Every row card ends with the same button.
         featured = html[html.index('id="featured-title"'):]
         self.assertIn('<span class="trending__cta">Compare prices<span aria-hidden="true"> →</span></span>', featured)
@@ -1870,16 +1870,30 @@ class RedesignTests(PageTestCase):
         for n in range(8):
             self.assertIn(f'src="https://img.example/{n}.png"', tiles)
 
-    def test_the_home_masthead_shows_the_lettering_and_the_hero_the_head(self):
+    def test_the_home_page_keeps_the_whole_logo_and_the_raptor_panels(self):
         home = self.client.get(reverse("web:home")).content.decode()
-        self.assertIn('src="/static/img/logo-lettering.png"', home)
-        self.assertNotIn('src="/static/img/logo.png"', home)
-        self.assertIn('class="mark mark--hero hero__mark"', home)
-        # Every other page keeps the whole logo.
-        for url in (reverse("web:deals"), self.etb.get_absolute_url()):
-            html = self.client.get(url).content.decode()
-            self.assertIn('src="/static/img/logo.png"', html)
-            self.assertNotIn("logo-lettering", html)
+        self.assertIn('src="/static/img/logo.png"', home)
+        self.assertNotIn("hero__mark", home)
+        # The owner's two panels: big capitals with the last sentence on its own line, the head cropped by the edge.
+        deals = home[home.index('class="poster poster--deals"'):home.index("</a>", home.index('class="poster poster--deals"'))]
+        self.assertIn('<a class="poster poster--deals" href="/deals/">', home)
+        self.assertIn('Prices. <span class="poster__line">Dropped.</span>', deals)
+        self.assertIn("Find your next rip for less.", deals)
+        self.assertIn("Explore deals", deals)
+        self.assertIn('<span class="mark poster__mark" aria-hidden="true"></span>', deals)
+        watch = home[home.index('class="poster poster--watch"'):home.index("</a>", home.index('class="poster poster--watch"'))]
+        self.assertIn("Keep an eye on it.", watch)
+        self.assertIn("Save products. Watch the price.", watch)
+        self.assertIn("View watchlist", watch)
+        self.assertIn('<span class="mark poster__mark" aria-hidden="true"></span>', watch)
+
+    def test_a_search_with_no_results_says_no_luck_yet(self):
+        html = self.client.get(reverse("web:search"), {"q": "charizard"}).content.decode()
+        card = html[html.index('class="no-luck"'):]
+        self.assertIn('<h1 class="no-luck__title">No luck. Yet.</h1>', card)
+        self.assertIn("No products match ‘charizard’", card)
+        self.assertIn("Try the set name or a shorter search.", card)
+        self.assertIn(f'href="{reverse("web:games")}">Browse games', card)
 
     def test_each_game_tile_shows_box_art_from_its_own_products(self):
         from django.core.cache import cache
@@ -1958,6 +1972,7 @@ class RedesignTests(PageTestCase):
         from web.templatetags.ripraptor import accent_last
 
         self.assertEqual(accent_last("Bad prices. Binned."), 'Bad prices. <span class="hero__accent">Binned.</span>')
+        self.assertEqual(accent_last("Prices. Dropped.", "poster__line"), 'Prices. <span class="poster__line">Dropped.</span>')
         self.assertEqual(accent_last("Better prices"), "Better prices")
         self.assertEqual(accent_last("One. Two. Three."), 'One. Two. <span class="hero__accent">Three.</span>')
         self.assertEqual(accent_last("A <b>x</b>. B."), 'A &lt;b&gt;x&lt;/b&gt;. <span class="hero__accent">B.</span>')
@@ -2037,8 +2052,7 @@ class RaptorMarkTests(PageTestCase):
 
     def test_the_raptor_stands_where_it_has_something_to_say(self):
         home = self.client.get(reverse("web:home")).content.decode()
-        self.assertIn('<span class="mark mark--hero hero__mark" aria-hidden="true"></span>', home)
-        self.assertIn('<span class="mark mark--md mark--lean promo__mark" aria-hidden="true"></span>', home)
+        self.assertEqual(home.count('<span class="mark poster__mark" aria-hidden="true"></span>'), 2)
         # Something went wrong: the ink head with a question mark.
         self.assertContains(self.client.get(reverse("web:search"), {"q": "nothing matches this"}), self.PUZZLED)
         self.assertContains(self.client.get("/no-such-page/"), self.PUZZLED, status_code=404)

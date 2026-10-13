@@ -252,14 +252,28 @@ ENTRIES = [
     ),
     Entry(
         "home.watch.title", H, "Watchlist card heading",
-        "Keep an eye on your next rip",
-        "Heading on the home page card that leads to the watchlist.",
+        "Keep an eye on it.",
+        "Big capitals on the dark home page card that leads to the watchlist, beside the raptor. A second sentence "
+        "goes on its own line. Keep it short: it wraps at a few words on a phone.",
     ),
     Entry(
         "home.watch.body", T, "Watchlist card text",
-        "Save products to your watchlist and see how their prices have moved since.",
+        "Save products. Watch the price.",
         "One line under the watchlist card heading.",
     ),
+    Entry("home.watch.button", B, "Watchlist card button", "View watchlist", "The button on the watchlist card."),
+    Entry(
+        "home.dropped.title", H, "Deals panel heading",
+        "Prices. Dropped.",
+        "Big capitals on the orange home page panel that leads to the deals page, beside the raptor. The last "
+        "sentence goes on its own line. Keep each sentence to a word or two.",
+    ),
+    Entry(
+        "home.dropped.body", T, "Deals panel text",
+        "Find your next rip for less.",
+        "One line under the deals panel heading.",
+    ),
+    Entry("home.dropped.button", B, "Deals panel button", "Explore deals", "The button on the deals panel."),
     Entry(
         "home.types.title", H, "Browse by product heading",
         "Browse by product",
@@ -409,17 +423,22 @@ ENTRIES = [
         placeholders=("count",),
     ),
     Entry(
-        "browse.no_results.title", H, "No results heading",
+        "browse.no_results.title", H, "No results line",
         "No products match ‘{query}’",
-        "Heading when a search finds nothing.",
+        "Under ‘No luck. Yet.’ when a search finds nothing, and the message in the quick results as you type.",
         placeholders=("query",),
     ),
     Entry(
         "browse.no_results.body", P, "No results help",
-        "Check the spelling or try fewer words. Searching for the set name on its own "
-        "usually works.",
-        "Help text under the no results heading, above links to each game.",
+        "Try the set name or a shorter search.",
+        "Help text on the no results card, above the Browse games button and links to each game.",
     ),
+    Entry(
+        "browse.no_results.headline", H, "No results heading",
+        "No luck. Yet.",
+        "Big capitals beside the puzzled raptor when a search finds nothing.",
+    ),
+    Entry("browse.no_results.button", B, "No results button", "Browse games", "The button on the no results card, to the list of games."),
     Entry(
         "browse.no_filtered_results", T, "No results with filters",
         "Nothing matches these filters.",

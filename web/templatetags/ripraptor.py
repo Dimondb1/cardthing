@@ -18,16 +18,17 @@ SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 @register.filter
-def accent_last(text):
+def accent_last(text, css="hero__accent"):
     """The headline with its last sentence on a line of its own, in the brand colour.
 
-    "Bad prices. Binned." becomes the first sentence, then the second in a span.
-    A headline of one sentence is left as it is, so the owner's wording decides.
+    "Bad prices. Binned." becomes the first sentence, then the second in a span. ``css`` names the span's class
+    ("poster__line" on the raptor panels). A headline of one sentence is left as it is, so the owner's wording
+    decides.
     """
     parts = SENTENCE_END.split(str(text or "").strip())
     if len(parts) < 2:
         return text
-    return format_html('{} <span class="hero__accent">{}</span>', " ".join(parts[:-1]), parts[-1])
+    return format_html('{} <span class="{}">{}</span>', " ".join(parts[:-1]), css, parts[-1])
 
 
 def _money(value):

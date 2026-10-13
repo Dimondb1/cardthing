@@ -1678,27 +1678,34 @@ set is on the Games page. Every product card in a row ends with the same
 
 ### The raptor
 
-On the home page the masthead shows the logo's lettering alone
-(`web/static/img/logo-lettering.png`, cut from `logo.png`; cut it again if the
-logo changes) and the head stands beside the headline, so the page never
-shows the head twice. Every other page shows the whole logo.
+The head from the logo appears where it has something to say, as the owner
+drew it, and never on a product page, beside section headings or in the
+footer. The whole logo stays in the masthead on every page.
 
-The head from the logo appears where it has something to say, and nowhere
-else. It is `web/static/img/raptor.png` drawn through a CSS mask, like the
-search and bag icons, so it takes any token colour at any size. That file is
-the head from the 512px app icon with the white removed, sharper than
-`mark.png`, which stays the source `make_icons` builds the icons from. Orange beside the home page
-headline (it lifts a little while the search box has focus) and leaning in
-from the left edge of the watchlist card, because it points you somewhere.
-Ink above the heading where it looked and found nothing: a search with no
-results, a broken link, the empty watchlist and the end of the swipe deck,
-with an orange question mark on the two where something went wrong. It never
-appears on a product page, beside section headings or in the footer. Sizes
-are the `--mark-*` tokens: `--mark-sm` is the floor, below which the crest
-smudges, and `--mark-hero` is capped at 12rem while the mark is a bitmap.
-A dark poster band and an orange band behind the hero were weighed and
-left out: orange means act on this site, and a dark band would make the
-home page a different site from the product pages people land on.
+- "Prices. Dropped.": an orange panel on the home page after Featured
+  deals, leading to the Deals page, with the head in paper on the right.
+- "Keep an eye on it.": a dark card leading to the watchlist, with the head
+  in orange coming in from the left.
+- "No luck. Yet.": a search that finds nothing shows a card with the head in
+  ink and an orange question mark, the search it tried, a Browse games button
+  and a link to each game.
+- In ink above the heading on a broken link (with the question mark), the
+  empty watchlist and the end of the swipe deck.
+
+The two panels use the owner's poster style: Archivo's condensed heavy
+capitals (`--text-poster`, `--stretch-poster`, `--weight-poster`) and the head
+cropped by the panel's edge, hung from the top on wider screens so its eye
+always shows. Their wording is under Home page in Site wording; the last
+sentence of each heading goes on its own line. The orange panel is the one
+place orange is a surface rather than a button or link, at the owner's request.
+
+The head is `web/static/img/raptor.png` (the head from the 512px app icon
+with the white removed) drawn through a CSS mask, like the search and bag
+icons, so it takes any token colour at any size; the panels use
+`raptor-lg.png`, the same shape enlarged three times with its edge
+re-sharpened, so it stays crisp at panel size. `mark.png` stays the source
+`make_icons` builds the home screen icons from. Sizes are the `--mark-*`
+tokens; `--mark-sm` is the floor, below which the crest smudges.
 
 ### When a price was checked
 

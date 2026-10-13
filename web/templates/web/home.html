@@ -3,15 +3,9 @@
 
 {% block content %}
 <section class="hero" aria-labelledby="hero-title">
-  {# The words with the raptor beside them: it is the one doing the binning. Decorative, so hidden from screen readers. #}
-  <div class="hero__top">
-    <div class="hero__copy">
-      {% copy "home.hero.eyebrow" as eyebrow %}{% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
-      {% copy "home.hero.title" as title %}<h1 id="hero-title" class="hero__title">{{ title|accent_last }}</h1>
-      {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
-    </div>
-    <span class="mark mark--hero hero__mark" aria-hidden="true"></span>
-  </div>
+  {% copy "home.hero.eyebrow" as eyebrow %}{% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
+  {% copy "home.hero.title" as title %}<h1 id="hero-title" class="hero__title">{{ title|accent_last }}</h1>
+  {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
   </div>
@@ -84,6 +78,19 @@
 </section>
 {% endif %}
 
+{# The raptor panels follow the owner's design: big capitals, the head cropped by the panel's edge. The whole panel
+   is the link, so it works with JavaScript off; the head is decoration, hidden from screen readers. #}
+<section class="home-section" aria-labelledby="dropped-title">
+  <a class="poster poster--deals" href="{% url 'web:deals' %}">
+    <span class="poster__body">
+      {% copy "home.dropped.title" as dropped %}<strong id="dropped-title" class="poster__title">{{ dropped|accent_last:"poster__line" }}</strong>
+      <span class="poster__text">{% copy "home.dropped.body" %}</span>
+      <span class="poster__button">{% copy "home.dropped.button" %} <span aria-hidden="true">→</span></span>
+    </span>
+    <span class="mark poster__mark" aria-hidden="true"></span>
+  </a>
+</section>
+
 {% if latest %}
 <section class="home-section" aria-labelledby="latest-title">
   <div class="section-head">
@@ -118,10 +125,13 @@
 {% endif %}
 
 <section class="home-section" aria-labelledby="watch-title">
-  <a class="promo" href="{% url 'web:watchlist' %}">
-    <span class="mark mark--md mark--lean promo__mark" aria-hidden="true"></span>
-    <span class="promo__body"><strong id="watch-title" class="promo__title">{% copy "home.watch.title" %}</strong><span class="promo__text">{% copy "home.watch.body" %}</span></span>
-    <span class="promo__arrow" aria-hidden="true">→</span>
+  <a class="poster poster--watch" href="{% url 'web:watchlist' %}">
+    <span class="mark poster__mark" aria-hidden="true"></span>
+    <span class="poster__body">
+      {% copy "home.watch.title" as watch %}<strong id="watch-title" class="poster__title">{{ watch|accent_last:"poster__line" }}</strong>
+      <span class="poster__text">{% copy "home.watch.body" %}</span>
+      <span class="poster__button">{% copy "home.watch.button" %} <span aria-hidden="true">→</span></span>
+    </span>
   </a>
 </section>
 

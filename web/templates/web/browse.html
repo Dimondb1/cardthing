@@ -6,15 +6,18 @@
 {% if no_matches %}
 {# A plain search found nothing: lead with that and offer a way forward. #}
 <div class="browse-head browse-head--empty">
-  <div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span><span class="empty-mark__ask">?</span></div>
-  <h1 class="browse-head__title">{% copy "browse.no_results.title" query=query %}</h1>
-  <div class="prose">{% copy "browse.no_results.body" %}</div>
-  {% if games %}
-  <p class="game-links">
-    <span class="game-links__label">{% copy "home.games.label" %}</span>
-    {% for item in games %}<a href="{{ item.get_absolute_url }}">{{ item.display_short }}</a>{% endfor %}
-  </p>
-  {% endif %}
+  <div class="no-luck">
+    <div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span><span class="empty-mark__ask">?</span></div>
+    <h1 class="no-luck__title">{% copy "browse.no_results.headline" %}</h1>
+    <p class="no-luck__query">{% copy "browse.no_results.title" query=query %}</p>
+    <div class="prose">{% copy "browse.no_results.body" %}</div>
+    <p><a class="button" href="{% url 'web:games' %}">{% copy "browse.no_results.button" %} <span aria-hidden="true">→</span></a></p>
+    {% if games %}
+    <p class="game-links">
+      {% for item in games %}<a href="{{ item.get_absolute_url }}">{{ item.display_short }}</a>{% endfor %}
+    </p>
+    {% endif %}
+  </div>
 </div>
 {% else %}
 <div class="browse-head">

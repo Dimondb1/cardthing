@@ -15,7 +15,7 @@ from django.db.models import Count, F, Max, Q, Sum
 from django.utils import timezone
 
 from . import checks, geo
-from .importers import STOPPED
+from .importers import STOPPED, section_handles
 from .pricing import drop_if_locked, retry_locked
 from .models import (
     DailyPageView, DailySearch, DailyVisitor, ImportRun, Listing, OutboundClick, Product, Retailer, StockAlert, WorkerState,
@@ -409,9 +409,112 @@ def report(days=30):
         "catalogue": catalogue_stats,
         "pages_per_visitor": round(total_views / total_visitors, 1) if total_visitors else 0,
         "ebay": ebay_coverage(),
+        "earning": earning_share(),
+        "section_shops": section_shops(),
+        "left_out": left_out(),
     }
     data["improvements"] = improvements(data)
     return data
+
+
+def earning_share():
+    """How many products a visitor can buy have a shop that pays us as their cheapest, the same order the
+    product pages use, and the shops that are cheapest most often without paying. Clicks follow the
+    cheapest price, so this is what the affiliate programmes are worth."""
+    earning_ids = set(
+        Retailer.objects.filter(
+            Q(affiliate_url_template__gt="") | Q(source_type__in=[Retailer.Source.AMAZON, Retailer.Source.EBAY])
+        ).values_list("pk", flat=True)
+    )
+    best = {}
+    rows = (
+        Listing.objects.buyable()
+        .order_by("product_id", "-delivery_known", "delivered_price", "retailer__name")
+        .values_list("product_id", "retailer_id", "retailer__name")
+    )
+    for product_id, retailer_id, name in rows:
+        best.setdefault(product_id, (retailer_id, name))
+    total = len(best)
+    paying = sum(1 for retailer_id, _ in best.values() if retailer_id in earning_ids)
+    unpaid = {}
+    for retailer_id, name in best.values():
+        if retailer_id not in earning_ids:
+            unpaid[name] = unpaid.get(name, 0) + 1
+    return {
+        "total": total, "paying": paying, "share": round(100 * paying / total) if total else 0,
+        "unpaid": sorted(unpaid.items(), key=lambda item: (-item[1], item[0]))[:10],
+    }
+
+
+def section_shops():
+    """Shops read from some of their collections rather than the whole shop (Zatu): which collections,
+    how many of their products we list, and how many found outside those collections are read one by one."""
+    shops = list(
+        Retailer.objects.filter(is_active=True, source_type=Retailer.Source.SHOPIFY).exclude(collection="").order_by("name")
+    )
+    ids = [retailer.pk for retailer in shops]
+    listed = dict(
+        Listing.objects.filter(retailer_id__in=ids, is_active=True)
+        .values_list("retailer_id").annotate(n=Count("id")).values_list("retailer_id", "n")
+    )
+    buyable = dict(
+        Listing.objects.buyable().filter(retailer_id__in=ids)
+        .values_list("retailer_id").annotate(n=Count("id")).values_list("retailer_id", "n")
+    )
+    return [
+        {"name": retailer.name, "slug": retailer.slug, "sections": section_handles(retailer),
+         "listed": listed.get(retailer.pk, 0), "buyable": buyable.get(retailer.pk, 0),
+         "extras": len((retailer.extra_products or "").split()), "last_ok": retailer.last_ok_at}
+        for retailer in shops
+    ]
+
+
+# The line a read keeps for an item it left out: "title [barcode, or no barcode] link".
+LEFT_OUT_LINE = re.compile(r"^(?P<title>.+) \[(?:no barcode|\d{8,14})\] (?P<url>https?://\S+)$")
+
+
+def left_out(limit=40):
+    """Items shops sell that look like a sealed product of a game we list but were not listed, from each
+    shop's latest good read: a kind of product the rules do not know yet ("Illustration Box"), or one that
+    is ours by its name but was turned away by the shop's category, its price or the matching. What the
+    rules leave out on purpose (cases of boxes, sleeves, single cards, figures) is not counted. Cached for
+    an hour against the runs it read, since a big shop's list runs to thousands of lines."""
+    from django.core.cache import cache
+
+    from .classify import NOT_SEALED, VARIANT_MENU, classify, find_game, find_type
+
+    latest = {}
+    runs = (
+        ImportRun.objects.filter(error="", note="", finished_at__isnull=False, retailer__is_active=True)
+        .exclude(unmatched="").order_by("retailer_id", "-started_at").values_list("pk", "retailer_id")
+    )
+    for pk, retailer_id in runs:
+        latest.setdefault(retailer_id, pk)
+    key = "insights:left-out:" + hashlib.sha1(",".join(map(str, sorted(latest.values()))).encode()).hexdigest()
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    items, by_shop = [], {}
+    for run in ImportRun.objects.filter(pk__in=latest.values()).select_related("retailer").order_by("retailer__name"):
+        for line in run.unmatched.splitlines():
+            found = LEFT_OUT_LINE.match(line)
+            if not found:
+                continue
+            title = found.group("title")
+            if not find_game(title) or NOT_SEALED.search(title) or VARIANT_MENU.search(title):
+                continue
+            if classify(title) is not None:
+                why = "ours by name, turned away by the shop's category, price or the matching"
+            elif find_type(title) is None:
+                why = "a kind of product the rules do not know"
+            else:
+                why = "left out by another rule"
+            by_shop[run.retailer.name] = by_shop.get(run.retailer.name, 0) + 1
+            if len(items) < limit:
+                items.append({"shop": run.retailer.name, "title": title, "url": found.group("url"), "why": why})
+    result = {"count": sum(by_shop.values()), "by_shop": sorted(by_shop.items(), key=lambda item: -item[1]), "items": items}
+    cache.set(key, result, 3600)
+    return result
 
 
 def ebay_coverage():
@@ -599,6 +702,21 @@ def improvements(data):
                 "Search is the traffic that grows on its own. In Search Console, request indexing for the home, "
                 "deals and top product pages, and check Pages for anything Google refuses.",
                 "https://search.google.com/search-console", "Search Console")
+
+    earning = data.get("earning")
+    if earning and earning["total"] and earning["share"] < 60 and earning["unpaid"]:
+        top = ", ".join(f"{name} ({n})" for name, n in earning["unpaid"][:4])
+        add(85, f"{earning['share']}% of products in stock have a paying shop as cheapest",
+            f"{earning['paying']} of {earning['total']}. Clicks follow the cheapest price, so these shops take the "
+            f"clicks most often without paying you: {top}. Joining their programmes earns on them.",
+            "/admin/catalogue/retailer/", "Shops")
+
+    left = data.get("left_out")
+    if left and left["count"]:
+        shops = ", ".join(f"{name} ({n})" for name, n in left["by_shop"][:4])
+        add(62, f"{plural(left['count'], 'item looks', 'items look')} sealed but {'was' if left['count'] == 1 else 'were'} left out",
+            f"Shops sell them but the rules did not take them: {shops}. The list below shows each with its link; "
+            "a kind the rules do not know can be added, and one turned away by mistake can be fixed.")
 
     if data["empty_searches"]:
         top = ", ".join(f"'{s['query']}'" for s in data["empty_searches"][:5])

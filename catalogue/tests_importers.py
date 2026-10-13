@@ -59,12 +59,94 @@ class ShopifyTests(TestCase):
         offers = list(shopify_offers(self.retailer, fetch=fetch))
         self.assertEqual([o.ean for o in offers], ["0820650851230"])
         self.assertTrue(any("/collections/trading-card-games/products.json" in u for u in asked))
-        self.assertFalse(any(u.startswith("https://harbour.example/products.json") for u in asked))
-        # setup_shops gives Zatu its collection without touching a shop that has one.
-        zatu = make_retailer("Zatu Games", slug="zatu-games", website="https://zatu.com/", source_type=Retailer.Source.SHOPIFY, source_url="https://zatu.com/")
+        # Of the whole shop, only its newest products are looked at, never every page.
+        whole = [u for u in asked if u.startswith("https://harbour.example/products.json")]
+        self.assertTrue(whole)
+        self.assertTrue(all(int(u.rsplit("page=", 1)[1]) <= 2 for u in whole))
+        # setup_shops gives Zatu its collections, and adds to the earlier list, but keeps one changed in admin.
+        zatu = make_retailer("Zatu Games", slug="zatu-games", website="https://zatu.com/", source_type=Retailer.Source.SHOPIFY,
+                             source_url="https://zatu.com/", collection="trading-card-games")
         call_command("setup_shops", stdout=StringIO())
         zatu.refresh_from_db()
-        self.assertEqual(zatu.collection, "trading-card-games")
+        self.assertEqual(zatu.collection, "trading-card-games top-5000-trading-card-games football")
+        Retailer.objects.filter(pk=zatu.pk).update(collection="cards-only")
+        call_command("setup_shops", stdout=StringIO())
+        zatu.refresh_from_db()
+        self.assertEqual(zatu.collection, "cards-only")
+
+    def test_new_products_outside_the_collections_are_found_and_kept(self):
+        """Zatu files some card products outside its card collections (the Topps tin was in Football only)."""
+        self.retailer.collection = "cards football"
+        self.retailer.save()
+        box = {"handle": "box", "title": "Pokemon TCG: Surging Sparks Booster Box", "product_type": "Booster Boxes", "tags": [],
+               "variants": [{"price": "129.99", "available": True}]}
+        tin = {"handle": "tin", "title": "Topps Chrome Premier League Tin 2026", "product_type": "Trading Card Games", "tags": [],
+               "vendor": "Topps", "variants": [{"price": "23.55", "available": True}]}
+        jigsaw = {"handle": "jigsaw", "title": "Pokemon 1000 Piece Jigsaw", "product_type": "Puzzles", "tags": [],
+                  "variants": [{"price": "14.99", "available": True}]}
+        state = {"newest": [box, tin, jigsaw], "tin_js": 200}
+
+        def fetch(url):
+            if "/collections/cards/products.json" in url and url.endswith("page=1"):
+                return shopify_page([box])
+            if "/collections/football/products.json" in url and url.endswith("page=1"):
+                return shopify_page([box])   # in two collections: read once
+            if url.startswith("https://harbour.example/products.json") and url.endswith("page=1"):
+                return shopify_page(state["newest"])
+            if url.endswith("/products/tin.js"):
+                if state["tin_js"] == 404:
+                    raise ImportError_(f"Could not fetch {url}: HTTP Error 404: Not Found")
+                if state["tin_js"] == 429:
+                    raise ImportError_(f"Could not fetch {url}: HTTP Error 429: Too Many Requests")
+                return json.dumps({"handle": "tin", "title": tin["title"], "type": tin["product_type"], "vendor": "Topps", "tags": [],
+                                   "images": ["//cdn.example/tin.jpg"],
+                                   "variants": [{"id": 1, "title": "Default Title", "price": 2355, "available": True}]}).encode()
+            if "products.json" in url:
+                return shopify_page([])
+            return b"{}"
+
+        def urls():
+            return sorted(o.url for o in shopify_offers(self.retailer, fetch=fetch))
+
+        # Found among the newest products and kept; the jigsaw is not ours.
+        self.assertEqual(urls(), ["https://harbour.example/products/box", "https://harbour.example/products/tin"])
+        self.retailer.refresh_from_db()
+        self.assertEqual(self.retailer.extra_products, "tin")
+        # A week on it is no longer among the newest, so it is read on its own, at its own price.
+        state["newest"] = [jigsaw]
+        offers = {o.url: o for o in shopify_offers(self.retailer, fetch=fetch)}
+        self.assertEqual(offers["https://harbour.example/products/tin"].price, Decimal("23.55"))
+        self.assertEqual(offers["https://harbour.example/products/tin"].image, "https://cdn.example/tin.jpg")
+        # A busy shop keeps it for next time; a deleted page lets it go.
+        state["tin_js"] = 429
+        list(shopify_offers(self.retailer, fetch=fetch))
+        self.retailer.refresh_from_db()
+        self.assertEqual(self.retailer.extra_products, "tin")
+        state["tin_js"] = 404
+        list(shopify_offers(self.retailer, fetch=fetch))
+        self.retailer.refresh_from_db()
+        self.assertEqual(self.retailer.extra_products, "")
+
+    def test_an_extra_that_joins_a_collection_is_no_longer_read_alone(self):
+        self.retailer.collection = "cards"
+        self.retailer.extra_products = "tin"
+        self.retailer.save()
+        tin = {"handle": "tin", "title": "Topps Chrome Premier League Tin 2026", "product_type": "Trading Card Games", "tags": [],
+               "variants": [{"price": "23.55", "available": True}]}
+        asked = []
+
+        def fetch(url):
+            asked.append(url)
+            if "/collections/cards/products.json" in url and url.endswith("page=1"):
+                return shopify_page([tin])
+            if "products.json" in url:
+                return shopify_page([])
+            return b"{}"
+
+        self.assertEqual([o.url for o in shopify_offers(self.retailer, fetch=fetch)], ["https://harbour.example/products/tin"])
+        self.assertFalse(any(u.endswith(".js") for u in asked))
+        self.retailer.refresh_from_db()
+        self.assertEqual(self.retailer.extra_products, "")
 
     def test_offers_are_matched_by_barcode_and_delivery_applied(self):
         fetch = self.fake_fetch([[

@@ -132,6 +132,12 @@
 
   <div class="ins__grid">
     <div class="module">
+      <h2>Products where a paying shop is cheapest</h2>
+      <div class="ins__total"><b>{{ earning.share }}%</b> of {{ earning.total }} products a visitor can buy ({{ earning.paying }})</div>
+      <p>Shops that are cheapest most often without paying you, by products.</p>
+      <table><tbody>{% for name, n in earning.unpaid %}<tr><td>{{ name }}</td><td class="n">{{ n }}</td></tr>{% empty %}<tr><td>Every cheapest price is at a paying shop.</td></tr>{% endfor %}</tbody></table>
+    </div>
+    <div class="module">
       <h2>Clicks that earn nothing</h2>
       <p>Shops with no affiliate link yet, by clicks sent.</p>
       <table><tbody>{% for u in unpaid %}<tr><td>{{ u.name }}</td><td class="n">{{ u.clicks }}</td></tr>{% empty %}<tr><td>Every click can earn.</td></tr>{% endfor %}</tbody></table>
@@ -181,6 +187,19 @@
     <ul class="ins__rows">{% for r in release_sources %}
       <li><b>{{ r.label }}</b>{% if r.official %} (official){% endif %}. Last read {% if r.last_ok %}{{ r.last_ok|date:"j M H:i" }}{% else %}never{% endif %}, {{ r.signals }} set{{ r.signals|pluralize }}, next read {% if r.next %}{{ r.next|date:"j M H:i" }}{% else %}due now{% endif %}.{% if r.error %} <span class="bad">Last error: {{ r.error }}</span>{% endif %}</li>{% endfor %}
     </ul>
+  </div>
+
+  <div class="module">
+    <h2>Shops read from part of their site</h2>
+    <table><thead><tr><th>Shop</th><th>Collections read</th><th class="n">Listed</th><th class="n">Buyable</th><th class="n">Found outside, read one by one</th></tr></thead>
+      <tbody>{% for s in section_shops %}<tr><td>{{ s.name }}</td><td class="wrap">{{ s.sections|join:", " }}, and its newest products</td><td class="n">{{ s.listed }}</td><td class="n">{{ s.buyable }}</td><td class="n">{{ s.extras }}</td></tr>{% empty %}<tr><td>Every shop is read whole.</td></tr>{% endfor %}</tbody></table>
+  </div>
+
+  <div class="module">
+    <h2>Look sealed, left out</h2>
+    <p>Items shops sell that look like a sealed product of a game we list but are not listed: a kind the rules do not know yet, or turned away by mistake. What is left out on purpose (cases, sleeves, singles, figures) is not here.</p>
+    {% if left_out.count %}<p>{{ left_out.count }} at {% for name, n in left_out.by_shop %}{{ name }} ({{ n }}){% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+    <table><tbody>{% for item in left_out.items %}<tr><td>{{ item.shop }}</td><td class="wrap"><a href="{{ item.url }}" rel="noreferrer noopener" target="_blank">{{ item.title }}</a></td><td class="wrap">{{ item.why }}</td></tr>{% empty %}<tr><td>Nothing: every sealed-looking item the shops sell is listed or left out on purpose.</td></tr>{% endfor %}</tbody></table>
   </div>
 
   <div class="module">

@@ -158,7 +158,7 @@ class RetailerAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {"fields": ("name", "slug", "website", "is_active")}),
         ("Delivery", {"fields": ("delivery_cost", "delivery_cost_up_to", "free_delivery_over", "delivery_note")}),
-        ("Prices", {"fields": ("source_type", "source_url", "collection", "session_url"),
+        ("Prices", {"fields": ("source_type", "source_url", "collection", "extra_products", "session_url"),
                     "description": "Run <code>python manage.py import_prices</code> to fetch prices "
                                    "from this source. A shop product is matched to ours by barcode, or by "
                                    "the link of a listing you add by hand under the product (any price; "

@@ -381,3 +381,55 @@ class RefreshTypesTests(TestCase):
         self.assertEqual(refresh_types(), 0)
         self.assertEqual(Product.objects.get(pk=pack.pk).product_type, "booster_box")
         self.assertEqual(Product.objects.get(pk=tin.pk).product_type, "collection_box")   # Lorcana sells no tins
+
+
+class CoverageRuleTests(TestCase):
+    """Sealed products the rules used to leave out, found by the Insights list of items left out (13 Oct 2026)."""
+
+    def kind(self, title, price="40"):
+        sealed = classify(title, price=Decimal(price))
+        return sealed and sealed.product_type
+
+    def test_a_bracketed_pre_order_tag_does_not_swallow_the_name(self):
+        sealed = classify("[Pre Order] Magic The Gathering Lorwyn Eclipsed Collector Booster Box", price=Decimal("300"))
+        self.assertEqual((sealed.product_type, sealed.name), ("collector_booster_box", "Lorwyn Eclipsed Collector Booster Box"))
+        self.assertEqual(classify("(Pre-Order) Pokemon Ascended Heroes Elite Trainer Box", price=Decimal("50")).name,
+                         "Ascended Heroes Elite Trainer Box")
+        self.assertEqual(tidy_name("Pokemon Surging Sparks Booster Box - Pre-Order"), "Pokemon Surging Sparks Booster Box")
+
+    def test_a_plain_booster_pack_counts_under_two_pounds(self):
+        self.assertEqual(self.kind("Pokemon Storm Emeralda m6 Korean Booster Pack", "1.79"), "booster_pack")
+        self.assertEqual(self.kind("Yu-Gi-Oh! Legacy of Darkness LOD-KR Korean Booster Pack", "0.59"), "booster_pack")
+        # Single cards and anything else under £2 stay out.
+        self.assertIsNone(self.kind("Pikachu 025/165 Holo", "1.20"))
+        self.assertIsNone(self.kind("Pokemon Surging Sparks Booster", "1.50"))
+        self.assertIsNone(self.kind("Pokemon Storm Emeralda m6 Korean Booster Pack", "0.30"))
+
+    def test_sealed_kinds_the_rules_did_not_know(self):
+        for title, kind in [
+            ("Magic: The Gathering: Lorwyn Eclipsed - Draft Night", "collection_box"),
+            ("Magic: The Gathering: Avatar: The Last Airbender - The Black Sun Invasion Scene Box", "collection_box"),
+            ("Pokemon TCG: Holiday Calendar 2025", "collection_box"),
+            ("Yu-Gi-Oh! Magnificent Monsters Tuck Box", "collection_box"),
+            ("Pokemon Scarlet & Violet Pokemon Center Hiroshima Japanese Special Box", "collection_box"),
+            ("Disney Lorcana Illumineer's Quest: The Great Hunny Rescue", "collection_box"),
+            ("2026 Topps Premier League Chrome Hanger Box", "booster_box"),
+            ("Topps Flagship Premier League 2026/27 Full Box", "booster_box"),
+            ("One Piece Starter Decks ST31-ST36 (Red Luffy (ST-31))", "deck"),
+        ]:
+            with self.subTest(title=title):
+                self.assertEqual(self.kind(title), kind)
+        # An Illustration Box's name is only its code, which names lose, so it stays out rather than merge.
+        self.assertIsNone(self.kind("One Piece Card Game - Illustration Box (IB-06)"))
+
+    def test_counter_means_an_accessory_only_in_its_own_phrases(self):
+        self.assertEqual(self.kind("Magic: The Gathering: Universes Beyond Final Fantasy - Commander Deck Counter Blitz"), "deck")
+        self.assertEqual(self.kind("Pokemon Surging Sparks Booster Pack Counter Display (24)"), "booster_box")
+        self.assertIsNone(self.kind("Pokemon Spindown Life Counter"))
+        self.assertIsNone(self.kind("Magic Damage Counters Set"))
+
+    def test_a_promo_single_named_like_a_kind_stays_out(self):
+        # "Iron Bundle" is a Pokemon; SVP 066 is its promo number. Zatu files it under Trading Card Games.
+        self.assertIsNone(classify("Iron Bundle SVP 066 - Holo", "Trading Card Games", "The Pokemon Company", ("pokemon",), Decimal("3.50")))
+        self.assertEqual(self.kind("Pokemon Sword & Shield SWSH12 Silver Tempest Booster Box"), "booster_box")
+        self.assertEqual(self.kind("Pokemon Holo Collection Box"), "collection_box")

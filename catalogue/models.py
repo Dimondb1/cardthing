@@ -308,13 +308,21 @@ class Retailer(models.Model):
         "its sitemap and read for schema.org product data. Leave empty for a local file "
         "passed to import_prices.",
     )
-    collection = models.SlugField(
-        "Shopify collection",
-        max_length=120,
+    collection = models.CharField(
+        "Shopify collections",
+        max_length=300,
         blank=True,
-        help_text="Shopify only: read this collection's products instead of the whole shop, for example "
-        "trading-card-games for a board game shop with one card game section. Products outside it are "
-        "treated as not stocked.",
+        help_text="Shopify only: read these collections instead of the whole shop, their handles separated by "
+        "spaces, for example trading-card-games football for a board game shop with card sections. The shop's "
+        "newest products are read too, and any of them that are our kind of product but sit outside these "
+        "collections are kept below and read from then on.",
+    )
+    extra_products = models.TextField(
+        "products read one by one",
+        blank=True,
+        help_text="Filled in by reads: our kind of products the shop listed outside the collections above, one "
+        "product handle a line. Each is read on its own every time the shop is read; one the shop deletes, or "
+        "that later appears in a collection, drops off by itself.",
     )
     session_url = models.URLField(
         "visit first",

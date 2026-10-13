@@ -83,11 +83,42 @@ targets under 24px. It needs `pip install playwright` and a running dev
 server.
 
 A Shopify shop that sells far more than cards (Zatu: board games, puzzles,
-books) can be read from one collection instead of the whole store: set
-"Shopify collection" on the retailer to the collection's handle, for
-example `trading-card-games`, and the import reads
-`/collections/<handle>/products.json`. Products outside the collection are
-treated as not stocked there. `setup_shops` sets this for Zatu.
+books, about 660,000 product pages) can be read from some of its
+collections instead of the whole store: set "Shopify collections" on the
+retailer to their handles, separated by spaces, and the import reads
+`/collections/<handle>/products.json` for each, a product in two of them
+once. `setup_shops` sets Zatu's to `trading-card-games
+top-5000-trading-card-games football`: a check of all of Zatu on 13 Oct 2026
+found 49 buyable card products outside `trading-card-games` alone, among
+them the Topps football tins, and none worth having outside these three.
+
+So nothing new is missed, a shop read this way is also read from its
+newest products (the first two pages of `/products.json`, about a week of
+new listings at Zatu). Any of them that are our kind of product but sit
+outside the collections are kept under "Products read one by one" on the
+retailer and read from `/products/<handle>.js` on every read from then on.
+One the shop deletes, or that later joins a collection, drops off by itself;
+a busy answer keeps it for the next read. At most 300 are kept.
+
+Insights shows how much this covers: "Shops read from part of their site"
+lists the collections, how many products are listed and buyable, and how
+many are read one by one. "Look sealed, left out" lists items any shop
+sells that look like a sealed product of a game we list but were not
+listed, from each shop's latest good read: a kind the rules do not know
+yet, or one ours by name but turned away by the shop's category, its price
+or the matching. What the rules leave out on purpose (cases, sleeves,
+singles, figures) is not listed. "Products where a paying shop is cheapest"
+gives the share of buyable products whose cheapest shop pays a commission,
+and the shops that are cheapest most often without paying. Both lead
+"What to do next" when they matter.
+
+The rules take a booster pack from 50p when its title plainly says booster
+pack (Japanese and Korean packs sell under £2), a "[Pre Order]" or
+"(Pre-Order)" tag before the name, and MTG Scene Boxes and Draft Nights,
+holiday calendars, tuck boxes, Pokemon Center special boxes, Topps hanger
+and full boxes, and "Starter Decks". A Pokemon promo number ("SVP 066") or a
+plain "Holo" marks a single card. One Piece Illustration Boxes stay out: their
+names are only a code, which names lose, so two would merge.
 
 Shop titles are matched with the game prefix taken off and the separators
 collapsed, so "Disney Lorcana: Shimmering Skies - Booster Box" is judged

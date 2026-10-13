@@ -10,6 +10,7 @@ land on one product page.
 
 import html
 import re
+from decimal import Decimal
 import unicodedata
 from dataclasses import dataclass
 
@@ -48,11 +49,18 @@ TYPES = [
     ("collection_box", ("ultra premium collection", "super premium collection", "premium collection", "collection box",
                         "collector's box", "collectors box", "illumineer's trove", "illumineers trove", "trove", "box set",
                         "gift box", "collection", "figure box", "poster box", "pin box", "surprise box", "battle box", "starter kit",
-                        "starter pack", "mega tin", "mega multipack", "multipack", "mega pack")),
+                        "starter pack", "mega tin", "mega multipack", "multipack", "mega pack",
+                        # Sealed boxes that are neither boosters nor decks: MTG's Scene Box and Draft Night, and the
+                        # advent calendars shops call holiday calendars.
+                        "scene box", "draft night", "holiday calendar", "advent calendar",
+                        # Yu-Gi-Oh's tuck boxes, Pokemon Center special boxes, Lorcana's co-op Illumineer's Quest.
+                        # Not One Piece's Illustration Box: its name is only its code, which names lose.
+                        "tuck box", "special box", "illumineer's quest", "illumineers quest")),
     ("booster_box", ("booster box", "booster display", "display box", "display", "case of 36", "box of 36", "box of 24", "box of 30",
-                     "hobby box", "retail box", "blaster box", "mega box", "jumbo box", "value box", "premium box", "fat pack box")),
+                     "hobby box", "retail box", "blaster box", "mega box", "jumbo box", "value box", "premium box", "fat pack box",
+                     "hanger box", "full box")),
     ("bundle", ("booster bundle", "bundle", "sleeved booster 3", "blister")),
-    ("deck", ("commander deck", "starter deck", "theme deck", "battle deck", "league battle deck", "start deck", "trial deck",
+    ("deck", ("commander deck", "starter deck", "starter decks", "theme deck", "battle deck", "league battle deck", "start deck", "trial deck",
               "deck", "precon", "two player starter", "2 player starter", "2-player starter")),
     ("tin", ("tin", "super tin", "booster tin")),
     ("gift_set", ("gift set", "gift pack")),
@@ -63,9 +71,11 @@ TYPES = [
 NOT_SEALED = re.compile(
     r"\bdon!* card\b|\bcards only\b|\bno box\b|^\s*[A-Z]{1,4}\d{0,2}[- ]\d{2,3}\b|\b(?:super|ultra|secret|hyper|special|alternate|alt) ?(?:art )?rare\b|\brare foil\b|"
     r"\b(?:common|uncommon|rare)\s*:|\bpromo\s*:|\bfoil\s*:|"
-    r"\b\d{1,3}\s*/\s*\d{1,3}\b|\bsingle\b|holofoil|holo rare|reverse holo|\bfoil\b(?!.*booster)|\bplaymat\b|\bsleeves?\b|\bbinder\b|"
+    r"\b\d{1,3}\s*/\s*\d{1,3}\b|\bsingle\b|holofoil|holo rare|reverse holo|\bfoil\b(?!.*booster)|"
+    # Pokemon promo card numbers ("Iron Bundle SVP 066 - Holo"): set codes have one or two digits, promos three.
+    r"\b(?:svp|swshp?|smp?|xyp?|bwp?)[ -]?\d{3}\b|\bholo\b(?!\s*(?:collection|box|tin|booster|pack))|\bplaymat\b|\bsleeves?\b|\bbinder\b|"
     r"\bdeck box\b|\bportfolio\b|\btoploader|\bevent\b|\bpre[\s-]?release event\b|\bticket\b|\bcase\b(?! of)|\bcarton\b|"
-    r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\bcounter\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b|\bkeyring\b|\bposter\b(?! box)|"
+    r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b|\bkeyring\b|\bposter\b(?! box)|"
     r"\bcode card\b|\bgraded\b|\bpsa\b|\bcgc\b|\bproxy\b|\bbulk\b|\blot of\b|\bjapanese single|\bpromo card\b|"
     r"\(near mint\)|\bnear mint\b|\blightly played\b|\bmoderately played\b|\(nm\)|\bpromo pack\b|\bpromotion pack\b|\bpower pack\b|"
     r"\bborderless\b|\bextended art\b|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"
@@ -245,6 +255,10 @@ def plain_type(name, current):
 # Nothing sealed sells for less than this. Cheaper things are single cards,
 # tokens, code sheets and other loose parts.
 MIN_PRICE = 2
+# Japanese and Korean booster packs sell for under £2 (Japan2UK: 59p to £1.99). A title that plainly says
+# booster pack, and nothing that marks a single card, is a pack at any price from this.
+MIN_PACK_PRICE = Decimal("0.50")
+PLAIN_PACK = re.compile(r"\bbooster pack\b", re.I)
 
 # A name made only of these words says what kind of thing it is, not which.
 GENERIC_WORDS = {"booster", "boosters", "pack", "packs", "box", "boxes", "deck", "decks", "starter", "bundle", "tin",
@@ -286,11 +300,11 @@ def drop_repeated_tail(name):
 
 
 SHOP_TAILS = re.compile(
-    r"(?<=\S)\s*:?\s*[:\-–]?\s*(?:brand new(?: and| &)? sealed(?: box| inc .*)?|new (?:and|&) sealed(?: box)?|pre[- ]?order\b.*|"
+    r"(?<=\S)\s*:?\s*[:\-–]?\s*(?:brand new(?: and| &)? sealed(?: box| inc .*)?|new (?:and|&) sealed(?: box)?|(?<![\[(])pre[- ]?order\b.*|"
     r"in stock(?: now)?|sealed)\s*!*\s*$",
     re.I,
 )
-SHOP_HEADS = re.compile(r"^\s*pre[- ]?order\b(?:.*?delivery time)?\s*[:\-–]?\s*", re.I)
+SHOP_HEADS = re.compile(r"^\s*[\[(]?\s*pre[- ]?orders?\b(?:.*?delivery time)?\s*[\])]?\s*[:\-–]?\s*", re.I)
 
 
 def tidy_name(title):
@@ -385,7 +399,8 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
         return None
     # The shop's category goes first, but a title that plainly says another type is right.
     kind = plain_type(title, kind) or kind
-    if price is not None and price < MIN_PRICE:
+    floor = MIN_PACK_PRICE if kind == "booster_pack" and PLAIN_PACK.search(title) else MIN_PRICE
+    if price is not None and price < floor:
         return None
     name = clean_name(title, game)
     if len(name) < 6 or is_generic(name):

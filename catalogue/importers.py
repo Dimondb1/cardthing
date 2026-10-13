@@ -393,18 +393,26 @@ def parse_published(value):
     return moment
 
 
-def shopify_offers(retailer, fetch=fetch, pause=0.0):
-    base = retailer.source_url.rstrip("/")
-    currency = shop_currency(base, fetch=fetch)
-    if currency and currency != "GBP":
-        raise ImportError_(f"{base} prices in {currency}, not pounds. Prices were not imported.")
-    preorders = preorder_handles(base, fetch=fetch)
-    # A shop that sells far more than cards (Zatu: board games, puzzles, books) is read from its
-    # card game collection, so the thousands of other products never reach the matcher.
-    listing = f"{base}/collections/{retailer.collection}/products.json" if retailer.collection else f"{base}/products.json"
+# A shop read from some of its collections is also read from its newest products, newest first: about a
+# week of new listings at Zatu. Any of them that are our kind of product but sit outside those collections
+# are kept on the retailer and read one by one from then on, so they never drop out of sight.
+NEWEST_PAGES = 2
+# Products read one by one at most, so a shop that files everything outside its card sections never
+# turns one read into thousands of requests.
+MAX_EXTRA_PRODUCTS = 300
+
+
+def section_handles(retailer):
+    """The Shopify collections a shop is read from, in order, or [] for the whole shop."""
+    return [h for h in re.split(r"[\s,]+", retailer.collection or "") if h]
+
+
+def shopify_pages(listing, fetch=fetch, pause=0.0, max_pages=MAX_SHOPIFY_PAGES):
+    """The products of a products.json listing, page by page. The first page failing raises ImportError_;
+    a later one ends the listing, which is how a shop says it has no more pages."""
     page = 1
     first_handle = None
-    while page <= MAX_SHOPIFY_PAGES:
+    while page <= max_pages:
         if page > 1 and pause:
             time.sleep(pause)
         try:
@@ -416,7 +424,7 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0):
             return  # past the last page
         except json.JSONDecodeError as exc:
             if page == 1:
-                raise ImportError_(f"{base} did not return Shopify JSON") from exc
+                raise ImportError_(f"{listing} did not return Shopify JSON") from exc
             return
         if not products:
             return
@@ -425,9 +433,104 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0):
             first_handle = handle
         elif handle == first_handle:
             return  # the shop repeats its first page instead of ending
-        for product in products:
-            yield from product_offers(base, product, preorder=product.get("handle") in preorders)
+        yield from products
         page += 1
+
+
+def ours(product):
+    """Whether a products.json entry is a sealed product of a game we list, by the importer's own rules."""
+    variants = product.get("variants") or [{}]
+    return classify(product.get("title", ""), product.get("product_type", ""), product.get("vendor", ""),
+                    tuple(product.get("tags", []) or []), money(variants[0].get("price"))) is not None
+
+
+def js_product(data):
+    """A /products/<handle>.js answer in the products.json shape product_offers reads (.js prices are pence)."""
+    def pounds(value):
+        return f"{value / 100:.2f}" if isinstance(value, (int, float)) and not isinstance(value, bool) else value
+
+    def absolute(src):
+        return f"https:{src}" if isinstance(src, str) and src.startswith("//") else (src or "")
+
+    return {
+        "handle": data.get("handle", ""), "title": data.get("title", ""), "product_type": data.get("type", ""),
+        "vendor": data.get("vendor", ""), "tags": data.get("tags") or [], "published_at": data.get("published_at"),
+        "images": [{"src": absolute(src)} for src in data.get("images") or [] if isinstance(src, str)],
+        "variants": [
+            {"id": v.get("id"), "title": v.get("title"), "available": bool(v.get("available")), "barcode": v.get("barcode"),
+             "price": pounds(v.get("price")), "featured_image": {"src": absolute((v.get("featured_image") or {}).get("src"))}}
+            for v in data.get("variants") or []
+        ],
+    }
+
+
+def gone(exc):
+    """Whether a failed fetch says the page no longer exists, rather than that the shop is busy."""
+    return "HTTP Error 404" in str(exc) or "HTTP Error 410" in str(exc)
+
+
+def shopify_offers(retailer, fetch=fetch, pause=0.0):
+    base = retailer.source_url.rstrip("/")
+    currency = shop_currency(base, fetch=fetch)
+    if currency and currency != "GBP":
+        raise ImportError_(f"{base} prices in {currency}, not pounds. Prices were not imported.")
+    preorders = preorder_handles(base, fetch=fetch)
+    sections = section_handles(retailer)
+    if not sections:
+        for product in shopify_pages(f"{base}/products.json", fetch, pause):
+            yield from product_offers(base, product, preorder=product.get("handle") in preorders)
+        return
+    # A shop that sells far more than cards (Zatu: board games, puzzles, books) is read from its card
+    # collections, so the thousands of other products never reach the matcher. A product in two of them
+    # is read once.
+    seen = set()
+    for section in sections:
+        for product in shopify_pages(f"{base}/collections/{section}/products.json", fetch, pause):
+            handle = product.get("handle")
+            if handle in seen:
+                continue
+            seen.add(handle)
+            yield from product_offers(base, product, preorder=handle in preorders)
+    in_sections = set(seen)
+    kept = [h for h in (retailer.extra_products or "").split() if h not in in_sections]
+    extras = list(dict.fromkeys(kept))
+    # The shop's newest products: one of ours filed outside the card collections joins the extras.
+    try:
+        for product in shopify_pages(f"{base}/products.json", fetch, pause, max_pages=NEWEST_PAGES):
+            handle = product.get("handle")
+            if handle in seen or not ours(product):
+                continue
+            seen.add(handle)
+            if handle not in extras:
+                extras.append(handle)
+            yield from product_offers(base, product, preorder=handle in preorders)
+    except ImportError_ as exc:
+        logger.warning("%s: newest products not read: %s", retailer.name, exc)
+    # Then every extra not met above, one by one, the newest kept when there are too many. One the shop
+    # has deleted, or that is no longer ours, goes.
+    extras = extras[-MAX_EXTRA_PRODUCTS:]
+    for handle in list(extras):
+        if handle in seen:
+            continue
+        if pause:
+            time.sleep(pause)
+        try:
+            product = js_product(json.loads(fetch(f"{base}/products/{handle}.js")))
+        except ImportError_ as exc:
+            if gone(exc):
+                extras.remove(handle)
+            continue  # a busy shop keeps the handle for the next read
+        except json.JSONDecodeError:
+            continue
+        if not ours(product):
+            extras.remove(handle)
+            continue
+        seen.add(handle)
+        yield from product_offers(base, product, preorder=handle in preorders)
+    text = "\n".join(extras)
+    if text != (retailer.extra_products or ""):
+        type(retailer).objects.filter(pk=retailer.pk).update(extra_products=text)
+        retailer.extra_products = text
 
 
 # The pre-order pulse ----------------------------------------------------------

@@ -96,9 +96,19 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        # 34 since the release sources table (one query for every source's state) joined the report.
-        with self.assertNumQueries(34):
+        # 38 since the earning share (2), the shops read from part of their site (1) and the items left out (1)
+        # joined the report.
+        with self.assertNumQueries(38):
             insights.report(30)
+        # Shops read from part of their site add two queries however many there are.
+        from catalogue.models import Retailer
+
+        for n in range(3):
+            Retailer.objects.create(name=f"Part {n}", slug=f"part-{n}", website=f"https://part{n}.example/",
+                                    source_type=Retailer.Source.SHOPIFY, source_url=f"https://part{n}.example/",
+                                    collection="cards football")
+            with self.assertNumQueries(40):
+                insights.report(30)
 
 
 class EbayCoverageTests(TestCase):
@@ -460,3 +470,75 @@ class PreorderPulseInsightTests(TestCase):
             self.preorder(n, 30, wait)
         html = self.client.get(reverse("insights")).content.decode()
         self.assertIn("Pre-orders: 5 listed, median 7 minutes from a shop publishing a pre-order to it appearing here (last 7 days).", html)
+
+
+class CoverageTests(TestCase):
+    """What Insights says about how much of what shops sell is listed, and how much of it earns."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.set = make_set(make_game())
+        self.paying = make_retailer("Zatu Games", slug="zatu-games", affiliate_url_template="https://click.example/?u={url}")
+        self.plain = make_retailer("Plain Shop")
+
+    def product(self, n, cheapest_at, other_at=None):
+        product = make_product(self.set, name=f"Surging Sparks Box {n}", slug=f"box-{n}", product_type="booster_box")
+        make_listing(product, cheapest_at, price="100.00")
+        if other_at is not None:
+            make_listing(product, other_at, price="110.00")
+        return product
+
+    def test_the_share_of_products_whose_cheapest_shop_pays(self):
+        self.product(1, self.paying, self.plain)
+        self.product(2, self.plain, self.paying)
+        self.product(3, self.plain)
+        self.product(4, self.paying)
+        earning = insights.earning_share()
+        self.assertEqual((earning["total"], earning["paying"], earning["share"]), (4, 2, 50))
+        self.assertEqual(earning["unpaid"], [("Plain Shop", 2)])
+        titles = [item["title"] for item in insights.report(30)["improvements"]]
+        self.assertIn("50% of products in stock have a paying shop as cheapest", titles)
+
+    def test_items_that_look_sealed_but_were_left_out(self):
+        from catalogue.models import ImportRun
+
+        ImportRun.objects.create(retailer=self.plain, finished_at=timezone.now(), unmatched="\n".join([
+            # A kind the rules do not know: listed.
+            "One Piece Card Game - Illustration Box (IB-06) [no barcode] https://plain.example/products/ib-06",
+            # Ours by name but turned away (here its price): listed.
+            "Pokemon Surging Sparks Booster Box [0820650851230] https://plain.example/products/ssb",
+            # Left out on purpose, not ours, or a variant the read set aside: not listed.
+            "Disney Lorcana Azurite Sea Booster Box Case (4 Boxes) [no barcode] https://plain.example/products/case",
+            "Ticket to Ride Board Game [no barcode] https://plain.example/products/ttr",
+            "Pokemon Booster Pack (1x Booster Pack) [a variant of another amount] https://plain.example/products/pack",
+            "Pokemon Mega Brave Booster Box -> maybe Mega Brave Booster Box (80%)",
+        ]))
+        left = insights.left_out()
+        self.assertEqual(left["count"], 2)
+        self.assertEqual(left["by_shop"], [("Plain Shop", 2)])
+        self.assertEqual([i["url"] for i in left["items"]],
+                         ["https://plain.example/products/ib-06", "https://plain.example/products/ssb"])
+        self.assertEqual(left["items"][0]["why"], "a kind of product the rules do not know")
+        report = insights.report(30)
+        self.assertIn("2 items look sealed but were left out", [item["title"] for item in report["improvements"]])
+        # A failed read says nothing about what a shop sells, so its list is not read.
+        ImportRun.objects.create(retailer=self.plain, finished_at=timezone.now(), error="boom",
+                                 unmatched="Pokemon Draft Night Box [no barcode] https://plain.example/products/x")
+        self.assertEqual(insights.left_out()["count"], 2)
+
+    def test_shops_read_from_part_of_their_site(self):
+        from catalogue.models import Retailer
+
+        Retailer.objects.filter(pk=self.paying.pk).update(
+            source_type=Retailer.Source.SHOPIFY, collection="trading-card-games football", extra_products="tin\nbox")
+        self.product(1, self.paying)
+        rows = insights.section_shops()
+        self.assertEqual([(r["name"], r["sections"], r["listed"], r["buyable"], r["extras"]) for r in rows],
+                         [("Zatu Games", ["trading-card-games", "football"], 1, 1, 2)])
+        staff = User.objects.create_superuser("boss", "boss@example.com", "pw")
+        self.client.force_login(staff)
+        page = self.client.get(reverse("insights"))
+        self.assertContains(page, "Shops read from part of their site")
+        self.assertContains(page, "trading-card-games, football, and its newest products")

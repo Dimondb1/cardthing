@@ -156,10 +156,13 @@ AFFILIATE = {
     "zatu-games": "https://click.linksynergy.com/deeplink?id=G4v6uhKa*n0&mid=53403&murl={url}",
 }
 
-# Shopify shops read from one collection instead of the whole store: Zatu sells thousands of board
-# games, puzzles and books, and all its card products sit in one collection.
+# Shopify shops read from some collections instead of the whole store: Zatu sells hundreds of thousands
+# of products, and its card products sit in a few collections. A check of all of Zatu on 13 Oct 2026
+# found 49 buyable card products outside trading-card-games: 46 in its broader "All Trading Card Games"
+# collection and the football cards in "Football". New products filed anywhere else are caught by the
+# read of the shop's newest products (importers.shopify_offers).
 COLLECTIONS = {
-    "zatu-games": "trading-card-games",
+    "zatu-games": "trading-card-games top-5000-trading-card-games football",
 }
 
 # Shops whose standard charge is only known up to an order value; above it the charge is not published.
@@ -196,7 +199,11 @@ class Command(BaseCommand):
                 if session_url and existing.session_url != session_url:
                     existing.session_url = session_url
                     changed.append("session_url")
-                if collection and not existing.collection:
+                # Collections added here reach a shop that still reads the earlier list; a list changed in
+                # admin to something else is kept.
+                if collection and existing.collection != collection and (
+                    set(existing.collection.split()) <= set(collection.split())
+                ):
                     existing.collection = collection
                     changed.append("collection")
                 if AFFILIATE.get(slug) and not existing.affiliate_url_template:

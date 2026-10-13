@@ -736,6 +736,17 @@ class SetupShopsTests(TestCase):
             {"collectors-kingdom": (Retailer.Source.SHOPIFY, Decimal("4.49"), Decimal("100")),
              "transcendent-cards": (Retailer.Source.SHOPIFY, Decimal("4.50"), None),
              "attic-cards": (Retailer.Source.SHOPIFY, Decimal("3.99"), None)})
+        # Zatu pays through Rakuten: its buy links are Rakuten deep links, exactly as Rakuten's dashboard makes them.
+        zatu = Retailer.objects.get(slug="zatu-games")
+        self.assertEqual(
+            zatu.outbound_url("https://zatu.com/products/topps-chrome-premier-league-tin-2026"),
+            "https://click.linksynergy.com/deeplink?id=G4v6uhKa*n0&mid=53403"
+            "&murl=https%3A%2F%2Fzatu.com%2Fproducts%2Ftopps-chrome-premier-league-tin-2026")
+        # A format changed in admin is kept by the next run.
+        Retailer.objects.filter(pk=zatu.pk).update(affiliate_url_template="https://other.example/?u={url}")
+        call_command("setup_shops", stdout=StringIO())
+        zatu.refresh_from_db()
+        self.assertEqual(zatu.affiliate_url_template, "https://other.example/?u={url}")
         tcg_box = Retailer.objects.get(slug="tcg-box")
         self.assertEqual((tcg_box.source_type, tcg_box.source_url, tcg_box.delivery_cost),
                          (Retailer.Source.SHOPIFY, "https://tcgbox.co.uk/", Decimal("3.95")))

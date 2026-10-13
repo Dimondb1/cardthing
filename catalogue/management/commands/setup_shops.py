@@ -149,6 +149,13 @@ SESSIONS = {
     "unicorn-cards": "https://unicorncards.co.uk/changecurrency/3?returnUrl=%2F",
 }
 
+# Affiliate link formats for shops whose programme the owner has joined: {url} is the product link, encoded
+# for you. Set only on a shop with none, so one changed in admin is kept. Zatu's is Rakuten's deep link, as the
+# Rakuten publisher dashboard generates it (Links, Deep Linking), 13 Oct 2026.
+AFFILIATE = {
+    "zatu-games": "https://click.linksynergy.com/deeplink?id=G4v6uhKa*n0&mid=53403&murl={url}",
+}
+
 # Shopify shops read from one collection instead of the whole store: Zatu sells thousands of board
 # games, puzzles and books, and all its card products sit in one collection.
 COLLECTIONS = {
@@ -192,6 +199,9 @@ class Command(BaseCommand):
                 if collection and not existing.collection:
                     existing.collection = collection
                     changed.append("collection")
+                if AFFILIATE.get(slug) and not existing.affiliate_url_template:
+                    existing.affiliate_url_template = AFFILIATE[slug]
+                    changed.append("affiliate_url_template")
                 # A charge stored as £0 that was never known: it is unknown, not free. A charge set in admin stays.
                 if cost is None and existing.delivery_cost == 0:
                     existing.delivery_cost = None
@@ -208,7 +218,7 @@ class Command(BaseCommand):
                 continue
             Retailer.objects.create(
                 slug=slug, name=name, website=website, source_type=source, source_url=website, session_url=session_url,
-                collection=collection,
+                collection=collection, affiliate_url_template=AFFILIATE.get(slug, ""),
                 delivery_cost=Decimal(cost) if cost is not None else None,
                 delivery_cost_up_to=Decimal(DELIVERY_UP_TO[slug]) if slug in DELIVERY_UP_TO else None,
                 free_delivery_over=Decimal(free) if free else None, delivery_note=note,

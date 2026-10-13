@@ -852,7 +852,11 @@ it again after changing the mark and commit the files.
 - Retailer affiliate links: set **Affiliate link format** on the retailer, for
   example `https://network.example/click?id=123&url={url}`. All outbound links
   go through `/go/<listing id>/`, which counts the click (no personal data is
-  stored) and redirects.
+  stored) and redirects. Formats for programmes the owner has joined are also
+  in `AFFILIATE` in `setup_shops`, set on a shop that has none so one changed
+  in admin is kept. Zatu pays through Rakuten: its format is the deep link
+  Rakuten's publisher dashboard makes (Links, Deep Linking) with the product
+  address replaced by `{url}`, the same way for any other Rakuten shop.
 
 ## Putting it on a server
 

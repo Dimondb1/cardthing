@@ -30,6 +30,18 @@
   .chk .said { display: block; margin-top: 4px; }
   .chk .claude .now { font-weight: 600; }
   .chk .claude details { margin-top: 8px; }
+  .chk .pick { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 4px; cursor: pointer; }
+  .chk .pick input { width: 22px; height: 22px; margin: 0; }
+  .chk .ticked { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin: 0 0 12px; padding: 8px 0; background: var(--body-bg); border-bottom: 1px solid var(--hairline-color); }
+  .chk button.act { min-height: 40px; padding: 8px 14px; border: 0; border-radius: 4px; background: var(--button-bg);
+    color: var(--button-fg); font: inherit; cursor: pointer; }
+  .chk button.act:hover, .chk button.act:focus { background: var(--button-hover-bg); }
+  .chk .pick[hidden] { display: none; }
+  .chk li.done { color: var(--body-quiet-color); }
+  .chk .tapped { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 3; margin: 0; padding: 12px 14px;
+    border-radius: 8px; background: var(--body-fg); color: var(--body-bg); }
+  .chk .tapped[hidden] { display: none; }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Things to check</div>{% endblock %}
 {% block content %}
@@ -52,7 +64,7 @@
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_on"><input type="submit" value="Switch Claude on"></form>
       {% endif %}
     </div>
-    <p class="note">Sort everything: Claude works through every row, merges duplicates and links shop pages it is sure of. Everything it does is under Sorted for you with Undo.</p>{% endif %}
+    <p class="note">Claude sorts what it can: what it is sure or fairly sure of, and what it still cannot tell after a careful second look. Sort everything: it works through the whole list now, rather than 25 an hour. Everything it does is under Sorted for you with Undo.</p>{% endif %}
     {% if claude.runs %}<details><summary>Recent runs</summary>
       <ul class="names">{% for run in claude.runs %}<li>{{ run.at|date:"j M H:i" }}: looked at {{ run.asked }}, sorted {{ run.sorted }}, {{ run.suggested }} left for you, {{ run.spent }}{% if run.note %}. {{ run.note }}{% endif %}.</li>{% endfor %}</ul>
     </details>{% endif %}
@@ -109,13 +121,19 @@
 
   <section>
     <h2>Doubtful prices ({{ doubtful_count }})</h2>
-    <p class="note">Cheapest prices far from the other shops. Open the link: if the price is right, tap This price is right; if it is another product, hide it.{% if checked_count %} {{ checked_count }} more {{ checked_count|pluralize:"is,are" }} checked as the right product.{% endif %}</p>
-    {% if doubtful %}<ul>
+    <p class="note">Cheapest prices far from the other shops. Open the link: if the price is right, tap This price is right; if it is another product, hide it. To answer several at once, tick them and tap a button at the top.{% if checked_count %} {{ checked_count }} more {{ checked_count|pluralize:"is,are" }} checked as the right product.{% endif %}</p>
+    {% if doubtful %}<form method="post" id="ticked-doubtful" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
+      <label class="pick" hidden><input type="checkbox" data-all="ticked-doubtful"> Tick all</label>
+      <button type="submit" class="act" name="do" value="trust">Ticked prices are right</button>
+      <button type="submit" class="act" name="do" value="hide">Hide ticked</button>
+    </form>
+    <ul>
       {% for listing in doubtful %}
       <li class="item"><b><a href="{{ listing.product.get_absolute_url }}" target="_blank" rel="noopener">{{ listing.product.name }}</a></b>
         <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer">£{{ listing.shown_price }} at {{ listing.retailer.name }}</a>: {{ listing.sanity_reason }}.
         {% include "admin/_claude_said.html" with ask=listing.claude %}
         <div class="row">
+          <label class="pick"><input type="checkbox" name="pick" value="{{ listing.pk }}:{{ listing.price }}" form="ticked-doubtful"> Tick</label>
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="trust"><input type="hidden" name="listing" value="{{ listing.pk }}"><input type="hidden" name="price" value="{{ listing.price }}"><input type="submit" value="This price is right"></form>
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ listing.pk }}"><input type="hidden" name="price" value="{{ listing.price }}"><input type="submit" value="Hide this one"></form>
         </div>
@@ -144,13 +162,16 @@
   <section>
     <h2>Wrong matches ({{ wrong|length }})</h2>
     <p class="note">The cheapest price is over {{ max_percent }}% under the next, so one is probably another product. Hide the one that is wrong.</p>
-    {% if wrong %}<ul>
+    {% if wrong %}<form method="post" id="ticked-wrong" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
+      <button type="submit" class="act" name="do" value="hide">Hide ticked</button>
+    </form>
+    <ul>
       {% for product, summary in wrong %}
       <li class="item"><b><a href="{{ product.get_absolute_url }}" target="_blank" rel="noopener">{{ product.name }}</a></b>
         {% with a=summary.best b=summary.second %}
-        <div class="row"><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">£{{ a.delivered_price }} at {{ a.retailer.name }}</a>{% include "admin/_claude_said.html" with ask=a.claude %}
+        <div class="row"><label class="pick"><input type="checkbox" name="pick" value="{{ a.pk }}:{{ a.price }}" form="ticked-wrong"> Tick</label><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer">£{{ a.delivered_price }} at {{ a.retailer.name }}</a>{% include "admin/_claude_said.html" with ask=a.claude %}
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ a.pk }}"><input type="submit" value="Hide this one"></form></div>
-        <div class="row"><a href="{{ b.url }}" target="_blank" rel="noopener noreferrer">£{{ b.delivered_price }} at {{ b.retailer.name }}</a>{% include "admin/_claude_said.html" with ask=b.claude %}
+        <div class="row"><label class="pick"><input type="checkbox" name="pick" value="{{ b.pk }}:{{ b.price }}" form="ticked-wrong"> Tick</label><a href="{{ b.url }}" target="_blank" rel="noopener noreferrer">£{{ b.delivered_price }} at {{ b.retailer.name }}</a>{% include "admin/_claude_said.html" with ask=b.claude %}
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="hide"><input type="hidden" name="listing" value="{{ b.pk }}"><input type="submit" value="Hide this one"></form></div>
         {% endwith %}
       </li>
@@ -162,12 +183,16 @@
     <h2>Possible duplicates ({{ duplicates|length }})</h2>
     {% if sure_pairs %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge_sure">{% for keep, other, ask in sure_pairs %}<input type="hidden" name="pair" value="{{ keep.pk }}:{{ other.pk }}">{% endfor %}<input type="submit" value="Merge the {{ sure_pairs|length }} pair{{ sure_pairs|pluralize }} Claude is sure are the same"></form>{% endif %}
     <p class="note">Merge only when they are the same product. Tap Not the same if not.</p>
-    {% if duplicates %}<ul>
+    {% if duplicates %}<form method="post" id="ticked-pairs" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
+      <label class="pick" hidden><input type="checkbox" data-all="ticked-pairs"> Tick all</label>
+      <button type="submit" class="act" name="do" value="apart">Ticked are not the same</button>
+    </form>
+    <ul>
       {% for keep, others in duplicates %}
       <li class="item"><b>Keep: <a href="{{ keep.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.name }}</a></b>
         Merge into it:
         <ul class="names">{% for other in others %}<li><a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a>{% include "admin/_claude_said.html" with ask=other.claude %}
-          <div class="row"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="apart"><input type="hidden" name="keep" value="{{ keep.pk }}"><input type="hidden" name="other" value="{{ other.pk }}"><input type="submit" value="Not the same"></form></div></li>{% endfor %}</ul>
+          <div class="row"><label class="pick"><input type="checkbox" name="pick" value="{{ keep.pk }}:{{ other.pk }}" form="ticked-pairs"> Tick</label><form method="post">{% csrf_token %}<input type="hidden" name="action" value="apart"><input type="hidden" name="keep" value="{{ keep.pk }}"><input type="hidden" name="other" value="{{ other.pk }}"><input type="submit" value="Not the same"></form></div></li>{% endfor %}</ul>
         <form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="keep" value="{{ keep.pk }}">{% for other in others %}<input type="hidden" name="other" value="{{ other.pk }}">{% endfor %}<input type="submit" value="Merge these"></form>
       </li>
       {% endfor %}
@@ -176,13 +201,19 @@
 
   <section>
     <h2>Found at another shop ({{ found_count }})</h2>
-    <p class="note">Is it the same product? Tap Yes to add the shop's price, or No.</p>
-    {% if found %}<ul>
+    <p class="note">Is it the same product? Tap Yes to add the shop's price, or No. To answer several at once, tick them and tap a button at the top.</p>
+    {% if found %}<form method="post" id="ticked-found" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
+      <label class="pick" hidden><input type="checkbox" data-all="ticked-found"> Tick all</label>
+      <button type="submit" class="act" name="do" value="link_found">Link ticked</button>
+      <button type="submit" class="act" name="do" value="not_found">Ticked are not this</button>
+    </form>
+    <ul>
       {% for row in found %}
       <li class="item"><b><a href="{{ row.suggested.get_absolute_url }}" target="_blank" rel="noopener">{{ row.suggested.name }}</a></b>
         might be at {{ row.retailer.name }} as <a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">"{{ row.title }}"</a>{% if row.price %} for £{{ row.price }}{% endif %}.
         {% include "admin/_claude_said.html" with ask=row.claude %}
         <div class="row">
+          <label class="pick"><input type="checkbox" name="pick" value="{{ row.pk }}:{{ row.price|default_if_none:'' }}" form="ticked-found"> Tick</label>
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="link_found"><input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="price" value="{{ row.price|default_if_none:'' }}"><input type="submit" value="Yes, link it"></form>
           <form method="post">{% csrf_token %}<input type="hidden" name="action" value="not_found"><input type="hidden" name="row" value="{{ row.pk }}"><input type="hidden" name="price" value="{{ row.price|default_if_none:'' }}"><input type="submit" value="No, not this"></form>
         </div>
@@ -261,5 +292,65 @@
       {% endfor %}
     </ul>{% else %}<p class="none">Every shop's delivery charge is known.</p>{% endif %}
   </section>
+  <p class="tapped" role="status" aria-live="polite" hidden></p>
 </div>
+<script>
+(function () {
+  // Taps answer a row where it is, with no reload, so the list stays where the owner is reading it.
+  // The forms work as they are without this script.
+  var page = document.querySelector(".chk"), status = page.querySelector(".tapped");
+  var inPlace = ["trust", "hide", "show", "link_found", "not_found", "apart", "undo", "not_a_set", "merge", "ticked"];
+  var timer, lastButton;
+  var ticked = {trust: "Counted.", hide: "Hidden.", link_found: "Linked.", not_found: "Noted: not this product.",
+                apart: "Noted: not the same."};
+  function say(text) {
+    status.textContent = text;
+    status.hidden = false;
+    clearTimeout(timer);
+    timer = setTimeout(function () { status.hidden = true; }, 6000);
+  }
+  function answered(item, text) {
+    if (!item) return;
+    item.textContent = text;
+    item.classList.add("done");
+  }
+  page.addEventListener("click", function (event) {
+    var button = event.target.closest("button[name], input[type=submit]");
+    if (button) lastButton = button;
+  });
+  page.querySelectorAll("[data-all]").forEach(function (box) {
+    box.closest("label").hidden = false;
+    box.addEventListener("change", function () {
+      document.querySelectorAll('input[name="pick"][form="' + box.dataset.all + '"]').forEach(function (pick) {
+        if (!pick.closest("li.done")) pick.checked = box.checked;
+      });
+    });
+  });
+  page.addEventListener("submit", function (event) {
+    var form = event.target, action = form.querySelector('input[name="action"]');
+    if (!action || inPlace.indexOf(action.value) < 0 || !window.fetch) return;
+    event.preventDefault();
+    // The ticked boxes belong to the form through their form attribute, so FormData carries them.
+    var data = new FormData(form), button = event.submitter || lastButton;
+    if (button && button.name && form.contains(button)) data.append(button.name, button.value);
+    form.querySelectorAll("input[type=submit], button").forEach(function (b) { b.disabled = true; });
+    fetch(window.location.pathname, {method: "POST", body: data, credentials: "same-origin", headers: {"X-Checks-Tap": "1"}})
+      .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json(); })
+      .then(function (reply) {
+        say(reply.said || "Done.");
+        if (action.value === "ticked") {
+          reply.done.forEach(function (value) {
+            document.querySelectorAll('input[name="pick"][form="' + form.id + '"]').forEach(function (pick) {
+              if (pick.value === value) answered(pick.closest("li"), (button && ticked[button.value]) || "Done.");
+            });
+          });
+        } else if (reply.ok) {
+          answered(form.closest("li"), reply.said);
+        }
+      })
+      .catch(function () { say("That did not go through. Reload the page and try again."); })
+      .finally(function () { form.querySelectorAll("input[type=submit], button").forEach(function (b) { b.disabled = false; }); });
+  });
+})();
+</script>
 {% endblock %}

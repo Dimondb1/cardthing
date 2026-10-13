@@ -480,30 +480,37 @@ or two of our products. It never supplies a price, a date, a barcode or a
 product, and never touches sets, release dates or delivery charges. The
 site's own rules decide whether its answer may act:
 
-Claude acts alone only where visitors see nothing change, or where it only
-takes something away. It never counts a price as right and never merges.
+Claude sorts every row it can, so you only see real conflicts. It never
+counts a price as right. Every act is listed under Sorted for you with
+Claude's reason and an Undo. "Sure" and "fairly sure" are Claude's own
+confidence; a "low" one counts as could not tell.
 
-- **Found at another shop:** Claude's "different" refuses the page (a
-  "fairly sure" one too, when it names a plain difference: game, set, kind,
-  quantity, language or edition). Its "same" links the page only when the
-  price is within 0.75 to 1.33 of the other shops', the title does not
-  plainly name another kind or set, the shop's barcode is not another
-  product's (or unrecorded while we hold one), the shop does not list the
-  product already, the new price is judged OK without making any other
-  price doubtful, and the product page would claim no saving over 25%.
-- **A doubtful cheapest price:** "same" ticks it off as **Checked**: the
-  price stays exactly as shown, doubtful, with no saving claimed, so
-  visitors see no change, and it comes back if its price or title changes.
-  Never for an eBay or Amazon seller's title, a title that says deposit, or
-  a shop barcode that is not ours or not read yet. "Different" hides it.
+- **Found at another shop:** "different" refuses the page, sure or fairly
+  sure, whenever it names something other than the price. A sure "same"
+  links the page whatever its price: the site judges the new price like any
+  other, so a far-off one is doubtful and claims no saving. A fairly sure
+  "same" links only when the price is within 0.75 to 1.33 of the other
+  shops'. Never when the title plainly names another kind or set, the
+  shop's barcode is another product's (or unrecorded while we hold one), the
+  shop lists the product already, the link would turn another shop's good
+  price doubtful, or the product page would claim a saving over 25%.
+- **A doubtful cheapest price:** "same", sure or fairly sure, ticks it off
+  as **Checked**: the price stays exactly as shown, doubtful, with no saving
+  claimed, so visitors see no change, and it comes back if its price or
+  title changes. An eBay or Amazon seller's title needs a sure "same".
+  Never for a title that says deposit, or a shop barcode that is not ours
+  or not read yet. "Different" hides it: sure, or fairly sure of a
+  difference that makes another product (game, set, kind, quantity,
+  language or edition).
 - **A wrong match:** "different" hides that price only when Claude is sure
-  the other price is the product. Both called the same stay with you.
-- **Possible duplicates:** "different" keeps the pair apart (with Sort
-  everything on, "same" merges it; see below) (a "fairly sure"
-  one too, for a plain difference). "Same" never merges by itself: **Merge
-  the pairs Claude is sure are the same** merges them on your tap, each so
-  it can be undone, and leaves out pairs whose barcodes differ or whose
-  shops' prices are far apart. The merged product is switched
+  or fairly sure the other price is the product. Both called the same stay
+  with you.
+- **Possible duplicates:** "different" keeps the pair apart, sure or fairly
+  sure. A sure "same" merges them, the undoable kind, unless their barcodes
+  differ, their shops charge far apart, a shop lists both or they are in
+  different languages. A fairly sure "same" stays with you; **Merge the
+  pairs Claude is sure are the same** merges any sure pairs left on your
+  tap. The merged product is switched
   off, not deleted; its barcode, shop pages and linked shop rows move to the
   kept product so shop reads never price it; and Undo puts back its listings,
   history and address. A price that has not changed since the merge gets
@@ -514,14 +521,17 @@ takes something away. It never counts a price as right and never merges.
   newest first: one that a later merge touched (into the same product, or
   merging the kept product on) waits until that later merge is undone, and
   the page says which.
+- **Could not tell:** the row is asked once more at high effort (at once, if
+  your effort setting is high). Still not able to tell, it is settled the
+  way that adds nothing to the site: the found page is not linked, the pair
+  stays apart, the doubtful price is hidden. A wrong match stays with you.
+  A "different" that names only the price counts as a fairly sure "same".
 
 It starts in **trial**: it only suggests, and its answer shows under each
 row ("Claude, 9 Oct: same product, sure. ..."). Once you agree with it, tap
-**Let Claude act**. It then acts only when it is sure, a "different" names
-something other than the price, the answer came from the model asked (not a
-fallback), and the row is still as Claude saw it. Each act is listed under
-Sorted for you with Claude's reason and an Undo. The box counts how often
-Claude agreed with your own taps.
+**Let Claude act**. It then acts by the rules above when the answer came
+from the model asked (not a fallback) and the row is still as Claude saw it.
+The box counts how often Claude agreed with your own taps.
 
 Answers Claude gave in trial are not wasted. Let Claude act, Ask Claude now
 and every run first put Claude's existing answers through the same rules,
@@ -529,8 +539,8 @@ free (nothing is sent), and act on the ones that pass: only a row's latest
 answer, only while the row is unchanged, never one from a fallback, never on
 a row anyone answered before (an undone answer included). While Claude may
 act, every answer it leaves for you says why under its row ("Left for you:
-the price is far from what other shops charge.", "Claude was only fairly
-sure.", "Claude never merges by itself.", and so on). The run line says how
+the shop's barcode is not ours, so only you can say.", "Claude was only
+fairly sure, and merges only when sure.", and so on). The run line says how
 many rows were sorted from earlier answers.
 
 Every act needs the exact price Claude saw. A fallback model's answer is
@@ -538,27 +548,31 @@ shown but never acts, and the row is asked again at the next run. A row is
 asked again when its titles, price or barcode change, at most five times.
 Rows an answer can clear are asked first: doubtful prices a "same" would
 tick off and wrong matches, then duplicate pairs, then found pages a "same"
-would link, then the rest. An hourly run asks up to 25 rows; one you ask
-for with **Ask Claude now** up to 100, within the same $1 and 10 minute
-limits. **Ask Claude now** starts the run at once in its own process
-(`judge_checks` holds a lock file in the cache directory, so two runs never
-overlap). At most 10 prices are hidden in one run; the rest are hidden from
-their answers at the next. If you undo three of Claude's acts in a week
-(counted from when you last tapped Let Claude act), it goes back to
-suggesting and tells you.
+would link, then the rest, then the careful second looks. An hourly run
+asks up to 25 rows; one you ask for with **Ask Claude now** up to 100,
+within the same $1 and 10 minute limits. **Ask Claude now** starts the run
+at once in its own process (`judge_checks` holds a lock file in the cache
+directory, so two runs never overlap). At most 30 prices are hidden in one
+run; the rest are hidden from their answers at the next. If you undo three
+of Claude's acts in a week (counted from when you last tapped Let Claude
+act), it goes back to suggesting and tells you.
 
-**Sort everything** (a button in the Claude box, off by default) lets Claude
-clear the whole list. It turns on Let Claude act and starts a run at once;
-each run then asks about every waiting row within its $1 and 10 minutes,
-and while rows are left the next run starts at the next five-minute tick
-instead of an hour later. On top of the rules above, a sure "same" links a
-found page whatever its price (the site judges the new price like any other,
-and the link still rolls back if it would turn another shop's good price
-doubtful or claim a saving over 25%), and merges a duplicate pair unless
-their barcodes differ, their shops charge far apart, a shop lists both or
-they are in different languages. Each merge is the undoable kind. An answer
-Claude was only fairly sure of, or could not tell, is asked once more at
-high effort. The monthly limit still holds.
+**Sort everything** (a button in the Claude box, off by default) works
+through the whole list now rather than 25 rows an hour. It turns on Let
+Claude act and starts a run at once; each run then asks about every waiting
+row within its $1 and 10 minutes, and while rows are left the next run
+starts at the next five-minute tick instead of an hour later. The rules are
+the same either way. The monthly limit still holds.
+
+**Answering what is left.** Each list (doubtful prices, wrong matches,
+duplicates, found pages) has a tick box on every row and buttons at its top
+that stay in view as you scroll: tick several and tap **Hide ticked**,
+**Ticked prices are right**, **Link ticked**, **Ticked are not this** or
+**Ticked are not the same**. Each ticked row is answered as its own button
+would, and only while it is as the page showed it; one that changed is
+left and counted. With JavaScript on, every tap answers its row in place
+with no reload, and Tick all ticks a whole list. Everything works with
+JavaScript off too.
 
 The push after a run you asked for, and the daily one, say "N sorted, N
 left for you". `python manage.py judge_checks --dry-run` says what the
@@ -570,7 +584,7 @@ model's rates and saved (Claude's answers are listed read-only in admin).
 Before a request is sent, the most it could cost is reserved, and nothing is
 sent that could take the month (a UTC month, as Anthropic counts) past your
 limit, or one run past $1. A row is asked again only when its titles or
-price band change, at most three times. Roughly, per answer at medium
+price band change, at most five times. Roughly, per answer at medium
 effort: Claude Opus 5.5 (the default) $0.023, Claude Sonnet 5.5 $0.012,
 Claude Haiku 5.5 under $0.001. The limit defaults to $10 a month, about 430
 answers on Opus. Low effort costs about half, high about twice.

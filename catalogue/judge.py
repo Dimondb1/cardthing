@@ -6,18 +6,23 @@ monthly limit he sets there.
 Claude only ever says whether two things the site already holds are the same product. It never supplies
 a price, a date, a barcode or a product. The site's own rules then decide whether that answer may act:
 
-- found at another shop: "different" (for a reason other than the price) refuses the page; "same" links it
-  only when the price is within 0.75 to 1.33 of what the other shops charge, the title does not plainly
-  name another kind or set, the shop does not list the product already, and the new price is judged OK
-  without making any other price doubtful.
+- found at another shop: "different" (for a reason other than the price) refuses the page; a sure "same"
+  links it, and the site judges the new price like any other; a fairly sure one only when the price is
+  within 0.75 to 1.33 of what the other shops charge. Never when the title plainly names another kind or
+  set, the barcode is not ours, the shop lists the product already, or another shop's good price would
+  turn doubtful.
 - a shop's price (the cheapest doubtful price, or either price of a wrong match): "different" hides it;
-  for a wrong match, only when Claude calls the other price "same". "Same" never counts a price.
-- possible duplicates: "different" keeps the pair apart. "Same" never merges: the owner merges the pairs
-  Claude is sure about with one tap, and each merge can be undone.
+  for a wrong match, only when Claude calls the other price "same". "Same" ticks a doubtful price off as
+  checked, which changes nothing visitors see. "Same" never counts a price.
+- possible duplicates: "different" keeps the pair apart; a sure "same" merges them when their barcodes and
+  prices agree, so the merge can be undone.
+- could not tell: the row is asked once more at high effort. Still not able to tell, the row is settled the
+  way that adds nothing to the site (ruling).
 
-An answer acts only when the owner has tapped Let Claude act, Claude is sure ("high"), the answer came
-from the model asked (not a fallback), and the row is still as Claude saw it. Everything else is a
-suggestion shown under the row. Every act is a CheckAnswer with Claude's reason and an Undo.
+An answer acts only when the owner has tapped Let Claude act, the answer came from the model asked (not a
+fallback), and the row is still as Claude saw it. What is left is a suggestion shown under the row, with why.
+Every act is a CheckAnswer with Claude's reason and an Undo, and three undos in a week put Claude back to
+suggesting.
 
 Cost: every request is priced from its usage at the model's rates and saved; before a request is sent its
 worst case is reserved, and nothing is sent that could take the month past the owner's limit (counted per
@@ -95,11 +100,11 @@ TITLES_ELSEWHERE = 5
 REASON_LENGTH = 200
 # Anthropic refusing this many requests in a row (a 400 for each) is a fault in the site: Claude stops.
 REJECTED_IN_A_ROW = 3
-# Differences that plainly make another product. A fairly sure answer naming one may say no to a page or a
-# pair; only a sure answer ever hides a price.
+# Differences that plainly make another product. A fairly sure answer must name one to hide a price; any
+# difference but the price is enough to say no to a page or a pair, which changes nothing visitors see.
 HARD = {"game", "set", "kind", "quantity", "language", "edition"}
 # At most this many prices are hidden in one run; the rest are sorted at the next.
-HIDES_PER_RUN = 10
+HIDES_PER_RUN = 30
 # A run the owner asked for looks further than the hourly one, within the same time and money limits.
 OWNER_ROWS_PER_RUN = 100
 # A link that would claim more than this saving on the cheapest price is left for the owner.
@@ -569,15 +574,15 @@ def worth(row):
     return 2 if ruling(row, SURE_SAME)[0] else 3
 
 
-def waiting(now=None, sort_all=False):
+def waiting(now=None):
     """The open rows to ask about, in the order of worth (each group keeps open_rows' order). Left out as
     well: rows the owner answered after Claude, unchanged rows already asked, and rows asked ASK_LIMIT
-    times. With Sort everything, an unchanged row Claude was only fairly sure of, or could not tell, is
-    asked once more at high effort, after the rest."""
+    times. An unchanged row Claude could not tell about, or was only fairly sure of, and so left for the
+    owner, is asked once more at high effort, after the rest: a careful answer may settle it."""
     rows = open_rows(now)
     owner_said = set(Ask.objects.exclude(owner_answer="").values_list("row_key", flat=True))
     before = asked_before()
-    latest = latest_answers({row.key for row in rows}) if sort_all else {}
+    latest = latest_answers({row.key for row in rows})
     keep, again, seen_keys = [], [], set()
     for row in rows:
         n, seen = before.get(row.key, (0, set()))
@@ -586,7 +591,8 @@ def waiting(now=None, sort_all=False):
         if row.fingerprint in seen:
             ask = latest.get(row.key)
             if (ask is not None and ask.fingerprint == row.fingerprint and own_answer(ask) and ask.effort != "high"
-                    and (ask.verdict == "unsure" or ask.confidence != "high")):
+                    and (ask.verdict == "unsure" or ask.confidence != "high")
+                    and ruling(row, as_answer(ask), as_answer(latest.get(row.partner)))[0] is None):
                 row.effort = "high"
                 seen_keys.add(row.key)
                 again.append(row)
@@ -743,7 +749,27 @@ def sure(answer, verdict):
     return verdict != "different" or any(item != "price" for item in answer["differences"])
 
 
-def decide(row, answer, may_act, partner=None, sort_all=False):
+def leaning(answer, verdict):
+    """Claude is sure or fairly sure of this verdict, read as reading() reads it."""
+    if answer is None:
+        return False
+    verdict_read, confidence = reading(answer)
+    return verdict_read == verdict and confidence in ("high", "medium")
+
+
+def reading(answer):
+    """(verdict, confidence) as the rules read an answer. A "different" that names only the price is a
+    fairly sure "same": the words name the product, and the site judges the price itself (the prompt's
+    rule 3), but Claude doubted it. A low confidence is a could not tell."""
+    verdict, confidence = answer["verdict"], answer["confidence"]
+    if verdict == "different" and not any(item != "price" for item in answer["differences"]):
+        verdict, confidence = "same", "medium"
+    if confidence == "low":
+        verdict = "unsure"
+    return verdict, confidence
+
+
+def decide(row, answer, may_act, partner=None):
     """What a row's answer may do: "link", "refuse", "hide", "apart", "check", "merge", or None for a
     suggestion.
 
@@ -752,34 +778,38 @@ def decide(row, answer, may_act, partner=None, sort_all=False):
     """
     if not may_act or answer is None:
         return None
-    return ruling(row, answer, partner, sort_all)[0]
+    return ruling(row, answer, partner)[0]
 
 
-def ruling(row, answer, partner=None, sort_all=False):
+def ruling(row, answer, partner=None):
     """(action, "") when the answer may act once Claude is let act, else (None, why it is left for the
     owner, in a few words).
 
-    Claude acts alone only where visitors see nothing change, or where it only takes something away. A
-    "check" ticks a doubtful price off as the right product and leaves it exactly as shown, with no saving
-    claimed. A link adds a price, so it also needs the site's own checks: the price band, the barcode,
-    and no big saving once linked (act). Claude never counts a price. With Sort everything, the owner's
-    setting, a sure same also links a page whatever its price (the site judges it like any other) and
-    merges a pair whose barcodes and prices agree; each has Undo.
+    Claude sorts every row it can, so the owner sees only real conflicts, and each act has Undo:
+
+    - sure or fairly sure of a plain difference: a page is refused, a pair kept apart, a doubtful price
+      hidden (fairly sure only for a difference that makes another product: game, set, kind and so on).
+    - sure or fairly sure of the same product: a doubtful price is ticked off as checked, which changes
+      nothing visitors see; a page is linked (when only fairly sure, only near other shops' price); a
+      pair is merged when sure, and their barcodes and prices agree.
+    - could not tell: asked once more, carefully. Still not able to tell, the row is settled the way that
+      adds nothing to the site: the page is not linked, the pair stays apart, the doubtful price is hidden.
+
+    Left for the owner: a barcode or a title that contradicts Claude's same, a deposit, two wrong-match
+    prices both called the product, and a fairly sure same about a pair.
     """
-    verdict, confidence = answer["verdict"], answer["confidence"]
+    verdict, confidence = reading(answer)
+    plain = set(answer["differences"]) - {"price"}
     if verdict == "unsure":
+        if not answer.get("careful"):
+            return None, "Claude could not tell, so it takes a careful second look"
+        if row.kind == "found":
+            return "refuse", ""
+        if row.kind == "pair":
+            return "apart", ""
+        if row.kind == "offer" and not row.partner:
+            return "hide", ""
         return None, "Claude could not tell"
-    if confidence != "high":
-        # Saying no to a page or a pair changes nothing visitors see, so a fairly sure answer that names a
-        # plain difference is enough. Hiding a price takes it away from them, so that needs a sure one.
-        if verdict == "different" and confidence == "medium" and set(answer["differences"]) & HARD:
-            if row.kind == "found":
-                return "refuse", ""
-            if row.kind == "pair":
-                return "apart", ""
-        return None, "Claude was only fairly sure" if confidence == "medium" else "Claude was not sure"
-    if verdict == "different" and not sure(answer, "different"):
-        return None, "Claude named no difference but the price, which the site's own checks judge"
     if row.kind == "found":
         if verdict == "different":
             return "refuse", ""
@@ -788,36 +818,41 @@ def ruling(row, answer, partner=None, sort_all=False):
         barred = autopilot.barcode_bars_link(row.product, row.shop_product)
         if barred:
             return None, barred
-        if sort_all:
+        if confidence == "high":
+            # The site judges the new price like any other: far from the rest, it is doubtful, not counted.
             return "link", ""
         price = row.shop_product.price
         if not price or price <= 0:
             return None, "the shop shows no price"
         if not row.others:
-            return None, "no other shop sells it, so there is no price to compare"
+            return None, "Claude was only fairly sure, and no other shop sells it to compare the price"
         if not autopilot.LINK_LOW <= price / row.rate <= autopilot.LINK_HIGH:
-            return None, "the price is far from what other shops charge"
+            return None, "Claude was only fairly sure, and the price is far from what other shops charge"
         return "link", ""
     if row.kind == "offer":
         if row.partner:
-            # A wrong match: only the price Claude is sure is another product is hidden, and only when it is
-            # sure the other is this one. Hiding the dearer one beside an unvouched cheaper one could open
-            # a saving nobody checked.
+            # A wrong match: only the price Claude names as another product is hidden, and only when it
+            # vouches for the other. Hiding the dearer one beside an unvouched cheaper one could open a
+            # saving nobody checked.
             if verdict == "same":
-                if sure(partner, "same"):
+                if leaning(partner, "same"):
                     return None, "Claude says both prices are this product, so one of them is unusual"
                 return None, "Claude says this price is the product. The other price was not shown to be another"
-            if not sure(partner, "same"):
+            if confidence != "high" and not plain & HARD:
+                return None, "Claude was only fairly sure"
+            if not leaning(partner, "same"):
                 return None, "Claude was not sure the other price is this product"
             return "hide", ""
         if verdict == "same":
-            barred = autopilot.check_bars(row.listing)
+            barred = autopilot.check_bars(row.listing, marketplace_ok=confidence == "high")
             return (None, barred) if barred else ("check", "")
+        if confidence != "high" and not plain & HARD:
+            return None, "Claude was only fairly sure, and named no difference that makes another product"
         return "hide", ""
     if row.kind == "pair":
         if verdict == "same":
-            if not sort_all:
-                return None, "Claude merges only with Sort everything on. The Merge button merges every pair it is sure of"
+            if confidence != "high":
+                return None, "Claude was only fairly sure, and merges only when sure"
             why = pair_disagrees(row)
             return (None, why) if why else ("merge", "")
         return "apart", ""
@@ -841,7 +876,8 @@ def as_answer(ask):
     """A stored answer in the shape decide reads, or None."""
     if ask is None or ask.outcome != Ask.Outcome.ANSWERED:
         return None
-    return {"verdict": ask.verdict, "confidence": ask.confidence, "differences": ask.differences or []}
+    return {"verdict": ask.verdict, "confidence": ask.confidence, "differences": ask.differences or [],
+            "careful": ask.effort == "high"}
 
 
 # Acting ------------------------------------------------------------------------------------------
@@ -1019,8 +1055,7 @@ def act_on_earlier(now=None, hides=None, dry_run=False):
             # A wrong match is decided only with both prices answered.
             if ask is None or (row.partner and row.partner not in usable):
                 continue
-            action = decide(row, as_answer(ask), True, partner=as_answer(usable.get(row.partner)),
-                            sort_all=bool(state and state.sort_all))
+            action = decide(row, as_answer(ask), True, partner=as_answer(usable.get(row.partner)))
             if action is None or (ask.evidence or {}).get("price") != row.evidence.get("price"):
                 continue
             if dry_run:
@@ -1102,7 +1137,8 @@ def due(state, now):
 
 def keep_going(state):
     """With Sort everything on, whether the last run left rows unasked while still getting somewhere: the
-    next run then starts at once, so the whole list is worked through run after run."""
+    next run then starts at once, so the whole list is worked through run after run, rather than
+    ROWS_PER_RUN an hour."""
     last = (state.runs or [{}])[0]
     return bool(state.sort_all and last.get("left") and (last.get("asked") or last.get("sorted"))
                 and last.get("note", "") in ("", "Stopped for time", "Reached the limit for one run"))
@@ -1153,7 +1189,7 @@ def run(client=None, now=None, dry_run=False, force=False):
     if not dry_run:
         # Answers given in trial, or before the row's other checks agreed, are free to act on now.
         result.earlier = result.acted = act_on_earlier(now, hides)
-    rows = waiting(now, sort_all=state.sort_all)
+    rows = waiting(now)
     total = len(rows)
     # Sort everything asks about every row, within the run's time and money; the next run goes on at once.
     if not state.sort_all:
@@ -1232,6 +1268,7 @@ def run(client=None, now=None, dry_run=False, force=False):
                 "request_id": (getattr(message, "_request_id", None) or getattr(message, "id", "") or "")[:80],
             }
             if answer is not None:
+                answer["careful"] = (row.effort or state.effort) == "high"
                 fields.update(verdict=answer["verdict"], confidence=answer["confidence"],
                               differences=answer["differences"], reason=clean(answer["reason"]))
             Ask.objects.filter(pk=ask.pk).update(**fields)
@@ -1253,7 +1290,7 @@ def run(client=None, now=None, dry_run=False, force=False):
                 todo_answer = answers.get(todo.key)
                 may_act = allowed and trusted.get(todo.key, False) and (
                     not todo.partner or trusted.get(todo.partner, False))
-                action = decide(todo, todo_answer, may_act, partner=answers.get(todo.partner), sort_all=fresh.sort_all)
+                action = decide(todo, todo_answer, may_act, partner=answers.get(todo.partner))
                 if action == "hide" and hides["left"] <= 0:
                     # Over the run's hides: left as a suggestion, sorted from the answer at the next run.
                     action = None
@@ -1387,7 +1424,7 @@ def latest_answers(keys):
     return found
 
 
-def attach_answers(doubtful, wrong, found, duplicates, may_act=False, sort_all=False):
+def attach_answers(doubtful, wrong, found, duplicates, may_act=False):
     """Give each row the page shows a ``claude`` attribute: Claude's latest answer about it while the row is
     still what Claude was asked about and the owner has not answered it since, else None. While Claude may
     act, each answer also says why it was left for the owner. Returns, for each section, how many rows
@@ -1412,8 +1449,7 @@ def attach_answers(doubtful, wrong, found, duplicates, may_act=False, sort_all=F
     for row, item in rows:
         item.claude = current.get(row.key)
         if item.claude is not None and may_act:
-            item.claude.left_because = left_because(row, item.claude, current.get(row.partner), row.key in before,
-                                                    sort_all)
+            item.claude.left_because = left_because(row, item.claude, current.get(row.partner), row.key in before)
         section = "pairs" if row.kind == "pair" else "found" if row.kind == "found" else "wrong" if row.partner else "doubtful"
         tally = counts.setdefault(section, {"same": 0, "different": 0, "unsure": 0, "none": 0, "total": 0})
         tally[item.claude.verdict if item.claude is not None else "none"] += 1
@@ -1443,7 +1479,7 @@ def answered_before(rows):
     return keys
 
 
-def left_because(row, ask, partner_ask=None, answered=False, sort_all=False):
+def left_because(row, ask, partner_ask=None, answered=False):
     """Why an answer on the page has not acted, in a few words."""
     if answered:
         return "the row was answered before, so it stays with you"
@@ -1451,7 +1487,7 @@ def left_because(row, ask, partner_ask=None, answered=False, sort_all=False):
         return "another model answered while Claude was busy. Claude asks again at its next look"
     if partner_ask is not None and not own_answer(partner_ask):
         partner_ask = None
-    action, why = ruling(row, as_answer(ask), as_answer(partner_ask), sort_all)
+    action, why = ruling(row, as_answer(ask), as_answer(partner_ask))
     return why if action is None else "Claude sorts this at its next look"
 
 
@@ -1487,7 +1523,7 @@ def page_status(now=None):
     elif state.may_act and state.sort_all:
         status = "Claude is on and sorting everything."
     elif state.may_act:
-        status = "Claude is on and sorts what it is sure of."
+        status = "Claude is on and sorts what it can, 25 an hour."
     else:
         status = "Claude is on, in trial: it only suggests."
     asked = state.asked_at is not None and (state.last_run_at is None or state.asked_at > state.last_run_at)

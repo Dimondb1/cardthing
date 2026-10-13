@@ -1391,12 +1391,121 @@ def posted_price_moved(request, listing):
     """True when the form posted a price and the listing's (or found row's) price is no longer that price."""
     if "price" not in request.POST:
         return False
+    return price_moved(request.POST["price"], listing)
+
+
+def price_moved(posted, listing):
+    """True when the listing's (or found row's) price is no longer the posted one."""
     if listing.price is None:
-        return request.POST["price"] != ""
+        return posted != ""
     try:
-        return Decimal(request.POST["price"]) != listing.price
+        return Decimal(posted) != listing.price
     except (InvalidOperation, ValueError):
         return True
+
+
+# Most rows one tap of Things to check's tick boxes answers.
+TICKED_LIMIT = 100
+CHANGED = "That {} has changed since the page loaded. Check it again below."
+
+
+def offer_tap(action, listing):
+    """Hide, This price is right or Show it anyway, for one listing. Returns what the page says."""
+    from catalogue import autopilot, judge, sanity
+
+    if action == "hide":
+        # The other shops were judged against this price: without it they may be fine. The autopilot
+        # never answers a price the owner hid.
+        autopilot.hide(listing)
+        autopilot.owner_hid(listing)
+        judge.note_owner(f"offer:{listing.pk}", "hid")
+        return (f"Hidden: {listing.product.name} at {listing.retailer.name}. "
+                "Tick show on site on the listing to bring it back.")
+    sanity.trust(listing)
+    judge.note_owner(f"offer:{listing.pk}", "same")
+    return (f"Counted: £{listing.price} for {listing.product.name} at {listing.retailer.name}. It stays counted "
+            f"while it moves less than {sanity.TRUST_BAND * 100:.0f}% for {sanity.TRUST_DAYS} days.")
+
+
+def found_tap(action, row):
+    """Yes, link it or No, not this, for one page the stockist finder found. Returns what the page says."""
+    from catalogue import finder, judge
+
+    if action == "link_found":
+        finder.link(row)
+        judge.note_owner(f"found:{row.pk}", "same")
+        return f"Linked: {row.suggested.name} at {row.retailer.name}. The next read of the shop checks its price and stock."
+    finder.ignore(row)
+    judge.note_owner(f"found:{row.pk}", "different")
+    return f"Noted: {row.retailer.name} is not asked about {row.suggested.name} again."
+
+
+def apart_tap(keep, other):
+    """Not the same, for one pair of possible duplicates. Returns what the page says."""
+    from catalogue import autopilot, judge
+
+    autopilot.owner_apart(keep, other)
+    judge.note_owner(judge.pair_key(keep, other), "different")
+    return f"Noted: {other.name} is not {keep.name}. They are not suggested together again."
+
+
+def ticked_tap(request):
+    """One tap for every ticked row of a list: hide them, count them, link them, say no to them or keep
+    pairs apart. Each row is answered as its own button would, and only while it is as the page showed
+    it. Returns the ticks answered, for the page to mark without reloading."""
+    from django.contrib import messages
+
+    from catalogue import checks
+    from catalogue.signals import clear_list_caches
+
+    do, picks = request.POST.get("do", ""), request.POST.getlist("pick")[:TICKED_LIMIT]
+    if do not in ("trust", "hide", "link_found", "not_found", "apart") or not picks:
+        messages.warning(request, "Tick at least one row first, then tap what to do with them.")
+        return []
+    pairs = {f"{keep.pk}:{other.pk}": (keep, other) for keep, others in checks.duplicates() for other in others} \
+        if do == "apart" else {}
+    done, changed = [], 0
+    for pick in dict.fromkeys(picks):
+        first, _, second = pick.partition(":")
+        if do == "apart":
+            pair = pairs.get(pick)
+            if pair is None:
+                changed += 1
+                continue
+            apart_tap(*pair)
+        elif not first.isdigit():
+            changed += 1
+            continue
+        elif do in ("trust", "hide"):
+            listing = Listing.objects.select_related("product", "retailer").filter(pk=first, is_active=True).first()
+            if listing is None or price_moved(second, listing):
+                changed += 1
+                continue
+            offer_tap(do, listing)
+        else:
+            row = checks.found_waiting().select_related("retailer", "suggested").filter(pk=first).first()
+            if row is None or price_moved(second, row):
+                changed += 1
+                continue
+            found_tap(do, row)
+        done.append(pick)
+    if done and do != "not_found":
+        clear_list_caches(force=True)
+    n = len(done)
+    rows = f"{n} row{'s' if n != 1 else ''}"
+    said = {
+        "trust": f"Counted {n} price{'s' if n != 1 else ''}.",
+        "hide": f"Hidden {n} price{'s' if n != 1 else ''}. Tick show on site on a listing to bring it back.",
+        "link_found": f"Linked {rows}. The next read of each shop checks its price and stock.",
+        "not_found": f"Noted {rows}: the shops are not asked about them again.",
+        "apart": f"Noted {n} pair{'s' if n != 1 else ''} as not the same.",
+    }[do]
+    if n:
+        messages.success(request, said)
+    if changed:
+        messages.warning(request, f"{changed} ticked row{'s' if changed != 1 else ''} had changed since the page "
+                                  "loaded. Check again below.")
+    return done
 
 
 @staff_member_required
@@ -1409,50 +1518,32 @@ def checks_page(request):
     from django.contrib import messages
     from django.db import transaction
 
-    from catalogue import autopilot, checks, judge, sanity
+    from catalogue import autopilot, checks, judge
     from catalogue.management.commands.merge_duplicates import merge
     from catalogue.models import CheckAnswer
     from catalogue.signals import clear_list_caches
 
     if request.method == "POST":
         action = request.POST.get("action", "")
+        done = []
         if action in ("hide", "trust", "show"):
             listing = get_object_or_404(Listing.objects.select_related("product", "retailer"), pk=request.POST.get("listing"))
             if posted_price_moved(request, listing):
                 # Only the price the owner looked at is acted on, as with a merge.
-                messages.warning(request, "That price has changed since the page loaded. Check it again below.")
-            elif action == "hide":
-                # The other shops were judged against this price: without it they may be fine. The autopilot
-                # never answers a price the owner hid.
-                autopilot.hide(listing)
-                autopilot.owner_hid(listing)
-                judge.note_owner(f"offer:{listing.pk}", "hid")
-                clear_list_caches(force=True)
-                messages.success(request, f"Hidden: {listing.product.name} at {listing.retailer.name}. "
-                                          "Tick show on site on the listing to bring it back.")
+                messages.warning(request, CHANGED.format("price"))
             else:
-                sanity.trust(listing)
-                judge.note_owner(f"offer:{listing.pk}", "same")
+                messages.success(request, offer_tap(action, listing))
                 clear_list_caches(force=True)
-                messages.success(request, f"Counted: £{listing.price} for {listing.product.name} at {listing.retailer.name}. "
-                                          f"It stays counted while it moves less than {sanity.TRUST_BAND * 100:.0f}% "
-                                          f"for {sanity.TRUST_DAYS} days.")
         elif action in ("link_found", "not_found"):
-            from catalogue import finder
-
             row = get_object_or_404(checks.found_waiting().select_related("retailer", "suggested"), pk=request.POST.get("row"))
             if posted_price_moved(request, row):
-                messages.warning(request, "That price has changed since the page loaded. Check it again below.")
-            elif action == "link_found":
-                finder.link(row)
-                judge.note_owner(f"found:{row.pk}", "same")
-                clear_list_caches(force=True)
-                messages.success(request, f"Linked: {row.suggested.name} at {row.retailer.name}. "
-                                          "The next read of the shop checks its price and stock.")
+                messages.warning(request, CHANGED.format("price"))
             else:
-                finder.ignore(row)
-                judge.note_owner(f"found:{row.pk}", "different")
-                messages.success(request, f"Noted: {row.retailer.name} is not asked about {row.suggested.name} again.")
+                messages.success(request, found_tap(action, row))
+                if action == "link_found":
+                    clear_list_caches(force=True)
+        elif action == "ticked":
+            done = ticked_tap(request)
         elif action in ("add_set", "not_a_set", "use_release_date", "keep_release_date"):
             release_tap(request, action)
         elif action == "merge":
@@ -1477,11 +1568,9 @@ def checks_page(request):
             pair = next(((keep, other) for keep, others in checks.duplicates() for other in others
                          if (str(keep.pk), str(other.pk)) == wanted), None)
             if pair is None:
-                messages.warning(request, "That group has changed since the page loaded. Check it again below.")
+                messages.warning(request, CHANGED.format("group"))
             else:
-                autopilot.owner_apart(*pair)
-                judge.note_owner(judge.pair_key(*pair), "different")
-                messages.success(request, f"Noted: {pair[1].name} is not {pair[0].name}. They are not suggested together again.")
+                messages.success(request, apart_tap(*pair))
         elif action == "undo":
             pk = request.POST.get("answer", "")
             answer = CheckAnswer.objects.filter(pk=pk, by_owner=False).first() if pk.isdigit() else None
@@ -1508,6 +1597,11 @@ def checks_page(request):
                 messages.success(request, f"Sorted {len(done)} thing{'s' if len(done) != 1 else ''}. Each is listed under Sorted for you, with Undo.")
             else:
                 messages.success(request, "Nothing more can be sorted without you. What is left below needs your eye.")
+        if request.headers.get("X-Checks-Tap") == "1":
+            # A tap sent by the page's script: it marks the row answered in place, with no reload.
+            said = [(message.level_tag, message.message) for message in messages.get_messages(request)]
+            return JsonResponse({"ok": bool(said) and all(tag == "success" for tag, _ in said),
+                                 "said": " ".join(text for _, text in said), "done": done})
         return HttpResponseRedirect(reverse("checks"))
     now = timezone.now()
     counts = checks.sanity_counts()
@@ -1520,8 +1614,7 @@ def checks_page(request):
     # Claude's latest answer for each row on the page, while the row is still as Claude saw it.
     claude = judge.page_status(now)
     state = claude["state"]
-    claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates, may_act=bool(state and state.may_act),
-                                         sort_all=bool(state and state.sort_all))
+    claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates, may_act=bool(state and state.may_act))
     context = {
         **admin.site.each_context(request), "title": "Things to check",
         "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
@@ -1594,7 +1687,7 @@ def claude_tap(request, action):
             update.update(may_act=True, acting_since=timezone.now(), asked_at=timezone.now())
             messages.success(request, "Claude now sorts everything, run after run, starting now. Each act has Undo.")
         else:
-            messages.success(request, "Claude now sorts only what it is sure of, and never merges by itself.")
+            messages.success(request, "Claude now looks at 25 rows an hour.")
     elif action in ("claude_on", "claude_off"):
         update["enabled"] = action == "claude_on"
         if not update["enabled"]:
@@ -1643,7 +1736,7 @@ def claude_tap(request, action):
             from catalogue import crawl
 
             messages.success(request, "Claude starts once Pause all is off." if crawl.all_paused() else
-                             "Claude now sorts what it is sure of.")
+                             "Claude now sorts what it can.")
     if action in ("claude_now", "claude_sort_on"):
         judge.start_now()
 

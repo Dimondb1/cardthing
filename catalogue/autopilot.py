@@ -238,10 +238,13 @@ def marketplace(listing):
     return listing.retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY)
 
 
-def check_bars(listing):
+def check_bars(listing, marketplace_ok=False):
     """Why a doubtful price may not be ticked off as the right product on a sure same, or "": a
-    marketplace's, a deposit, a title naming another product, or a barcode that is not ours or not read."""
-    if marketplace(listing):
+    marketplace's, a deposit, a title naming another product, or a barcode that is not ours or not read.
+
+    ``marketplace_ok`` lets a marketplace's price through: Claude, sure from the seller's words, may tick it
+    off, since a Checked price stays exactly as shown with no saving claimed. The barcode never proves one."""
+    if marketplace(listing) and not marketplace_ok:
         return "eBay and Amazon titles are the seller's own words, so Claude leaves these to you"
     if DEPOSIT.search(listing.title or ""):
         return "the shop's title says deposit, so the price may not be the whole price"

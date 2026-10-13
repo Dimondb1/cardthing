@@ -614,10 +614,13 @@ class UnionArenaTests(TestCase):
             ("Union Arena TCG: Tokyo Ghoul UE18ST - Starter Deck", "deck", "Tokyo Ghoul UE18ST Starter Deck"),
             ("Union Arena - BLEACH Thousand-Year Blood War Starter Deck UE01ST - ENGLISH", "deck",
              "BLEACH Thousand Year Blood War Starter Deck UE01ST"),
+            ("Union-Arena Hunter x Hunter Booster Box", "booster_box", "Hunter x Hunter Booster Box"),
         ]:
             with self.subTest(title=title):
                 sealed = classify(title, price=Decimal("30"))
                 self.assertEqual((sealed.game, sealed.product_type, sealed.name), ("union-arena", kind, name))
+        # Other games' boxes of the same anime stay with their game.
+        self.assertEqual(classify("Weiss Schwarz Hunter x Hunter Booster Box", price=Decimal("60")).game, "weiss-schwarz")
         self.assertIsNone(classify("Union Arena - Goddess of Victory: NIKKE - soda - UA18BT/NIK-1-081 (PSA 10 Graded Slab)",
                                    price=Decimal("149.95")))
 

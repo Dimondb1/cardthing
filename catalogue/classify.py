@@ -19,7 +19,7 @@ from .matching import expand
 # slug, name, short name, words that identify the game in a title, vendor or tag
 GAMES = [
     # First, because its sets are named after anime that other games' words could otherwise claim.
-    ("union-arena", "Union Arena", "Union Arena", ("union arena",)),
+    ("union-arena", "Union Arena", "Union Arena", ("union arena", "union-arena")),
     ("pokemon", "Pokémon", "Pokémon", ("pokemon", "pokémon", "ptcg")),
     ("magic-the-gathering", "Magic: The Gathering", "Magic", ("magic the gathering", "magic: the gathering", "mtg", "magic:")),
     ("one-piece", "One Piece Card Game", "One Piece", ("one piece",)),
@@ -165,7 +165,7 @@ PREFIXES = re.compile(
     r"^(?:pok[eé]mon(?: tcg| trading card game)?|magic(?: the gathering|: the gathering)?|mtg|one piece(?: card game| tcg)?|"
     r"disney lorcana(?: tcg)?|lorcana(?: tcg)?|yu-gi-oh!?|yugioh|star wars(?::)? unlimited|flesh (?:and|&) blood(?: tcg)?|"
     r"digimon(?: card game| tcg)?|dragon ball super(?: card game| tcg)?|riftbound(?::)?(?: league of legends tcg)?|"
-    r"cardfight!*(?: vanguard)?(?: overdress)?|weiss schwarz|weiß schwarz|union arena(?: tcg| card game)?)\s*[:\-–|]*\s*",
+    r"cardfight!*(?: vanguard)?(?: overdress)?|weiss schwarz|weiß schwarz|union[- ]arena(?: tcg| card game)?)\s*[:\-–|]*\s*",
     re.I,
 )
 KIND_FIRST = re.compile(r"^(Booster Box|Booster Pack|Trial Deck\+?|Start Deck|Starter Deck|Extra Booster(?: Box| Pack)?)\s*[:\-–]\s*(.+)$", re.I)

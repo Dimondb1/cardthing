@@ -76,6 +76,15 @@ def file_cron():
     return cron_lines((DEPLOY / "crontab").read_text())
 
 
+class InstallStepTests(TestCase):
+    def test_the_installer_loads_the_hand_added_products_after_the_shops(self):
+        text = (DEPLOY / "install.sh").read_text()
+        shops = text.index(".venv/bin/python manage.py setup_shops\n")
+        loaded = text.index(".venv/bin/python manage.py import_products catalogue/data/union_arena.csv")
+        self.assertGreater(loaded, shops)
+        self.assertLess(loaded, text.index("systemctl restart ripraptor"))
+
+
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()

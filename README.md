@@ -73,7 +73,9 @@ classifier knows is created if no shop has brought one of its products in
 yet. A product given a release date in the file is kept while no shop lists
 it, so eBay, Amazon and the stockist finder can look for it: `tidy_catalogue`
 only removes products that shops brought in. `catalogue/data/union_arena.csv`
-holds the Union Arena products a visitor asked for.
+holds the Union Arena products a visitor asked for; the installer loads it
+on every update, so a product added to that file reaches the site with the
+next update.
 
 `scripts/browser_sweep.py` drives every public page in a real browser and
 reports script errors, horizontal overflow, unlabelled controls and tap

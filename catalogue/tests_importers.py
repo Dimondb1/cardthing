@@ -631,8 +631,13 @@ class UnionArenaTests(TestCase):
         from .ebay import search_queries
 
         out = StringIO()
-        call_command("import_products", str(Path(settings.BASE_DIR) / "catalogue" / "data" / "union_arena.csv"), stdout=out)
+        path = str(Path(settings.BASE_DIR) / "catalogue" / "data" / "union_arena.csv")
+        call_command("import_products", path, stdout=out)
         self.assertIn("5 products added, 0 updated.", out.getvalue())
+        # The installer loads the file on every update, so a second load must change nothing.
+        again = StringIO()
+        call_command("import_products", path, stdout=again)
+        self.assertIn("0 products added, 5 updated.", again.getvalue())
         products = Product.objects.filter(game__slug="union-arena")
         self.assertEqual(products.count(), 5)
         game = products.first().game

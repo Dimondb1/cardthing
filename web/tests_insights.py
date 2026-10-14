@@ -96,9 +96,9 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        # 38 since the earning share (2), the shops read from part of their site (1) and the items left out (1)
-        # joined the report.
-        with self.assertNumQueries(38):
+        # 37 since the earning share (2) and the shops read from part of their site (1) joined the report. The
+        # items left out are counted by the hourly tidy-up and read from the cache.
+        with self.assertNumQueries(37):
             insights.report(30)
         # Shops read from part of their site add two queries however many there are.
         from catalogue.models import Retailer
@@ -107,7 +107,7 @@ class InsightsPageTests(TestCase):
             Retailer.objects.create(name=f"Part {n}", slug=f"part-{n}", website=f"https://part{n}.example/",
                                     source_type=Retailer.Source.SHOPIFY, source_url=f"https://part{n}.example/",
                                     collection="cards football")
-            with self.assertNumQueries(40):
+            with self.assertNumQueries(39):
                 insights.report(30)
 
 
@@ -515,6 +515,10 @@ class CoverageTests(TestCase):
             "Pokemon Booster Pack (1x Booster Pack) [a variant of another amount] https://plain.example/products/pack",
             "Pokemon Mega Brave Booster Box -> maybe Mega Brave Booster Box (80%)",
         ]))
+        # Nothing is counted while the page loads: before the hourly tidy-up counts, the page says so.
+        self.assertIsNone(insights.left_out())
+        self.assertIsNone(insights.report(30)["left_out"])
+        insights.count_left_out()
         left = insights.left_out()
         self.assertEqual(left["count"], 2)
         self.assertEqual(left["by_shop"], [("Plain Shop", 2)])
@@ -526,7 +530,7 @@ class CoverageTests(TestCase):
         # A failed read says nothing about what a shop sells, so its list is not read.
         ImportRun.objects.create(retailer=self.plain, finished_at=timezone.now(), error="boom",
                                  unmatched="Pokemon Draft Night Box [no barcode] https://plain.example/products/x")
-        self.assertEqual(insights.left_out()["count"], 2)
+        self.assertEqual(insights.count_left_out()["count"], 2)
 
     def test_shops_read_from_part_of_their_site(self):
         from catalogue.models import Retailer
@@ -542,3 +546,37 @@ class CoverageTests(TestCase):
         page = self.client.get(reverse("insights"))
         self.assertContains(page, "Shops read from part of their site")
         self.assertContains(page, "trading-card-games, football, and its newest products")
+
+
+class LeftOutCountTests(TestCase):
+    """The left-out count is made by the hourly tidy-up, never while the Insights page loads."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from django.core.cache import cache
+
+        cache.clear()
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+
+    def test_the_page_waits_for_the_tidy_up_and_then_shows_when_it_counted(self):
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+        from django.urls import reverse
+
+        from catalogue.models import ImportRun
+        from catalogue.testing import make_retailer
+
+        shop = make_retailer("Plain Shop")
+        ImportRun.objects.create(retailer=shop, finished_at=timezone.now(), unmatched=(
+            "One Piece Card Game - Illustration Box (IB-06) [no barcode] https://plain.example/products/ib-06"))
+        with mock.patch("catalogue.insights.count_left_out", side_effect=AssertionError("counted in a page")):
+            page = self.client.get(reverse("insights"))
+        self.assertContains(page, "The first count is not ready yet.")
+        out = StringIO()
+        call_command("tidy_all", stdout=out)
+        self.assertIn("1 items shops sell look sealed but were left out.", out.getvalue())
+        page = self.client.get(reverse("insights"))
+        self.assertContains(page, "Illustration Box (IB-06)")
+        self.assertContains(page, "Counted ")

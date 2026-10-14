@@ -71,6 +71,12 @@ class Command(BaseCommand):
             cleared, deleted = prune_runs()
             self.stdout.write(f"{cleared} lists of unmatched products cleared, {deleted} old runs deleted.")
 
+        # Counted here, never while the Insights page waits: a big shop's list runs to thousands of lines.
+        from catalogue.insights import count_left_out
+
+        self.stdout.write("== look sealed, left out")
+        self.stdout.write(f"{count_left_out()['count']} items shops sell look sealed but were left out.")
+
         from catalogue import autopilot
 
         if autopilot.enabled():

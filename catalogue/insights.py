@@ -473,12 +473,20 @@ def section_shops():
 LEFT_OUT_LINE = re.compile(r"^(?P<title>.+) \[(?:no barcode|\d{8,14})\] (?P<url>https?://\S+)$")
 
 
-def left_out(limit=40):
+# The hourly tidy-up's count of items left out, kept long enough to outlast a missed hour or two.
+LEFT_OUT_KEY = "insights:left-out:v2"
+LEFT_OUT_SECONDS = 3 * 3600
+
+
+def count_left_out(limit=40, now=None):
     """Items shops sell that look like a sealed product of a game we list but were not listed, from each
     shop's latest good read: a kind of product the rules do not know yet ("Illustration Box"), or one that
     is ours by its name but was turned away by the shop's category, its price or the matching. What the
-    rules leave out on purpose (cases of boxes, sleeves, single cards, figures) is not counted. Cached for
-    an hour against the runs it read, since a big shop's list runs to thousands of lines."""
+    rules leave out on purpose (cases of boxes, sleeves, single cards, figures) is not counted.
+
+    Counted by the hourly tidy_all and kept in the shared cache, never while a page waits: a big shop's
+    list runs to thousands of lines, and on 14 Oct 2026 counting them for the Insights page took the
+    one-processor server past gunicorn's 60 seconds and out of memory. One shop's list is read at a time."""
     from django.core.cache import cache
 
     from .classify import NOT_SEALED, VARIANT_MENU, classify, find_game, find_type
@@ -490,13 +498,11 @@ def left_out(limit=40):
     )
     for pk, retailer_id in runs:
         latest.setdefault(retailer_id, pk)
-    key = "insights:left-out:" + hashlib.sha1(",".join(map(str, sorted(latest.values()))).encode()).hexdigest()
-    cached = cache.get(key)
-    if cached is not None:
-        return cached
     items, by_shop = [], {}
-    for run in ImportRun.objects.filter(pk__in=latest.values()).select_related("retailer").order_by("retailer__name"):
-        for line in run.unmatched.splitlines():
+    shops = ImportRun.objects.filter(pk__in=latest.values()).order_by("retailer__name").values_list("pk", "retailer__name")
+    for pk, shop in list(shops):
+        text = ImportRun.objects.filter(pk=pk).values_list("unmatched", flat=True).first() or ""
+        for line in text.splitlines():
             found = LEFT_OUT_LINE.match(line)
             if not found:
                 continue
@@ -509,12 +515,20 @@ def left_out(limit=40):
                 why = "a kind of product the rules do not know"
             else:
                 why = "left out by another rule"
-            by_shop[run.retailer.name] = by_shop.get(run.retailer.name, 0) + 1
+            by_shop[shop] = by_shop.get(shop, 0) + 1
             if len(items) < limit:
-                items.append({"shop": run.retailer.name, "title": title, "url": found.group("url"), "why": why})
-    result = {"count": sum(by_shop.values()), "by_shop": sorted(by_shop.items(), key=lambda item: -item[1]), "items": items}
-    cache.set(key, result, 3600)
+                items.append({"shop": shop, "title": title, "url": found.group("url"), "why": why})
+    result = {"count": sum(by_shop.values()), "by_shop": sorted(by_shop.items(), key=lambda item: -item[1]),
+              "items": items, "counted_at": now or timezone.now()}
+    cache.set(LEFT_OUT_KEY, result, LEFT_OUT_SECONDS)
     return result
+
+
+def left_out():
+    """The hourly count from count_left_out, or None before the first one."""
+    from django.core.cache import cache
+
+    return cache.get(LEFT_OUT_KEY)
 
 
 def ebay_coverage():

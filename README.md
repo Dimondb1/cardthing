@@ -107,7 +107,10 @@ sells that look like a sealed product of a game we list but were not
 listed, from each shop's latest good read: a kind the rules do not know
 yet, or one ours by name but turned away by the shop's category, its price
 or the matching. What the rules leave out on purpose (cases, sleeves,
-singles, figures) is not listed. "Products where a paying shop is cheapest"
+singles, figures) is not listed. It is counted by the hourly `tidy_all`,
+one shop's list at a time, and the page shows the last count and when it
+was made: counting while the page loaded took the one-processor server past
+gunicorn's 60 seconds and out of memory. "Products where a paying shop is cheapest"
 gives the share of buyable products whose cheapest shop pays a commission,
 and the shops that are cheapest most often without paying. Both lead
 "What to do next" when they matter.

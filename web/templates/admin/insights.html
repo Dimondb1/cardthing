@@ -198,8 +198,9 @@
   <div class="module">
     <h2>Look sealed, left out</h2>
     <p>Items shops sell that look like a sealed product of a game we list but are not listed: a kind the rules do not know yet, or turned away by mistake. What is left out on purpose (cases, sleeves, singles, figures) is not here.</p>
-    {% if left_out.count %}<p>{{ left_out.count }} at {% for name, n in left_out.by_shop %}{{ name }} ({{ n }}){% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
-    <table><tbody>{% for item in left_out.items %}<tr><td>{{ item.shop }}</td><td class="wrap"><a href="{{ item.url }}" rel="noreferrer noopener" target="_blank">{{ item.title }}</a></td><td class="wrap">{{ item.why }}</td></tr>{% empty %}<tr><td>Nothing: every sealed-looking item the shops sell is listed or left out on purpose.</td></tr>{% endfor %}</tbody></table>
+    {% if left_out is None %}<p>Counted every hour by the tidy-up, not while this page loads. The first count is not ready yet.</p>{% else %}
+    <p>{% if left_out.count %}{{ left_out.count }} at {% for name, n in left_out.by_shop %}{{ name }} ({{ n }}){% if not forloop.last %}, {% endif %}{% endfor %}. {% endif %}Counted {{ left_out.counted_at|date:"j M H:i" }}.</p>
+    <table><tbody>{% for item in left_out.items %}<tr><td>{{ item.shop }}</td><td class="wrap"><a href="{{ item.url }}" rel="noreferrer noopener" target="_blank">{{ item.title }}</a></td><td class="wrap">{{ item.why }}</td></tr>{% empty %}<tr><td>Nothing: every sealed-looking item the shops sell is listed or left out on purpose.</td></tr>{% endfor %}</tbody></table>{% endif %}
   </div>
 
   <div class="module">

@@ -919,6 +919,15 @@ background reader as services, configures HTTPS for the domain and
 schedules the cron jobs. The reader reads every shop on its first start. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
 
+If the site was down, this prints a short read-only report: reboots, code
+updates, restarts and crashes of the site, the reader and Caddy, when Caddy
+could not reach the site, out-of-memory kills, locked-database errors,
+memory, disk and what is running now, all in UK time. It changes nothing.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Dimondb1/cardthing/claude/compassionate-edison-aot3li/deploy/why_down.sh | bash
+```
+
 Each update first copies the database to `/var/lib/ripraptor/backups/`
 with `backup_db` (the newest five are kept; see "Backups, timeouts and runs
 cut short" below). To roll back, stop the site and the cron jobs, copy the

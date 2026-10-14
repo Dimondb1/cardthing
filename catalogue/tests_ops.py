@@ -85,6 +85,19 @@ class InstallStepTests(TestCase):
         self.assertLess(loaded, text.index("systemctl restart ripraptor"))
 
 
+class WhyDownTests(TestCase):
+    """deploy/why_down.sh, the owner's report for when the site was down, is valid and only reads."""
+
+    def test_it_parses_and_never_changes_anything(self):
+        script = DEPLOY / "why_down.sh"
+        subprocess.run(["bash", "-n", str(script)], check=True)
+        body = "\n".join(line for line in script.read_text().splitlines() if not line.lstrip().startswith("#"))
+        for writes in (r"systemctl (?:start|stop|restart|reload|enable|disable|kill)", r"\brm\b", r"\bkill\b",
+                       r"\bcrontab\b", r"\bapt(?:-get)? +(?:install|remove|purge|upgrade|update)\b", r"\bchown\b",
+                       r"\bchmod\b", r"\bmanage\.py\b", r"\bsed -i\b", r">>?\s*(?!/dev/null|&)[\w/$\"]"):
+            self.assertIsNone(re.search(writes, body), writes)
+
+
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()

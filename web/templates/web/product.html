@@ -59,7 +59,7 @@
       <div class="buybox__amazon buybox__amazon--lead">
         {% if amazon_search %}<a class="button button--big buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
         {% if ebay_search %}<a class="button {% if amazon_search %}button--quiet{% else %}button--big{% endif %} buybox__amazon-button" href="{{ ebay_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.ebay.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
-        <p class="buybox__summary">{% copy "product.marketplaces.note_sold_out" %}</p>
+        <p class="buybox__summary">{% copy "product.marketplaces.note_sold_out" %}{% if amazon_search %} {% copy "terms.amazon" %}{% endif %}</p>
       </div>
     {% endif %}
     {% if alerts_on %}{% include "web/includes/alert_form.html" %}{% endif %}
@@ -67,7 +67,7 @@
     {% if amazon_search and cheapest %}
       <div class="buybox__amazon">
         <a class="button button--small buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
-        <p class="buybox__summary">{% copy "product.amazon.note" %}</p>
+        <p class="buybox__summary">{% copy "product.amazon.note" %} {% copy "terms.amazon" %}</p>
       </div>
     {% endif %}
   </section>

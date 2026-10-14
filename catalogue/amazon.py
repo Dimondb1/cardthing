@@ -42,7 +42,6 @@ PAUSE = 1.1  # seconds between calls: new accounts get one a second
 RESOURCES = [
     "ItemInfo.Title",
     "ItemInfo.ExternalIds",
-    "Images.Primary.Large",
     "Offers.Listings.Price",
     "Offers.Listings.Availability.Type",
     "Offers.Listings.Condition",
@@ -143,7 +142,7 @@ def item_offer(item, Offer):
     in_stock = (listing.get("Availability", {}) or {}).get("Type", "Now") == "Now"
     free = (listing.get("DeliveryInfo", {}) or {}).get("IsFreeShippingEligible", False)
     eans = ((item.get("ItemInfo", {}).get("ExternalIds", {}) or {}).get("EANs", {}) or {}).get("DisplayValues", [])
-    image = ((item.get("Images", {}).get("Primary", {}) or {}).get("Large", {}) or {}).get("URL", "")
+    # No picture: Amazon's policies forbid storing its images, and the site keeps a product's picture for good.
     return Offer(
         title=title,
         url=url,
@@ -151,7 +150,7 @@ def item_offer(item, Offer):
         ean=eans[0] if eans else "",
         availability=Listing.Availability.IN_STOCK if in_stock else Listing.Availability.OUT_OF_STOCK,
         delivery=Decimal("0.00") if free else None,
-        image=image,
+        image="",
         tags=(asin,),
     )
 

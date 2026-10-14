@@ -224,10 +224,30 @@ tried, then those tried longest ago. A wanted product searched in the last
 three days waits its normal turn, so the same one is not searched every
 day ahead of products never tried. A result is kept only when it matches the
 product asked about. Amazon's own tracked link is stored on each listing,
-so the shop needs no affiliate link format. The Terms page carries the
-Amazon Associates line while Amazon is an active shop. Amazon removes API
+so the shop needs no affiliate link format. Amazon removes API
 access from accounts with no sales in their first months; the import then
 reports the error in admin until access is restored.
+
+**Amazon Associates rules the site keeps.** While the tag is set, Amazon's
+required statement ("As an Amazon Associate, RipRaptor earns from
+qualifying purchases.") is on the Terms page, in the footer line of every
+page and beside the Amazon buttons in the product price box. Amazon links go
+straight to amazon.co.uk with the tag (no redirect), and the site sends its
+address as the referrer. The footer links "Privacy" to the Your data part of
+the Terms page, which says shops and their affiliate networks set their own
+cookies. No Amazon picture is asked for or stored: Amazon forbids keeping
+its images.
+
+Before turning on Amazon prices (the API keys), three more rules apply.
+Amazon's UK policies say a site with Amazon links "must not have price
+tracking and/or price alerting functionality" unless Amazon agrees, and
+RipRaptor has price history, lowest-in-90-days badges and stock alerts, so
+get Amazon's agreement in writing first. Amazon prices may be shown only
+when refreshed within 24 hours, with the time they were checked and
+Amazon's disclaimer ("Product prices and availability are accurate as of
+the date/time indicated and are subject to change...") beside them or a
+Details link to it. The daily read and the 72 hour stale window do not
+meet that yet.
 
 ## eBay
 

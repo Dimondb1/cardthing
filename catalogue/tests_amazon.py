@@ -261,3 +261,38 @@ class ImportTests(TestCase):
         shop = Retailer.objects.get(slug="amazon")
         self.assertEqual(shop.source_type, Retailer.Source.AMAZON)
         self.assertEqual(shop.delivery_cost, Decimal("4.99"))
+
+
+class AmazonPolicyTests(TestCase):
+    """Amazon Associates rules the site keeps: no Amazon picture is stored, and Amazon's statement shows
+    on every page and beside its buttons while Amazon links carry our tag."""
+
+    def test_no_amazon_picture_is_asked_for_or_kept(self):
+        from . import amazon
+        from .importers import Offer
+
+        self.assertNotIn("Images.Primary.Large", amazon.RESOURCES)
+        offer = amazon.item_offer(api_item("B0TEST", "Surging Sparks Booster Box", "99.99"), Offer)
+        self.assertEqual(offer.image, "")
+
+    def test_the_statement_is_on_every_page_and_beside_the_amazon_buttons_while_tagged(self):
+        game = make_game()
+        product = make_product(make_set(game))
+        line = "As an Amazon Associate, RipRaptor earns from qualifying purchases."
+        with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            for url in (reverse("web:home"), game.get_absolute_url(), reverse("web:about")):
+                with self.subTest(url=url):
+                    self.assertContains(self.client.get(url), line, count=1)
+            page = self.client.get(product.get_absolute_url())
+            self.assertContains(page, "amazon.co.uk/s?")
+            # The footer, and beside the Amazon button in the price box.
+            self.assertContains(page, line, count=2)
+        with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG=""):
+            self.assertNotContains(self.client.get(product.get_absolute_url()), line)
+
+    def test_the_privacy_part_of_the_terms_is_linked_from_every_footer_and_names_shop_cookies(self):
+        home = self.client.get(reverse("web:home"))
+        self.assertContains(home, f'href="{reverse("web:terms")}#terms-data">Privacy</a>')
+        terms = self.client.get(reverse("web:terms"))
+        self.assertContains(terms, 'id="terms-data"')
+        self.assertContains(terms, "may set its own cookies to record that you came from RipRaptor")

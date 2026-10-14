@@ -166,6 +166,11 @@ ENTRIES = [
         "Footer link to the terms page.",
     ),
     Entry(
+        "site.nav.privacy", B, "Privacy link",
+        "Privacy",
+        "Footer link to the Your data part of the terms page, the site's privacy policy.",
+    ),
+    Entry(
         "site.nav.games", B, "Games link",
         "Games",
         "Header link to the list of games and sets.",
@@ -1410,7 +1415,8 @@ ENTRIES = [
     Entry(
         "terms.amazon", T, "Amazon disclosure",
         "As an Amazon Associate, RipRaptor earns from qualifying purchases.",
-        "Terms page, shown while Amazon links carry our tag. Amazon requires this wording.",
+        "Shown while Amazon links carry our tag: on the terms page, in the footer of every page and beside "
+        "the Amazon buttons on product pages. Amazon requires this wording.",
         legal=True,
     ),
     Entry("terms.prices.title", H, "Prices heading", "Prices", "Heading on the terms page."),
@@ -1435,6 +1441,16 @@ ENTRIES = [
         "months after its last message. A cookie in your browser remembers the private "
         "link to your conversation.",
         "Data section of the terms page.",
+        legal=True,
+    ),
+    Entry(
+        "terms.data.shops", P, "Shop and affiliate cookies",
+        "When you follow a link to a shop, the shop or the affiliate network it uses (Amazon Associates, "
+        "eBay Partner Network, Awin or Rakuten Advertising) may set its own cookies to record that you came "
+        "from RipRaptor, so it can pay us a commission if you buy. Our pages also load a script from Awin that "
+        "can turn shop links into Awin affiliate links. These companies do not tell us who you are, and their "
+        "own privacy policies apply to what they collect.",
+        "Data section of the terms page, after the main explanation: the cookies shops and affiliate networks set.",
         legal=True,
     ),
     Entry(

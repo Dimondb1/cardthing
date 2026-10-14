@@ -12,6 +12,8 @@ def site(request):
         "site_name": settings.RIPRAPTOR_SITE_NAME,
         "adsense_client": getattr(settings, "RIPRAPTOR_ADSENSE_CLIENT", ""),
         "awin_publisher_id": getattr(settings, "RIPRAPTOR_AWIN_PUBLISHER_ID", ""),
+        # Amazon links carry our tag: Amazon's required statement goes on every page and beside its buttons.
+        "amazon_associate": bool(settings.RIPRAPTOR_AMAZON_PARTNER_TAG),
         "ga_id": getattr(settings, "RIPRAPTOR_GA_ID", ""),
         # No third-party script runs on these, even on a 404 for a mistyped one, and they pass on no address.
         "private_link": bool(PRIVATE_LINK.match(request.path)),

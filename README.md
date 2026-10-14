@@ -1690,7 +1690,7 @@ admin) show as plain rows, soonest first, with no new address:
   and none takes pre-orders, or else "No pre-orders yet".
 - The home page shows up to 3 under Latest drops, and only sets a shop
   already takes pre-orders for.
-- A game page lists its own; a set page prints "Out <date>" and which
+- A game page lists its own at the top of its Pre-orders tab; a set page prints "Out <date>" and which
   release source gave the date (nothing for a date you set), or "Date not
   announced yet" for an undated set shops already take pre-orders for.
 
@@ -1794,7 +1794,23 @@ and Buy now; the two cheapest shops as rows, the cheapest flagged; then
 "Compare N shops" and "Check prices", both opening the product's price list.
 The filters above are one select each for sort, game, type, price and
 language, and two switches, In stock and 2+ shops; the sets are chips with
-"All sets" first, scrolled to the current set on a phone. The swipe page uses
+"All sets" first, scrolled to the current set on a phone.
+
+Game and set pages split their products into three tabs instead of the In
+stock switch: **In stock** (opens first), **Pre-orders** (soonest out
+first unless another sort is chosen, with the game's Coming soon sets at
+the top) and **Out of stock** (everything nobody has in stock or takes
+pre-orders for, including products no shop lists yet). Each product is in
+exactly one, and each tab shows its count, all counted in one query.
+2+ shops means two shops in stock, taking pre-orders or listing it,
+for the tab in view. The tab row stays at the top of the screen as the list
+scrolls. Without JavaScript each tab is a link to its own page
+(`?tab=pre-orders`, `?tab=out-of-stock`); with it (`js/tabs.js`) the other
+tabs' lists are fetched one at a time once the page is idle
+(`?tab=...&pane=1` returns just the list, marked noindex) and sit beside the
+first, so a swipe or a tap moves between them at once. When a swipe settles,
+the tab, the address, the filters' hidden tab and the height follow, and a
+page scrolled past the top of the list goes back to it. The swipe page uses
 the same selects for game, type, sort and language, without the price select
 or the switches.
 

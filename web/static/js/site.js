@@ -239,8 +239,13 @@ if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: re
   });
 }
 
-// Product images settle in once loaded rather than popping.
-document.querySelectorAll(".product-image img").forEach((img) => {
-  if (img.complete) img.classList.add("is-loaded");
-  else img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true });
-});
+// Product images settle in once loaded rather than popping, in the page and in lists added later
+// (the stock tabs send ripraptor:content with the new list).
+function settleImages(root) {
+  root.querySelectorAll(".product-image img").forEach((img) => {
+    if (img.complete) img.classList.add("is-loaded");
+    else img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true });
+  });
+}
+settleImages(document);
+document.addEventListener("ripraptor:content", (event) => settleImages(event.detail));

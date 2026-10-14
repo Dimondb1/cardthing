@@ -170,8 +170,10 @@ def link_email(text, email):
 
 @register.simple_tag(takes_context=True)
 def query_string(context, **changes):
-    """Current query string with some values replaced, for pagination links."""
+    """Current query string with some values replaced, for pagination links. A stock tab's list fetched
+    on its own (pane=1) links to whole pages."""
     params = context["request"].GET.copy()
+    params.pop("pane", None)
     for key, value in changes.items():
         if value in (None, ""):
             params.pop(key, None)

@@ -72,6 +72,9 @@
     paintLinks(); paintHeader(); paintList();
   }
 
+  // A list added later (the stock tabs) shows which of its products are saved.
+  document.addEventListener("ripraptor:content", () => paintLinks());
+
   document.addEventListener("click", (e) => {
     const a = e.target.closest("[data-watch]");
     if (!a || e.metaKey || e.ctrlKey) return;

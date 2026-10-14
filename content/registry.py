@@ -599,6 +599,36 @@ ENTRIES = [
         "All sets",
         "First chip in the row of sets on game and set pages: every product for the game.",
     ),
+    Entry(
+        "browse.tabs.label", T, "Stock tabs label",
+        "Availability",
+        "Read out by screen readers for the row of In stock, Pre-orders and Out of stock tabs on game and set pages.",
+    ),
+    Entry(
+        "browse.tabs.loading", T, "Stock tab loading",
+        "Loading",
+        "Shown for a moment in a stock tab swiped to before its list arrives.",
+    ),
+    Entry(
+        "browse.tabs.soonest", T, "Pre-orders order note",
+        "Soonest out first.",
+        "Above the Pre-orders tab's list when no other sort is chosen.",
+    ),
+    Entry(
+        "browse.tabs.empty.in_stock", T, "Nothing in stock",
+        "Nothing here is in stock right now.",
+        "The In stock tab of a game or set page when no product is in stock.",
+    ),
+    Entry(
+        "browse.tabs.empty.pre_orders", T, "No pre-orders",
+        "No pre-orders here right now.",
+        "The Pre-orders tab of a game or set page when no shop takes pre-orders.",
+    ),
+    Entry(
+        "browse.tabs.empty.out_of_stock", T, "Nothing out of stock",
+        "Everything here is in stock or on pre-order.",
+        "The Out of stock tab of a game or set page when it is empty.",
+    ),
 
     # Swipe page --------------------------------------------------------------
     Entry(

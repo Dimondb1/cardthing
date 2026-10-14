@@ -1559,16 +1559,20 @@ class ComingSoonTests(PageTestCase):
         self.soon_set.save()
         self.assertIn("Ascended Heroes", self.block(self.client.get(reverse("web:new")).content.decode()))
 
-    def test_game_pages_show_their_own_sets(self):
+    def test_game_pages_show_their_own_sets_in_the_pre_orders_tab(self):
         other = make_game(name="Magic: The Gathering", slug="magic-the-gathering")
         make_set(other, name="Lorwyn Eclipsed", slug="lorwyn-eclipsed", code="ECL",
                  release_date=self.today + timedelta(days=20))
         make_product(make_set(other, name="Old Magic", slug="old-magic", code="OLD"), name="Old Magic Box", slug="old-magic-box")
-        page = self.client.get(self.game.get_absolute_url()).content.decode()
+        # The In stock tab leads with what can be bought now.
+        self.assertNotIn('id="coming-title"', self.client.get(self.game.get_absolute_url()).content.decode())
+        page = self.client.get(self.game.get_absolute_url() + "?tab=pre-orders").content.decode()
         block = self.block(page)
         self.assertIn("Ascended Heroes", block)
         self.assertNotIn("Lorwyn Eclipsed", block)
-        magic = self.block(self.client.get(other.get_absolute_url()).content.decode())
+        self.assertIn("Ascended Heroes", self.block(self.client.get(
+            self.game.get_absolute_url() + "?tab=pre-orders&pane=1").content.decode()))
+        magic = self.block(self.client.get(other.get_absolute_url() + "?tab=pre-orders").content.decode())
         self.assertIn("Lorwyn Eclipsed", magic)
         self.assertNotIn("Ascended Heroes", magic)
         new = self.block(self.client.get(reverse("web:new")).content.decode())
@@ -1675,7 +1679,7 @@ class ComingSoonTests(PageTestCase):
                          release_date=self.today + timedelta(days=5))
         make_listing(make_product(early, name="Early Street Box", slug="early-street-box"), self.north,
                      price="99.00", availability=Listing.Availability.IN_STOCK)
-        blocks = [reverse("web:home"), reverse("web:new"), self.game.get_absolute_url()]
+        blocks = [reverse("web:home"), reverse("web:new"), self.game.get_absolute_url() + "?tab=pre-orders"]
         set_pages = [self.soon_set.get_absolute_url(), undated.get_absolute_url()]
         for url in blocks + set_pages:
             html = self.client.get(url).content.decode()
@@ -2092,3 +2096,125 @@ class RaptorMarkTests(PageTestCase):
         self.assertIn('el("span", "mark mark--md")', finished)
         self.assertIn('setAttribute("aria-hidden", "true")', finished)
         self.assertIn("words.finished", finished)
+
+
+class StockTabsTests(TestCase):
+    """Game and set pages split their products into In stock, Pre-orders and Out of stock: what can be
+    bought now first, counted for every tab in one query, each tab its own page without script and a
+    list on its own (pane=1) for the script to swipe to."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.game = make_game()
+        self.later = make_set(self.game, name="Later Set", slug="later-set", code="LAT",
+                              release_date=timezone.localdate() + timedelta(days=90))
+        self.sooner = make_set(self.game, name="Sooner Set", slug="sooner-set", code="SOO",
+                               release_date=timezone.localdate() + timedelta(days=10))
+        self.old = make_set(self.game, name="Old Set", slug="old-set", code="OLD",
+                            release_date=timezone.localdate() - timedelta(days=200))
+        self.a, self.b = make_retailer("Shop A"), make_retailer("Shop B")
+        self.stocked = make_product(self.old, name="Old Set Booster Box", slug="old-box")
+        make_listing(self.stocked, self.a, price="90.00")
+        make_listing(self.stocked, self.b, price="95.00")
+        self.far = make_product(self.later, name="Later Set Elite Trainer Box", slug="later-etb")
+        make_listing(self.far, self.a, price="50.00", availability=Listing.Availability.PREORDER)
+        self.near = make_product(self.sooner, name="Sooner Set Elite Trainer Box", slug="sooner-etb")
+        make_listing(self.near, self.a, price="60.00", availability=Listing.Availability.PREORDER)
+        make_listing(self.near, self.b, price="61.00", availability=Listing.Availability.PREORDER)
+        self.gone = make_product(self.old, name="Old Set Bundle", slug="old-bundle", product_type=Product.Type.BUNDLE)
+        make_listing(self.gone, self.a, price="30.00", availability=Listing.Availability.OUT_OF_STOCK)
+        self.url = self.game.get_absolute_url()
+
+    def names(self, response):
+        return re.findall(r'class="card__name"><a href="[^"]+">([^<]+)</a>', response.content.decode())
+
+    def test_in_stock_comes_first_and_each_product_is_in_one_tab(self):
+        page = self.client.get(self.url)
+        html = page.content.decode()
+        self.assertEqual(self.names(page), ["Old Set Booster Box"])
+        for label, count in (("In stock", 1), ("Pre-orders", 2), ("Out of stock", 1)):
+            self.assertRegex(html, rf'{label}</span> <span class="stock-tabs__count">{count}</span>')
+        self.assertContains(page, "4 products")
+        self.assertContains(page, 'data-tab="in-stock" aria-current="page"')
+        self.assertEqual(self.names(self.client.get(self.url + "?tab=out-of-stock")), ["Old Set Bundle"])
+        # Anything else asked for is the In stock tab.
+        self.assertEqual(self.names(self.client.get(self.url + "?tab=nonsense")), ["Old Set Booster Box"])
+
+    def test_pre_orders_are_soonest_out_first_unless_sorted(self):
+        page = self.client.get(self.url + "?tab=pre-orders")
+        self.assertEqual(self.names(page), ["Sooner Set Elite Trainer Box", "Later Set Elite Trainer Box"])
+        self.assertContains(page, "Soonest out first.")
+        self.assertNotContains(page, "Clear filters")
+        by_price = self.client.get(self.url + "?tab=pre-orders&sort=price")
+        self.assertEqual(self.names(by_price), ["Later Set Elite Trainer Box", "Sooner Set Elite Trainer Box"])
+        self.assertNotContains(by_price, "Soonest out first.")
+
+    def test_two_shops_means_two_shops_for_the_tab_in_view(self):
+        html = self.client.get(self.url + "?compared=on").content.decode()
+        for label, count in (("In stock", 1), ("Pre-orders", 1), ("Out of stock", 0)):
+            self.assertRegex(html, rf'{label}</span> <span class="stock-tabs__count">{count}</span>')
+        self.assertEqual(self.names(self.client.get(self.url + "?tab=pre-orders&compared=on")),
+                         ["Sooner Set Elite Trainer Box"])
+
+    def test_the_tabs_replace_the_in_stock_toggle_only_where_they_show(self):
+        self.assertNotContains(self.client.get(self.url), 'name="in_stock"')
+        self.assertNotContains(self.client.get(self.old.get_absolute_url()), 'name="in_stock"')
+        self.assertContains(self.client.get(reverse("web:search") + "?q=box"), 'name="in_stock"')
+        self.assertNotContains(self.client.get(reverse("web:search") + "?q=box"), "stock-tabs")
+        # An old link with the toggle on still opens the In stock tab, with nothing to clear.
+        old_link = self.client.get(self.url + "?in_stock=on")
+        self.assertEqual(self.names(old_link), ["Old Set Booster Box"])
+        self.assertNotContains(old_link, "Clear filters")
+
+    def test_tab_links_keep_the_filters_and_start_at_page_one(self):
+        html = self.client.get(self.url + "?type=elite_trainer_box&page=1&tab=out-of-stock").content.decode()
+        self.assertIn('href="?type=elite_trainer_box&amp;tab=pre-orders" data-tab="pre-orders"', html)
+        self.assertIn('href="?type=elite_trainer_box" data-tab="in-stock"', html)
+        self.assertIn('name="tab" value="out-of-stock"', html)
+        self.assertIn('data-src="?type=elite_trainer_box&amp;tab=pre-orders&amp;pane=1"', html)
+        self.assertIn("Nothing matches these filters.", html)
+
+    def test_a_pane_is_just_its_list_never_indexed_and_links_to_whole_pages(self):
+        from django.test import override_settings
+
+        with override_settings(RIPRAPTOR_PAGE_SIZE=1):
+            pane = self.client.get(self.url + "?tab=pre-orders&pane=1")
+        html = pane.content.decode()
+        self.assertTrue(html.lstrip().startswith("<section class=\"stock-pane\" data-tab=\"pre-orders\""))
+        self.assertNotIn("<html", html)
+        self.assertEqual(pane["X-Robots-Tag"], "noindex")
+        self.assertIn('href="?tab=pre-orders&amp;page=2"', html)
+        self.assertNotIn("pane=1", html)
+
+    def test_empty_tabs_say_so(self):
+        Listing.objects.filter(product=self.gone).delete()
+        Listing.objects.filter(product__in=[self.far, self.near]).delete()
+        self.assertContains(self.client.get(self.url + "?tab=pre-orders"), "No pre-orders here right now.")
+        Listing.objects.filter(product=self.stocked).delete()
+        self.assertContains(self.client.get(self.url), "Nothing here is in stock right now.")
+        Product.objects.exclude(pk=self.stocked.pk).update(is_active=False)
+        make_listing(self.stocked, self.a)
+        self.assertContains(self.client.get(self.url + "?tab=out-of-stock"), "Everything here is in stock or on pre-order.")
+
+    def test_set_pages_have_the_tabs_too(self):
+        page = self.client.get(self.old.get_absolute_url())
+        self.assertContains(page, "stock-tabs")
+        self.assertEqual(self.names(page), ["Old Set Booster Box"])
+        self.assertEqual(self.names(self.client.get(self.old.get_absolute_url() + "?tab=out-of-stock")), ["Old Set Bundle"])
+
+    def test_the_queries_do_not_grow_with_the_products(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self.client.get(self.url)
+        with CaptureQueriesContext(connection) as few:
+            self.client.get(self.url)
+        for n in range(6):
+            product = make_product(self.old, name=f"Old Set Tin {n}", slug=f"old-tin-{n}", product_type=Product.Type.TIN)
+            make_listing(product, self.a, price="20.00")
+        self.client.get(self.url)   # the saves cleared the cached coming soon list
+        with CaptureQueriesContext(connection) as many:
+            self.client.get(self.url)
+        self.assertEqual(len(few), len(many))

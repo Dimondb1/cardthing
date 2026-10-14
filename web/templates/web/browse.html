@@ -1,5 +1,5 @@
 {% extends "web/base.html" %}
-{% load sitecopy ripraptor %}
+{% load sitecopy ripraptor static %}
 
 {% block content %}
 {% if query %}<span data-search-query="{{ query }}" hidden></span>{% endif %}
@@ -53,12 +53,22 @@
 </nav>
 {% endif %}
 
-{% if coming_soon and page.number == 1 %}
+{% if stock_tabs %}
+<div class="stock-view" data-stock>
+<nav class="stock-tabs" aria-label="{% copy 'browse.tabs.label' %}">
+  <ul>
+    {% for item in stock_tabs %}
+    <li><a href="{{ item.url }}" data-tab="{{ item.key }}"{% if item.key == tab %} aria-current="page"{% endif %}><span class="stock-tabs__label">{{ item.label }}</span> <span class="stock-tabs__count">{{ item.count }}</span></a></li>
+    {% endfor %}
+  </ul>
+</nav>
+{% elif coming_soon and page.number == 1 %}
   {% if game %}{% include "web/includes/coming_soon.html" %}{% else %}{% include "web/includes/coming_soon.html" with show_game=True %}{% endif %}
 {% endif %}
 
 <form class="filters" method="get" action="" data-autosubmit>
   {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+  {% if tab %}<input type="hidden" name="tab" value="{{ tab }}" data-tab-input>{% endif %}
   <div class="pill pill--sort">
     <label class="visually-hidden" for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
     {{ form.sort }}
@@ -81,15 +91,26 @@
     <label class="visually-hidden" for="{{ form.lang.id_for_label }}">{{ form.lang.label }}</label>
     {{ form.lang }}
   </div>
-  <label class="toggle">{{ form.in_stock }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.in_stock.label }}</span></label>
+  {% if not stock_tabs %}<label class="toggle">{{ form.in_stock }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.in_stock.label }}</span></label>{% endif %}
   <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>
   <div class="filters__actions">
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
-    {% if filters_active %}<a class="filters__clear" href="?{% if query %}q={{ query|urlencode }}{% endif %}">{% copy "browse.filters.clear" %}</a>{% endif %}
+    {% if filters_active %}<a class="filters__clear" href="?{% if query %}q={{ query|urlencode }}{% if tab and tab != 'in-stock' %}&amp;{% endif %}{% endif %}{% if tab and tab != 'in-stock' %}tab={{ tab }}{% endif %}"{% if tab %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
   </div>
 </form>
 
-{% if page.object_list %}
+{% if stock_tabs %}
+<div class="stock-panes">
+  {% for item in stock_tabs %}
+  {% if item.key == tab %}{% include "web/includes/stock_pane.html" %}
+  {% else %}<section class="stock-pane" data-tab="{{ item.key }}" data-src="{{ item.pane_url }}" aria-labelledby="pane-{{ item.key }}" hidden>
+    <h2 class="visually-hidden" id="pane-{{ item.key }}">{{ item.label }}</h2>
+    <p class="stock-pane__loading">{% copy "browse.tabs.loading" %}</p>
+  </section>{% endif %}
+  {% endfor %}
+</div>
+</div>
+{% elif page.object_list %}
   <ul class="cards">
     {% for product, summary in cards %}
       {% include "web/includes/product_card.html" %}
@@ -104,3 +125,5 @@
 {% endif %}
 {% endif %}
 {% endblock %}
+
+{% block scripts %}{% if stock_tabs %}<script src="{% static 'js/tabs.js' %}" defer></script>{% endif %}{% endblock %}

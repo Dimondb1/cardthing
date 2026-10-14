@@ -97,8 +97,27 @@ def types_for(game, queryset):
     return type_choices(game.slug if game else None, present=present)
 
 
-def _browse(request, template_context, *, base_queryset, fixed_game=None, default_ordering=None):
-    """Shared by search, game and set pages."""
+# The stock tabs on game and set pages, in the order they sit side by side: what can be bought now
+# first, then pre-orders, then everything nobody has in stock. Each product is in exactly one.
+STOCK_TABS = [("in-stock", "In stock"), ("pre-orders", "Pre-orders"), ("out-of-stock", "Out of stock")]
+
+
+def stock_tab(tab, compared=False):
+    """The filter for one stock tab. With 2+ shops: two shops in stock, taking pre-orders, or listing it."""
+    if tab == "pre-orders":
+        return Q(in_stock_count=0, preorder_count__gte=2 if compared else 1)
+    if tab == "out-of-stock":
+        return Q(in_stock_count=0, preorder_count=0) & (Q(listing_count__gte=2) if compared else Q())
+    return Q(in_stock_count__gte=2 if compared else 1)
+
+
+def _browse(request, template_context, *, base_queryset, fixed_game=None, default_ordering=None, tabs=False):
+    """Shared by search, game and set pages.
+
+    With ``tabs`` (game and set pages) the products are split into STOCK_TABS: the page shows one tab's
+    list, counted for every tab in one query, and ``?pane=1`` returns just that tab's list for the
+    page's script to swipe to. The In stock toggle gives way to the tabs.
+    """
     has_query = bool(request.GET.get("q", "").strip())
     chosen_game = fixed_game or Game.objects.filter(slug=request.GET.get("game", "")).first()
     scope = base_queryset.filter(game=chosen_game) if chosen_game and fixed_game is None else base_queryset
@@ -119,9 +138,9 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     product_type = form.value("type")
     if product_type:
         products = products.filter(product_type=product_type)
-    if form.value("in_stock"):
+    if form.value("in_stock") and not tabs:
         products = products.filter(in_stock_count__gt=0)
-    if form.value("compared"):
+    if form.value("compared") and not tabs:
         products = products.filter(in_stock_count__gte=2)
     band = form.value("price")
     if band:
@@ -132,15 +151,31 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     languages = [form.value("lang")] if form.value("lang") else []
     products = apply_languages(products, languages)
 
+    tab, tab_counts = "", {}
+    if tabs:
+        tab = request.GET.get("tab", "")
+        tab = tab if tab in dict(STOCK_TABS) else STOCK_TABS[0][0]
+        compared = bool(form.value("compared"))
+        counted = products.aggregate(**{
+            key.replace("-", "_"): Count("pk", filter=stock_tab(key, compared)) for key, _ in STOCK_TABS
+        })
+        tab_counts = {key: counted[key.replace("-", "_")] for key, _ in STOCK_TABS}
+        products = products.filter(stock_tab(tab, compared))
+
     sort = form.value("sort", form.default_sort)
     if sort == "best" and not terms:
         sort = "newest"
+    if tab == "pre-orders" and sort == "newest":
+        # Pre-orders read best soonest out first: newest first would lead with next year's.
+        sort = "soonest"
     if default_ordering and sort == "newest":
         products = order_products_default(products, sort, default_ordering)
     else:
         products = order_products(products, sort, first="name_rank" if sort == "best" else None)
 
     paginator = Paginator(products.prefetch_related(offers.buyable_prefetch()), settings.RIPRAPTOR_PAGE_SIZE)
+    if tabs:
+        paginator.count = tab_counts[tab]   # counted with the tabs already
     page = paginator.get_page(request.GET.get("page"))
     if query and not request.GET.get("page"):
         insights.record_search(request, query, paginator.count)
@@ -148,21 +183,46 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     cards = [(product, offers.summarise(product, week_lows)) for product in page.object_list]
 
     filters_active = bool(
-        game or product_type or form.value("in_stock") or form.value("compared") or band or languages
-        or sort != form.default_sort
+        game or product_type or (form.value("in_stock") and not tabs) or form.value("compared") or band or languages
+        or sort not in (form.default_sort, "soonest")
     )
     context = {
         "form": form,
         "query": query,
         "page": page,
         "cards": cards,
-        "total": paginator.count,
+        "total": sum(tab_counts.values()) if tabs else paginator.count,
         "filters_active": filters_active,
         "no_matches": bool(query) and not filters_active and paginator.count == 0,
         "games": Game.objects.filter(is_active=True),
+        "tab": tab,
+        "tab_label": dict(STOCK_TABS).get(tab, ""),
+        "stock_tabs": stock_tab_links(request, tab_counts) if tabs else [],
+        "soonest": sort == "soonest",
     }
     context.update(template_context)
+    if tabs and request.GET.get("pane"):
+        # One tab's list for the page's script, which slots it in beside the others. Never indexed.
+        response = render(request, "web/includes/stock_pane.html", {**context, "pane": tab})
+        response["X-Robots-Tag"] = "noindex"
+        return response
     return render(request, "web/browse.html", context)
+
+
+def stock_tab_links(request, counts):
+    """[{key, label, count, url}] for the stock tabs: each keeps the filters and drops the page number."""
+    links = []
+    for key, label in STOCK_TABS:
+        params = request.GET.copy()
+        for name in ("page", "pane", "tab", "in_stock"):
+            params.pop(name, None)
+        if key != STOCK_TABS[0][0]:
+            params["tab"] = key
+        encoded = params.urlencode()
+        params["pane"] = "1"
+        links.append({"key": key, "label": label, "count": counts.get(key, 0), "url": f"?{encoded}" if encoded else "?",
+                      "pane_url": f"?{params.urlencode()}"})
+    return links
 
 
 def home_lists():
@@ -521,6 +581,7 @@ def game_detail(request, game_slug):
         },
         base_queryset=Product.objects.for_lists().filter(game=game),
         fixed_game=game,
+        tabs=True,
     )
 
 
@@ -555,6 +616,7 @@ def set_detail(request, game_slug, set_slug):
         },
         base_queryset=Product.objects.for_lists().filter(product_set=product_set),
         fixed_game=game,
+        tabs=True,
     )
 
 

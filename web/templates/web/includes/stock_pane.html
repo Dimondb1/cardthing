@@ -1,0 +1,23 @@
+{% load sitecopy ripraptor %}{# One stock tab's list on a game or set page: in the page for the tab asked for, or on its own (pane=1) for the page's script to swipe to. Takes tab, tab_label, page, cards, coming_soon, soonest, filters_active and query. #}
+<section class="stock-pane" data-tab="{{ tab }}" aria-labelledby="pane-{{ tab }}">
+  <h2 class="visually-hidden" id="pane-{{ tab }}">{{ tab_label }}</h2>
+  {% if tab == "pre-orders" and coming_soon and page.number == 1 %}{% include "web/includes/coming_soon.html" %}{% endif %}
+  {% if page.object_list %}
+    {% if soonest %}<p class="stock-pane__note">{% copy "browse.tabs.soonest" %}</p>{% endif %}
+    <ul class="cards">
+      {% for product, summary in cards %}
+        {% include "web/includes/product_card.html" %}
+      {% endfor %}
+    </ul>
+    {% include "web/includes/pagination.html" %}
+  {% else %}
+    <div class="empty">
+      {% if filters_active %}
+      <p class="empty__title">{% copy "browse.no_filtered_results" %}</p>
+      <p><a href="?{% if query %}q={{ query|urlencode }}{% if tab != 'in-stock' %}&amp;{% endif %}{% endif %}{% if tab != 'in-stock' %}tab={{ tab }}{% endif %}">{% copy "browse.filters.clear" %}</a></p>
+      {% elif tab == "pre-orders" %}<p class="empty__title">{% copy "browse.tabs.empty.pre_orders" %}</p>
+      {% elif tab == "out-of-stock" %}<p class="empty__title">{% copy "browse.tabs.empty.out_of_stock" %}</p>
+      {% else %}<p class="empty__title">{% copy "browse.tabs.empty.in_stock" %}</p>{% endif %}
+    </div>
+  {% endif %}
+</section>

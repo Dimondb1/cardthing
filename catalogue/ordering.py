@@ -72,6 +72,9 @@ def order_products(products, sort, first=None):
         )
         products = products.annotate(at_low=at_low)
         ordering = ["has_price", "at_low", F("lowest_price").asc(nulls_last=True), "name"]
+    elif sort == "soonest":
+        # Not offered in the sort menu: the Pre-orders tab's own order, the next to come out first.
+        ordering = ["has_price", F("release").asc(nulls_last=True), "name"]
     else:
         ordering = ["has_price", F("release").desc(nulls_last=True), "name"]
     if first:

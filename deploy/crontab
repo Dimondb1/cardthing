@@ -5,7 +5,8 @@
 # lock and then waits up to 30 minutes for the import lock, so it never merges products while a read saves offers.
 # The stock alerts run every 10 minutes whatever the reader does, the Claude judge looks every 5 minutes and
 # sends nothing until the owner switches it on, check_worker hourly, price history and a
-# backup nightly, delivery charges weekly. Install with: crontab deploy/crontab
+# backup nightly, delivery charges weekly. The alerts (3 past) and the judge (2 past) start off the tens, so no
+# more than two of these Django processes start in the same minute on a 1 GB server. Install with: crontab deploy/crontab
 # deploy/install.sh writes the same lines (it is the source of truth); catalogue/tests_ops.py fails when they differ.
 # Every command runs under timeout, set to its budget plus five minutes, so a hung command cannot hold a lock for ever.
 # The snapshot, the delivery check and tidy_all put timeout inside flock, so waiting for a long import does not use up their limit.
@@ -15,8 +16,8 @@ PYTHONUNBUFFERED=1
 15 0 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 1800 .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd /srv/ripraptor && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 3000 .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
 */10 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
-*/10 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-alerts.lock .venv/bin/python manage.py send_stock_alerts >> /var/log/ripraptor-import.log 2>&1
-*/5 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 900 flock -n /tmp/ripraptor-judge.lock .venv/bin/python manage.py judge_checks >> /var/log/ripraptor-import.log 2>&1
+3-59/10 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-alerts.lock .venv/bin/python manage.py send_stock_alerts >> /var/log/ripraptor-import.log 2>&1
+2-59/5 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 900 flock -n /tmp/ripraptor-judge.lock .venv/bin/python manage.py judge_checks >> /var/log/ripraptor-import.log 2>&1
 20 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1
 40 0 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1

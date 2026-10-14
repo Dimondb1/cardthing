@@ -98,6 +98,50 @@ class WhyDownTests(TestCase):
             self.assertIsNone(re.search(writes, body), writes)
 
 
+def minutes(field):
+    """The minutes a cron minute (or hour) field fires at: *, */n, a-b/n, a-b or a number."""
+    if field == "*":
+        return set(range(60))
+    spread, _, step = field.partition("/")
+    first, last = (0, 59) if spread == "*" else map(int, spread.split("-")) if "-" in spread else (int(spread),) * 2
+    return set(range(first, last + 1, int(step or 1)))
+
+
+class MemoryTests(TestCase):
+    """On 14 Oct 2026 a 1 GB server with no swap ran out of memory and the kernel killed the site's
+    gunicorn. The update gives it swap, has the kernel stop background work first and starts no more than
+    two cron commands in one minute (WorkerThreadsInstallTests: and runs the reader with two jobs)."""
+
+    def test_install_adds_swap_once_before_the_heavy_steps(self):
+        text = (DEPLOY / "install.sh").read_text()
+        swap = text.index('if [ -z "$(swapon --show --noheadings 2>/dev/null)" ]; then')
+        self.assertLess(swap, text.index("pip install"))
+        block = text[swap:text.index("sysctl -q -p")]
+        self.assertIn("[ ! -f /swapfile ]", block)
+        self.assertIn("fallocate -l 1G /swapfile", block)
+        self.assertIn("grep -q '^/swapfile ' /etc/fstab ||", block)
+        self.assertIn("vm.swappiness=10", block)
+
+    def test_the_kernel_stops_the_reader_before_the_site(self):
+        site = (DEPLOY / "ripraptor.service").read_text()
+        reader = (DEPLOY / "ripraptor-worker.service").read_text()
+        web = int(re.search(r"^OOMScoreAdjust=(-?\d+)$", site, re.M).group(1))
+        background = int(re.search(r"^OOMScoreAdjust=(-?\d+)$", reader, re.M).group(1))
+        self.assertLess(web, 0)
+        self.assertGreater(background, 0)
+        self.assertIn("MemorySwapMax=100M", reader)
+
+    def test_no_more_than_two_cron_commands_start_in_one_minute(self):
+        starts = {}
+        for schedule, command in install_cron():
+            minute, hour = schedule.split()[:2]
+            for h in (set(range(24)) if hour == "*" else minutes(hour)):
+                for m in minutes(minute):
+                    starts.setdefault((h, m), []).append(command.split("manage.py ")[1].split()[0])
+        crowded = {at: names for at, names in starts.items() if len(names) > 2}
+        self.assertEqual(crowded, {})
+
+
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()
@@ -120,7 +164,7 @@ class CronTests(TestCase):
                 self.assertIsNotNone(found, f"No timeout before: {part}")
                 kill, seconds, name = int(found.group(1)), int(found.group(2)), found.group(3)
                 self.assertEqual(seconds, TIMEOUTS[name], name)
-                if schedule.startswith("*/10"):
+                if schedule.split()[0].endswith("/10"):
                     # Killed outright before the next run ten minutes later starts.
                     self.assertLess(seconds + kill, 600, name)
                 seen.add(name)
@@ -456,8 +500,12 @@ class WorkerThreadsInstallTests(TestCase):
     def test_a_server_under_1_gb_gets_two_threads(self):
         self.assertIn("RIPRAPTOR_WORKER_THREADS=2", self.run_line("DJANGO_DEBUG=0\n", 480000))
 
-    def test_a_1_gb_server_keeps_the_default(self):
-        self.assertNotIn("RIPRAPTOR_WORKER_THREADS", self.run_line("DJANGO_DEBUG=0\n", 985000))
+    def test_a_1_gb_server_gets_two_threads_too(self):
+        # A "1 GB" droplet reports about 984,000 kB; with three jobs its reader hit 300 MB eight times a night.
+        self.assertIn("RIPRAPTOR_WORKER_THREADS=2", self.run_line("DJANGO_DEBUG=0\n", 985000))
+
+    def test_a_2_gb_server_keeps_the_default(self):
+        self.assertNotIn("RIPRAPTOR_WORKER_THREADS", self.run_line("DJANGO_DEBUG=0\n", 2000000))
 
     def test_a_value_set_by_hand_stays(self):
         env = self.run_line("RIPRAPTOR_WORKER_THREADS=3\n", 480000)

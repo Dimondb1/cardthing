@@ -919,6 +919,20 @@ background reader as services, configures HTTPS for the domain and
 schedules the cron jobs. The reader reads every shop on its first start. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
 
+**Memory.** On a 1 GB server the site, the reader and the cron jobs share
+very little room. On 14 October 2026 the server ran out, with no swap, and
+the kernel killed the site's gunicorn: visitors could not load it for
+about 30 seconds, and pages hung for a few minutes after. So the update:
+adds a 1 GB swap file at `/swapfile` when the server has no swap (made
+once, kept in `/etc/fstab`, with `vm.swappiness=10` so the site stays in
+memory while there is room); has the kernel stop the reader before the
+site when memory runs out (`OOMScoreAdjust` in both unit files; the reader
+may use 100 MB of swap past its 300 MB, then it is restarted); runs the
+reader with two jobs at once on a server under 1.5 GB; and starts the
+stock alerts at 3 past the tens and the Claude judge at 2 past the fives,
+so no more than two cron commands start in the same minute. A 2 GB server
+removes the squeeze altogether.
+
 If the site was down, this prints a short read-only report: reboots, code
 updates, restarts and crashes of the site, the reader and Caddy, when Caddy
 could not reach the site, out-of-memory kills, locked-database errors,
@@ -1176,9 +1190,9 @@ journalctl -u ripraptor-worker -f
 
 `run_worker --once` plans once, runs every job due in the calling thread
 and stops. It runs `RIPRAPTOR_WORKER_THREADS` jobs at once (3 unless set);
-set it to 2 in `.env` on a server with under 1 GB of memory and restart the
-reader. `install.sh` copies the unit file on every update, so the setting
-belongs in `.env`, not in the unit. `--max-threads` overrides it for one run.
+`install.sh` writes 2 in `.env` on a server with under 1.5 GB of memory (a
+"1 GB" server reports about 960 MB). `install.sh` copies the unit file on
+every update, so the setting belongs in `.env`, not in the unit. `--max-threads` overrides it for one run.
 `check_worker` prints how old the heartbeat is and exits with code 1 when
 it is over ten minutes old or there has never been one; cron runs it hourly
 so the log shows when the reader stopped. Insights lists "Worker not
@@ -1525,7 +1539,7 @@ site's cache.
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
-| `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing. Restart `ripraptor-worker` after changing it. |
+| `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1.5 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing. Restart `ripraptor-worker` after changing it. |
 | `RIPRAPTOR_AMAZON_ACCESS_KEY`  |         | Product Advertising API key from Amazon Associates. |
 | `RIPRAPTOR_AMAZON_SECRET_KEY`  |         | Its secret. |
 | `RIPRAPTOR_AMAZON_PARTNER_TAG` |         | The Associates tracking tag, for example `ripraptor-21`. All three set means Amazon is read once a day. |

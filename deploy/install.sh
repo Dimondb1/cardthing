@@ -20,6 +20,21 @@ rm -f /etc/apt/sources.list.d/caddy-stable.list
 apt-get update -qq
 apt-get install -y -qq git python3 python3-venv python3-pip curl caddy >/dev/null
 
+# Swap: a 1 GB server with none has nowhere to go when memory runs out, so the kernel kills a
+# process outright. On 14 Oct 2026 it killed the site's gunicorn (the reader, both web workers and
+# cron jobs at once). With a 1 GB swap file it moves idle memory to disk instead. swappiness 10
+# keeps it to that: the site stays in memory while there is room. Made once; existing swap is kept.
+# A server that cannot have swap (some containers) is told so, and the update carries on.
+if [ -z "$(swapon --show --noheadings 2>/dev/null)" ]; then
+  {
+    if [ ! -f /swapfile ]; then
+      fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null
+    fi && swapon /swapfile && { grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab; }
+  } || echo "Could not turn on a swap file; carrying on without one."
+fi
+echo 'vm.swappiness=10' > /etc/sysctl.d/90-ripraptor.conf
+sysctl -q -p /etc/sysctl.d/90-ripraptor.conf || true
+
 id -u ripraptor >/dev/null 2>&1 || useradd --system --home "$DIR" --shell /usr/sbin/nologin ripraptor
 git config --global --add safe.directory "$DIR" >/dev/null 2>&1 || true   # the checkout is owned by ripraptor, git runs as root
 if [ -d "$DIR/.git" ]; then
@@ -83,9 +98,10 @@ grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/d
 # Pre-order emails go only to alerts asked for from this install on, when the form first promised them.
 # Written once, so a later update never moves the cut-off and an earlier subscriber never hears about pre-orders.
 grep -q RIPRAPTOR_PREORDER_ALERTS_FROM .env || echo "RIPRAPTOR_PREORDER_ALERTS_FROM=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" >> .env
-# A server with under 1 GB of memory runs two background reader jobs at once instead of three, so
-# the reader stays under its 300 MB limit beside the site. Written once; a value set by hand stays.
-grep -q RIPRAPTOR_WORKER_THREADS .env || { [ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 900000 ] && echo "RIPRAPTOR_WORKER_THREADS=2" >> .env || true; }
+# A server with under 1.5 GB of memory runs two background reader jobs at once instead of three, so
+# the reader stays under its 300 MB limit beside the site. A "1 GB" server reports about 960 MB, which
+# the old 900 MB line missed. Written once; a value set by hand stays.
+grep -q RIPRAPTOR_WORKER_THREADS .env || { [ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 1500000 ] && echo "RIPRAPTOR_WORKER_THREADS=2" >> .env || true; }
 set -a; . ./.env; set +a
 [ -f /var/lib/ripraptor/dbip-country.mmdb ] || .venv/bin/python manage.py fetch_geoip || true
 chown -R ripraptor:ripraptor "$DIR" /var/lib/ripraptor
@@ -118,6 +134,9 @@ systemctl reload caddy
 # never depend on the reader, the Claude judge looks every 5 minutes on its own lock and does nothing
 # until the owner saves a key and switches it on in Things to check, check_worker logs whether the reader is alive (and tells the owner,
 # at most once a day, when it has stopped or never starts), and backup_db keeps five nightly copies.
+# The alerts start at 3 past the tens and the judge at 2 past the fives, so no more than two of these
+# Django processes start in the same minute: on 14 Oct 2026 three at once beside the reader and the
+# site ran a 1 GB server out of memory.
 # Every command runs under timeout, set to its budget plus five minutes: a command that hangs
 # while holding a lock would otherwise make every later run behind it give up silently.
 # The snapshot, the delivery check and tidy_all put timeout inside flock, so time spent waiting
@@ -129,8 +148,8 @@ echo "PYTHONUNBUFFERED=1
 15 0 * * * cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 1800 .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 3000 .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
 */10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
-*/10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-alerts.lock .venv/bin/python manage.py send_stock_alerts >> /var/log/ripraptor-import.log 2>&1
-*/5 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 900 flock -n /tmp/ripraptor-judge.lock .venv/bin/python manage.py judge_checks >> /var/log/ripraptor-import.log 2>&1
+3-59/10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-alerts.lock .venv/bin/python manage.py send_stock_alerts >> /var/log/ripraptor-import.log 2>&1
+2-59/5 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 900 flock -n /tmp/ripraptor-judge.lock .venv/bin/python manage.py judge_checks >> /var/log/ripraptor-import.log 2>&1
 20 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1
 40 0 * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -

@@ -9,6 +9,8 @@ WorkingDirectory=/srv/ripraptor
 EnvironmentFile=/srv/ripraptor/.env
 ExecStart=/srv/ripraptor/.venv/bin/gunicorn ripraptor.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 60
 Restart=always
+# When memory runs out, the kernel stops background work before the site visitors use.
+OOMScoreAdjust=-500
 
 [Install]
 WantedBy=multi-user.target

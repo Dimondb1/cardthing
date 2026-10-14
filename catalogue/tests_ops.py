@@ -142,6 +142,17 @@ class MemoryTests(TestCase):
         self.assertEqual(crowded, {})
 
 
+class OneAddressTests(TestCase):
+    """www. forwards permanently to the address without it: serving both, Google indexed the site twice."""
+
+    def test_caddy_sends_www_to_the_bare_domain(self):
+        text = (DEPLOY / "install.sh").read_text()
+        caddy = text[text.index("cat > /etc/caddy/Caddyfile <<CADDY"):text.index("\nCADDY\n")]
+        self.assertIn("www.$DOMAIN {\n    redir https://$DOMAIN{uri} permanent\n}", caddy)
+        self.assertIn("$DOMAIN {\n    reverse_proxy 127.0.0.1:8000", caddy)
+        self.assertNotIn("$DOMAIN, www.$DOMAIN", caddy)
+
+
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()

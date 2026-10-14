@@ -1,4 +1,8 @@
-# Caddy gives HTTPS automatically. Replace the domain and reload Caddy.
+# Caddy gives HTTPS automatically. Replace the domain and reload Caddy. deploy/install.sh writes the same.
+# www. forwards permanently to the address without it, so search engines see one site, not two.
+www.cardscout.example {
+    redir https://cardscout.example{uri} permanent
+}
 cardscout.example {
     reverse_proxy 127.0.0.1:8000
     encode gzip

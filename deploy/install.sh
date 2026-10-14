@@ -115,8 +115,13 @@ systemctl restart ripraptor
 # Empty it once the old workers have stopped; clearing before the restart would let them refill it.
 sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py shell -c 'from django.core.cache import cache; cache.clear()'"
 
+# One address for the site: www. sends visitors and Google to the same page without it, permanently.
+# Serving both made Google index the whole site twice and split each page's standing between them.
 cat > /etc/caddy/Caddyfile <<CADDY
-$DOMAIN, www.$DOMAIN {
+www.$DOMAIN {
+    redir https://$DOMAIN{uri} permanent
+}
+$DOMAIN {
     reverse_proxy 127.0.0.1:8000
     encode gzip
 }

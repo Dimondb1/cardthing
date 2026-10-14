@@ -938,8 +938,9 @@ curl -fsSL https://raw.githubusercontent.com/Dimondb1/cardthing/claude/compassio
 `deploy/install.sh` installs Python and Caddy, clones the code to
 `/srv/ripraptor`, writes `.env` with a generated secret key, migrates,
 collects static files, sets up the shops, starts the app and the
-background reader as services, configures HTTPS for the domain and
-schedules the cron jobs. The reader reads every shop on its first start. Run the same command again to update. The repository must be
+background reader as services, configures HTTPS for the domain (with
+`www.` forwarding permanently to the address without it, so Google sees one
+site rather than two copies) and schedules the cron jobs. The reader reads every shop on its first start. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
 
 **Memory.** On a 1 GB server the site, the reader and the cron jobs share

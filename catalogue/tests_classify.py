@@ -433,3 +433,30 @@ class CoverageRuleTests(TestCase):
         self.assertIsNone(classify("Iron Bundle SVP 066 - Holo", "Trading Card Games", "The Pokemon Company", ("pokemon",), Decimal("3.50")))
         self.assertEqual(self.kind("Pokemon Sword & Shield SWSH12 Silver Tempest Booster Box"), "booster_box")
         self.assertEqual(self.kind("Pokemon Holo Collection Box"), "collection_box")
+
+
+class ImpactLeagueRuleTests(TestCase):
+    """What reading Impact League TCG (15 Oct 2026) showed the rules missed."""
+
+    def test_an_all_nines_price_means_not_for_sale(self):
+        for price in ("999", "999.00", "999.99", "9999.99"):
+            with self.subTest(price=price):
+                self.assertIsNone(classify("Pokemon Paldea Evolved Booster Box", price=Decimal(price)))
+        for price in ("99.99", "1999.99", "515.00"):
+            with self.subTest(price=price):
+                self.assertIsNotNone(classify("Pokemon Paldea Evolved Booster Box", price=Decimal(price)))
+
+    def test_second_hand_stock_is_left_out(self):
+        for title in ("Pokémon TCG: Mega Charizard ex Tin (TRADE IN)", "Pre-Owned Evolving Skies Booster Box",
+                      "Second Hand Lost Origin Elite Trainer Box", "Pokémon TCG: Poke Ball Tin (2025) (TRADE/IMPORT)",
+                      "Pokemon Perfect Order Booster Pack (TRADE)"):
+            with self.subTest(title=title):
+                self.assertIsNone(classify(title, price=Decimal("40")))
+        # A product named for trading is not second-hand.
+        self.assertIsNotNone(classify("Pokemon Trick or Trade BOOster Bundle 2023", price=Decimal("40")))
+
+    def test_shop_words_around_the_name_are_dropped(self):
+        stock = classify("NEW SHOP STOCK Pokemon Gyarados ex Premium Collection", price=Decimal("70"))
+        self.assertEqual(stock.name, "Gyarados ex Premium Collection")
+        margin = classify("One Piece Card Game - OP-10 - Royal Blood - Booster Box (Margin)", price=Decimal("100"))
+        self.assertTrue(margin.name.endswith("Booster Box"), margin.name)

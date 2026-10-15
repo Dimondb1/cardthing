@@ -133,6 +133,10 @@ SHOPS = [
      "page), read 13 Oct 2026"),
     ("attic-cards", "Attic Cards", "https://atticcards.co.uk/", S.SHOPIFY, "3.99", None,
      "Standard £3.99 (basket check), no free threshold published, read 13 Oct 2026"),
+    # Added at the owner's request: about 10,000 products, mostly graded and single cards, so only its
+    # sealed collections are read (COLLECTIONS), with its newest products for releases filed elsewhere.
+    ("impact-league-tcg", "Impact League TCG", "https://impactleaguetcg.co.uk/", S.SHOPIFY, "5.99", None,
+     "Standard £5.99 (basket check), no free threshold published, read 15 Oct 2026"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's
@@ -163,6 +167,11 @@ AFFILIATE = {
 # read of the shop's newest products (importers.shopify_offers).
 COLLECTIONS = {
     "zatu-games": "trading-card-games top-5000-trading-card-games football",
+    # Its sealed products by game; the singles sit in collections of their own. These held 401 of the
+    # 458 sealed products found on 15 Oct 2026, and the newest-products read takes most of the rest.
+    "impact-league-tcg": "pokemon-booster-boxes pokemon-booster-packs english-etb-ex-boxes-and-other-sealed-products "
+                         "magic-the-gathering lorcana one-piece riftbound yu-gi-oh dragon-ball star-wars-unlimited "
+                         "topps-products yu-gi-oh-dragonball-and-other-products",
 }
 
 # Shops whose standard charge is only known up to an order value; above it the charge is not published.

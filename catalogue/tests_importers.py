@@ -829,6 +829,12 @@ class SetupShopsTests(TestCase):
         call_command("setup_shops", stdout=StringIO())
         zatu.refresh_from_db()
         self.assertEqual(zatu.affiliate_url_template, "https://other.example/?u={url}")
+        # Impact League TCG, asked for by the owner: mostly singles, so only its sealed collections are read.
+        impact = Retailer.objects.get(slug="impact-league-tcg")
+        self.assertEqual((impact.source_type, impact.delivery_cost, impact.free_delivery_over),
+                         (Retailer.Source.SHOPIFY, Decimal("5.99"), None))
+        self.assertIn("pokemon-booster-boxes", impact.collection.split())
+        self.assertNotIn("mtg-singles", impact.collection.split())
         tcg_box = Retailer.objects.get(slug="tcg-box")
         self.assertEqual((tcg_box.source_type, tcg_box.source_url, tcg_box.delivery_cost),
                          (Retailer.Source.SHOPIFY, "https://tcgbox.co.uk/", Decimal("3.95")))

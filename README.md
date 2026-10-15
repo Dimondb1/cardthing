@@ -123,6 +123,15 @@ and full boxes, and "Starter Decks". A Pokemon promo number ("SVP 066") or a
 plain "Holo" marks a single card. One Piece Illustration Boxes stay out: their
 names are only a code, which names lose, so two would merge.
 
+Since Impact League TCG joined (15 Oct 2026): a price of nothing but nines
+(£999, £999.99, £9,999) means not for sale and the offer is left out;
+second-hand stock ("trade in", a bracketed "(TRADE)" or "(TRADE/IMPORT)"
+tag, "pre-owned", "second hand") is left out; and "NEW SHOP STOCK" before a
+name and "(Margin)" after it are dropped. Impact League TCG sells about
+10,000 products, mostly graded and single cards, so only its sealed
+collections are read (`COLLECTIONS` in `setup_shops`), with its newest
+products; delivery is £5.99 (basket check), with no free threshold published.
+
 Shop titles are matched with the game prefix taken off and the separators
 collapsed, so "Disney Lorcana: Shimmering Skies - Booster Box" is judged
 on "Shimmering Skies Booster Box" and counts as a full match for our

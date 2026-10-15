@@ -83,6 +83,9 @@ NOT_SEALED = re.compile(
     r"\bmystery booster(?: \d)?\s*$|\bmystery (?:box(?:es)?|bundles?|bags?|packs?)\b|\bdeck protectors?\b|\bprotectors?\b|\bholder\b|\bplay ?mat\b|\bgamegenic\b|\bultra[- ]pro\b|\bdragon shield\b|\bultimate guard\b|\bbastion\b|\bsidekick\b|\bsquire\b|\bwatchtower\b|\bsatin tower\b|\bzip-?up\b|\bart sleeves\b|\bcard holder\b|\bdeck holder\b|\bmatte sleeves\b|\bboxgods?\b|\bonline (?:deck )?code\b|\bprize pack\b|\bleague promo\b|\bnon-?holo\b|"
     r"\(planeswalker deck card\)|\bdeck card\b|\(borderless art\)|\bfull art\b(?!.*(?:box|tin|bundle|collection box))|"
     r"\btokens?\b|\bemblem\b|\bcode sheet\b|\bonline code\b|\bcard dividers?\b|\bdeck pods?\b|\(display commander\)|"
+    # Second-hand stock ("Mega Charizard ex Tin (TRADE IN)"): the site lists new products. A bracketed
+    # "(TRADE)" or "(TRADE/IMPORT)" tag is not explained by the shop, so it is treated the same.
+    r"\btrade[- ]?ins?\b|\(trade\b[^)]*\)|\bpre[- ]?owned\b|\bsecond[- ]?hand\b|"
     r"\btheme booster card\b|\bbooster card\b|\bstickers?\b|\bmini album\b|\bcrates?\b|\bdeck box(?:es)?\b|\bcard case\b|"
     r"\bposters?\b|\bbeanie\b|\bscarf\b|\bfigures\b|\binch\b|\bmug\b|\bkeychain\b|\bwallet\b|\bhoodie\b|\bt-shirt\b|\bsocks\b|\bpuzzle\b|\bsofbits\b|\bshokugan\b",
     re.I,
@@ -258,6 +261,9 @@ MIN_PRICE = 2
 # Japanese and Korean booster packs sell for under £2 (Japan2UK: 59p to £1.99). A title that plainly says
 # booster pack, and nothing that marks a single card, is a pack at any price from this.
 MIN_PACK_PRICE = Decimal("0.50")
+# A price of nothing but nines (£999, £999.99, £9,999) is a shop's way of saying not for sale
+# (Impact League TCG's in-stock "Paldea Evolved Booster Box" at £999): such an offer is left out.
+PLACEHOLDER_PRICE = re.compile(r"^9{3,}(?:\.(?:00|99))?$")
 PLAIN_PACK = re.compile(r"\bbooster pack\b", re.I)
 
 # A name made only of these words says what kind of thing it is, not which.
@@ -301,10 +307,12 @@ def drop_repeated_tail(name):
 
 SHOP_TAILS = re.compile(
     r"(?<=\S)\s*:?\s*[:\-–]?\s*(?:brand new(?: and| &)? sealed(?: box| inc .*)?|new (?:and|&) sealed(?: box)?|(?<![\[(])pre[- ]?order\b.*|"
-    r"in stock(?: now)?|sealed)\s*!*\s*$",
+    r"in stock(?: now)?|sealed|\(margin\))\s*!*\s*$",
     re.I,
 )
-SHOP_HEADS = re.compile(r"^\s*[\[(]?\s*pre[- ]?orders?\b(?:.*?delivery time)?\s*[\])]?\s*[:\-–]?\s*", re.I)
+SHOP_HEADS = re.compile(
+    r"^\s*[\[(]?\s*(?:pre[- ]?orders?\b(?:.*?delivery time)?|new shop stock\b)\s*[\])]?\s*[:\-–]?\s*", re.I
+)
 
 
 def tidy_name(title):
@@ -379,7 +387,7 @@ def clean_name(title, game=""):
 
 def classify(title, shop_type="", vendor="", tags=(), price=None):
     """Return a Sealed description, or None if this is not a sealed product we list."""
-    if price is not None and price <= 0:
+    if price is not None and (price <= 0 or PLACEHOLDER_PRICE.match(str(price))):
         return None
     if (shop_type or "").lower() in NOT_SEALED_TYPES:
         return None

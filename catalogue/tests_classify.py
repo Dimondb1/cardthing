@@ -489,3 +489,23 @@ class ImpactLeagueRuleTests(TestCase):
         self.assertEqual(stock.name, "Gyarados ex Premium Collection")
         margin = classify("One Piece Card Game - OP-10 - Royal Blood - Booster Box (Margin)", price=Decimal("100"))
         self.assertTrue(margin.name.endswith("Booster Box"), margin.name)
+
+
+class CardNumberRuleTests(TestCase):
+    """The card-number rule took "Set 01", "OP 18" and "SV 151" for single cards, so the hourly tidy deleted
+    every Riftbound booster and Champion Deck as not sealed."""
+
+    def test_a_set_number_at_the_start_is_a_sealed_product(self):
+        for title in ("Riftbound Set 01 Origins Booster Pack", "Riftbound Set 03 Unleashed Champion Deck Vex",
+                      "One Piece OP 18 The Dominance of God Booster Pack", "One Piece OP 01 & OP 02 Booster Box",
+                      "Pokemon SV 151 Booster Bundle",
+                      "One Piece Double Pack Set DP 09 OP 14 Booster Bundle with DON Card"):
+            with self.subTest(title=title):
+                self.assertIsNotNone(classify(title, vendor="", tags=(), price=10), title)
+
+    def test_a_card_number_at_the_start_is_still_a_single(self):
+        for title in ("One Piece OP01-001 Roronoa Zoro Leader", "One Piece ST10-005 Trafalgar Law",
+                      "Dragon Ball Super BT22-045 Son Goku SR", "Yu-Gi-Oh LOB-001 Blue-Eyes White Dragon",
+                      "One Piece DON Card (Nami): DON Non Foil English One Piece TCG Card: PRB02"):
+            with self.subTest(title=title):
+                self.assertIsNone(classify(title, vendor="", tags=(), price=10), title)

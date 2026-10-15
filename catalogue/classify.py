@@ -67,9 +67,11 @@ TYPES = [
     ("booster_pack", ("booster pack", "booster", "pack", "packet", "checklane", "sleeved")),
 ]
 
-# A title with any of these is not a sealed product we list.
+# A title with any of these is not a sealed product we list. A card number leads a single's title ("OP01-001",
+# "BT22-045", "LOB-001"); "Set 01", "OP 18" and "SV 151" lead a set's name, and a title that goes on to name a
+# box, pack or deck is the sealed product.
 NOT_SEALED = re.compile(
-    r"\bdon!* card\b|\bcards only\b|\bno box\b|^\s*[A-Z]{1,4}\d{0,2}[- ]\d{2,3}\b|\b(?:super|ultra|secret|hyper|special|alternate|alt) ?(?:art )?rare\b|\brare foil\b|"
+    r"(?<!\bwith )\bdon!* card\b|\bcards only\b|\bno box\b|^\s*(?:[A-Z]{1,4}\d{1,2}[- ]\d{3}|[A-Z]{2,4}-\d{3})\b(?!.*\b(?:booster|box|pack|deck|bundle|display|tin|collection)\b)|\b(?:super|ultra|secret|hyper|special|alternate|alt) ?(?:art )?rare\b|\brare foil\b|"
     r"\b(?:common|uncommon|rare)\s*:|\bpromo\s*:|\bfoil\s*:|"
     r"\b\d{1,3}\s*/\s*\d{1,3}\b|\bsingle\b|holofoil|holo rare|reverse holo|\bfoil\b(?!.*booster)|"
     # Pokemon promo card numbers ("Iron Bundle SVP 066 - Holo"): set codes have one or two digits, promos three.

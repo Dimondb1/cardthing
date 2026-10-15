@@ -236,6 +236,41 @@ class ChangedAtTests(TestCase):
                 availability=availability, last_checked=timezone.now() - timedelta(hours=100), changed_at=None)
             self.assertEqual(self.check("100.00", availability=availability, at=at), at if stamped else None)
 
+    def test_a_new_multi_buy_or_shop_page_stamps_and_a_new_title_does_not(self):
+        from catalogue.importers import Offer, apply_offers
+        from catalogue.models import Retailer
+
+        cache.clear()
+        shop = make_retailer("Reader", source_type=Retailer.Source.SHOPIFY, source_url="https://reader.example",
+                             delivery_cost=Decimal("0"))
+        page = "https://reader.example/products/ssbb"
+        listing = make_listing(self.product, shop, price="50.00", url=page, title=self.product.name)
+        Product.objects.filter(pk=self.product.pk).update(updated_at=timezone.now() - timedelta(days=60))
+        start = timezone.now() - timedelta(days=5)
+
+        def read(days, url=page, title=self.product.name, **kwargs):
+            at = start + timedelta(days=days)
+            apply_offers(shop, [Offer(title=title, url=url, price=Decimal("50.00"), **kwargs)], checked_at=at)
+            listing.refresh_from_db()
+            return at
+
+        at = read(0, deal=(2, Decimal("90.00")))
+        self.assertEqual((listing.deal_quantity, listing.changed_at), (2, at))
+        self.assertContains(self.client.get(self.product.get_absolute_url()), 'class="offer__deal"')
+        self.assertEqual(sitemap_entries(self.client)[self.product.get_absolute_url()], day(at))
+        # The same multi-buy, a read that did not look for one, another variant of the same page or a new title:
+        # the page looks the same.
+        read(1, deal=(2, Decimal("90.00")))
+        read(2)
+        read(3, url=page + "?variant=7", title="Surging Sparks Booster Box (sealed)")
+        self.assertEqual((listing.deal_quantity, listing.title, listing.changed_at),
+                         (2, "Surging Sparks Booster Box (sealed)", at))
+        # The multi-buy gone, then the buy link moved to another of the shop's pages.
+        at = read(4, deal=(None, None))
+        self.assertEqual((listing.deal_quantity, listing.changed_at), (None, at))
+        at = read(5, url="https://reader.example/products/ssbb-uk")
+        self.assertEqual(listing.changed_at, at)
+
     def test_a_price_lost_to_out_of_stock_stamps(self):
         at = timezone.now() - timedelta(minutes=5)
         self.assertEqual(self.check("0", availability=OUT, at=at), at)

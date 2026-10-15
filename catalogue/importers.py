@@ -1379,6 +1379,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         deal = held if offer.deal is None else offer.deal
         if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
                 or deal != held):
+            # The page shows the multi-buy and links to the shop's page: a new one of either is a change.
+            shown = not created and (deal != held or link_key(listing.url) != link_key(offer.url))
             listing.url = offer.url
             listing.title = title
             listing.shop_ean = shop_ean
@@ -1387,6 +1389,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if published:
                 listing.shop_published_at = published
                 fields.append("shop_published_at")
+            if shown:
+                listing.changed_at = checked_at
+                fields.append("changed_at")
             listing.save(update_fields=fields)
         if offer.image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
             images_by_product.setdefault(product_pk, offer.image)

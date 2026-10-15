@@ -2317,8 +2317,10 @@ saved, not when a lookup is recorded) and the last change of any shown
 shop's price, delivery or stock (`Listing.changed_at`). A check that finds
 the same price and stock leaves `changed_at` alone, so `lastmod` does not
 move every hour; a new price, a sell-out, a restock, a shop's price back
-on sale after being out of date, a price kept out of or let back into the
-comparison, a shop hidden or shown, or a shop moved onto the product does. Listings changed before `changed_at` existed fall back to
+on sale after being out of date, a multi-buy that starts, changes or ends,
+a buy link moved to another of the shop's pages (not another variant of
+the same page), a price kept out of or let back into the comparison, a
+shop hidden or shown, or a shop moved onto the product does. Listings changed before `changed_at` existed fall back to
 their last restock. A set's `lastmod` is the latest of its products'.
 `changefreq` and `priority` are not sent: Google ignores them. Each part
 of the sitemap costs two queries, a count and the page, however many

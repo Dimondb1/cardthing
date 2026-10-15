@@ -561,8 +561,8 @@ class CommandTests(Base):
     def test_export_needs_a_known_shop_and_a_path(self):
         with self.assertRaisesMessage(CommandError, "No shop has the slug nowhere."):
             call_command("data_files", "--export", "x.xlsx", "--left-out", "nowhere")
-        with self.assertRaises(CommandError):
-            call_command("data_files")
+        with self.assertRaisesMessage(CommandError, "--left-out goes with --export."):
+            call_command("data_files", "--left-out", self.shop.slug)
         self.assertFalse(DataExport.objects.exists())
 
     def test_a_failed_build_says_so_on_the_row(self):

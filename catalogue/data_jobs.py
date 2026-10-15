@@ -1,17 +1,72 @@
 """
 The work behind the owner's spreadsheet (catalogue/workbook.py), run by `manage.py data_files` in its own
-process, never in a web request: making a workbook takes seconds here and up to a minute on the server.
+process, never in a web request: making a workbook takes seconds here and up to a minute on the server, and
+so does checking one he uploads.
+
+The page queues a job and starts the runner at once (start_now). The runner takes the oldest job of each
+kind in turn: downloads to make, uploads to check, files to apply, files to undo. A job writes a heartbeat as
+it goes; one whose heartbeat stops (the process was killed) is taken up again, and after three stops it is
+given up with a reason. Applying a file resumes at the first change not yet made, so a change is never made
+twice.
+
+Each change is made in its own short transaction through catalogue/owner_edits.py, the code his buttons
+use. One the site has changed since he checked the file is left as it is and listed; one that fails is
+listed too, and the rest go on.
 """
 
 import gzip
 import json
 import logging
+import secrets
+from collections import Counter
+from datetime import timedelta
+from io import StringIO
+from pathlib import Path
+from time import sleep
 
+from django.conf import settings
+from django.core.management import CommandError, call_command
+from django.db import transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
-from .models import DataExport
+from .models import DataChange, DataExport, DataImport
+from .pricing import retry_locked
+from .signals import clear_list_caches
 
 logger = logging.getLogger(__name__)
+
+Status = DataImport.Status
+Outcome = DataChange.Outcome
+State = DataChange.State
+Kind = DataChange.Kind
+
+# A running job whose heartbeat is older than this was stopped (a deploy, the memory killer, a crash).
+STALE_AFTER = timedelta(minutes=5)
+MAX_ATTEMPTS = 3
+STOPPED = "Stopped three times. Download a fresh file and try again."
+# One run of the runner stops taking new jobs after this; the next start carries on.
+RUN_FOR = timedelta(minutes=25)
+# A file is made only while no shop read is saving prices, which takes the import lock. Shop reads hold it
+# for minutes at a time, so the wait is checked every few seconds and may last the whole run.
+LOCK_POLL_SECONDS = 10
+WAITING_FOR_READ = "Waiting for a shop read to finish"
+HEARTBEAT_EVERY = 25
+# A copy of the database is made first for a file that merges, takes pages off or makes many changes,
+# unless the newest copy is younger than this.
+BACKUP_FRESH = timedelta(hours=6)
+BACKUP_CHANGES = 200
+CHANGED_SINCE = "Changed on the site since you checked, so it was left as it was."
+UNDO_CHANGED = "Changed on the site since, so it was left as it is."
+NO_UPLOAD = "This file is no longer kept. Upload it again."
+
+# (model, waiting, running) in the order the runner takes them.
+QUEUES = (
+    (DataExport, DataExport.Status.QUEUED, DataExport.Status.BUILDING),
+    (DataImport, Status.QUEUED, Status.CHECKING),
+    (DataImport, Status.APPLY_QUEUED, Status.APPLYING),
+    (DataImport, Status.UNDO_QUEUED, Status.UNDOING),
+)
 
 
 def pack_base(base):
@@ -21,6 +76,86 @@ def pack_base(base):
 def unpack_base(blob):
     return json.loads(gzip.decompress(bytes(blob)).decode("utf-8"))
 
+
+def start_now():
+    """Start the runner at once in its own process, so the page returns straight away. data_files takes a
+    lock, so a second runner never starts. Never in tests."""
+    import subprocess
+    import sys
+
+    if getattr(settings, "TESTING", False):
+        return False
+    try:
+        subprocess.Popen(
+            [sys.executable, str(Path(settings.BASE_DIR) / "manage.py"), "data_files"], cwd=settings.BASE_DIR,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+        )
+    except OSError:
+        logger.warning("Spreadsheets: could not start the runner; the next look at the page starts it.", exc_info=True)
+        return False
+    return True
+
+
+# The runner ------------------------------------------------------------------------------------------------
+
+def run(deadline):
+    """Run queued jobs, oldest first by kind, until none is left or ``deadline`` passes. Returns how many ran."""
+    ran = 0
+    while timezone.now() < deadline:
+        reclaim()
+        job = claim()
+        if job is None:
+            break
+        ran += 1
+        try:
+            work(job, deadline)
+        except Exception:
+            # Left to be taken up again at once, which counts as one of its three tries.
+            logger.exception("Spreadsheet job %s %s stopped", type(job).__name__, job.pk)
+            type(job).objects.filter(pk=job.pk).update(heartbeat_at=None)
+    return ran
+
+
+def work(job, deadline):
+    if isinstance(job, DataExport):
+        build_export(job)
+    elif job.status == Status.CHECKING:
+        check_import(job)
+    elif job.status == Status.APPLYING:
+        apply_import(job, deadline)
+    elif job.status == Status.UNDOING:
+        undo_import(job, deadline)
+
+
+def claim():
+    """The next job, marked running: only one runner can mark it."""
+    for model, waiting, running in QUEUES:
+        for pk in model.objects.filter(status=waiting).order_by("created_at", "pk").values_list("pk", flat=True)[:5]:
+            now = timezone.now()
+            if model.objects.filter(pk=pk, status=waiting).update(status=running, started_at=now, heartbeat_at=now):
+                blobs = ("workbook", "base") if model is DataExport else ("upload",)
+                return model.objects.defer(*blobs).get(pk=pk)
+    return None
+
+
+def reclaim(now=None):
+    """Jobs whose heartbeat stopped go back in the queue, and one stopped three times is given up."""
+    now = now or timezone.now()
+    stale = Q(heartbeat_at__lt=now - STALE_AFTER) | Q(heartbeat_at__isnull=True)
+    for model, waiting, running in QUEUES:
+        for pk, attempts in model.objects.filter(stale, status=running).values_list("pk", "attempts"):
+            if attempts + 1 >= MAX_ATTEMPTS:
+                model.objects.filter(pk=pk, status=running).update(
+                    status=model.Status.FAILED, attempts=attempts + 1, error=STOPPED, finished_at=now)
+            else:
+                model.objects.filter(pk=pk, status=running).update(status=waiting, attempts=attempts + 1)
+
+
+def beat(job, **fields):
+    type(job).objects.filter(pk=job.pk).update(heartbeat_at=timezone.now(), **fields)
+
+
+# Downloads ----------------------------------------------------------------------------------------------
 
 def build_export(export):
     """Make one export's workbook and keep it with the values it was made with. Returns the workbook bytes, or
@@ -44,3 +179,253 @@ def build_export(export):
         size_bytes=len(data), workbook=data, base=pack_base(base),
     )
     return data
+
+
+# Checking an upload ---------------------------------------------------------------------------------------
+
+def import_counts(changes, unread):
+    """What the preview's summary and buttons need without reading every change: how many there are in each
+    state, the ready ones by kind, and what was not read."""
+    from .workbook_plan import counted_as, summary
+
+    return {
+        "state": dict(Counter(change.state for change in changes)),
+        "kind": dict(Counter(counted_as(change) for change in changes if change.state == State.READY)),
+        "unread": list(unread),
+        "summary": summary(changes),
+    }
+
+
+def check_import(job):
+    """Read an uploaded file and keep the list of what it would change, for the owner's preview. It changes
+    nothing on the site. A check again replaces the earlier list and its token, so an apply sent from the
+    older preview is refused."""
+    from . import workbook, workbook_plan
+
+    upload = DataImport.objects.filter(pk=job.pk).values_list("upload", flat=True).first()
+    now = timezone.now()
+    if upload is None:
+        DataImport.objects.filter(pk=job.pk).update(status=Status.REFUSED, error=NO_UPLOAD, finished_at=now)
+        return
+    try:
+        parsed = workbook.read_upload(bytes(upload))
+        export = workbook_plan.export_for(parsed.reference)
+        changes = workbook_plan.plan(export, parsed)
+    except workbook.FileRefused as exc:
+        DataImport.objects.filter(pk=job.pk).update(status=Status.REFUSED, error=str(exc)[:300],
+                                                    finished_at=timezone.now(), heartbeat_at=timezone.now())
+        return
+    for change in changes:
+        change.data_import_id = job.pk
+    with transaction.atomic():
+        DataChange.objects.filter(data_import_id=job.pk).delete()
+        DataChange.objects.bulk_create(changes, batch_size=500)
+        now = timezone.now()
+        DataImport.objects.filter(pk=job.pk).update(
+            status=Status.CHECKED, export=export, check_token=secrets.token_hex(6), checked_at=now, finished_at=now,
+            heartbeat_at=now, counts=import_counts(changes, parsed.unread), done=0, note="", error="",
+            total=sum(change.state == State.READY for change in changes),
+        )
+
+
+# Applying a file -------------------------------------------------------------------------------------------
+
+def wait_for_import_lock(job, until):
+    """The import lock, once no shop read holds it, or None when it is still held at ``until``. While it
+    waits the page says so, and the heartbeat goes on."""
+    from . import worker
+
+    # Read when called, not when imported, so the tests can point it at a file of their own.
+    lock = worker.ImportLock(worker.IMPORT_LOCK)
+    noted = False
+    while True:
+        now = timezone.now()
+        if lock.acquire(now):
+            # Also a note left from a wait in an earlier run.
+            beat(job, note="")
+            return lock
+        if not noted:
+            noted = True
+            beat(job, note=WAITING_FOR_READ)
+        else:
+            beat(job)
+        if now >= until:
+            return None
+        sleep(LOCK_POLL_SECONDS)
+
+
+def newest_backup():
+    """The newest copy backup_db made of this database, or None."""
+    from django.db import connection
+
+    from .management.commands.backup_db import backups
+
+    if connection.vendor != "sqlite" or connection.is_in_memory_db():
+        return None
+    database = Path(connection.settings_dict["NAME"])
+    found = backups(database.parent / "backups", database)
+    return found[-1] if found else None
+
+
+def safety_backup(job, todo):
+    """A copy of the database before a file that merges, takes pages off or makes many changes, unless the
+    nightly copy (or an earlier one of these) is under six hours old. Every change can be undone, so a copy
+    that cannot be made (a full disk) is logged and the file is still made. Returns the copy's name, or ""."""
+    if not (todo.filter(kind__in=[Kind.MERGE, Kind.TAKE_OFF]).exists() or todo.count() > BACKUP_CHANGES):
+        return ""
+    newest = newest_backup()
+    if newest is not None and timezone.now().timestamp() - newest.stat().st_mtime < BACKUP_FRESH.total_seconds():
+        return ""
+    try:
+        call_command("backup_db", stdout=StringIO())
+    except CommandError:
+        logger.warning("Spreadsheet upload %s: no copy of the database was made first", job.pk, exc_info=True)
+        return ""
+    newest = newest_backup()
+    name = newest.name if newest is not None else ""
+    DataImport.objects.filter(pk=job.pk).update(backup_name=name[:200])
+    return name
+
+
+def applying_for(job):
+    """Who uploaded the file, its number, and the products and sets its new rows became in a run that was
+    cut short, so the rest of the file can still name them."""
+    from . import owner_edits
+
+    reference = ""
+    if job.export_id:
+        export = DataExport.objects.filter(pk=job.export_id).only("pk", "token").first()
+        reference = export.reference if export else ""
+    applying = owner_edits.Applying(user_id=job.created_by_id, reference=reference)
+    for kind, ref, pk in job.changes.filter(kind__in=[Kind.NEW_PRODUCT, Kind.NEW_SET], outcome=Outcome.APPLIED,
+                                            object_id__isnull=False).values_list("kind", "ref", "object_id"):
+        (applying.sets if kind == Kind.NEW_SET else applying.products)[ref] = pk
+    return applying
+
+
+def each_change(changes, order):
+    """The changes, a few hundred at a time: never one query left open while the table is written."""
+    pks = list(changes.order_by(*order).values_list("pk", flat=True))
+    for start in range(0, len(pks), 200):
+        chunk = pks[start:start + 200]
+        found = DataChange.objects.in_bulk(chunk)
+        for pk in chunk:
+            yield found[pk]
+
+
+def make(job, change, applying):
+    """Make one change in its own transaction, with its outcome. Returns the outcome."""
+    from . import owner_edits
+
+    def attempt():
+        with transaction.atomic():
+            made = owner_edits.apply_change(change, applying)
+            DataChange.objects.filter(pk=change.pk).update(
+                outcome=Outcome.APPLIED, outcome_note="", applied_at=timezone.now(), undo=made.undo,
+                answer=made.answer, object_id=made.object_id if made.object_id is not None else change.object_id)
+            DataImport.objects.filter(pk=job.pk).update(done=F("done") + 1)
+        return made
+
+    try:
+        made = retry_locked(attempt)
+    except owner_edits.Stale:
+        return finish_change(job, change, Outcome.SKIPPED, CHANGED_SINCE)
+    except owner_edits.Refused as exc:
+        return finish_change(job, change, Outcome.SKIPPED, str(exc))
+    except Exception as exc:
+        logger.exception("Spreadsheet upload %s: change %s (%s) failed", job.pk, change.seq, change.kind)
+        return finish_change(job, change, Outcome.FAILED, f"This could not be made ({type(exc).__name__}). The "
+                                                          "site's log has the details.")
+    if change.kind == Kind.NEW_PRODUCT:
+        applying.products[change.ref] = made.object_id
+    elif change.kind == Kind.NEW_SET:
+        applying.sets[change.ref] = made.object_id
+    return Outcome.APPLIED
+
+
+def finish_change(job, change, outcome, note):
+    DataChange.objects.filter(pk=change.pk).update(outcome=outcome, outcome_note=note[:300])
+    DataImport.objects.filter(pk=job.pk).update(done=F("done") + 1)
+    return outcome
+
+
+def apply_import(job, deadline):
+    """Make the file's ready changes (and the held ones, when he said so) in order: sets, new products,
+    product fields, shop pages, merges, pairs kept apart, then shop items."""
+    until = min(deadline, timezone.now() + RUN_FOR)
+    lock = wait_for_import_lock(job, until)
+    if lock is None:
+        # Still waiting: the next start of the runner waits again.
+        DataImport.objects.filter(pk=job.pk).update(status=Status.APPLY_QUEUED, heartbeat_at=timezone.now())
+        return
+    try:
+        states = [State.READY, State.HELD] if job.include_held else [State.READY]
+        todo = job.changes.filter(state__in=states)
+        safety_backup(job, todo.filter(outcome=Outcome.NONE))
+        beat(job, total=todo.count(), done=todo.exclude(outcome=Outcome.NONE).count())
+        applying = applying_for(job)
+        for n, change in enumerate(each_change(todo.filter(outcome=Outcome.NONE), ("step", "seq")), start=1):
+            make(job, change, applying)
+            if n % HEARTBEAT_EVERY == 0:
+                beat(job)
+    finally:
+        lock.release()
+    # Once, after every change: each change judged its own products as it went.
+    clear_list_caches(force=True)
+    counts = DataImport.objects.filter(pk=job.pk).values_list("counts", flat=True).first() or {}
+    counts["outcome"] = dict(Counter(job.changes.exclude(outcome=Outcome.NONE).values_list("outcome", flat=True)))
+    now = timezone.now()
+    DataImport.objects.filter(pk=job.pk).update(status=Status.APPLIED, counts=counts, finished_at=now,
+                                                heartbeat_at=now, note="")
+
+
+# Undoing a file -------------------------------------------------------------------------------------------
+
+def unmake(job, change, applying):
+    from . import owner_edits
+
+    def attempt():
+        with transaction.atomic():
+            owner_edits.undo(change, applying)
+            DataChange.objects.filter(pk=change.pk).update(outcome=Outcome.UNDONE, outcome_note="",
+                                                           undone_at=timezone.now())
+            DataImport.objects.filter(pk=job.pk).update(done=F("done") + 1)
+
+    try:
+        retry_locked(attempt)
+    except owner_edits.Stale:
+        return finish_change(job, change, Outcome.UNDO_SKIPPED, UNDO_CHANGED)
+    except owner_edits.Refused as exc:
+        return finish_change(job, change, Outcome.UNDO_SKIPPED, str(exc))
+    except Exception as exc:
+        logger.exception("Spreadsheet upload %s: undoing change %s (%s) failed", job.pk, change.seq, change.kind)
+        return finish_change(job, change, Outcome.UNDO_SKIPPED, f"This could not be undone ({type(exc).__name__}). "
+                                                                "The site's log has the details.")
+    return Outcome.UNDONE
+
+
+def undo_import(job, deadline):
+    """Take back every change the file made, newest first, each only while the site still holds what the
+    file left: a merge is undone before the merges it came after, and a change made by hand since stays."""
+    until = min(deadline, timezone.now() + RUN_FOR)
+    lock = wait_for_import_lock(job, until)
+    if lock is None:
+        DataImport.objects.filter(pk=job.pk).update(status=Status.UNDO_QUEUED, heartbeat_at=timezone.now())
+        return
+    try:
+        undoing = job.changes.filter(outcome__in=[Outcome.APPLIED, Outcome.UNDONE, Outcome.UNDO_SKIPPED])
+        beat(job, total=undoing.count(), done=undoing.exclude(outcome=Outcome.APPLIED).count())
+        applying = applying_for(job)
+        for n, change in enumerate(each_change(undoing.filter(outcome=Outcome.APPLIED), ("-step", "-seq")), start=1):
+            unmake(job, change, applying)
+            if n % HEARTBEAT_EVERY == 0:
+                beat(job)
+    finally:
+        lock.release()
+    clear_list_caches(force=True)
+    counts = DataImport.objects.filter(pk=job.pk).values_list("counts", flat=True).first() or {}
+    counts["undo"] = dict(Counter(job.changes.filter(outcome__in=[Outcome.UNDONE, Outcome.UNDO_SKIPPED])
+                                  .values_list("outcome", flat=True)))
+    now = timezone.now()
+    DataImport.objects.filter(pk=job.pk).update(status=Status.UNDONE, counts=counts, finished_at=now,
+                                                heartbeat_at=now, note="")

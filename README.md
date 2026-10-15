@@ -202,6 +202,29 @@ that the next hour would merge, refile or remove. The code is
 `catalogue/workbook.py` (reading) and `catalogue/workbook_plan.py`. Applying a
 file happens only from the admin page, after its preview.
 
+Downloads, checks, applying and undoing all run in the background runner,
+which the admin page starts at once in its own process:
+
+```sh
+python manage.py data_files
+```
+
+With no arguments it runs whatever is queued, under a lock file in the cache
+folder so a second copy never runs, at a lower priority than the site and
+first in line for the memory killer. Each change is made in its own short
+transaction through `catalogue/owner_edits.py`, the code paths the owner's own
+buttons use: a merge can be undone and is listed under Sorted for you, a type
+leaves the admin history line that keeps it from the hourly retype, a page
+taken off a product is marked Not ours so the next read never matches it by
+name, and a link with no price seen waits for the shop's next read. A change
+the site made since the check is left as it is and listed. A file waits while
+a shop read holds the import lock, and a copy of the database is made first
+when it merges, takes pages off or makes more than 200 changes, unless the
+newest copy is under six hours old. A runner that is stopped is taken up
+again where it stopped, without making any change twice; after three stops
+the file is given up. Undo this file takes the changes back newest first,
+each only while the site still holds what the file left.
+
 ## Adding several shops at once
 
 ```sh

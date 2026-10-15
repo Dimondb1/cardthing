@@ -1,6 +1,7 @@
 """
 The owner's catalogue as a spreadsheet (catalogue/workbook.py and catalogue/data_jobs.py).
 
+    python manage.py data_files                                     # run the queued jobs from the Your data page
     python manage.py data_files --export data.xlsx                  # write the workbook to a file
     python manage.py data_files --export data.xlsx --left-out zatu-games
     python manage.py data_files --check data.xlsx                   # what an edited file would change
@@ -11,10 +12,18 @@ items its latest read left out.
 
 --check reads an edited workbook and prints, in plain words, every change it would make and every change it
 would not, with why. It changes nothing: changes are made only from the Your data page, after its preview.
+
+With no arguments it runs what the Your data page queued (catalogue/data_jobs.py): downloads to make,
+uploads to check, files to apply or undo. The page starts it at once in its own process; a lock file in
+the cache directory keeps a second copy from running. It runs at a lower priority than the site, and is the
+first process the memory killer stops on the 1 GB server, so the site's own workers keep going.
 """
 
+import fcntl
+import os
 from pathlib import Path
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
@@ -32,7 +41,7 @@ SECTIONS = (
 
 
 class Command(BaseCommand):
-    help = "Write the catalogue as an Excel workbook for the owner to tidy and upload."
+    help = "Run the Your data page's queued spreadsheet jobs, or write or check a workbook."
 
     def add_arguments(self, parser):
         parser.add_argument("--export", metavar="PATH", help="Write the workbook to this file.")
@@ -49,7 +58,20 @@ class Command(BaseCommand):
             raise CommandError("--left-out goes with --export.")
         if check:
             return self.check_file(Path(check))
-        raise CommandError("Say what to do: --export PATH writes the workbook, --check PATH reads one back.")
+        return self.run_jobs()
+
+    def run_jobs(self):
+        folder = Path(settings.RIPRAPTOR_CACHE_DIR)
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / "data-files.lock", "w") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return None   # a runner is going already, and takes this job too
+            if not getattr(settings, "TESTING", False):
+                lower_priority()
+            data_jobs.run(timezone.now() + data_jobs.RUN_FOR)
+        return None
 
     def export(self, path, left_out):
         retailer = None
@@ -99,3 +121,16 @@ class Command(BaseCommand):
             write(f"\nNot read ({len(parsed.unread):,})")
             for line in parsed.unread:
                 write(f"  {line}")
+
+
+def lower_priority():
+    """Below the site's workers for the processor, and first to go when memory runs out: a spreadsheet can
+    wait, a visitor cannot."""
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+    try:
+        Path("/proc/self/oom_score_adj").write_text("500")
+    except OSError:
+        pass

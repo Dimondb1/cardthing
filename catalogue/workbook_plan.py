@@ -1070,7 +1070,7 @@ class Planner:
                              object_id=pk, data=label)
                 continue
             product = site.products.get(page.product_id)
-            label = {"title": page.title or page.url, "shop": site.shop_name(page.retailer_id),
+            label = {"title": page.title, "shop": site.shop_name(page.retailer_id),
                      "product": page.product_id, "product_name": product.name if product else "", "link": base["link"]}
             marketplace = site.is_marketplace(page.retailer_id)
             verdict, value, why = self.compare(cells, "product", self.as_product, base["product"], page.product_id)
@@ -1140,7 +1140,8 @@ class Planner:
             item = site.items.get(pk)
             data = {"title": item.title if item else "", "shop": site.shop_name(item.retailer_id) if item else "",
                     "price": str(item.price) if item and item.price is not None else None,
-                    "seen": item.last_seen.isoformat() if item else None, "typed": typed,
+                    # London time, as the sheet shows it.
+                    "seen": timezone.localtime(item.last_seen).isoformat() if item else None, "typed": typed,
                     "status": base["status"], "suggested": base["suggested"]}
             if not problem and item is None:
                 self.add(kind, sheet, number, State.CONFLICT, "This shop item was removed since your download.",
@@ -1686,10 +1687,15 @@ def describe(change):
             return f"Rename {name} to {quoted(file, WHOLE)} {where}.{after}"
         if field == "code":
             return f"Change the code of {name} to {file or 'none'} (was {base or 'none'}) {where}.{after}"
+        if not file:
+            return (f"Clear the release date of {name} (was {day_text(base)}) {where}. A release source may give it "
+                    "a date again.")
         return (f"Change the release date of {name} to {day_text(file)} (was {day_text(base)}) {where}. Release "
                 "sources never change a date you set.")
     if kind in (Kind.TAKE_OFF, Kind.MOVE, Kind.HIDE, Kind.SHOW):
-        page = f"{possessive(d['shop'])} {quoted(d.get('title'))}" if d.get("shop") else f"the page {d.get('link')}"
+        # A page with no title of its own (older eBay ones) is the shop's page: its stored link carries tracking.
+        page = (f"{possessive(d['shop'])} {quoted(d['title']) if d.get('title') else 'page'}" if d.get("shop")
+                else f"the page {d.get('link')}")
         on = f"{d['product']} {quoted(d.get('product_name'))}" if d.get("product") else "its product"
         if kind == Kind.TAKE_OFF:
             return f"Take {page} off {on} {where}. Its page is never matched to a product by name again."

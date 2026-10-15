@@ -3,7 +3,7 @@ uploaded, as the site holds it now), the guards against a file mixed up in Excel
 judged against before anything is made. Nothing here makes a change: that is the apply step."""
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import StringIO
 from unittest import mock
@@ -528,6 +528,14 @@ class ProductFieldTests(Base):
         self.assertEqual(self.only(self.edit(data, ("Sets", mew.pk, "Release date", "23/09/2023"))).state,
                          State.READY)
 
+    def test_a_sets_release_date_cleared_may_be_given_again(self):
+        _export, data = self.download()
+        cleared = self.only(self.edit(data, ("Sets", self.bolt.pk, "Release date", "")))
+        self.assertEqual(cleared.what, f'Clear the release date of the set {self.bolt.pk} "Black Bolt" (was 18 Jul '
+                                       f"2025) (Sets row {cleared.row}). A release source may give it a date again.")
+        typed = self.only(self.edit(data, ("Sets", self.bolt.pk, "Release date", "19/07/2025")))
+        self.assertTrue(typed.what.endswith("Release sources never change a date you set."))
+
     def test_a_set_name_or_code_holding_markup_is_refused(self):
         _export, data = self.download()
         for heading, value in (("Name", "Surging Sparks <img src=x>"), ("Code", "SV08>")):
@@ -877,9 +885,20 @@ class ListingTests(Base):
         move = self.only(self.edit(data, ("Listings", self.listing.pk, "Product id", str(self.etb.pk))))
         self.assertEqual((move.kind, move.state, move.target_id), (Kind.MOVE, State.READY, self.etb.pk))
         self.assertEqual(move.fields["product"], [self.box.pk, self.etb.pk, self.box.pk, self.etb.pk])
-        self.assertEqual(move.what, f'Move Solent Cards\' "{self.listing.title or self.listing.url}" from '
+        self.assertEqual(move.what, f"Move Solent Cards' page from "
                                     f'{self.box.pk} "Surging Sparks Booster Box" to {self.etb.pk} "Surging Sparks '
                                     f'Elite Trainer Box" (Listings row {move.row}).')
+        # With a title of its own, the page is named by it.
+        Listing.objects.filter(pk=self.listing.pk).update(title="SSP Booster Box")
+        move = self.only(self.edit(data, ("Listings", self.listing.pk, "Product id", str(self.etb.pk))))
+        self.assertTrue(move.what.startswith('Move Solent Cards\' "SSP Booster Box" from '), move.what)
+
+    def test_a_page_with_no_title_is_never_named_by_its_tracked_link(self):
+        page = make_listing(self.box, self.ebay, url="https://www.ebay.co.uk/itm/335512345678?hash=item4e1b&mkcid=1")
+        _export, data = self.download()
+        hide = self.only(self.edit(data, ("Listings", page.pk, "Show on site", "No")))
+        self.assertEqual(hide.what, f'Hide eBay\'s page on {self.box.pk} "Surging Sparks Booster Box" (Listings row '
+                                    f"{hide.row}).")
 
     def test_moves_that_would_not_stick_are_refused(self):
         on_ebay = make_listing(self.box, self.ebay, url="https://www.ebay.co.uk/itm/1")
@@ -1038,6 +1057,15 @@ class ShopItemTests(Base):
         old = self.only(self.decide(data, "Link"))
         self.assertEqual((old.state, old.warning), (State.READY, "The price shows once the shop's next read checks it."))
 
+
+    def test_the_day_an_item_was_seen_is_the_day_the_sheet_shows(self):
+        # 00:30 in London in summer is 23:30 the day before in UTC.
+        seen = timezone.make_aware(datetime(2026, 10, 15, 0, 30))
+        ShopProduct.objects.filter(pk=self.item.pk).update(last_seen=seen)
+        _export, data = self.download()
+        with mock.patch.object(workbook_plan.timezone, "now", return_value=seen + timedelta(hours=1)):
+            link = self.only(self.decide(data, "Link"))
+        self.assertIn("(£44.99, seen 15 Oct)", link.what)
 
     def test_a_link_at_a_shop_switched_off_since_is_refused(self):
         _export, data = self.download()

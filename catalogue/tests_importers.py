@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from .classify import classify
-from .importers import ImportError_, apply_offers, feed_offers, run_import, shopify_offers
+from .importers import ImportError_, Offer, apply_offers, feed_offers, run_import, shopify_offers
 from .models import DailyLowestPrice, ImportRun, Listing, Product, Retailer, ShopProduct
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
@@ -642,6 +642,53 @@ class AutoCatalogueTests(TestCase):
         ])
         run_import(shop, fetch=lambda url: page if "page=1" in url else shopify_page([]))
         self.assertEqual(Product.objects.get().product_set, phoenix)
+
+
+class TwinTests(TestCase):
+    """A read never makes a second page for a product the catalogue has under other shops' words. Titles from
+    Solent Cards' read of 15 Oct 2026, products from the 3 Oct snapshot, where each of these became a new page."""
+
+    def setUp(self):
+        self.game = make_game()
+        self.magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
+        self.shop = make_retailer("Solent Cards")
+        names = {
+            "pursue": "Pursue Glory Together csv10 C Simplified Chinese Slim Booster Box",
+            "pursue_jumbo": "Pursue Glory Together csv10 C Simplified Chinese Jumbo Booster Box",
+            "festival": "(JAPANESE) Pokemon SV8a High Class Terastal Festival ex Booster Box",
+            "festival_bare": "Eeveelutions Terastal Festival ex High Class sv8a No Shrink Japanese Booster Box",
+            "gem3": "Gem Pack Vol. 3 Simplified Chinese Booster Box",
+            "spinner": "Japanese Ninja Spinner Booster Box",
+            "spinner_bare": "Ninja Spinner m4 No Shrink Japanese Booster Box",
+        }
+        self.products = {key: Product.objects.create(game=self.game, name=name, product_type="booster_box")
+                         for key, name in names.items()}
+        self.products["foundations"] = Product.objects.create(game=self.magic, name="Foundations Play Booster Box",
+                                                              product_type="booster_box")
+
+    def read(self, *titles):
+        apply_offers(self.shop, [Offer(title=title, url=f"https://solentcards.co.uk/products/{n}", price=Decimal("50"))
+                                 for n, title in enumerate(titles)])
+        return {listing.title: listing.product for listing in Listing.objects.filter(retailer=self.shop)}
+
+    def test_a_shops_own_words_for_a_product_we_have_join_its_page(self):
+        expected = {
+            "Pokémon Chasing Glory Together Simplified Chinese Slim Booster Box (csv10)": "pursue",
+            "Pokemon Eeveelutions Terastal Festival ex High Class sv8a Japanese Booster Box": "festival",
+            "Pokemon Gem Pack Vol 3 CBB3C Simplified Chinese Booster Box": "gem3",
+            "Pokemon Ninja Spinner (m4) Japanese Booster Box": "spinner",
+            "Magic: The Gathering Foundations Play Booster Display (36 Packs)": "foundations",
+        }
+        found = self.read(*expected)
+        self.assertEqual(Product.objects.count(), len(self.products))
+        self.assertEqual({title: product.pk for title, product in found.items()},
+                         {title: self.products[key].pk for title, key in expected.items()})
+
+    def test_another_language_size_or_wrapping_gets_its_own_page(self):
+        found = self.read("Pokemon Ninja Spinner m4 Korean Booster Box",
+                          "Pokemon Chasing Glory Together Simplified Chinese Standard Booster Box (csv10)",
+                          "Pokemon Terastal Festival ex sv8a Japanese Booster Box Case (6 Boxes)")
+        self.assertFalse(set(found.values()) & set(self.products.values()), found)
 
 
 class ChineseShopTests(TestCase):

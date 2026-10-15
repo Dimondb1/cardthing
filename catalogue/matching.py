@@ -393,10 +393,45 @@ def match_key(text, game=""):
     return " ".join(kept)
 
 
+# A Magic booster's kind: a set booster box is not a draft booster box, though "set" is a word shops drop.
+# Read on the plain name, so "Collector's Booster" and "Collectors English Booster" are Collector Boosters.
+BOOSTER_KIND = re.compile(r"\b(set|draft|play|collector|jumpstart|gift|prerelease)s? booster")
+
+
+def booster_kinds(name):
+    return set(BOOSTER_KIND.findall(" ".join(LANGUAGE_WORDS.sub(" ", expand(name)).split())))
+
+
 def same_product(a, b, game=""):
     """Whether two names that share a key may be taken for one product without a person: their numbers
-    agree ("Vol 4" is not "Vol 6") and so do their set codes."""
-    return identity_numbers(a) == identity_numbers(b) and not codes_differ(a, b, game)
+    agree ("Vol 4" is not "Vol 6"), and so do their set codes and booster kinds."""
+    return (identity_numbers(a) == identity_numbers(b) and not codes_differ(a, b, game)
+            and booster_kinds(a) == booster_kinds(b))
+
+
+# Sizes of one set's box: a slim box and a jumbo box of one code are two products.
+BOX_SIZES = {"slim", "jumbo", "standard", "mini", "half"}
+# Words that make a product a variant of another with the same name: an unwrapped box, a case of boxes.
+VARIANT_WORDS = {"noshrink", "case", "half", "damaged", "mini"}
+
+
+def code_key(name, game=""):
+    """A name carrying one set code: the code with the box size and the kind of product ("sv8a #box",
+    "csv10 slim #box"), else "". A code names one set, so two shops' names for one box share it however
+    else they word it ("Eeveelutions Terastal Festival ex sv8a", "Pursue Glory Together csv10" and "Chasing
+    Glory Together (csv10)")."""
+    codes = set_codes(name, game)
+    if len(codes) != 1:
+        return ""
+    text = key_text(name, game)
+    marks = [mark for mark, pattern in KIND_MARKS if pattern.search(text)]
+    return " ".join([*codes, *sorted(BOX_SIZES & set(text.split())), *marks])
+
+
+def naming_words(name, game=""):
+    """The words of a key that name the product, without its codes."""
+    words = {singular(w) for w in key_text(name, game).split()} - LOOSE
+    return {w for w in words if not is_code(w, game) and not chinese_code(w)}
 
 
 def score(product_name, title, game=""):

@@ -463,11 +463,11 @@ class ShopNamingTests(TestCase):
     keeps different products apart."""
 
     def same(self, game, a, b):
-        from .management.commands.merge_duplicates import booster_kinds, merge_key
+        from .management.commands.merge_duplicates import merge_key
         from .matching import same_product
 
         key = merge_key(a, game)
-        return bool(key) and key == merge_key(b, game) and same_product(a, b, game) and booster_kinds(a) == booster_kinds(b)
+        return bool(key) and key == merge_key(b, game) and same_product(a, b, game)
 
     def test_one_product_under_two_shops_names_shares_a_key(self):
         for game, a, b in SAME_PRODUCT:

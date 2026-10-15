@@ -25,7 +25,6 @@ The hourly run merges only what is certain: two names whose numbers differ
 pair the owner said are not the same is never merged.
 """
 
-import re
 from collections import defaultdict
 from contextlib import nullcontext
 
@@ -35,7 +34,7 @@ from django.utils import timezone
 
 from catalogue.languages import CHINESE, SIMPLIFIED, name as language_name, plain, product_language
 from catalogue.matching import (
-    KIND_WORDS, LANGUAGE_WORDS, chinese_code, codes_differ, expand, identity_numbers, match_key,
+    BOX_SIZES, KIND_WORDS, booster_kinds, chinese_code, codes_differ, identity_numbers, match_key,
 )
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, ProductAlias, Restock, ShopProduct, StockAlert,
@@ -318,10 +317,6 @@ def unmerge(note):
     return restored
 
 
-# Sizes of one set's booster box: a slim box and a jumbo box of the same code are two products.
-BOX_SIZES = {"slim", "jumbo", "standard", "mini", "half"}
-
-
 def chinese_code_key(name, game_slug):
     """For a Pokémon name carrying one Simplified Chinese set code, the code with the box size and the kind of
     product, else "". Shops translate set names differently ("Pursue Glory Together" and "Chasing Glory
@@ -391,15 +386,6 @@ def duplicate_groups(loose=False):
                                   not p.image_url, len(p.name), p.pk))
         found.append((group[0], group[1:]))
     return sorted(found, key=lambda row: row[0].name)
-
-
-# A Magic booster's kind: a set booster box is not a draft booster box, though "set" is a word shops drop.
-# Read on the plain name, so "Collector's Booster" and "Collectors English Booster" are Collector Boosters.
-BOOSTER_KIND = re.compile(r"\b(set|draft|play|collector|jumpstart|gift|prerelease)s? booster")
-
-
-def booster_kinds(name):
-    return set(BOOSTER_KIND.findall(" ".join(LANGUAGE_WORDS.sub(" ", expand(name)).split())))
 
 
 def game_slug_of(product):

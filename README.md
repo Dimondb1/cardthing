@@ -562,7 +562,15 @@ An offer links to an existing product automatically only when it is a
 sealed product of the same game and its title and our name agree both
 ways (every meaningful word of ours in the title, and most of the title's
 own words in ours), or when both boil down to the same matching key (the
-identifying words plus the kind of thing: box, pack, bundle, deck).
+identifying words plus the kind of thing: box, pack, bundle, deck) in the
+same language, with the same numbers, set codes and booster kind. Before a
+read makes a new product it looks for one it already has under other
+shops' words: the same key, or the same set code with the same box size and
+kind when only one product carries that code ("Eeveelutions Terastal
+Festival ex High Class sv8a Japanese Booster Box" joins "(JAPANESE) Pokemon
+SV8a High Class Terastal Festival ex Booster Box", and Solent's "Chasing
+Glory Together Slim Booster Box (csv10)" joins "Pursue Glory Together csv10
+C Slim"). An unwrapped box, a case, another size or language never joins.
 Anything less certain goes to Shop products to review. Shops mark
 pre-orders in a pre-order collection, which the importer reads, so a
 pre-order never shows as in stock.

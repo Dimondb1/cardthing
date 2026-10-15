@@ -39,7 +39,10 @@ from django.utils.dateparse import parse_datetime
 
 from . import languages, pricing
 from .classify import GAMES, classify, find_game, variant_differs
-from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, names_something, same_product, score, shop_title
+from .matching import (
+    AUTO_LINK, SUGGEST, VARIANT_WORDS, best_match, chinese_code, code_key, covers, match_key, names_something, naming_words,
+    same_product, score, set_codes, shop_title,
+)
 from .models import (
     Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, shown_change,
     stale_cutoff,
@@ -1592,6 +1595,7 @@ class Catalogue:
         self.games = {}
         self.index = {}
         self.by_key = {}
+        self._by_code = None   # (game, code_key) -> [pk], made when first asked
         self._words = words
         for row in rows:
             self.add(*row)
@@ -1602,6 +1606,61 @@ class Catalogue:
         self.by_key.setdefault((game, match_key(name, game or "")), []).append(pk)
         for word in set(self._words(name)):
             self.index.setdefault(word, set()).add(pk)
+        if self._by_code is not None:
+            self._add_code(pk, name, game)
+
+    def _add_code(self, pk, name, game):
+        key = code_key(name, game or "")
+        if key:
+            self._by_code.setdefault((game, key), []).append(pk)
+
+    def twin(self, name, title, game=None):
+        """The one product that is surely the one a shop names ``name`` (its title as classify cleans it), under
+        other shops' words, or None. Asked before a product is made, so a read never makes a second page for
+        a product the catalogue has.
+
+        The same key (matching.match_key) in the same language, with equal numbers, set codes and booster
+        kinds: "Foundations Play Booster Display" is "Foundations Play Booster Box". Or else the same set code
+        with the same size and kind, in the same language, when only one product carries it: a code names one
+        set, however a shop words the rest. Simplified Chinese names are translations ("Pursue Glory Together
+        csv10" and "Chasing Glory Together (csv10)"), so they need only be a likely match; any other code
+        needs every naming word of ours in the shop's name ("Terastal Festival ex sv8a" in "Eeveelutions
+        Terastal Festival ex High Class sv8a"), and an unwrapped box or a case is never the plain box.
+        """
+        slug = game or ""
+        language = languages.language_of(name, slug)
+        if languages.mixed(name, slug):
+            return None
+
+        def same_language(pk):
+            return languages.same(languages.language_of(self.names[pk], slug), language)
+
+        key = match_key(name, slug)
+        if names_something(key):
+            for pk in self.by_key.get((game, key), ()):
+                if same_language(pk) and same_product(name, self.names[pk], slug):
+                    return pk
+        code = code_key(name, slug)
+        if not code:
+            return None
+        if self._by_code is None:
+            self._by_code = {}
+            for pk, other in self.names.items():
+                self._add_code(pk, other, self.games[pk])
+        ours = naming_words(name, slug)
+        chinese = any(chinese_code(word) for word in set_codes(name, slug))
+        found = []
+        for pk in self._by_code.get((game, code), ()):
+            other = self.names[pk]
+            if not same_language(pk) or not same_product(name, other, slug):
+                continue
+            theirs = naming_words(other, slug)
+            if (ours ^ theirs) & VARIANT_WORDS:
+                continue
+            likely = score(other, title, slug) >= SUGGEST if chinese else theirs <= ours
+            if likely:
+                found.append(pk)
+        return found[0] if len(found) == 1 else None
 
     def append(self, row):
         self.add(*row)
@@ -1658,6 +1717,10 @@ def create_from_offer(offer, catalogue, sealed=None):
     match, value = catalogue.best_match(sealed.name, game=sealed.game)
     if match and value >= AUTO_LINK and score(sealed.name, match[1]) >= AUTO_LINK:
         return match[0]
+    # Or under other shops' words for the same thing ("Booster Display", a set code, a translation).
+    twin = catalogue.twin(sealed.name, offer.title, game=sealed.game)
+    if twin is not None:
+        return twin
     game = Game.objects.filter(slug=sealed.game).first()
     if game is None:
         for slug, name, short, words in GAMES:

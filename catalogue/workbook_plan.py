@@ -193,6 +193,8 @@ class Item:
     last_seen: object
     status: str
     suggested_id: object
+    source: str = ""
+    product_id: object = None   # the product the stockist finder searched for, on a row it found
 
 
 class Site:
@@ -226,7 +228,8 @@ class Site:
         self.items = {}
         self.item_at = {}   # (retailer, link key): the shop item
         for row in ShopProduct.objects.values_list("pk", "retailer_id", "url", "title", "shop_ean", "price",
-                                                   "last_seen", "status", "suggested_id").iterator(chunk_size=2000):
+                                                   "last_seen", "status", "suggested_id", "source",
+                                                   "product_id").iterator(chunk_size=2000):
             item = Item(*row[:4], row[4] or "", *row[5:])
             self.items[item.pk] = item
             self.item_at[(item.retailer_id, link_key(item.url))] = item.pk
@@ -1143,6 +1146,9 @@ class Planner:
                     # London time, as the sheet shows it.
                     "seen": timezone.localtime(item.last_seen).isoformat() if item else None, "typed": typed,
                     "status": base["status"], "suggested": base["suggested"]}
+            if item is not None and item.source == ShopProduct.Source.FINDER and item.product_id in site.products:
+                # A No to the stockist finder is about the product it searched for only.
+                data["finder_product"] = site.products[item.product_id].name
             if not problem and item is None:
                 self.add(kind, sheet, number, State.CONFLICT, "This shop item was removed since your download.",
                          object_id=pk, data=data)
@@ -1730,6 +1736,9 @@ def describe(change):
         return text if change.warning else text + " Its price shows at once."
     if kind == Kind.LEFT_LINK:
         return f"Link {item} to {target_words(change)} {where}. The shop's next read adds its price."
+    if kind == Kind.IGNORE and d.get("finder_product"):
+        return (f"Mark {item} as not ours {where}. It is never suggested for {quoted(d['finder_product'], 50)} "
+                "again, and can still be matched to another product.")
     if kind in (Kind.IGNORE, Kind.LEFT_IGNORE):
         return f"Mark {item} as not ours {where}. Its page is never matched by name again."
     return f"Put {item} back to look at again {where}."

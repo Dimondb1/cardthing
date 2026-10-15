@@ -1077,6 +1077,18 @@ class ShopItemTests(Base):
             link = self.only(self.decide(data, "Link"))
         self.assertIn("(£44.99, seen 15 Oct)", link.what)
 
+    def test_not_ours_on_an_item_the_stockist_finder_found_is_about_that_product_only(self):
+        ShopProduct.objects.filter(pk=self.item.pk).update(source=ShopProduct.Source.FINDER, product=self.etb)
+        _export, data = self.download()
+        no = self.only(self.decide(data, "Not ours"))
+        self.assertTrue(no.what.endswith(
+            'It is never suggested for "Surging Sparks Elite Trainer Box" again, and can still be matched to another '
+            "product."), no.what)
+        ShopProduct.objects.filter(pk=self.item.pk).update(source=ShopProduct.Source.IMPORT, product=None)
+        _export, data = self.download()
+        self.assertTrue(self.only(self.decide(data, "Not ours")).what.endswith(
+            "Its page is never matched by name again."))
+
     def test_a_link_at_a_shop_switched_off_since_is_refused(self):
         _export, data = self.download()
         Retailer.objects.filter(pk=self.harbour.pk).update(is_active=False)

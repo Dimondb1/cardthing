@@ -1052,12 +1052,17 @@ class Planner:
                      "product": page.product_id, "product_name": product.name if product else "", "link": base["link"]}
             marketplace = site.is_marketplace(page.retailer_id)
             verdict, value, why = self.compare(cells, "product", self.as_product, base["product"], page.product_id)
+            # He meant the page on the product his download showed it on; on another now, it is left.
+            moved_since = (f"This page moved to {page.product_id} since your download. Left as it is."
+                           if verdict == "none" and base["product"] != page.product_id else "")
             if take_problem:
                 self.add(Kind.TAKE_OFF, sheet, number, State.PROBLEM, take_problem, object_id=pk, data=dict(label))
             elif take_off and verdict == "apply":
                 both = "Not this product and a new Product id on one row. Do one or the other."
                 self.add(Kind.TAKE_OFF, sheet, number, State.PROBLEM, both, object_id=pk, data=dict(label))
                 verdict, why = "problem", both
+            elif take_off and moved_since:
+                self.add(Kind.TAKE_OFF, sheet, number, State.CONFLICT, moved_since, object_id=pk, data=dict(label))
             elif take_off:
                 self.add(Kind.TAKE_OFF, sheet, number, State.PROBLEM if marketplace else State.READY,
                          marketplace_why if marketplace else "", object_id=pk, data=dict(label))
@@ -1079,6 +1084,8 @@ class Planner:
                 continue
             if take_off:
                 verdict, why = "problem", "Not this product takes it off, so Show on site is left."
+            elif moved_since and verdict != "same":
+                verdict, why = "conflict", moved_since
             elif verdict == "conflict":
                 why = self.conflict_why("show", base["show"], value, page.active)
             self.field_change(Kind.HIDE if value is False else Kind.SHOW, sheet, number, "show", verdict, base["show"],

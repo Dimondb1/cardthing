@@ -930,6 +930,15 @@ class ListingTests(Base):
                             ("Shop items", item.pk, "Decision", "Link"))
         self.assertEqual({c.state for c in changes}, {State.READY})
 
+    def test_not_this_product_or_a_hide_on_a_page_moved_since_is_left(self):
+        _export, data = self.download()
+        Listing.objects.filter(pk=self.listing.pk).update(product=self.etb)
+        why = f"This page moved to {self.etb.pk} since your download. Left as it is."
+        off = self.only(self.edit(data, ("Listings", self.listing.pk, "Not this product", "Yes")))
+        self.assertEqual((off.kind, off.state, off.why), (Kind.TAKE_OFF, State.CONFLICT, why))
+        hide = self.only(self.edit(data, ("Listings", self.listing.pk, "Show on site", "No")))
+        self.assertEqual((hide.kind, hide.state, hide.why), (Kind.HIDE, State.CONFLICT, why))
+
     def test_hide_and_show(self):
         hidden = make_listing(self.etb, self.harbour, is_active=False)
         _export, data = self.download()

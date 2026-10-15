@@ -112,6 +112,17 @@ class PruneDataFilesTests(TestCase):
         self.assertEqual(made.changes.count(), 1)
         self.assertEqual(housekeeping.prune_data_files(), (0, 0, 0, 0))
 
+    def test_the_readme_counts_the_upload_window_from_when_the_file_was_made(self):
+        from django.conf import settings
+
+        # The values a file is compared with go 90 days after it was made, whenever it was downloaded.
+        downloaded_late = self.export(91)
+        DataExport.objects.filter(pk=downloaded_late.pk).update(downloaded_at=timezone.now() - datetime.timedelta(80))
+        housekeeping.prune_data_files()
+        self.assertFalse(DataExport.objects.filter(pk=downloaded_late.pk).exists())
+        readme = (Path(settings.BASE_DIR) / "README.md").read_text()
+        self.assertIn(f"A file can be uploaded for {housekeeping.EXPORTS_KEPT_DAYS} days after it was made", readme)
+
     def test_tidy_all_clears_them_every_hour(self):
         self.export(15)
         self.upload(181, DataImport.Status.APPLIED)

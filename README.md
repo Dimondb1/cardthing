@@ -273,8 +273,9 @@ first, say), Undo this file can be tapped again to try those once more.
 
 ### How long files are kept
 
-A file can be uploaded for 90 days after it was downloaded; after that the
-page asks for a fresh download. `tidy_all` clears old files every hour: a
+A file can be uploaded for 90 days after it was made (not downloaded: a
+file made on 1 March and downloaded on 14 March is refused from 30 May);
+after that the page asks for a fresh download. `tidy_all` clears old files every hour: a
 download's workbook after 14 days, the values it was made with after 90
 days, an upload's file once its changes are made or it is discarded (or
 after a week), and its list of changes after 180 days, when the file can no

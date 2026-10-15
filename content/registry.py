@@ -1509,9 +1509,10 @@ ENTRIES = [
     ),
     Entry(
         "errors.410.body", P, "Product removed text",
-        "We no longer compare prices for this product, so its page has been taken down. Its set and game "
-        "list what we compare now, or you can search.",
-        "Text under the heading on a removed product's page, above links to its set and game and a search box.",
+        "We no longer compare prices for this product, so its page has been taken down. Search for what we "
+        "compare now.",
+        "Text under the heading on a removed product's page, above a search box and, when the product had them, "
+        "links to its set and game. Most removed products have neither, so the text should not point to them.",
     ),
     Entry(
         "errors.410.set", B, "Product removed set link",

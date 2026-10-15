@@ -530,14 +530,22 @@ class RemovedProductTests(TestCase):
             self.assertNotIn(phrase, html.lower())
 
     def test_a_removed_product_of_a_hidden_game_or_without_a_set_still_answers_410(self):
+        def text(response):
+            return re.search(r'<div class="prose">(.*?)</div>', response.content.decode(), re.S).group(1)
+
         RemovedProduct.objects.create(slug="setless", name="Setless Box", game=self.game)
         response = self.client.get("/products/setless/")
         self.assertContains(response, f'href="{self.game.get_absolute_url()}"', status_code=410)
         self.assertNotContains(response, "Prismatic Evolutions products", status_code=410)
+        # The text never points to a set or game link that may not be there, only to the search box.
+        self.assertNotRegex(text(response), r"(?i)\b(set|game)s?\b")
+        self.assertIn("Search for what we compare now", text(response))
         type(self.game).objects.filter(pk=self.game.pk).update(is_active=False)
         response = self.client.get("/products/setless/")
         self.assertEqual(response.status_code, 410)
         self.assertNotContains(response, "All Pokémon products", status_code=410)
+        self.assertNotRegex(text(response), r"(?i)\b(set|game)s?\b")
+        self.assertContains(response, 'id="gone-q"', status_code=410)
 
     def test_a_live_product_or_an_old_address_wins_over_a_removal(self):
         RemovedProduct.objects.create(slug="back-again", name="Back Again Box", game=self.game)

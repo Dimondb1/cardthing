@@ -516,9 +516,9 @@ the way `merge_duplicates` merges, so the old address redirects there for
 good and its price history, restocks, clicks and stock alerts move across.
 A product of another type, or one switched off in admin, is never merged
 into: the product is renamed in place instead. A removed product's address
-answers 410 Gone, not 404, with links to its set and game and the search
-box, so Google drops it quickly and a visitor is not stranded (see
-"Sitemap and removed pages").
+answers 410 Gone, not 404, with the search box and links to its set and
+game when it had them, so Google drops it quickly and a visitor is not
+stranded (see "Sitemap and removed pages").
 
 Only Total Cards publishes barcodes, so most offers are matched by name.
 An offer links to an existing product automatically only when it is a
@@ -2347,8 +2347,11 @@ A product page `tidy_catalogue` removes (no shop lists it, no release date
 and no image, or it fails the sealed-product rules) leaves its address, and
 every old address that led to it, in admin under "Removed product
 addresses". A visit there answers **410 Gone** with "... is no longer
-listed", links to its set and game, and the search box; the wording is in
-Site wording under Error pages. Google drops a 410 faster than a 404. A
+listed", a line pointing to the search box, the search box and links to
+its set and game when it had them (on the 3 October snapshot none of the
+204 products the tidy would remove had a set); the wording is in Site
+wording under Error pages and never mentions the set or game links, which
+may not be there. Google drops a 410 faster than a 404. A
 product created again at the same address simply shows, and an old address
 of a merged product still redirects. `tidy_all` forgets these addresses
 after a year, when they go back to a plain 404. Changing a product's

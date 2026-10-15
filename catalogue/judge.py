@@ -968,7 +968,7 @@ def act(row, ask, action, now):
         keep, other = row.product, row.other
 
         def apart():
-            if not any(k.pk == keep.pk and any(o.pk == other.pk for o in others) for k, others in checks.duplicates()):
+            if not checks.still_offered(keep, other):
                 raise autopilot.Stale
 
         pilot.answer(Kind.APART, f"{other.name} is not {keep.name}", f"{why} Checked: still suggested as duplicates",

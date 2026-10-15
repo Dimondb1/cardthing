@@ -857,11 +857,14 @@ class ReviewFindingTests(Base):
         client, _ = self.ask()
         self.assertEqual(client.sent, [])
 
-    def test_a_pair_where_one_shop_lists_both_even_hidden_is_never_offered(self):
+    def test_a_pair_where_one_shop_hid_one_is_offered_keeping_the_one_it_shows(self):
         keep, other = self.pair()
         shop = make_retailer("Both")
         make_listing(keep, shop, is_active=False)
         make_listing(other, shop, url=f"{shop.website}p/other")
+        # Merged the usual way round, the shop's shown price would stay on the switched-off product.
+        self.assertEqual(checks.duplicates(), [(other, [keep])])
+        Listing.objects.filter(product=keep, retailer=shop).update(is_active=True)
         self.assertEqual(checks.duplicates(), [])
 
     def test_a_merge_works_when_an_old_address_already_has_the_slug(self):

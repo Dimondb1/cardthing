@@ -12,6 +12,7 @@ is left as it is. The autopilot (catalogue/autopilot.py) answers the rows the
 evidence settles before the owner sees them.
 """
 
+from copy import copy
 from datetime import timedelta
 
 from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Value
@@ -179,32 +180,64 @@ def shops_in_the_way(keep, other):
 
 
 def duplicates():
-    """[(keep, [others])] that the loose rule would merge. Strict duplicates are merged every hour already.
+    """[(keep, [others])] of products that may be one product, from the pairs merge_duplicates.duplicate_pairs
+    finds: each other is paired with its keep on its own, never through a third product. Strict duplicates
+    are merged every hour already; what is left here is for the owner or Claude. Three queries.
 
-    A product the owner said is not the same as the one kept is left out, and so is one a shop sells
-    beside the kept one or beside another in the group: a shop that shows both under their own names
-    sells two products (shops_in_the_way: never eBay or Amazon, nor a hidden listing).
+    A pair the owner said are not the same is left out, and so is one a shop shows both of: a shop that
+    shows both under their own names sells two products (shops_in_the_way: never eBay or Amazon, nor a
+    hidden listing). When a shop shows one and has hidden its listing on the other, the one it shows is
+    kept, so its price stays on the site. Two others one shop shows side by side go under their keep
+    separately, so Merge these never joins them.
     """
-    from .management.commands.merge_duplicates import duplicate_groups
+    from .management.commands.merge_duplicates import duplicate_pairs
 
-    groups = duplicate_groups(loose=True)
-    if not groups:
+    pairs = duplicate_pairs()
+    if not pairs:
         return []
     apart = kept_apart()
-    shops = shop_listings({p.pk for keep, others in groups for p in [keep, *others]})
-    found = []
-    for keep, others in groups:
-        taken, kept = dict(shops.get(keep.pk, {})), []
-        for other in others:
-            # A shop that sells this one beside the kept one, or beside another in the group, sells two products.
-            theirs = shops.get(other.pk, {})
-            if frozenset((keep.pk, other.pk)) in apart or shops_in_the_way(taken, theirs):
+    shops = shop_listings()
+    by_keep = {}
+    for keep, other in pairs:
+        if frozenset((keep.pk, other.pk)) in apart:
+            continue
+        ours, theirs = shops.get(keep.pk, {}), shops.get(other.pk, {})
+        if shops_in_the_way(ours, theirs):
+            if shops_in_the_way(theirs, ours):
                 continue
+            keep, other = other, keep
+        by_keep.setdefault(keep.pk, (keep, []))[1].append(other)
+    found = []
+    for keep, others in sorted(by_keep.values(), key=lambda row: (row[0].name, row[0].pk)):
+        groups = []
+        for other in others:
+            theirs = shops.get(other.pk, {})
+            group = next((g for g in groups if not shops_in_the_way(g[0], theirs)), None)
+            if group is None:
+                group = (dict(shops.get(keep.pk, {})), [])
+                groups.append(group)
+            taken, members = group
             taken.update({shop: shown or taken.get(shop, False) for shop, shown in theirs.items()})
-            kept.append(other)
-        if kept:
-            found.append((keep, kept))
+            # Its own copy for each pair: the page hangs Claude's answer about this pair on it.
+            members.append(copy(other))
+        found += [(keep, members) for _, members in groups]
     return found
+
+
+def still_offered(keep, other):
+    """Whether Possible duplicates still offers this pair, checked for these two products alone: both shown,
+    not kept apart, a key in common and no shop in the way."""
+    from .management.commands.merge_duplicates import share_a_key
+
+    products = {p.pk: p for p in Product.objects.filter(pk__in=[keep.pk, other.pk], is_active=True)
+                .select_related("game", "product_set")}
+    if len(products) != 2 or frozenset(products) in kept_apart():
+        return False
+    if not share_a_key(products[keep.pk], products[other.pk]):
+        return False
+    shops = shop_listings(list(products))
+    ours, theirs = shops.get(keep.pk, {}), shops.get(other.pk, {})
+    return not (shops_in_the_way(ours, theirs) and shops_in_the_way(theirs, ours))
 
 
 def unknown_delivery_shops():

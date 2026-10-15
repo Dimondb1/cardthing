@@ -34,7 +34,8 @@ from django.utils import timezone
 
 from catalogue.languages import CHINESE, SIMPLIFIED, name as language_name, plain, product_language
 from catalogue.matching import (
-    BOX_SIZES, KIND_WORDS, booster_kinds, chinese_code, codes_differ, identity_numbers, marked_different, match_key,
+    BOX_SIZES, KIND_MARKS, KIND_WORDS, VARIANT_WORDS, booster_kinds, chinese_code, code_key, codes_differ,
+    identity_numbers, key_text, key_words, marked_different, match_key, naming_words, same_product, set_codes,
 )
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, ProductAlias, Restock, ShopProduct, StockAlert,
@@ -343,13 +344,10 @@ def duplicate_groups(loose=False):
 
     The loose rule gives a product two keys when it carries a Simplified Chinese code (its words, and its
     code), and products sharing either are one group."""
-    from django.db.models import Count
-
     groups = defaultdict(list)
     products = {}
     said = {}
-    for product in Product.objects.filter(is_active=True).select_related("game", "product_set").annotate(
-            listing_total=Count("listings")).order_by("pk"):
+    for product in shown_products():
         keys = [loose_key(product.name, product.game.slug) if loose else merge_key(product.name, product.game.slug)]
         if loose:
             keys.append(chinese_code_key(product.name, product.game.slug))
@@ -382,10 +380,126 @@ def duplicate_groups(loose=False):
     for group in members.values():
         if len(group) < 2:
             continue
-        group.sort(key=lambda p: (-p.listing_total, not says_language(p.name, said[p.pk]), not p.image,
-                                  not p.image_url, len(p.name), p.pk))
+        group.sort(key=lambda p: keep_order(p, said[p.pk]))
         found.append((group[0], group[1:]))
     return sorted(found, key=lambda row: row[0].name)
+
+
+def language_family(language):
+    """"Chinese" that says no more is nearly always Simplified at UK shops: such a box is suggested beside
+    the Simplified ones, never merged with them unasked."""
+    return SIMPLIFIED if language == CHINESE else language
+
+
+def set_words(product_set, game_slug):
+    """The words and codes that name a set, spelt as keys spell them."""
+    code = product_set.code or ""
+    return (key_words(product_set.name, game_slug) | key_words(code, game_slug)
+            | set_codes(f"{product_set.name} {code}", game_slug))
+
+
+def set_key(name, game_slug, product_set):
+    """For a product filed under a set, the words of its name that are not the set's, with the kind of
+    product: "SV10 Booster Box" and "Destined Rivals Booster Box", both filed under Destined Rivals, are
+    both "booster #box". "" without a set or a kind of product."""
+    if product_set is None:
+        return ""
+    marks = [mark for mark, pattern in KIND_MARKS if pattern.search(key_text(name, game_slug))]
+    if not marks:
+        return ""
+    return " ".join([*sorted(naming_words(name, game_slug) - set_words(product_set, game_slug)), *marks])
+
+
+# Keys that only point at a pair: the two names must also agree on everything the hourly merge checks, and on
+# their size and wrapping, before the pair is offered.
+POINTING_KEYS = {"code", "set"}
+
+
+def pair_keys(product, language):
+    """The keys two names of one product share, each (kind, scope, language, key). A pair needs one in common.
+
+    words: the loose key (merge_key without filler and series words), across product types, since shops
+        file one product under two ("Gift Set" and "Gift Box"); the kind of product is in the key.
+    chinese: a Pokémon name's one Simplified Chinese set code, size and kind (translations differ).
+    code: a name's one set code, size and kind ("Eeveelutions Terastal Festival ex sv8a" and "Terastal
+        Festival sv8a High Class Booster Box").
+    set: for a product filed under a set, its words that are not the set's, with its kind.
+    barcode: the same barcode.
+    """
+    from catalogue.importers import ean_key
+
+    slug = product.game.slug
+    family = language_family(language)
+    keys = [
+        ("words", product.game_id, family, loose_key(product.name, slug)),
+        ("chinese", product.game_id, family, chinese_code_key(product.name, slug)),
+        ("code", product.game_id, family, code_key(product.name, slug)),
+        ("barcode", product.game_id, family, ean_key(product.ean)),
+    ]
+    if product.product_set_id:
+        keys.append(("set", product.product_set_id, family, set_key(product.name, slug, product.product_set)))
+    return [key for key in keys if key[-1]]
+
+
+def points_at_one_product(a, b, game_slug):
+    """For two names a pointing key pairs: whether their numbers, set codes, booster kinds, the words that
+    mark another product, and their size and wrapping all agree (a case, an unwrapped box or a half box is
+    not the box)."""
+    return (same_product(a, b, game_slug)
+            and not (naming_words(a, game_slug) ^ naming_words(b, game_slug)) & (VARIANT_WORDS | BOX_SIZES))
+
+
+def keep_order(product, language):
+    """Which of two products to keep: most listings, then one whose name says its language in words (the
+    page then says it too), then one with an image, then the shortest name. Needs ``listing_total``."""
+    return (-product.listing_total, not says_language(product.name, language), not product.image,
+            not product.image_url, len(product.name), product.pk)
+
+
+def shown_products():
+    """Every product shown on the site, with its game, set and listing count, in one query."""
+    from django.db.models import Count
+
+    return Product.objects.filter(is_active=True).select_related("game", "product_set").annotate(
+        listing_total=Count("listings")).order_by("pk")
+
+
+def duplicate_pairs(products=None):
+    """[(keep, other)] for every two products shown on the site that may be one product: they share a key
+    of pair_keys, in one game and language. Each pair stands alone, so a product that only looks like one
+    of a group is never pulled in with the rest. One query, or none for ``products`` from shown_products."""
+    products = list(shown_products() if products is None else products)
+    said = {product.pk: product_language(product) for product in products}
+    by_pk = {product.pk: product for product in products}
+    buckets = defaultdict(list)
+    for product in products:
+        for key in pair_keys(product, said[product.pk]):
+            buckets[key].append(product.pk)
+    pairs = {}
+    for (kind, *_), pks in buckets.items():
+        for i, first in enumerate(pks):
+            for second in pks[i + 1:]:
+                pair = (first, second)
+                if pair in pairs and pairs[pair]:
+                    continue
+                a, b = by_pk[first], by_pk[second]
+                pairs[pair] = kind not in POINTING_KEYS or points_at_one_product(a.name, b.name, a.game.slug)
+    found = []
+    for (first, second), offered in pairs.items():
+        if not offered:
+            continue
+        a, b = by_pk[first], by_pk[second]
+        keep, other = (a, b) if keep_order(a, said[a.pk]) <= keep_order(b, said[b.pk]) else (b, a)
+        found.append((keep, other))
+    return sorted(found, key=lambda pair: (pair[0].name, pair[0].pk, pair[1].name, pair[1].pk))
+
+
+def share_a_key(a, b):
+    """Whether duplicate_pairs pairs these two products (with game and set loaded), whatever their shops say."""
+    first = set(pair_keys(a, product_language(a)))
+    common = [key for key in pair_keys(b, product_language(b)) if key in first]
+    return any(kind not in POINTING_KEYS or points_at_one_product(a.name, b.name, a.game.slug)
+               for kind, *_ in common)
 
 
 def game_slug_of(product):

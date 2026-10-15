@@ -326,8 +326,9 @@ class DuplicateTests(Base):
         make_listing(first, both)
         make_listing(second, both, url=f"{both.website}p/second")
         self.shop(50, product=keep, title=keep.name)
-        [(kept, others)] = checks.duplicates()
-        self.assertEqual((kept, len(others)), (keep, 1))
+        # Each is offered with the kept one, never both under one Merge these.
+        self.assertEqual(sorted((kept.pk, [o.pk for o in others]) for kept, others in checks.duplicates()),
+                         [(keep.pk, [first.pk]), (keep.pk, [second.pk])])
 
 
 class AnnouncedSetTests(Base):

@@ -1993,6 +1993,8 @@ MACROS = ("This file holds macros. Save it as Excel Workbook (.xlsx), not Excel 
 BUSY = "The database was busy, so nothing changed. Tap the button again."
 RECHECKED = ("This file was checked again since the page loaded, so nothing was made. Read the list below, then "
              "tap to make the changes.")
+MADE_SINCE = ("Another upload of this spreadsheet has made or undone changes since this list was checked, so nothing "
+              "was made. Tap Check again, read the list, then make the changes.")
 OLD_PREVIEW = ("This list was checked over a day ago, so nothing was made. Tap Check again, read the list, then make "
                "the changes.")
 
@@ -2222,7 +2224,7 @@ def import_tap(request, pk):
     action = request.POST.get("action", "")
     now = timezone.now()
     jobs = DataImport.objects.filter(pk=pk)
-    job = jobs.only("pk", "status", "check_token", "checked_at").first()
+    job = jobs.only("pk", "status", "check_token", "checked_at", "export_id").first()
     if job is None:
         raise Http404("No such upload.")
     made_some = Exists(DataChange.objects.filter(data_import=OuterRef("pk"), outcome=DataChange.Outcome.APPLIED))
@@ -2235,6 +2237,11 @@ def import_tap(request, pk):
             messages.warning(request, RECHECKED)
         elif job.checked_at is None or job.checked_at < now - PREVIEW_FRESH:
             messages.warning(request, OLD_PREVIEW)
+        elif job.export_id and DataChange.objects.filter(
+                Q(applied_at__gt=job.checked_at) | Q(undone_at__gt=job.checked_at),
+                data_import__export_id=job.export_id).exclude(data_import_id=job.pk).exists():
+            # Its list may count on what the other file has since made or undone, such as a new1 it added.
+            messages.warning(request, MADE_SINCE)
         elif jobs.filter(status=Status.CHECKED, check_token=token).update(
                 status=Status.APPLY_QUEUED, include_held=action == "apply_all", done=0, **queued):
             data_jobs.start_now()

@@ -354,6 +354,28 @@ class PreviewTests(DataPageBase):
         self.assertContains(page, data_jobs.CHANGED_SINCE)
         self.assertNotContains(page, "Undo this file")
 
+    def test_a_second_upload_of_one_download_is_checked_again_once_the_first_is_made(self):
+        data = self.downloaded(self.make_download())
+        new_row = ("Products", {"Product id": "new1", "Game": "Pokémon", "Name": "Black Bolt Elite Trainer Box",
+                                "Type": "Elite Trainer Box", "Release date": "18/07/2025"})
+        self.send(excel_resave(data, insert_rows=[new_row]))
+        self.send(excel_resave(data, [("Products", self.etb.pk, "Name", "Surging Sparks ETB")], insert_rows=[new_row]))
+        call_command("data_files")
+        first, second = DataImport.objects.order_by("pk")
+        self.tap(first, "apply", check_token=first.check_token)
+        call_command("data_files")
+        self.assertContains(self.tap(second, "apply", check_token=second.check_token), views.MADE_SINCE)
+        self.assertEqual(DataImport.objects.get(pk=second.pk).status, Status.CHECKED)
+        # Checked again, its new1 is the product the first file added.
+        self.tap(second, "check_again")
+        call_command("data_files")
+        second.refresh_from_db()
+        self.assertEqual(second.changes.get(kind=DataChange.Kind.NEW_PRODUCT).state, DataChange.State.SAME)
+        self.tap(second, "apply", check_token=second.check_token)
+        call_command("data_files")
+        self.assertEqual(Product.objects.filter(name="Black Bolt Elite Trainer Box").count(), 1)
+        self.assertEqual(Product.objects.get(pk=self.etb.pk).name, "Surging Sparks ETB")
+
     def test_check_again_gives_a_new_token(self):
         upload = self.checked_upload()
         old = upload.check_token

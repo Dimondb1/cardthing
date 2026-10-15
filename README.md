@@ -245,7 +245,9 @@ on the product kept by a held merge) is held with it.
 
 A list of changes is made only from the page it was read on: Check again
 reads the file against the site as it is now and gives a new list, and a
-list over a day old must be checked again. The same file uploaded twice
+list over a day old must be checked again, as must a list checked before
+another upload of the same download made or undid changes (so a new1 both
+add is added once). The same file uploaded twice
 goes to where the first got to, so it is never made twice; once discarded
 or undone it can be uploaded again. An upload must be an .xlsx of 10 MB or
 less with no macros. Each change is made in its own short transaction

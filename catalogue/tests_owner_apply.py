@@ -225,6 +225,21 @@ class NewProductTests(Base):
                                   "The new product new1 was not added, so this was not made either.")])
         self.assertEqual(ShopProduct.objects.get(pk=item.pk).status, Status.REVIEW)
 
+    def test_two_uploads_of_one_download_add_its_new_row_once(self):
+        _export, data = self.download()
+        new_row = ("Products", {"Product id": "new1", "Game": "Pokémon", "Name": "Black Bolt Elite Trainer Box",
+                                "Type": "Elite Trainer Box", "Release date": "18/07/2025"})
+        first = self.upload(excel_resave(data, insert_rows=[new_row]))
+        second = self.upload(excel_resave(data, [("Products", self.etb.pk, "Name", "Surging Sparks ETB")],
+                                          insert_rows=[new_row]))
+        added = self.made(self.apply(first), Kind.NEW_PRODUCT).object_id
+        second = self.apply(second)
+        self.assertEqual(list(Product.objects.filter(name="Black Bolt Elite Trainer Box").values_list("pk", flat=True)),
+                         [added])
+        change = self.changes(second, kind=Kind.NEW_PRODUCT)[0]
+        self.assertEqual((change.outcome, change.outcome_note),
+                         (Outcome.SKIPPED, f"Another upload of this download added new1 already, as {added}."))
+
     def test_a_file_made_again_is_already_so(self):
         _export, data = self.download()
         edited = excel_resave(data, [("Products", self.etb.pk, "Name", "Surging Sparks ETB")], insert_rows=[(

@@ -390,9 +390,11 @@ class Applying:
     """What one file's changes share while they are made: who uploaded it, its number, and the products and
     sets its new rows became."""
 
-    def __init__(self, user_id=None, reference="", products=None, sets=None):
+    def __init__(self, user_id=None, reference="", products=None, sets=None, export_id=None, import_id=None):
         self.user_id = user_id
         self.reference = reference
+        self.export_id = export_id   # the download the file came from
+        self.import_id = import_id
         self.products = dict(products or {})   # new1: the product id it became
         self.sets = dict(sets or {})
 
@@ -435,6 +437,13 @@ def make_set_fields(change, applying):
 
 
 def make_new_product(change, applying):
+    # Two uploads of one download, both checked before either was made, would each add the row.
+    if applying.export_id is not None:
+        earlier = (DataChange.objects.filter(kind=Kind.NEW_PRODUCT, ref=change.ref, outcome=DataChange.Outcome.APPLIED,
+                                             data_import__export_id=applying.export_id)
+                   .exclude(data_import_id=applying.import_id).values_list("object_id", flat=True).first())
+        if earlier is not None:
+            raise Refused(f"Another upload of this download added {change.ref} already, as {earlier}.")
     product = create_product(change.data, applying.user_id, applying.sets)
     return Made({"product": product.pk}, object_id=product.pk)
 

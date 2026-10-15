@@ -343,7 +343,8 @@ def applying_for(job):
     if job.export_id:
         export = DataExport.objects.filter(pk=job.export_id).only("pk", "token").first()
         reference = export.reference if export else ""
-    applying = owner_edits.Applying(user_id=job.created_by_id, reference=reference)
+    applying = owner_edits.Applying(user_id=job.created_by_id, reference=reference, export_id=job.export_id,
+                                    import_id=job.pk)
     for kind, ref, pk in job.changes.filter(kind__in=[Kind.NEW_PRODUCT, Kind.NEW_SET], outcome=Outcome.APPLIED,
                                             object_id__isnull=False).values_list("kind", "ref", "object_id"):
         (applying.sets if kind == Kind.NEW_SET else applying.products)[ref] = pk

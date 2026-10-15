@@ -547,6 +547,15 @@ re-checks products the importer created: it removes any that a later,
 stricter version of the rules would not have created, tidies names (HTML
 entities, a set name repeated after the product) and merges the duplicates
 that shows up. Run it with `--dry-run` first to see what it would do.
+A rename never changes a product's address. A tidied name that is already
+another product's of the same game, type and language is merged into it
+the way `merge_duplicates` merges, so the old address redirects there for
+good and its price history, restocks, clicks and stock alerts move across.
+A product of another type, or one switched off in admin, is never merged
+into: the product is renamed in place instead. A removed product's address
+answers 410 Gone, not 404, with the search box and links to its set and
+game when it had them, so Google drops it quickly and a visitor is not
+stranded (see "Sitemap and removed pages").
 
 Only Total Cards publishes barcodes, so most offers are matched by name.
 An offer links to an existing product automatically only when it is a
@@ -573,9 +582,11 @@ set up: the deal shows read-only on the listing in Django Admin.
 
 Three cleanup commands keep the catalogue honest after the rules improve
 (`tidy_all` runs them in order; `start.bat` and `update_prices` run it
-after their import, and the server's cron runs it at five past every hour):
-`tidy_catalogue` (products that no longer pass), `merge_duplicates` (one
-product under two names) and `tidy_listings` (a shop item linked to the
+after their import, and the server's cron runs it at five past every hour,
+when it also forgets removed product addresses older than a year):
+`tidy_catalogue` (products that no longer pass; their addresses answer 410
+Gone, and a name tidied onto another product's merges with a redirect),
+`merge_duplicates` (one product under two names) and `tidy_listings` (a shop item linked to the
 wrong product, judged by the words in its shop address; it also hides an
 eBay listing the current rules refuse: a price under 40% of the cheapest
 any shop last showed, in stock or not, or a title that is a multi-buy, a
@@ -1117,6 +1128,15 @@ it again after changing the mark and commit the files.
   fails part way. Only offers that change something go through
   `record_check`, so a read of a large shop writes a few dozen rows instead
   of thousands.
+- A product with several offers in one read (a page's variants, or two pages
+  that share a barcode) has its listing written once, from the best offer:
+  the cheapest in stock or on pre-order, else the cheapest. A page's offers
+  are held until the read moves to the next page, and an offer from another
+  page than the one the listing links to waits for the end of the read
+  while that page is still to come. So a dearer first variant never prices
+  the listing for a moment, never records a false restock, and a read that
+  finds what the last one did changes nothing. eBay's offers name their
+  product and are written as they come. The run counts each product once.
 - A price of £0.00 or less is not a price, whatever the stock state says (a
   shop opening a pre-order before pricing it, a deposit variant, or a page
   that lost its price). Such an offer can only take an existing listing out
@@ -2261,9 +2281,11 @@ by a check appears on the next request.
 product's old address, and a visit to an old address is sent to the
 kept product with a permanent redirect, so links, search results and
 watchlists saved in browsers keep working. Old addresses are listed in
-admin under "Old product addresses". Price history, restocks, clicks and
-stock alerts move to the kept product. A count with and without its noun
-("Display (10 Bundles)" and "Display (10)") counts as the same name; a name
+admin under "Old product addresses". Price history, restocks, pre-order
+openings, clicks and stock alerts move to the kept product. `tidy_catalogue`
+merges the same way when it tidies a name onto another product's. A count
+with and without its noun ("Display (10 Bundles)" and "Display (10)")
+counts as the same name; a name
 with nothing but the kind of product left ("Scarlet & Violet Elite Trainer
 Box") is never merged. A Simplified Chinese set code counts however a shop
 spells it ("csv7C", "csv7 C", "CSV9.5 C", "CBB2 C"), and "Simplified" and
@@ -2311,6 +2333,70 @@ names the AI crawlers and allows them the same pages as everyone else,
 and `/llms.txt` describes the site in plain Markdown with links to the
 games, the how it works page and the sitemap. Search, swipe and the
 click redirect stay out of the index.
+
+## Sitemap and removed pages
+
+`/sitemap.xml` (`web/sitemaps.py`) lists the product pages worth a search
+engine's visit, not every product:
+
+- on sale now: a shop has it in stock or on pre-order, checked within the
+  last 72 hours and not kept out of the comparison;
+- coming soon: its release date (or its set's) is still ahead;
+- priced recently: a shop had it on sale in the last 30 days
+  (`RECENT_DAYS`), so a page stays listed through a sell-out.
+
+The rest, products no shop has priced for a month, stay on the site, are
+linked from their set and game pages and are not `noindex`; they are only
+left out of the list so Google spends its visits on pages with a price. On
+the 3 October snapshot that is 2,785 of 7,626 products. Every game, set and
+the fixed pages are listed too.
+
+Each product's `lastmod` is when its page really changed: the latest of its
+own edits, its set's edits and the last change of any of its shops' price,
+delivery or stock.
+
+- `Product.updated_at` moves when a field the page shows is saved,
+  including by the hourly tidy (a retype, a corrected language, filing
+  under a set or taking it away, a merge undone), and not when a lookup is
+  recorded.
+- `ProductSet.updated_at` moves when the set's name, address, code or
+  release date is saved, since the product page shows them too. A release
+  source repeating the date the set already has only notes where it came
+  from and does not move it. Sets last edited before this field was added
+  have none.
+- `Listing.changed_at` moves for a shop's change. A check that finds the
+  same price and stock leaves it alone, so `lastmod` does not move every
+  hour; a new price, a sell-out, a restock, a shop's price back on sale
+  after being out of date, a multi-buy that starts, changes or ends, a buy
+  link moved to another of the shop's pages (not another variant of the
+  same page), a price kept out of or let back into the comparison, a
+  listing hidden or shown, a shop switched off or on in admin, or a shop
+  moved onto the product does. A hidden listing (or one of a shop switched
+  off) still counts, by when it was hidden, so taking a shop off a page
+  moves `lastmod` forward; while hidden, its own changes are not stamped,
+  as the page does not show them. Listings changed before `changed_at`
+  existed fall back to their last restock, if they are shown.
+
+A set's `lastmod` is the latest of its own edits and its products', so a
+product filed under it moves it too.
+`changefreq` and `priority` are not sent: Google ignores them. Each part
+of the sitemap costs two queries, a count and the page, however many
+products there are.
+
+A product page `tidy_catalogue` removes (no shop lists it, no release date
+and no image, or it fails the sealed-product rules) leaves its address, and
+every old address that led to it, in admin under "Removed product
+addresses". A visit there answers **410 Gone** with "... is no longer
+listed", a line pointing to the search box, the search box and links to
+its set and game when it had them (on the 3 October snapshot none of the
+204 products the tidy would remove had a set); the wording is in Site
+wording under Error pages and never mentions the set or game links, which
+may not be there. Google drops a 410 faster than a 404. A
+product created again at the same address simply shows, and an old address
+of a merged product still redirects. `tidy_all` forgets these addresses
+after a year, when they go back to a plain 404. Changing a product's
+address in Django Admin keeps the old one as an old address, so it
+redirects.
 
 ## Insights
 

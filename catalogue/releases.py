@@ -867,9 +867,10 @@ def write_date(product_set, released, source_name):
         return False
     if product_set.release_date == released and product_set.release_date_source == source_name:
         return False
+    fields = ["release_date_source"] if product_set.release_date == released else ["release_date", "release_date_source"]
     product_set.release_date = released
     product_set.release_date_source = source_name[:20]
-    product_set.save(update_fields=["release_date", "release_date_source"])
+    product_set.save(update_fields=fields)
     return True
 
 
@@ -1179,8 +1180,10 @@ def attach_sets(game, product_ids=None):
         if chosen is not None:
             moves[chosen].append(pk)
     moved = 0
+    now = timezone.now()
     for set_pk, pks in moves.items():
-        moved += Product.objects.filter(pk__in=pks, product_set__isnull=True).update(product_set_id=set_pk)
+        # Filed under a set, the product's page gains the set and its date: the page changed.
+        moved += Product.objects.filter(pk__in=pks, product_set__isnull=True).update(product_set_id=set_pk, updated_at=now)
     if moved:
         from .signals import clear_list_caches
 

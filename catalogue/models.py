@@ -5,7 +5,7 @@ from urllib.parse import quote, urlparse
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Count, F, Min, Q
+from django.db.models import Case, Count, F, Min, Q, Value, When
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
@@ -19,6 +19,12 @@ def stale_cutoff(now=None):
     """Listings checked before this moment are out of date."""
     hours = settings.RIPRAPTOR_STALE_AFTER_HOURS
     return (now or timezone.now()) - timedelta(hours=hours)
+
+
+def shown_change(at):
+    """Listing.changed_at for a queryset update: ``at`` on a listing the page shows, unchanged on a hidden one,
+    whose changes the page does not show (hiding it was stamped when it happened)."""
+    return Case(When(is_active=True, then=Value(at)), default=F("changed_at"))
 
 
 class Game(models.Model):
@@ -68,6 +74,10 @@ class ProductSet(models.Model):
         help_text="Where the release date came from: a release source, or owner when it was set here. "
         "A date set here is never changed by a source.",
     )
+    # When a field its page and its products' pages show was last saved (the sitemap's lastmod). Empty for a
+    # set last changed before this was recorded: stamped in save(), not auto_now, which would date every set
+    # to the day the field was added.
+    updated_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ["game", F("release_date").desc(nulls_last=True), "name"]
@@ -76,6 +86,18 @@ class ProductSet(models.Model):
 
     def __str__(self):
         return self.name
+
+    # Fields the set's page and its products' pages show. Saving one with update_fields moves updated_at;
+    # saving only where a date came from does not.
+    PAGE_FIELDS = {"game", "name", "slug", "code", "release_date"}
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or set(update_fields) & self.PAGE_FIELDS:
+            self.updated_at = timezone.now()
+            if update_fields is not None:
+                kwargs["update_fields"] = [*update_fields, "updated_at"]
+        super().save(*args, **kwargs)
 
     def get_absolute_url(self):
         return reverse("web:set", args=[self.game.slug, self.slug])
@@ -203,6 +225,10 @@ class Product(models.Model):
         if self.product_set_id and self.game_id and self.product_set.game_id != self.game_id:
             raise ValidationError({"product_set": "This set belongs to a different game."})
 
+    # Fields the product page shows. Saving one moves updated_at, the time the page's own content last changed
+    # (the sitemap's lastmod with its listings' changed_at); saving only the record of a lookup does not.
+    PAGE_FIELDS = {"name", "game", "product_set", "product_type", "image", "image_url", "ean", "release_date"}
+
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)[:220]
@@ -210,7 +236,10 @@ class Product(models.Model):
         self.search_text = build_search_text(self)
         update_fields = kwargs.get("update_fields")
         if update_fields is not None:
-            kwargs["update_fields"] = list(set(update_fields) | {"search_text", "language"})
+            fields = set(update_fields) | {"search_text", "language"}
+            if fields & self.PAGE_FIELDS:
+                fields.add("updated_at")
+            kwargs["update_fields"] = list(fields)
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
@@ -496,6 +525,42 @@ class ProductAlias(models.Model):
         return f"{self.slug} -> {self.product.slug}"
 
 
+class RemovedProduct(models.Model):
+    """The address of a product page tidy_catalogue took down, so a visit answers 410 Gone with links to its
+    set and game rather than a bare 404: search engines drop the page sooner and a visitor is not stranded.
+    Kept for a year (catalogue/housekeeping.py)."""
+
+    slug = models.SlugField(max_length=220, unique=True)
+    name = models.CharField(max_length=200)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="removed_products")
+    product_set = models.ForeignKey(
+        ProductSet, on_delete=models.SET_NULL, null=True, blank=True, related_name="removed_products",
+        verbose_name="set",
+    )
+    removed_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-removed_at"]
+        verbose_name = "removed product address"
+        verbose_name_plural = "removed product addresses"
+
+    def __str__(self):
+        return self.slug
+
+    @classmethod
+    def record(cls, product, now=None):
+        """Note the product's address, and every old address that led to it, as removed. Call before deleting
+        it: its old addresses go with it."""
+        now = now or timezone.now()
+        slugs = [product.slug, *ProductAlias.objects.filter(product=product).values_list("slug", flat=True)]
+        for slug in slugs:
+            cls.objects.update_or_create(slug=slug, defaults={
+                "name": product.name, "game_id": product.game_id, "product_set_id": product.product_set_id,
+                "removed_at": now,
+            })
+        return slugs
+
+
 class ListingQuerySet(models.QuerySet):
     def live(self):
         return self.filter(is_active=True, retailer__is_active=True)
@@ -563,6 +628,12 @@ class Listing(models.Model):
         null=True, blank=True, db_index=True,
         help_text="When this shop last went from not having it to having it in stock.",
     )
+    # When what the product page shows for this shop last changed: its price, delivery or stock, whether it is
+    # shown or kept out of the comparison, or the product it is listed under. A check that finds nothing new
+    # leaves it alone, so the sitemap can tell search engines when a page really changed (web/sitemaps.py).
+    # Hiding the listing, or switching its shop off, stamps it; while hidden, its changes do not.
+    # Empty for a listing not changed since the field was added.
+    changed_at = models.DateTimeField("price or stock changed", null=True, blank=True, editable=False)
     is_active = models.BooleanField("show on site", default=True)
     # The verdict from the other shops' prices (catalogue/sanity.py). Written only when it changes.
     sanity = models.CharField(

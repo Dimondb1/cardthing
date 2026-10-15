@@ -9,8 +9,8 @@ the rules), then files products without a set under the set their name or
 code names (catalogue/releases.py attach_sets), sets each product's language from its name and set
 (catalogue/languages.py), retypes products whose name plainly says another type (catalogue/types.py),
 forgets website shop pages
-no sitemap has listed for 30 days, clears old import records and the owner's old spreadsheets
-(catalogue/housekeeping.py) so the database stays small, and lets the autopilot answer the Things to
+no sitemap has listed for 30 days, clears old import records, removed product addresses after a year and the
+owner's old spreadsheets (catalogue/housekeeping.py) so the database stays small, and lets the autopilot answer the Things to
 check rows the evidence settles (catalogue/autopilot.py). Run by start.bat, update_prices and the server's hourly import,
 so a rule added in code is applied to data already in the database.
 
@@ -47,6 +47,14 @@ class Command(BaseCommand):
 
             cleared, deleted = prune_runs()
             self.stdout.write(f"{cleared} lists of unmatched products cleared, {deleted} old runs deleted.")
+
+        self.stdout.write("== removed product addresses")
+        if dry_run:
+            self.stdout.write("Removed product addresses older than a year would be forgotten.")
+        else:
+            from catalogue.housekeeping import prune_removed
+
+            self.stdout.write(f"{prune_removed()} removed product addresses forgotten.")
 
         self.stdout.write("== spreadsheets")
         if dry_run:

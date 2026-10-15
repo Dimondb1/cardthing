@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from . import autopilot, languages
 from .classify import classify
@@ -146,10 +147,20 @@ class CheckedRulesTests(TestCase):
         self.assertEqual(catalogue.best_match("Pokemon 151 Booster Box Japanese", POKEMON)[0][0], 1)
 
     def test_the_refresh_changes_nothing_the_second_time(self):
-        make_product(make_set(make_game()), name="151 (sv2a) Booster Box", product_type="booster_box")
-        Product.objects.update(language="")
+        from datetime import timedelta
+
+        product_set = make_set(make_game())
+        product = make_product(product_set, name="151 (sv2a) Booster Box", product_type="booster_box")
+        same = make_product(product_set, name="Surging Sparks Booster Box", slug="ss-box", product_type="booster_box")
+        old = timezone.now() - timedelta(days=30)
+        Product.objects.update(updated_at=old)
+        Product.objects.filter(pk=product.pk).update(language="")
         self.assertEqual(languages.refresh_languages(), 1)
         self.assertEqual(languages.refresh_languages(), 0)
+        # The page shows the language, so the one that changed is dated as changed (the sitemap's lastmod).
+        product.refresh_from_db()
+        same.refresh_from_db()
+        self.assertEqual((product.updated_at > old, same.updated_at), (True, old))
 
 
 class ProductTests(TestCase):

@@ -23,7 +23,7 @@ from .autopilot import Stale
 from .importers import ean_key, link_key
 from .models import (
     CheckAnswer, DataChange, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Restock, Retailer, ShopPage,
-    ShopProduct, StockAlert, StockistSearch,
+    ShopProduct, StockAlert, StockistSearch, shown_change,
 )
 
 Kind = DataChange.Kind
@@ -265,7 +265,7 @@ def move_listing(listing, target):
         raise Refused(f"{listing.retailer.name} already has a page on {target.pk}: {there.url}. Either that page or "
                       "this one is a different product.")
     old = listing.product_id
-    Listing.objects.filter(pk=listing.pk).update(product=target)
+    Listing.objects.filter(pk=listing.pk).update(product=target, changed_at=shown_change(timezone.now()))
     ShopProduct.objects.filter(retailer_id=listing.retailer_id, url=listing.url, status=Status.LINKED).update(
         suggested=target)
     ShopPage.objects.filter(retailer_id=listing.retailer_id, url=listing.url).update(product=target)
@@ -313,7 +313,7 @@ def show_listing(listing):
     answer = (CheckAnswer.objects.select_related("listing__product", "listing__retailer")
               .filter(kind=CheckAnswer.Kind.HIDE, listing=listing, undone_at__isnull=True).order_by("-pk").first())
     if answer is None or not autopilot.undo(answer):
-        Listing.objects.filter(pk=listing.pk).update(is_active=True)
+        Listing.objects.filter(pk=listing.pk).update(is_active=True, changed_at=timezone.now())
         sanity.judge_product(listing.product_id)
         answer = None
     pricing.update_daily_lowest(listing.product)

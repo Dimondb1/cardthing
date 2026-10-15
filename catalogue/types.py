@@ -178,12 +178,15 @@ def refresh_types(dry_run=False, log=None):
     """Retype every product whose name plainly says another type (classify.plain_type), so the type
     filter shows only that type. A type the game does not use, and one the owner set, stay as they are.
     Returns how many changed."""
+    from django.utils import timezone
+
     from .classify import plain_type
     from .models import Product
     from .search import build_search_text
 
     keep = owner_typed()
     changed = []
+    now = timezone.now()
     for product in Product.objects.select_related("game", "product_set").exclude(pk__in=keep):
         kind = plain_type(product.name, product.product_type)
         if kind is None or kind not in {code for code, _label in GAME_TYPES.get(product.game.slug, DEFAULT)}:
@@ -192,7 +195,9 @@ def refresh_types(dry_run=False, log=None):
             log(f"{'would retype' if dry_run else 'retyped'}: {product.name} -> {kind}")
         product.product_type = kind
         product.search_text = build_search_text(product)
+        # The page and the type filter show the type: the page changed.
+        product.updated_at = now
         changed.append(product)
     if not dry_run:
-        Product.objects.bulk_update(changed, ["product_type", "search_text"], batch_size=500)
+        Product.objects.bulk_update(changed, ["product_type", "search_text", "updated_at"], batch_size=500)
     return len(changed)

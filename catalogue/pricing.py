@@ -17,7 +17,9 @@ from django.db import OperationalError
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, FloatField, Min, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from .models import DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, Restock, Retailer, stale_cutoff
+from .models import (
+    DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, Restock, Retailer, shown_change, stale_cutoff,
+)
 from .offers import MAX_REAL_PERCENT
 
 # A listing that flips out and back within this long is one restock, not two.
@@ -101,7 +103,11 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
             moved = listing.availability != availability
             listing.availability = availability
             listing.last_checked = checked_at
-            listing.save(update_fields=["availability", "last_checked"])
+            fields = ["availability", "last_checked"]
+            if moved and listing.is_active:
+                listing.changed_at = checked_at
+                fields.append("changed_at")
+            listing.save(update_fields=fields)
             if moved:
                 # No longer a price the other shops are judged against.
                 judge(listing, checked_at)
@@ -111,13 +117,22 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     repriced = not new and (
         listing.price != price or listing.delivery_known != (delivery_cost is not None) or listing.delivery_cost != cost
     )
+    stale = listing.last_checked is not None and listing.last_checked < stale_cutoff(checked_at)
     changed = new or repriced or (
         listing.availability != availability
         or listing.sanity != Listing.Sanity.OK
-        or (listing.last_checked is not None and listing.last_checked < stale_cutoff(checked_at))
+        or stale
         or (listing.trusted_at is not None and listing.trusted_at < trust_expiry(checked_at))
     )
+    # An out of date (or never checked) listing that is in stock or on pre-order gets its buy button back.
+    back = (stale or listing.last_checked is None) and availability in Listing.BUYABLE
     fields = ["price", "delivery_cost", "delivery_known", "availability", "last_checked"]
+    if listing.is_active and (new or repriced or back or listing.availability != availability):
+        # What the page shows for this shop changed: the sitemap's lastmod moves. A check that only confirms
+        # what we hold is stamped by importers.stamp_checked, and a verdict alone by sanity. A hidden listing
+        # is not on the page.
+        listing.changed_at = checked_at
+        fields.append("changed_at")
     was_in_stock = listing.availability == Listing.Availability.IN_STOCK
     restocked = availability == Listing.Availability.IN_STOCK and not was_in_stock and listing.pk and not listing._state.adding
     if restocked:
@@ -174,7 +189,8 @@ def apply_delivery_rules(retailer):
         cost = delivery if known else Decimal("0.00")
         unknown += not known
         if listing.delivery_known != known or listing.delivery_cost != cost:
-            Listing.objects.filter(pk=listing.pk).update(delivery_cost=cost, delivery_known=known)
+            Listing.objects.filter(pk=listing.pk).update(delivery_cost=cost, delivery_known=known,
+                                                         changed_at=shown_change(timezone.now()))
     from .signals import clear_list_caches
 
     clear_list_caches(force=True)

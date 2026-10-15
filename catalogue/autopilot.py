@@ -169,7 +169,7 @@ def hide(listing):
     and today's history loses a low it may have made."""
     from .pricing import correct_daily_lowest
 
-    Listing.objects.filter(pk=listing.pk).update(is_active=False)
+    Listing.objects.filter(pk=listing.pk).update(is_active=False, changed_at=timezone.now())
     sanity.judge_product(listing.product_id)
     correct_daily_lowest(listing.product_id)
 
@@ -470,7 +470,7 @@ def undo(answer, now=None):
                 finder.link(row)
                 message = f"Undone: linked {row.suggested.name} at {row.retailer.name}. The next read checks its price and stock."
         elif answer.kind == Kind.HIDE and answer.listing is not None:
-            Listing.objects.filter(pk=answer.listing.pk).update(is_active=True)
+            Listing.objects.filter(pk=answer.listing.pk).update(is_active=True, changed_at=timezone.now())
             sanity.judge_product(answer.listing.product_id)
             message = f"Undone: {answer.listing.retailer.name}'s price for {answer.listing.product.name} is back on the site."
         elif answer.kind == Kind.TRUST and answer.listing is not None:
@@ -530,7 +530,7 @@ def undo_set(answer):
         others = Release.objects.filter(product_set=product_set, status=Release.Status.ACCEPTED).exclude(pk=row.pk)
         if product_set.release_date is not None or others.exists():
             return ""
-        Product.objects.filter(product_set=product_set).update(product_set=None)
+        Product.objects.filter(product_set=product_set).update(product_set=None, updated_at=timezone.now())
         Release.objects.filter(product_set=product_set).update(product_set=None)
         ProductSet.objects.filter(pk=product_set.pk).delete()
     row.refresh_from_db()

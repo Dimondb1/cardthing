@@ -23,7 +23,9 @@ from django.views.decorators.http import require_GET, require_POST
 
 from catalogue import alerts, insights, mail, offers, pricing
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
-from catalogue.models import DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Retailer, stale_cutoff
+from catalogue.models import (
+    DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, RemovedProduct, Retailer, stale_cutoff,
+)
 from catalogue.search import apply_search
 from catalogue.types import type_choices, type_label
 from content import service as copy
@@ -708,14 +710,29 @@ def ebay_search_url(product, listings):
     return f"https://www.ebay.co.uk/sch/i.html?{query}"
 
 
+def product_gone(request, gone):
+    """410 Gone for a product page tidy_catalogue took down: search engines drop it quickly, and a visitor
+    gets its set and game, while they are on the site, and the search box."""
+    game = gone.game if gone.game.is_active else None
+    product_set = gone.product_set if game is not None and gone.product_set_id else None
+    heading = text(request, "errors.410.title", product=gone.name)
+    return render(request, "web/product_gone.html", {
+        "gone": gone, "gone_game": game, "gone_set": product_set, "heading": heading,
+        "meta_title": heading, "noindex": True,
+    }, status=410)
+
+
 @require_GET
 def product_detail(request, slug):
     product = Product.objects.active().select_related("game", "product_set").filter(slug=slug).first()
     if product is None:
         alias = ProductAlias.objects.filter(slug=slug, product__is_active=True).select_related("product").first()
-        if alias is None:
+        if alias is not None:
+            return HttpResponsePermanentRedirect(alias.product.get_absolute_url())
+        gone = RemovedProduct.objects.filter(slug=slug).select_related("game", "product_set__game").first()
+        if gone is None:
             raise Http404("No product with that address.")
-        return HttpResponsePermanentRedirect(alias.product.get_absolute_url())
+        return product_gone(request, gone)
     listings = list(
         Listing.objects.filter(product=product)
         .live()
@@ -1445,7 +1462,8 @@ def llms_txt(request):
         f"- [Every game and set]({request.build_absolute_uri(reverse('web:games'))})",
         f"- [How it works]({request.build_absolute_uri(reverse('web:about'))})",
         f"- [Terms and disclosures]({request.build_absolute_uri(reverse('web:terms'))})",
-        f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product page",
+        f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product on sale, coming soon or priced "
+        "in the last month, and every game and set",
         "",
     ]
     return HttpResponse("\n".join(lines), content_type="text/markdown; charset=utf-8")

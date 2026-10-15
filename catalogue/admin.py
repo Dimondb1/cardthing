@@ -1,9 +1,25 @@
 from django.contrib import admin, messages
 from django.db.models import Count
+from django.utils import timezone
 from django.utils.html import format_html
 
 from . import pricing, sanity
-from .models import ClaudeAsk, ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release, Restock, Retailer, ShopProduct, StockAlert, TypeBand
+from .models import (
+    ClaudeAsk, ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    RemovedProduct, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
+)
+
+# A listing field the product page shows. Changing one here stamps the listing's changed_at, the sitemap's
+# record of when the page last changed.
+SHOWN_LISTING_FIELDS = {"product", "retailer", "url", "price", "delivery_cost", "delivery_known", "availability", "is_active"}
+
+
+def stamp_shown_change(form):
+    """Stamp a listing form's instance as changed when it is new, hidden or shown, or when a field the page
+    shows was changed on a listing the page shows."""
+    changed = set(form.changed_data)
+    if form.instance.pk is None or "is_active" in changed or (form.instance.is_active and SHOWN_LISTING_FIELDS & changed):
+        form.instance.changed_at = timezone.now()
 
 
 @admin.register(Game)
@@ -138,6 +154,21 @@ class ProductAdmin(admin.ModelAdmin):
         source = "uploaded" if obj.image else "from a retailer feed"
         return format_html('<img src="{}" alt="" style="max-height: 160px;"><br>{}', obj.image_src, source)
 
+    def save_model(self, request, obj, form, change):
+        old_slug = form.initial.get("slug") if change and "slug" in form.changed_data else None
+        super().save_model(request, obj, form, change)
+        if old_slug and old_slug != obj.slug:
+            # A new address: the old one keeps working, as after a merge, so links and search results follow.
+            ProductAlias.objects.update_or_create(slug=old_slug, defaults={"product": obj})
+            ProductAlias.objects.filter(slug=obj.slug, product=obj).delete()
+
+    def save_formset(self, request, form, formset, change):
+        if formset.model is Listing:
+            for listing_form in formset.forms:
+                if listing_form.has_changed():
+                    stamp_shown_change(listing_form)
+        super().save_formset(request, form, formset, change)
+
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         pricing.update_daily_lowest(form.instance)
@@ -179,6 +210,9 @@ class RetailerAdmin(admin.ModelAdmin):
         # New delivery rules apply to the shop's prices at once, not at its next import.
         if change and {"delivery_cost", "delivery_cost_up_to", "free_delivery_over"} & set(form.changed_data):
             pricing.apply_delivery_rules(obj)
+        if change and "is_active" in form.changed_data:
+            # The shop leaves or joins every page it is listed on: those pages changed (the sitemap's lastmod).
+            Listing.objects.filter(retailer=obj, is_active=True).update(changed_at=timezone.now())
 
 
 @admin.register(Listing)
@@ -191,9 +225,10 @@ class ListingAdmin(admin.ModelAdmin):
     date_hierarchy = "last_checked"
     # Verdicts are worked out from the other shops' prices; the owner acts on them from Things to check.
     readonly_fields = ("sanity", "sanity_reason", "sanity_ratio", "sanity_at", "last_ok_price", "trusted_price", "trusted_at",
-                       "shop_published_at", "first_preorder_at", "deal_quantity", "deal_price")
+                       "shop_published_at", "first_preorder_at", "deal_quantity", "deal_price", "changed_at")
 
     def save_model(self, request, obj, form, change):
+        stamp_shown_change(form)
         super().save_model(request, obj, form, change)
         # A price, stock or shop typed in here is judged like any check, and so is the product it left.
         moved_from = form.initial.get("product") if change and "product" in form.changed_data else None
@@ -354,6 +389,21 @@ class ProductAliasAdmin(admin.ModelAdmin):
     list_display = ("slug", "product", "created_at")
     search_fields = ("slug", "product__name")
     autocomplete_fields = ("product",)
+
+
+@admin.register(RemovedProduct)
+class RemovedProductAdmin(admin.ModelAdmin):
+    """Addresses of products tidy_catalogue took down. Each answers 410 Gone with links to its set and game for a
+    year. Delete one to make its address an ordinary 404."""
+
+    list_display = ("slug", "name", "game", "product_set", "removed_at")
+    list_filter = ("game",)
+    search_fields = ("slug", "name")
+    list_select_related = ("game", "product_set")
+    readonly_fields = ("slug", "name", "game", "product_set", "removed_at")
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(ClaudeAsk)

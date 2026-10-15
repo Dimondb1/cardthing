@@ -143,25 +143,40 @@ with `g:sale_price` over `g:price`, `g:availability` and `g:shipping`.
 
 ## Your data in Excel
 
-The whole catalogue can be downloaded as one Excel workbook to check and
-tidy by hand:
+The whole catalogue can be downloaded as one Excel workbook, checked and
+tidied in Excel, and uploaded again to make the changes. It is done from
+**Your data in Excel** in admin (`/admin/data/`, a box on the admin home),
+which only a superuser can open, and which works with JavaScript off:
 
-```sh
-python manage.py data_files --export data.xlsx
-python manage.py data_files --export data.xlsx --left-out zatu-games
-```
+1. **Make a spreadsheet.** The file is made in the background and the page
+   refreshes itself until **Download spreadsheet** appears, usually within
+   a minute. Pick a shop first to add the items its latest read left out.
+2. **Edit it in Excel.** Change only the orange columns and save it as
+   Excel Workbook (.xlsx).
+3. **Check this file.** Upload it. Nothing changes yet: the page lists every
+   change it would make in plain words, with how many there are of each.
+4. **Make the changes.** One tap makes them; a second button also makes the
+   ones held for your say. The page shows how far it has got.
+5. **Undo this file** takes them all back if something looks wrong.
 
-It has a Read me with the file's number, then Products, Listings, Shop items
-(waiting for a decision, not ours, and linked but not shown), Sets, and with
-`--left-out` one shop's items its latest read left out. Orange headings are
-the columns that may be changed; grey ones come from the shops or the site.
-Products merged away are left out, and their listings say "Merged into"
-the product kept. Look-alike group numbers products that may be one product
-on two pages (the loose duplicate key, a Chinese set code or a shared
-barcode, whatever their types). Each export is kept as a row with the values
-it was written with, so an upload can later be compared with exactly what
-was downloaded. The code is `catalogue/workbook.py` (the sheets, one spec)
-and `catalogue/data_jobs.py`.
+### What is in the file
+
+A Read me with the file's number and how to edit it, then:
+
+| Sheet | Rows | Orange (editable) columns |
+|---|---|---|
+| Products | every product, except ones merged away | Name, Type, Set, Language, Barcode, Release date, Show on site, Same as product id, Not the same as |
+| Listings | every shop's page, hidden ones too | Product id, Show on site, Not this product |
+| Shop items | items waiting for a decision, ones marked not ours, and linked items not shown | Link to product id, Decision |
+| Left out | one shop's items its latest read left out, when a shop was picked | Link to product id, Decision |
+| Sets | every set | Name, Code, Release date |
+
+Grey columns (prices, stock, shop titles, links, counts, Look-alike group,
+Kept apart from) come from the shops or the site and are ignored on upload.
+Look-alike group numbers products that may be one product on two pages (the
+loose duplicate key, a Chinese set code or a shared barcode, whatever their
+types). Products merged away are left out, and their listings say "Merged
+into" the product kept.
 
 Nothing personal or secret goes in: the sheets are built from an allowlist
 of catalogue columns, never from alerts, messages, visitors, searches,
@@ -171,59 +186,112 @@ Amazon links lose their query string. Every text is written as text, so a
 shop title starting with = is never a formula, and barcodes stay text, so
 Excel cannot turn them into 5.05E+12.
 
-`openpyxl` was added for this (the one new dependency): it writes and reads
+### What each edit does
+
+- **Name, Type, Set, Language, Barcode, Release date** change the product,
+  through the same form as Django Admin, with an admin history line. A type
+  set here is kept from the hourly retype. A language is added to the name
+  ("(Japanese)"), as the site reads language from the name and set.
+- **Show on site** No hides a product, or one shop's price on Listings; Yes
+  shows it again.
+- **Same as product id**: put the id of the product to keep, and this row is
+  merged into it. It is an undoable merge, listed under Sorted for you on
+  Things to check with its own Undo, and its address redirects.
+- **Not the same as**: one or more ids of look-alikes that differ, so they
+  are never suggested as duplicates again.
+- **new1, new2** and so on in Product id (or Set id) add a row, with a game,
+  a name, a type and a release date. Other rows and sheets can use new1 as a
+  product id.
+- **Product id** on Listings moves a shop's page to another product. **Not
+  this product** Yes takes it off and marks the item not ours, so the next
+  read never matches it by name again.
+- **Decision** on Shop items and Left out: Link (to the suggested product,
+  or the id typed in Link to product id), Not ours, or (Shop items only)
+  Look again. A link keeps the price the shop showed and when it was seen,
+  so an old price stays hidden until the shop's next read checks it, and an
+  item with no price waits for that read. No price is made up.
+
+### Held, not made, already so
+
+Each cell is compared three ways: with the download, with the file and with
+the site now. Only a cell that was edited counts, and a cell the site
+changed since the download is left as the site has it ("Changed on the site
+since your download"). Sorting whole rows, deleting rows, moving columns and
+adding columns change nothing.
+
+A change is **not made** when the hourly tidy-up would undo it, a shop's
+next read would put it back, or Excel mixed the file up: a name that would
+merge with another product, a barcode already on another product, a page
+moved to a product that already has that shop, a set cleared when the name
+names one, a formula, an id twice, an id not in the download, ids sorted on
+their own, or a Name or Barcode column sorted on its own. A change is
+**held for your say** when it is probably right but worth a look: a merge
+where a shop sells both on separate pages, or the barcodes differ, or you
+said before they differ; a page move the hourly tidy would question; hiding
+a product the hourly tidy would then remove; or a column with 50 or more
+edits on more than a quarter of its rows, in case a sort mixed them up.
+Every change is judged against the site as it will be once the whole file
+is made, so the order of rows never changes a verdict.
+
+A list of changes is made only from the page it was read on: Check again
+reads the file against the site as it is now and gives a new list, and a
+list over a day old must be checked again. The same file uploaded twice
+goes to where the first got to, so it is never made twice; once discarded
+or undone it can be uploaded again. An upload must be an .xlsx of 10 MB or
+less with no macros. Each change is made in its own short transaction
+through `catalogue/owner_edits.py`, the code paths the owner's own buttons
+use, and only while the site still holds what it held at the check: one
+changed since is left as it was and listed with the reason. A file waits
+while a shop read holds the import lock, and a copy of the database is made
+first when it merges, takes pages off or makes more than 200 changes,
+unless the newest copy is under six hours old.
+
+**Undo this file** takes the changes back newest first, each only while the
+site still holds what the file left; one changed again since is left as it
+is and listed.
+
+### How long files are kept
+
+A file can be uploaded for 90 days after it was downloaded; after that the
+page asks for a fresh download. `tidy_all` clears old files every hour: a
+download's workbook after 14 days, the values it was made with after 90
+days, an upload's file once its changes are made or it is discarded (or
+after a week), and its list of changes after 180 days, when the file can no
+longer be undone (its merges can still be undone on Things to check).
+
+### The command
+
+```sh
+python manage.py data_files                         # run what the page queued
+python manage.py data_files --export data.xlsx      # write the workbook to a file
+python manage.py data_files --export data.xlsx --left-out zatu-games
+python manage.py data_files --check edited.xlsx     # print what it would change
+```
+
+With no arguments it runs whatever the page queued (downloads to make,
+uploads to check, files to make or undo). The page starts it at once in its
+own process and starts it again when a job waits 30 seconds with nobody
+taking it, or its heartbeat stops. A lock file in the cache folder keeps a
+second copy from running. It runs at a lower priority than the site and is
+first in line for the memory killer, so visitors come first on the 1 GB
+server. A runner that is stopped is taken up again where it stopped,
+without making any change twice; after three stops the file is given up.
+`--export` makes a file that can be uploaded on the page like one made
+there. `--check` prints every change in plain words and changes nothing;
+changes are made only from the page, after its preview. The code is
+`catalogue/workbook.py` (the sheets, one spec for both directions),
+`catalogue/workbook_plan.py` (the comparison and guards),
+`catalogue/owner_edits.py`, `catalogue/data_jobs.py` and the views in
+`web/views.py`.
+
+`openpyxl` was added for this, the one new dependency: it writes and reads
 real .xlsx files, which keep barcodes as text and dates as dates and hold
 several sheets with dropdowns. A CSV cannot, and Excel damages barcodes in
-one. It is loaded only by `data_files`, never by a web worker. Making the
-file takes about 9 seconds and 140 MB on a copy of the October catalogue
-(7,626 products, 13,220 listings), or 22 seconds and 210 MB with the left-out
-items of the shop with the longest list (capped at 5,000 rows), so it never
-runs in a web request. No new settings are needed.
-
-An edited file can be read back to see what it would change:
-
-```sh
-python manage.py data_files --check edited.xlsx
-```
-
-It prints every change in plain words (ready, held for a say, not made and
-why, changed on the site since the download, already so) and the sheets and
-columns it did not read, and changes nothing. Each cell is compared three
-ways: with the download, with the file and with the site now, so only a cell
-that was edited counts, and a cell the site changed since the download is
-left as the site has it. Sheets and columns are found by name wherever they
-are, so sorting whole rows, deleting rows, moving columns and adding a column
-change nothing. A file whose ids were sorted on their own, a Name or Barcode
-column sorted on its own, a formula, an id twice or an id not in the download
-is refused where it happens; a column changed on more than a quarter of its
-rows is held. Every change is then judged against the site as it will be once
-the whole file is made, and against the hourly tidy-up, so nothing is made
-that the next hour would merge, refile or remove. The code is
-`catalogue/workbook.py` (reading) and `catalogue/workbook_plan.py`. Applying a
-file happens only from the admin page, after its preview.
-
-Downloads, checks, applying and undoing all run in the background runner,
-which the admin page starts at once in its own process:
-
-```sh
-python manage.py data_files
-```
-
-With no arguments it runs whatever is queued, under a lock file in the cache
-folder so a second copy never runs, at a lower priority than the site and
-first in line for the memory killer. Each change is made in its own short
-transaction through `catalogue/owner_edits.py`, the code paths the owner's own
-buttons use: a merge can be undone and is listed under Sorted for you, a type
-leaves the admin history line that keeps it from the hourly retype, a page
-taken off a product is marked Not ours so the next read never matches it by
-name, and a link with no price seen waits for the shop's next read. A change
-the site made since the check is left as it is and listed. A file waits while
-a shop read holds the import lock, and a copy of the database is made first
-when it merges, takes pages off or makes more than 200 changes, unless the
-newest copy is under six hours old. A runner that is stopped is taken up
-again where it stopped, without making any change twice; after three stops
-the file is given up. Undo this file takes the changes back newest first,
-each only while the site still holds what the file left.
+one. It is loaded only by `data_files`, never by a web worker (a test checks
+this). Making the file takes about 9 seconds and 140 MB on a copy of the
+October catalogue (7,626 products, 13,220 listings), or 22 seconds and 210
+MB with the left-out items of the shop with the longest list (capped at
+5,000 rows), so it never runs in a web request. No new settings are needed.
 
 ## Adding several shops at once
 
@@ -919,7 +987,7 @@ admin.
 |-------------|---------------|
 | `catalogue` | Games, sets, products, retailers, listings (one retailer's offer for one product), daily lowest prices and click counts. Price queries live in `catalogue/pricing.py`, search in `catalogue/search.py`. |
 | `content`   | Editable site wording (`SiteContent`), its defaults in `content/registry.py`, and the `{% copy %}` template tag. |
-| `web`       | Public views, templates, CSS, the font and the favicon. |
+| `web`       | Public views, templates, CSS, the font and the favicon, and the admin pages Things to check, Crawl health, Insights and Your data in Excel. |
 
 ## Editing site wording
 
@@ -2187,6 +2255,11 @@ differently ("Pursue Glory Together" and "Chasing Glory Together csv10").
 Things to check shows these pairs for a yes or no. It never runs on its own: read the dry run, and run it without
 `--dry-run` only when every group is right.
 
+A merge made from the owner's spreadsheet (Same as product id, see "Your
+data in Excel") is the undoable kind: the other product is switched off
+rather than deleted, its address redirects the same way, and it is listed
+under Sorted for you on Things to check with an Undo that brings it back.
+
 ## Search engines and AI crawlers
 
 Every page carries a canonical link, Open Graph and Twitter sharing tags,
@@ -2244,6 +2317,11 @@ python manage.py test
 
 Besides behaviour, the tests render every public page and fail on em dashes,
 exclamation marks and stock marketing phrases.
+The spreadsheet tests (`catalogue/tests_workbook.py`, `tests_owner_import.py`,
+`tests_owner_apply.py` and `web/tests_data.py`) edit real workbooks the way
+Excel saves typing (`catalogue.testing.excel_resave`), check the Your data
+pages' wording the same way, and check in a fresh process that a web worker
+never loads openpyxl.
 A test run blanks `RIPRAPTOR_NTFY_TOPIC`, `RIPRAPTOR_INBOX_NOTIFY_EMAIL`
 and `RIPRAPTOR_ZEPTOMAIL_TOKEN`, so running the tests from a shell that
 has loaded the server's `.env` never sends a push or an email.

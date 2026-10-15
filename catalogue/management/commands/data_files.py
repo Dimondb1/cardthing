@@ -1,19 +1,20 @@
 """
 The owner's catalogue as a spreadsheet (catalogue/workbook.py and catalogue/data_jobs.py).
 
-    python manage.py data_files                                     # run the queued jobs from the Your data page
-    python manage.py data_files --export data.xlsx                  # write the workbook to a file
+    python manage.py data_files                                 # run what the Your data in Excel page queued
+    python manage.py data_files --export data.xlsx              # write the workbook to a file
     python manage.py data_files --export data.xlsx --left-out zatu-games
-    python manage.py data_files --check data.xlsx                   # what an edited file would change
+    python manage.py data_files --check data.xlsx               # what an edited file would change
 
 --export writes the workbook a download would give, and keeps it as a download with the values it was made
-with, so the file can be uploaded on the Your data page like one made there. --left-out adds one shop's
-items its latest read left out.
+with, so the file can be uploaded on the Your data in Excel page like one made there. --left-out adds one
+shop's items its latest read left out.
 
 --check reads an edited workbook and prints, in plain words, every change it would make and every change it
-would not, with why. It changes nothing: changes are made only from the Your data page, after its preview.
+would not, with why. It changes nothing: changes are made only from the Your data in Excel page, after its
+preview.
 
-With no arguments it runs what the Your data page queued (catalogue/data_jobs.py): downloads to make,
+With no arguments it runs what the Your data in Excel page queued (catalogue/data_jobs.py): downloads to make,
 uploads to check, files to apply or undo. The page starts it at once in its own process; a lock file in
 the cache directory keeps a second copy from running. It runs at a lower priority than the site, and is the
 first process the memory killer stops on the 1 GB server, so the site's own workers keep going.
@@ -41,7 +42,7 @@ SECTIONS = (
 
 
 class Command(BaseCommand):
-    help = "Run the Your data page's queued spreadsheet jobs, or write or check a workbook."
+    help = "Run the Your data in Excel page's queued spreadsheet jobs, or write or check a workbook."
 
     def add_arguments(self, parser):
         parser.add_argument("--export", metavar="PATH", help="Write the workbook to this file.")

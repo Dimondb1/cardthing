@@ -227,7 +227,9 @@ names one, a formula, an id twice, an id not in the download, ids sorted on
 their own, or a Name or Barcode column sorted on its own. A change is
 **held for your say** when it is probably right but worth a look: a merge
 where a shop sells both on separate pages, or the barcodes differ, or you
-said before they differ; a page move the hourly tidy would question; hiding
+said before they differ; a page move, link, rename or merge that leaves a
+shop's address contradicting its product's name, which the hourly tidy
+would delete (an address saying Japanese on a name that no longer does); hiding
 a product the hourly tidy would then remove; or a column with 50 or more
 edits on more than a quarter of its rows, in case a sort mixed them up.
 Every change is judged against the site as it will be once the whole file

@@ -529,7 +529,9 @@ class ShopItemTests(Base):
         self.assertEqual(Listing.objects.get(pk=listing.pk).price, Decimal("45.50"))
 
     def test_a_link_to_another_product_with_no_price_waits_for_the_shops_read(self):
-        ShopProduct.objects.filter(pk=self.item.pk).update(price=None)
+        # An address that does not say ETB, which the hourly tidy would hold against the box.
+        ShopProduct.objects.filter(pk=self.item.pk).update(price=None, url="https://harbour.example/p/9")
+        self.item.refresh_from_db()
         page = ShopPage.objects.create(retailer=self.harbour, url=self.item.url, last_fetched_at=timezone.now())
         _export, data = self.download()
         self.made(self.decide(data, None, product=self.box.pk))

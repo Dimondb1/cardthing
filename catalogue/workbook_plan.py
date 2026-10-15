@@ -99,6 +99,18 @@ def strict_key(name):
     return merge_key(name)
 
 
+@lru_cache(maxsize=65536)
+def fits_name(url, name, game_slug):
+    from .management.commands.tidy_listings import fits
+
+    return fits(Listing(url=url, product=Product(name=name, game=Game(slug=game_slug))))
+
+
+def page_fits(url, product):
+    """Whether the hourly tidy (tidy_listings.fits) keeps a shop page with this address on ``product``."""
+    return fits_name(url, product.name, product.game_slug)
+
+
 def day_text(value):
     if not value:
         return "none"
@@ -344,6 +356,7 @@ class FinalState:
 
         # The merges: the product merged away is switched off, its barcode moves to the product kept when that
         # has none, and its pages move to it for the shops it lacks (merge_undoable).
+        self.carried = defaultdict(list)   # a product merged away: the pages that move to the product kept
         for other in self.edges:
             keep = self.keeper(other)
             if keep is None or keep == other or other not in products or keep not in products:
@@ -355,6 +368,7 @@ class FinalState:
             for retailer, entries in list(pages[other].items()):
                 if retailer not in pages[keep]:
                     pages[keep][retailer] = entries
+                    self.carried[other].extend((retailer, url) for _whose, _key, url in entries)
                     del pages[other][retailer]
         self.products = products
         self.pages = pages
@@ -1188,6 +1202,15 @@ class Planner:
                 if chosen is not None:
                     return (State.PROBLEM, f"The name names {self.set_row(chosen).name}, so the hourly filing puts "
                             "it back. Pick the right set or change the name.")
+        if "name" in fields:
+            before = self.site.products[pk]
+            for retailer, entries in state.pages[pk].items():
+                for whose, _key, url in entries:
+                    # Its own pages; a page moved or linked here is judged by that change.
+                    if (whose[0] == "listing" and self.site.pages[whose[1]].product_id == pk
+                            and page_fits(url, before) and not page_fits(url, product)):
+                        shop = possessive(self.site.shop_name(retailer))
+                        return State.HELD, f"{FITS} The new name contradicts {shop} page {url}."
         unlisted = not state.pages[pk] and not product.image
         if "show" in fields and fields["show"][3] is False and unlisted and not product.release_date:
             return State.HELD, f"{TIDY_REMOVES} Hiding it removes it for good."
@@ -1258,6 +1281,11 @@ class Planner:
             return (State.HELD, f"{both[0]} sells both on separate pages. After the merge its second page sits on the "
                     "switched-off product and is not shown. Fix it in Listings first, or make the merge anyway.",
                     warning)
+        for retailer, url in state.carried.get(pk, ()):
+            if page_fits(url, other) and not page_fits(url, kept):
+                shop = possessive(self.site.shop_name(retailer))
+                return (State.HELD, f"{FITS} {shop} page moves across, and its address contradicts "
+                        f"{self.named(state, keep)}: {url}.", warning)
         if ean_key(other.ean) and ean_key(kept.ean) and ean_key(other.ean) != ean_key(kept.ean):
             return (State.HELD, f"They have different barcodes, {other.ean} and {kept.ean}. Check they are one "
                     "product.", warning)
@@ -1282,8 +1310,6 @@ class Planner:
         return None
 
     def guard_move(self, change, state):
-        from .management.commands.tidy_listings import fits
-
         page = self.site.pages[change.object_id]
         keep = state.keeper(change.data["target"])
         if keep is None or keep not in state.products:
@@ -1307,8 +1333,7 @@ class Planner:
             other = min(owners, key=str)
             return (State.PROBLEM, f"The shop gives the barcode {page.shop_ean}, which is on "
                     f"{self.named(state, other)}, so the shop's next read puts it back there.")
-        copy = Listing(url=page.url, product=Product(name=product.name, game=Game(slug=product.game_slug)))
-        if not fits(copy):
+        if not page_fits(page.url, product):
             return State.HELD, f"{FITS} Check its address names {self.named(state, keep)}."
         return None
 
@@ -1351,9 +1376,12 @@ class Planner:
             other = min(owners, key=str)
             return (State.PROBLEM, f"The shop gives the barcode {item.shop_ean}, which is on "
                     f"{self.named(state, other)}, so the shop's next read links it there.")
+        warning = ""
         if item.price is None or item.last_seen < self.now - STALE_SEEN:
-            return State.READY, "", "The price shows once the shop's next read checks it."
-        return None
+            warning = "The price shows once the shop's next read checks it."
+        if not page_fits(item.url, product):
+            return State.HELD, f"{FITS} Check its address names {self.named(state, keep)}.", warning
+        return (State.READY, "", warning) if warning else None
 
     def guard_left_link(self, change, state):
         d = change.data
@@ -1371,6 +1399,8 @@ class Planner:
         if others:
             return (State.PROBLEM, f"{d['shop']} already has a page on {keep}: {others[0][2]}. One product has one "
                     "page per shop.")
+        if not page_fits(d["url"], state.products[keep]):
+            return State.HELD, f"{FITS} Check its address names {self.named(state, keep)}."
         return None
 
     def finish(self, state):

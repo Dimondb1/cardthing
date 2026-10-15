@@ -360,6 +360,21 @@ class ProductFieldTests(Base):
                             ("Products", twin.pk, "Same as product id", str(self.etb.pk)))
         self.assertEqual({c.state for c in changes}, {State.READY}, [(c.what, c.why) for c in changes])
 
+    def test_a_rename_its_own_shop_pages_contradict_is_held(self):
+        # Filed under a Japanese set it stays Japanese without the word, but its shop's address says Japanese,
+        # and the hourly tidy deletes a listing whose address has a language word its product's name lacks.
+        festival = make_set(self.game, name="Terastal Festival ex", slug="terastal-festival", code="SV8a")
+        box = make_product(festival, name="Terastal Festival ex Booster Box Japanese", slug="sv8a-box",
+                           product_type="booster_box", release_date=date(2024, 12, 6))
+        url = "https://solent.example/products/terastal-festival-ex-booster-box-japanese"
+        make_listing(box, self.shop, url=url)
+        _export, data = self.download()
+        rename = self.only(self.edit(data, ("Products", box.pk, "Name", "Terastal Festival ex Booster Box")))
+        self.assertEqual((rename.state, rename.why),
+                         (State.HELD, f"{workbook_plan.FITS} The new name contradicts Solent Cards' page {url}."))
+        ready = self.only(self.edit(data, ("Products", box.pk, "Name", "Terastal Festival ex Booster Box (Japanese)")))
+        self.assertEqual(ready.state, State.READY)
+
     def test_names_the_hourly_tidy_would_remove_are_refused(self):
         _export, data = self.download()
         generic = self.only(self.edit(data, ("Products", self.etb.pk, "Name", "Elite Trainer Box")))
@@ -608,6 +623,17 @@ class MergeTests(Base):
         self.assertEqual(move.state, State.HELD)
         self.assertEqual((merge.state, merge.why), (State.HELD, workbook_plan.DEPENDS))
 
+    def test_held_when_a_page_it_brings_contradicts_the_product_kept(self):
+        case = make_product(self.set, name="Surging Sparks Booster Box Case", slug="ssp-case",
+                            product_type="booster_box", release_date=date(2024, 11, 8))
+        url = "https://kingdom.example/products/surging-sparks-booster-box-case"
+        make_listing(case, make_retailer("Kingdom Cards"), url=url)
+        _export, data = self.download()
+        held = self.only(self.same_as(data, (case, self.box)))
+        self.assertEqual((held.state, held.why), (State.HELD, (
+            f"{workbook_plan.FITS} Kingdom Cards' page moves across, and its address contradicts {self.box.pk} "
+            f'"Surging Sparks Booster Box": {url}.')))
+
     def test_refused_across_languages_or_games_or_into_a_hidden_product(self):
         japanese = make_product(self.set, name="Surging Sparks Booster Box (Japanese)", slug="ssp-jp",
                                 product_type="booster_box")
@@ -789,6 +815,15 @@ class ShopItemTests(Base):
         self.assertEqual((old.state, old.warning), (State.READY, "The price shows once the shop's next read checks it."))
 
 
+    def test_a_link_its_address_contradicts_is_held(self):
+        ShopProduct.objects.filter(pk=self.item.pk).update(
+            url="https://harbour.example/products/surging-sparks-elite-trainer-box-german")
+        _export, data = self.download()
+        link = self.only(self.decide(data, "Link"))
+        self.assertEqual((link.state, link.why), (State.HELD, (
+            f'{workbook_plan.FITS} Check its address names {self.etb.pk} "Surging Sparks Elite Trainer Box".')))
+
+
 class LeftOutTests(Base):
     def setUp(self):
         super().setUp()
@@ -813,6 +848,17 @@ class LeftOutTests(Base):
         refused = self.only(self.edit(data, ("Left out", key, "Link to product id", str(self.etb.pk))))
         self.assertEqual(refused.state, State.PROBLEM)
         self.assertIn("Harbour Games already has a page on", refused.why)
+
+    def test_a_left_out_link_its_address_contradicts_is_held(self):
+        from .models import ImportRun
+
+        ImportRun.objects.update(unmatched=(
+            "Pokemon Surging Sparks Booster Box German [no barcode] https://harbour.example/products/ssp-box-german"))
+        _export, data = self.download(left_out_retailer=self.harbour)
+        held = self.only(self.edit(data, ("Left out", "https://harbour.example/products/ssp-box-german",
+                                          "Link to product id", str(self.box.pk))))
+        self.assertEqual((held.state, held.why), (State.HELD, (
+            f'{workbook_plan.FITS} Check its address names {self.box.pk} "Surging Sparks Booster Box".')))
 
 
 class OrderTests(Base):

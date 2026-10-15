@@ -587,7 +587,10 @@ when it also forgets removed product addresses older than a year):
 `tidy_catalogue` (products that no longer pass; their addresses answer 410
 Gone, and a name tidied onto another product's merges with a redirect),
 `merge_duplicates` (one product under two names) and `tidy_listings` (a shop item linked to the
-wrong product, judged by the words in its shop address; it also hides an
+wrong product, judged by the words in its shop address; a language word in
+the address counts against the product only when it names another language
+than the product's, so "...-simplified-chinese-gem-4-booster-box" stays on
+"Chinese Gem Pack Vol 4 Booster Box"; it also hides an
 eBay listing the current rules refuse: a price under 40% of the cheapest
 any shop last showed, in stock or not, or a title that is a multi-buy, a
 code, a sampling pack or another language. Listings keep the shop's own

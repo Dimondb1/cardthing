@@ -133,6 +133,30 @@ class TidyListingsTests(TestCase):
         self.assertTrue(Listing.objects.filter(pk=kept.pk).exists())
         self.assertFalse(Listing.objects.filter(pk=wrong.pk).exists())
 
+    def test_an_address_in_the_products_own_language_is_kept(self):
+        # The hourly merge kept "Chinese Gem Pack Vol 4 Booster Box", and the tidy then deleted every other shop's
+        # "...-simplified-chinese-..." listing it had moved there, which their next reads put back (15 Oct 2026).
+        pokemon = make_game(name="Pokemon", slug="pokemon", short_name="Pokemon")
+        gem = make_product(make_set(pokemon, name="Gem Pack Vol 4", slug="gem-4"), name="Chinese Gem Pack Vol 4 Booster Box",
+                           product_type="booster_box")
+        kept = [
+            make_listing(gem, make_retailer("Solent Cards"),
+                         url="https://solentcards.co.uk/products/pokemon-gem-pack-vol-4-cbb4-c-simplified-chinese-booster-box"),
+            make_listing(gem, make_retailer("Lvl Up"), url="https://lvlup.example/products/gem-4-simplified-chinese-booster-box"),
+        ]
+        wrong = [
+            make_listing(gem, make_retailer("Japan2UK"), url="https://j2uk.example/products/gem-pack-vol-4-traditional-chinese-box"),
+            make_listing(gem, make_retailer("Other"), url="https://other.example/products/gem-pack-vol-4-japanese-booster-box"),
+        ]
+        english = make_product(make_set(pokemon, name="Surging Sparks", slug="ssp"), name="Surging Sparks Booster Box",
+                               product_type="booster_box")
+        wrong.append(make_listing(english, make_retailer("Third"), url="https://third.example/surging-sparks-booster-box-japanese"))
+        call_command("tidy_listings", stdout=StringIO())
+        for listing in kept:
+            self.assertTrue(Listing.objects.filter(pk=listing.pk).exists(), listing.url)
+        for listing in wrong:
+            self.assertFalse(Listing.objects.filter(pk=listing.pk).exists(), listing.url)
+
     def test_listings_on_the_wrong_product_are_removed(self):
         magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
         box = make_product(make_set(magic, name="Invasion", slug="invasion"), name="Invasion Booster Box", product_type="booster_box")

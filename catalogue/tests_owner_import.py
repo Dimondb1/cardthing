@@ -440,19 +440,20 @@ class ProductFieldTests(Base):
         self.assertEqual({c.state for c in changes}, {State.READY}, [(c.what, c.why) for c in changes])
 
     def test_a_rename_its_own_shop_pages_contradict_is_held(self):
-        # Filed under a Japanese set it stays Japanese without the word, but its shop's address says Japanese,
-        # and the hourly tidy deletes a listing whose address has a language word its product's name lacks.
+        # The hourly tidy deletes a listing whose address names another language than its product's.
         festival = make_set(self.game, name="Terastal Festival ex", slug="terastal-festival", code="SV8a")
         box = make_product(festival, name="Terastal Festival ex Booster Box Japanese", slug="sv8a-box",
                            product_type="booster_box", release_date=date(2024, 12, 6))
         url = "https://solent.example/products/terastal-festival-ex-booster-box-japanese"
         make_listing(box, self.shop, url=url)
         _export, data = self.download()
-        rename = self.only(self.edit(data, ("Products", box.pk, "Name", "Terastal Festival ex Booster Box")))
+        rename = self.only(self.edit(data, ("Products", box.pk, "Name", "Terastal Festival ex Booster Box (Korean)")))
         self.assertEqual((rename.state, rename.why),
                          (State.HELD, f"{workbook_plan.FITS} The new name contradicts Solent Cards' page {url}."))
-        ready = self.only(self.edit(data, ("Products", box.pk, "Name", "Terastal Festival ex Booster Box (Japanese)")))
-        self.assertEqual(ready.state, State.READY)
+        # Without the word it is still Japanese (a Japanese-only set), as the address says: the listing stays.
+        for name in ("Terastal Festival ex Booster Box", "Terastal Festival ex Booster Box (Japanese)"):
+            ready = self.only(self.edit(data, ("Products", box.pk, "Name", name)))
+            self.assertEqual(ready.state, State.READY, name)
 
     def test_showing_a_hidden_twin_the_hourly_merge_would_join_is_refused(self):
         twin = make_product(self.set, name="Pokemon TCG: Surging Sparks Booster Box", slug="ssp-box-tcg",

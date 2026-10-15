@@ -459,13 +459,16 @@ class Planner:
         self.changes = []
         self.refs = {}         # newN on Products that an earlier upload of this file added: the product's id
         self.set_refs = {}     # the same for Sets
+        self.added = {}        # (sheet, newN): what the earlier upload's row said
+        self.reused = {}       # newN on Products given to another product than the one added before: its id
         self.new_sets = {}     # newN on Sets that this file adds: SetRow
         self.new_rows = set()  # newN on Products that this file adds
-        for sheet, ref, pk in DataChange.objects.filter(
+        for sheet, ref, pk, data in DataChange.objects.filter(
             data_import__export=export, kind__in=[Kind.NEW_PRODUCT, Kind.NEW_SET], outcome=DataChange.Outcome.APPLIED,
             object_id__isnull=False,
-        ).values_list("sheet", "ref", "object_id"):
+        ).values_list("sheet", "ref", "object_id", "data"):
             (self.set_refs if sheet == wb.SETS.name else self.refs)[ref] = pk
+            self.added[(sheet, ref)] = data or {}
 
     def run(self):
         self.read_sets()
@@ -727,6 +730,11 @@ class Planner:
                 self.add(Kind.NEW_SET, sheet, number, State.CONFLICT,
                          f"Added from this file before as {pk}, and removed since.", ref=ref, data=data)
                 return
+            if not self.same_new_row(sheet, ref, cells, {"game": row.game_id, "name": row.name}):
+                # Another set given the same newN: rows naming it are not filed under the earlier one.
+                self.add(Kind.NEW_SET, sheet, number, State.PROBLEM,
+                         self.reused_why(ref, f"the set {quoted(row.name)}", pk), ref=ref, data=data)
+                return
             self.set_names.found[(row.game_id, "ref", ref)] = pk
             data = {"game": row.game_id, "name": row.name, "code": row.code, "release_date": row.release_date}
             self.add(Kind.NEW_SET, sheet, number, State.SAME, f"Already added (id {pk}).", ref=ref, object_id=pk,
@@ -756,6 +764,14 @@ class Planner:
         rows = self.rows_of(wb.PRODUCTS)
         # Other rows and sheets may name a new row, so they are all known before any row is read.
         self.new_rows = {key for _n, key, _c, base in rows if base is None}
+        # A newN an earlier upload of this download added names that product, unless this row is another
+        # product (the original download reopened and new1 used again): then nothing resolves to it.
+        for _n, key, cells, base in rows:
+            if base is None and key in self.refs and self.refs[key] in self.site.products:
+                earlier = self.site.products[self.refs[key]]
+                if not self.same_new_row(wb.PRODUCTS, key, cells, {"game": earlier.game_id, "name": earlier.name,
+                                                                   "type": earlier.type}):
+                    self.reused[key] = self.refs.pop(key)
         for number, key, cells, base in rows:
             if base is None:
                 self.new_product(number, key, cells)
@@ -881,9 +897,39 @@ class Planner:
                 return named, ""
         return name, f"The name or set says {languages.name(found)}. Change the name or set."
 
+    def same_new_row(self, sheet, ref, cells, now):
+        """Whether this newN row is the one an earlier upload of the download added, by what that upload's row
+        said or by the product or set as it is now: the same game and name (a product's name may have gained
+        its language, "(Japanese)"), and for a product the same type."""
+        game_id, _ = self.site.game_names(cells.get("game"))
+        name = wb.as_text(cells.get("name"))[0]
+        if sheet is wb.PRODUCTS:
+            name = wb.tidy(name)
+            game_slug = self.site.games[game_id][1] if game_id else ""
+            kind = wb.as_type(cells.get("type"), game_slug)[0] if game_id else None
+        for was in (self.added.get((sheet.name, ref)) or {}, now):
+            named = was.get("name") or ""
+            if was.get("game") != game_id or (sheet is wb.PRODUCTS and was.get("type") != kind):
+                continue
+            if named.casefold() == name.casefold() or (named.startswith(f"{name} (") and named.endswith(")")):
+                return True
+        return False
+
+    def reused_why(self, ref, what, pk):
+        used = {int(r[3:]) for r in (*self.refs, *self.set_refs, *self.reused, *self.new_rows, *self.new_sets)
+                if isinstance(r, str) and r[3:].isdigit()}
+        return (f"{ref} was used for {what} (id {pk}) in an earlier upload of this download. Number this row "
+                f"new{max(used, default=0) + 1} instead, and the rows that name it.")
+
     def new_product(self, number, ref, cells):
         sheet = wb.PRODUCTS
         site = self.site
+        if ref in self.reused:
+            pk = self.reused[ref]
+            self.add(Kind.NEW_PRODUCT, sheet, number, State.PROBLEM,
+                     self.reused_why(ref, quoted(site.products[pk].name), pk), ref=ref,
+                     data={"name": wb.clean_text(cells.get("name"))})
+            return
         if ref in self.refs:
             pk = self.refs[ref]
             product = site.products.get(pk)

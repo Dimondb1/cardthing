@@ -236,6 +236,43 @@ class ReuploadTests(Base):
         self.assertEqual((link.state, link.target_id), (State.READY, added.pk))
 
 
+    def test_a_new_row_number_used_again_for_another_product_or_set_is_refused(self):
+        item = ShopProduct.objects.create(retailer=self.harbour, title="BLK Bundle", url="https://harbour.example/p/b",
+                                          price=Decimal("30"), status=Status.REVIEW, last_seen=timezone.now())
+        export, data = self.download()
+        # An earlier upload of this download added new1 and a set new1.
+        added = make_product(self.bolt, name="Black Bolt Elite Trainer Box", release_date=date(2025, 7, 18))
+        rivals = make_set(self.game, name="Destined Rivals", slug="destined-rivals", code="DRI")
+        upload = DataImport.objects.create(export=export, file_name="a.xlsx", sha256="x", status="applied")
+        for seq, (sheet, kind, pk, row) in enumerate((
+                ("Products", Kind.NEW_PRODUCT, added.pk, {"game": self.game.pk, "name": added.name,
+                                                          "type": "elite_trainer_box"}),
+                ("Sets", Kind.NEW_SET, rivals.pk, {"game": self.game.pk, "name": "Destined Rivals"}))):
+            DataChange.objects.create(data_import=upload, step=2, seq=seq, sheet=sheet, row=9, kind=kind,
+                                      state=State.READY, ref="new1", object_id=pk, outcome="applied", what="Add",
+                                      data=row)
+        # The original download opened again, and new1 given to another product and another set.
+        changes = self.edit(data, ("Shop items", item.pk, "Link to product id", "new1"), insert_rows=[
+            ("Products", {"Product id": "new1", "Game": "Pokémon", "Name": "Black Bolt Booster Bundle",
+                          "Type": "Booster bundle", "Release date": "18/07/2025"}),
+            ("Sets", {"Set id": "new1", "Game": "Pokémon", "Name": "Journey Together"})])
+        new = self.only(changes, kind=Kind.NEW_PRODUCT)
+        self.assertEqual((new.state, new.why), (State.PROBLEM, (
+            f'new1 was used for "Black Bolt Elite Trainer Box" (id {added.pk}) in an earlier upload of this '
+            "download. Number this row new2 instead, and the rows that name it.")))
+        link = self.only(changes, kind=Kind.LINK)
+        self.assertEqual((link.state, link.target_id), (State.PROBLEM, None))
+        new_set = self.only(changes, kind=Kind.NEW_SET)
+        self.assertEqual(new_set.state, State.PROBLEM)
+        self.assertTrue(new_set.why.startswith(f'new1 was used for the set "Destined Rivals" (id {rivals.pk})'))
+        # The same rows again are what was added before.
+        again = self.edit(data, insert_rows=[
+            ("Products", {"Product id": "new1", "Game": "Pokémon", "Name": "Black Bolt Elite Trainer Box",
+                          "Type": "Elite Trainer Box", "Release date": "18/07/2025"}),
+            ("Sets", {"Set id": "new1", "Game": "Pokémon", "Name": "Destined Rivals"})])
+        self.assertEqual({c.state for c in again}, {State.SAME}, [(c.what, c.why) for c in again])
+
+
 class IntegrityTests(Base):
     def products(self, n):
         return [make_product(self.set, name=f"Surging Sparks Collection {i + 1:02d}", product_type="collection_box",

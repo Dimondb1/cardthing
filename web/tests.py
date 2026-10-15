@@ -205,6 +205,24 @@ class CopyStyleTests(PageTestCase):
                 with self.subTest(url=url, phrase=phrase):
                     self.assertNotIn(phrase, html)
 
+    def test_no_template_notes_show_on_a_page(self):
+        # A {# note #} that runs over two lines is printed on the page, not hidden.
+        for url in self.public_urls() + ["/no-such-page/"]:
+            html = self.client.get(url).content.decode()
+            visible_text = re.sub(r"<[^>]*>", " ", re.sub(r"(?s)<(script|style)\b.*?</\1>", " ", html))
+            for mark in ("{#", "#}", "{%", "%}", "{{", "}}"):
+                with self.subTest(url=url, mark=mark):
+                    self.assertNotIn(mark, visible_text)
+
+    def test_every_template_note_closes_on_its_own_line(self):
+        from pathlib import Path
+
+        for path in Path(__file__).resolve().parent.joinpath("templates").rglob("*.html"):
+            for number, line in enumerate(path.read_text().splitlines(), 1):
+                if "{#" in line:
+                    with self.subTest(template=str(path), line=number):
+                        self.assertIn("#}", line[line.index("{#"):])
+
     def test_no_exclamation_marks(self):
         for url in self.public_urls():
             html = self.client.get(url).content.decode()

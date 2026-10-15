@@ -78,8 +78,8 @@
 </section>
 {% endif %}
 
-{# The raptor panels follow the owner's design: big capitals, the head cropped by the panel's edge. The whole panel
-   is the link, so it works with JavaScript off; the head is decoration, hidden from screen readers. #}
+{% comment %}The raptor panels follow the owner's design: big capitals, the head cropped by the panel's edge. The whole panel
+   is the link, so it works with JavaScript off; the head is decoration, hidden from screen readers.{% endcomment %}
 <section class="home-section" aria-labelledby="dropped-title">
   <a class="poster poster--deals" href="{% url 'web:deals' %}">
     <span class="poster__body">

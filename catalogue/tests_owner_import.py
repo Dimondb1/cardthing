@@ -392,6 +392,27 @@ class IntegrityTests(Base):
         with mock.patch.object(workbook_plan, "MAX_CHANGES", 1), \
                 self.assertRaisesMessage(workbook.FileRefused, "more than 1 changes. Split your changes over several"):
             self.edit(data, *edits)
+        # Most of them rows that cannot be read: splitting the file would not help, so it does not say so.
+        bad = [("Products", self.box.pk, "Type", "Mystery thing"), ("Products", self.etb.pk, "Type", "Mystery thing")]
+        with mock.patch.object(workbook_plan, "MAX_CHANGES", 1), \
+                self.assertRaisesMessage(workbook.FileRefused, "2 of this file's changes cannot be made, too many"):
+            self.edit(data, *bad)
+
+    def test_a_formula_filled_down_a_column_is_one_problem(self):
+        made = self.products(24)
+        _export, data = self.download()
+        edits = [("Products", p.pk, "Same as product id", Pasted(f'=IF(N{n}="","",N{n})'))
+                 for n, p in enumerate(made, start=2)]
+        edits.append(("Products", self.etb.pk, "Name", "Surging Sparks ETB"))
+        changes = self.edit(data, *edits)
+        self.assertEqual(sorted((c.state, c.what) for c in changes), [
+            (State.PROBLEM, "Nothing in Same as product id on Products was read."),
+            (State.READY, f'Rename {self.etb.pk} "Surging Sparks Elite Trainer Box" to "Surging Sparks ETB" '
+                          f"(Products row {self.only(changes, state=State.READY).row})."),
+        ])
+        self.assertEqual(self.only(changes, state=State.PROBLEM).why,
+                         "24 of its cells are formulas. Copy the column, paste it back as values, save and upload "
+                         "again.")
 
 
 class ProductFieldTests(Base):

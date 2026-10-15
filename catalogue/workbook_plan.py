@@ -72,11 +72,16 @@ NOT_IN_FILE = "Not in the file you downloaded."
 ADD_A_ROW = "Use new1, new2 and so on to add a row."
 MERGED_AWAY = "Merged away, so its other changes are not made."
 FORMULA = "Row {row}, {heading} is a formula. Copy the column, paste it back as values, save and upload again."
+FORMULAS = "{count:,} of its cells are formulas. Copy the column, paste it back as values, save and upload again."
 MASS = "Over a quarter of this column changed. If a sort mixed up the rows, discard this file."
 TIDY_REMOVES = "The hourly tidy-up removes a product no shop lists that has no release date."
 ALREADY = "Already so."
 FITS = "The hourly tidy deletes a listing whose address contradicts the product."
 DEPENDS = "Depends on a change held for your say, so it is made only with the held changes."
+
+
+def is_formula(value):
+    return isinstance(value, str) and value.strip().startswith("=")
 
 
 def three_way(base, file, current, equal=None):
@@ -493,6 +498,11 @@ class Planner:
         self.judge()
         counted = [change for change in self.changes if change.state != State.SAME]
         if len(counted) > MAX_CHANGES:
+            unread = sum(change.state == State.PROBLEM for change in counted)
+            if unread * 2 > len(counted):
+                # Splitting would not help: most of them are rows that cannot be read.
+                raise wb.FileRefused(f"{unread:,} of this file's changes cannot be made, too many to list. Check the "
+                                     "columns you changed for values the site does not know, then upload again.")
             raise wb.FileRefused(f"This file makes more than {MAX_CHANGES:,} changes. {wb.TOO_BIG}")
         self.changes.sort(key=lambda c: (STEPS[c.kind], WITHIN_STEP.get(c.kind, 0), SHEET_ORDER[c.sheet], c.row, c.seq))
         for seq, change in enumerate(self.changes, start=1):
@@ -546,11 +556,21 @@ class Planner:
         if sheet.integrity:
             for row_key, row in base.items():
                 owners[wb.clean_text(row.get(sheet.integrity))].add(row_key)
+        # A formula filled down a column (or an Excel Table's calculated column) is one problem, not one a row:
+        # the whole column is left out.
+        formulas = Counter(column.key for _number, cells in rows for column in changeable
+                           if is_formula(cells.get(column.key)))
+        dropped = {key for key, count in formulas.items() if count > MAX_MISMATCHES}
+        for column in changeable:
+            if column.key in dropped:
+                self.row_problem(sheet, 0, None, FORMULAS.format(count=formulas[column.key]),
+                                 what=f"Nothing in {column.heading} on {sheet.name} was read.")
         for number, cells in rows:
             cells = dict(cells)
             for column in changeable:
-                value = cells.get(column.key)
-                if isinstance(value, str) and value.strip().startswith("="):
+                if column.key in dropped:
+                    cells.pop(column.key, None)
+                elif is_formula(cells.get(column.key)):
                     self.row_problem(sheet, number, None, FORMULA.format(row=number, heading=column.heading),
                                      what=f"{column.heading} on {sheet.name} row {number} was not read.")
                     del cells[column.key]

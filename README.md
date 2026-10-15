@@ -2312,16 +2312,29 @@ the 3 October snapshot that is 2,785 of 7,626 products. Every game, set and
 the fixed pages are listed too.
 
 Each product's `lastmod` is when its page really changed: the latest of its
-own edits (`updated_at`, which moves only when a field the page shows is
-saved, not when a lookup is recorded) and the last change of any shown
-shop's price, delivery or stock (`Listing.changed_at`). A check that finds
-the same price and stock leaves `changed_at` alone, so `lastmod` does not
-move every hour; a new price, a sell-out, a restock, a shop's price back
-on sale after being out of date, a multi-buy that starts, changes or ends,
-a buy link moved to another of the shop's pages (not another variant of
-the same page), a price kept out of or let back into the comparison, a
-shop hidden or shown, or a shop moved onto the product does. Listings changed before `changed_at` existed fall back to
-their last restock. A set's `lastmod` is the latest of its products'.
+own edits, its set's edits and the last change of any shown shop's price,
+delivery or stock.
+
+- `Product.updated_at` moves when a field the page shows is saved,
+  including by the hourly tidy (a retype, a corrected language, filing
+  under a set or taking it away, a merge undone), and not when a lookup is
+  recorded.
+- `ProductSet.updated_at` moves when the set's name, address, code or
+  release date is saved, since the product page shows them too. A release
+  source repeating the date the set already has only notes where it came
+  from and does not move it. Sets last edited before this field was added
+  have none.
+- `Listing.changed_at` moves for a shop's change. A check that finds the
+  same price and stock leaves it alone, so `lastmod` does not move every
+  hour; a new price, a sell-out, a restock, a shop's price back on sale
+  after being out of date, a multi-buy that starts, changes or ends, a buy
+  link moved to another of the shop's pages (not another variant of the
+  same page), a price kept out of or let back into the comparison, a shop
+  hidden or shown, or a shop moved onto the product does. Listings changed
+  before `changed_at` existed fall back to their last restock.
+
+A set's `lastmod` is the latest of its own edits and its products', so a
+product filed under it moves it too.
 `changefreq` and `priority` are not sent: Google ignores them. Each part
 of the sitemap costs two queries, a count and the page, however many
 products there are.

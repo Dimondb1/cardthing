@@ -530,7 +530,7 @@ def undo_set(answer):
         others = Release.objects.filter(product_set=product_set, status=Release.Status.ACCEPTED).exclude(pk=row.pk)
         if product_set.release_date is not None or others.exists():
             return ""
-        Product.objects.filter(product_set=product_set).update(product_set=None)
+        Product.objects.filter(product_set=product_set).update(product_set=None, updated_at=timezone.now())
         Release.objects.filter(product_set=product_set).update(product_set=None)
         ProductSet.objects.filter(pk=product_set.pk).delete()
     row.refresh_from_db()

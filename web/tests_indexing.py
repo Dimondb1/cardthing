@@ -14,7 +14,7 @@ from django.utils import timezone
 from catalogue import pricing, sanity
 from catalogue.housekeeping import prune_removed
 from catalogue.models import (
-    DailyLowestPrice, Listing, PreorderOpen, Product, ProductAlias, RemovedProduct, StockAlert,
+    DailyLowestPrice, Listing, PreorderOpen, Product, ProductAlias, ProductSet, RemovedProduct, StockAlert,
 )
 from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
 from web.sitemaps import RECENT_DAYS, ProductSitemap, SetSitemap
@@ -74,6 +74,8 @@ class SitemapTests(TestCase):
         make_listing(cls.hidden, cls.shop)
         cls.hidden_listing = product("Hidden Listing Box")
         make_listing(cls.hidden_listing, cls.shop, is_active=False)
+        # Sets edited before their edits were recorded.
+        ProductSet.objects.update(updated_at=None)
 
     def setUp(self):
         cache.clear()
@@ -147,7 +149,11 @@ class SitemapTests(TestCase):
         self.assertEqual(entries[self.set.get_absolute_url()], day(now - timedelta(days=3)))
         # A set whose products have no recorded change carries their latest edit.
         self.assertEqual(entries[self.later_set.get_absolute_url()], day(self.in_later_set.updated_at))
+        # A set with no products carries when it was last edited, and nothing before edits were recorded.
         empty = make_set(self.game, name="Empty Set", slug="empty-set")
+        item = next(s for s in SetSitemap().items() if s.pk == empty.pk)
+        self.assertEqual(SetSitemap().lastmod(item), empty.updated_at)
+        ProductSet.objects.filter(pk=empty.pk).update(updated_at=None)
         item = next(s for s in SetSitemap().items() if s.pk == empty.pk)
         self.assertIsNone(SetSitemap().lastmod(item))
 
@@ -164,11 +170,84 @@ class SitemapTests(TestCase):
         self.assertContains(response, "/products/extra-14/")
 
 
+class PageEditTests(TestCase):
+    """What the hourly tidy and the owner change on a product or set page moves its lastmod."""
+
+    def setUp(self):
+        cache.clear()
+        self.game = make_game()
+        self.set = make_set(self.game, release_date=timezone.localdate() - timedelta(days=100))
+        self.shop = make_retailer("Harbour Games")
+        self.old = timezone.now() - timedelta(days=60)
+
+    def freeze(self, *products):
+        Product.objects.filter(pk__in=[p.pk for p in products]).update(updated_at=self.old)
+        ProductSet.objects.update(updated_at=None)
+        Listing.objects.update(changed_at=None, back_in_stock_at=None)
+        return sitemap_entries(self.client)
+
+    def test_a_retype_moves_the_products_lastmod(self):
+        from catalogue.types import refresh_types
+
+        product = make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pe-bundle",
+                               product_type=Product.Type.ELITE_TRAINER_BOX)
+        make_listing(product, self.shop)
+        url = product.get_absolute_url()
+        self.assertEqual(self.freeze(product)[url], day(self.old))
+        self.assertEqual(refresh_types(), 1)
+        self.assertEqual(sitemap_entries(self.client)[url], day(timezone.now()))
+
+    def test_filing_a_product_under_a_set_moves_both_lastmods(self):
+        from catalogue.releases import attach_sets
+
+        product = Product.objects.create(game=self.game, name="Prismatic Evolutions Elite Trainer Box", slug="pe-etb",
+                                         product_type=Product.Type.ELITE_TRAINER_BOX)
+        make_listing(product, self.shop)
+        before = self.freeze(product)
+        self.assertEqual((before[product.get_absolute_url()], before[self.set.get_absolute_url()]), (day(self.old), None))
+        self.assertEqual(attach_sets(self.game), 1)
+        after = sitemap_entries(self.client)
+        today = day(timezone.now())
+        self.assertEqual((after[product.get_absolute_url()], after[self.set.get_absolute_url()]), (today, today))
+
+    def test_a_set_edit_moves_the_set_and_its_products(self):
+        from catalogue import releases
+
+        product = make_product(self.set, slug="pe-etb")
+        make_listing(product, self.shop)
+        product_url, set_url = product.get_absolute_url(), self.set.get_absolute_url()
+        ProductSet.objects.filter(pk=self.set.pk).update(release_date_source="tcgdex_sets")
+        self.assertEqual(self.freeze(product)[set_url], day(self.old))
+        # The publisher repeating the date a community source gave only notes where it came from.
+        self.set.refresh_from_db()
+        self.assertTrue(releases.write_date(self.set, self.set.release_date, "pokemon_uk_news"))
+        self.set.refresh_from_db()
+        self.assertEqual((self.set.release_date_source, self.set.updated_at), ("pokemon_uk_news", None))
+        self.set.name = "Prismatic Evolutions (SV8.5)"
+        self.set.save(update_fields=["name"])
+        today = day(timezone.now())
+        entries = sitemap_entries(self.client)
+        self.assertEqual((entries[product_url], entries[set_url]), (today, today))
+        # A new date from a source does too, and so does the owner's edit or a new set.
+        ProductSet.objects.update(updated_at=None)
+        self.assertTrue(releases.write_date(self.set, timezone.localdate() - timedelta(days=90), "pokemon_uk_news"))
+        self.set.refresh_from_db()
+        self.assertIsNotNone(self.set.updated_at)
+        self.assertIsNotNone(make_set(self.game, name="Journey Together", slug="journey-together").updated_at)
+
+    def test_the_sitemap_still_costs_two_queries_a_section(self):
+        product = make_product(self.set, slug="pe-etb")
+        make_listing(product, self.shop)
+        with self.assertNumQueries(6):
+            self.client.get("/sitemap.xml")
+
+
 class ChangedAtTests(TestCase):
     """Listing.changed_at moves when what the page shows for a shop changes, and only then."""
 
     def setUp(self):
         self.set = make_set(make_game())
+        ProductSet.objects.update(updated_at=None)
         self.product = make_product(self.set, name="Surging Sparks Booster Box", product_type="booster_box")
         self.shop = make_retailer("Shop", delivery_cost=Decimal("0"))
         self.listing = make_listing(self.product, self.shop, price="100.00")

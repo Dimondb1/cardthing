@@ -261,12 +261,13 @@ def unmerge(note):
         else:
             ProductAlias.objects.filter(pk=entry["alias"]).delete()
         ProductAlias.objects.filter(pk__in=entry["aliases"], product=keep).update(product=other)
-        Product.objects.filter(pk=other.pk).update(is_active=True, ean=entry.get("ean", "") or other.ean)
+        Product.objects.filter(pk=other.pk).update(is_active=True, ean=entry.get("ean", "") or other.ean,
+                                                   updated_at=timezone.now())
         restored.append(other)
     if note.get("image_url") and keep.image_url == note["image_url"]:
-        Product.objects.filter(pk=keep.pk).update(image_url="")
+        Product.objects.filter(pk=keep.pk).update(image_url="", updated_at=timezone.now())
     if note.get("ean") and keep.ean == note["ean"]:
-        Product.objects.filter(pk=keep.pk).update(ean="")
+        Product.objects.filter(pk=keep.pk).update(ean="", updated_at=timezone.now())
     if note.get("at"):
         merged_on = date.fromisoformat(note["at"])
         DailyLowestPrice.objects.filter(product=keep, date__gt=merged_on).delete()

@@ -7,9 +7,10 @@ the site and reachable through its set and game pages, which link every product;
 list, so a crawler spends its visits on pages with a price.
 
 lastmod is the latest of the product's own edits (Product.updated_at, which moves only when a field the page
-shows is saved) and the last change of any shown shop's price, delivery or stock (Listing.changed_at, which a
-check that finds nothing new leaves alone). Before changed_at existed the only such record is the last time a
-shop came back into stock. changefreq and priority are left out: Google ignores them.
+shows is saved), its set's (ProductSet.updated_at: the set's name, code and date are on the product page too)
+and the last change of any shown shop's price, delivery or stock (Listing.changed_at, which a check that finds
+nothing new leaves alone). Before changed_at existed the only such record is the last time a shop came back
+into stock. changefreq and priority are left out: Google ignores them.
 
 Each section costs two queries per sitemap page, however many products there are: a count and the page.
 """
@@ -17,7 +18,7 @@ Each section costs two queries per sitemap page, however many products there are
 from datetime import timedelta
 
 from django.contrib.sitemaps import Sitemap
-from django.db.models import Exists, Max, OuterRef, Q, Subquery
+from django.db.models import Exists, F, Max, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
@@ -40,7 +41,8 @@ def last_listing_change(listings, group):
 
 
 def indexable_products(now=None):
-    """Active products worth listing, with ``listing_changed`` (the last shown listing change, or None), by pk."""
+    """Active products worth listing, by pk, with ``listing_changed`` (the last shown listing change, or None)
+    and ``set_changed`` (when their set was last edited, or None)."""
     now = now or timezone.now()
     today = timezone.localdate(now)
     buyable = Listing.objects.buyable().filter(product=OuterRef("pk"))
@@ -49,7 +51,10 @@ def indexable_products(now=None):
     return (
         Product.objects.active()
         .filter(Exists(buyable) | coming | Exists(priced))
-        .annotate(listing_changed=last_listing_change(Listing.objects.filter(product=OuterRef("pk")), "product"))
+        .annotate(
+            listing_changed=last_listing_change(Listing.objects.filter(product=OuterRef("pk")), "product"),
+            set_changed=F("product_set__updated_at"),
+        )
         .only("slug", "updated_at")
         .order_by("pk")
     )
@@ -65,7 +70,7 @@ class ProductSitemap(Sitemap):
         return indexable_products()
 
     def lastmod(self, product):
-        return latest(product.updated_at, product.listing_changed)
+        return latest(product.updated_at, product.set_changed, product.listing_changed)
 
 
 class GameSitemap(Sitemap):
@@ -74,7 +79,8 @@ class GameSitemap(Sitemap):
 
 
 class SetSitemap(Sitemap):
-    """A set page lists its products with their prices and stock, so it changed when one of them did."""
+    """A set page shows its name, code and date and lists its products with their prices and stock, so it
+    changed when it was edited or when one of them changed (a product filed under it included)."""
 
     def items(self):
         products = Product.objects.active().filter(product_set=OuterRef("pk")).order_by()
@@ -90,7 +96,7 @@ class SetSitemap(Sitemap):
         )
 
     def lastmod(self, product_set):
-        return latest(product_set.edited, product_set.listing_changed)
+        return latest(product_set.updated_at, product_set.edited, product_set.listing_changed)
 
 
 class PageSitemap(Sitemap):

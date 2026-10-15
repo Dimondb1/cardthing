@@ -361,13 +361,18 @@ def refresh_languages(dry_run=False):
     from .models import Product
     from .search import build_search_text
 
+    from django.utils import timezone
+
     changed = []
+    now = timezone.now()
     for product in Product.objects.select_related("game", "product_set"):
         language = product_language(product)
         if language != product.language:
             product.language = language
             product.search_text = build_search_text(product)
+            # The page shows the language: it changed.
+            product.updated_at = now
             changed.append(product)
     if not dry_run:
-        Product.objects.bulk_update(changed, ["language", "search_text"], batch_size=500)
+        Product.objects.bulk_update(changed, ["language", "search_text", "updated_at"], batch_size=500)
     return len(changed)

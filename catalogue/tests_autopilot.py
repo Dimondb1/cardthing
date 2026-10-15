@@ -348,11 +348,15 @@ class AnnouncedSetTests(Base):
         self.assertEqual((etb.product_set, row.status), (product_set, Release.Status.ACCEPTED))
         answer = CheckAnswer.objects.get()
         self.assertIn("TCGdex announced it and 1 product on the site already name it", answer.why)
+        old = timezone.now() - timedelta(days=30)
+        Product.objects.filter(pk=etb.pk).update(updated_at=old)
         self.assertIn("not a set", autopilot.undo(answer))
         etb.refresh_from_db()
         row.refresh_from_db()
         self.assertFalse(ProductSet.objects.filter(name="Destined Rivals").exists())
         self.assertEqual((etb.product_set, row.status), (None, Release.Status.DISMISSED))
+        # Its page lost the set: dated as changed (the sitemap's lastmod).
+        self.assertGreater(etb.updated_at, old)
 
     def test_a_set_that_has_gained_a_date_is_not_taken_away_by_undo(self):
         Product.objects.create(game=self.game, name="Destined Rivals Elite Trainer Box", product_type="elite_trainer_box")
@@ -521,10 +525,14 @@ class UndoableMergeTests(Base):
         self.assertEqual((keep.image_url, keep.ean), ("https://img.example/etb.jpg", "0196214112345"))
 
         import json
+        old = timezone.now() - days(30)
+        Product.objects.filter(pk__in=[keep.pk, other.pk]).update(updated_at=old)
         unmerge(json.loads(json.dumps(note)))   # the note survives a trip through a JSON field
         other.refresh_from_db()
         keep.refresh_from_db()
         self.assertTrue(other.is_active)
+        # Both pages changed: one is back, the other lost the image and barcode it had taken.
+        self.assertTrue(other.updated_at > old and keep.updated_at > old)
         self.assertEqual(Listing.objects.get(pk=moved.pk).product, other)
         self.assertEqual(Listing.objects.get(pk=kept_listing.pk).product, keep)
         self.assertEqual((Restock.objects.get(pk=restock.pk).product, OutboundClick.objects.get(pk=click.pk).product),

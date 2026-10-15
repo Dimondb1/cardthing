@@ -68,6 +68,10 @@ class ProductSet(models.Model):
         help_text="Where the release date came from: a release source, or owner when it was set here. "
         "A date set here is never changed by a source.",
     )
+    # When a field its page and its products' pages show was last saved (the sitemap's lastmod). Empty for a
+    # set last changed before this was recorded: stamped in save(), not auto_now, which would date every set
+    # to the day the field was added.
+    updated_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ["game", F("release_date").desc(nulls_last=True), "name"]
@@ -76,6 +80,18 @@ class ProductSet(models.Model):
 
     def __str__(self):
         return self.name
+
+    # Fields the set's page and its products' pages show. Saving one with update_fields moves updated_at;
+    # saving only where a date came from does not.
+    PAGE_FIELDS = {"game", "name", "slug", "code", "release_date"}
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or set(update_fields) & self.PAGE_FIELDS:
+            self.updated_at = timezone.now()
+            if update_fields is not None:
+                kwargs["update_fields"] = [*update_fields, "updated_at"]
+        super().save(*args, **kwargs)
 
     def get_absolute_url(self):
         return reverse("web:set", args=[self.game.slug, self.slug])

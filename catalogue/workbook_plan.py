@@ -98,10 +98,10 @@ def three_way(base, file, current, equal=None):
 
 
 @lru_cache(maxsize=65536)
-def strict_key(name):
+def strict_key(name, game_slug=""):
     from .management.commands.merge_duplicates import merge_key
 
-    return merge_key(name)
+    return merge_key(name, game_slug)
 
 
 @lru_cache(maxsize=65536)
@@ -298,7 +298,7 @@ class Index:
         for pk, product in products.items():
             if not product.active:
                 continue
-            key = strict_key(product.name)
+            key = strict_key(product.name, product.game_slug)
             if key:
                 self.by_key[(product.game_id, product.type, product.language, key)].add(pk)
             self.by_name[(product.game_id, product.language, product.name)].add(pk)
@@ -311,7 +311,7 @@ class Index:
         if not product.active:
             return set()
         found = set(self.by_name[(product.game_id, product.language, product.name)])
-        key = strict_key(product.name)
+        key = strict_key(product.name, product.game_slug)
         if key:
             found |= {other for other in self.by_key[(product.game_id, product.type, product.language, key)]
                       if other != pk and not why_not_merge(product, products[other])}

@@ -12,7 +12,7 @@ from . import autopilot, languages
 from .classify import classify
 from .importers import Catalogue
 from .matching import SUGGEST
-from .models import Product
+from .models import Listing, Product
 from .ordering import apply_languages
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
@@ -293,12 +293,10 @@ class MidAutumnTests(TestCase):
         # Only Pokémon's: another game's festival box says nothing about China.
         self.assertEqual(languages.language_of("Mid-Autumn Festival Gift Box", "one-piece"), languages.ENGLISH)
 
-    def test_the_shop_that_left_out_the_language_is_offered_as_a_duplicate_of_the_chinese_page(self):
+    def test_the_shop_that_left_out_the_language_is_merged_into_the_chinese_page(self):
         from io import StringIO
 
         from django.core.management import call_command
-
-        from . import checks
 
         game = make_game()
         pset = make_set(game)
@@ -309,8 +307,7 @@ class MidAutumnTests(TestCase):
         make_listing(chinese, make_retailer("eBay"), price="27.99")
         make_listing(solent, make_retailer("Solent Cards"), price="20.00", delivery="3.65")
         call_command("set_languages", stdout=StringIO())
-        # Never merged unasked (the strict rule keeps "Chinese" in the name): one tap on Things to check.
+        # Both are Simplified Chinese, and the names differ only by saying so: the hourly merge joins them.
         call_command("merge_duplicates", stdout=StringIO())
-        self.assertEqual(Product.objects.filter(pk__in=[chinese.pk, solent.pk], is_active=True).count(), 2)
-        [(keep, others)] = checks.duplicates()
-        self.assertEqual({keep.pk, *(o.pk for o in others)}, {chinese.pk, solent.pk})
+        self.assertEqual(Product.objects.filter(pk__in=[chinese.pk, solent.pk], is_active=True).count(), 1)
+        self.assertEqual(Listing.objects.filter(retailer__name__in=["eBay", "Solent Cards"]).values("product").distinct().count(), 1)

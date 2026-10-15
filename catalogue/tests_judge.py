@@ -1540,9 +1540,10 @@ class ClearsTheQueueTests(Base):
                                     title="Surging Sparks Tin"),
             "deposit": self.doubtful(product=make_product(self.set, name="Surging Sparks Mini Tin", product_type="tin"),
                                      title="Surging Sparks Mini Tin Deposit"),
-            "barcode": self.doubtful(product=make_product(self.set, name="Surging Sparks Booster Display",
+            # Not "Surging Sparks Booster Display": that is the setUp's booster box under another name.
+            "barcode": self.doubtful(product=make_product(self.set, name="Stellar Crown Booster Display",
                                                           product_type="booster_box", ean="0820650851230"),
-                                     title="Surging Sparks Booster Display", shop_ean="5099999999999"),
+                                     title="Stellar Crown Booster Display", shop_ean="5099999999999"),
             "unread": self.doubtful(product=make_product(self.set, name="Surging Sparks Elite Trainer Box"),
                                     title="Surging Sparks Elite Trainer Box", shop_ean=None),
         }

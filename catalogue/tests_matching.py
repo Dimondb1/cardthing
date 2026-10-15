@@ -5,6 +5,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from .importers import Offer, apply_offers
+from .languages import language_of
 from .matching import match_key
 from .models import Listing, Product
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
@@ -243,8 +244,8 @@ class ChineseDuplicateTests(TestCase):
         from . import checks
         from .management.commands.merge_duplicates import duplicate_groups
 
-        coded = self.box("Gem Pack Vol. 6 CBB6 C Simplified Chinese Booster Box", "Japan2UK")
-        bare = self.box("Gem Pack Vol 6 Booster Box (Simplified Chinese)", "Eterna Cards")
+        coded = self.box("Black Crystal Blaze csv5 C Simplified Chinese Slim Booster Box", "Japan2UK")
+        bare = self.box("Black Crystal Blaze Slim Booster Box (Simplified Chinese)", "Eterna Cards")
         plain = self.box("Chinese Terastal Gathering Booster Box", "MaxOnCards")
         said = self.box("Terastal Gathering Booster Box (Simplified Chinese)", "Eterna Cards 2")
         chasing = self.box("Chasing Glory Together CSV10 C Slim Booster Box (Simplified Chinese)", "Eterna Cards 3")
@@ -254,6 +255,41 @@ class ChineseDuplicateTests(TestCase):
         pairs = {frozenset([keep.pk, *(o.pk for o in others)]) for keep, others in checks.duplicates()}
         self.assertEqual(pairs, {frozenset([coded.pk, bare.pk]), frozenset([plain.pk, said.pk]),
                                  frozenset([chasing.pk, pursue.pk])})
+
+
+class GemPackTests(TestCase):
+    """Solent Cards' "Gem Pack Vol. 4 CBB4 C Simplified Chinese Booster Box" sat on its own page while five other
+    shops' Gem 4 boxes sat on others (15 Oct 2026). A Gem Pack's code only says its volume again."""
+
+    def setUp(self):
+        self.game = make_game()
+
+    def test_every_shops_name_for_one_gem_box_is_one_key(self):
+        names = ["Gem Pack Vol. 4 CBB4 C Simplified Chinese Booster Box", "Chinese Gem Pack Vol 4 Booster Box",
+                 "Simplified Chinese Pokemon TCG: Gem Pack Volume 4 Booster Box", "Gem 4 Simplified Chinese Booster Box",
+                 "Chinese TCG: Gem Series 4 Chinese Booster Box", "Gem Pack Vol. 4 Booster Box"]
+        self.assertEqual(len({match_key(name, "pokemon") for name in names}), 1)
+        for name in names:
+            self.assertEqual(language_of(name, "pokemon"), "zh-hans", name)
+
+    def test_other_volumes_kinds_and_codes_stay_apart(self):
+        box = match_key("Gem Pack Vol. 4 CBB4 C Simplified Chinese Booster Box", "pokemon")
+        self.assertNotEqual(box, match_key("Gem Pack Vol. 6 CBB6 C Simplified Chinese Booster Box", "pokemon"))
+        self.assertNotEqual(box, match_key("Gem Pack Vol. 4 CBB4 C Simplified Chinese Booster Pack", "pokemon"))
+        # A code that is not the volume's is kept, so the names never meet.
+        self.assertNotEqual(box, match_key("Gem Pack Vol. 4 CBB5 C Simplified Chinese Booster Box", "pokemon"))
+
+    def test_the_hourly_merge_joins_them(self):
+        for name, shop in [("Gem Pack Vol. 4 CBB4 C Simplified Chinese Booster Box", "Solent Cards"),
+                           ("Gem 4 Simplified Chinese Booster Box", "Lvl Up"),
+                           ("Chinese TCG: Gem Series 4 Chinese Booster Box", "Iconic")]:
+            make_listing(Product.objects.create(game=self.game, name=name, product_type="booster_box"),
+                         make_retailer(shop))
+        call_command("set_languages", stdout=StringIO())
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        self.assertIn("2 products merged", out.getvalue())
+        self.assertEqual(Listing.objects.filter(product__is_active=True).values("product").distinct().count(), 1)
 
 
 class HourlyMergeGuardTests(TestCase):
@@ -309,3 +345,196 @@ class HourlyMergeGuardTests(TestCase):
         self.product("Surging Sparks Booster Box (36 Packs)", "Total Cards", "booster_box")
         self.product("Surging Sparks Booster Box", "Magic Madhouse", "booster_box")
         self.assertIn("1 products merged", self.merge())
+
+
+# Pairs of real shop titles for one product, from the duplicate pages on the 3 Oct 2026 snapshot and Solent
+# Cards' read of 15 Oct 2026: (game, one shop's name, another's).
+SAME_PRODUCT = [
+    ("pokemon", "Surging Sparks Booster Box", "Surging Sparks Booster Display"),
+    ("pokemon", "Paldea Evolved Booster Box", "Paldea Evolved Booster Display Box"),
+    ("pokemon", "Paldea Evolved Booster Box", "Paldea Evolved Booster Box (36)"),
+    ("pokemon", "Mega Evolution Pitch Black Booster Box", "Mega Evolution Pitch Black Boosters Display Box"),
+    ("pokemon", "Journey Together Booster Bundle", "Journey Together Bundle"),
+    ("pokemon", "Paldean Fates Mini Tin", "Paldean Fates Mini Tins"),
+    ("pokemon", "Destined Rivals Booster Box", "SV10 Destined Rivals Booster Box"),
+    ("pokemon", "SV10 Booster Box", "Pokemon Scarlet & Violet 10 Booster Box"),
+    ("pokemon", "Phantasmal Flames Elite Trainer Box", "Mega Evolution Phantasmal Flames Elite Trainer Box"),
+    ("pokemon", "Phantasmal Flames Elite Trainer Box", "ME02 Phantasmal Flames Elite Trainer Box"),
+    ("pokemon", "Mega Evolution: Ascended Heroes Elite Trainer Box", "Ascended Heroes ME2.5 Elite Trainer Box (ETB)"),
+    ("pokemon", "Mega Evolution Pitch Black Booster Pack", "Pitch Black ME05 Booster Pack"),
+    ("pokemon", "Pokemon Center Elite Trainer Box Destined Rivals", "Destined Rivals PC ETB"),
+    ("pokemon", "Japanese Mega Brave Booster Box", "M1L Mega Brave Japanese Booster Box"),
+    ("pokemon", "Japanese Pokemon Mega Dream Booster Box",
+     "Mega Dream EX Japanese Booster Box M2A High Class Packs (10 Booster Packs)"),
+    ("pokemon", "Mega Evolution Mega Dream (M2a) Booster Box (Japanese)", "Mega Dream EX Japanese Pokémon M2a Booster Box"),
+    ("pokemon", "Shiny Treasure ex SV4A High Class Booster Box (Japanese)",
+     "Scarlet & Violet Shiny Treasure (SV4a) Booster Box (Japanese)"),
+    ("pokemon", "(JAPANESE) Pokemon SV8a High Class Terastal Festival ex Booster Box", "JAPANESE Terastal Festival Booster Box"),
+    ("pokemon", "Terastal Festival SV8A Booster Box 10 Japanese Booster Packs Japanese High Class Packs",
+     "JAPANESE Terastal Festival Booster Box"),
+    ("pokemon", "Japanese Ninja Spinner Booster Box", "Pokemon Ninja Spinner (m4) Japanese Booster Box"),
+    ("pokemon", "Mega Evolution Storm Emeralda Japanese Booster Box", "Pokemon Storm Emeralda m6 Japanese Booster Box"),
+    ("pokemon", "JAPANESE Mega Dream Ex Booster Box No Plastic Wrap", "Mega Dream ex High Class m2a No Shrink Japanese Booster Box"),
+    ("pokemon", "Sword & Shield Dark Phantasma Japanese Booster Box", "Japanese Dark Phantasma Booster Box S10a"),
+    ("pokemon", "2026 Pokémon Mid Autumn Festival Gift Box", "Simplified Chinese 2026 Mid Autumn Festival Gift Box"),
+    ("pokemon", "Surging Sparks 3-Pack Blister Pikachu", "Surging Sparks Three Pack Blister Pikachu"),
+    ("magic-the-gathering", "Foundations Play Booster Box", "Foundations Play Booster Display"),
+    ("magic-the-gathering", "Tarkir Dragonstorm Play Booster Box", "Tarkir: Dragonstorm Play Booster Display (30 Packs)"),
+    ("magic-the-gathering", "Murders at Karlov Manor Revenant Recon Commander Deck",
+     "Murders at Karlov Manor Commander Decks (Revenant Recon)"),
+    ("magic-the-gathering", "Duskmourn House of Horrors Play Booster Box", "Duskmourn: House of Horror Play Booster Box"),
+    ("magic-the-gathering", "Adventures In The Forgotten Realms Collector Booster Box",
+     "Dungeons & Dragons: Adventures in the Forgotten Realms Collector Booster Box"),
+    ("magic-the-gathering", "Edge of Eternities Play Booster Box", "Magic: the Gathering: Edge of Eternities Play Booster Display"),
+    ("one-piece", "OP09 Booster Box", "OP-09 Booster Box"),
+    ("one-piece", "Emperors in the New World Booster Box (OP-09)", "One Piece Card Game Emperors In The New World Booster Display"),
+    ("lorcana", "Archazia's Island Booster Box", "Archazias Island Booster Display"),
+    ("star-wars-unlimited", "Legends of the Force Booster Box", "Star Wars Unlimited Legends of the Force Booster Display"),
+    ("star-wars-unlimited", "Twilight of the Republic Two Player Starter", "Twilight of the Republic 2 Player Starter"),
+    ("yu-gi-oh", "Rarity Collection 2 Booster Box", "Rarity Collection II Booster Box"),
+    ("dragon-ball", "Fusion World FB05 New Adventure Booster Box", "CG: New Adventure Booster Box"),
+    ("dragon-ball", "Starter Deck Fusion World Son Goku (Mini) FS06", "CG: Fusion World Son Goku Mini Starter Deck"),
+    ("digimon", "BT08 New Awakening Booster Box", "New Awakening Booster Display Box BT08"),
+    ("riftbound", "Origins Booster Box", "Riftbound Origins Booster Display"),
+    ("riftbound", "Origins Booster Box", "Riftbound: League of Legends TCG Origins Booster Box"),
+    ("flesh-and-blood", "Rosetta Booster Box", "Flesh and Blood Rosetta Booster Display"),
+]
+# Pairs that must stay apart however close their words: another set, volume, size, kind, language, booster,
+# series or wrapping.
+DIFFERENT_PRODUCTS = [
+    ("pokemon", "Gem Pack Vol 4 Booster Pack", "Gem Pack Vol 6 Booster Pack"),
+    ("pokemon", "Storming Emergence csm1b C Simplified Chinese Jumbo Booster Box",
+     "Storming Emergence csm1c C Simplified Chinese Jumbo Booster Box"),
+    ("pokemon", "Blade Awakening csv7 C Simplified Chinese Slim Booster Box", "Blade Awakening csv7 C Simplified Chinese Jumbo Booster Box"),
+    ("pokemon", "Scarlet & Violet Elite Trainer Box", "Sword & Shield Elite Trainer Box"),
+    ("pokemon", "Scarlet & Violet Base Set Booster Box", "Mega Evolution Base Set Booster Box"),
+    ("pokemon", "Mega Lucario ex Premium Collection", "Lucario ex Premium Collection"),
+    ("pokemon", "Charizard ex Premium Collection", "Charizard Premium Collection"),
+    ("pokemon", "Japanese Booster Box M1L", "Japanese Booster Box M1S"),
+    ("pokemon", "Mega Brave M1L Booster Box", "Mega Symphonia M1S Booster Box"),
+    ("pokemon", "Surging Sparks Booster Box", "Surging Sparks Booster Pack"),
+    ("pokemon", "Surging Sparks Booster Box", "Surging Sparks Booster Box Case of 6"),
+    ("pokemon", "Scarlet & Violet Journey Together Booster Box", "Scarlet & Violet: Journey Together Booster Box (18)"),
+    ("pokemon", "Lumiose City Mini Tin Display (10 Tins)", "Lumiose City Mini Tin"),
+    ("pokemon", "151 Booster Bundle Display (10 Bundles)", "151 Booster Bundle"),
+    ("pokemon", "Ninja Spinner m4 No Shrink Japanese Booster Box", "Ninja Spinner m4 Japanese Booster Box"),
+    ("pokemon", "Surging Sparks 3 Pack Bundle", "Surging Sparks Booster Bundle"),
+    ("pokemon", "Scarlet & Violet Prismatic Evolutions Booster Bundle", "Scarlet & Violet—Prismatic Evolutions 2 Pack Bundle"),
+    ("one-piece", "Premium Booster PRB-01 Booster Box", "Premium Booster PRB-02 Booster Box"),
+    ("one-piece", "The Best PRB 01 Japanese Booster Pack", "The Best PRB 02 Japanese Booster Pack"),
+    ("one-piece", "OP-09 Booster Box", "OP-10 Booster Box"),
+    ("one-piece", "Extra Booster EB-01 Booster Box", "Extra Booster EB-02 Booster Box"),
+    ("dragon-ball", "Starter Deck EX Fusion World FS15", "CG: Fusion World Starter Deck EX"),
+    ("magic-the-gathering", "M20 Booster Box", "M21 Booster Box"),
+    ("magic-the-gathering", "Core Set 2020 M20 Booster Box", "Core Set 2021 M21 Booster Box"),
+    ("magic-the-gathering", "Throne of Eldraine Set Booster Box", "Throne of Eldraine Draft Booster Box"),
+    ("yu-gi-oh", "Rarity Collection 5 Booster Pack", "Rarity Collection II Booster Pack"),
+    ("yu-gi-oh", "Base Set Unlimited Booster Box", "Base Set 1st Edition Booster Box"),
+]
+
+
+class ShopNamingTests(TestCase):
+    """One product, many shop names: "Booster Display" for a booster box, plurals, the game's name in words,
+    language words, Pokémon's "Booster Bundle", "High Class" and "ex", set codes in any spelling. Each rule
+    keeps different products apart."""
+
+    def same(self, game, a, b):
+        from .management.commands.merge_duplicates import booster_kinds, merge_key
+        from .matching import same_product
+
+        key = merge_key(a, game)
+        return bool(key) and key == merge_key(b, game) and same_product(a, b, game) and booster_kinds(a) == booster_kinds(b)
+
+    def test_one_product_under_two_shops_names_shares_a_key(self):
+        for game, a, b in SAME_PRODUCT:
+            with self.subTest(a=a, b=b):
+                self.assertTrue(self.same(game, a, b))
+
+    def test_different_products_stay_apart(self):
+        for game, a, b in DIFFERENT_PRODUCTS:
+            with self.subTest(a=a, b=b):
+                self.assertFalse(self.same(game, a, b))
+
+    def test_a_display_of_tins_bundles_or_decks_is_not_a_booster_box(self):
+        for name in ("Lumiose City Mini Tin Display (10 Tins)", "Prismatic Evolutions Booster Bundle Display (10)",
+                     "Murders at Karlov Manor Commander Deck Display Blame Game", "Surging Sparks Elite Trainer Box Display"):
+            with self.subTest(name=name):
+                self.assertNotEqual(match_key(name, "pokemon"),
+                                    match_key(name.replace("Display", "Booster Box"), "pokemon"))
+
+    def test_a_name_of_only_a_code_keeps_it(self):
+        self.assertEqual(match_key("OP-09 Booster Box", "one-piece"), "booster op9 #box")
+        self.assertEqual(match_key("Pokemon SV10 Booster Box", "pokemon"), "booster sv10 #box")
+        # A bare series names nothing more, so the two series never meet.
+        self.assertNotEqual(match_key("Scarlet & Violet Booster Box", "pokemon"), match_key("Sword & Shield Booster Box", "pokemon"))
+
+    def test_magic_core_set_codes_are_not_pokemon_codes(self):
+        self.assertNotEqual(match_key("Core Set M20 Booster Box", "magic-the-gathering"),
+                            match_key("Core Set M21 Booster Box", "magic-the-gathering"))
+
+    def test_the_hourly_merge_joins_them_and_leaves_the_rest(self):
+        game = make_game()
+        magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
+
+        def product(game, name, shop):
+            item = Product.objects.create(game=game, name=name, product_type="booster_box")
+            make_listing(item, make_retailer(shop))
+
+        product(game, "Surging Sparks Booster Box", "Total Cards")
+        product(game, "Surging Sparks Booster Display", "Card Vault")
+        product(game, "Scarlet & Violet Base Set Booster Box", "Zatu")
+        product(game, "Mega Evolution Base Set Booster Box", "Magic Madhouse")
+        product(magic, "Final Fantasy Collector Booster Box", "Total Cards 2")
+        product(magic, "Magic: the Gathering: Final Fantasy Collector's Booster Display", "Card Vault 2")
+        product(magic, "Final Fantasy Play Booster Box", "Zatu 2")
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        self.assertIn("2 products merged", out.getvalue())
+        self.assertEqual(sorted(Product.objects.values_list("name", flat=True)), [
+            "Final Fantasy Collector Booster Box", "Final Fantasy Play Booster Box", "Mega Evolution Base Set Booster Box",
+            "Scarlet & Violet Base Set Booster Box", "Surging Sparks Booster Box"])
+
+    def test_the_kept_page_says_its_language(self):
+        from .management.commands.merge_duplicates import duplicate_groups
+
+        game = make_game()
+        for name, shop in [("Gem Pack Vol. 4 Booster Box", "Sports Cards Direct"), ("Chinese Gem Pack Vol 4 Booster Box", "Jet"),
+                           ("Gem 4 Simplified Chinese Booster Box", "Lvl Up")]:
+            make_listing(Product.objects.create(game=game, name=name, product_type="booster_box"), make_retailer(shop))
+        [(keep, others)] = duplicate_groups()
+        self.assertEqual(keep.name, "Gem 4 Simplified Chinese Booster Box")
+        self.assertEqual(len(others), 2)
+
+
+class KeyLinkTests(TestCase):
+    """A shop title whose key equals a product's links at once (importers.Catalogue.best_match), so the key
+    links only what is surely the product."""
+
+    def catalogue(self, *names, game="pokemon"):
+        from .importers import Catalogue
+
+        return Catalogue([(pk, name, game) for pk, name in enumerate(names, start=1)])
+
+    def test_a_booster_display_title_links_to_the_booster_box(self):
+        from .matching import AUTO_LINK
+
+        match, value = self.catalogue("Foundations Play Booster Box", game="magic-the-gathering").best_match(
+            "Magic: The Gathering Foundations Play Booster Display (36 Packs)", game="magic-the-gathering")
+        self.assertEqual((match[0], value), (1, AUTO_LINK))
+        match, value = self.catalogue("Journey Together Booster Bundle").best_match("Pokemon TCG: Journey Together Bundle",
+                                                                                    game="pokemon")
+        self.assertEqual((match[0], value), (1, AUTO_LINK))
+
+    def test_numbers_codes_and_bare_kinds_are_never_linked_by_key(self):
+        from .matching import AUTO_LINK
+
+        for names, title, game in [
+            (("Surging Sparks Booster Bundle",), "Pokemon Surging Sparks 3 Pack Bundle", "pokemon"),
+            (("OP-09 Booster Box",), "One Piece OP-10 Booster Box", "one-piece"),
+            (("Gem Pack Vol 4 Booster Box (Simplified Chinese)",), "Pokemon Gem Pack Vol 6 Booster Box Simplified Chinese",
+             "pokemon"),
+            (("Sword & Shield Booster Box",), "Pokemon Mega Evolution Booster Box", "pokemon"),
+        ]:
+            with self.subTest(title=title):
+                match, value = self.catalogue(*names, game=game).best_match(title, game=game)
+                self.assertLess(value, AUTO_LINK, match)

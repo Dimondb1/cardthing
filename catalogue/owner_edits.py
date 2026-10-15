@@ -76,9 +76,11 @@ def form_problem(form):
 
 
 def log(user_id, queryset, action, message):
-    """The Django Admin history line his own save would leave. types.owner_typed reads a type change from it."""
+    """The Django Admin history line his own save would leave, or None. types.owner_typed reads a type change
+    from it."""
     if user_id is not None:
-        LogEntry.objects.log_actions(user_id, queryset, action, message, single_object=True)
+        return LogEntry.objects.log_actions(user_id, queryset, action, message, single_object=True)
+    return None
 
 
 # Products and sets ---------------------------------------------------------------------------------------
@@ -108,7 +110,8 @@ def save_product(pk, changes, user_id, sets=None):
     """Make one row's changes to a product, as the owner's save in Django Admin would. ``changes`` is
     {field: [as downloaded, in the file, on the site when checked, to save]}; a language is made through
     the name. Raises Stale when a field no longer holds what the site held when checked. Returns
-    (before, after): the fields as they were and as they are now."""
+    (before, after, typed): the fields as they were and as they are now, and the history line that keeps a
+    type he set from the hourly retype, or None."""
     product = Product.objects.select_related("game", "product_set").filter(pk=pk).first()
     if product is None:
         raise Stale
@@ -133,10 +136,11 @@ def save_product(pk, changes, user_id, sets=None):
     if "language" in changes and not languages.same(product.language, changes["language"][3]):
         raise Refused(f"The name or set says {languages.name(product.language)}. Change the name or set.")
     # "Product type" in this line is what keeps the type from the hourly retype (types.owner_typed).
-    log(user_id, Product.objects.filter(pk=pk), CHANGE, construct_change_message(form, [], False))
+    entry = log(user_id, Product.objects.filter(pk=pk), CHANGE, construct_change_message(form, [], False))
     pricing.update_daily_lowest(product)
     after = product_now(product)
-    return {field: now[field] for field in changes}, {field: after[field] for field in changes}
+    typed = entry.pk if entry is not None and "product_type" in form.changed_data else None
+    return {field: now[field] for field in changes}, {field: after[field] for field in changes}, typed
 
 
 def unique_slug(name):
@@ -449,8 +453,8 @@ def make_new_product(change, applying):
 
 
 def make_product_fields(change, applying):
-    before, after = save_product(change.object_id, change.fields, applying.user_id, applying.sets)
-    return Made({"before": before, "after": after})
+    before, after, typed = save_product(change.object_id, change.fields, applying.user_id, applying.sets)
+    return Made({"before": before, "after": after, "typed": typed})
 
 
 def make_take_off(change, applying):
@@ -649,7 +653,16 @@ def undo_product_fields(change, applying):
     if not form.is_valid():
         raise Refused(form_problem(form))
     form.save()
-    log(applying.user_id, Product.objects.filter(pk=product.pk), CHANGE, construct_change_message(form, [], False))
+    message = construct_change_message(form, [], False)
+    if change.undo.get("typed"):
+        # The type is back as it was before the file, and so is whether it is his: the file's history line
+        # that kept it from the hourly retype goes, and this one does not name the type (types.owner_typed).
+        LogEntry.objects.filter(pk=change.undo["typed"]).delete()
+        for part in message:
+            fields = part.get("changed", {}).get("fields")
+            if fields:
+                part["changed"]["fields"] = ["Type put back" if field == "Product type" else field for field in fields]
+    log(applying.user_id, Product.objects.filter(pk=product.pk), CHANGE, message)
     pricing.correct_daily_lowest(product.pk)
 
 

@@ -128,6 +128,19 @@ class ProductEditTests(Base):
         self.assertTrue(set(Product.objects.values_list("name", flat=True)).issuperset({
             "Surging Sparks Elite Trainer Box", "Surging Sparks Booster Box", twin.name}))
 
+    def test_undoing_a_type_gives_it_back_to_the_hourly_retype(self):
+        _export, data = self.download()
+        upload = self.make(data, ("Products", self.etb.pk, "Type", "Booster bundle"))
+        self.assertIn(self.etb.pk, types.owner_typed())
+        self.undo(upload)
+        self.assertEqual(Product.objects.get(pk=self.etb.pk).product_type, "elite_trainer_box")
+        self.assertNotIn(self.etb.pk, types.owner_typed())
+        self.assertIn("Type put back", LogEntry.objects.filter(object_id=str(self.etb.pk)).latest("pk").change_message)
+        # Renamed later, the hourly retype follows the name as it did before the file.
+        Product.objects.filter(pk=self.etb.pk).update(name="Surging Sparks Booster Bundle")
+        self.tidy()
+        self.assertEqual(Product.objects.get(pk=self.etb.pk).product_type, "bundle")
+
     def test_a_type_is_kept_from_the_hourly_retype(self):
         _export, data = self.download()
         self.made(self.make(data, ("Products", self.etb.pk, "Type", "Booster bundle")))

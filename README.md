@@ -369,6 +369,19 @@ Anything less certain goes to Shop products to review. Shops mark
 pre-orders in a pre-order collection, which the importer reads, so a
 pre-order never shows as in stock.
 
+Multi-buys look after themselves the same way. When a Shopify shop has a
+collection named like "2 for £50" or "Any 3 for £100", every read marks
+its products with that deal and clears it when the collection or the
+product goes. The product page shows it under that shop's price ("2 for
+£50.00 here, £25.00 each delivered"), and the cheapest-price box and the
+product cards add "Or 2 for £50.00 at ..." when the deal costs less per
+item than buying one at the cheapest shop. Delivery is worked out on the
+whole multi-buy, so a deal that reaches free delivery counts as free. The
+ranking stays on buying one. A deal that saves nothing, or costs under
+half the single price per item, is ignored as a mistake. A read that
+cannot see the shop's collections leaves the deal as it was. Nothing to
+set up: the deal shows read-only on the listing in Django Admin.
+
 Three cleanup commands keep the catalogue honest after the rules improve
 (`tidy_all` runs them in order; `start.bat` and `update_prices` run it
 after their import, and the server's cron runs it at five past every hour):

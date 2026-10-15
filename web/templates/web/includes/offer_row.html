@@ -14,6 +14,7 @@
   <p class="offer__meta">
     {% include "web/includes/price_note.html" %}{% if not listing.is_stale %}<span aria-hidden="true"> · </span><span class="visually-hidden">. </span>{% copy "product.compare.checked_ago" time=listing.last_checked|ago %}{% endif %}
   </p>
+  {% if listing.has_deal %}<p class="offer__deal">{% if listing.deal_delivery is None %}{% copy "product.deal.row_plus" quantity=listing.deal_quantity price=listing.deal_price|gbp each=listing.deal_each|gbp %}{% else %}{% copy "product.deal.row" quantity=listing.deal_quantity price=listing.deal_price|gbp each=listing.deal_each|gbp %}{% endif %}</p>{% endif %}
   <div class="offer__action">
     {% if muted %}
     <a class="offer__link" href="{{ listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.view" %}<span class="visually-hidden"> {{ listing.retailer.name }} (opens in a new tab)</span></a>

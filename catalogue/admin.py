@@ -191,7 +191,7 @@ class ListingAdmin(admin.ModelAdmin):
     date_hierarchy = "last_checked"
     # Verdicts are worked out from the other shops' prices; the owner acts on them from Things to check.
     readonly_fields = ("sanity", "sanity_reason", "sanity_ratio", "sanity_at", "last_ok_price", "trusted_price", "trusted_at",
-                       "shop_published_at", "first_preorder_at")
+                       "shop_published_at", "first_preorder_at", "deal_quantity", "deal_price")
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

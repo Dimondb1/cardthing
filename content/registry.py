@@ -845,6 +845,26 @@ ENTRIES = [
         placeholders=("price",),
     ),
     Entry(
+        "product.deal.row", T, "Multi-buy on a shop's row",
+        "{quantity} for {price} here, {each} each delivered",
+        "Under a shop's price when the shop runs a multi-buy on the product. Read from the shop's own "
+        "collection of that name on every read, so it comes and goes with the shop's offer.",
+        placeholders=("quantity", "price", "each"),
+    ),
+    Entry(
+        "product.deal.row_plus", T, "Multi-buy on a shop's row, delivery not known",
+        "{quantity} for {price} here, {each} each plus delivery",
+        "As the multi-buy line, when we do not know the shop's delivery charge on the multi-buy.",
+        placeholders=("quantity", "price", "each"),
+    ),
+    Entry(
+        "product.deal.better", T, "Cheaper per item in a multi-buy",
+        "Or {quantity} for {price} at {retailer}, {each} each delivered",
+        "Under the cheapest price on a product page and on product cards, when a shop's multi-buy costs "
+        "less per item than buying one at the cheapest shop. The comparison itself stays on buying one.",
+        placeholders=("quantity", "price", "retailer", "each"),
+    ),
+    Entry(
         "product.compare.shops", T, "Shop count link",
         "Compare {count} shops",
         "Next to the stock line on a product page, and at the foot of a product card with two or more shops; "

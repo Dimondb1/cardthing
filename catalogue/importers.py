@@ -79,6 +79,12 @@ class Offer:
     page_pk: int | None = None   # the ShopPage a website read took this offer from
     published_at: datetime | None = None   # when the shop published the product (Shopify's published_at)
     variant: str = ""   # the shop's variant label ("1 Pack", "Booster Box"), when the product page has several
+    # The shop's multi-buy on it as (quantity, price for them all), NO_DEAL when the read found it in none,
+    # None when the read did not look, which leaves a listing's deal as it was.
+    deal: tuple | None = None
+
+
+NO_DEAL = (None, None)
 
 
 class ImportError_(Exception):
@@ -269,13 +275,22 @@ def shop_currency(base, fetch=fetch):
 PREORDER_COLLECTIONS = ("pre-order", "pre-orders", "preorder", "preorders")
 
 
-def preorder_collections(base, fetch=fetch):
-    """Handles of the shop's collections whose names say pre-order, plus the usual names."""
-    names = list(PREORDER_COLLECTIONS)
+def shop_collections(base, fetch=fetch):
+    """The collections a Shopify shop lists in /collections.json, or None when it gives no list."""
     try:
-        listed = json.loads(fetch(f"{base}/collections.json?limit=250")).get("collections", [])
+        listed = json.loads(fetch(f"{base}/collections.json?limit=250")).get("collections")
     except Exception:   # a shop without the listing, or a test fake that has no answer for it
-        listed = []
+        return None
+    return listed if isinstance(listed, list) else None
+
+
+def preorder_collections(base, fetch=fetch, listed=None):
+    """Handles of the shop's collections whose names say pre-order, plus the usual names.
+
+    ``listed`` is the shop's collections.json list when the caller has already read it."""
+    names = list(PREORDER_COLLECTIONS)
+    if listed is None:
+        listed = shop_collections(base, fetch=fetch) or []
     for collection in listed:
         handle = collection.get("handle", "")
         if collection_kind(handle) == PREORDER_KIND and handle not in names:
@@ -299,7 +314,23 @@ def collection_kind(handle):
     return None
 
 
-def preorder_handles(base, fetch=fetch, limit=20):
+def collection_handles(base, name, fetch=fetch, limit=20):
+    """Handles of the products in one collection, or None when its first page could not be read."""
+    handles = set()
+    for page in range(1, limit + 1):
+        try:
+            products = json.loads(fetch(f"{base}/collections/{name}/products.json?limit=250&page={page}")).get("products", [])
+        except (ImportError_, json.JSONDecodeError, AttributeError):
+            return handles if page > 1 else None
+        if not products:
+            break
+        handles.update(p.get("handle", "") for p in products)
+        if len(products) < 250:
+            break
+    return handles
+
+
+def preorder_handles(base, fetch=fetch, limit=20, listed=None):
     """Handles of products the shop lists in a pre-order collection.
 
     Many Shopify shops mark pre-orders only through a collection, so the
@@ -308,18 +339,60 @@ def preorder_handles(base, fetch=fetch, limit=20):
     "pre-order", "all-pre-order-items", "pokemon-pre-orders" and so on.
     """
     handles = set()
-    for name in preorder_collections(base, fetch=fetch):
-        for page in range(1, limit + 1):
-            try:
-                products = json.loads(fetch(f"{base}/collections/{name}/products.json?limit=250&page={page}")).get("products", [])
-            except (ImportError_, json.JSONDecodeError, AttributeError):
-                break
-            if not products:
-                break
-            handles.update(p.get("handle", "") for p in products)
-            if len(products) < 250:
-                break
+    for name in preorder_collections(base, fetch=fetch, listed=listed):
+        handles.update(collection_handles(base, name, fetch=fetch, limit=limit) or ())
     return handles
+
+
+# A multi-buy collection: "2 for £50", "Any 3 for £100", "Buy 2 for £45.00". The pounds sign is needed, so
+# "3 for 2" (pay for two of three) is not read as three for £2.
+DEAL_TITLE = re.compile(r"^\s*(?:buy\s+)?(?:any\s+)?(\d{1,2})\s+for\s+£\s?(\d{1,4}(?:\.\d{2})?)\s*$", re.I)
+# A multi-buy price below this share of the single price is a mistake or another kind of offer, not a deal.
+DEAL_FLOOR = Decimal("0.5")
+
+
+def deal_terms(collection):
+    """(quantity, total) for a collection named as a multi-buy, or None."""
+    found = DEAL_TITLE.match(str(collection.get("title") or ""))
+    if not found:
+        return None
+    quantity, total = int(found.group(1)), Decimal(found.group(2))
+    if not 2 <= quantity <= 10 or total <= 0:
+        return None
+    return quantity, total
+
+
+def deal_handles(base, listed, fetch=fetch):
+    """{product handle: (quantity, total)} for the shop's multi-buy collections, or None when not known.
+
+    None says the shop's collections could not be read, so listings keep the deal they have. A product in
+    two multi-buys keeps the one that costs least per item."""
+    if listed is None:
+        return None
+    deals = {}
+    for collection in listed:
+        terms = deal_terms(collection)
+        if terms is None:
+            continue
+        handles = collection_handles(base, collection.get("handle", ""), fetch=fetch)
+        if handles is None:
+            return None   # one of them was not read: better no change than a deal cleared by mistake
+        for handle in handles:
+            held = deals.get(handle)
+            if held is None or terms[1] / terms[0] < held[1] / held[0]:
+                deals[handle] = terms
+    return deals
+
+
+def offer_deal(offer, terms):
+    """The deal an offer carries: NO_DEAL unless the multi-buy really costs less than buying singly."""
+    if not terms:
+        return NO_DEAL
+    quantity, total = terms
+    each = total / quantity
+    if offer.price <= 0 or each >= offer.price or each < offer.price * DEAL_FLOOR:
+        return NO_DEAL
+    return terms
 
 
 # The background reader waits this long between products.json pages, on top of the shop's own rate.
@@ -474,11 +547,23 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0):
     currency = shop_currency(base, fetch=fetch)
     if currency and currency != "GBP":
         raise ImportError_(f"{base} prices in {currency}, not pounds. Prices were not imported.")
-    preorders = preorder_handles(base, fetch=fetch)
+    listed = shop_collections(base, fetch=fetch)
+    preorders = preorder_handles(base, fetch=fetch, listed=listed if listed is not None else [])
+    # Multi-buys ("2 for £50") are read from the shop's collections of that name, so one that starts or ends
+    # needs nothing from the owner.
+    deals = deal_handles(base, listed, fetch=fetch)
+
+    def offers_of(product):
+        handle = product.get("handle")
+        for offer in product_offers(base, product, preorder=handle in preorders):
+            if deals is not None:
+                offer.deal = offer_deal(offer, deals.get(handle))
+            yield offer
+
     sections = section_handles(retailer)
     if not sections:
         for product in shopify_pages(f"{base}/products.json", fetch, pause):
-            yield from product_offers(base, product, preorder=product.get("handle") in preorders)
+            yield from offers_of(product)
         return
     # A shop that sells far more than cards (Zatu: board games, puzzles, books) is read from its card
     # collections, so the thousands of other products never reach the matcher. A product in two of them
@@ -490,7 +575,7 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0):
             if handle in seen:
                 continue
             seen.add(handle)
-            yield from product_offers(base, product, preorder=handle in preorders)
+            yield from offers_of(product)
     in_sections = set(seen)
     kept = [h for h in (retailer.extra_products or "").split() if h not in in_sections]
     extras = list(dict.fromkeys(kept))
@@ -503,7 +588,7 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0):
             seen.add(handle)
             if handle not in extras:
                 extras.append(handle)
-            yield from product_offers(base, product, preorder=handle in preorders)
+            yield from offers_of(product)
     except ImportError_ as exc:
         logger.warning("%s: newest products not read: %s", retailer.name, exc)
     # Then every extra not met above, one by one, the newest kept when there are too many. One the shop
@@ -526,7 +611,7 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0):
             extras.remove(handle)
             continue
         seen.add(handle)
-        yield from product_offers(base, product, preorder=handle in preorders)
+        yield from offers_of(product)
     text = "\n".join(extras)
     if text != (retailer.extra_products or ""):
         type(retailer).objects.filter(pk=retailer.pk).update(extra_products=text)
@@ -1344,11 +1429,16 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             # The shop's own publishing time is kept from the first read that gives it, so a later
             # republish cannot make a pre-order look as if it reached the site sooner than it did.
             published = offer.published_at if listing.shop_published_at is None else None
-            if created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published:
+            # A read that looked for multi-buys sets or clears the listing's; one that did not leaves it.
+            held = (listing.deal_quantity, listing.deal_price)
+            deal = held if offer.deal is None else offer.deal
+            if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
+                    or deal != held):
                 listing.url = offer.url
                 listing.title = title
                 listing.shop_ean = shop_ean
-                fields = ["url", "title", "shop_ean"]
+                listing.deal_quantity, listing.deal_price = deal
+                fields = ["url", "title", "shop_ean", "deal_quantity", "deal_price"]
                 if published:
                     listing.shop_published_at = published
                     fields.append("shop_published_at")

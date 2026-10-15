@@ -46,11 +46,28 @@ MAX_REAL_PERCENT = 70
 
 
 class Summary:
-    __slots__ = ("best", "second", "saving", "percent", "badge", "suspect")
+    __slots__ = ("best", "second", "saving", "percent", "badge", "suspect", "deal")
 
-    def __init__(self, best, second, saving, percent, badge, suspect=False):
+    def __init__(self, best, second, saving, percent, badge, suspect=False, deal=None):
         self.best, self.second, self.saving, self.percent, self.badge = best, second, saving, percent, badge
         self.suspect = suspect
+        self.deal = deal
+
+
+def best_deal(offers, best):
+    """The offer whose multi-buy ("2 for £50") costs least per item, when that beats buying one at ``best``.
+
+    Only delivered prices are compared, so a deal is never called cheaper against a price without delivery.
+    The ranking itself stays on buying one: a multi-buy asks the buyer to spend more."""
+    if best is None or not best.delivery_known:
+        return None
+    found = None
+    for offer in offers:
+        if not offer.has_deal or offer.deal_delivery is None or offer.sanity == Listing.Sanity.DOUBTFUL:
+            continue
+        if offer.deal_each < best.delivered_price and (found is None or offer.deal_each < found.deal_each):
+            found = offer
+    return found
 
 
 def summarise(product, week_lows=None):
@@ -76,7 +93,7 @@ def summarise(product, week_lows=None):
     badge = None
     if best and best.delivery_known and not suspect and week_lows is not None and product.pk in week_lows:
         badge = BEST_WEEK if best.delivered_price <= week_lows[product.pk] else LOWEST_TODAY
-    return Summary(best, second, saving, percent, badge, suspect)
+    return Summary(best, second, saving, percent, badge, suspect, best_deal(offers, best))
 
 
 def week_low_map(product_ids, days=None, today=None):

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from urllib.parse import quote, urlparse
 
 from django.conf import settings
@@ -586,6 +586,13 @@ class Listing(models.Model):
     # pre-order reached the site.
     shop_published_at = models.DateTimeField("shop published it", null=True, blank=True)
     first_preorder_at = models.DateTimeField("first seen on pre-order", null=True, blank=True)
+    # A multi-buy the shop runs on it ("2 for £50"), read from the shop's own collection of that name on every
+    # read and cleared when it goes. Shown beside the price; the comparison stays on buying one.
+    deal_quantity = models.PositiveSmallIntegerField("multi-buy quantity", null=True, blank=True, editable=False)
+    deal_price = models.DecimalField(
+        "multi-buy price", max_digits=8, decimal_places=2, null=True, blank=True, editable=False,
+        help_text="What the shop charges for the multi-buy quantity together, read from the shop.",
+    )
 
     objects = ListingQuerySet.as_manager()
 
@@ -605,6 +612,29 @@ class Listing(models.Model):
     def shown_price(self):
         """The price a visitor compares: delivered when delivery is known, the item price otherwise."""
         return self.delivered_price if self.delivery_known else self.price
+
+    @property
+    def has_deal(self):
+        return bool(self.deal_quantity) and self.deal_price is not None
+
+    @property
+    def deal_delivery(self):
+        """Delivery on the whole multi-buy under the shop's rules, or None when not known or no deal.
+
+        Free on one item is free on the multi-buy: a kept deal always costs more than one item."""
+        if not self.has_deal:
+            return None
+        if self.delivery_known and not self.delivery_cost:
+            return Decimal("0.00")
+        return self.retailer.delivery_for(self.deal_price)
+
+    @property
+    def deal_each(self):
+        """One item's share of the multi-buy, delivery included when known, or None without a deal."""
+        if not self.has_deal:
+            return None
+        total = self.deal_price + (self.deal_delivery or 0)
+        return (total / self.deal_quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @property
     def is_stale(self):

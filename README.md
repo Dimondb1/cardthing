@@ -1151,7 +1151,9 @@ curl -fsSL https://raw.githubusercontent.com/Dimondb1/cardthing/claude/compassio
 collects static files, sets up the shops, starts the app and the
 background reader as services, configures HTTPS for the domain (with
 `www.` forwarding permanently to the address without it, so Google sees one
-site rather than two copies) and schedules the cron jobs. The reader reads every shop on its first start. Run the same command again to update. The repository must be
+site rather than two copies, and request bodies over 25 MB refused before
+they reach the site, which reads a whole upload before it can refuse one)
+and schedules the cron jobs. The reader reads every shop on its first start. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
 
 **Memory.** On a 1 GB server the site, the reader and the cron jobs share

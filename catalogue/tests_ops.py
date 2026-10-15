@@ -149,7 +149,7 @@ class OneAddressTests(TestCase):
         text = (DEPLOY / "install.sh").read_text()
         caddy = text[text.index("cat > /etc/caddy/Caddyfile <<CADDY"):text.index("\nCADDY\n")]
         self.assertIn("www.$DOMAIN {\n    redir https://$DOMAIN{uri} permanent\n}", caddy)
-        self.assertIn("$DOMAIN {\n    reverse_proxy 127.0.0.1:8000", caddy)
+        self.assertIn("    reverse_proxy 127.0.0.1:8000", caddy[caddy.index("\n$DOMAIN {"):])
         self.assertNotIn("$DOMAIN, www.$DOMAIN", caddy)
 
 
@@ -167,6 +167,21 @@ class SpreadsheetDeployTests(TestCase):
         self.assertGreater(wait, text.index("set -a; . ./.env; set +a"))
         for later in ("manage.py compact_db", "manage.py migrate", "systemctl restart ripraptor"):
             self.assertLess(wait, text.index(later), later)
+
+
+class UploadLimitTests(TestCase):
+    """Django reads a whole request body before a view can refuse it, so Caddy refuses a body far over the
+    largest upload (a 10 MB spreadsheet) before it reaches a web worker."""
+
+    def test_both_caddyfiles_cap_the_request_body_alike(self):
+        install = (DEPLOY / "install.sh").read_text()
+        written = install[install.index("cat > /etc/caddy/Caddyfile <<CADDY"):install.index("\nCADDY\n")]
+        sample = (DEPLOY / "caddy.Caddyfile").read_text()
+        cap = "    request_body {\n        max_size 25MB\n    }\n    reverse_proxy 127.0.0.1:8000"
+        site = written[written.index("\n$DOMAIN {") + 1:]
+        self.assertIn(cap, site)
+        self.assertEqual(site.replace("$DOMAIN", "cardscout.example"),
+                         sample[sample.index("\ncardscout.example {") + 1:].rstrip("\n"))
 
 
 class CronTests(TestCase):

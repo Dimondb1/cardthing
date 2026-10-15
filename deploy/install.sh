@@ -129,6 +129,10 @@ www.$DOMAIN {
     redir https://$DOMAIN{uri} permanent
 }
 $DOMAIN {
+    # The largest upload is a 10 MB spreadsheet; a bigger body is refused here, before a web worker reads it.
+    request_body {
+        max_size 25MB
+    }
     reverse_proxy 127.0.0.1:8000
     encode gzip
 }

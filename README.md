@@ -2326,9 +2326,11 @@ The hourly merge only joins names whose numbers agree. A volume or set
 number is never read as a pack count ("Gem Pack Vol 4 Booster Pack" and
 "Vol 6" are two products), and two names with different numbers ("Mystery
 Bundle 5 Sealed Booster Packs" and "10"), different booster kinds ("Set
-Booster Box" and "Booster Box"), different set codes ("M1L" and "M1S") or
-series ("Scarlet & Violet Base Set" and "Mega Evolution Base Set") are left
-apart, with a "left:" line in the command's output, and so is a pair the
+Booster Box" and "Booster Box"), different set codes ("M1L" and "M1S"),
+series ("Scarlet & Violet Base Set" and "Mega Evolution Base Set") or a word
+the hourly tidy reads as another product on one side only ("Collector's
+Edition", "Case", "Damaged") are left apart, with a "left:" line in the
+command's output, and so is a pair the
 owner said are not the same (Not the same on Things to check, or Not the
 same as in his spreadsheet). What a box holds ("Booster Box (36 Packs)",
 "Booster Box (36)", but not a half box's "(18)") and series or set codes

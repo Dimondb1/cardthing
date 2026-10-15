@@ -9,6 +9,7 @@ from django.db.models import Count, Min
 from catalogue.classify import find_type, MIN_PRICE, NOT_SEALED, is_generic, tidy_name
 from catalogue.languages import product_language
 from catalogue.models import Listing, Product, ProductAlias
+from catalogue.types import owner_typed
 
 
 class Command(BaseCommand):
@@ -22,6 +23,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, dry_run=False, **options):
         removed = renamed = merged = 0
+        # A type the owner set (in Django Admin or his spreadsheet) is his, as refresh_types leaves it.
+        typed = owner_typed()
         rows = (
             Product.objects.filter(image="")
             # A product an undoable merge switched off has no listings; deleting it would leave nothing
@@ -35,7 +38,7 @@ class Command(BaseCommand):
         with transaction.atomic() if dry_run else nullcontext():
             for product in rows:
                 with transaction.atomic():
-                    done = self.tidy(product, dry_run)
+                    done = self.tidy(product, dry_run, typed)
                 removed += done == "removed"
                 renamed += done == "renamed"
                 merged += done == "merged"
@@ -45,7 +48,7 @@ class Command(BaseCommand):
             f"{removed} removed, {renamed} renamed, {merged} merged. {Product.objects.count()} products remain."
         )
 
-    def tidy(self, product, dry_run):
+    def tidy(self, product, dry_run, typed=frozenset()):
         """Remove, retype, merge or rename one product. Returns what was done, or "" for nothing."""
         name = tidy_name(product.name)
         reason = None
@@ -67,7 +70,7 @@ class Command(BaseCommand):
                 product.delete()
             return "removed"
         kind = find_type(name)
-        if kind and kind.startswith("collector_") and product.product_type != kind:
+        if kind and kind.startswith("collector_") and product.product_type != kind and product.pk not in typed:
             self.stdout.write(f"{'would retype' if dry_run else 'retyped'}: {product.name} -> {kind}")
             if not dry_run:
                 product.product_type = kind

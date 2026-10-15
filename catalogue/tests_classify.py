@@ -236,6 +236,35 @@ class TidyNameTests(TestCase):
 
 
 class TidyCatalogueTests(TestCase):
+    def test_a_type_the_owner_set_survives_the_collector_retype(self):
+        from io import StringIO
+
+        from django.contrib.admin.models import CHANGE, LogEntry
+        from django.contrib.auth import get_user_model
+        from django.contrib.contenttypes.models import ContentType
+        from django.core.management import call_command
+
+        from catalogue.models import Product
+        from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        magic = make_set(make_game("Magic: The Gathering", "magic-the-gathering"), name="Foundations", slug="fdn")
+        mine = make_product(magic, name="Foundations Collector Booster Box", slug="mine", product_type="booster_box")
+        other = make_product(magic, name="Foundations Collector Booster Display", slug="other",
+                             product_type="booster_box")
+        shop = make_retailer("Shop A")
+        for product in (mine, other):
+            make_listing(product, shop, url=f"https://shop.example/{product.slug}")
+        Product.objects.filter(pk__in=[mine.pk, other.pk]).update(image="")
+        # The line Django Admin (and the owner's spreadsheet) writes when he sets a type.
+        LogEntry.objects.create(
+            user=get_user_model().objects.create_superuser("owner", "owner@example.com", "x"),
+            content_type=ContentType.objects.get_for_model(Product), object_id=str(mine.pk), object_repr=mine.name,
+            action_flag=CHANGE, change_message='[{"changed": {"fields": ["Product type"]}}]',
+        )
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertEqual(Product.objects.get(pk=mine.pk).product_type, "booster_box")
+        self.assertEqual(Product.objects.get(pk=other.pk).product_type, "collector_booster_box")
+
     def test_tidy_removes_renames_and_merges(self):
         from decimal import Decimal
         from io import StringIO

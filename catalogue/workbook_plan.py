@@ -17,6 +17,7 @@ the ones he says yes to.
 """
 
 from collections import defaultdict
+from copy import copy
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from functools import lru_cache
@@ -42,6 +43,8 @@ STEPS = {
     Kind.REVIEW: 7, Kind.LEFT_LINK: 7, Kind.LEFT_IGNORE: 7,
 }
 WITHIN_STEP = {Kind.TAKE_OFF: 0, Kind.MOVE: 1, Kind.HIDE: 2, Kind.SHOW: 2}
+# The changes that land on a product named in the file, resolved through its merges.
+TARGETED = (Kind.MOVE, Kind.LINK, Kind.LEFT_LINK, Kind.MERGE)
 SHEET_ORDER = {sheet.name: n for n, sheet in enumerate((wb.SETS, wb.PRODUCTS, wb.LISTINGS, wb.SHOP_ITEMS, wb.LEFT_OUT))}
 # A row that is not read is listed under the kind of change its sheet makes.
 SHEET_KIND = {
@@ -73,6 +76,7 @@ MASS = "Over a quarter of this column changed. If a sort mixed up the rows, disc
 TIDY_REMOVES = "The hourly tidy-up removes a product no shop lists that has no release date."
 ALREADY = "Already so."
 FITS = "The hourly tidy deletes a listing whose address contradicts the product."
+DEPENDS = "Depends on a change held for your say, so it is made only with the held changes."
 
 
 def three_way(base, file, current, equal=None):
@@ -1107,7 +1111,31 @@ class Planner:
             if verdict_state == State.HELD:
                 change.why = " ".join(filter(None, [change.why if change.state == State.HELD else "", why]))
                 change.state = State.HELD
+        self.hold_dependents(state, set_rows)
         self.finish(state)
+
+    def hold_dependents(self, state, set_rows):
+        """Make N changes makes the ready ones without the held ones, so each ready change must stand on its
+        own: one judged otherwise, or landing on another product, once the held changes are left out is held
+        with them. Holding one can unsettle another, so this goes on until nothing more moves."""
+        while any(change.state == State.HELD for change in self.changes):
+            ready = [change for change in self.changes if change.state == State.READY]
+            alone = FinalState(self.site, ready, set_rows)
+            moved = False
+            for change in ready:
+                if self.stands(change, alone) != self.stands(change, state):
+                    change.state, change.why = State.HELD, DEPENDS
+                    moved = True
+            if not moved:
+                return
+
+    def stands(self, change, state):
+        """(verdict, the product it lands on) for a change in ``state``, leaving the change as it was."""
+        trial = copy(change)
+        trial.data = dict(change.data)
+        verdict = self.guard(trial, state)
+        target = change.data.get("target") if change.kind in TARGETED else None
+        return (verdict[0] if verdict else State.READY), (state.keeper(target) if target is not None else None)
 
     @property
     def site_index(self):

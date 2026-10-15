@@ -92,7 +92,7 @@ class DataPageBase(ApplyBase):
         """A file with a rename (ready) and a merge (held), uploaded and checked."""
         export = self.make_download()
         edited = excel_resave(self.downloaded(export), [
-            ("Products", self.box.pk, "Name", "Surging Sparks Booster Box Display"),
+            ("Products", self.box.pk, "Name", "Surging Sparks Booster Box (36 Packs)"),
             ("Products", self.display.pk, "Same as product id", str(self.box.pk)),
         ])
         self.send(edited)
@@ -283,7 +283,7 @@ class PreviewTests(DataPageBase):
     def test_upload_check_make_and_undo(self):
         export = self.make_download()
         edited = excel_resave(self.downloaded(export), [
-            ("Products", self.box.pk, "Name", "Surging Sparks Booster Box Display"),
+            ("Products", self.box.pk, "Name", "Surging Sparks Booster Box (36 Packs)"),
             ("Products", self.display.pk, "Same as product id", str(self.box.pk)),
             ("Products", self.etb.pk, "Barcode", "5053222123450"),   # a wrong check digit
         ])
@@ -296,7 +296,7 @@ class PreviewTests(DataPageBase):
         self.assertNotContains(page, REFRESH)
         self.assertContains(page, "This file makes 1 change: 1 name. 1 is held for your say, 1 could not be made.")
         self.assertContains(page, f"Rename {self.box.pk} &quot;Surging Sparks Booster Box&quot; to &quot;Surging "
-                                  "Sparks Booster Box Display&quot;")
+                                  "Sparks Booster Box (36 Packs)&quot;")
         self.assertContains(page, "Solent Cards sells both on separate pages")
         self.assertContains(page, "Ready (1)")
         self.assertContains(page, "Held for your say (1)")
@@ -329,7 +329,7 @@ class PreviewTests(DataPageBase):
         self.assertContains(page, "Made 2 changes.")
         self.assertContains(page, "Things to check")
         self.assertContains(page, "Undo this file")
-        self.assertEqual(Product.objects.get(pk=self.box.pk).name, "Surging Sparks Booster Box Display")
+        self.assertEqual(Product.objects.get(pk=self.box.pk).name, "Surging Sparks Booster Box (36 Packs)")
         self.assertFalse(Product.objects.get(pk=self.display.pk).is_active)
 
         response = self.tap(upload, "undo")

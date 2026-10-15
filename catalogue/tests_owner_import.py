@@ -597,6 +597,17 @@ class MergeTests(Base):
         held = self.only(self.same_as(data, (self.display, self.box)))
         self.assertEqual((held.state, held.why), (State.HELD, "You said before that these are not the same product."))
 
+    def test_a_ready_change_that_needs_a_held_one_is_held_with_it(self):
+        # The move is held (its address says Japanese, the ETB's name does not). Judged with the move made, the
+        # merge would be ready, but made without it Solent's second page would sit on the switched-off display.
+        page = make_listing(self.display, self.shop, url="https://solent.example/products/ssp-display-japanese")
+        _export, data = self.download()
+        changes = self.edit(data, ("Listings", page.pk, "Product id", str(self.etb.pk)),
+                            ("Products", self.display.pk, "Same as product id", str(self.box.pk)))
+        move, merge = self.only(changes, kind=Kind.MOVE), self.only(changes, kind=Kind.MERGE)
+        self.assertEqual(move.state, State.HELD)
+        self.assertEqual((merge.state, merge.why), (State.HELD, workbook_plan.DEPENDS))
+
     def test_refused_across_languages_or_games_or_into_a_hidden_product(self):
         japanese = make_product(self.set, name="Surging Sparks Booster Box (Japanese)", slug="ssp-jp",
                                 product_type="booster_box")

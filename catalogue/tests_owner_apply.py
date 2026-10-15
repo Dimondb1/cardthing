@@ -296,6 +296,33 @@ class MergeTests(Base):
         self.made(self.apply(self.upload(edited), include_held=True))
         self.assertFalse(Product.objects.get(pk=self.display.pk).is_active)
 
+    def test_changes_that_need_a_held_merge_wait_for_it(self):
+        # The merge is held: Solent sells both. The barcode is free and the link lands on the box only once the
+        # display is merged away, so Make N changes must not make them alone.
+        Product.objects.filter(pk=self.box.pk).update(ean="")
+        Product.objects.filter(pk=self.display.pk).update(ean="5053222123458")
+        make_listing(self.display, self.shop, url="https://solent.example/products/display")
+        kingdom = make_retailer("Kingdom Cards")
+        item = ShopProduct.objects.create(retailer=kingdom, title="SSP Display", url="https://kingdom.example/p/9",
+                                          price=Decimal("120.00"), status=Status.REVIEW, suggested=self.display,
+                                          last_seen=timezone.now())
+        _export, data = self.download()
+        edited = excel_resave(data, [("Products", self.display.pk, "Same as product id", str(self.box.pk)),
+                                     ("Products", self.box.pk, "Barcode", "5053222123458"),
+                                     ("Shop items", item.pk, "Decision", "Link")])
+        upload = self.apply(self.upload(edited))
+        self.assertEqual({(c.kind, c.state, c.outcome) for c in self.changes(upload)},
+                         {(Kind.MERGE, State.HELD, Outcome.NONE), (Kind.PRODUCT_FIELDS, State.HELD, Outcome.NONE),
+                          (Kind.LINK, State.HELD, Outcome.NONE)})
+        self.assertEqual(Product.objects.get(pk=self.box.pk).ean, "")
+        self.assertEqual(ShopProduct.objects.get(pk=item.pk).status, Status.REVIEW)
+        # With the second button all three are made together.
+        upload = self.apply(self.upload(edited), include_held=True)
+        self.assertEqual({c.outcome for c in self.changes(upload)}, {Outcome.APPLIED})
+        self.assertEqual(list(Product.objects.filter(is_active=True, ean="5053222123458").values_list("pk", flat=True)),
+                         [self.box.pk])
+        self.assertEqual(Listing.objects.get(retailer=kingdom, url=item.url).product_id, self.box.pk)
+
     def test_ebay_listing_both_does_not_hold_it(self):
         make_listing(self.display, self.ebay, url="https://www.ebay.co.uk/itm/1")
         make_listing(self.box, self.ebay, url="https://www.ebay.co.uk/itm/2")

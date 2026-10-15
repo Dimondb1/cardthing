@@ -231,7 +231,10 @@ said before they differ; a page move the hourly tidy would question; hiding
 a product the hourly tidy would then remove; or a column with 50 or more
 edits on more than a quarter of its rows, in case a sort mixed them up.
 Every change is judged against the site as it will be once the whole file
-is made, so the order of rows never changes a verdict.
+is made, so the order of rows never changes a verdict. The first button
+makes the ready changes without the held ones, so a change that only works
+once a held one is made (a barcode a held merge frees, or a link that lands
+on the product kept by a held merge) is held with it.
 
 A list of changes is made only from the page it was read on: Check again
 reads the file against the site as it is now and gives a new list, and a

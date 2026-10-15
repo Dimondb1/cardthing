@@ -340,12 +340,28 @@ class OfferAndPairTests(Base):
         self.shop(51, product=other, title=other.name)
         return keep, other
 
-    def test_a_fairly_sure_pair_never_merges_and_a_sure_different_keeps_them_apart(self):
+    def test_a_fairly_sure_pair_merges_only_when_the_names_agree_on_every_point(self):
         self.switch_on()
+        # Only the set they are filed under pairs these two.
+        loose = make_product(self.set, name="SSP Elite Trainer Box")
+        self.shop(52, product=loose, title=loose.name)
         keep, other = self.pair()
         self.ask(lambda key, params: reply(key, confidence="medium"))
-        self.assertTrue(Product.objects.get(pk=other.pk).is_active)
-        self.assertEqual(len(checks.duplicates()), 1)
+        self.assertTrue(Product.objects.get(pk=loose.pk).is_active)
+        [answer] = self.answers()
+        self.assertEqual((answer.kind, answer.product, answer.other), (CheckAnswer.Kind.MERGE, keep, other))
+        self.assertFalse(Product.objects.get(pk=other.pk).is_active)
+        self.assertEqual([(k, list(o)) for k, o in checks.duplicates()], [(keep, [loose])])
+
+    def test_only_a_sure_plain_difference_keeps_a_pair_apart_for_good(self):
+        self.switch_on()
+        keep, other = self.pair()
+        for confidence, differences in (("medium", ["edition"]), ("high", ["variant"]), ("high", ["condition"])):
+            Ask.objects.all().delete()
+            ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+            self.ask(lambda key, params: reply(key, "different", confidence=confidence, differences=differences))
+            self.assertEqual(self.answers(), [])
+            self.assertEqual(len(checks.duplicates()), 1)
         Ask.objects.all().delete()
         ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
         self.ask(lambda key, params: reply(key, "different", differences=["edition"]))
@@ -1369,8 +1385,9 @@ class EarlierAnswerTests(Base):
     def test_each_answer_left_for_the_owner_says_why(self):
         unsure = self.found(price="101.00")
         far = self.found(title="Surging Sparks Booster Display", price="150.00")
+        # Only the set they are filed under pairs these two: their names leave room for another product.
         keep = make_product(self.set, name="Surging Sparks Elite Trainer Box")
-        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        other = make_product(self.set, name="SSP Elite Trainer Box")
         self.shop(50, product=keep, title=keep.name)
         self.shop(51, product=other, title=other.name)
         bundle = make_product(self.set, name="Surging Sparks Booster Bundle", product_type="bundle")
@@ -1385,7 +1402,7 @@ class EarlierAnswerTests(Base):
         self.assertIn("Left for you: Claude could not tell, so it takes a careful second look.", page)
         self.assertIn("Left for you: Claude was only fairly sure, and the price is far from what other shops charge.",
                       page)
-        self.assertIn("Left for you: Claude was only fairly sure, and merges only when sure.", page)
+        self.assertIn("Left for you: Claude was only fairly sure, and the names leave room for another product.", page)
         self.assertIn("Left for you: the shop&#x27;s barcode is not recorded yet. Its next read records it.", page)
         self.assertEqual(judge.act_on_earlier(), 0)
         self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
@@ -1631,7 +1648,9 @@ class ClearsTheQueueTests(Base):
         self.ask(lambda key, params: reply(key, "different", confidence="medium", differences=["language"]))
         row.refresh_from_db()
         self.assertEqual(row.status, ShopProduct.Status.IGNORED)
-        self.assertEqual(checks.duplicates(), [])
+        # A pair is kept apart for good only when Claude is sure: a fairly sure one waits for the owner.
+        self.assertEqual(len(checks.duplicates()), 1)
+        self.assertFalse(CheckAnswer.objects.filter(kind=CheckAnswer.Kind.APART).exists())
         self.assertFalse(Listing.objects.get(pk=cheap.pk).is_active)
         for answer in self.answers():
             autopilot.undo(answer)
@@ -1669,13 +1688,15 @@ class ClearsTheQueueTests(Base):
         client, _ = self.ask(lambda key, params: reply(key, "unsure", confidence="low"))
         self.assertEqual({params["output_config"]["effort"] for _, params in client.sent}, {"high"})
         self.assertEqual(len(client.sent), 3)
-        self.assertEqual(sorted(a.kind for a in self.answers()),
-                         sorted([CheckAnswer.Kind.HIDE, CheckAnswer.Kind.REFUSE, CheckAnswer.Kind.APART]))
+        self.assertEqual(sorted(a.kind for a in self.answers()), sorted([CheckAnswer.Kind.HIDE, CheckAnswer.Kind.REFUSE]))
         row.refresh_from_db()
         self.assertEqual(row.status, ShopProduct.Status.IGNORED)
         self.assertFalse(Listing.objects.get(pk=cheap.pk).is_active)
+        # A pair Claude could not tell about is never kept apart for good: it waits for the owner.
         self.assertTrue(Product.objects.get(pk=other.pk).is_active)
-        self.assertEqual(checks.duplicates(), [])
+        self.assertEqual(len(checks.duplicates()), 1)
+        self.assertIn("could not tell, so the pair waits for you",
+                      self.client.get(self.url).content.decode())
 
     def test_at_high_effort_could_not_tell_settles_at_the_first_look(self):
         row = self.found(price="101.00")
@@ -1727,8 +1748,19 @@ class ClearsTheQueueTests(Base):
         Product.objects.filter(pk=other.pk).update(ean="5099999999999")
         self.assertEqual(judge.sure_pairs(checks.duplicates()), [])
         Product.objects.filter(pk=other.pk).update(ean="")
+        # One shop each: one price may be a sale's or a pre-order's, so only over twice apart says no.
+        Listing.objects.filter(product=other).update(price=Decimal("90.00"))
+        self.assertEqual(len(judge.sure_pairs(checks.duplicates())), 1)
+        Listing.objects.filter(product=other).update(price=Decimal("110.00"))
+        self.assertEqual(judge.sure_pairs(checks.duplicates()), [])
+        # Two shops each: their prices agree closely, or only the owner can say. (Untitled, so what Claude
+        # was asked about is unchanged.)
+        self.shop(52, product=keep, title="")
+        self.shop(88, product=other, title="")
         Listing.objects.filter(product=other).update(price=Decimal("90.00"))
         self.assertEqual(judge.sure_pairs(checks.duplicates()), [])
+        Listing.objects.filter(product=other).update(price=Decimal("60.00"))
+        self.assertEqual(len(judge.sure_pairs(checks.duplicates())), 1)
 
     def test_a_fallback_answer_never_acts_and_is_asked_again_at_the_next_run(self):
         self.doubtful()

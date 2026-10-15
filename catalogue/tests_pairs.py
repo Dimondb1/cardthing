@@ -1,12 +1,17 @@
 """Possible duplicates, from the pairs offered on Things to check to what Claude and the hourly merge may do
 with them. No test here touches the network: tests_judge's fake client stands in for Anthropic."""
 
+from decimal import Decimal
+from io import StringIO
+from unittest import mock
+
+from django.core.management import call_command
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from . import autopilot, checks
-from .models import CheckAnswer, ClaudeAsk, Listing, Product, Retailer
-from .testing import make_listing, make_product, make_retailer, make_set
+from . import autopilot, checks, judge, sanity
+from .models import CheckAnswer, ClaudeAsk, ClaudeJudge, Listing, OutboundClick, Product, Retailer
+from .testing import make_game, make_listing, make_product, make_retailer, make_set
 from .tests_judge import Base, reply
 
 Ask = ClaudeAsk
@@ -172,8 +177,6 @@ class CandidatePairTests(PairBase):
         self.assertEqual(Ask.objects.get().action, Ask.Action.STALE)
 
     def test_a_product_paired_with_two_kept_ones_shows_claudes_answer_for_each_pair(self):
-        from . import judge
-
         shared = self.named("Chasing Glory Together (csv10) Slim Booster Box Simplified Chinese")
         first = self.named("Pursue Glory Together csv10 Slim Booster Box Simplified Chinese")
         second = self.named("Chasing Glory Together Slim Booster Box Simplified Chinese")
@@ -186,3 +189,112 @@ class CandidatePairTests(PairBase):
         judge.attach_answers([], [], [], duplicates)
         said = {keep.pk: [other.claude.verdict for other in others] for keep, others in duplicates}
         self.assertEqual(said, {first.pk: ["same"], second.pk: ["different"]})
+
+
+class JudgeRuleTests(PairBase):
+    """Claude keeps a pair apart for good only when sure of a plain difference, merges a fairly sure same only
+    when the names agree on every point a rule can check, and is stopped by prices only when they plainly
+    disagree."""
+
+    def again(self, verdict="same", confidence="high", differences=()):
+        Ask.objects.all().delete()
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        self.ask(lambda key, params: reply(key, verdict, confidence=confidence, differences=list(differences)))
+
+    def test_a_real_different_pair_is_never_merged(self):
+        magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering")
+        eldraine = make_set(magic, name="Throne of Eldraine", slug="throne-of-eldraine", code="ELD")
+        set_box = make_product(eldraine, name="Throne of Eldraine Set Booster Box", product_type="booster_box")
+        draft = make_product(eldraine, name="Throne of Eldraine Booster Box", product_type="booster_box")
+        self.shop(110, product=set_box, title=set_box.name)
+        self.shop(100, product=draft, title=draft.name)
+        # Offered for a person: shops drop the word "set". The hourly merge leaves it.
+        self.assertEqual(self.pairs(), {frozenset((set_box.pk, draft.pk))})
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        self.assertIn("their booster kinds differ", out.getvalue())
+        self.switch_on()
+        for verdict, confidence, differences in (("same", "medium", []), ("same", "low", []), ("unsure", "high", []),
+                                                 ("different", "medium", ["kind"]), ("different", "high", ["variant"])):
+            self.again(verdict, confidence, differences)
+            self.assertEqual(self.answers(), [])
+        self.again("different", "high", ["kind"])
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.APART])
+        self.assertEqual(Product.objects.filter(pk__in=[set_box.pk, draft.pk], is_active=True).count(), 2)
+        self.assertEqual(self.offered(), [])
+
+    def test_a_fairly_sure_same_needs_one_language_one_barcode_and_close_prices_too(self):
+        keep, other = self.pair()
+        self.switch_on()
+        Product.objects.filter(pk=keep.pk).update(ean="0820650851230")
+        Product.objects.filter(pk=other.pk).update(ean="0820650851247")
+        self.again(confidence="medium")
+        self.assertEqual(self.answers(), [])
+        Product.objects.filter(pk=other.pk).update(ean="")
+        Listing.objects.filter(product=other).update(price=Decimal("120.00"))
+        self.again(confidence="medium")
+        self.assertEqual(self.answers(), [])
+        Listing.objects.filter(product=other).update(price=Decimal("51.00"))
+        self.again(confidence="medium")
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.MERGE])
+        self.assertTrue(self.answers()[0].undo_note)
+
+    def test_the_names_must_agree_for_a_fairly_sure_merge(self):
+        keep, other = self.pair()
+        row = judge.Evidence({keep.pk, other.pk}).pair(keep, other)
+        self.assertTrue(row.agrees)
+        japanese = make_product(self.set, name="Surging Sparks Elite Trainer Box Japanese")
+        coded = make_product(self.set, name="SSP Elite Trainer Box")
+        case = make_product(self.set, name="Surging Sparks Elite Trainer Box Case")
+        for product in (japanese, coded, case):
+            self.assertFalse(judge.Evidence({keep.pk, product.pk}).pair(keep, product).agrees, product.name)
+
+    def test_prices_say_no_only_when_plainly_apart(self):
+        money = [Decimal(n) for n in ("50", "52", "60", "90", "110")]
+        fifty, fifty_two, sixty, ninety, hundred_ten = money
+        self.assertFalse(judge.prices_disagree([fifty], [ninety]))
+        self.assertTrue(judge.prices_disagree([fifty], [hundred_ten]))
+        self.assertTrue(judge.prices_disagree([fifty, fifty_two], [ninety, ninety]))
+        self.assertFalse(judge.prices_disagree([fifty, fifty_two], [sixty, sixty]))
+        self.assertFalse(judge.prices_disagree([], [ninety]))
+
+
+class AskingOrderTests(PairBase):
+    """Pairs take turns with the price rows, so a long list of prices never starves them."""
+
+    def doubtful(self, n):
+        product = make_product(self.set, name=f"Surging Sparks Tin {n}", product_type="tin")
+        cheap = self.shop(30, product=product, title=product.name, shop_ean="")
+        self.shop(100, product=product, title=product.name, shop_ean="")
+        sanity.judge_product(product.pk)
+        cheap.refresh_from_db()
+        self.assertEqual(cheap.sanity, Listing.Sanity.DOUBTFUL)
+        return cheap
+
+    def test_a_pair_is_asked_second_however_many_prices_wait(self):
+        prices = [self.doubtful(n) for n in range(4)]
+        keep, other = self.pair()
+        order = [row.key for row in judge.waiting()]
+        self.assertEqual(order[1], judge.pair_key(keep, other))
+        self.assertEqual(set(order) - {order[1]}, {f"offer:{cheap.pk}" for cheap in prices})
+        self.switch_on(may_act=False)
+        with mock.patch.object(judge, "ROWS_PER_RUN", 2):
+            client, _ = self.ask()
+        self.assertIn(judge.pair_key(keep, other), [client.row_key(params) for _, params in client.sent])
+
+    def test_the_pairs_visitors_want_come_first(self):
+        first = self.pair()
+        second = self.pair("Surging Sparks Booster Bundle", "Scarlet & Violet Surging Sparks Booster Bundle")
+        # By name, the bundle comes first; a visitor's click on the box puts it first.
+        self.assertEqual([row.key for row in judge.waiting()][0], judge.pair_key(*second))
+        OutboundClick.objects.create(product=first[1], retailer=Retailer.objects.first())
+        self.assertEqual([row.key for row in judge.waiting()][0], judge.pair_key(*first))
+
+    def test_turns_keep_a_wrong_matchs_two_prices_together(self):
+        rows = [judge.Row("offer", "offer:1", {}), judge.Row("offer", "offer:2", {}, partner="offer:3"),
+                judge.Row("offer", "offer:3", {}, partner="offer:2"), judge.Row("pair", "pair:1:2", {}),
+                judge.Row("pair", "pair:3:4", {}), judge.Row("found", "found:1", {}), judge.Row("found", "found:2", {})]
+        lanes = {"offer:1": 0, "offer:2": 0, "offer:3": 0, "pair:1:2": 1, "pair:3:4": 1, "found:1": 2, "found:2": 3}
+        with mock.patch.object(judge, "worth", side_effect=lambda row: lanes[row.key]):
+            order = [row.key for row in judge.take_turns(rows)]
+        self.assertEqual(order, ["offer:1", "pair:1:2", "found:1", "offer:2", "offer:3", "pair:3:4", "found:2"])

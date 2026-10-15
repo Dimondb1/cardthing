@@ -14,10 +14,13 @@ a price, a date, a barcode or a product. The site's own rules then decide whethe
 - a shop's price (the cheapest doubtful price, or either price of a wrong match): "different" hides it;
   for a wrong match, only when Claude calls the other price "same". "Same" ticks a doubtful price off as
   checked, which changes nothing visitors see. "Same" never counts a price.
-- possible duplicates: "different" keeps the pair apart; a sure "same" merges them when their barcodes and
-  prices agree, so the merge can be undone.
+- possible duplicates: a sure "different" naming a difference that makes another product (game, set, kind,
+  quantity, language, edition) keeps the pair apart for good; any other "different" is left for the owner and
+  asked again when what the site holds about the pair changes. A sure "same" merges them when their barcodes
+  and prices agree, and a fairly sure one when the names also agree on every point a rule can check
+  (merge_duplicates.names_agree). Every merge can be undone.
 - could not tell: the row is asked once more at high effort. Still not able to tell, the row is settled the
-  way that adds nothing to the site (ruling).
+  way that adds nothing to the site (ruling); a pair is left for the owner instead, never kept apart for good.
 
 An answer acts only when the owner has tapped Let Claude act, the answer came from the model asked (not a
 fallback), and the row is still as Claude saw it. What is left is a suggestion shown under the row, with why.
@@ -42,6 +45,7 @@ import re
 import tempfile
 import time
 from dataclasses import dataclass, field
+from itertools import zip_longest
 from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from pathlib import Path
@@ -418,6 +422,7 @@ class Row:
     rate: object = None
     others: list = field(default_factory=list)
     effort: str = ""           # set for a second, more careful look; the owner's setting otherwise
+    agrees: bool = False       # a pair whose names agree on every point a rule can check
 
     @property
     def fingerprint(self):
@@ -489,11 +494,10 @@ class Evidence:
             else "only one has one" if any(codes) else "neither has one",
         }
 
-        def going(product):
-            prices = self.peers(product.pk, None)
-            return median(prices) if prices else None
+        from .management.commands.merge_duplicates import names_agree
 
-        return Row("pair", key, evidence, product=keep, other=other, others=[going(keep), going(other)])
+        return Row("pair", key, evidence, product=keep, other=other, agrees=names_agree(keep, other),
+                   others=[self.peers(keep.pk, None), self.peers(other.pk, None)])
 
 
 def asked_before():
@@ -526,7 +530,7 @@ def own_answer(ask):
 def open_rows(now=None):
     """Every row still open on Things to check, in order: the cheapest doubtful prices (most clicked
     first), the wrong matches (both prices together), the pages found at another shop (most wanted
-    first), the possible duplicates. Left out: rows anyone has answered (an undone answer included),
+    first), the possible duplicates (most wanted first). Left out: rows anyone has answered (an undone answer included),
     prices the owner counted and untitled rows."""
     from .finder import interest_scores
 
@@ -544,6 +548,9 @@ def open_rows(now=None):
     found = [row for row in checks.found_stockists(now) if row.title and row.pk not in answered_rows]
     pairs = [(keep, other) for keep, others in checks.duplicates() for other in others
              if frozenset((keep.pk, other.pk)) not in settled]
+    scores = interest_scores(now, visitors_only=True) if found or pairs else {}
+    # The pages visitors want most are sorted first.
+    pairs.sort(key=lambda pair: -max(scores.get(pair[0].pk, 0), scores.get(pair[1].pk, 0)))
     ids = ({listing.product_id for listing in doubtful} | {product.pk for product, _ in wrong}
            | {row.suggested_id for row in found} | {p.pk for pair in pairs for p in pair})
     build = Evidence(ids)
@@ -552,9 +559,7 @@ def open_rows(now=None):
         best, second = summary.best, summary.second
         best.product = second.product = product
         rows += [build.offer(best, partner=f"offer:{second.pk}"), build.offer(second, partner=f"offer:{best.pk}")]
-    if found:
-        scores = interest_scores(now, visitors_only=True)
-        found.sort(key=lambda row: -scores.get(row.suggested_id, 0))
+    found.sort(key=lambda row: -scores.get(row.suggested_id, 0))
     rows += [build.found(row) for row in found]
     rows += [build.pair(keep, other) for keep, other in pairs]
     return rows
@@ -564,9 +569,9 @@ SURE_SAME = {"verdict": "same", "confidence": "high", "differences": []}
 
 
 def worth(row):
-    """Where a row comes in the asking order, so the money goes first to rows an answer can clear: prices
-    a sure same would tick off (and wrong matches), then duplicate pairs, then found pages a sure same
-    would link, then rows only a "different" can clear."""
+    """Which lane of the asking order a row is in (take_turns): 0 for prices a sure same would tick off (and
+    wrong matches), 1 for duplicate pairs, 2 for found pages a sure same would link, 3 for rows only a
+    "different" can clear."""
     if row.kind == "offer":
         return 0 if row.partner or ruling(row, SURE_SAME)[0] else 3
     if row.kind == "pair":
@@ -599,7 +604,23 @@ def waiting(now=None):
             continue
         seen_keys.add(row.key)
         keep.append(row)
-    return sorted(keep, key=worth) + again
+    return take_turns(keep) + again
+
+
+def take_turns(rows):
+    """The rows in the order to ask: a price an answer can clear, a duplicate pair, a found page a sure same
+    would link, and round again, so no kind of row waits behind every row of another however long the list
+    (each lane keeps open_rows' order); then the rows only a "different" can clear. A wrong match's two
+    prices stay together, so one run asks both."""
+    lanes = ([], [], [], [])
+    i = 0
+    while i < len(rows):
+        unit = rows[i:i + 2] if rows[i].partner and rows[i + 1:i + 2] and rows[i + 1].key == rows[i].partner \
+            else rows[i:i + 1]
+        lanes[worth(unit[0])].append(unit)
+        i += len(unit)
+    ordered = [row for turn in zip_longest(*lanes[:3]) for unit in turn if unit for row in unit]
+    return ordered + [row for unit in lanes[3] for row in unit]
 
 
 # Asking ------------------------------------------------------------------------------------------
@@ -787,16 +808,20 @@ def ruling(row, answer, partner=None):
 
     Claude sorts every row it can, so the owner sees only real conflicts, and each act has Undo:
 
-    - sure or fairly sure of a plain difference: a page is refused, a pair kept apart, a doubtful price
-      hidden (fairly sure only for a difference that makes another product: game, set, kind and so on).
+    - sure or fairly sure of a plain difference: a page is refused, a doubtful price hidden (fairly sure
+      only for a difference that makes another product: game, set, kind and so on). A pair is kept apart for
+      good only when Claude is sure of such a difference.
     - sure or fairly sure of the same product: a doubtful price is ticked off as checked, which changes
       nothing visitors see; a page is linked (when only fairly sure, only near other shops' price); a
-      pair is merged when sure, and their barcodes and prices agree.
+      pair is merged when their barcodes and prices agree, and when only fairly sure, only when the names
+      agree on every point a rule can check (Row.agrees).
     - could not tell: asked once more, carefully. Still not able to tell, the row is settled the way that
-      adds nothing to the site: the page is not linked, the pair stays apart, the doubtful price is hidden.
+      adds nothing to the site: the page is not linked, the doubtful price is hidden. A pair waits for the
+      owner, and is asked again when what the site holds about it changes.
 
     Left for the owner: a barcode or a title that contradicts Claude's same, a deposit, two wrong-match
-    prices both called the product, and a fairly sure same about a pair.
+    prices both called the product, a fairly sure same about a pair whose names leave room for doubt, and a
+    pair Claude could not tell about or calls different for a reason that does not make another product.
     """
     verdict, confidence = reading(answer)
     plain = set(answer["differences"]) - {"price"}
@@ -806,7 +831,7 @@ def ruling(row, answer, partner=None):
         if row.kind == "found":
             return "refuse", ""
         if row.kind == "pair":
-            return "apart", ""
+            return None, "Claude could not tell, so the pair waits for you"
         if row.kind == "offer" and not row.partner:
             return "hide", ""
         return None, "Claude could not tell"
@@ -851,23 +876,46 @@ def ruling(row, answer, partner=None):
         return "hide", ""
     if row.kind == "pair":
         if verdict == "same":
-            if confidence != "high":
-                return None, "Claude was only fairly sure, and merges only when sure"
             why = pair_disagrees(row)
-            return (None, why) if why else ("merge", "")
+            if why:
+                return None, why
+            if confidence != "high" and not row.agrees:
+                return None, "Claude was only fairly sure, and the names leave room for another product"
+            return "merge", ""
+        # Kept apart for good only on a sure, plain difference: a variant, a condition or a fairly sure answer
+        # is the owner's, and is asked again when the pair changes.
+        if confidence != "high" or not plain & HARD:
+            return None, "Claude named no sure difference that makes another product, so the pair waits for you"
         return "apart", ""
     return None, ""
 
 
+# Two products' shop prices further apart than this are left for the owner. With two or more prices on each
+# side the band is LINK_LOW to LINK_HIGH; with fewer it is wider, since one shop's price may be a sale's or a
+# pre-order's.
+PAIR_LOW, PAIR_HIGH = Decimal("0.5"), Decimal("2.0")
+
+
+def prices_disagree(first, second):
+    """Whether two products' shop prices say they are not one product: the medians of their prices at shops
+    (not marketplaces) are outside LINK_LOW to LINK_HIGH of each other when each has at least two, or
+    outside PAIR_LOW to PAIR_HIGH when either has only one. No price on a side says nothing."""
+    if not first or not second:
+        return False
+    low, high = (autopilot.LINK_LOW, autopilot.LINK_HIGH) if len(first) >= 2 and len(second) >= 2 \
+        else (PAIR_LOW, PAIR_HIGH)
+    return not low <= median(first) / median(second) <= high
+
+
 def pair_disagrees(row):
     """Why two products Claude calls the same may not be merged, or "": their barcodes differ, or their
-    shops charge far apart."""
+    shops charge far apart (prices_disagree)."""
     keep, other = row.product, row.other
     codes = ean_key(keep.ean), ean_key(other.ean)
     if all(codes) and codes[0] != codes[1]:
         return "their barcodes differ, so only you can say"
-    a, b = (list(row.others) + [None, None])[:2]
-    if a and b and not autopilot.LINK_LOW <= a / b <= autopilot.LINK_HIGH:
+    first, second = (list(row.others) + [[], []])[:2]
+    if prices_disagree(first, second):
         return "their shops charge very different prices, so only you can say"
     return ""
 
@@ -1594,22 +1642,9 @@ def key_line(state, has_key):
 def sure_pairs(groups):
     """[(keep, other, ask)] for the duplicate pairs on the page Claude is sure are the same product, as the
     page shows them now: never one already merged or undone, one the owner answered, or a fallback's, nor
-    one whose barcodes differ or whose shops' prices for the two are far apart."""
+    one whose barcodes differ or whose shops' prices for the two are far apart (pair_disagrees)."""
     builder = Evidence({p.pk for keep, others in groups for p in [keep, *others]})
     pairs = {pair_key(keep, other): (keep, other) for keep, others in groups for other in others}
-    rates = builder.rates
-
-    def going(product):
-        prices = [price for _, price in rates.get(product.pk, [])]
-        return median(prices) if prices else None
-
-    def disagree(keep, other):
-        ours, theirs = ean_key(keep.ean), ean_key(other.ean)
-        if ours and theirs and ours != theirs:
-            return True
-        a, b = going(keep), going(other)
-        return bool(a and b) and not autopilot.LINK_LOW <= a / b <= autopilot.LINK_HIGH
-
     latest = latest_answers(pairs)
     used = set(CheckAnswer.objects.filter(ask__in=[ask.pk for ask in latest.values()]).values_list("ask_id", flat=True))
     found = []
@@ -1619,7 +1654,8 @@ def sure_pairs(groups):
             continue
         if not sure({"verdict": ask.verdict, "confidence": ask.confidence, "differences": ask.differences}, "same"):
             continue
-        if ask.fingerprint != builder.pair(keep, other).fingerprint or disagree(keep, other):
+        row = builder.pair(keep, other)
+        if ask.fingerprint != row.fingerprint or pair_disagrees(row):
             continue
         found.append((keep, other, ask))
     return found

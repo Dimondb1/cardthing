@@ -494,6 +494,23 @@ def duplicate_pairs(products=None):
     return sorted(found, key=lambda pair: (pair[0].name, pair[0].pk, pair[1].name, pair[1].pk))
 
 
+def names_agree(keep, other):
+    """Whether two products' names say they are one product on every point a rule can check: one game and
+    language, a words or set code key in common (pair_keys), nothing why_not_merge finds (numbers, set codes,
+    booster kinds, words that mark another product), and no size or wrapping only one of them has. The
+    judge lets a fairly sure "same" from Claude merge such a pair; barcodes and prices are its own to check."""
+    if keep.game_id != other.game_id:
+        return False
+    language = product_language(keep)
+    if language != product_language(other):
+        return False
+    ours = {key for key in pair_keys(keep, language) if key[0] in ("words", "code", "chinese")}
+    if not ours & set(pair_keys(other, language)) or why_not_merge(keep, other):
+        return False
+    slug = keep.game.slug
+    return not (naming_words(keep.name, slug) ^ naming_words(other.name, slug)) & (VARIANT_WORDS | BOX_SIZES)
+
+
 def share_a_key(a, b):
     """Whether duplicate_pairs pairs these two products (with game and set loaded), whatever their shops say."""
     first = set(pair_keys(a, product_language(a)))

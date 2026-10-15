@@ -978,14 +978,15 @@ def act(row, ask, action, now):
 
 def still_duplicates(keep, other):
     """Raise Stale unless the two are still a pair to merge: both shown, nobody has answered the pair, no
-    shop lists both (a shop selling both sells two products) and they are in one language."""
+    shop shows both (a shop selling both sells two products; eBay, Amazon and hidden listings say nothing,
+    checks.shops_in_the_way) and they are in one language."""
     if Product.objects.filter(pk__in=[keep.pk, other.pk], is_active=True).count() != 2:
         raise autopilot.Stale
     if CheckAnswer.objects.filter(kind__in=[Kind.APART, Kind.MERGE], product__in=[keep, other],
                                   other__in=[keep, other]).exists():
         raise autopilot.Stale
-    shops = set(Listing.objects.filter(product=keep).values_list("retailer_id", flat=True))
-    if Listing.objects.filter(product=other, retailer_id__in=shops).exists():
+    shops = checks.shop_listings([keep.pk, other.pk])
+    if checks.shops_in_the_way(shops.get(keep.pk, {}), shops.get(other.pk, {})):
         raise autopilot.Stale
     if not languages.same(languages.product_language(keep), languages.product_language(other)):
         raise autopilot.Stale

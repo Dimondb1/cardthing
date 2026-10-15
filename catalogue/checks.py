@@ -147,12 +147,43 @@ def kept_apart():
     }
 
 
+def shop_listings(products=None):
+    """{product id: {shop id: shown}} for listings at shops, not marketplaces, in one query: ``shown`` is
+    False for a listing hidden by the owner, the autopilot or Claude. ``products`` limits it to those
+    product ids; by default every product still shown."""
+    rows = Listing.objects.exclude(retailer__source_type__in=MARKETPLACES)
+    rows = rows.filter(product_id__in=products) if products is not None else rows.filter(product__is_active=True)
+    found = {}
+    for product_id, retailer_id, shown in rows.values_list("product_id", "retailer_id", "is_active"):
+        found.setdefault(product_id, {})[retailer_id] = shown
+    return found
+
+
+def shown_at(listings):
+    """The shops of a product's shop_listings that show it."""
+    return {shop for shop, shown in listings.items() if shown}
+
+
+def shops_in_the_way(keep, other):
+    """Why the shops say two products may not be merged, from their shop_listings, or "".
+
+    A shop that shows both under their own names sells two products. eBay and Amazon search for every
+    product, so they say nothing, and nor does a hidden listing (often another product the shop sells).
+    A shop whose listing on the kept product is hidden and on the other is shown would lose its price
+    from the site, since a merge leaves a shop's second listing on the switched-off product."""
+    if shown_at(keep) & shown_at(other):
+        return "a shop sells both"
+    if {shop for shop, shown in keep.items() if not shown} & shown_at(other):
+        return "a shop's price would leave the site"
+    return ""
+
+
 def duplicates():
     """[(keep, [others])] that the loose rule would merge. Strict duplicates are merged every hour already.
 
     A product the owner said is not the same as the one kept is left out, and so is one a shop sells
-    beside the kept one or beside another in the group: a shop that lists both under their own names
-    sells two products.
+    beside the kept one or beside another in the group: a shop that shows both under their own names
+    sells two products (shops_in_the_way: never eBay or Amazon, nor a hidden listing).
     """
     from .management.commands.merge_duplicates import duplicate_groups
 
@@ -160,22 +191,16 @@ def duplicates():
     if not groups:
         return []
     apart = kept_apart()
-    pks = {p.pk for keep, others in groups for p in [keep, *others]}
-    shops = {}
-    # Hidden listings count too: a merge cannot move a shop's live price onto a product that shop already lists.
-    for product_id, retailer_id in Listing.objects.filter(product_id__in=pks).values_list(
-        "product_id", "retailer_id"
-    ):
-        shops.setdefault(product_id, set()).add(retailer_id)
+    shops = shop_listings({p.pk for keep, others in groups for p in [keep, *others]})
     found = []
     for keep, others in groups:
-        taken, kept = set(shops.get(keep.pk, ())), []
+        taken, kept = dict(shops.get(keep.pk, {})), []
         for other in others:
             # A shop that sells this one beside the kept one, or beside another in the group, sells two products.
-            theirs = shops.get(other.pk, set())
-            if frozenset((keep.pk, other.pk)) in apart or taken & theirs:
+            theirs = shops.get(other.pk, {})
+            if frozenset((keep.pk, other.pk)) in apart or shops_in_the_way(taken, theirs):
                 continue
-            taken |= theirs
+            taken.update({shop: shown or taken.get(shop, False) for shop, shown in theirs.items()})
             kept.append(other)
         if kept:
             found.append((keep, kept))

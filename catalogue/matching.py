@@ -402,11 +402,24 @@ def booster_kinds(name):
     return set(BOOSTER_KIND.findall(" ".join(LANGUAGE_WORDS.sub(" ", expand(name)).split())))
 
 
+LANGUAGE_DIFFERENT = {"japanese", "korean", "chinese", "traditional", "simplified", "thai", "german", "french",
+                      "italian", "spanish", "portuguese"}
+
+
+def marked_different(name):
+    """The words of DIFFERENT a name says, but its language: "Collector's Edition", "Case", "Damaged". The hourly
+    tidy (tidy_listings) removes a shop's listing whose address says one its product's name does not."""
+    text = f" {expand(name)} "
+    return {word for word in DIFFERENT - LANGUAGE_DIFFERENT if f" {word} " in text}
+
+
 def same_product(a, b, game=""):
     """Whether two names that share a key may be taken for one product without a person: their numbers
-    agree ("Vol 4" is not "Vol 6"), and so do their set codes and booster kinds."""
+    agree ("Vol 4" is not "Vol 6"), and so do their set codes, booster kinds and the words that mark another
+    product ("Collector's Edition Commander Deck" is left for a person, and the hourly tidy would take the
+    listings it brought off "Collector Commander Deck")."""
     return (identity_numbers(a) == identity_numbers(b) and not codes_differ(a, b, game)
-            and booster_kinds(a) == booster_kinds(b))
+            and booster_kinds(a) == booster_kinds(b) and marked_different(a) == marked_different(b))
 
 
 # Sizes of one set's box: a slim box and a jumbo box of one code are two products.

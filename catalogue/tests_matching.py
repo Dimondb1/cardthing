@@ -452,6 +452,9 @@ DIFFERENT_PRODUCTS = [
     ("magic-the-gathering", "M20 Booster Box", "M21 Booster Box"),
     ("magic-the-gathering", "Core Set 2020 M20 Booster Box", "Core Set 2021 M21 Booster Box"),
     ("magic-the-gathering", "Throne of Eldraine Set Booster Box", "Throne of Eldraine Draft Booster Box"),
+    # The hourly tidy takes a "...-collectors-edition-..." address off a name without it, so a person decides.
+    ("magic-the-gathering", "Marvel Super Heroes Wakanda Forever Collector Commander Deck",
+     "Marvel Super Heroes Collector's Edition Commander Deck Wakanda Forever"),
     ("yu-gi-oh", "Rarity Collection 5 Booster Pack", "Rarity Collection II Booster Pack"),
     ("yu-gi-oh", "Base Set Unlimited Booster Box", "Base Set 1st Edition Booster Box"),
 ]
@@ -511,10 +514,14 @@ class ShopNamingTests(TestCase):
         product(magic, "Final Fantasy Collector Booster Box", "Total Cards 2")
         product(magic, "Magic: the Gathering: Final Fantasy Collector's Booster Display", "Card Vault 2")
         product(magic, "Final Fantasy Play Booster Box", "Zatu 2")
+        product(magic, "Doctor Who Masters of Evil Collector Commander Deck", "Lvl Up")
+        product(magic, "Doctor Who Collector's Edition Commander Deck Masters of Evil", "Jet")
         out = StringIO()
         call_command("merge_duplicates", stdout=out)
         self.assertIn("2 products merged", out.getvalue())
+        self.assertIn("one says Collector's Edition, Case or the like and the other does not", out.getvalue())
         self.assertEqual(sorted(Product.objects.values_list("name", flat=True)), [
+            "Doctor Who Collector's Edition Commander Deck Masters of Evil", "Doctor Who Masters of Evil Collector Commander Deck",
             "Final Fantasy Collector Booster Box", "Final Fantasy Play Booster Box", "Mega Evolution Base Set Booster Box",
             "Scarlet & Violet Base Set Booster Box", "Surging Sparks Booster Box"])
 

@@ -34,7 +34,7 @@ from django.utils import timezone
 
 from catalogue.languages import CHINESE, SIMPLIFIED, name as language_name, plain, product_language
 from catalogue.matching import (
-    BOX_SIZES, KIND_WORDS, booster_kinds, chinese_code, codes_differ, identity_numbers, match_key,
+    BOX_SIZES, KIND_WORDS, booster_kinds, chinese_code, codes_differ, identity_numbers, marked_different, match_key,
 )
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, ProductAlias, Restock, ShopProduct, StockAlert,
@@ -407,6 +407,8 @@ def why_not_merge(keep, other, apart=frozenset()):
         return "their set codes differ"
     if booster_kinds(keep.name) != booster_kinds(other.name):
         return "their booster kinds differ"
+    if marked_different(keep.name) != marked_different(other.name):
+        return "one says Collector's Edition, Case or the like and the other does not"
     return ""
 
 

@@ -24,15 +24,12 @@ from catalogue import languages
 from catalogue.classify import NOT_SEALED, box_contents, find_game
 from catalogue.ebay import EbayError, fill_titles, too_cheap_listings
 from catalogue.importers import slug_words
-from catalogue.matching import DIFFERENT, expand, match_key
+from catalogue.matching import DIFFERENT, LANGUAGE_DIFFERENT, expand, match_key
 from catalogue.models import Game, Listing, Product, shown_change
 from catalogue.signals import clear_list_caches
 
 
 PACK_WORDS = re.compile(r"\bpacks?\b|\bblister\b|\bchecklane\b|\bsleeved\b")
-# The words of DIFFERENT that name a language.
-LANGUAGE_DIFFERENT = {"japanese", "korean", "chinese", "traditional", "simplified", "thai", "german", "french",
-                      "italian", "spanish", "portuguese"}
 
 
 def same_language(title, product):

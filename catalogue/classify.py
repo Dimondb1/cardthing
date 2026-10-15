@@ -77,8 +77,9 @@ NOT_SEALED = re.compile(
     # Pokemon promo card numbers ("Iron Bundle SVP 066 - Holo"): set codes have one or two digits, promos three.
     r"\b(?:svp|swshp?|smp?|xyp?|bwp?)[ -]?\d{3}\b|\bholo\b(?!\s*(?:collection|box|tin|booster|pack))|\bplaymat\b|\bsleeves?\b|\bbinder\b|"
     r"\bdeck box\b|\bportfolio\b|\btoploader|\bevent\b|\bpre[\s-]?release event\b|\bticket\b|\bcase\b(?! of)|\bcarton\b|"
-    # A plush packed in a tin with booster packs is the tin ("Electric Plush Blind Box Tin", Solent Cards).
-    r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b(?!.*\btins?\b)|\bkeyring\b|\bposter\b(?! box)|"
+    # A plush packed in a tin with booster packs is the tin ("Electric Plush Blind Box Tin", Solent Cards), also
+    # in an address that glues the tin to the next word ("...-blind-box-tinsimplified-chinese"). Not "tiny".
+    r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b(?!.*\btins?(?![a-rt-z]))|\bkeyring\b|\bposter\b(?! box)|"
     r"\bcode card\b|\bgraded\b|\bpsa\b|\bcgc\b|\bproxy\b|\bbulk\b|\blot of\b|\bjapanese single|\bpromo card\b|"
     r"\(near mint\)|\bnear mint\b|\blightly played\b|\bmoderately played\b|\(nm\)|\bpromo pack\b|\bpromotion pack\b|\bpower pack\b|"
     r"\bborderless\b|\bextended art\b|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"

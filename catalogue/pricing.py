@@ -115,16 +115,19 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     repriced = not new and (
         listing.price != price or listing.delivery_known != (delivery_cost is not None) or listing.delivery_cost != cost
     )
+    stale = listing.last_checked is not None and listing.last_checked < stale_cutoff(checked_at)
     changed = new or repriced or (
         listing.availability != availability
         or listing.sanity != Listing.Sanity.OK
-        or (listing.last_checked is not None and listing.last_checked < stale_cutoff(checked_at))
+        or stale
         or (listing.trusted_at is not None and listing.trusted_at < trust_expiry(checked_at))
     )
+    # An out of date (or never checked) listing that is in stock or on pre-order gets its buy button back.
+    back = (stale or listing.last_checked is None) and availability in Listing.BUYABLE
     fields = ["price", "delivery_cost", "delivery_known", "availability", "last_checked"]
-    if new or repriced or listing.availability != availability:
+    if new or repriced or back or listing.availability != availability:
         # What the page shows for this shop changed: the sitemap's lastmod moves. A check that only confirms
-        # what we hold never gets here (importers.stamp_checked), and a verdict alone is stamped by sanity.
+        # what we hold is stamped by importers.stamp_checked, and a verdict alone by sanity.
         listing.changed_at = checked_at
         fields.append("changed_at")
     was_in_stock = listing.availability == Listing.Availability.IN_STOCK

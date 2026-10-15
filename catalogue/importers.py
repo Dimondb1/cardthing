@@ -33,7 +33,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Case, F, Q, Value, When
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -1252,11 +1252,16 @@ def stamp_checked(pks, checked_at):
     verdict was not OK (the other shops may have corrected theirs since), when the owner's trust in it
     has run out, or when it was out of date until now (the other shops were judged without it). One
     query per chunk, run before the stamp, finds them.
+
+    A listing in stock or on pre-order that was out of date until now gets its buy button back on the
+    page, so the same stamp also records that as a change (changed_at, the sitemap's lastmod).
     """
+    cutoff = stale_cutoff(checked_at)
+    back = Q(availability__in=Listing.BUYABLE) & (Q(last_checked__lt=cutoff) | Q(last_checked__isnull=True))
     again = (
         ~Q(sanity=Listing.Sanity.OK)
         | Q(trusted_at__lt=trust_expiry(checked_at))
-        | Q(last_checked__lt=stale_cutoff(checked_at), availability__in=Listing.BUYABLE)
+        | Q(last_checked__lt=cutoff, availability__in=Listing.BUYABLE)
     )
     for start in range(0, len(pks), STAMP_CHUNK):
         chunk = pks[start:start + STAMP_CHUNK]
@@ -1264,7 +1269,11 @@ def stamp_checked(pks, checked_at):
             Listing.objects.filter(again, pk__in=chunk)
             .order_by().values_list("product_id", flat=True).distinct()
         )
-        Listing.objects.filter(pk__in=chunk).update(last_checked=checked_at)
+        # One UPDATE: its CASE reads last_checked as it was before this stamp.
+        Listing.objects.filter(pk__in=chunk).update(
+            last_checked=checked_at,
+            changed_at=Case(When(back, then=Value(checked_at)), default=F("changed_at")),
+        )
         for product_id in products:
             judge_product(product_id, now=checked_at)
     pks.clear()

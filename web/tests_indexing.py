@@ -208,6 +208,34 @@ class ChangedAtTests(TestCase):
         self.assertEqual(swept.availability, OUT)
         self.assertEqual(swept.changed_at, swept.last_checked)
 
+    def test_a_listing_back_from_out_of_date_stamps_though_its_price_is_the_same(self):
+        from catalogue.importers import Offer, apply_offers
+        from catalogue.models import Retailer
+
+        cache.clear()
+        shop = make_retailer("Reader", source_type=Retailer.Source.SHOPIFY, source_url="https://reader.example",
+                             delivery_cost=Decimal("0"))
+        product = make_product(self.set, name="Surging Sparks Elite Trainer Box", slug="ss-etb")
+        listing = make_listing(product, shop, price="50.00", url="https://reader.example/products/ss-etb", hours_ago=100)
+        Product.objects.filter(pk=product.pk).update(updated_at=timezone.now() - timedelta(days=60))
+        url = product.get_absolute_url()
+        # Out of date: no buy button, and not in the sitemap.
+        self.assertNotContains(self.client.get(url), "Buy now")
+        self.assertNotIn(url, sitemap_entries(self.client))
+        at = timezone.now() - timedelta(minutes=5)
+        apply_offers(shop, [Offer(title=product.name, url=listing.url, price=Decimal("50.00"))], checked_at=at)
+        listing.refresh_from_db()
+        self.assertEqual(listing.changed_at, at)
+        cache.clear()
+        self.assertContains(self.client.get(url), "Buy now")
+        self.assertEqual(sitemap_entries(self.client)[url], day(at))
+
+        # The same through a single check, and only for a listing a visitor can buy.
+        for availability, stamped in ((IN_STOCK, True), (OUT, False)):
+            Listing.objects.filter(pk=self.listing.pk).update(
+                availability=availability, last_checked=timezone.now() - timedelta(hours=100), changed_at=None)
+            self.assertEqual(self.check("100.00", availability=availability, at=at), at if stamped else None)
+
     def test_a_price_lost_to_out_of_stock_stamps(self):
         at = timezone.now() - timedelta(minutes=5)
         self.assertEqual(self.check("0", availability=OUT, at=at), at)

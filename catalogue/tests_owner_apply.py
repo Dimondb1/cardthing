@@ -798,6 +798,47 @@ class RunnerTests(Base):
         self.assertEqual((upload.status, upload.attempts, upload.done), (Upload.APPLIED, 1, 15))
         self.each_made_once(products)
 
+    def test_a_database_held_past_the_busy_wait_is_waited_for_not_failed(self):
+        from django.db import OperationalError
+
+        _export, data = self.download()
+        edited = excel_resave(data, [("Products", self.etb.pk, "Name", "Surging Sparks ETB")])
+        real = owner_edits.apply_change
+
+        def locked(times):
+            calls = []
+
+            def apply_change(*args):
+                calls.append(1)
+                if len(calls) <= times:
+                    raise OperationalError("database is locked")
+                return real(*args)
+            return apply_change
+
+        # A deploy's VACUUM holds it for a while: the change waits, then is made.
+        with mock.patch.object(owner_edits, "apply_change", side_effect=locked(4)), \
+                mock.patch("catalogue.pricing.time.sleep"), mock.patch.object(data_jobs, "sleep") as paused:
+            upload = self.apply(self.upload(edited))
+        paused.assert_called_with(data_jobs.LOCKED_PAUSE_SECONDS)
+        self.assertEqual((upload.status, upload.attempts), (Upload.APPLIED, 0))
+        self.made(upload)
+        # Held through every try: not made and not failed, queued again with no stop counted.
+        Product.objects.filter(pk=self.etb.pk).update(name="Surging Sparks Elite Trainer Box")
+        with mock.patch.object(owner_edits, "apply_change", side_effect=locked(10 ** 6)), \
+                mock.patch("catalogue.pricing.time.sleep"), mock.patch.object(data_jobs, "sleep"), \
+                self.assertLogs("catalogue.data_jobs", "WARNING"):
+            upload = self.apply(self.upload(edited))
+        self.assertEqual((upload.status, upload.attempts), (Upload.APPLY_QUEUED, 0))
+        self.assertEqual(self.changes(upload)[0].outcome, Outcome.NONE)
+        call_command("data_files")
+        upload.refresh_from_db()
+        self.assertEqual(upload.status, Upload.APPLIED)
+        self.made(upload)
+        # A heartbeat that cannot be written is skipped, never a stop.
+        with mock.patch.object(DataImport.objects, "filter", side_effect=OperationalError("database is locked")), \
+                self.assertLogs("catalogue.pricing", "WARNING"):
+            data_jobs.beat(upload)
+
     def test_a_change_that_fails_is_listed_and_the_rest_are_made(self):
         _export, data = self.download()
         upload = self.upload(excel_resave(data, [("Products", self.etb.pk, "Name", "Surging Sparks ETB"),

@@ -292,6 +292,9 @@ file in the cache folder keeps a second copy from running. It runs at a lower pr
 first in line for the memory killer, so visitors come first on the 1 GB
 server. A runner that is stopped is taken up again where it stopped,
 without making any change twice; after three stops the file is given up.
+A database another process holds for longer than SQLite waits is waited
+for, about two and a half minutes, and then left to the runner's next
+start; the change is not counted as failed, nor the wait as a stop.
 An update (`deploy/install.sh`) waits for a file being made before it
 touches the database or restarts the site, which would stop the runner
 with it. If a runner is stopped part way all the same (the memory killer,

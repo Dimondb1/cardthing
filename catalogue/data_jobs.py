@@ -27,12 +27,12 @@ from time import sleep
 
 from django.conf import settings
 from django.core.management import CommandError, call_command
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.db.models import Exists, F, OuterRef, Q
 from django.utils import timezone
 
 from .models import DataChange, DataExport, DataImport
-from .pricing import retry_locked
+from .pricing import drop_if_locked, is_locked, retry_locked
 from .signals import clear_list_caches
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,10 @@ HEARTBEAT_EVERY = 25
 # unless the newest copy is younger than this.
 BACKUP_FRESH = timedelta(hours=6)
 BACKUP_CHANGES = 200
+# A database another process holds past SQLite's busy wait (a deploy's VACUUM or migrate) is tried again
+# after a pause; still held after every try, the change is left to be made at the runner's next start.
+LOCKED_TRIES = 6
+LOCKED_PAUSE_SECONDS = 5
 CHANGED_SINCE = "Changed on the site since you checked, so it was left as it was."
 UNDO_CHANGED = "Changed on the site since, so it was left as it is."
 NO_UPLOAD = "This file is no longer kept. Upload it again."
@@ -165,6 +169,23 @@ def start_now():
 
 # The runner ------------------------------------------------------------------------------------------------
 
+class StillLocked(Exception):
+    """Another process held the database through every try: the change is not made yet."""
+
+
+def patiently(attempt):
+    """``attempt()`` through retry_locked, tried again after a pause while another process holds the database
+    past the busy wait. Raises StillLocked when it never lets go."""
+    for _try in range(LOCKED_TRIES):
+        try:
+            return retry_locked(attempt)
+        except OperationalError as exc:
+            if not is_locked(exc):
+                raise
+        sleep(LOCKED_PAUSE_SECONDS)
+    raise StillLocked
+
+
 def run(deadline):
     """Run queued jobs, oldest first by kind, until none is left or ``deadline`` passes. Returns how many ran."""
     ran = 0
@@ -176,10 +197,15 @@ def run(deadline):
         ran += 1
         try:
             work(job, deadline)
+        except StillLocked:
+            # Queued again with no stop counted; the next start of the runner carries on.
+            logger.warning("Spreadsheet job %s %s waits: the database stayed locked", type(job).__name__, job.pk)
+            break
         except Exception:
             # Left to be taken up again at once, which counts as one of its three tries.
             logger.exception("Spreadsheet job %s %s stopped", type(job).__name__, job.pk)
-            type(job).objects.filter(pk=job.pk).update(heartbeat_at=None)
+            with drop_if_locked("Spreadsheet job stop"):
+                type(job).objects.filter(pk=job.pk).update(heartbeat_at=None)
     return ran
 
 
@@ -219,7 +245,10 @@ def reclaim(now=None):
 
 
 def beat(job, **fields):
-    type(job).objects.filter(pk=job.pk).update(heartbeat_at=timezone.now(), **fields)
+    # Skipped while another process holds the database: a missed heartbeat is harmless, a runner stopped by
+    # one is not.
+    with drop_if_locked("Spreadsheet heartbeat"):
+        type(job).objects.filter(pk=job.pk).update(heartbeat_at=timezone.now(), **fields)
 
 
 # Downloads ----------------------------------------------------------------------------------------------
@@ -395,7 +424,9 @@ def make(job, change, applying):
         return made
 
     try:
-        made = retry_locked(attempt)
+        made = patiently(attempt)
+    except StillLocked:
+        raise
     except owner_edits.Stale:
         return finish_change(job, change, Outcome.SKIPPED, CHANGED_SINCE)
     except owner_edits.Refused as exc:
@@ -417,6 +448,12 @@ def finish_change(job, change, outcome, note):
     return outcome
 
 
+def requeue(job, status):
+    """Back in the queue where it stopped, for the next start of the runner, with no stop counted."""
+    with drop_if_locked("Spreadsheet job"):
+        DataImport.objects.filter(pk=job.pk).update(status=status, heartbeat_at=timezone.now())
+
+
 def apply_import(job, deadline):
     """Make the file's ready changes (and the held ones, when he said so) in order: sets, new products,
     product fields, shop pages, merges, pairs kept apart, then shop items."""
@@ -436,6 +473,9 @@ def apply_import(job, deadline):
             make(job, change, applying)
             if n % HEARTBEAT_EVERY == 0:
                 beat(job)
+    except StillLocked:
+        requeue(job, Status.APPLY_QUEUED)
+        raise
     finally:
         lock.release()
     # Once, after every change: each change judged its own products as it went.
@@ -460,7 +500,9 @@ def unmake(job, change, applying):
             DataImport.objects.filter(pk=job.pk).update(done=F("done") + 1)
 
     try:
-        retry_locked(attempt)
+        patiently(attempt)
+    except StillLocked:
+        raise
     except owner_edits.Stale:
         return finish_change(job, change, Outcome.UNDO_SKIPPED, UNDO_CHANGED)
     except owner_edits.Refused as exc:
@@ -488,6 +530,9 @@ def undo_import(job, deadline):
             unmake(job, change, applying)
             if n % HEARTBEAT_EVERY == 0:
                 beat(job)
+    except StillLocked:
+        requeue(job, Status.UNDO_QUEUED)
+        raise
     finally:
         lock.release()
     clear_list_caches(force=True)

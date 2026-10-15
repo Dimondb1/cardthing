@@ -1566,8 +1566,9 @@ class Planner:
             other = min(owners, key=str)
             return (State.PROBLEM, f"The shop gives the barcode {item.shop_ean}, which is on "
                     f"{self.named(state, other)}, so the shop's next read links it there.")
+        # An item with no price says so in its own sentence; one priced long ago is worth a note.
         warning = ""
-        if item.price is None or item.last_seen < self.now - STALE_SEEN:
+        if item.price is not None and item.last_seen < self.now - STALE_SEEN:
             warning = "The price shows once the shop's next read checks it."
         if not page_fits(item.url, product):
             return State.HELD, f"{FITS} Check its address names {self.named(state, keep)}.", warning
@@ -1723,8 +1724,10 @@ def describe(change):
         price = money(float(d["price"])) if d.get("price") else "no price"
         when = f", seen {seen.day} {seen:%b}" if seen else ""
         text = f"Link {item} ({price}{when}) to {target_words(change)} {where}."
-        return text + (" The shop's next read checks its price." if d.get("price") else
-                       " Its price shows after the shop's next read.")
+        # The link adds the listing at the price seen, shown at once while it is fresh (else the note says).
+        if not d.get("price"):
+            return text + " Its price shows after the shop's next read."
+        return text if change.warning else text + " Its price shows at once."
     if kind == Kind.LEFT_LINK:
         return f"Link {item} to {target_words(change)} {where}. The shop's next read adds its price."
     if kind in (Kind.IGNORE, Kind.LEFT_IGNORE):

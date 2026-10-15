@@ -1056,6 +1056,16 @@ class ShopItemTests(Base):
                                                           last_seen=timezone.now() - timedelta(days=5))
         old = self.only(self.decide(data, "Link"))
         self.assertEqual((old.state, old.warning), (State.READY, "The price shows once the shop's next read checks it."))
+        self.assertTrue(old.what.endswith(f"(Shop items row {old.row})."), old.what)
+
+    def test_the_link_line_says_once_when_its_price_shows(self):
+        _export, data = self.download()
+        fresh = self.only(self.decide(data, "Link"))
+        self.assertTrue(fresh.what.endswith("Its price shows at once."), fresh.what)
+        ShopProduct.objects.filter(pk=self.item.pk).update(price=None)
+        unpriced = self.only(self.decide(data, "Link"))
+        self.assertTrue(unpriced.what.endswith("Its price shows after the shop's next read."), unpriced.what)
+        self.assertEqual(unpriced.warning, "")
 
 
     def test_the_day_an_item_was_seen_is_the_day_the_sheet_shows(self):

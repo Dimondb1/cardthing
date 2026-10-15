@@ -114,8 +114,9 @@ SHOPS = [
      "Standard £3.99 (basket check), free over £100 (delivery page, confirmed by basket), read 7 Oct 2026"),
     ("wolves-pokemart", "Wolves Pokemart", "https://wolvespokemart.co.uk/", S.SHOPIFY, "0.00", None,
      "Free standard delivery (basket check), read 7 Oct 2026"),
-    ("solent-cards", "Solent Cards", "https://solentcards.co.uk/", S.SHOPIFY, "3.65", None,
-     "Standard £3.65 (basket check), read 7 Oct 2026"),
+    ("solent-cards", "Solent Cards", "https://solentcards.co.uk/", S.SHOPIFY, "3.65", "50",
+     "Standard £3.65 (basket check), free over £50 (the shop's email, 15 Oct 2026; baskets of £54 and £55 "
+     "checked free), read 15 Oct 2026"),
     ("gecko-cards", "Gecko Cards", "https://geckocards.co.uk/", S.SHOPIFY, "1.50", '25',
      "Standard £1.50, free over £25 (delivery page), read 7 Oct 2026"),
     # Added at the owner's request: a Shopify shop selling Simplified Chinese Pokémon. Its policy prices by

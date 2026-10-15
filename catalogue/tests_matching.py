@@ -254,3 +254,45 @@ class ChineseDuplicateTests(TestCase):
         pairs = {frozenset([keep.pk, *(o.pk for o in others)]) for keep, others in checks.duplicates()}
         self.assertEqual(pairs, {frozenset([coded.pk, bare.pk]), frozenset([plain.pk, said.pk]),
                                  frozenset([chasing.pk, pursue.pk])})
+
+
+class HourlyMergeGuardTests(TestCase):
+    """The hourly merge (tidy_all runs merge_duplicates) merged Gem Pack Vol 4 and Vol 6 packs and 5 and 10 pack
+    bundles, and deleted one shop's listing each time. It now merges only what is certain."""
+
+    def setUp(self):
+        self.game = make_game()
+
+    def product(self, name, shop, product_type="booster_pack"):
+        product = Product.objects.create(game=self.game, name=name, product_type=product_type)
+        make_listing(product, make_retailer(shop) if isinstance(shop, str) else shop)
+        return product
+
+    def merge(self):
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        return out.getvalue()
+
+    def test_a_volume_number_is_never_taken_for_a_pack_count(self):
+        self.assertNotEqual(match_key("Gem Pack Vol 4 Booster Pack"), match_key("Gem Pack Vol 6 Booster Pack"))
+        self.assertNotEqual(match_key("Gem Pack Volume 4 Booster Pack"), match_key("Gem Pack Volume 6 Booster Pack"))
+        # A count after the box is still what the box holds.
+        self.assertEqual(match_key("Surging Sparks Booster Box 36 Packs"), match_key("Surging Sparks Booster Box"))
+
+    def test_different_numbers_are_left_apart(self):
+        five = self.product("Mystery Bundle 5 Sealed Booster Packs", "Solent Cards", "bundle")
+        ten = self.product("Mystery Bundle 10 Sealed Booster Packs", "Japan2UK", "bundle")
+        out = self.merge()
+        self.assertIn("their numbers differ", out)
+        self.assertEqual(Product.objects.filter(pk__in=[five.pk, ten.pk]).count(), 2)
+
+    def test_a_set_booster_box_is_not_a_draft_booster_box(self):
+        self.product("Throne of Eldraine Set Booster Box", "Total Cards", "booster_box")
+        self.product("Throne of Eldraine Booster Box", "Magic Madhouse", "booster_box")
+        self.assertIn("their booster kinds differ", self.merge())
+        self.assertEqual(Product.objects.count(), 2)
+
+    def test_the_same_box_written_two_ways_still_merges(self):
+        self.product("Surging Sparks Booster Box (36 Packs)", "Total Cards", "booster_box")
+        self.product("Surging Sparks Booster Box", "Magic Madhouse", "booster_box")
+        self.assertIn("1 products merged", self.merge())

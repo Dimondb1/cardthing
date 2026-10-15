@@ -18,8 +18,13 @@ key, keeps the one with the most listings (or an image), moves the other
 listings, price history, restocks, clicks and stock alerts across, and
 deletes the rest. The old addresses redirect to the kept product, and
 watchlists saved in browsers follow them. Run with --dry-run first.
+
+The hourly run merges only what is certain: two names whose numbers differ
+("Vol 4" and "Vol 6", "5 packs" and "10") or whose booster kind differs
+("Set Booster" and "Booster") are left for Things to check instead.
 """
 
+import re
 from collections import defaultdict
 from contextlib import nullcontext
 
@@ -28,7 +33,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from catalogue.languages import CHINESE, SIMPLIFIED, product_language
-from catalogue.matching import chinese_code, match_key
+from catalogue.matching import chinese_code, identity_numbers, match_key
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, Product, ProductAlias, Restock, ShopProduct, StockAlert,
 )
@@ -366,6 +371,19 @@ def duplicate_groups(loose=False):
     return sorted(found, key=lambda row: row[0].name)
 
 
+# A Magic booster's kind: a set booster box is not a draft booster box, though "set" is a word shops drop.
+BOOSTER_KIND = re.compile(r"\b(set|draft|play|collector|jumpstart|gift|prerelease) booster", re.I)
+
+
+def why_not_merge(keep, other):
+    """Why two products a key groups must not be merged without a person or Claude, or "" when it is safe."""
+    if identity_numbers(keep.name) != identity_numbers(other.name):
+        return "their numbers differ"
+    if {k.lower() for k in BOOSTER_KIND.findall(keep.name)} != {k.lower() for k in BOOSTER_KIND.findall(other.name)}:
+        return "their booster kinds differ"
+    return ""
+
+
 class Command(BaseCommand):
     help = "Merge products whose names identify the same thing."
 
@@ -378,7 +396,16 @@ class Command(BaseCommand):
         # Each group is its own short transaction, so a group that fails leaves the earlier ones merged
         # and nothing else waits for the whole walk. A dry run wraps them all and rolls back.
         with transaction.atomic() if dry_run else nullcontext():
-            for keep, others in duplicate_groups(loose):
+            for keep, group in duplicate_groups(loose):
+                others = []
+                for other in group:
+                    why = why_not_merge(keep, other)
+                    if why:
+                        self.stdout.write(f"left: {other.name} and {keep.name}, {why}")
+                    else:
+                        others.append(other)
+                if not others:
+                    continue
                 self.stdout.write(f"{'would keep' if dry_run else 'kept'}: {keep.name}")
                 for other in others:
                     self.stdout.write(f"    merged: {other.name}")

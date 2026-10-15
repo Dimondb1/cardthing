@@ -2081,6 +2081,14 @@ one Chinese box at two shops is one page. The code itself still counts
 ("Storming Emergence csm1b" and "csm1c" are two boxes), and so does the
 size (slim and jumbo boxes stay apart).
 
+The hourly merge only joins names whose numbers agree. A volume or set
+number is never read as a pack count ("Gem Pack Vol 4 Booster Pack" and
+"Vol 6" are two products), and two names with different numbers ("Mystery
+Bundle 5 Sealed Booster Packs" and "10") or different booster kinds ("Set
+Booster Box" and "Booster Box") are left apart, with a "left:" line in the
+command's output. What a box holds ("Booster Box (36 Packs)") and series or
+set codes ("SV8.5", "OP-10") do not count as numbers.
+
 ```sh
 python manage.py merge_duplicates --loose --dry-run
 ```

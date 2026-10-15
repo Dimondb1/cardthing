@@ -75,7 +75,10 @@ SERIES = re.compile(
 # "set of 4" stays: a set of four decks is not one deck.
 # Union Arena's codes too ("UE02BT", "UE18ST", Japanese "UA18BT"), but not an EX set's ("UEX01BT"), which
 # shops sometimes write instead of "Vol. 2" and must never meet the first volume.
-COUNTS = re.compile(r"\b\d+ (?:sealed )?(?:booster )?packs?\b|\(\d+\)|\bx\s?\d+\b|"
+# A number after "vol", "volume", "series", "set" or "gem" names the product ("Gem Pack Vol 6 Booster Pack"),
+# so it is never taken for a count.
+COUNTS = re.compile(r"(?<!\bvol )(?<!\bvolume )(?<!\bseries )(?<!\bset )(?<!\bgem )"
+                    r"\b\d+ (?:sealed )?(?:booster )?packs?\b|\(\d+\)|\bx\s?\d+\b|"
                     r"\b(?:op|st|bt|ex|eb|lm|pb|fb)[- ]?\d{1,3}\b|\bu[ae]\d{1,2} ?(?:bt|st)\b")
 # Simplified Chinese Pokémon codes, read on normalised text ("csv9.5C" is "csv9 5c"), with the language
 # letter shops glue on, leave apart or leave out ("csv7C", "csv7 C", "CBB2 C"): one spelling each, so two
@@ -139,6 +142,26 @@ def key_text(text):
     expanded = CHINESE_CODE.sub(lambda m: m.group(1).replace(" ", "."), expanded)
     expanded = SHARED_CHINESE_CODE.sub(r"\1", expanded)
     return expanded
+
+
+# What a box holds, straight after the box ("Booster Box 36 Packs", "Display (24)", "Elite Trainer Box 9 x Packs"):
+# the same box written two ways, not two products.
+BOX_CONTENTS = re.compile(r"\b(?:booster box|display(?: box)?|elite trainer box|case)(?: of)? \d{1,3}(?: ?x)?"
+                          r"(?: (?:sealed )?(?:booster )?packs?)?\b")
+CODES = re.compile(r"\b(?:op|st|bt|ex|eb|lm|pb|fb|prb|sv|swsh|sm|xy|me|m|s)[- ]?\d{1,3}(?: 5)?[a-z]?\b|\bu[ae]\d{1,2} ?(?:bt|st)\b")
+
+
+def identity_numbers(name):
+    """The numbers that say which product a name is: a volume, a set number, how many packs a multi-pack
+    holds. Not a series or set code, nor what a box holds. Two names with different ones are two products,
+    even when every word matches ("Gem Pack Vol 4" and "Vol 6", "5 Sealed Booster Packs" and "10")."""
+    text = " " + expand(name) + " "
+    text = SERIES.sub(" ", text)
+    text = CHINESE_CODE.sub(" ", text)
+    text = SHARED_CHINESE_CODE.sub(r" \1 ", text)
+    text = CODES.sub(" ", text)
+    text = BOX_CONTENTS.sub(" ", text)
+    return frozenset(re.findall(r"\d+", text))
 
 
 def chinese_code(word):

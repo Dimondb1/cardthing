@@ -250,6 +250,16 @@ class IntegrityTests(Base):
         self.assertEqual(sorted(c.object_id for c in changes), sorted([a.pk, b.pk]))
         self.assertTrue(all(c.state == State.PROBLEM and c.why == workbook_plan.MISMATCH for c in changes))
 
+    def test_addresses_changed_by_find_and_replace_are_ignored(self):
+        # Replace All over the sheet changes the grey Address text too, which is ignored on upload.
+        made = self.products(24)
+        _export, data = self.download()
+        edits = [("Products", p.pk, "Address", f"https://ripraptor.example/products/pokémon-{p.slug}") for p in made]
+        edits.append(("Products", self.box.pk, "Address", "https://ripraptor.example/products/elite-trainer-box"))
+        edits.append(("Products", self.etb.pk, "Name", "Surging Sparks Elite Trainer Box Pokémon Center"))
+        rename = self.only(self.edit(data, *edits))
+        self.assertEqual((rename.object_id, rename.state), (self.etb.pk, State.READY))
+
     def test_more_than_twenty_mismatched_ids_leave_the_whole_sheet(self):
         made = self.products(24)
         _export, data = self.download()

@@ -222,7 +222,8 @@ Each cell is compared three ways: with the download, with the file and with
 the site now. Only a cell that was edited counts, and a cell the site
 changed since the download is left as the site has it ("Changed on the site
 since your download"). Sorting whole rows, deleting rows, moving columns and
-adding columns change nothing.
+adding columns change nothing, and nor does Find and Replace changing a grey
+column; an Address or Link that is another row's means the ids were moved.
 
 A change is **not made** when the hourly tidy-up would undo it, a shop's
 next read would put it back, or Excel mixed the file up: a name that would

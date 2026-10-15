@@ -513,6 +513,11 @@ class Planner:
         read = {column.key for column in changeable} | {sheet.key, sheet.integrity, "game"}
         keyed = defaultdict(list)
         mismatched = []
+        # Which rows each address belongs to (two marketplace listings can share a shown link).
+        owners = defaultdict(set)
+        if sheet.integrity:
+            for row_key, row in base.items():
+                owners[wb.clean_text(row.get(sheet.integrity))].add(row_key)
         for number, cells in rows:
             cells = dict(cells)
             for column in changeable:
@@ -545,8 +550,10 @@ class Planner:
                         self.row_problem(sheet, number, key, NOT_IN_FILE)
                     continue
                 if sheet.integrity and sheet.integrity in cells:
+                    # Another row's address means the ids were moved. One no row had is a grey cell changed,
+                    # by Find and Replace say, and grey cells are ignored.
                     written = wb.clean_text(cells.get(sheet.integrity))
-                    if written and written != wb.clean_text(row_base.get(sheet.integrity)):
+                    if written and written in owners and str(key) not in owners[written]:
                         mismatched.append((number, key))
                         continue
             keyed[key].append((number, cells, row_base))

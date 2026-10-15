@@ -640,6 +640,20 @@ class MergeTests(Base):
         self.assertEqual(held.state, State.HELD)
         self.assertTrue(held.why.startswith("Solent Cards sells both on separate pages."))
 
+    def test_merges_into_one_product_are_judged_in_the_order_they_are_made(self):
+        # The box has no Harbour page; the display and a third product each have one. The first merge made brings
+        # its page across, so the second would leave its own on the switched-off product.
+        third = make_product(self.set, name="Surging Sparks Booster Box 36 Packs", slug="ssp-36",
+                             product_type="booster_box", release_date=date(2024, 11, 8))
+        make_listing(third, self.harbour, url="https://harbour.example/p/36")
+        _export, data = self.download()
+        first, second = sorted(self.same_as(data, (self.display, self.box), (third, self.box)), key=lambda c: c.row)
+        self.assertEqual((first.object_id, first.state, first.data["shops"]), (third.pk, State.READY, 1))
+        self.assertIn("Its 1 shop moves across", first.what)
+        self.assertEqual((second.object_id, second.state, second.data["shops"]), (self.display.pk, State.HELD, 0))
+        self.assertTrue(second.why.startswith("Harbour Games sells both on separate pages."))
+        self.assertNotIn("moves across", second.what)
+
     def test_held_for_differing_barcodes_and_for_a_pair_kept_apart(self):
         Product.objects.filter(pk=self.display.pk).update(ean="5053222123458")
         _export, data = self.download()

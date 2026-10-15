@@ -344,7 +344,9 @@ class FinalState:
             product = products[pk]
             product.language = language_of(product, sets.get(product.set_id))
         self.new_sets = {change.ref for change in live if change.kind == Kind.NEW_SET}
-        self.edges = {change.object_id: change.data["target"] for change in live if change.kind == Kind.MERGE}
+        # In the order they are made: each merge finds the product kept with the pages earlier ones brought.
+        self.edges = {change.object_id: change.data["target"] for change in
+                      sorted((c for c in live if c.kind == Kind.MERGE), key=lambda c: (c.row, c.seq))}
 
         # Shop pages before the merges: take-offs gone, moves made, links added, each on its final product.
         taken = {change.object_id for change in live if change.kind == Kind.TAKE_OFF}
@@ -369,12 +371,11 @@ class FinalState:
                 d = change.data
                 pages[product][d["retailer"]].append((("left", change.ref), link_key(d["url"]), d["url"]))
         self.before_merge = {pk: replace(product) for pk, product in products.items() if pk in self.edges}
-        merging = set(self.edges) | {self.keeper(target) for target in self.edges.values()}
-        self.shops_before = {pk: set(pages[pk]) for pk in merging}
 
         # The merges: the product merged away is switched off, its barcode moves to the product kept when that
         # has none, and its pages move to it for the shops it lacks (merge_undoable).
         self.carried = defaultdict(list)   # a product merged away: the pages that move to the product kept
+        self.stranded = {}                 # and the shops whose page stays on it, unseen
         for other in self.edges:
             keep = self.keeper(other)
             if keep is None or keep == other or other not in products or keep not in products:
@@ -383,6 +384,7 @@ class FinalState:
             kept = products[keep] = replace(products[keep])
             if not kept.ean and self.before_merge[other].ean:
                 kept.ean = self.before_merge[other].ean
+            self.stranded[other] = set(pages[other]) & set(pages[keep])
             for retailer, entries in list(pages[other].items()):
                 if retailer not in pages[keep]:
                     pages[keep][retailer] = entries
@@ -1310,14 +1312,13 @@ class Planner:
         if not languages.same(other.language, kept.language):
             return (State.PROBLEM, f"This is {languages.name(other.language)} and {keep} is "
                     f"{languages.name(kept.language)}, so they are not one product.")
-        shops_other = state.shops_before.get(pk, set())
-        shops_kept = state.shops_before.get(keep, set())
-        d["shops"] = len(shops_other - shops_kept)
+        d["shops"] = len({retailer for retailer, _url in state.carried.get(pk, ())})
         warning = change.warning
         if other.type != kept.type:
             warning = " ".join(filter(None, [warning, f"Their types differ: {keep} keeps its type, "
                                              f"{types.type_label(kept.game_slug, kept.type)}."]))
-        both = sorted(self.site.shop_name(r) for r in shops_other & shops_kept if not self.site.is_marketplace(r))
+        # Against the product kept as the file's earlier merges into it leave it.
+        both = sorted(self.site.shop_name(r) for r in state.stranded.get(pk, ()) if not self.site.is_marketplace(r))
         if both:
             return (State.HELD, f"{both[0]} sells both on separate pages. After the merge its second page sits on the "
                     "switched-off product and is not shown. Fix it in Listings first, or make the merge anyway.",

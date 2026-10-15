@@ -1217,8 +1217,9 @@ def feed_offers(text):
 
 # Applying offers ------------------------------------------------------------
 
-def link_key(url):
-    """Product links compare without scheme, www, query string or trailing slash."""
+def page_key(url):
+    """The shop's page a link is on: without scheme, www, query string or trailing slash. Every variant of
+    one Shopify page shares it."""
     parsed = urllib.parse.urlsplit(url.strip().lower())
     host = parsed.netloc.removeprefix("www.")
     path = parsed.path.rstrip("/")
@@ -1226,6 +1227,74 @@ def link_key(url):
     if "/products/" in path:
         path = "/products/" + path.split("/products/", 1)[1]
     return host + path
+
+
+def variant_of(url):
+    """The Shopify variant a link selects (?variant=123), or ""."""
+    found = urllib.parse.parse_qs(urllib.parse.urlsplit(url.strip()).query).get("variant") or [""]
+    return found[0] if found[0].isdigit() else ""
+
+
+def link_key(url):
+    """Product links compare without scheme, www, query string or trailing slash, but keep the Shopify
+    variant they select: "Avengers Assemble" and "Fantastic Four" on one Commander deck page are two
+    products at one address, told apart only by ?variant=."""
+    variant = variant_of(url)
+    return page_key(url) + (f"?variant={variant}" if variant else "")
+
+
+class LinkIndex:
+    """Which product each of one shop's links is, for a read.
+
+    A link that selects a variant matches only that variant. A shop's link to the bare page (one added by
+    hand, or from before the page had variants) still matches the page's offers, but an offer for one of
+    several variants takes it only when its title names the product in full (``names``). Two listings on
+    one exact link (left by reads before variants were told apart) go to the one whose name the title
+    names, or to neither.
+    """
+
+    def __init__(self, rows, names=None):
+        self.exact, self.bare, self.on_page = {}, {}, {}
+        self.names = names if names is not None else {}
+        for url, pk in rows:
+            self.add(url, pk)
+
+    def add(self, url, pk):
+        key = link_key(url)
+        held = self.exact.setdefault(key, [])
+        if pk not in held:
+            held.append(pk)
+        page = page_key(url)
+        self.on_page.setdefault(page, set()).add(pk)
+        if not variant_of(url):
+            self.bare.setdefault(page, set()).add(pk)
+
+    def set(self, url, pk):
+        """The link is now this product's alone."""
+        self.exact[link_key(url)] = [pk]
+        self.on_page.setdefault(page_key(url), set()).add(pk)
+
+    def named(self, pks, title, game=None):
+        """The one product of ``pks`` whose name the title names in full, or None."""
+        sure = [pk for pk in pks if pk in self.names and score(self.names[pk], title, game or "") >= AUTO_LINK]
+        return sure[0] if len(sure) == 1 else None
+
+    def get(self, url, title="", variant="", game=None):
+        held = self.exact.get(link_key(url))
+        if held:
+            return held[0] if len(held) == 1 else self.named(held, title, game)
+        page = page_key(url)
+        if not variant_of(url):
+            # The page now sells one thing: the product listed at it, if only one is.
+            pks = self.on_page.get(page, set())
+            return next(iter(pks)) if len(pks) == 1 else None
+        bare = self.bare.get(page, set())
+        if len(bare) != 1:
+            return None
+        pk = next(iter(bare))
+        if not variant or self.named([pk], title, game) == pk:
+            return pk
+        return None
 
 
 # Unchanged listings are stamped this many at a time: one short UPDATE each.
@@ -1317,10 +1386,12 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     """
     checked_at = checked_at or timezone.now()
     marketplace = retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY)
-    products_by_link = {
-        link_key(url): pk
-        for pk, url in Listing.objects.filter(retailer=retailer).values_list("product_id", "url")
-    }
+    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
+    # Each listing's link, the variant it selects included, so one variant never takes over another's listing.
+    links = LinkIndex(
+        ((url, pk) for pk, url in Listing.objects.filter(retailer=retailer).values_list("product_id", "url")),
+        names=catalogue.names,
+    )
     products_by_ean = {}
     for pk, ean in Product.objects.exclude(ean="").values_list("pk", "ean"):
         if ean_key(ean):
@@ -1329,13 +1400,12 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     unmatched = []
     seen_products = set()
     images_by_product = {}
-    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
     # A page the owner said is not one of ours is never matched by name. A No to the stockist finder is
     # about one product only: the page can still be matched by name to any other.
     # A page the owner said Yes to before any read had priced it (a website page the stockist finder
     # found by its address) waits: the first read that prices it adds its listing. Read in the same query.
     ignored, refused, waiting = set(), {}, {}
-    listed = set(products_by_link.values())
+    listed = {pk for pks in links.on_page.values() for pk in pks}
     answers = ShopProduct.objects.filter(retailer=retailer).filter(
         Q(status=ShopProduct.Status.IGNORED)
         | (Q(status=ShopProduct.Status.LINKED, suggested__isnull=False) & (Q(price__isnull=True) | Q(price__lte=0)))
@@ -1355,7 +1425,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     # Product pk -> (first offer without a price, whether every such offer said out of stock).
     unpriced = {}
     # Product pk -> its best priced offer so far in this read; the ones still to write for the page being
-    # read (pending) and at the end of the read (late); and the pages read so far, by link_key.
+    # read (pending) and at the end of the read (late); and the pages read so far, by page_key (a page's
+    # variants are one page).
     best, pending, late = {}, {}, {}
     pages = set()
     page = None
@@ -1368,7 +1439,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         listing, created = Listing.objects.get_or_create(
             product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
         )
-        other_page = link_key(listing.url) != link_key(offer.url) and link_key(listing.url) not in pages
+        other_page = page_key(listing.url) != page_key(offer.url) and page_key(listing.url) not in pages
         if not (final or created) and offer.product_pk is None and other_page:
             late[product_pk] = offer
             return
@@ -1383,8 +1454,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         deal = held if offer.deal is None else offer.deal
         if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
                 or deal != held):
-            # The page shows the multi-buy and links to the shop's page: a new one of either is a change.
-            shown = not created and listing.is_active and (deal != held or link_key(listing.url) != link_key(offer.url))
+            # The page shows the multi-buy and links to the shop's page: a new one of either is a change. Another
+            # variant of the same page is not.
+            shown = not created and listing.is_active and (deal != held or page_key(listing.url) != page_key(offer.url))
             listing.url = offer.url
             listing.title = title
             listing.shop_ean = shop_ean
@@ -1447,7 +1519,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if product_pk is None:
                 product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
             if product_pk is None:
-                product_pk = products_by_link.get(link_key(offer.url))
+                product_pk = links.get(offer.url, offer.title, offer.variant)
             answer = None
             if product_pk is None and link_key(offer.url) in waiting:
                 answer, product_pk = waiting[link_key(offer.url)]
@@ -1507,11 +1579,11 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 ShopProduct.objects.filter(pk=answer).update(price=offer.price, availability=offer.availability,
                                                              last_seen=checked_at)
                 waiting.pop(link_key(offer.url), None)
-                products_by_link[link_key(offer.url)] = product_pk
-            if link_key(offer.url) != page:
+                links.set(offer.url, product_pk)
+            if page_key(offer.url) != page:
                 # The read moved on to another page: the last page's products are written.
                 write_pending()
-                page = link_key(offer.url)
+                page = page_key(offer.url)
                 pages.add(page)
             if product_pk in best and not better(offer, best[product_pk]):
                 continue

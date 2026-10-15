@@ -52,7 +52,9 @@ from django.utils import timezone
 
 from . import crawl, importers
 from .classify import classify
-from .importers import Catalogue, ImportError_, apply_offers, ean_key, link_key, money, product_offers
+from .importers import (
+    Catalogue, ImportError_, LinkIndex, apply_offers, ean_key, link_key, money, page_key, product_offers,
+)
 from .classify import TYPES, label_kind
 from .matching import AUTO_LINK, SUGGEST, TYPE_WORDS, covers, key_words, shop_title
 from .models import (
@@ -875,9 +877,7 @@ class Finder:
         """The page is another product's listing at this shop, one the owner said is not one of ours, or
         one the owner said is not this product."""
         if shop.pk not in self.taken:
-            self.taken[shop.pk] = {
-                link_key(u): pk for u, pk in Listing.objects.filter(retailer=shop).values_list("url", "product_id")
-            }
+            self.taken[shop.pk] = LinkIndex(Listing.objects.filter(retailer=shop).values_list("url", "product_id"))
             refused = {}
             for u, source, suggested_pk, looked_for_pk in ShopProduct.objects.filter(
                 retailer=shop, status=ShopProduct.Status.IGNORED
@@ -886,8 +886,10 @@ class Finder:
                 refused[link_key(u)] = ({suggested_pk, looked_for_pk} - {None}) if source == ShopProduct.Source.FINDER else None
             self.ignored[shop.pk] = refused
         key = link_key(url)
-        owner = self.taken[shop.pk].get(key)
-        if owner is not None and owner != product.pk:
+        # The variant's own listing, or a listing of the bare page, which stands for all its variants.
+        links = self.taken[shop.pk]
+        owners = set(links.exact.get(key) or ()) | links.bare.get(page_key(url), set())
+        if owners - {product.pk}:
             return True
         if key not in self.ignored[shop.pk]:
             return False
@@ -898,7 +900,8 @@ class Finder:
         apply_offers(shop, [replace(offer, product_pk=product.pk)], checked_at=self.clock(), complete=False)
         if not Listing.objects.filter(product=product, retailer=shop).exists():
             return self.note(product, shop, StockistSearch.Outcome.NONE, offer.url, value)
-        self.taken.setdefault(shop.pk, {})[link_key(offer.url)] = product.pk
+        if shop.pk in self.taken:
+            self.taken[shop.pk].set(offer.url, product.pk)
         return self.note(product, shop, StockistSearch.Outcome.LINKED, offer.url, value)
 
     def review(self, product, shop, offer, value):

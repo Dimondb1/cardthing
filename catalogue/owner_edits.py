@@ -780,6 +780,12 @@ def undo_link(change, applying):
         listing = Listing.objects.filter(pk=u["listing"], product_id=row.suggested_id).first()
         if listing is not None and link_key(listing.url) == link_key(row.url):
             drop_listing(listing)
+    else:
+        # An item with no price waited, and the shop's read since may have added its listing. The product had no
+        # page at the shop when it was linked (make_link refuses otherwise), so one with this link came from it.
+        for listing in Listing.objects.filter(product_id=row.suggested_id, retailer_id=row.retailer_id):
+            if link_key(listing.url) == link_key(row.url):
+                drop_listing(listing)
     ShopProduct.objects.filter(pk=row.pk).update(status=u["status"], suggested_id=u["suggested"])
     restore_search(u.get("search"))
     restore_pages(u.get("pages", []))

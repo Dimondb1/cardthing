@@ -917,6 +917,21 @@ class UndoTests(Base):
         self.assertEqual((item.status, item.suggested_id), (Status.REVIEW, self.etb.pk))
         self.assertFalse(Listing.objects.filter(retailer=self.shop, url=item.url).exists())
 
+    def test_undo_takes_away_a_listing_the_shops_read_added_to_a_waiting_link(self):
+        item = ShopProduct.objects.create(retailer=self.harbour, title="SSP ETB", url="https://harbour.example/p/9",
+                                          status=Status.REVIEW, suggested=self.etb, last_seen=timezone.now())
+        _export, data = self.download()
+        upload = self.make(data, ("Shop items", item.pk, "Decision", "Link"))
+        self.assertFalse(Listing.objects.filter(retailer=self.harbour).exists())
+        apply_offers(self.harbour, [Offer(title="SSP ETB", url=item.url, price=Decimal("45.50"))], complete=False)
+        self.assertEqual(Listing.objects.get(retailer=self.harbour).product, self.etb)
+        self.assertEqual(self.changes(self.undo(upload))[0].outcome, Outcome.UNDONE)
+        self.assertFalse(Listing.objects.filter(retailer=self.harbour).exists())
+        self.assertEqual(ShopProduct.objects.get(pk=item.pk).status, Status.REVIEW)
+        # Back to waiting for him, the next read adds nothing.
+        apply_offers(self.harbour, [Offer(title="SSP ETB", url=item.url, price=Decimal("44.00"))], complete=False)
+        self.assertFalse(Listing.objects.filter(retailer=self.harbour, product=self.etb).exists())
+
     def test_undo_takes_away_what_the_file_added_and_puts_pages_back(self):
         from .models import ImportRun
 

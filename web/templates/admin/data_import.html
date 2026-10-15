@@ -17,6 +17,7 @@
     {% elif job.status == "applied" or job.status == "undone" %}
     <p class="progress">{{ result }}</p>
     {% if merges and job.status == "applied" %}<p class="note">Its merges are also under Sorted for you on <a href="{% url 'checks' %}">Things to check</a>, each with its own Undo.</p>{% endif %}
+    {% if held_left %}<p class="note">{{ held_left }} held for your say {{ held_left|pluralize:"was,were" }} not made. To make {{ held_left|pluralize:"it,them" }}, <a href="{% url 'data' %}#upload">upload this file again</a> and tap the button that includes the held changes. What was made reads as already so.</p>{% endif %}
     {% elif job.status == "discarded" %}
     <p class="progress">Discarded. Nothing in this file was made.</p>
     {% elif job.status == "failed" %}
@@ -56,14 +57,14 @@
   {% for section in sections %}
   <details id="{{ section.state }}"{% if section.open %} open{% endif %}>
     <summary><h2>{{ section.heading }}</h2></summary>
-    {% if section.state == "held" %}<p class="note">Made only with the button that includes them. Each says why it waits for you.</p>{% elif section.state == "conflict" %}<p class="note">You changed these, but so did the site since your download. The site's value is kept.</p>{% endif %}
+    {% if section.state == "held" and job.status == "checked" %}<p class="note">Made only with the button that includes them. Each says why it waits for you.</p>{% elif section.left %}<p class="note">Not made: the button you tapped leaves these out. Each says why it waits for you.</p>{% elif section.state == "conflict" %}<p class="note">You changed these, but so did the site since your download. The site's value is kept.</p>{% endif %}
     {% if section.state == "ready" %}
     {% regroup section.lines by get_kind_display as kinds %}
     {% for kind in kinds %}<h3>{{ kind.grouper }}</h3>
-    <ul class="lines">{% for change in kind.list %}{% include "admin/_data_change.html" %}{% endfor %}</ul>
+    <ul class="lines">{% for change in kind.list %}{% include "admin/_data_change.html" with done=section.done left=section.left %}{% endfor %}</ul>
     {% endfor %}
     {% else %}
-    <ul class="lines">{% for change in section.lines %}{% include "admin/_data_change.html" %}{% endfor %}</ul>
+    <ul class="lines">{% for change in section.lines %}{% include "admin/_data_change.html" with done=section.done left=section.left %}{% endfor %}</ul>
     {% endif %}
     {% if section.pages > 1 %}
     <div class="pages">

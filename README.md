@@ -253,7 +253,10 @@ list over a day old must be checked again, as must a list checked before
 another upload of the same download made or undid changes (so a new1 both
 add is added once). The same file uploaded twice
 goes to where the first got to, so it is never made twice; once discarded
-or undone it can be uploaded again. An upload must be an .xlsx of 10 MB or
+or undone it can be uploaded again, and so can a file made without its
+held changes, to make them (what was made then reads as already so). Once
+a file is made, each section's heading says what came of its changes
+("Ready (12): 11 made, 1 left as it was"). An upload must be an .xlsx of 10 MB or
 less with no macros. Each change is made in its own short transaction
 through `catalogue/owner_edits.py`, the code paths the owner's own buttons
 use, and only while the site still holds what it held at the check: one

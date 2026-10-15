@@ -2119,7 +2119,7 @@ def take_upload(request):
     from django.contrib import messages
 
     from catalogue import data_jobs
-    from catalogue.models import DataImport
+    from catalogue.models import DataChange, DataImport
 
     Status = DataImport.Status
     form = UploadForm(request.POST, request.FILES)
@@ -2133,9 +2133,13 @@ def take_upload(request):
     DataImport.objects.filter(sha256=sha256, status=Status.CHECKED, upload__isnull=True).update(
         status=Status.DISCARDED, check_token="")
     # The same file twice is shown where it got to, so it is never made twice. One refused, discarded, failed or
-    # undone may be uploaded again.
+    # undone may be uploaded again, and so may one made without its held changes, to make them: checked again,
+    # what was made reads as already so.
+    held_left = Exists(DataChange.objects.filter(data_import=OuterRef("pk"), state=DataChange.State.HELD,
+                                                 outcome=DataChange.Outcome.NONE))
     earlier = (DataImport.objects.filter(sha256=sha256)
                .exclude(status__in=[Status.REFUSED, Status.DISCARDED, Status.FAILED, Status.UNDONE])
+               .exclude(Q(status=Status.APPLIED), held_left)
                .only("pk", "created_at").order_by("-created_at", "-pk").first())
     if earlier is not None:
         messages.info(request, f"You uploaded this file already, on {when(earlier.created_at)}. This is where it "
@@ -2270,12 +2274,41 @@ def import_tap(request, pk):
             messages.warning(request, "This file has no changes to undo.")
 
 
+# What came of the ready and held changes, as their headings say once the file is made or undone.
+CAME_OF = (("applied", "made", "made"), ("undone", "undone", "undone"),
+           ("skipped", "left as it was", "left as they were"), ("failed", "could not be made", "could not be made"),
+           ("undo_skipped", "not undone", "not undone"), ("", "not made", "not made"))
+
+
+def came_of(outcomes, going):
+    """'2 made, 1 left as it was' from {outcome: count}; "not made yet" while the file is still being made."""
+    parts = []
+    for outcome, one, many in CAME_OF:
+        if outcomes.get(outcome):
+            words = one if outcomes[outcome] == 1 else many
+            parts.append(f"{outcomes[outcome]:,} {words}{' yet' if going and not outcome else ''}")
+    return ", ".join(parts)
+
+
 def change_sections(job, wanted, page):
     """The preview's sections, each with one page of its lines: one query a section, however long the list."""
-    from catalogue.management.commands.data_files import SECTIONS
-    from catalogue.models import DataChange
+    from collections import Counter, defaultdict
 
+    from django.db.models import Count
+
+    from catalogue.management.commands.data_files import SECTIONS
+    from catalogue.models import DataChange, DataImport
+
+    Status, State = DataImport.Status, DataChange.State
     states = (job.counts or {}).get("state", {})
+    # Once the file is being made or undone, the ready and held headings say what came of them, in one query.
+    done = job.status not in (Status.QUEUED, Status.CHECKING, Status.CHECKED, Status.REFUSED, Status.DISCARDED)
+    outcomes = defaultdict(Counter)
+    if done:
+        for state, outcome, count in (DataChange.objects.filter(data_import_id=job.pk, state__in=[State.READY, State.HELD])
+                                      .values_list("state", "outcome").annotate(count=Count("pk")).order_by()):
+            outcomes[state][outcome] = count
+    going = job.status in (Status.APPLY_QUEUED, Status.APPLYING, Status.UNDO_QUEUED, Status.UNDOING)
     sections = []
     for state, heading in SECTIONS:
         count = states.get(state, 0)
@@ -2288,8 +2321,12 @@ def change_sections(job, wanted, page):
         lines = DataChange.objects.filter(data_import_id=job.pk, state=state).order_by("step", "seq").only(
             "sheet", "row", "what", "why", "warning", "state", "kind", "outcome", "outcome_note")[
             start:start + LINES_PER_PAGE]
+        result = came_of(outcomes[state], going) if done and state in (State.READY, State.HELD) else ""
         sections.append({
-            "state": state, "heading": f"{heading} ({count:,})", "lines": list(lines), "page": number, "pages": pages,
+            "state": state, "heading": f"{heading} ({count:,})" + (f": {result}" if result else ""),
+            "done": done and state in (State.READY, State.HELD),
+            "left": done and state == State.HELD and not job.include_held and bool(outcomes[state].get("")),
+            "lines": list(lines), "page": number, "pages": pages,
             "where": f"Lines {start + 1:,} to {min(start + LINES_PER_PAGE, count):,} of {count:,}",
             # What needs his eye is open; what is already so, or changed on the site, is a tap away.
             "open": wanted == state or (not wanted and state in ("ready", "held", "problem")),
@@ -2384,6 +2421,8 @@ def data_import_page(request, pk):
         "make_label": f"Make {plural(ready, 'change', 'changes')}" if ready else "",
         "make_all_label": (f"Make {plural(ready + held, 'change', 'changes')}, including the {held:,} held for your "
                            "say") if held else "",
+        # Made without the held changes: they can still be made from the same file uploaded again.
+        "held_left": held if job.status == Status.APPLIED and not job.include_held else 0,
         "can_undo": (job.status == Status.APPLIED and made.get(Outcome.APPLIED)) or failed_part_made,
         "can_discard": job.status == Status.CHECKED or (job.status == Status.FAILED and not failed_part_made),
         "result": result_line(job), "left": left, "merges": merged,

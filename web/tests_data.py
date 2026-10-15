@@ -376,6 +376,36 @@ class PreviewTests(DataPageBase):
         self.assertEqual(Product.objects.filter(name="Black Bolt Elite Trainer Box").count(), 1)
         self.assertEqual(Product.objects.get(pk=self.etb.pk).name, "Surging Sparks ETB")
 
+    def test_after_make_the_page_says_what_came_of_each_and_the_held_ones_can_still_be_made(self):
+        upload = self.checked_upload()
+        data = bytes(DataImport.objects.values_list("upload", flat=True).get(pk=upload.pk))
+        self.tap(upload, "apply", check_token=upload.check_token)
+        call_command("data_files")
+        page = self.page(upload.pk)
+        self.assertContains(page, "Made 1 change.")
+        self.assertContains(page, "Ready (1): 1 made<")
+        self.assertContains(page, "Held for your say (1): 1 not made<")
+        self.assertContains(page, "Not made: held for your say")
+        self.assertNotContains(page, "Made only with the button that includes them")
+        self.assertContains(page, "1 held for your say was not made. To make it,")
+        # The same file again: what was made is already so, and the held merge can be made now.
+        self.send(data)
+        call_command("data_files")
+        again = DataImport.objects.exclude(pk=upload.pk).get()
+        self.assertEqual({(c.kind, c.state) for c in again.changes.all()},
+                         {(DataChange.Kind.PRODUCT_FIELDS, DataChange.State.SAME),
+                          (DataChange.Kind.MERGE, DataChange.State.HELD)})
+        self.tap(again, "apply_all", check_token=again.check_token)
+        call_command("data_files")
+        self.assertFalse(Product.objects.get(pk=self.display.pk).is_active)
+        self.assertNotContains(self.page(again.pk), "not made")
+        # Once nothing is held back, the same file goes to where it got to.
+        self.assertContains(self.send(data), "You uploaded this file already")
+        # Undone, the headings say so.
+        self.tap(again, "undo")
+        call_command("data_files")
+        self.assertContains(self.page(again.pk), "Held for your say (1): 1 undone<")
+
     def test_check_again_gives_a_new_token(self):
         upload = self.checked_upload()
         old = upload.check_token

@@ -295,7 +295,9 @@ taking it, or its heartbeat stops, unless a runner is going already. A lock
 file in the cache folder keeps a second copy from running. It runs at a lower priority than the site and is
 first in line for the memory killer (score 1000, ahead of the shop reader's
 500), so visitors and fresh prices come first on the 1 GB server. A runner that is stopped is taken up again where it stopped,
-without making any change twice; after three stops the file is given up.
+without making any change twice; after three stops the file is given up,
+with what to tap next (for a file part made, upload it again to make the
+rest, or undo it).
 A database another process holds for longer than SQLite waits is waited
 for, about two and a half minutes, and then left to the runner's next
 start; the change is not counted as failed, nor the wait as a stop.

@@ -885,10 +885,18 @@ class RunnerTests(Base):
         for row in (checking, applying, running, building):
             row.refresh_from_db()
         self.assertEqual((checking.status, checking.attempts), (Upload.CHECKED, 1))
-        self.assertEqual((applying.status, applying.attempts, applying.error),
-                         (Upload.FAILED, 3, "Stopped three times. Download a fresh file and try again."))
+        # Each says what to tap next for what it was doing.
+        self.assertEqual((applying.status, applying.attempts, applying.error), (Upload.FAILED, 3, (
+            "Making its changes stopped three times. Those made are listed; upload this file again to make the rest, "
+            "or undo it.")))
         self.assertEqual((running.status, running.attempts), (Upload.APPLYING, 0))
-        self.assertEqual((building.status, building.error), (DataExport.Status.FAILED, data_jobs.STOPPED))
+        self.assertEqual((building.status, building.error), (
+            DataExport.Status.FAILED, "Making it stopped three times. Tap Make a spreadsheet to try again."))
+        undoing = DataImport.objects.create(file_name="d.xlsx", sha256="d", status=Upload.UNDOING, heartbeat_at=stale,
+                                            attempts=2)
+        data_jobs.reclaim()
+        self.assertEqual(DataImport.objects.get(pk=undoing.pk).error,
+                         "Undoing it stopped three times. Tap Undo this file to carry on.")
 
     def test_it_waits_for_a_shop_read_to_finish(self):
         _export, data = self.download()
@@ -1150,7 +1158,7 @@ class WordingTests(Base):
 
         from web.tests import CopyStyleTests
 
-        texts = [data_jobs.STOPPED, data_jobs.CHANGED_SINCE, data_jobs.UNDO_CHANGED, data_jobs.NO_UPLOAD,
+        texts = [*data_jobs.STOPPED.values(), data_jobs.CHANGED_SINCE, data_jobs.UNDO_CHANGED, data_jobs.NO_UPLOAD,
                  data_jobs.WAITING_FOR_READ]
         # Every sentence a change left as it was can carry, as the code writes it.
         for node in ast.walk(ast.parse(inspect.getsource(owner_edits))):

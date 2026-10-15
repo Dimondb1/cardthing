@@ -45,7 +45,14 @@ Kind = DataChange.Kind
 # A running job whose heartbeat is older than this was stopped (a deploy, the memory killer, a crash).
 STALE_AFTER = timedelta(minutes=5)
 MAX_ATTEMPTS = 3
-STOPPED = "Stopped three times. Download a fresh file and try again."
+# Why a job was given up after three stops, by what it was doing: what to tap next differs.
+STOPPED = {
+    "building": "Making it stopped three times. Tap Make a spreadsheet to try again.",
+    "checking": "Checking it failed three times; the site's log has the details. Discard it, or upload it again.",
+    "applying": "Making its changes stopped three times. Those made are listed; upload this file again to make the "
+                "rest, or undo it.",
+    "undoing": "Undoing it stopped three times. Tap Undo this file to carry on.",
+}
 # One run of the runner stops taking new jobs after this; the next start carries on.
 RUN_FOR = timedelta(minutes=25)
 # A file is made only while no shop read is saving prices, which takes the import lock. Shop reads hold it
@@ -239,7 +246,7 @@ def reclaim(now=None):
         for pk, attempts in model.objects.filter(stale, status=running).values_list("pk", "attempts"):
             if attempts + 1 >= MAX_ATTEMPTS:
                 model.objects.filter(pk=pk, status=running).update(
-                    status=model.Status.FAILED, attempts=attempts + 1, error=STOPPED, finished_at=now)
+                    status=model.Status.FAILED, attempts=attempts + 1, error=STOPPED[running], finished_at=now)
             else:
                 model.objects.filter(pk=pk, status=running).update(status=waiting, attempts=attempts + 1)
 

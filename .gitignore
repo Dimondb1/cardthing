@@ -13,3 +13,6 @@ db.sqlite3-shm
 
 # The Claude judge key, saved from Things to check (RIPRAPTOR_CLAUDE_KEY_FILE)
 claude-key
+
+# Temporary working copies made by Claude Code agents
+/.claude/worktrees/

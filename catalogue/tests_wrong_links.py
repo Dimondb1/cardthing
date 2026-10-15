@@ -158,3 +158,136 @@ class ListingPageTests(TestCase):
         self.assertIn("a page listing many products", unmatched[0])
         listing = Listing.objects.get(retailer=shop)
         self.assertEqual((listing.price, listing.availability), (Decimal("4.99"), Listing.Availability.OUT_OF_STOCK))
+
+
+class ContradictionTests(TestCase):
+    """matching.contradiction on real shop titles and our real product names from the export."""
+
+    WRONG = [
+        # (shop title, our product, game, our language, why)
+        ("One Piece Card Game - OP15 - Booster Box - (24 Packs)", "OP18 Sealed Booster Box", "one-piece", "", "set code"),
+        ("One Piece OP19 Booster Box", "OP18 Sealed Booster Box", "one-piece", "", "set code"),
+        ("One Piece TCG - OP-01 & OP-02 - Booster Box", "OP18 Sealed Booster Box", "one-piece", "", "set code"),
+        ("Pokemon TCG Scarlet Violet Future Flash SV4M  new  Booster Box Japanese Edition",
+         "Japanese TCG: Scarlet ex SV1S Japanese Booster Box", "pokemon", "ja", "set code"),
+        ("Pokemon TCG: Sword & Shield Base Set - Booster Pack", "Scarlet & Violet Base Set Booster Pack", "pokemon", "",
+         "set code"),
+        ("Dragon Ball Super CG: Booster Box - Fusion World ST10 Story Booster 01",
+         "Fusion World ST01 Story Booster 01 Booster Box", "dragon-ball", "", "set code"),
+        ("Dragon ball super masters TCG Ultimate Advent booster pack factory sealed BT26", "Ultimate Masters Booster Pack",
+         "magic-the-gathering", "", "game"),
+        ('ONE PIECE OP-16 Card Game "THE TIME OF BATTLE" Japanese Booster Pack',
+         "The Time of Battle OP 16 English Booster Pack", "one-piece", "", "language"),
+        ("Pokemon TCG: 30th Celebration - Booster Box [JP]", "30th Celebration Booster Box", "pokemon", "", "language"),
+        ("Pokémon CENTER TCG Cards SWSH EVOLVING SKIES ELITE TRAINER BOX ETB COIN", "Evolving Skies Elite Trainer Box",
+         "pokemon", "", "Center"),
+        ("Pokemon Center SV Journey Together Enhanced Booster Display Box 36 Pack",
+         "Scarlet & Violet: Journey Together Enhanced Booster Display Box", "pokemon", "", "Center"),
+        ("Ultra Limit - Booster Box [FB04] (Damaged)", "Ultra Limit Booster Box (Normal)", "dragon-ball", "", "condition"),
+        ("Pokemon TCG Prismatic Evolutions Mini Tin Umbreon Sealed New (Slight Dent)", "Prismatic Evolutions Mini Tin Umbreon",
+         "pokemon", "", "condition"),
+        ("Pokemon Ninja Spinner m4 Japanese Booster Box (No Shrink Booster Box)",
+         "Ninja Spinner m4 Japanese Booster Box (Shrinked Booster Box)", "pokemon", "ja", "condition"),
+        ("WAVE 2 Pokémon TCG: 30th Anniversary Products (RIPPED SEALS) (Booster Bundle)",
+         "WAVE 2 Pokémon TCG: 30th Anniversary Products (RIPPED SEALS) (Elite Trainer Box)", "pokemon", "", "unit"),
+        ("PRE-ORDER: Magic The Gathering - Star Trek Collector Booster (Booster Box)", "Star Trek Collector Booster",
+         "magic-the-gathering", "", "unit"),
+        ("Double Pack Set Vol.7 [DP-07] (Double Pack)", "Double Pack Set Vol.7 (Case of Double Packs (8 Units))",
+         "yu-gi-oh", "", "unit"),
+        ("Magic: The Gathering - Aetherdrift Play Booster (Booster Pack)", "Aetherdrift Play Booster Box (Booster Box)",
+         "magic-the-gathering", "", "unit"),
+        ("Crown Zenith Elite Trainer Box", "Crown Zenith: 4 Booster Packs", "pokemon", "", "unit"),
+        ("Pokemon Perfect Order 3-Pack Blister", "Perfect Order 1 Pack Blister", "pokemon", "", "packs"),
+        ("Pokémon Scarlet & Violet Obsidian Flames blister 2 packs", "Scarlet & Violet Obsidian Flames 3 Pack Blister",
+         "pokemon", "", "packs"),
+    ]
+    RIGHT = [
+        ("One Piece (OP15) Adventure on Kami's Island Booster Pack", "Adventure on Kami's Island OP 15 EB 04 English Booster Pack",
+         "one-piece", ""),
+        ("One Piece Starter Decks ST31-ST36 (Blue Kuzan (ST-33))", "Starter Decks ST31 ST36 (Blue Kuzan)", "one-piece", ""),
+        ("Dragon Ball Super Card Game Masters: Impact Beyond Dimensions (BT31) Booster Box",
+         "Masters Impact Beyond Dimensions B31 English Booster Box", "dragon-ball", ""),
+        ("One Piece TCG EBC-03 EB-03 Heroines Edition Booster Box 24 Packs Sealed Chinese",
+         "Heroines Edition EBC 03 Chinese Booster Box", "one-piece", "zh-hans"),
+        ("Union Arena TCG UE10BT Attack on Titan (16 Booster Packs)", "Attack on Titan Booster Box", "union-arena", ""),
+        ("Pokémon TCG: Perfect Order - Pokémon Center Elite Trainer Box (Exclusive)", "Center Perfect Order Elite Trainer Box",
+         "pokemon", ""),
+        ("One Piece TCG OP-09 Emperors in the New World Booster Box - Unsealed by Bandai",
+         "Emperors In The New World Booster Box (Booster Box)", "one-piece", ""),
+        ("Pokémon Terastal Festival Japanese Booster Box BEWARE OF FAKES & RESEALED BOXES",
+         "JAPANESE Terastal Festival Booster Box", "pokemon", "ja"),
+        ("Disney Lorcana: Rise of the Floodborn - Set 2 Booster Pack", "Rise Of The Floodborn 1 pack", "lorcana", ""),
+        ("Weiss Schwarz - OSHI NO KO Vol. 3 - Booster Pack", "OSHI NO KO Vol. 3 Booster Pack", "weiss-schwarz", ""),
+        ("Pokemon TCG: Surging Sparks Booster Box (36x Packs)", "Surging Sparks Booster Box", "pokemon", ""),
+        ("Prismatic Evolutions Booster Bundle (6 Booster Packs)", "Prismatic Evolutions Booster Bundle", "pokemon", ""),
+        ("Pokemon TCG: Paldea Evolved - Booster Box + Elite Trainer Box Bundle",
+         "Elite Trainer + Booster Box Bundle Scarlet & Violet Paldea Evolved", "pokemon", ""),
+        ("Mystery Japanese/Chinese booster pack", "Mystery Japanese/Chinese booster pack", "pokemon", "ja"),
+        ("Pokemon Dreams Come True AC2b Traditional Chinese Booster Box", "Dreams Come True AC2b Traditional Chinese Booster Box",
+         "pokemon", "asia"),
+    ]
+
+    def test_titles_that_plainly_name_another_product(self):
+        from .matching import contradiction
+
+        for title, name, game, language, why in self.WRONG:
+            self.assertIn(why, contradiction(name, title, game, language), title)
+
+    def test_titles_that_name_the_same_product_in_other_words(self):
+        from .matching import contradiction
+
+        for title, name, game, language in self.RIGHT:
+            self.assertEqual(contradiction(name, title, game, language), "", title)
+
+
+@override_settings(RIPRAPTOR_AUTO_CATALOGUE=False)
+class RefusedPathTests(TestCase):
+    """Every way a page reaches a product refuses a title that plainly names another one."""
+
+    def setUp(self):
+        one_piece = make_game("One Piece Card Game", "one-piece")
+        self.op18 = make_product(make_set(one_piece, "OP18", "op18", code="OP18"), "OP18 Sealed Booster Box",
+                                 slug="op18-box", product_type="booster_box")
+        self.op16 = make_product(make_set(one_piece, "The Time of Battle", "op16", code="OP16"),
+                                 "The Time of Battle OP 16 English Booster Pack", slug="op16-pack", product_type="booster_pack")
+        self.shop = make_retailer("Cosmic Collectables", source_type=Retailer.Source.SHOPIFY,
+                                  source_url="https://cosmiccollectables.co.uk")
+
+    def test_a_listing_s_own_link_never_prices_a_title_of_another_set_or_language(self):
+        url = "https://cosmiccollectables.co.uk/products/one-piece-card-game-op15-booster-box-24-packs"
+        make_listing(self.op18, self.shop, url=url, price="119.95")
+        titan = "https://titancards.co.uk/products/one-piece-op-16-card-game-the-time-of-battle-booster-pack"
+        make_listing(self.op16, self.shop, url=titan, price="4.99")
+        offers = [Offer(title="One Piece Card Game - OP15 - Booster Box - (24 Packs)", url=url, price=Decimal("99.95")),
+                  Offer(title='ONE PIECE OP-16 Card Game "THE TIME OF BATTLE" Japanese Booster Pack', url=titan,
+                        price=Decimal("3.99"))]
+        found, updated, unmatched = apply_offers(self.shop, offers, complete=True)
+        self.assertEqual(updated, 0)
+        self.assertTrue(any("another set code, not OP18 Sealed Booster Box" in line for line in unmatched))
+        self.assertTrue(any("another language" in line for line in unmatched))
+        prices = dict(Listing.objects.values_list("product_id", "price"))
+        self.assertEqual(prices, {self.op18.pk: Decimal("119.95"), self.op16.pk: Decimal("4.99")})
+        self.assertFalse(Listing.objects.exclude(availability=Listing.Availability.OUT_OF_STOCK).exists())
+
+    def test_our_own_valid_barcode_still_settles_it(self):
+        Listing.objects.all().delete()
+        type(self.op18).objects.filter(pk=self.op18.pk).update(ean="4012927170304")
+        offer = Offer(title="One Piece OP19 Booster Box", url="https://eternacards.co.uk/products/one-piece-op19-booster-box",
+                      price=Decimal("118.95"), ean="4012927170304")
+        apply_offers(self.shop, [offer], complete=False)
+        self.assertEqual(Listing.objects.get().product, self.op18)
+
+    def test_an_owner_yes_waiting_for_a_price_is_refused_too(self):
+        from .models import ShopProduct
+
+        url = "https://eternacards.co.uk/products/one-piece-op19-booster-box"
+        ShopProduct.objects.create(retailer=self.shop, url=url, title="One Piece OP19 Booster Box", suggested=self.op18,
+                                   status=ShopProduct.Status.LINKED)
+        apply_offers(self.shop, [Offer(title="One Piece OP19 Booster Box", url=url, price=Decimal("118.95"))],
+                     complete=False)
+        self.assertFalse(Listing.objects.exists())
+
+    def test_the_stockist_finder_judges_a_contradiction_as_no_match(self):
+        from . import finder
+
+        self.assertEqual(finder.judge(self.op18, "One Piece OP19 Booster Box"), 0)

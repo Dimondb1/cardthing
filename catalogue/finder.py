@@ -56,7 +56,7 @@ from .importers import (
     Catalogue, ImportError_, LinkIndex, apply_offers, ean_key, link_key, money, page_key, product_offers,
 )
 from .classify import TYPES, label_kind
-from .matching import AUTO_LINK, SUGGEST, TYPE_WORDS, covers, key_words, shop_title
+from .matching import AUTO_LINK, SUGGEST, TYPE_WORDS, contradiction, covers, key_words, shop_title
 from .models import (
     DailyPageView, ImportRun, Listing, OutboundClick, Product, Retailer, ShopPage, ShopProduct, StockAlert,
     StockistSearch, stale_cutoff,
@@ -338,6 +338,8 @@ def judge(product, title, sealed=None):
     when the shop's kind of product is known, the same kind. A title missing most of the words that name
     our product is not a likely match, however many kind words it shares."""
     game = product.game.slug
+    if contradiction(product.name, title, game, product.language):
+        return 0   # another game, set code, edition, condition or unit of sale (matching.contradiction)
     match, value = Catalogue([(product.pk, product.name, game)]).best_match(title, game=game)
     if match is None:
         return 0

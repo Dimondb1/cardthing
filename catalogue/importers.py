@@ -40,8 +40,8 @@ from django.utils.dateparse import parse_datetime
 from . import languages, pricing
 from .classify import GAMES, classify, find_game, variant_differs
 from .matching import (
-    AUTO_LINK, SUGGEST, VARIANT_WORDS, best_match, chinese_code, code_key, covers, match_key, names_something, naming_words,
-    same_product, score, set_codes, shop_title,
+    AUTO_LINK, SUGGEST, VARIANT_WORDS, best_match, chinese_code, code_key, contradiction, covers, match_key, names_something,
+    naming_words, same_product, score, set_codes, shop_title,
 )
 from .models import (
     Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, shown_change,
@@ -1491,6 +1491,18 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         else:
             ignored.add(url)
 
+    identities = Identities()
+
+    def wrong_product(product_pk, offer, marketplace):
+        """Why the offer's title plainly names another product than ``product_pk``, or "". A shop's own barcode
+        that is ours and valid settles it; a marketplace's barcode is our own, copied in, so it never does."""
+        name, game, language, ean = identities.get(product_pk)
+        if name is None:
+            return ""
+        if not marketplace and offer.ean and ean_key(offer.ean) == ean_key(ean) and valid_gtin(ean):
+            return ""
+        return contradiction(name, offer.title, game or "", language)
+
     to_stamp = []
     # Product pk -> (first offer without a price, whether every such offer said out of stock).
     unpriced = {}
@@ -1639,6 +1651,14 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if not offer.url.lower().startswith(("http://", "https://")):
                 unmatched.append(f"{offer.title} [link is not a web address]")
                 continue
+            # A product named from this very title (create_from_offer) is the title's own product.
+            why = "" if sealed is not None and identities.name(product_pk) == sealed.name else wrong_product(
+                product_pk, offer, marketplace)
+            if why:
+                # However the page came to this product (its link, the owner's Yes, its name, eBay's search,
+                # the stockist finder), a title that plainly names another product never prices it.
+                unmatched.append(f"{offer.title} [{why}, not {identities.name(product_pk)}] {offer.url}")
+                continue
             if offer.page_pk is not None:
                 # The shop's page now names its product, so a search can find it without a fetch.
                 ShopPage.objects.filter(pk=offer.page_pk).exclude(product_id=product_pk).update(product_id=product_pk)
@@ -1731,6 +1751,38 @@ def notice_release(shop_signals, offer, checked_at):
         logger.warning("Could not note a release from %r", offer.title, exc_info=True)
 
 
+def valid_gtin(value):
+    """Whether a barcode is a well-formed GTIN (8, 12, 13 or 14 digits) with the right check digit."""
+    digits = clean_ean(value)
+    if len(digits) not in (8, 12, 13, 14):
+        return False
+    body, check = digits[:-1], int(digits[-1])
+    total = sum(int(d) * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(body)))
+    return (10 - total % 10) % 10 == check
+
+
+class Identities:
+    """Name, game, language and barcode of our products, read once a read and only when first needed."""
+
+    def __init__(self):
+        self.rows = None
+
+    def get(self, pk):
+        if self.rows is None:
+            self.rows = {
+                pk: (name, game, language, ean)
+                for pk, name, game, language, ean in Product.objects.values_list("pk", "name", "game__slug", "language", "ean")
+            }
+        if pk not in self.rows:
+            # Made during this read.
+            row = Product.objects.filter(pk=pk).values_list("name", "game__slug", "language", "ean").first()
+            self.rows[pk] = row or (None, None, None, None)
+        return self.rows[pk]
+
+    def name(self, pk):
+        return self.get(pk)[0]
+
+
 class Catalogue:
     """Our products, indexed by word so an offer is only scored against likely matches."""
 
@@ -1819,6 +1871,14 @@ class Catalogue:
         return iter(self.names.items())
 
     def best_match(self, title, game=None):
+        """(product, score) for the shop title, only among products of ``game``: _best_match's, below
+        SUGGEST when the title plainly names another product (matching.contradiction)."""
+        match, value = self._best_match(title, game)
+        if match is not None and value >= SUGGEST and contradiction(match[1], title, game or ""):
+            value = SUGGEST - 1
+        return match, value
+
+    def _best_match(self, title, game=None):
         """(product, score) for the shop title, only among products of ``game``.
 
         A full score needs every meaningful word of our name in the title

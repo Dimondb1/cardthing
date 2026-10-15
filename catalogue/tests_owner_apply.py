@@ -580,7 +580,7 @@ class ShopItemTests(Base):
         page.refresh_from_db()
         self.assertEqual((page.product, page.last_fetched_at), (self.box, None))
         self.tidy()
-        apply_offers(self.harbour, [Offer(title="SSP ETB", url=self.item.url, price=Decimal("120"))], complete=False)
+        apply_offers(self.harbour, [Offer(title="SSP", url=self.item.url, price=Decimal("120"))], complete=False)
         self.assertEqual(Listing.objects.get(retailer=self.harbour).product, self.box)
 
     def test_a_link_to_a_product_with_another_page_at_the_shop_is_not_made(self):
@@ -626,10 +626,16 @@ class LeftOutTests(Base):
         page.refresh_from_db()
         self.assertEqual((page.product, page.last_fetched_at), (self.etb, None))
         self.tidy()
-        # A title the rules turn away: the waiting row is matched before any rule reads it.
-        apply_offers(self.harbour, [Offer(title="Mystery Bundle of Things", url=self.url, price=Decimal("30"))],
+        # A title name matching turns away: the waiting row is matched before any name rule reads it.
+        apply_offers(self.harbour, [Offer(title="Mystery Box of Things", url=self.url, price=Decimal("30"))],
                      complete=False)
         self.assertEqual(Listing.objects.get(retailer=self.harbour).product, self.etb)
+        # A title that plainly names another product (another unit of sale) still never prices it.
+        Listing.objects.all().delete()
+        ShopProduct.objects.filter(url=self.url).update(price=None)
+        apply_offers(self.harbour, [Offer(title="Surging Sparks Booster Bundle", url=self.url, price=Decimal("30"))],
+                     complete=False)
+        self.assertFalse(Listing.objects.filter(retailer=self.harbour).exists())
 
     def test_a_left_out_item_not_ours(self):
         _export, data = self.download(left_out_retailer=self.harbour)

@@ -250,6 +250,13 @@ class JudgeRuleTests(PairBase):
         case = make_product(self.set, name="Surging Sparks Elite Trainer Box Case")
         for product in (japanese, coded, case):
             self.assertFalse(judge.Evidence({keep.pk, product.pk}).pair(keep, product).agrees, product.name)
+        # One set code is not enough: two blisters of one set hold different Pokemon.
+        first = make_product(self.set, name="Scarlet & Violet 3 Obsidian Flames Premium Checklane Blister Kingambit",
+                             product_type="bundle")
+        second = make_product(self.set, name="Scarlet & Violet 3 Obsidian Flames Checklane Blister (Annihilape)",
+                              product_type="bundle")
+        self.assertIn(frozenset((first.pk, second.pk)), self.pairs())
+        self.assertFalse(judge.Evidence({first.pk, second.pk}).pair(first, second).agrees)
 
     def test_prices_say_no_only_when_plainly_apart(self):
         money = [Decimal(n) for n in ("50", "52", "60", "90", "110")]

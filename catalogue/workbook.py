@@ -449,9 +449,10 @@ def shop_item_status(status, suggested_id, suggested_active, price, there, key):
 
 def shop_item_rows(index):
     """Shop items waiting for a decision, ones he said are not ours, and linked ones the site does not show,
-    by shop, then waiting, linked and not ours, then title. ``index`` comes from listing_rows."""
+    by shop, then waiting, linked and not ours, then title. ``index`` comes from listing_rows. A switched-off
+    shop's are left out, as on Things to check: it is never read, and its prices are not shown."""
     rows = (
-        ShopProduct.objects.alias(status_order=STATUS_ORDER)
+        ShopProduct.objects.filter(retailer__is_active=True).alias(status_order=STATUS_ORDER)
         .order_by("retailer__name", "status_order", "title", "pk").values_list(
             "pk", "retailer_id", "retailer__name", "retailer__source_type", "title", "url", "shop_ean", "price",
             "availability", "last_seen", "source", "status", "suggested_id", "suggested__name",

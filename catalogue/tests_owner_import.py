@@ -1039,6 +1039,13 @@ class ShopItemTests(Base):
         self.assertEqual((old.state, old.warning), (State.READY, "The price shows once the shop's next read checks it."))
 
 
+    def test_a_link_at_a_shop_switched_off_since_is_refused(self):
+        _export, data = self.download()
+        Retailer.objects.filter(pk=self.harbour.pk).update(is_active=False)
+        link = self.only(self.decide(data, "Link"))
+        self.assertEqual((link.state, link.why), (State.PROBLEM, (
+            "Harbour Games is switched off, so it is not read and its prices are not shown.")))
+
     def test_a_link_its_address_contradicts_is_held(self):
         ShopProduct.objects.filter(pk=self.item.pk).update(
             url="https://harbour.example/products/surging-sparks-elite-trainer-box-german")

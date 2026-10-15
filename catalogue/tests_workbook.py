@@ -407,6 +407,11 @@ class ShopItemTests(Base):
         self.assertEqual(rows[review.pk]["Already shown there"], "SSP ETB")
         self.assertEqual((rows[review.pk]["Suggested id"], rows[review.pk]["Suggested product"], rows[review.pk]["Match %"]),
                          (other.pk, "Surging Sparks Elite Trainer Box", 70))
+        # A switched-off shop's are left out, as on Things to check.
+        closed = make_retailer("Closed Cards", is_active=False)
+        at_closed = ShopProduct.objects.create(retailer=closed, title="SSP Box", url="https://closed.example/p/box",
+                                               status=Status.REVIEW, suggested=self.box)
+        self.assertNotIn(at_closed.pk, self.by_id(self.export()[1], "Shop items", "Shop item id"))
         # Waiting first, then linked, then not ours.
         self.assertEqual(list(rows)[0], review.pk)
         self.assertEqual(list(rows)[-1], ignored.pk)

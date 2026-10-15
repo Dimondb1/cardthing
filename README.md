@@ -167,7 +167,7 @@ A Read me with the file's number and how to edit it, then:
 |---|---|---|
 | Products | every product, except ones merged away | Name, Type, Set, Language, Barcode, Release date, Show on site, Same as product id, Not the same as |
 | Listings | every shop's page, hidden ones too | Product id, Show on site, Not this product |
-| Shop items | items waiting for a decision, ones marked not ours, and linked items not shown | Link to product id, Decision |
+| Shop items | items waiting for a decision, ones marked not ours, and linked items not shown, at shops switched on | Link to product id, Decision |
 | Left out | one shop's items its latest read left out, when a shop was picked | Link to product id, Decision |
 | Sets | every set | Name, Code, Release date |
 

@@ -1537,6 +1537,8 @@ class Planner:
     def guard_link(self, change, state):
         item = self.site.items[change.object_id]
         d = change.data
+        if not self.site.shops[item.retailer_id][2]:
+            return State.PROBLEM, self.switched_off(item.retailer_id)
         if d["target"] is None:
             return State.PROBLEM, "No product to link to. Type one in Link to product id."
         keep = state.keeper(d["target"])
@@ -1570,8 +1572,13 @@ class Planner:
             return State.HELD, f"{FITS} Check its address names {self.named(state, keep)}.", warning
         return (State.READY, "", warning) if warning else None
 
+    def switched_off(self, retailer_id):
+        return f"{self.site.shop_name(retailer_id)} is switched off, so it is not read and its prices are not shown."
+
     def guard_left_link(self, change, state):
         d = change.data
+        if not self.site.shops[d["retailer"]][2]:
+            return State.PROBLEM, self.switched_off(d["retailer"])
         keep = state.keeper(d["target"])
         if keep is None or keep not in state.products:
             return State.PROBLEM, self.missing(keep if keep is not None else None)

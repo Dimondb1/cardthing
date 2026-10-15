@@ -10,6 +10,7 @@ so a web worker never loads it: the page that takes an upload only needs quick_r
 """
 
 import re
+import unicodedata
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
@@ -187,6 +188,10 @@ README_LINES = (
 
 # Characters an Excel cell cannot hold (openpyxl refuses them); a shop's title sometimes carries one.
 CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+EXCEL_ESCAPE = re.compile(r"_x([0-9A-Fa-f]{4})_")
+# Unicode's invisible format characters (category Cf) that turn up in pasted text.
+FORMAT_CHARACTERS = re.compile("[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff"
+                               "\ufff9-\ufffb]")
 SPACES = re.compile(r"\s+")
 
 STOCK = dict(Listing.Availability.choices)
@@ -209,10 +214,19 @@ TIDY_REMOVES = "No shop and no release date: the hourly tidy removes it"
 
 def clean_text(value):
     """Text as the upload compares it: no control characters, no-break spaces as spaces, runs of spaces as
-    one, no spaces at the ends. Applied alike to what is written and what comes back."""
+    one, no spaces at the ends. Applied alike to what is written and what comes back.
+
+    Excel's own escapes are read as what they stand for (a line break pasted into a cell is saved as
+    _x000D_), invisible format characters pasted from a web page (a zero-width space, a soft hyphen) are
+    dropped, and accents are in one Unicode form, so text that looks the same compares the same."""
     if value is None:
         return ""
-    text = CONTROL.sub("", str(value)).replace("\xa0", " ")
+    text = str(value)
+    if "_x" in text:
+        text = EXCEL_ESCAPE.sub(lambda found: chr(int(found.group(1), 16)), text)
+    if not text.isascii():
+        text = FORMAT_CHARACTERS.sub("", unicodedata.normalize("NFC", text))
+    text = CONTROL.sub("", text).replace("\xa0", " ")
     return SPACES.sub(" ", text).strip()
 
 

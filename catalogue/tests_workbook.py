@@ -821,6 +821,17 @@ class NormaliserTests(TestCase):
         self.assertEqual(workbook.as_text(151.0), ("151", ""))
         self.assertEqual(workbook.as_text(" SV\x0b08 "), ("SV08", ""))
 
+    def test_excel_escapes_and_invisible_characters(self):
+        # A line break pasted into a cell, as Excel saves it.
+        self.assertEqual(workbook.clean_text("Black Bolt Elite_x000D_\nTrainer Box"), "Black Bolt Elite Trainer Box")
+        # A zero-width space, a soft hyphen and a byte order mark, as pasted from a web page.
+        self.assertEqual(workbook.clean_text("Black Bolt Elite Trainer Box\u200b"), "Black Bolt Elite Trainer Box")
+        self.assertEqual(workbook.clean_text("\ufeffBlack Bolt Elite Trai\u00adner Box"), "Black Bolt Elite Trainer Box")
+        self.assertEqual(workbook.as_ref("2\u200b"), (2, ""))
+        self.assertEqual(workbook.as_name("Black Bolt Elite Trainer Box\u200b"), ("Black Bolt Elite Trainer Box", ""))
+        # An accent typed as a letter and a mark is the same as one typed whole.
+        self.assertEqual(workbook.clean_text("Poke\u0301mon"), "Pokémon")
+
     def test_sets_by_name_address_code_or_new_row(self):
         names = workbook.SetNames()
         names.add(1, 10, "Surging Sparks", "SV08")

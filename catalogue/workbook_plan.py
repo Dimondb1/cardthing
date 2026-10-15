@@ -719,7 +719,9 @@ class Planner:
                     continue
                 now = {"name": wb.clean_text(current.name), "code": wb.clean_text(current.code),
                        "release_date": current.release_date}[field]
-                verdict, value, why = self.compare(cells, field, normalise, base[field], now)
+                # Cleaned again as the file's value is, so a download made before a cleaning rule changed agrees.
+                was = wb.clean_text(base[field]) if field in ("name", "code") else base[field]
+                verdict, value, why = self.compare(cells, field, normalise, was, now)
                 if verdict == "none":
                     continue
                 if verdict == "apply":

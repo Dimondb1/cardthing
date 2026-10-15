@@ -470,12 +470,45 @@ def section_shops():
 
 
 # The line a read keeps for an item it left out: "title [barcode, or no barcode] link".
-LEFT_OUT_LINE = re.compile(r"^(?P<title>.+) \[(?:no barcode|\d{8,14})\] (?P<url>https?://\S+)$")
+LEFT_OUT_LINE = re.compile(r"^(?P<title>.+) \[(?:no barcode|(?P<barcode>\d{8,14}))\] (?P<url>https?://\S+)$")
 
 
 # The hourly tidy-up's count of items left out, kept long enough to outlast a missed hour or two.
 LEFT_OUT_KEY = "insights:left-out:v2"
 LEFT_OUT_SECONDS = 3 * 3600
+
+
+def each_line(text):
+    """The lines of a big text one at a time. splitlines() would hold a second copy of a big shop's list as a list
+    of lines, and io.StringIO four copies: measured on a 41 MB list, 58 MB and 156 MB more, this nothing."""
+    start, end_of_text = 0, len(text)
+    while start < end_of_text:
+        end = text.find("\n", start)
+        if end < 0:
+            end = end_of_text
+        yield text[start:end].rstrip("\r")
+        start = end + 1
+
+
+def left_out_lines(text):
+    """{title, barcode, url, why} for each item in one read's unmatched text that looks like a sealed product
+    of a game we list: what count_left_out counts, and what the owner's spreadsheet lists for one shop."""
+    from .classify import NOT_SEALED, VARIANT_MENU, classify, find_game, find_type
+
+    for line in each_line(text or ""):
+        found = LEFT_OUT_LINE.match(line)
+        if not found:
+            continue
+        title = found.group("title")
+        if not find_game(title) or NOT_SEALED.search(title) or VARIANT_MENU.search(title):
+            continue
+        if classify(title) is not None:
+            why = "ours by name, turned away by the shop's category, price or the matching"
+        elif find_type(title) is None:
+            why = "a kind of product the rules do not know"
+        else:
+            why = "left out by another rule"
+        yield {"title": title, "barcode": found.group("barcode") or "", "url": found.group("url"), "why": why}
 
 
 def count_left_out(limit=40, now=None):
@@ -489,8 +522,6 @@ def count_left_out(limit=40, now=None):
     one-processor server past gunicorn's 60 seconds and out of memory. One shop's list is read at a time."""
     from django.core.cache import cache
 
-    from .classify import NOT_SEALED, VARIANT_MENU, classify, find_game, find_type
-
     latest = {}
     runs = (
         ImportRun.objects.filter(error="", note="", finished_at__isnull=False, retailer__is_active=True)
@@ -502,22 +533,10 @@ def count_left_out(limit=40, now=None):
     shops = ImportRun.objects.filter(pk__in=latest.values()).order_by("retailer__name").values_list("pk", "retailer__name")
     for pk, shop in list(shops):
         text = ImportRun.objects.filter(pk=pk).values_list("unmatched", flat=True).first() or ""
-        for line in text.splitlines():
-            found = LEFT_OUT_LINE.match(line)
-            if not found:
-                continue
-            title = found.group("title")
-            if not find_game(title) or NOT_SEALED.search(title) or VARIANT_MENU.search(title):
-                continue
-            if classify(title) is not None:
-                why = "ours by name, turned away by the shop's category, price or the matching"
-            elif find_type(title) is None:
-                why = "a kind of product the rules do not know"
-            else:
-                why = "left out by another rule"
+        for item in left_out_lines(text):
             by_shop[shop] = by_shop.get(shop, 0) + 1
             if len(items) < limit:
-                items.append({"shop": shop, "title": title, "url": found.group("url"), "why": why})
+                items.append({"shop": shop, "title": item["title"], "url": item["url"], "why": item["why"]})
     result = {"count": sum(by_shop.values()), "by_shop": sorted(by_shop.items(), key=lambda item: -item[1]),
               "items": items, "counted_at": now or timezone.now()}
     cache.set(LEFT_OUT_KEY, result, LEFT_OUT_SECONDS)

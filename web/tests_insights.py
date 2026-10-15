@@ -580,3 +580,41 @@ class LeftOutCountTests(TestCase):
         page = self.client.get(reverse("insights"))
         self.assertContains(page, "Illustration Box (IB-06)")
         self.assertContains(page, "Counted ")
+
+
+class LeftOutLinesTests(TestCase):
+    """The left-out lines are read one at a time, and the hourly count made from them is as it was."""
+
+    def test_each_item_with_its_barcode_and_the_count(self):
+        from catalogue.models import ImportRun
+
+        shop = make_retailer("Plain Shop")
+        run = ImportRun.objects.create(retailer=shop, finished_at=timezone.now(), unmatched="\r\n".join([
+            "One Piece Card Game - Illustration Box (IB-06) [no barcode] https://plain.example/products/ib-06",
+            "Pokemon Surging Sparks Booster Box [0820650851230] https://plain.example/products/ssb",
+            "Disney Lorcana Azurite Sea Booster Box Case (4 Boxes) [no barcode] https://plain.example/products/case",
+            "Ticket to Ride Board Game [no barcode] https://plain.example/products/ttr",
+            "Pokemon Draft Night Box [no barcode] https://plain.example/products/draft",
+            "Pokemon Mega Brave Booster Box -> maybe Mega Brave Booster Box (80%)",
+        ]))
+        items = list(insights.left_out_lines(run.unmatched))
+        self.assertEqual([(i["title"], i["barcode"], i["url"]) for i in items], [
+            ("One Piece Card Game - Illustration Box (IB-06)", "", "https://plain.example/products/ib-06"),
+            ("Pokemon Surging Sparks Booster Box", "0820650851230", "https://plain.example/products/ssb"),
+            ("Pokemon Draft Night Box", "", "https://plain.example/products/draft"),
+        ])
+        counted = insights.count_left_out(now=run.finished_at)
+        self.assertEqual(counted, {
+            "count": 3, "by_shop": [("Plain Shop", 3)], "counted_at": run.finished_at,
+            "items": [
+                {"shop": "Plain Shop", "title": item["title"], "url": item["url"], "why": item["why"]}
+                for item in items
+            ],
+        })
+        self.assertEqual(counted["items"][0]["why"], "a kind of product the rules do not know")
+        self.assertEqual(len(insights.count_left_out(limit=1)["items"]), 1)
+
+    def test_lines_come_one_at_a_time(self):
+        self.assertEqual(list(insights.each_line("a\r\nb\n\nc")), ["a", "b", "", "c"])
+        self.assertEqual(list(insights.each_line("a\n")), ["a"])
+        self.assertEqual(list(insights.each_line("")), [])

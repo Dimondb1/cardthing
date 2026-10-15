@@ -928,6 +928,59 @@ def slug_words(url):
     return re.sub(r"[-_+]+", " ", path.rsplit("/", 1)[-1]).strip()
 
 
+# Path segments under which shops list many products: "/collections/booster-boxes", "/product-category/pokemon".
+LIST_MARKS = {"collections", "collection", "category", "categories", "product-category", "shop"}
+# Words of a section of a shop: its games, languages and kinds of product in the plural ("booster-boxes",
+# "3-pack-blisters", "mini-tins", "other"). A page named only by these lists products.
+SECTION_WORDS = {
+    "english", "japanese", "korean", "chinese", "simplified", "traditional", "thai", "indonesian", "german", "french",
+    "italian", "spanish", "portuguese", "booster", "boosters", "box", "boxes", "pack", "packs", "bundles", "tins",
+    "mini", "blisters", "sleeved", "collections", "illustration", "super", "premium", "ultra", "special", "ex",
+    "elite", "trainer", "decks", "starter", "battle", "other", "sealed", "products", "accessories", "displays",
+    "cases", "etbs", "all", "new", "pre", "orders", "preorders", "latest", "arrivals", "sale", "collection", "blister",
+    "tin", "bundle", "deck", "display", "case", "etb", "kits", "gift", "sets",
+}
+
+
+def listing_page(url):
+    """True when a shop's address is a list of products, not one product: a Shopify collection without
+    "/products/", or a section of the shop named only by its game, language and kinds of product
+    ("maxoncards.co.uk/shop/pokemon/japanese/booster-boxes", "/shop/dandadan"). Such a page shows many
+    products, so whatever one title a read takes from it is never a listing."""
+    path = urllib.parse.urlsplit(url or "").path.lower().strip("/")
+    segments = [segment for segment in path.split("/") if segment]
+    if not segments or "products" in segments or "product" in segments:
+        return False
+    marks = [i for i, segment in enumerate(segments) if segment in LIST_MARKS]
+    if not marks:
+        return False
+    rest = segments[marks[0] + 1:]
+    if segments[marks[0]] in ("collections", "collection"):
+        return True
+    if not rest:
+        return True
+    return all(section_segment(segment) for segment in rest)
+
+
+def section_segment(segment):
+    """Whether one segment of an address names a section of a shop rather than a product."""
+    words = [word for word in re.split(r"[-_+]+", segment) if word]
+    if len(words) == 1 and not any(ch.isdigit() for ch in words[0]):
+        return True   # "pokemon", "dandadan", "english": a product's address names more than one word
+    text = " ".join(words)
+    game = find_game(text)
+    if game is not None:
+        names = next(names for slug, _n, _s, names in GAMES if slug == game)
+        for name in names:
+            text = text.replace(name, " ")
+        if not text.strip(" -"):
+            return True
+    # A number only as a count of packs ("3-pack-blisters"): "151-booster-packs" is a set's packs.
+    counts = all(word in SECTION_WORDS or (word.isdigit() and words[i + 1:i + 2] == ["pack"])
+                 for i, word in enumerate(words))
+    return counts and any(word.endswith("s") for word in words if not word.isdigit())
+
+
 def page_rank(url):
     """Order sitemap pages so the ones worth fetching come first.
 
@@ -937,6 +990,8 @@ def page_rank(url):
     nothing about a game, and a page whose address names a game but reads as a
     single card or accessory is skipped (None).
     """
+    if listing_page(url):
+        return None
     words = slug_words(url)
     if classify(words):
         return 0
@@ -986,7 +1041,22 @@ def page_stock_hint(html):
 
 
 def page_offer(url, html):
-    """An Offer from a product page's schema.org data or Open Graph tags, or None."""
+    """An Offer from a product page's schema.org data or Open Graph tags, or None. A page whose data names
+    several products is a list of them (a shop's category page), not one product's page: None."""
+    if listing_page(url):
+        return None
+    named = set()
+    for block in JSON_LD.findall(html):
+        try:
+            data = json.loads(block.strip(), strict=False)
+        except json.JSONDecodeError:
+            continue
+        for node in _walk(data):
+            kind = node.get("@type", "")
+            if "Product" in (kind if isinstance(kind, list) else [kind]) and node.get("name"):
+                named.add(" ".join(str(node["name"]).lower().split()))
+    if len(named) > 1:
+        return None
     for block in JSON_LD.findall(html):
         try:
             data = json.loads(block.strip(), strict=False)  # some shops leave control characters in descriptions
@@ -1506,6 +1576,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             found += 1
             notice_release(shop_signals, offer, checked_at)
+            if listing_page(offer.url):
+                # A shop's list of products: whichever title came with it is not this page's product.
+                unmatched.append(f"{offer.title} [a page listing many products] {offer.url}")
+                continue
             if offer.variant:
                 # "1 Pack", "18 Packs", "Half Box" or "Case" on a booster box page is another product at another
                 # price. It is judged against the page before any matching, so it can never take over the

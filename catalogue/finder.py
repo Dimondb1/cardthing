@@ -750,7 +750,8 @@ class Finder:
                 ShopPage.objects.filter(retailer=shop).order_by("pk").values_list("pk", "url", "slug_words", "product_id")
             )
             self.pages[shop.pk] = None if not rows else [
-                (pk, url, words) for pk, url, words, owner in rows if owner is None and words
+                (pk, url, words) for pk, url, words, owner in rows
+                if owner is None and words and not importers.listing_page(url)   # a list of products is never one
             ]
         return self.pages[shop.pk]
 

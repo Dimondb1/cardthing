@@ -100,3 +100,61 @@ class VariantListingTests(TestCase):
                      complete=False)
         listing.refresh_from_db()
         self.assertEqual((listing.url, listing.price), (MARVEL, Decimal("60.00")))
+
+
+MAXON = "https://maxoncards.co.uk"
+
+
+class ListingPageTests(TestCase):
+    """MaxOnCards' category pages became 46 listings and shop items: "/shop/magic-the-gathering/english" carried
+    a Reality Fracture Play Booster Pack at £4.99 on our Play Booster Box (listing 19305)."""
+
+    def test_a_shop_section_or_collection_is_a_list_of_products(self):
+        from .importers import listing_page, page_rank
+
+        for path in ("/shop/pokemon/japanese/booster-boxes", "/shop/magic-the-gathering/english", "/shop/dandadan",
+                     "/shop/pokemon/english/3-pack-blisters", "/shop/pokemon/english/collection-boxes",
+                     "/shop/pokemon/english/blister-packs", "/shop/yu-gi-oh/english", "/shop/one-piece/english/starter-decks",
+                     "/shop/pokemon/english/super-premium-collections", "/shop/pokemon/english/other",
+                     "/collections/pokemon-booster-boxes", "/en-gb/collections/one-piece"):
+            self.assertTrue(listing_page(MAXON + path), path)
+            self.assertIsNone(page_rank(MAXON + path), path)
+        for url in (f"{MAXON}/product/pokemon-tcg-mega-evolution-perfect-order-elite-trainer-box-pokemon-center-exclusive",
+                    "https://shop.example/collections/pokemon/products/surging-sparks-booster-box",
+                    "https://shop.example/shop/pokemon-151-booster-packs",
+                    "https://shop.example/shop/surging-sparks-booster-box",
+                    "https://unicorncards.co.uk/flesh-and-blood-tcg-silver-age-chapter-1-deck-kayo",
+                    "https://www.ebay.co.uk/itm/389598234635"):
+            self.assertFalse(listing_page(url), url)
+
+    def test_a_page_whose_data_names_several_products_gives_no_offer(self):
+        import json
+
+        from .importers import page_offer
+
+        def product(name, price):
+            return {"@type": "Product", "name": name, "offers": {"price": price, "priceCurrency": "GBP"}}
+
+        items = {"@type": "ItemList", "itemListElement": [
+            product("Magic: The Gathering – Reality Fracture Play Booster Pack", "4.99"),
+            product("Magic: The Gathering – Reality Fracture Play Booster Box", "149.99")]}
+        html = f'<script type="application/ld+json">{json.dumps(items)}</script>'
+        self.assertIsNone(page_offer("https://shop.example/whatever", html))
+        one = f'<script type="application/ld+json">{json.dumps(product("Reality Fracture Play Booster Box", "149.99"))}</script>'
+        self.assertEqual(page_offer("https://shop.example/reality-fracture-box", one).price, Decimal("149.99"))
+        self.assertIsNone(page_offer(f"{MAXON}/shop/magic-the-gathering/english", one))
+
+    @override_settings(RIPRAPTOR_AUTO_CATALOGUE=False)
+    def test_a_read_never_lists_a_category_page_and_drops_the_one_it_had(self):
+        magic = make_game("Magic: The Gathering", "magic-the-gathering")
+        box = make_product(make_set(magic, "Reality Fracture", "reality-fracture", code="RF"),
+                           "Reality Fracture Play Booster Box", product_type="booster_box")
+        shop = make_retailer("MaxOnCards", source_type=Retailer.Source.WEBSITE, source_url=MAXON)
+        make_listing(box, shop, url=f"{MAXON}/shop/magic-the-gathering/english", price="4.99")
+        offer = Offer(title="Magic: The Gathering – Reality Fracture Play Booster Box",
+                      url=f"{MAXON}/shop/magic-the-gathering/english/booster-boxes", price=Decimal("149.99"))
+        found, updated, unmatched = apply_offers(shop, [offer], complete=True)
+        self.assertEqual(updated, 0)
+        self.assertIn("a page listing many products", unmatched[0])
+        listing = Listing.objects.get(retailer=shop)
+        self.assertEqual((listing.price, listing.availability), (Decimal("4.99"), Listing.Availability.OUT_OF_STOCK))

@@ -575,6 +575,32 @@ class DiscoverabilityTests(PageTestCase):
         self.assertContains(response, '"@type": "BreadcrumbList"')
         self.assertContains(response, '"@type": "Product"')
 
+    def test_a_name_holding_a_script_tag_stays_inside_the_data_block(self):
+        import json
+
+        from django.core.cache import cache
+
+        from catalogue.models import ProductSet
+
+        cache.clear()
+        name = "Prismatic Evolutions Elite Trainer Box </script><script>alert(1)</script>"
+        Product.objects.filter(pk=self.etb.pk).update(name=name)
+        ProductSet.objects.filter(pk=self.pre.pk).update(name="Prismatic Evolutions </script><img src=x onerror=alert(1)>")
+        crumbs = {}
+        for url in (self.etb.get_absolute_url(), self.pre.get_absolute_url()):
+            html = self.client.get(url).content.decode()
+            self.assertNotIn("</script><script>", html, url)
+            self.assertNotIn("<img src=x", html, url)
+            start = html.index('<script type="application/ld+json">') + len('<script type="application/ld+json">')
+            blocks = json.loads(html[start:html.index("</script>", start)])
+            # The names read back whole: the escapes are only how they are written.
+            crumbs[url] = [crumb["name"] for block in (blocks if isinstance(blocks, list) else [blocks])
+                           if block["@type"] == "BreadcrumbList" for crumb in block["itemListElement"]]
+        self.assertEqual(crumbs[self.etb.get_absolute_url()][1:],
+                         ["Prismatic Evolutions </script><img src=x onerror=alert(1)>", name])
+        self.assertEqual(crumbs[self.pre.get_absolute_url()][1:],
+                         ["Prismatic Evolutions </script><img src=x onerror=alert(1)>"])
+
     def test_every_product_data_block_carries_offers(self):
         import json
 

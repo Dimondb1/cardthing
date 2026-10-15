@@ -454,7 +454,7 @@ def latest_drops(request):
             "meta_title": text(request, "meta.new.title"),
             "meta_description": text(request, "meta.new.description"),
             "canonical_url": request.build_absolute_uri(reverse("web:new")),
-            "structured_json": json.dumps(breadcrumbs_json(request, [(heading, reverse("web:new"))])),
+            "structured_json": ld_json(breadcrumbs_json(request, [(heading, reverse("web:new"))])),
             "coming_soon": coming_soon_sets(limit=None),
         },
         base_queryset=latest_drops_queryset(),
@@ -525,7 +525,7 @@ def home(request):
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
             ),
             "canonical_url": request.build_absolute_uri("/"),
-            "structured_json": json.dumps(site_json(request)),
+            "structured_json": ld_json(site_json(request)),
         },
     )
 
@@ -579,7 +579,7 @@ def game_detail(request, game_slug):
             "meta_title": text(request, "meta.game.title", game=game.name),
             "meta_description": text(request, "meta.game.description", game=game.name),
             "canonical_url": request.build_absolute_uri(game.get_absolute_url()),
-            "structured_json": json.dumps(breadcrumbs_json(request, [(game.name, game.get_absolute_url())])),
+            "structured_json": ld_json(breadcrumbs_json(request, [(game.name, game.get_absolute_url())])),
             "coming_soon": coming_soon_sets(game),
         },
         base_queryset=Product.objects.for_lists().filter(game=game),
@@ -613,7 +613,7 @@ def set_detail(request, game_slug, set_slug):
             "meta_title": text(request, "meta.set.title", **values),
             "meta_description": text(request, "meta.set.description", **values),
             "canonical_url": request.build_absolute_uri(product_set.get_absolute_url()),
-            "structured_json": json.dumps(breadcrumbs_json(
+            "structured_json": ld_json(breadcrumbs_json(
                 request, [(game.name, game.get_absolute_url()), (product_set.name, product_set.get_absolute_url())]
             )),
         },
@@ -621,6 +621,16 @@ def set_detail(request, game_slug, set_slug):
         fixed_game=game,
         tabs=True,
     )
+
+
+# JSON inside <script>: "<", ">" and "&" as \u escapes, so a name holding "</script>" (from a shop's title or
+# the owner's spreadsheet) cannot end the block and run as script. JSON-LD readers decode them as the characters.
+SCRIPT_ESCAPES = {ord("<"): "\\u003c", ord(">"): "\\u003e", ord("&"): "\\u0026"}
+
+
+def ld_json(data):
+    """``data`` as JSON safe to put inside a <script type="application/ld+json"> block."""
+    return json.dumps(data).translate(SCRIPT_ESCAPES)
 
 
 def breadcrumbs_json(request, crumbs):
@@ -805,7 +815,7 @@ def product_detail(request, slug):
         {
             "product": product,
             # A product with no prices at all carries only its breadcrumbs: Product data without offers is invalid.
-            "structured_json": json.dumps(product_json + [breadcrumbs_json(request, crumbs)]),
+            "structured_json": ld_json(product_json + [breadcrumbs_json(request, crumbs)]),
             "meta_type": "product",
             "meta_image": request.build_absolute_uri(product.image_src) if product.image_src else "",
             "current": current,
@@ -1100,7 +1110,7 @@ def deals(request):
             "meta_title": text(request, "meta.deals.title"),
             "meta_description": text(request, "meta.deals.description"),
             "canonical_url": request.build_absolute_uri(reverse("web:deals")),
-            "structured_json": json.dumps(breadcrumbs_json(request, [(text(request, "deals.title"), reverse("web:deals"))])),
+            "structured_json": ld_json(breadcrumbs_json(request, [(text(request, "deals.title"), reverse("web:deals"))])),
         },
     )
 

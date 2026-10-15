@@ -325,6 +325,17 @@ class IntegrityTests(Base):
              "upload again."),
         ])
 
+    def test_an_array_formula_is_not_read_either(self):
+        from openpyxl.worksheet.formula import ArrayFormula
+
+        _export, data = self.download()
+        changes = self.edit(data, ("Products", self.box.pk, "Name", Pasted(ArrayFormula("D2", "=TRIM(X2:X5)"))),
+                            ("Products", self.etb.pk, "Same as product id", Pasted(ArrayFormula("L3", "=X3"))),
+                            ("Sets", self.set.pk, "Name", Pasted(ArrayFormula("D2", "=PROPER(D2)"))))
+        self.assertEqual({c.state for c in changes}, {State.PROBLEM})
+        self.assertEqual(len(changes), 3)
+        self.assertTrue(all(" is a formula. Copy the column" in c.why for c in changes), [c.why for c in changes])
+
     def test_a_file_with_no_number_a_forged_one_or_an_old_one_is_refused(self):
         export, data = self.download()
         with self.assertRaisesMessage(workbook.FileRefused, "lost its file number or is over 90 days old"):

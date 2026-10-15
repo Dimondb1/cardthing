@@ -11,7 +11,7 @@ so a web worker never loads it: the page that takes an upload only needs quick_r
 
 import re
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from io import BytesIO
 from tempfile import SpooledTemporaryFile
 from typing import NamedTuple
@@ -793,6 +793,15 @@ def read_upload(data):
     return Parsed(reference, sheets, columns, unread)
 
 
+def cell_value(value):
+    """A cell as Excel stored it, with an array or data table formula (a spilling or Ctrl+Shift+Enter one,
+    which openpyxl gives as an object) as its formula text, so the formula guard sees it like any other."""
+    if value is None or isinstance(value, (str, int, float, date, time, timedelta)):
+        return value
+    text = getattr(value, "text", None)
+    return text if isinstance(text, str) and text.startswith("=") else "="
+
+
 def read_sheet(ws, sheet):
     """(rows, column keys present, notes) for one sheet; rows is None when the sheet has no id column."""
     by_heading = {fold(column.heading): column for column in sheet.columns}
@@ -826,7 +835,7 @@ def read_sheet(ws, sheet):
         return None, set(), notes
     found = []
     for number, values in enumerate(rows, start=start + 1):
-        cells = {key: values[index] for index, key in place.items() if index < len(values)}
+        cells = {key: cell_value(values[index]) for index, key in place.items() if index < len(values)}
         if all(blank(value) for value in cells.values()):
             continue
         found.append((number, cells))

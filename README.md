@@ -595,7 +595,9 @@ when it also forgets removed product addresses older than a year):
 `tidy_catalogue` (products that no longer pass; their addresses answer 410
 Gone, and a name tidied onto another product's merges with a redirect),
 `merge_duplicates` (one product under two names) and `tidy_listings` (a shop item linked to the
-wrong product, judged by the words in its shop address; a language word in
+wrong product: a shop's category page, a kept shop title that plainly names another product by the
+rule every read uses (see "Wrong links" below), one shop link on several of our products where the
+shop's title names exactly one of them in full, or the words in its shop address; a language word in
 the address counts against the product only when it names another language
 than the product's, so "...-simplified-chinese-gem-4-booster-box" stays on
 "Chinese Gem Pack Vol 4 Booster Box"; it also hides an
@@ -1195,6 +1197,24 @@ it again after changing the mark and commit the files.
   the listing for a moment, never records a false restock, and a read that
   finds what the last one did changes nothing. eBay's offers name their
   product and are written as they come. The run counts each product once.
+- Wrong links. A shop's link keeps the Shopify variant it selects
+  (`?variant=...`), so each variant of one page is its own listing and one
+  variant never takes over another's. A link to the bare page is taken by a
+  variant only when the variant's title names that product in full. A shop's
+  category page (`/collections/...` without `/products/`, or a section such
+  as `/shop/pokemon/japanese/booster-boxes`) and a page whose data names
+  several products are never a listing. And whichever way a page reaches a
+  product (its link, a Yes waiting for a price, its name, eBay's search, the
+  stockist finder), a title that plainly names another product never prices
+  it: another game, another set code ("OP15" on our OP18 box), another
+  language, a Pokémon Center edition against the shops' edition, a damaged,
+  opened or unwrapped item ("Damaged", "Dent", "No Shrink", "Cut Seal")
+  against the sealed one, another unit of sale (a case, a box, a pack, an
+  Elite Trainer Box) or another number of packs ("3-Pack Blister" on a 1 Pack
+  Blister). Only the shop's own barcode settles it the other way, when it is
+  ours and a valid GTIN. The rule is `matching.contradiction`; such offers are
+  in the run's unmatched list with the reason. One eBay listing is only ever
+  on one product.
 - A price of £0.00 or less is not a price, whatever the stock state says (a
   shop opening a pre-order before pricing it, a deposit variant, or a page
   that lost its price). Such an offer can only take an existing listing out

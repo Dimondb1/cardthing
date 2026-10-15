@@ -291,3 +291,72 @@ class RefusedPathTests(TestCase):
         from . import finder
 
         self.assertEqual(finder.judge(self.op18, "One Piece OP19 Booster Box"), 0)
+
+
+class TidyTests(TestCase):
+    """The hourly tidy takes off listings the export showed on the wrong product, and nothing else."""
+
+    def setUp(self):
+        one_piece = make_game("One Piece Card Game", "one-piece")
+        self.op18 = make_product(make_set(one_piece, "OP18", "op18", code="OP18"), "OP18 Sealed Booster Box",
+                                 slug="op18-box", product_type="booster_box")
+        self.op16 = make_product(make_set(one_piece, "The Time of Battle", "op16", code="OP16"),
+                                 "The Time of Battle OP 16 English Booster Pack", slug="op16-pack", product_type="booster_pack")
+        magic = make_game("Magic: The Gathering", "magic-the-gathering")
+        marvel = make_set(magic, "Marvel Super Heroes", "marvel-super-heroes", code="SPM")
+        self.avengers = make_product(marvel, "Marvel Super Heroes Avengers Assemble Commander Deck", slug="avengers",
+                                     product_type="deck")
+        self.four = make_product(marvel, "Marvel Super Heroes Fantastic Four Commander Deck", slug="four", product_type="deck")
+        self.fracture = make_product(make_set(magic, "Reality Fracture", "reality-fracture", code="RF"),
+                                     "Reality Fracture Play Booster Box", slug="rf-box", product_type="booster_box")
+
+    def tidy(self, *args):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("tidy_listings", *args, stdout=out)
+        return out.getvalue()
+
+    def test_wrong_listings_go_and_right_ones_stay(self):
+        cosmic = make_retailer("Cosmic Collectables")
+        titan = make_retailer("Titan Cards")
+        travelling = make_retailer("Travelling Man")
+        maxon = make_retailer("MaxOnCards")
+        wrong = [
+            make_listing(self.op18, cosmic, title="One Piece Card Game - OP15 - Booster Box - (24 Packs)",
+                         url="https://cosmiccollectables.co.uk/products/one-piece-card-game-op15-booster-box-24-packs"),
+            make_listing(self.op16, titan, title='ONE PIECE OP-16 Card Game "THE TIME OF BATTLE" Japanese Booster Pack',
+                         url="https://titancards.co.uk/products/one-piece-op-16-card-game-the-time-of-battle-booster-pack"),
+            make_listing(self.four, travelling, url=f"{MARVEL}?variant=58370149646710",
+                         title="Magic: The Gathering - Marvel Super Heroes Commander Deck (Avengers Assemble)"),
+            make_listing(self.fracture, maxon, url=f"{MAXON}/shop/magic-the-gathering/english",
+                         title="Magic: The Gathering – Reality Fracture Play Booster Pack"),
+        ]
+        right = [
+            make_listing(self.avengers, travelling, url=f"{MARVEL}?variant=58370149646710", title=""),
+            make_listing(self.op16, cosmic, title="One Piece Card Game: The Time of Battle (OP-16) Booster Pack",
+                         url="https://cosmiccollectables.co.uk/products/op16-pack"),
+        ]
+        preview = self.tidy("--dry-run")
+        for listing in wrong:
+            self.assertIn(f"would remove: {listing.product.name} <- {listing.retailer.name} {listing.url}", preview)
+        self.assertEqual(Listing.objects.count(), 6)
+        self.tidy()
+        self.assertEqual(set(Listing.objects.values_list("pk", flat=True)), {listing.pk for listing in right})
+
+    def test_two_products_on_one_link_with_no_title_naming_one_both_stay(self):
+        shop = make_retailer("Travelling Man")
+        make_listing(self.avengers, shop, url=f"{MARVEL}?variant=1", title="")
+        make_listing(self.four, shop, url=f"{MARVEL}?variant=1", title="Marvel Super Heroes Commander Deck")
+        self.tidy()
+        self.assertEqual(Listing.objects.count(), 2)
+
+    def test_our_own_valid_barcode_keeps_a_listing_whatever_the_title(self):
+        type(self.op18).objects.filter(pk=self.op18.pk).update(ean="4012927170304")
+        self.op18.refresh_from_db()
+        make_listing(self.op18, make_retailer("Eterna Cards"), title="One Piece OP19 Booster Box", shop_ean="4012927170304",
+                     url="https://eternacards.co.uk/products/one-piece-op19-booster-box")
+        self.tidy()
+        self.assertEqual(Listing.objects.count(), 1)

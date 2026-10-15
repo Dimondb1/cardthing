@@ -35,7 +35,7 @@ from django.utils import timezone
 from catalogue.languages import CHINESE, SIMPLIFIED, product_language
 from catalogue.matching import chinese_code, identity_numbers, match_key
 from catalogue.models import (
-    DailyLowestPrice, Listing, OutboundClick, Product, ProductAlias, Restock, ShopProduct, StockAlert,
+    DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, ProductAlias, Restock, ShopProduct, StockAlert,
 )
 
 
@@ -88,6 +88,7 @@ def carry_history(keep, other):
         elif row.price < lows[row.date]:
             DailyLowestPrice.objects.filter(product=keep, date=row.date).update(price=row.price)
     Restock.objects.filter(product=other).update(product=keep)
+    PreorderOpen.objects.filter(product=other).update(product=keep)
     OutboundClick.objects.filter(product=other).update(product=keep)
     asked = set(StockAlert.objects.filter(product=keep).values_list("email", flat=True))
     StockAlert.objects.filter(product=other).exclude(email__in=asked).update(product=keep)

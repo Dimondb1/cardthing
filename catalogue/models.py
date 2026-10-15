@@ -503,6 +503,42 @@ class ProductAlias(models.Model):
         return f"{self.slug} -> {self.product.slug}"
 
 
+class RemovedProduct(models.Model):
+    """The address of a product page tidy_catalogue took down, so a visit answers 410 Gone with links to its
+    set and game rather than a bare 404: search engines drop the page sooner and a visitor is not stranded.
+    Kept for a year (catalogue/housekeeping.py)."""
+
+    slug = models.SlugField(max_length=220, unique=True)
+    name = models.CharField(max_length=200)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="removed_products")
+    product_set = models.ForeignKey(
+        ProductSet, on_delete=models.SET_NULL, null=True, blank=True, related_name="removed_products",
+        verbose_name="set",
+    )
+    removed_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-removed_at"]
+        verbose_name = "removed product address"
+        verbose_name_plural = "removed product addresses"
+
+    def __str__(self):
+        return self.slug
+
+    @classmethod
+    def record(cls, product, now=None):
+        """Note the product's address, and every old address that led to it, as removed. Call before deleting
+        it: its old addresses go with it."""
+        now = now or timezone.now()
+        slugs = [product.slug, *ProductAlias.objects.filter(product=product).values_list("slug", flat=True)]
+        for slug in slugs:
+            cls.objects.update_or_create(slug=slug, defaults={
+                "name": product.name, "game_id": product.game_id, "product_set_id": product.product_set_id,
+                "removed_at": now,
+            })
+        return slugs
+
+
 class ListingQuerySet(models.QuerySet):
     def live(self):
         return self.filter(is_active=True, retailer__is_active=True)

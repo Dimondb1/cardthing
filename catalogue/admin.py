@@ -6,7 +6,7 @@ from django.utils.html import format_html
 from . import pricing, sanity
 from .models import (
     ClaudeAsk, ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
-    Restock, Retailer, ShopProduct, StockAlert, TypeBand,
+    RemovedProduct, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
 # A listing field the product page shows. Changing one here stamps the listing's changed_at, the sitemap's
@@ -151,6 +151,14 @@ class ProductAdmin(admin.ModelAdmin):
             return "No image yet. Upload one, or a price import may bring one from a retailer feed."
         source = "uploaded" if obj.image else "from a retailer feed"
         return format_html('<img src="{}" alt="" style="max-height: 160px;"><br>{}', obj.image_src, source)
+
+    def save_model(self, request, obj, form, change):
+        old_slug = form.initial.get("slug") if change and "slug" in form.changed_data else None
+        super().save_model(request, obj, form, change)
+        if old_slug and old_slug != obj.slug:
+            # A new address: the old one keeps working, as after a merge, so links and search results follow.
+            ProductAlias.objects.update_or_create(slug=old_slug, defaults={"product": obj})
+            ProductAlias.objects.filter(slug=obj.slug, product=obj).delete()
 
     def save_formset(self, request, form, formset, change):
         if formset.model is Listing:
@@ -376,6 +384,21 @@ class ProductAliasAdmin(admin.ModelAdmin):
     list_display = ("slug", "product", "created_at")
     search_fields = ("slug", "product__name")
     autocomplete_fields = ("product",)
+
+
+@admin.register(RemovedProduct)
+class RemovedProductAdmin(admin.ModelAdmin):
+    """Addresses of products tidy_catalogue took down. Each answers 410 Gone with links to its set and game for a
+    year. Delete one to make its address an ordinary 404."""
+
+    list_display = ("slug", "name", "game", "product_set", "removed_at")
+    list_filter = ("game",)
+    search_fields = ("slug", "name")
+    list_select_related = ("game", "product_set")
+    readonly_fields = ("slug", "name", "game", "product_set", "removed_at")
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(ClaudeAsk)

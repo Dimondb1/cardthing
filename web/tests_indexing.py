@@ -1,15 +1,21 @@
-"""What search engines are told: the sitemap's pages and the dates their content last changed."""
+"""What search engines are told: the sitemap's pages and dates, and the answers at a removed product's address."""
 
 import re
 from datetime import timedelta
 from decimal import Decimal
+from io import StringIO
+from types import SimpleNamespace
 
 from django.core.cache import cache
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
 from catalogue import pricing, sanity
-from catalogue.models import DailyLowestPrice, Listing, Product
+from catalogue.housekeeping import prune_removed
+from catalogue.models import (
+    DailyLowestPrice, Listing, PreorderOpen, Product, ProductAlias, RemovedProduct, StockAlert,
+)
 from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
 from web.sitemaps import RECENT_DAYS, ProductSitemap, SetSitemap
 
@@ -236,3 +242,144 @@ class ChangedAtTests(TestCase):
         self.product.save(update_fields=["image_url"])
         self.product.refresh_from_db()
         self.assertGreater(self.product.updated_at, before)
+
+
+class RemovedProductTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.game = make_game()
+        cls.set = make_set(cls.game)
+        cls.shop = make_retailer("Shop A")
+        cls.other_shop = make_retailer("Shop B")
+
+    def setUp(self):
+        cache.clear()
+
+    def orphan(self, name="Nobody Sells This Booster Box", slug="orphan", **kwargs):
+        product = make_product(self.set, name=name, slug=slug, **kwargs)
+        Product.objects.filter(pk=product.pk).update(image="")
+        return product
+
+    def test_a_product_tidy_removes_answers_410_with_its_set_and_game(self):
+        product = self.orphan()
+        ProductAlias.objects.create(slug="orphan-old-address", product=product)
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=product.pk).exists())
+        for slug in ("orphan", "orphan-old-address"):
+            response = self.client.get(f"/products/{slug}/")
+            self.assertEqual(response.status_code, 410, slug)
+            self.assertContains(response, "Nobody Sells This Booster Box is no longer listed", status_code=410)
+            self.assertContains(response, f'href="{self.set.get_absolute_url()}"', status_code=410)
+            self.assertContains(response, "Prismatic Evolutions products", status_code=410)
+            self.assertContains(response, f'href="{self.game.get_absolute_url()}"', status_code=410)
+            self.assertContains(response, "All Pokémon products", status_code=410)
+            self.assertContains(response, '<meta name="robots" content="noindex, follow">', status_code=410)
+
+    def test_an_unknown_address_is_still_404(self):
+        self.assertEqual(self.client.get("/products/never-existed/").status_code, 404)
+
+    def test_a_product_address_still_answers_only_get(self):
+        RemovedProduct.objects.create(slug="gone", name="Gone Booster Box", game=self.game)
+        self.assertEqual(self.client.post("/products/gone/").status_code, 405)
+
+    def test_the_410_page_keeps_the_house_style(self):
+        from web.tests import CopyStyleTests
+
+        RemovedProduct.objects.create(slug="gone", name="Gone Booster Box", game=self.game, product_set=self.set)
+        html = self.client.get("/products/gone/").content.decode()
+        visible = re.sub(r"<[^>]*>", " ", html)
+        self.assertNotIn("!", visible)
+        for phrase in CopyStyleTests.BANNED:
+            self.assertNotIn(phrase, html.lower())
+
+    def test_a_removed_product_of_a_hidden_game_or_without_a_set_still_answers_410(self):
+        RemovedProduct.objects.create(slug="setless", name="Setless Box", game=self.game)
+        response = self.client.get("/products/setless/")
+        self.assertContains(response, f'href="{self.game.get_absolute_url()}"', status_code=410)
+        self.assertNotContains(response, "Prismatic Evolutions products", status_code=410)
+        type(self.game).objects.filter(pk=self.game.pk).update(is_active=False)
+        response = self.client.get("/products/setless/")
+        self.assertEqual(response.status_code, 410)
+        self.assertNotContains(response, "All Pokémon products", status_code=410)
+
+    def test_a_live_product_or_an_old_address_wins_over_a_removal(self):
+        RemovedProduct.objects.create(slug="back-again", name="Back Again Box", game=self.game)
+        RemovedProduct.objects.create(slug="merged-away", name="Merged Box", game=self.game)
+        back = make_product(self.set, name="Back Again Box", slug="back-again")
+        ProductAlias.objects.create(slug="merged-away", product=back)
+        self.assertEqual(self.client.get("/products/back-again/").status_code, 200)
+        response = self.client.get("/products/merged-away/")
+        self.assertEqual((response.status_code, response["Location"]), (301, back.get_absolute_url()))
+        # Housekeeping forgets both: the address answers for itself again.
+        self.assertEqual(prune_removed(), 2)
+
+    def test_removals_are_forgotten_after_a_year(self):
+        now = timezone.now()
+        RemovedProduct.objects.create(slug="old", name="Old Box", game=self.game, removed_at=now - timedelta(days=366))
+        RemovedProduct.objects.create(slug="recent", name="Recent Box", game=self.game, removed_at=now - timedelta(days=300))
+        out = StringIO()
+        call_command("tidy_all", stdout=out)
+        self.assertIn("1 removed product addresses forgotten.", out.getvalue())
+        self.assertEqual(list(RemovedProduct.objects.values_list("slug", flat=True)), ["recent"])
+        self.assertEqual(self.client.get("/products/old/").status_code, 404)
+
+    def test_a_dry_run_records_nothing(self):
+        self.orphan()
+        call_command("tidy_catalogue", "--dry-run", stdout=StringIO())
+        self.assertFalse(RemovedProduct.objects.exists())
+
+    def test_a_rename_onto_another_product_merges_and_leaves_a_301(self):
+        spaced = self.orphan(name="Alpha  Booster Box", slug="alpha-1", product_type="booster_box")
+        make_listing(spaced, self.shop, url="https://a.example/alpha")
+        today = timezone.localdate()
+        DailyLowestPrice.objects.create(product=spaced, date=today - timedelta(days=3), price="90.00")
+        StockAlert.objects.create(product=spaced, email="someone@example.com")
+        PreorderOpen.objects.create(product=spaced, retailer=self.shop, price="95.00")
+        target = self.orphan(name="Alpha Booster Box", slug="alpha-2", product_type="booster_box")
+        make_listing(target, self.other_shop, url="https://b.example/alpha")
+        out = StringIO()
+        call_command("tidy_catalogue", stdout=out)
+        self.assertIn("merged: Alpha  Booster Box -> Alpha Booster Box", out.getvalue())
+        response = self.client.get("/products/alpha-1/")
+        self.assertEqual((response.status_code, response["Location"]), (301, target.get_absolute_url()))
+        self.assertEqual(target.listings.count(), 2)
+        self.assertTrue(DailyLowestPrice.objects.filter(product=target, date=today - timedelta(days=3)).exists())
+        self.assertTrue(StockAlert.objects.filter(product=target, email="someone@example.com").exists())
+        self.assertTrue(PreorderOpen.objects.filter(product=target).exists())
+        self.assertFalse(RemovedProduct.objects.exists())
+        # The kept page gained a shop, so the sitemap says it changed.
+        self.assertIsNotNone(target.listings.get(retailer=self.shop).changed_at)
+
+    def test_a_rename_never_merges_another_type_or_a_hidden_product(self):
+        collector = self.orphan(name="Beta  Booster Box", slug="beta-1", product_type="collector_booster_box")
+        make_listing(collector, self.shop, url="https://a.example/beta")
+        plain = self.orphan(name="Beta Booster Box", slug="beta-2", product_type="booster_box")
+        make_listing(plain, self.other_shop, url="https://b.example/beta")
+        shown = self.orphan(name="Gamma  Booster Box", slug="gamma-1", product_type="booster_box")
+        make_listing(shown, self.shop, url="https://a.example/gamma")
+        hidden = self.orphan(name="Gamma Booster Box", slug="gamma-2", product_type="booster_box", is_active=False)
+        make_listing(hidden, self.other_shop, url="https://b.example/gamma")
+        call_command("tidy_catalogue", stdout=StringIO())
+        for product in (collector, plain, shown, hidden):
+            self.assertTrue(Product.objects.filter(pk=product.pk).exists(), product.slug)
+        # Renamed in place: the address stays.
+        collector.refresh_from_db()
+        self.assertEqual((collector.name, collector.slug), ("Beta Booster Box", "beta-1"))
+        self.assertEqual(self.client.get("/products/beta-1/").status_code, 200)
+        self.assertEqual(self.client.get("/products/gamma-1/").status_code, 200)
+
+    def test_changing_an_address_in_admin_keeps_the_old_one(self):
+        from django.contrib.admin.sites import site
+
+        product = make_product(self.set, name="Delta Booster Box", slug="delta")
+        product.slug = "delta-booster-box"
+        site._registry[Product].save_model(None, product, SimpleNamespace(initial={"slug": "delta"}, changed_data=["slug"]),
+                                           True)
+        response = self.client.get("/products/delta/")
+        self.assertEqual((response.status_code, response["Location"]), (301, "/products/delta-booster-box/"))
+        # And back again: the address in use is never also an old address.
+        product.slug = "delta"
+        site._registry[Product].save_model(
+            None, product, SimpleNamespace(initial={"slug": "delta-booster-box"}, changed_data=["slug"]), True)
+        self.assertEqual(self.client.get("/products/delta/").status_code, 200)
+        self.assertEqual(list(ProductAlias.objects.values_list("slug", flat=True)), ["delta-booster-box"])

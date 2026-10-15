@@ -1,0 +1,17 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{# A product page taken down by tidy_catalogue: answered with 410 Gone, so search engines drop it, and with somewhere to go. #}
+
+{% block content %}
+<div class="prose-page not-found">
+  <h1 class="page-title">{{ heading }}</h1>
+  <div class="prose">{% copy "errors.410.body" %}</div>
+  {% if gone_set or gone_game %}
+  <ul class="gone-links">
+    {% if gone_set %}<li><a href="{{ gone_set.get_absolute_url }}">{% copy "errors.410.set" set=gone_set.name %}</a></li>{% endif %}
+    {% if gone_game %}<li><a href="{{ gone_game.get_absolute_url }}">{% copy "errors.410.game" game=gone_game.name %}</a></li>{% endif %}
+  </ul>
+  {% endif %}
+  {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" field_id="gone-q" %}
+</div>
+{% endblock %}

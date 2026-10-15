@@ -510,6 +510,15 @@ re-checks products the importer created: it removes any that a later,
 stricter version of the rules would not have created, tidies names (HTML
 entities, a set name repeated after the product) and merges the duplicates
 that shows up. Run it with `--dry-run` first to see what it would do.
+A rename never changes a product's address. A tidied name that is already
+another product's of the same game, type and language is merged into it
+the way `merge_duplicates` merges, so the old address redirects there for
+good and its price history, restocks, clicks and stock alerts move across.
+A product of another type, or one switched off in admin, is never merged
+into: the product is renamed in place instead. A removed product's address
+answers 410 Gone, not 404, with links to its set and game and the search
+box, so Google drops it quickly and a visitor is not stranded (see
+"Sitemap and removed pages").
 
 Only Total Cards publishes barcodes, so most offers are matched by name.
 An offer links to an existing product automatically only when it is a
@@ -536,9 +545,11 @@ set up: the deal shows read-only on the listing in Django Admin.
 
 Three cleanup commands keep the catalogue honest after the rules improve
 (`tidy_all` runs them in order; `start.bat` and `update_prices` run it
-after their import, and the server's cron runs it at five past every hour):
-`tidy_catalogue` (products that no longer pass), `merge_duplicates` (one
-product under two names) and `tidy_listings` (a shop item linked to the
+after their import, and the server's cron runs it at five past every hour,
+when it also forgets removed product addresses older than a year):
+`tidy_catalogue` (products that no longer pass; their addresses answer 410
+Gone, and a name tidied onto another product's merges with a redirect),
+`merge_duplicates` (one product under two names) and `tidy_listings` (a shop item linked to the
 wrong product, judged by the words in its shop address; it also hides an
 eBay listing the current rules refuse: a price under 40% of the cheapest
 any shop last showed, in stock or not, or a title that is a multi-buy, a
@@ -2222,9 +2233,11 @@ by a check appears on the next request.
 product's old address, and a visit to an old address is sent to the
 kept product with a permanent redirect, so links, search results and
 watchlists saved in browsers keep working. Old addresses are listed in
-admin under "Old product addresses". Price history, restocks, clicks and
-stock alerts move to the kept product. A count with and without its noun
-("Display (10 Bundles)" and "Display (10)") counts as the same name; a name
+admin under "Old product addresses". Price history, restocks, pre-order
+openings, clicks and stock alerts move to the kept product. `tidy_catalogue`
+merges the same way when it tidies a name onto another product's. A count
+with and without its noun ("Display (10 Bundles)" and "Display (10)")
+counts as the same name; a name
 with nothing but the kind of product left ("Scarlet & Violet Elite Trainer
 Box") is never merged. A Simplified Chinese set code counts however a shop
 spells it ("csv7C", "csv7 C", "CSV9.5 C", "CBB2 C"), and "Simplified" and
@@ -2272,7 +2285,7 @@ and `/llms.txt` describes the site in plain Markdown with links to the
 games, the how it works page and the sitemap. Search, swipe and the
 click redirect stay out of the index.
 
-## Sitemap
+## Sitemap and removed pages
 
 `/sitemap.xml` (`web/sitemaps.py`) lists the product pages worth a search
 engine's visit, not every product:
@@ -2301,6 +2314,18 @@ their last restock. A set's `lastmod` is the latest of its products'.
 `changefreq` and `priority` are not sent: Google ignores them. Each part
 of the sitemap costs two queries, a count and the page, however many
 products there are.
+
+A product page `tidy_catalogue` removes (no shop lists it, no release date
+and no image, or it fails the sealed-product rules) leaves its address, and
+every old address that led to it, in admin under "Removed product
+addresses". A visit there answers **410 Gone** with "... is no longer
+listed", links to its set and game, and the search box; the wording is in
+Site wording under Error pages. Google drops a 410 faster than a 404. A
+product created again at the same address simply shows, and an old address
+of a merged product still redirects. `tidy_all` forgets these addresses
+after a year, when they go back to a plain 404. Changing a product's
+address in Django Admin keeps the old one as an old address, so it
+redirects.
 
 ## Insights
 

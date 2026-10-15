@@ -68,6 +68,27 @@ def vacuum():
         cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
 
+# A removed product's address answers 410 Gone for a year (web/views.py product_detail). Search engines drop a
+# page that answers 410 within weeks, so after a year the address can go back to a plain 404.
+REMOVED_KEPT_DAYS = 365
+
+
+def prune_removed(now=None, keep_days=REMOVED_KEPT_DAYS):
+    """Forget removed product addresses older than ``keep_days``, and any a product or an old address has taken
+    again, which answer for themselves. Returns how many were forgotten."""
+    from django.db.models import Q
+
+    from .models import Product, ProductAlias, RemovedProduct
+
+    now = now or timezone.now()
+    gone, _ = RemovedProduct.objects.filter(
+        Q(removed_at__lt=now - timedelta(days=keep_days))
+        | Q(slug__in=Product.objects.values("slug"))
+        | Q(slug__in=ProductAlias.objects.values("slug"))
+    ).delete()
+    return gone
+
+
 # The owner's spreadsheets (catalogue/data_jobs.py). A download is a few megabytes and is kept for a fortnight
 # to download again; the values it was made with are kept for the 90 days an upload of it is accepted. An
 # upload is needed only until it is checked into its list of changes; the list stays for half a year, so a

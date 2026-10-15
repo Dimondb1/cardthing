@@ -982,6 +982,10 @@ ul, ol { margin: 0; padding: 0; }
 .not-found .search { margin-top: var(--space-5); }
 .not-found .empty-mark { margin-top: var(--space-6); }
 .not-found .empty-mark + .page-title { margin-top: 0; }
+/* A removed product's page: its set and game as plain rows */
+.gone-links { list-style: none; margin-top: var(--space-5); border-top: 1px solid var(--color-line); }
+.gone-links li { border-bottom: 1px solid var(--color-line); }
+.gone-links a { display: block; padding: var(--space-3) 0; font-weight: var(--weight-medium); }
 
 /* Swipe deck --------------------------------------------------------------- */
 

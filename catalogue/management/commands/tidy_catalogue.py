@@ -1,4 +1,10 @@
-"""Re-check automatically created products after the classifier's rules improve."""
+"""Re-check automatically created products after the classifier's rules improve.
+
+A product removed here leaves its address behind as a RemovedProduct, so a visit answers 410 Gone with links
+to its set and game. A product renamed onto the name of another of the same game, type and language is merged
+into it as merge_duplicates merges, so its old address redirects there and its history and alerts move too.
+A rename never changes an address.
+"""
 
 from contextlib import nullcontext
 
@@ -8,7 +14,8 @@ from django.db.models import Count, Min
 
 from catalogue.classify import find_type, MIN_PRICE, NOT_SEALED, is_generic, tidy_name
 from catalogue.languages import product_language
-from catalogue.models import Listing, Product, ProductAlias
+from catalogue.management.commands.merge_duplicates import merge
+from catalogue.models import Product, ProductAlias, RemovedProduct
 from catalogue.types import owner_typed
 
 
@@ -67,6 +74,8 @@ class Command(BaseCommand):
         if reason:
             self.stdout.write(f"{'would remove' if dry_run else 'removed'} ({reason}): {product.name}")
             if not dry_run:
+                # Its address, and any old address that led to it, answer 410 Gone from now on.
+                RemovedProduct.record(product)
                 product.delete()
             return "removed"
         kind = find_type(name)
@@ -76,9 +85,12 @@ class Command(BaseCommand):
                 product.product_type = kind
                 product.save(update_fields=["product_type"])
         if name != product.name:
+            # Only a product of the same type is the same thing (a collector booster box and a booster box can
+            # share a name until one is retyped), and only one that is shown: merging into a product the owner
+            # switched off would take this page off the site.
             other = (
-                Product.objects.filter(game=product.game, name=name).exclude(pk=product.pk)
-                .exclude(is_active=False, slug__in=ProductAlias.objects.values("slug")).first()
+                Product.objects.filter(game=product.game, name=name, product_type=product.product_type, is_active=True)
+                .exclude(pk=product.pk).first()
             )
             if other is not None and product_language(other) != product_language(product):
                 # One name in two languages (one filed under a Japanese set): two products, never merged.
@@ -86,13 +98,9 @@ class Command(BaseCommand):
             if other is not None:
                 self.stdout.write(f"{'would merge' if dry_run else 'merged'}: {product.name} -> {other.name}")
                 if not dry_run:
-                    for listing in product.listings.all():
-                        if Listing.objects.filter(product=other, retailer=listing.retailer).exists():
-                            listing.delete()
-                        else:
-                            listing.product = other
-                            listing.save(update_fields=["product"])
-                    product.delete()
+                    # Listings, price history, restocks, clicks and alerts move across, and the old address
+                    # redirects to the kept product for good.
+                    merge(other, [product])
                 return "merged"
             self.stdout.write(f"{'would rename' if dry_run else 'renamed'}: {product.name} -> {name}")
             if not dry_run:

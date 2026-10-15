@@ -1500,6 +1500,31 @@ ENTRIES = [
         "for it instead.",
         "Text on the page shown for a broken link, above a search box.",
     ),
+    Entry(
+        "errors.410.title", H, "Product removed heading",
+        "{product} is no longer listed",
+        "Heading on the page shown at the address of a product we no longer list (it answers 410 Gone, so "
+        "search engines drop it).",
+        placeholders=("product",),
+    ),
+    Entry(
+        "errors.410.body", P, "Product removed text",
+        "We no longer compare prices for this product, so its page has been taken down. Its set and game "
+        "list what we compare now, or you can search.",
+        "Text under the heading on a removed product's page, above links to its set and game and a search box.",
+    ),
+    Entry(
+        "errors.410.set", B, "Product removed set link",
+        "{set} products",
+        "Link to the removed product's set.",
+        placeholders=("set",),
+    ),
+    Entry(
+        "errors.410.game", B, "Product removed game link",
+        "All {game} products",
+        "Link to the removed product's game.",
+        placeholders=("game",),
+    ),
 
     # Page titles and descriptions ----------------------------------------
     Entry(

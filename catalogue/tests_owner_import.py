@@ -517,6 +517,24 @@ class ProductFieldTests(Base):
         chinese = self.only(self.edit(data, ("Products", gem.pk, "Language", "Chinese")))
         self.assertEqual((chinese.state, chinese.why), (State.SAME, "Already so: the site reads it as Simplified Chinese."))
 
+    def test_a_long_name_is_shown_whole_where_it_changes(self):
+        long = "SWSH Evolving Skies Elite Trainer Box Leafeon, Umbreon, Jolteon, Flareon POKEMON CENTER"
+        Product.objects.filter(pk=self.etb.pk).update(name=long)
+        _export, data = self.download()
+        new = long.replace("POKEMON CENTER", "Pokemon Center")
+        rename = self.only(self.edit(data, ("Products", self.etb.pk, "Name", new)))
+        self.assertEqual(rename.what, f'Rename {self.etb.pk} "SWSH Evolving Skies Elite Trainer Box..." to "{new}" '
+                                      f"(Products row {rename.row}).")
+        japanese = self.only(self.edit(data, ("Products", self.etb.pk, "Language", "Japanese")))
+        self.assertIn(f'its name becomes "{long} (Japanese)"', japanese.what)
+        # Changed on the site too: the names are cut in the middle, so where they differ shows.
+        Product.objects.filter(pk=self.etb.pk).update(name=long.replace("POKEMON CENTER", "Pokemon Centre"))
+        conflict = self.only(self.edit(data, ("Products", self.etb.pk, "Name", new)))
+        self.assertEqual(conflict.state, State.CONFLICT)
+        self.assertIn("Flareon Pokemon Center\" but the site has", conflict.why.replace(",", ""))
+        self.assertIn("Flareon Pokemon Centre\" since your download", conflict.why)
+        self.assertLessEqual(len(conflict.why), 300)
+
     def test_a_rename_says_when_it_changes_the_language(self):
         _export, data = self.download()
         rename = self.only(self.edit(data, ("Products", self.etb.pk, "Name", "Surging Sparks Elite Trainer Box JPN")))

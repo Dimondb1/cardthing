@@ -118,9 +118,21 @@ def day_text(value):
     return f"{day.day} {day:%b %Y}"
 
 
-def quoted(text, limit=70):
+# A name the change gives is shown whole (a product name is at most 200 characters), and the name it replaces
+# is cut short, so the sentence fits and he sees exactly what he is making.
+WHOLE, SHORT = 200, 40
+
+
+def quoted(text, limit=70, middle=False):
+    """Text in quotes, cut to ``limit`` characters: at the end, or in the middle, so that two long names that
+    differ only at the end still look different."""
     text = text or ""
-    return f'"{text[:limit - 3].rstrip()}..."' if len(text) > limit else f'"{text}"'
+    if len(text) <= limit:
+        return f'"{text}"'
+    if middle:
+        half = (limit - 3) // 2
+        return f'"{text[:half].rstrip()}...{text[-half:].lstrip()}"'
+    return f'"{text[:limit - 3].rstrip()}..."'
 
 
 def money(value):
@@ -595,6 +607,16 @@ class Planner:
         return verdict, value, ""
 
     def conflict_why(self, field, base, value, current, game_slug=""):
+        if field == "name":
+            whole = (f"You changed Name from {quoted(base, WHOLE)} to {quoted(value, WHOLE)}, but the site has "
+                     f"{quoted(current, WHOLE)} since your download. Left as {quoted(current, WHOLE)}.")
+            if len(whole) <= 300:
+                return whole
+            # Long names do not all fit whole: each is cut in the middle, so where they differ still shows.
+            return (f"You changed Name from {quoted(base, SHORT, middle=True)} to {quoted(value, 75, middle=True)}, "
+                    f"but the site has {quoted(current, 75, middle=True)} since your download. Left as the site has "
+                    "it.")
+
         def show(v):
             return self.shown(field, v, game_slug)
         return (f"You changed {HEADINGS[field]} from {show(base)} to {show(value)}, but the site has "
@@ -1556,7 +1578,8 @@ def describe(change):
         after = "".join(f" {n:,} product{'s become' if n != 1 else ' becomes'} {languages.name(code)}."
                         for code, n in d.get("languages_after") or [])
         if field == "name":
-            return f"Rename {name} to {quoted(file)} {where}.{after}"
+            name = f"the set {change.object_id} {quoted(d.get('name'), SHORT)}"
+            return f"Rename {name} to {quoted(file, WHOLE)} {where}.{after}"
         if field == "code":
             return f"Change the code of {name} to {file or 'none'} (was {base or 'none'}) {where}.{after}"
         return (f"Change the release date of {name} to {day_text(file)} (was {day_text(base)}) {where}. Release "
@@ -1610,17 +1633,18 @@ def describe_fields(change, where):
     d = change.data
     game = d.get("game_slug", "")
     who = f"{change.object_id} {quoted(d.get('name'))}"
+    renamed = f"{change.object_id} {quoted(d.get('name'), SHORT)}"
     fields = change.fields
     if "language" in fields:
         target = languages.name(fields["language"][1])
         if "name" in fields:
-            return f"Make {who} {target}: its name becomes {quoted(fields['name'][3])} {where}."
+            return f"Make {renamed} {target}: its name becomes {quoted(fields['name'][3], WHOLE)} {where}."
         return f"Make {who} {target} {where}."
     field, (base, _file, _seen, new) = next(iter(fields.items()))
     if new is None and d.get("typed") is not None:
         return f"Change {HEADINGS[field]} of {who} to {quoted(d['typed'])} {where}."
     if field == "name":
-        text = f"Rename {who} to {quoted(new)} {where}."
+        text = f"Rename {renamed} to {quoted(new, WHOLE)} {where}."
     elif field == "type":
         text = (f"Change {who} from {types.type_label(game, base) if base else 'none'} to "
                 f"{types.type_label(game, new) if new else 'none'} {where}. The hourly retype leaves a type you set.")

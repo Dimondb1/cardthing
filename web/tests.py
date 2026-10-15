@@ -1060,7 +1060,8 @@ class DealsAndAliasTests(PageTestCase):
         twin = make_product(self.pre, name="Scarlet & Violet 8.5 Prismatic Evolutions Elite Trainer Box", slug="sv85-pev-etb")
         make_listing(twin, make_retailer("Third Shop"), price="56.00")
         call_command("merge_duplicates", stdout=StringIO())
-        self.assertFalse(Product.objects.filter(pk=twin.pk).exists())
+        # Switched off rather than deleted, so the merge can be undone.
+        self.assertFalse(Product.objects.get(pk=twin.pk).is_active)
         self.assertEqual(ProductAlias.objects.get(slug="sv85-pev-etb").product, self.etb)
         self.assertEqual(self.client.get("/products/sv85-pev-etb/").status_code, 301)
         self.assertEqual(self.etb.listings.count(), 3)

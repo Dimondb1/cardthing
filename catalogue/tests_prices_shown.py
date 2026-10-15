@@ -214,7 +214,7 @@ class MergeTests(TestCase):
         Restock.objects.create(product=dup, retailer=self.other_shop, listing=listing, price="1255.99")
         StockAlert.objects.create(product=dup, email="a@example.com")
         call_command("merge_duplicates", stdout=StringIO())
-        self.assertFalse(Product.objects.filter(pk=dup.pk).exists())
+        self.assertFalse(Product.objects.get(pk=dup.pk).is_active)
         self.assertEqual(keep.listings.count(), 3)
         self.assertEqual(DailyLowestPrice.objects.get(product=keep, date=day).price, Decimal("1190.00"))
         self.assertTrue(DailyLowestPrice.objects.filter(product=keep, date=day - timezone.timedelta(days=3)).exists())
@@ -231,15 +231,16 @@ class MergeTests(TestCase):
                  "Scarlet & Violet Elite Trainer Box",
                  "Sword & Shield Elite Trainer Box"]
         for i, name in enumerate(names):
-            make_listing(make_product(self.set, name=name, slug=f"p{i}"), self.shop, price="60.00")
+            make_listing(make_product(self.set, name=name, slug=f"p{i}"), make_retailer(f"Shop {i}"), price="60.00")
+        shown = Product.objects.filter(is_active=True)
         call_command("merge_duplicates", stdout=StringIO())
-        self.assertEqual(Product.objects.count(), 6)
+        self.assertEqual(shown.count(), 6)
         out = StringIO()
         call_command("merge_duplicates", "--loose", "--dry-run", stdout=out)
-        self.assertEqual(Product.objects.count(), 6)
+        self.assertEqual(shown.count(), 6)
         self.assertIn("1 products merged", out.getvalue())
         call_command("merge_duplicates", "--loose", stdout=StringIO())
-        left = set(Product.objects.values_list("name", flat=True))
+        left = set(shown.values_list("name", flat=True))
         self.assertEqual(len(left), 5)
         self.assertEqual(len(left & set(names[:2])), 1)
         self.assertTrue(set(names[2:]) <= left)
@@ -287,7 +288,7 @@ class ChecksPageTests(TestCase):
         self.assertContains(stale, "That group has changed")
         self.assertEqual(Product.objects.filter(pk__in=[self.a.pk, self.b.pk]).count(), 2)
         self.client.post(self.url, {"action": "merge", "keep": self.a.pk, "other": [self.b.pk]})
-        self.assertFalse(Product.objects.filter(pk=self.b.pk).exists())
+        self.assertFalse(Product.objects.get(pk=self.b.pk).is_active)
         self.assertEqual(self.a.listings.count(), 2)
         self.assertRedirects(self.client.get("/products/pb-b/"), self.a.get_absolute_url(), status_code=301)
 
@@ -302,7 +303,7 @@ class ChecksPageTests(TestCase):
             cache.set(HOME_CACHE_KEY, "lists", 300)
             self.client.post(self.url, action)
             self.assertIsNone(cache.get(HOME_CACHE_KEY), action["action"])
-        self.assertFalse(Product.objects.filter(pk=self.b.pk).exists())
+        self.assertFalse(Product.objects.get(pk=self.b.pk).is_active)
 
 class UnpricedTests(TestCase):
     """A price of nothing is not a price: it never becomes a product's lowest price."""

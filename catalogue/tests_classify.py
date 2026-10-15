@@ -509,3 +509,38 @@ class CardNumberRuleTests(TestCase):
                       "One Piece DON Card (Nami): DON Non Foil English One Piece TCG Card: PRB02"):
             with self.subTest(title=title):
                 self.assertIsNone(classify(title, vendor="", tags=(), price=10), title)
+
+
+class SolentTitleTests(TestCase):
+    """Solent Cards' titles, read on 15 Oct 2026."""
+
+    def test_a_plush_tin_of_booster_packs_is_a_sealed_tin(self):
+        sealed = classify("Pokemon Electric Plush Blind Box Tin(Simplified Chinese)", price=Decimal("27"))
+        self.assertEqual((sealed.game, sealed.product_type, sealed.name),
+                         ("pokemon", "tin", "Electric Plush Blind Box Tin (Simplified Chinese)"))
+        # A plush alone is still a toy.
+        self.assertIsNone(classify("Pokemon Pikachu Plush 20cm", price=Decimal("15")))
+        self.assertIsNone(classify("Pokemon Center Eevee Plush", price=Decimal("25")))
+
+    def test_the_hourly_tidy_keeps_the_plush_tins_listing(self):
+        # Solent's address glues the tin to the next word: "...-blind-box-tinsimplified-chinese".
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .models import Listing, Product
+        from .testing import make_game, make_listing, make_retailer
+
+        tin = Product.objects.create(game=make_game(), name="Electric Plush Blind Box Tin (Simplified Chinese)",
+                                     product_type="tin")
+        listing = make_listing(tin, make_retailer("Solent Cards"),
+                               url="https://solentcards.co.uk/products/pokemon-electric-plush-blind-box-tinsimplified-chinese")
+        call_command("tidy_listings", stdout=StringIO())
+        self.assertTrue(Listing.objects.filter(pk=listing.pk).exists())
+
+    def test_a_bracketed_simplified_chinese_code_stays_in_the_name(self):
+        sealed = classify("Pokémon Chasing Glory Together Simplified Chinese Slim Booster Box (csv10)", price=Decimal("27"))
+        self.assertEqual(sealed.name, "Chasing Glory Together Simplified Chinese Slim Booster Box (csv10)")
+        # Other bracketed codes still go.
+        self.assertEqual(classify("One Piece Emperors in the New World Booster Box (OP-09)", price=Decimal("90")).name,
+                         "Emperors in the New World Booster Box")

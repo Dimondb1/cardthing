@@ -1612,7 +1612,7 @@ def checks_page(request):
     from django.db import transaction
 
     from catalogue import autopilot, checks, judge
-    from catalogue.management.commands.merge_duplicates import merge
+    from catalogue.management.commands.merge_duplicates import merge_with_undo
     from catalogue.models import CheckAnswer
     from catalogue.signals import clear_list_caches
 
@@ -1644,14 +1644,15 @@ def checks_page(request):
             wanted = request.POST.get("keep", ""), sorted(request.POST.getlist("other"))
             for keep, others in checks.duplicates():
                 if (str(keep.pk), sorted(str(o.pk) for o in others)) == wanted:
-                    # Keys first: a merge deletes the others.
-                    keys = [judge.pair_key(keep, other) for other in others]
+                    # Each pair can be undone on its own, under Sorted for you.
                     with transaction.atomic():
-                        merge(keep, others)
-                    for row_key in keys:
-                        judge.note_owner(row_key, "same")
+                        for other in others:
+                            row_key = judge.pair_key(keep, other)
+                            merge_with_undo(keep, other, "You tapped Merge these", by_owner=True)
+                            judge.note_owner(row_key, "same")
                     clear_list_caches(force=True)
-                    messages.success(request, f"Merged into {keep.name}. The old addresses redirect to it.")
+                    messages.success(request, f"Merged into {keep.name}. The old addresses redirect to it. Each "
+                                              "merge is listed under Sorted for you, with Undo.")
                     break
             else:
                 messages.warning(request, "That group has changed since the page loaded. Check it again below.")
@@ -1666,7 +1667,8 @@ def checks_page(request):
                 messages.success(request, apart_tap(*pair))
         elif action == "undo":
             pk = request.POST.get("answer", "")
-            answer = CheckAnswer.objects.filter(pk=pk, by_owner=False).first() if pk.isdigit() else None
+            # The site's and Claude's answers, and the owner's merges: his other answers have their own buttons.
+            answer = checks.undoable().filter(pk=pk).first() if pk.isdigit() else None
             message = autopilot.undo(answer) if answer is not None else ""
             if message:
                 messages.success(request, message)
@@ -1710,7 +1712,7 @@ def checks_page(request):
     claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates, may_act=bool(state and state.may_act))
     context = {
         **admin.site.each_context(request), "title": "Things to check",
-        "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
+        "answers": checks.listed_answers(answers), "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
         "tally": [(CheckAnswer.Kind(kind).label, n) for kind, n in tally.most_common()],
         "doubtful": doubtful, "doubtful_count": doubtful_count,
         "doubtful_left": max(0, counts["doubtful"] - doubtful_count - checked_count), "checked_count": checked_count,

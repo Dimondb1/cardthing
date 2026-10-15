@@ -15,8 +15,8 @@ the title states:
 3. a script: kana is Japanese, Hangul Korean, Thai Thai, Cyrillic Russian, Chinese characters alone
    Chinese (Simplified or Traditional where a character says which);
 4. for Pokémon and One Piece, codes only a stated language has: Simplified Chinese (CSV8C, CBB3, Gem
-   Pack, 151C), a language letter after a Japanese code ("s7D F" Traditional Chinese, "SV8-T" Thai),
-   Indonesian and Thai combined sets (sv9s, MA2), One Piece OPC and OPK.
+   Pack, Gem 4, Gem Series 4, 151C), a language letter after a Japanese code ("s7D F" Traditional
+   Chinese, "SV8-T" Thai), Indonesian and Thai combined sets (sv9s, MA2), One Piece OPC and OPK.
 
 "English", "Eng" or "(EN)" then outweighs what the rest implies, for Pokémon only: a set code with a
 letter after the number (sv2a, s12a, SM12a, M2a), a Japanese-only kind of product (High Class Pack,
@@ -159,7 +159,8 @@ BARE_CODE_LETTER = re.compile(rf"{_B}(?:sv(?:[3-9]|10)|m[2-6]|s(?:[2-4]|[89]|1[1
 # Simplified Chinese, which never reuses the Japanese codes.
 SIMPLIFIED_CODE = re.compile(
     rf"{_B}(?:csv(?:10|[1-9])(?:\.5)?|csm[12](?:\.5|[abc])|cs[1-6](?:\.5|[ab])|cbb[1-6]|csvl[12]|csvm2a|csvh5|"
-    rf"cs[eqp]1)(?:\s?c)?{B_}|{_B}30th\s?c{B_}|{_B}151c{B_}|\bcollect 151\b|\bgem(?: pack)?\s*vol|\bgem pack\b")
+    rf"cs[eqp]1)(?:\s?c)?{B_}|{_B}30th\s?c{B_}|{_B}151c{B_}|\bcollect 151\b|\bgem(?: pack)?\s*vol|\bgem pack\b|"
+    r"\bgem(?: series)? \d\b")
 # Indonesian and Thai combined sets, and the codes Asian editions share.
 INDONESIAN_SET = re.compile(rf"{_B}sv(?:[7-9]|10)s(?:\s?(?P<l>[it]))?{B_}")
 MA_SET = re.compile(rf"{_B}ma[1-6](?:\s?(?P<l>[ti]))?{B_}")

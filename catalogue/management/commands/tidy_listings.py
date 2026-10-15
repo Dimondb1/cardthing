@@ -20,15 +20,25 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from catalogue import languages
 from catalogue.classify import NOT_SEALED, box_contents, find_game
 from catalogue.ebay import EbayError, fill_titles, too_cheap_listings
 from catalogue.importers import slug_words
-from catalogue.matching import DIFFERENT, expand, match_key
+from catalogue.matching import DIFFERENT, LANGUAGE_DIFFERENT, expand, match_key
 from catalogue.models import Game, Listing, Product, shown_change
 from catalogue.signals import clear_list_caches
 
 
 PACK_WORDS = re.compile(r"\bpacks?\b|\bblister\b|\bchecklane\b|\bsleeved\b")
+
+
+def same_language(title, product):
+    """Whether an address that names a language names the product's own (catalogue/languages.py): plain Chinese
+    is the same as Simplified or Traditional, as everywhere else."""
+    game = product.game.slug
+    theirs = languages.language_of(title, game)
+    ours = getattr(product, "language", "") or languages.language_of(product.name, game)
+    return bool(theirs) and not languages.mixed(title, game) and languages.same(theirs, ours)
 
 
 def fits(listing):
@@ -54,6 +64,10 @@ def fits(listing):
     name_text = " " + expand(product.name) + " "
     for word in DIFFERENT:
         if f" {word} " in title_text and f" {word} " not in name_text:
+            # A language word is judged by the language, not the word: "...-simplified-chinese-gem-4-booster-box"
+            # is the product "Chinese Gem Pack Vol 4 Booster Box", whose name says Chinese less fully.
+            if word in LANGUAGE_DIFFERENT and same_language(title, product):
+                continue
             return False
     title_marks = {m for m in match_key(title).split() if m.startswith("#")}
     name_marks = {m for m in match_key(product.name).split() if m.startswith("#")}

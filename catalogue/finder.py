@@ -327,8 +327,8 @@ KIND_WORDS = {word for phrase in TYPE_WORDS for word in phrase.split()} | {
 NAMING_SHARE = 0.5
 
 
-def naming_words(text):
-    return key_words(shop_title(text)) - KIND_WORDS
+def naming_words(text, game=""):
+    return key_words(shop_title(text), game) - KIND_WORDS
 
 
 def judge(product, title, sealed=None):
@@ -339,10 +339,10 @@ def judge(product, title, sealed=None):
     match, value = Catalogue([(product.pk, product.name, game)]).best_match(title, game=game)
     if match is None:
         return 0
-    if value >= AUTO_LINK and not covers(shop_title(title), product.name):
+    if value >= AUTO_LINK and not covers(shop_title(title), product.name, game):
         value = AUTO_LINK - 1
-    ours = naming_words(product.name)
-    if ours and len(ours & naming_words(title)) < NAMING_SHARE * len(ours):
+    ours = naming_words(product.name, game)
+    if ours and len(ours & naming_words(title, game)) < NAMING_SHARE * len(ours):
         value = min(value, SUGGEST - 1)
     if sealed is not None and sealed.product_type != product.product_type:
         value = min(value, AUTO_LINK - 1)
@@ -741,14 +741,14 @@ class Finder:
     # Website shops: the page index
 
     def shop_pages(self, shop):
-        """[(page pk, address, address words, naming words)] for the shop's indexed pages no product has
-        claimed, read in one query once per batch. None when the shop has no index yet."""
+        """[(page pk, address, address words)] for the shop's indexed pages no product has claimed, read in one
+        query once per batch. None when the shop has no index yet."""
         if shop.pk not in self.pages:
             rows = list(
                 ShopPage.objects.filter(retailer=shop).order_by("pk").values_list("pk", "url", "slug_words", "product_id")
             )
             self.pages[shop.pk] = None if not rows else [
-                (pk, url, words, naming_words(words)) for pk, url, words, owner in rows if owner is None and words
+                (pk, url, words) for pk, url, words, owner in rows if owner is None and words
             ]
         return self.pages[shop.pk]
 
@@ -764,13 +764,23 @@ class Finder:
                 sealed = None
         return sealed
 
+    def page_naming(self, page_pk, words, game):
+        """A page's naming words for one game, worked out once a batch: the matching cache is too small to keep
+        every shop's pages for every game."""
+        cache = self.__dict__.setdefault("_page_naming", {})
+        key = (page_pk, game)
+        if key not in cache:
+            cache[key] = naming_words(words, game)
+        return cache[key]
+
     def from_pages(self, product, shop):
         """The unclaimed page whose address words best name this product, at SUGGEST or more, or None."""
-        ours = naming_words(product.name)
+        game = product.game.slug
+        ours = naming_words(product.name, game)
         best, best_rank = None, None
-        for page_pk, url, words, naming in self.shop_pages(shop) or ():
+        for page_pk, url, words in self.shop_pages(shop) or ():
             # judge() caps a title this short of our naming words below SUGGEST, so it is not judged at all.
-            if ours and len(ours & naming) < NAMING_SHARE * len(ours):
+            if ours and len(ours & self.page_naming(page_pk, words, game)) < NAMING_SHARE * len(ours):
                 continue
             sealed = self.page_kind(product, page_pk, words)
             named = self.page_kinds[page_pk]   # what the address says by itself

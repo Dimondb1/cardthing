@@ -384,7 +384,7 @@ def verdict(product, item, Offer, catalogue, specifics, shops):
     match, value = catalogue.best_match(offer.title, game=product.game.slug)
     needed = SUGGEST if product.ean else AUTO_LINK
     # A duplicate catalogue entry with the same key counts as this product.
-    same = catalogue.by_key.get((product.game.slug, match_key(product.name)), ())
+    same = catalogue.by_key.get((product.game.slug, match_key(product.name, product.game.slug)), ())
     named = match and (match[0] == product.pk or match[0] in same) and value >= needed
     if named or is_this_product(product, offer.title, specifics):
         return offer, None

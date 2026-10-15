@@ -15,17 +15,20 @@ Baldur's Gate Bundle" and "Commander Legends Battle For Baldurs Gate
 Bundle"), so one product can end up on two pages, each with one shop. This
 groups products of one game and type whose names share the same matching
 key, keeps the one with the most listings (or an image), moves the other
-listings, price history, restocks, clicks and stock alerts across, and
-deletes the rest. The old addresses redirect to the kept product, and
-watchlists saved in browsers follow them. Run with --dry-run first.
+listings, price history, restocks, clicks, shop pages and stock alerts
+across, and switches the rest off (merge_undoable). The old addresses
+redirect to the kept product, and watchlists saved in browsers follow them.
+Each merge is listed under Sorted for you on Things to check with Undo, and
+no shop's listing is ever deleted. Run with --dry-run first.
 
 The hourly run merges only what is certain: two names whose numbers differ
 ("Vol 4" and "Vol 6", "5 packs" and "10") or whose booster kind differs
-("Set Booster" and "Booster") are left for Things to check instead, and a
-pair the owner said are not the same is never merged.
+("Set Booster" and "Booster") are left for Things to check instead, and so
+is a pair a shop shows both of (two products, to that shop) or whose merge
+would take a shop's shown price off the site. A pair the owner said are not
+the same, or whose merge anyone undid, is never merged here.
 """
 
-import re
 from collections import defaultdict
 from contextlib import nullcontext
 
@@ -33,8 +36,11 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from catalogue.languages import CHINESE, SIMPLIFIED, product_language
-from catalogue.matching import chinese_code, identity_numbers, match_key
+from catalogue.languages import CHINESE, SIMPLIFIED, name as language_name, plain, product_language
+from catalogue.matching import (
+    BOX_SIZES, KIND_MARKS, KIND_WORDS, VARIANT_WORDS, booster_kinds, chinese_code, code_key, codes_differ,
+    identity_numbers, key_text, key_words, marked_different, match_key, naming_words, same_product, set_codes,
+)
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, ProductAlias, Restock, ShopProduct, StockAlert,
     shown_change,
@@ -45,22 +51,20 @@ from catalogue.models import (
 FILLER = {"exclusive", "english", "tcg", "edition"}
 # Pokémon series names, which some shops put before the set name and others leave out.
 POKEMON_SERIES = {"pokemon", "mega", "evolution", "base", "set", "scarlet", "violet", "sv", "sword", "shield", "swsh"}
-# Words that say what kind of thing it is, not which one.
-KIND_WORDS = {"elite", "trainer", "box", "center", "booster", "bundle", "display", "pack", "packs", "case", "tin", "collection"}
 
 
 def identifying(words):
     return [w for w in words if w not in KIND_WORDS and not w.startswith("#")]
 
 
-def merge_key(name):
+def merge_key(name, game_slug=""):
     """The matching key, with a plural dropped when its singular is already there: "Booster Bundle
     Display (10 Bundles)" and "Booster Bundle Display (10)" name the same thing.
 
-    "" when nothing but the kind of product is left: the matching key drops series names, so
-    "Scarlet & Violet Elite Trainer Box" and "Sword & Shield Elite Trainer Box" would otherwise meet.
+    "" when nothing but the kind of product is left, so two names that say only "Elite Trainer Box" in
+    different words never meet. ``game_slug`` adds the rules only one game's names need (matching.match_key).
     """
-    words = match_key(name).split()
+    words = match_key(name, game_slug).split()
     kept = [w for w in words if not (w.endswith("s") and w[:-1] in words)]
     return " ".join(kept) if identifying(kept) else ""
 
@@ -74,7 +78,7 @@ def loose_key(name, game_slug):
     Booster Box"). The products are grouped by language, so an English box is never among them; two boxes
     only a code tells apart are, and the owner or Claude says which they are."""
     noise = FILLER | (POKEMON_SERIES | {"chinese"} if game_slug == "pokemon" else set())
-    words = [w for w in merge_key(name).split() if w not in noise and not (game_slug == "pokemon" and chinese_code(w))]
+    words = [w for w in merge_key(name, game_slug).split() if w not in noise and not (game_slug == "pokemon" and chinese_code(w))]
     if not identifying(words):
         return ""
     return " ".join(sorted(set(words)))
@@ -125,6 +129,31 @@ def merge(keep, others):
         other.delete()
         ProductAlias.objects.create(slug=other.slug, product=keep)
     return moved
+
+
+# Why the hourly merge joined two products, as Sorted for you on Things to check says it.
+HOURLY_WHY = "The hourly tidy merged them: their names say the same product in other words"
+
+
+def merge_with_undo(keep, other, why, by_owner=False, **refs):
+    """Merge ``other`` into ``keep`` so it can be undone (merge_undoable), and write it down as a CheckAnswer
+    MERGE holding what Undo needs, inside the caller's transaction. Returns the answer."""
+    from catalogue.models import CheckAnswer
+
+    note = merge_undoable(keep, [other])
+    return CheckAnswer.objects.create(
+        kind=CheckAnswer.Kind.MERGE, by_owner=by_owner, product=keep, other=other, undo_note=note,
+        what=f"Merged {other.name} into {keep.name}"[:300], why=why[:300], **refs,
+    )
+
+
+def undone_merges():
+    """{frozenset of two product pks} for every merge someone undid: Undo says they are not one product."""
+    from catalogue.models import CheckAnswer
+
+    return {frozenset(pair) for pair in CheckAnswer.objects.filter(
+        kind=CheckAnswer.Kind.MERGE, undone_at__isnull=False, product__isnull=False, other__isnull=False,
+    ).values_list("product_id", "other_id")}
 
 
 def merge_undoable(keep, others):
@@ -318,10 +347,6 @@ def unmerge(note):
     return restored
 
 
-# Sizes of one set's booster box: a slim box and a jumbo box of the same code are two products.
-BOX_SIZES = {"slim", "jumbo", "standard", "mini", "half"}
-
-
 def chinese_code_key(name, game_slug):
     """For a Pokémon name carrying one Simplified Chinese set code, the code with the box size and the kind of
     product, else "". Shops translate set names differently ("Pursue Glory Together" and "Chasing Glory
@@ -329,28 +354,35 @@ def chinese_code_key(name, game_slug):
     guide. Never used for a merge on its own."""
     if game_slug != "pokemon":
         return ""
-    words = match_key(name).split()
+    words = match_key(name, game_slug).split()
     codes = {w for w in words if chinese_code(w)}
     if len(codes) != 1:
         return ""
     return " ".join([*codes, *sorted(BOX_SIZES & set(words)), *(w for w in words if w.startswith("#"))])
 
 
+def says_language(name, language):
+    """Whether a name says its language in words ("Simplified Chinese", "Japanese"). English needs no word."""
+    return not language or language_name(language).lower() in plain(name)
+
+
 def duplicate_groups(loose=False):
     """[(keep, [others])] for every group of products that name the same thing, the one to keep first:
-    most listings, then one with an image, then the shortest name.
+    most listings, then one whose name says its language in words (the page then says it too), then one with
+    an image, then the shortest name.
 
     The loose rule gives a product two keys when it carries a Simplified Chinese code (its words, and its
     code), and products sharing either are one group."""
     groups = defaultdict(list)
     products = {}
-    for product in Product.objects.filter(is_active=True).select_related("game", "product_set").order_by("pk"):
-        keys = [loose_key(product.name, product.game.slug) if loose else merge_key(product.name)]
+    said = {}
+    for product in shown_products():
+        keys = [loose_key(product.name, product.game.slug) if loose else merge_key(product.name, product.game.slug)]
         if loose:
             keys.append(chinese_code_key(product.name, product.game.slug))
         # The key drops set codes and language words, so the language keeps a Japanese box (sv11B)
         # from ever being merged into the English one of the same name.
-        language = product_language(product)
+        language = said[product.pk] = product_language(product)
         if loose and language == CHINESE:
             # "Chinese" that says no more is nearly always Simplified at UK shops: suggested beside the
             # Simplified boxes, never merged with them unasked.
@@ -377,13 +409,152 @@ def duplicate_groups(loose=False):
     for group in members.values():
         if len(group) < 2:
             continue
-        group.sort(key=lambda p: (-p.listings.count(), not p.image, not p.image_url, len(p.name), p.pk))
+        group.sort(key=lambda p: keep_order(p, said[p.pk]))
         found.append((group[0], group[1:]))
     return sorted(found, key=lambda row: row[0].name)
 
 
-# A Magic booster's kind: a set booster box is not a draft booster box, though "set" is a word shops drop.
-BOOSTER_KIND = re.compile(r"\b(set|draft|play|collector|jumpstart|gift|prerelease) booster", re.I)
+def language_family(language):
+    """"Chinese" that says no more is nearly always Simplified at UK shops: such a box is suggested beside
+    the Simplified ones, never merged with them unasked."""
+    return SIMPLIFIED if language == CHINESE else language
+
+
+def set_words(product_set, game_slug):
+    """The words and codes that name a set, spelt as keys spell them."""
+    code = product_set.code or ""
+    return (key_words(product_set.name, game_slug) | key_words(code, game_slug)
+            | set_codes(f"{product_set.name} {code}", game_slug))
+
+
+def set_key(name, game_slug, product_set):
+    """For a product filed under a set, the words of its name that are not the set's, with the kind of
+    product: "SV10 Booster Box" and "Destined Rivals Booster Box", both filed under Destined Rivals, are
+    both "booster #box". "" without a set or a kind of product."""
+    if product_set is None:
+        return ""
+    marks = [mark for mark, pattern in KIND_MARKS if pattern.search(key_text(name, game_slug))]
+    if not marks:
+        return ""
+    return " ".join([*sorted(naming_words(name, game_slug) - set_words(product_set, game_slug)), *marks])
+
+
+# Keys that only point at a pair: the two names must also agree on everything the hourly merge checks, and on
+# their size and wrapping, before the pair is offered.
+POINTING_KEYS = {"code", "set"}
+
+
+def pair_keys(product, language):
+    """The keys two names of one product share, each (kind, scope, language, key). A pair needs one in common.
+
+    words: the loose key (merge_key without filler and series words), across product types, since shops
+        file one product under two ("Gift Set" and "Gift Box"); the kind of product is in the key.
+    chinese: a Pokémon name's one Simplified Chinese set code, size and kind (translations differ).
+    code: a name's one set code, size and kind ("Eeveelutions Terastal Festival ex sv8a" and "Terastal
+        Festival sv8a High Class Booster Box").
+    set: for a product filed under a set, its words that are not the set's, with its kind.
+    barcode: the same barcode.
+    """
+    from catalogue.importers import ean_key
+
+    slug = product.game.slug
+    family = language_family(language)
+    keys = [
+        ("words", product.game_id, family, loose_key(product.name, slug)),
+        ("chinese", product.game_id, family, chinese_code_key(product.name, slug)),
+        ("code", product.game_id, family, code_key(product.name, slug)),
+        ("barcode", product.game_id, family, ean_key(product.ean)),
+    ]
+    if product.product_set_id:
+        keys.append(("set", product.product_set_id, family, set_key(product.name, slug, product.product_set)))
+    return [key for key in keys if key[-1]]
+
+
+def points_at_one_product(a, b, game_slug):
+    """For two names a pointing key pairs: whether their numbers, set codes, booster kinds, the words that
+    mark another product, and their size and wrapping all agree (a case, an unwrapped box or a half box is
+    not the box)."""
+    return (same_product(a, b, game_slug)
+            and not (naming_words(a, game_slug) ^ naming_words(b, game_slug)) & (VARIANT_WORDS | BOX_SIZES))
+
+
+def keep_order(product, language):
+    """Which of two products to keep: most listings, then one whose name says its language in words (the
+    page then says it too), then one with an image, then the shortest name. Needs ``listing_total``."""
+    return (-product.listing_total, not says_language(product.name, language), not product.image,
+            not product.image_url, len(product.name), product.pk)
+
+
+def shown_products():
+    """Every product shown on the site, with its game, set and listing count, in one query."""
+    from django.db.models import Count
+
+    return Product.objects.filter(is_active=True).select_related("game", "product_set").annotate(
+        listing_total=Count("listings")).order_by("pk")
+
+
+def duplicate_pairs(products=None):
+    """[(keep, other)] for every two products shown on the site that may be one product: they share a key
+    of pair_keys, in one game and language. Each pair stands alone, so a product that only looks like one
+    of a group is never pulled in with the rest. One query, or none for ``products`` from shown_products."""
+    products = list(shown_products() if products is None else products)
+    said = {product.pk: product_language(product) for product in products}
+    by_pk = {product.pk: product for product in products}
+    buckets = defaultdict(list)
+    for product in products:
+        for key in pair_keys(product, said[product.pk]):
+            buckets[key].append(product.pk)
+    pairs = {}
+    for (kind, *_), pks in buckets.items():
+        for i, first in enumerate(pks):
+            for second in pks[i + 1:]:
+                pair = (first, second)
+                if pair in pairs and pairs[pair]:
+                    continue
+                a, b = by_pk[first], by_pk[second]
+                pairs[pair] = kind not in POINTING_KEYS or points_at_one_product(a.name, b.name, a.game.slug)
+    found = []
+    for (first, second), offered in pairs.items():
+        if not offered:
+            continue
+        a, b = by_pk[first], by_pk[second]
+        keep, other = (a, b) if keep_order(a, said[a.pk]) <= keep_order(b, said[b.pk]) else (b, a)
+        found.append((keep, other))
+    return sorted(found, key=lambda pair: (pair[0].name, pair[0].pk, pair[1].name, pair[1].pk))
+
+
+def names_agree(keep, other):
+    """Whether two products' names say they are one product on every point a rule can check: one game and
+    language, the same words once shop wording is set aside (loose_key, across product types), nothing
+    why_not_merge finds (numbers, set codes, booster kinds, words that mark another product), and no size
+    or wrapping only one of them has. A shared set code is not enough: "Checklane Blister Kingambit" and
+    "Checklane Blister Annihilape" carry one. The judge lets a fairly sure "same" from Claude merge such a
+    pair; barcodes and prices are its own to check."""
+    if keep.game_id != other.game_id:
+        return False
+    if product_language(keep) != product_language(other):
+        return False
+    slug = keep.game.slug
+    words = loose_key(keep.name, slug)
+    if not words or words != loose_key(other.name, slug) or why_not_merge(keep, other):
+        return False
+    return not (naming_words(keep.name, slug) ^ naming_words(other.name, slug)) & (VARIANT_WORDS | BOX_SIZES)
+
+
+def share_a_key(a, b):
+    """Whether duplicate_pairs pairs these two products (with game and set loaded), whatever their shops say."""
+    first = set(pair_keys(a, product_language(a)))
+    common = [key for key in pair_keys(b, product_language(b)) if key in first]
+    return any(kind not in POINTING_KEYS or points_at_one_product(a.name, b.name, a.game.slug)
+               for kind, *_ in common)
+
+
+def game_slug_of(product):
+    """The game's slug of a product, or of the workbook's plain record of one."""
+    slug = getattr(product, "game_slug", None)
+    if slug is not None:
+        return slug
+    return product.game.slug if product.game_id else ""
 
 
 def why_not_merge(keep, other, apart=frozenset()):
@@ -393,8 +564,12 @@ def why_not_merge(keep, other, apart=frozenset()):
         return "you said they are not the same"
     if identity_numbers(keep.name) != identity_numbers(other.name):
         return "their numbers differ"
-    if {k.lower() for k in BOOSTER_KIND.findall(keep.name)} != {k.lower() for k in BOOSTER_KIND.findall(other.name)}:
+    if codes_differ(keep.name, other.name, game_slug_of(keep)):
+        return "their set codes differ"
+    if booster_kinds(keep.name) != booster_kinds(other.name):
         return "their booster kinds differ"
+    if marked_different(keep.name) != marked_different(other.name):
+        return "one says Collector's Edition, Case or the like and the other does not"
     return ""
 
 
@@ -406,31 +581,44 @@ class Command(BaseCommand):
         parser.add_argument("--loose", action="store_true", help="Also ignore filler and series words. Review a dry run first.")
 
     def handle(self, *args, dry_run=False, loose=False, **options):
-        from catalogue.checks import kept_apart
+        from catalogue.checks import kept_apart, shop_listings, shops_in_the_way
 
         merged = moved = 0
-        # His Not the same (on Things to check or in his spreadsheet) stands: such a pair is never merged here.
-        apart = kept_apart()
-        # Each group is its own short transaction, so a group that fails leaves the earlier ones merged
-        # and nothing else waits for the whole walk. A dry run wraps them all and rolls back.
+        # His Not the same (on Things to check or in his spreadsheet) stands, and so does an Undo of a merge:
+        # such a pair is never merged here.
+        apart = kept_apart() | undone_merges()
+        shops = shop_listings()
+        # Each merge is its own short transaction, so one that fails leaves the earlier ones merged and
+        # nothing else waits for the whole walk. A dry run wraps them all and rolls back.
         with transaction.atomic() if dry_run else nullcontext():
             for keep, group in duplicate_groups(loose):
-                others = []
+                others, taken = [], dict(shops.get(keep.pk, {}))
                 for other in group:
-                    why = why_not_merge(keep, other, apart)
+                    theirs = shops.get(other.pk, {})
+                    # A shop showing both, or two of the others, sells two products.
+                    why = why_not_merge(keep, other, apart) or shops_in_the_way(taken, theirs)
                     if why:
                         self.stdout.write(f"left: {other.name} and {keep.name}, {why}")
-                    else:
-                        others.append(other)
+                        continue
+                    taken.update({shop: shown or taken.get(shop, False) for shop, shown in theirs.items()})
+                    others.append(other)
                 if not others:
                     continue
                 self.stdout.write(f"{'would keep' if dry_run else 'kept'}: {keep.name}")
                 for other in others:
                     self.stdout.write(f"    merged: {other.name}")
                 merged += len(others)
-                if not dry_run:
+                if dry_run:
+                    continue
+                for other in others:
                     with transaction.atomic():
-                        moved += merge(keep, others)
+                        answer = merge_with_undo(keep, other, HOURLY_WHY)
+                    moved += sum(len(entry["listings"]) for entry in answer.undo_note["others"])
             if dry_run:
                 transaction.set_rollback(True)
-        self.stdout.write(f"{merged} products merged, {moved} listings moved. {Product.objects.count()} products remain.")
+        if merged and not dry_run:
+            from catalogue.signals import clear_list_caches
+
+            clear_list_caches(force=True)
+        shown = Product.objects.filter(is_active=True).count()
+        self.stdout.write(f"{merged} products merged, {moved} listings moved. {shown} products are shown.")

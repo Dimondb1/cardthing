@@ -102,7 +102,7 @@
 
   <section>
     <h2>Sorted for you ({{ answers_count }})</h2>
-    <p class="note">What the site and Claude sorted in the last {{ answers_days }} days. If one is wrong, tap Undo.</p>
+    <p class="note">What the site and Claude sorted, and what you merged, in the last {{ answers_days }} days. If one is wrong, tap Undo.</p>
     {% if tally %}<p class="tally">{% for label, n in tally %}{{ label }}: {{ n }}{% if not forloop.last %}. {% endif %}{% endfor %}.</p>{% endif %}
     <form method="post">{% csrf_token %}<input type="hidden" name="action" value="autopilot_now"><input type="submit" value="Sort what you can now"></form>
     {% if answers %}<details>

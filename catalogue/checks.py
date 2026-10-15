@@ -12,6 +12,7 @@ is left as it is. The autopilot (catalogue/autopilot.py) answers the rows the
 evidence settles before the owner sees them.
 """
 
+from copy import copy
 from datetime import timedelta
 
 from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Value
@@ -35,6 +36,9 @@ DATE_GAP_DAYS = 1
 # The autopilot's answers are listed at the top of the page, with Undo, for this long, this many at once.
 ANSWERS_DAYS = 7
 ANSWER_ROWS = 100
+# The hourly merge's own answers are listed after the others and do not count against ANSWER_ROWS: its
+# first run after a rule change can make hundreds, and each must keep its Undo.
+HOURLY_MERGE_ROWS = 1000
 
 
 def judged():
@@ -147,39 +151,96 @@ def kept_apart():
     }
 
 
+def shop_listings(products=None):
+    """{product id: {shop id: shown}} for listings at shops, not marketplaces, in one query: ``shown`` is
+    False for a listing hidden by the owner, the autopilot or Claude. ``products`` limits it to those
+    product ids; by default every product still shown."""
+    rows = Listing.objects.exclude(retailer__source_type__in=MARKETPLACES)
+    rows = rows.filter(product_id__in=products) if products is not None else rows.filter(product__is_active=True)
+    found = {}
+    for product_id, retailer_id, shown in rows.values_list("product_id", "retailer_id", "is_active"):
+        found.setdefault(product_id, {})[retailer_id] = shown
+    return found
+
+
+def shown_at(listings):
+    """The shops of a product's shop_listings that show it."""
+    return {shop for shop, shown in listings.items() if shown}
+
+
+def shops_in_the_way(keep, other):
+    """Why the shops say two products may not be merged, from their shop_listings, or "".
+
+    A shop that shows both under their own names sells two products. eBay and Amazon search for every
+    product, so they say nothing, and nor does a hidden listing (often another product the shop sells).
+    A shop whose listing on the kept product is hidden and on the other is shown would lose its price
+    from the site, since a merge leaves a shop's second listing on the switched-off product."""
+    if shown_at(keep) & shown_at(other):
+        return "a shop sells both"
+    if {shop for shop, shown in keep.items() if not shown} & shown_at(other):
+        return "a shop's price would leave the site"
+    return ""
+
+
 def duplicates():
-    """[(keep, [others])] that the loose rule would merge. Strict duplicates are merged every hour already.
+    """[(keep, [others])] of products that may be one product, from the pairs merge_duplicates.duplicate_pairs
+    finds: each other is paired with its keep on its own, never through a third product. Strict duplicates
+    are merged every hour already; what is left here is for the owner or Claude. Three queries.
 
-    A product the owner said is not the same as the one kept is left out, and so is one a shop sells
-    beside the kept one or beside another in the group: a shop that lists both under their own names
-    sells two products.
+    A pair the owner said are not the same is left out, and so is one a shop shows both of: a shop that
+    shows both under their own names sells two products (shops_in_the_way: never eBay or Amazon, nor a
+    hidden listing). When a shop shows one and has hidden its listing on the other, the one it shows is
+    kept, so its price stays on the site. Two others one shop shows side by side go under their keep
+    separately, so Merge these never joins them.
     """
-    from .management.commands.merge_duplicates import duplicate_groups
+    from .management.commands.merge_duplicates import duplicate_pairs
 
-    groups = duplicate_groups(loose=True)
-    if not groups:
+    pairs = duplicate_pairs()
+    if not pairs:
         return []
     apart = kept_apart()
-    pks = {p.pk for keep, others in groups for p in [keep, *others]}
-    shops = {}
-    # Hidden listings count too: a merge cannot move a shop's live price onto a product that shop already lists.
-    for product_id, retailer_id in Listing.objects.filter(product_id__in=pks).values_list(
-        "product_id", "retailer_id"
-    ):
-        shops.setdefault(product_id, set()).add(retailer_id)
-    found = []
-    for keep, others in groups:
-        taken, kept = set(shops.get(keep.pk, ())), []
-        for other in others:
-            # A shop that sells this one beside the kept one, or beside another in the group, sells two products.
-            theirs = shops.get(other.pk, set())
-            if frozenset((keep.pk, other.pk)) in apart or taken & theirs:
+    shops = shop_listings()
+    by_keep = {}
+    for keep, other in pairs:
+        if frozenset((keep.pk, other.pk)) in apart:
+            continue
+        ours, theirs = shops.get(keep.pk, {}), shops.get(other.pk, {})
+        if shops_in_the_way(ours, theirs):
+            if shops_in_the_way(theirs, ours):
                 continue
-            taken |= theirs
-            kept.append(other)
-        if kept:
-            found.append((keep, kept))
+            keep, other = other, keep
+        by_keep.setdefault(keep.pk, (keep, []))[1].append(other)
+    found = []
+    for keep, others in sorted(by_keep.values(), key=lambda row: (row[0].name, row[0].pk)):
+        groups = []
+        for other in others:
+            theirs = shops.get(other.pk, {})
+            group = next((g for g in groups if not shops_in_the_way(g[0], theirs)), None)
+            if group is None:
+                group = (dict(shops.get(keep.pk, {})), [])
+                groups.append(group)
+            taken, members = group
+            taken.update({shop: shown or taken.get(shop, False) for shop, shown in theirs.items()})
+            # Its own copy for each pair: the page hangs Claude's answer about this pair on it.
+            members.append(copy(other))
+        found += [(keep, members) for _, members in groups]
     return found
+
+
+def still_offered(keep, other):
+    """Whether Possible duplicates still offers this pair, checked for these two products alone: both shown,
+    not kept apart, a key in common and no shop in the way."""
+    from .management.commands.merge_duplicates import share_a_key
+
+    products = {p.pk: p for p in Product.objects.filter(pk__in=[keep.pk, other.pk], is_active=True)
+                .select_related("game", "product_set")}
+    if len(products) != 2 or frozenset(products) in kept_apart():
+        return False
+    if not share_a_key(products[keep.pk], products[other.pk]):
+        return False
+    shops = shop_listings(list(products))
+    ours, theirs = shops.get(keep.pk, {}), shops.get(other.pk, {})
+    return not (shops_in_the_way(ours, theirs) and shops_in_the_way(theirs, ours))
 
 
 def unknown_delivery_shops():
@@ -308,11 +369,30 @@ def stale_release_sources(now=None):
     return [{"state": state, "source": BY_NAME[state.name]} for state in states]
 
 
+def undoable():
+    """The answers Sorted for you lists with Undo: the autopilot's, Claude's and the hourly merge's, and the
+    owner's own merges (Merge these), which can be undone like any other."""
+    return CheckAnswer.objects.filter(Q(by_owner=False) | Q(kind=CheckAnswer.Kind.MERGE))
+
+
+def hourly_merge(answer):
+    """Whether an answer is the hourly merge's: a merge nobody asked Claude about and the owner did not make."""
+    return answer.kind == CheckAnswer.Kind.MERGE and not answer.by_owner and answer.ask_id is None
+
+
+def listed_answers(answers):
+    """The answers the page lists: the newest ANSWER_ROWS of everyone else's, then the hourly merge's."""
+    others = [answer for answer in answers if not hourly_merge(answer)]
+    hourly = [answer for answer in answers if hourly_merge(answer)]
+    return others[:ANSWER_ROWS] + hourly[:HOURLY_MERGE_ROWS]
+
+
 def recent_answers(now=None):
-    """What the autopilot answered in the last ANSWERS_DAYS days, newest first, in one query."""
+    """What the autopilot, Claude and the hourly merge answered, and what the owner merged, in the last
+    ANSWERS_DAYS days, newest first, in one query."""
     since = (now or timezone.now()) - timedelta(days=ANSWERS_DAYS)
     return list(
-        CheckAnswer.objects.filter(by_owner=False, created_at__gte=since)
+        undoable().filter(created_at__gte=since)
         .select_related("listing", "shop_product", "product", "release")
         .order_by("-created_at", "-pk")
     )

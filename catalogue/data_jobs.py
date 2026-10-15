@@ -516,7 +516,8 @@ def unmake(job, change, applying):
 
 def undo_import(job, deadline):
     """Take back every change the file made, newest first, each only while the site still holds what the
-    file left: a merge is undone before the merges it came after, and a change made by hand since stays."""
+    file left: a merge is undone before the merges it came after, and a change made by hand since stays. A
+    change left as it was by an earlier undo is tried again."""
     until = min(deadline, timezone.now() + RUN_FOR)
     lock = wait_for_import_lock(job, until)
     if lock is None:
@@ -524,9 +525,11 @@ def undo_import(job, deadline):
         return
     try:
         undoing = job.changes.filter(outcome__in=[Outcome.APPLIED, Outcome.UNDONE, Outcome.UNDO_SKIPPED])
-        beat(job, total=undoing.count(), done=undoing.exclude(outcome=Outcome.APPLIED).count())
+        # One left as it was is tried again: Undo this file is tapped again once what stopped it is put right.
+        todo = undoing.filter(outcome__in=[Outcome.APPLIED, Outcome.UNDO_SKIPPED])
+        beat(job, total=undoing.count(), done=undoing.filter(outcome=Outcome.UNDONE).count())
         applying = applying_for(job)
-        for n, change in enumerate(each_change(undoing.filter(outcome=Outcome.APPLIED), ("-step", "-seq")), start=1):
+        for n, change in enumerate(each_change(todo, ("-step", "-seq")), start=1):
             unmake(job, change, applying)
             if n % HEARTBEAT_EVERY == 0:
                 beat(job)

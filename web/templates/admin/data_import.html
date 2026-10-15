@@ -49,7 +49,7 @@
     <div class="row"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="discard"><button type="submit" class="act quiet">Discard this file</button></form></div>
     {% endif %}
     {% if can_undo %}
-    <p class="note">Undo this file takes its changes back, newest first. A change the site has changed again since is left as it is.</p>
+    {% if job.status == "undone" %}<p class="note">Undo this file again tries the changes left as they are, newest first, once what stopped them is put right.</p>{% else %}<p class="note">Undo this file takes its changes back, newest first. A change the site has changed again since is left as it is.</p>{% endif %}
     <div class="row"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="undo"><button type="submit" class="act">Undo this file</button></form></div>
     {% endif %}
   </section>

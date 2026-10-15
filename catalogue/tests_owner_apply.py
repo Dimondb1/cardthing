@@ -1076,6 +1076,17 @@ class UndoTests(Base):
         self.assertEqual(merge.outcome_note, "A later merge built on this one: Merged the case. Undo that merge first, "
                                              "then this file.")
         self.assertFalse(Product.objects.get(pk=display.pk).is_active)
+        # Done as it says, Undo this file is tapped again and undoes the merge.
+        from . import autopilot
+
+        self.assertTrue(autopilot.undo(CheckAnswer.objects.get(other=later)))
+        self.client.force_login(self.owner)
+        self.client.post(reverse("data_import", args=[upload.pk]), {"action": "undo"})
+        self.assertEqual(DataImport.objects.get(pk=upload.pk).status, Upload.UNDO_QUEUED)
+        call_command("data_files")
+        upload.refresh_from_db()
+        self.assertEqual((upload.status, upload.counts["undo"]), (Upload.UNDONE, {Outcome.UNDONE: 1}))
+        self.assertTrue(Product.objects.get(pk=display.pk).is_active)
 
 
 class CommandTests(Base):

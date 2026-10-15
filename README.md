@@ -267,7 +267,8 @@ unless the newest copy is under six hours old.
 
 **Undo this file** takes the changes back newest first, each only while the
 site still holds what the file left; one changed again since is left as it
-is and listed.
+is and listed. Once what stopped it is put right (a later merge undone
+first, say), Undo this file can be tapped again to try those once more.
 
 ### How long files are kept
 

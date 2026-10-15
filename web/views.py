@@ -2265,8 +2265,11 @@ def import_tap(request, pk):
         else:
             messages.warning(request, "Only a file whose changes have not been made can be discarded.")
     elif action == "undo":
-        if jobs.filter(Q(status=Status.APPLIED) | Q(status=Status.FAILED), made_some).update(
-                status=Status.UNDO_QUEUED, **queued):
+        # An undone file with changes left as they were may be undone again, once what stopped them is put right.
+        undo_left = Exists(DataChange.objects.filter(data_import=OuterRef("pk"),
+                                                     outcome=DataChange.Outcome.UNDO_SKIPPED))
+        if jobs.filter(Q(status__in=[Status.APPLIED, Status.FAILED]) & made_some
+                       | Q(status=Status.UNDONE) & undo_left).update(status=Status.UNDO_QUEUED, **queued):
             data_jobs.start_now()
             messages.success(request, "Undoing the file, newest change first. Each is undone only while the site "
                                       "still holds what the file left.")
@@ -2423,7 +2426,8 @@ def data_import_page(request, pk):
                            "say") if held else "",
         # Made without the held changes: they can still be made from the same file uploaded again.
         "held_left": held if job.status == Status.APPLIED and not job.include_held else 0,
-        "can_undo": (job.status == Status.APPLIED and made.get(Outcome.APPLIED)) or failed_part_made,
+        "can_undo": ((job.status == Status.APPLIED and made.get(Outcome.APPLIED)) or failed_part_made
+                     or (job.status == Status.UNDONE and undone.get(Outcome.UNDO_SKIPPED))),
         "can_discard": job.status == Status.CHECKED or (job.status == Status.FAILED and not failed_part_made),
         "result": result_line(job), "left": left, "merges": merged,
     }

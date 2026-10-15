@@ -1245,6 +1245,13 @@ def unchanged(listing, offer, delivery):
     )
 
 
+def better(offer, than):
+    """True when ``offer`` beats ``than`` for one product: in stock or on pre-order beats out of stock, then
+    the lower price. A tie keeps the offer read first."""
+    out = Listing.Availability.OUT_OF_STOCK
+    return (offer.availability == out, offer.price) < (than.availability == out, than.price)
+
+
 def stamp_checked(pks, checked_at):
     """Mark listings as checked at ``checked_at`` without rewriting anything else, then empty ``pks``.
 
@@ -1289,6 +1296,13 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     Offers match a product by barcode, or by the link of a listing that was
     added by hand for this retailer, or by a page the owner said Yes to before
     any read had priced it. Returns (found, updated, unmatched titles).
+
+    A product's listing is written once a read, from the best of its offers: the cheapest in stock or on
+    pre-order, else the cheapest. Its offers are held while the read stays on one page (a page's variants
+    come together) and written when it moves on. An offer from another page than the one the listing links
+    to (two pages sharing a barcode) waits for the end of the read while that page is still to come. So a
+    page whose variants differ never moves the listing back and forth within a read, and a read that finds
+    what the last one did changes nothing. Counted in ``updated`` once per product.
 
     An offer that changes nothing on its listing is not written: its listing is only stamped as
     checked, in chunks, before each progress post and at the end, and when the read fails part way.
@@ -1336,6 +1350,67 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     to_stamp = []
     # Product pk -> (first offer without a price, whether every such offer said out of stock).
     unpriced = {}
+    # Product pk -> its best priced offer so far in this read; the ones still to write for the page being
+    # read (pending) and at the end of the read (late); and the pages read so far, by link_key.
+    best, pending, late = {}, {}, {}
+    pages = set()
+    page = None
+
+    def write(product_pk, offer, final=False):
+        """Bring the product's listing at this shop up to ``offer``. Unless ``final``, an offer from another
+        page than the listing's waits in ``late`` while the listing's own page has not been read yet. An offer
+        that names its product (eBay's, one per product) never waits: eBay's reads keep each as it comes, so
+        an interrupted run keeps its work."""
+        listing, created = Listing.objects.get_or_create(
+            product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
+        )
+        other_page = link_key(listing.url) != link_key(offer.url) and link_key(listing.url) not in pages
+        if not (final or created) and offer.product_pk is None and other_page:
+            late[product_pk] = offer
+            return
+        title = (offer.title or "")[:300]
+        # The shop's own barcode, to compare with ours. A marketplace's is our own, copied in.
+        shop_ean = listing.shop_ean if marketplace else (offer.ean or "")[:20]
+        # The shop's own publishing time is kept from the first read that gives it, so a later
+        # republish cannot make a pre-order look as if it reached the site sooner than it did.
+        published = offer.published_at if listing.shop_published_at is None else None
+        # A read that looked for multi-buys sets or clears the listing's; one that did not leaves it.
+        held = (listing.deal_quantity, listing.deal_price)
+        deal = held if offer.deal is None else offer.deal
+        if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
+                or deal != held):
+            listing.url = offer.url
+            listing.title = title
+            listing.shop_ean = shop_ean
+            listing.deal_quantity, listing.deal_price = deal
+            fields = ["url", "title", "shop_ean", "deal_quantity", "deal_price"]
+            if published:
+                listing.shop_published_at = published
+                fields.append("shop_published_at")
+            listing.save(update_fields=fields)
+        if offer.image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
+            images_by_product.setdefault(product_pk, offer.image)
+        delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)
+        if not created and unchanged(listing, offer, delivery):
+            to_stamp.append(listing.pk)
+            return
+        pricing.record_check(
+            listing,
+            price=offer.price,
+            delivery_cost=delivery,
+            availability=offer.availability,
+            checked_at=checked_at,
+            new=created,
+        )
+
+    def write_pending():
+        # Popped one at a time, so one that fails is not tried again when the read's failure writes the rest.
+        for product_pk in list(pending):
+            write(product_pk, pending.pop(product_pk))
+
+    def write_late():
+        for product_pk in list(late):
+            write(product_pk, late.pop(product_pk), final=True)
     # Set codes in pre-order titles and pre-release event tickets: the earliest sign of a new set.
     from .releases import ShopSignals
 
@@ -1418,57 +1493,34 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 first, all_out = unpriced.get(product_pk, (offer, True))
                 unpriced[product_pk] = (first, all_out and offer.availability == Listing.Availability.OUT_OF_STOCK)
                 continue
-            listing, created = Listing.objects.get_or_create(
-                product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
-            )
             if answer is not None:
                 # Priced now, so the row no longer waits.
                 ShopProduct.objects.filter(pk=answer).update(price=offer.price, availability=offer.availability,
                                                              last_seen=checked_at)
                 waiting.pop(link_key(offer.url), None)
                 products_by_link[link_key(offer.url)] = product_pk
-            if product_pk in seen_products and listing.availability != Listing.Availability.OUT_OF_STOCK:
-                # Several variants of one product: keep the cheapest one that is in stock.
-                if offer.availability == Listing.Availability.OUT_OF_STOCK or offer.price >= listing.price:
-                    continue
-            seen_products.add(product_pk)
-            title = (offer.title or "")[:300]
-            # The shop's own barcode, to compare with ours. A marketplace's is our own, copied in.
-            shop_ean = listing.shop_ean if marketplace else (offer.ean or "")[:20]
-            # The shop's own publishing time is kept from the first read that gives it, so a later
-            # republish cannot make a pre-order look as if it reached the site sooner than it did.
-            published = offer.published_at if listing.shop_published_at is None else None
-            # A read that looked for multi-buys sets or clears the listing's; one that did not leaves it.
-            held = (listing.deal_quantity, listing.deal_price)
-            deal = held if offer.deal is None else offer.deal
-            if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
-                    or deal != held):
-                listing.url = offer.url
-                listing.title = title
-                listing.shop_ean = shop_ean
-                listing.deal_quantity, listing.deal_price = deal
-                fields = ["url", "title", "shop_ean", "deal_quantity", "deal_price"]
-                if published:
-                    listing.shop_published_at = published
-                    fields.append("shop_published_at")
-                listing.save(update_fields=fields)
-            if offer.image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
-                images_by_product.setdefault(product_pk, offer.image)
-            delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)
-            updated += 1
-            if not created and unchanged(listing, offer, delivery):
-                to_stamp.append(listing.pk)
+            if link_key(offer.url) != page:
+                # The read moved on to another page: the last page's products are written.
+                write_pending()
+                page = link_key(offer.url)
+                pages.add(page)
+            if product_pk in best and not better(offer, best[product_pk]):
                 continue
-            pricing.record_check(
-                listing,
-                price=offer.price,
-                delivery_cost=delivery,
-                availability=offer.availability,
-                checked_at=checked_at,
-                new=created,
-            )
+            if product_pk not in best:
+                updated += 1
+            best[product_pk] = pending[product_pk] = offer
+            late.pop(product_pk, None)
+            seen_products.add(product_pk)
+        write_pending()
+        write_late()
     except BaseException:
-        # The listings seen so far were checked: keep that, unless the database cannot take it either.
+        # The offers read so far, and the listings seen so far were checked: keep that, unless the database
+        # cannot take it either.
+        try:
+            write_pending()
+            write_late()
+        except Exception:
+            logger.warning("Offers from %s not written after the read failed", retailer, exc_info=True)
         try:
             stamp_checked(to_stamp, checked_at)
         except Exception:

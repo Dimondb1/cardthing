@@ -1091,6 +1091,15 @@ it again after changing the mark and commit the files.
   fails part way. Only offers that change something go through
   `record_check`, so a read of a large shop writes a few dozen rows instead
   of thousands.
+- A product with several offers in one read (a page's variants, or two pages
+  that share a barcode) has its listing written once, from the best offer:
+  the cheapest in stock or on pre-order, else the cheapest. A page's offers
+  are held until the read moves to the next page, and an offer from another
+  page than the one the listing links to waits for the end of the read
+  while that page is still to come. So a dearer first variant never prices
+  the listing for a moment, never records a false restock, and a read that
+  finds what the last one did changes nothing. eBay's offers name their
+  product and are written as they come. The run counts each product once.
 - A price of £0.00 or less is not a price, whatever the stock state says (a
   shop opening a pre-order before pricing it, a deposit variant, or a page
   that lost its price). Such an offer can only take an existing listing out

@@ -1425,6 +1425,88 @@ class WriteSkippingTests(TestCase):
             apply_offers(self.retailer, offers(ImportError_("The shop stopped answering")))
 
 
+class OneWritePerProductTests(TestCase):
+    """A product with several offers in one read (a page's variants, or pages sharing a barcode) has its
+    listing written once, from the best offer, so a read that finds what the last one did changes nothing."""
+
+    def setUp(self):
+        self.shop = make_retailer("Reader", source_type=Retailer.Source.SHOPIFY, source_url="https://reader.example",
+                                  delivery_cost=Decimal("0"))
+        self.set = make_set(make_game())
+        self.product = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", ean="5012345678900")
+        self.other = make_product(self.set, name="Prismatic Evolutions Booster Bundle", ean="5012345678917")
+
+    def offer(self, page, price, product=None, **kwargs):
+        from .importers import Offer
+
+        product = product or self.product
+        return Offer(title=product.name, url=f"https://reader.example/products/{page}", price=Decimal(price),
+                     ean=product.ean, **kwargs)
+
+    def read(self, offers, days):
+        from datetime import timedelta
+
+        at = timezone.now() - timedelta(days=10 - days)
+        apply_offers(self.shop, offers, checked_at=at)
+        return Listing.objects.get(product=self.product, retailer=self.shop), at
+
+    def test_a_page_whose_first_variant_is_dearer_is_written_once_a_read(self):
+        from unittest import mock
+
+        from . import pricing
+        from .models import Restock
+
+        out = Listing.Availability.OUT_OF_STOCK
+        offers = [self.offer("pe-etb?variant=1", "50.00"), self.offer("pe-etb?variant=2", "40.00"),
+                  self.offer("pe-etb?variant=3", "35.00", availability=out)]
+        listing, first = self.read(offers, 0)
+        self.assertEqual((listing.price, listing.availability, listing.changed_at), (Decimal("40.00"), "in_stock", first))
+        self.assertEqual(listing.url, "https://reader.example/products/pe-etb?variant=2")
+        with mock.patch.object(pricing, "record_check", wraps=pricing.record_check) as checks:
+            for days in (1, 2):
+                listing, at = self.read(offers, days)
+                self.assertEqual((listing.price, listing.changed_at, listing.last_checked), (Decimal("40.00"), first, at))
+        checks.assert_not_called()
+
+        # Sold out on the first variant, in stock on a later one: no restock is recorded every read.
+        offers = [self.offer("pe-etb?variant=1", "50.00", availability=out), self.offer("pe-etb?variant=2", "40.00")]
+        for days in (3, 4):
+            listing, at = self.read(offers, days)
+        self.assertEqual((listing.availability, listing.changed_at, listing.back_in_stock_at), ("in_stock", first, None))
+        self.assertFalse(Restock.objects.exists())
+
+    def test_two_pages_sharing_a_barcode_settle_on_the_cheaper_one(self):
+        # The dearer page comes first, with another product's page between the two.
+        offers = [self.offer("pe-etb", "50.00"), self.offer("pe-bundle", "30.00", product=self.other),
+                  self.offer("pe-etb-sealed", "45.00")]
+        listing, first = self.read(offers, 0)
+        self.assertEqual((listing.price, listing.url), (Decimal("45.00"), "https://reader.example/products/pe-etb-sealed"))
+        for days in (1, 2):
+            listing, at = self.read(offers, days)
+            self.assertEqual((listing.price, listing.changed_at, listing.last_checked), (Decimal("45.00"), first, at))
+        # The cheaper page gone: the dearer one takes over at the end of the read.
+        listing, at = self.read(offers[:2], 3)
+        self.assertEqual((listing.price, listing.url, listing.changed_at),
+                         (Decimal("50.00"), "https://reader.example/products/pe-etb", at))
+
+    def test_a_read_that_fails_still_writes_the_offers_it_held(self):
+        make_listing(self.product, self.shop, price="50.00", url="https://reader.example/products/pe-etb")
+
+        def offers():
+            yield self.offer("pe-etb", "42.00")
+            raise ImportError_("The shop stopped answering")
+
+        with self.assertRaises(ImportError_):
+            apply_offers(self.shop, offers())
+        self.assertEqual(Listing.objects.get(product=self.product).price, Decimal("42.00"))
+
+    def test_each_product_is_counted_once(self):
+        offers = [self.offer("pe-etb?variant=1", "50.00"), self.offer("pe-etb?variant=2", "40.00"),
+                  self.offer("pe-bundle", "30.00", product=self.other)]
+        found, updated, unmatched = apply_offers(self.shop, offers)
+        self.assertEqual((found, updated, unmatched), (3, 2, []))
+
+
 class CadenceTests(TestCase):
     """Each shop's reading schedule: when it is due, how long it waits after errors, and pauses."""
 

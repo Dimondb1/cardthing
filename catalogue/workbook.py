@@ -706,14 +706,19 @@ def build_export(export):
     return data, base, counts
 
 
-def quick_reference(archive):
+def quick_reference(archive, limit=64 * 1024):
     """(export pk, token) from an uploaded workbook's custom properties, or None, without openpyxl: the upload
     page refuses a file with no number, or an old one, before anything else is done. ``archive`` is an open
-    zipfile.ZipFile."""
+    zipfile.ZipFile. A properties part larger than ``limit`` bytes is not read: no more than that is ever
+    unpacked, whatever size the zip states."""
     try:
-        text = archive.read("docProps/custom.xml").decode("utf-8", "replace")
+        with archive.open("docProps/custom.xml") as part:
+            raw = part.read(limit + 1)
     except KeyError:
         return None
+    if len(raw) > limit:
+        return None
+    text = raw.decode("utf-8", "replace")
     found = REFERENCE.search(text)
     return (int(found.group(1)), found.group(2)) if found else None
 

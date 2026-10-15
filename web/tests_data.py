@@ -243,6 +243,20 @@ class UploadRefusalTests(DataPageBase):
         many = rezip(self.data, add=[(f"xl/media/image{n}.png", b"x") for n in range(views.MAX_PARTS)])
         self.refused(many, views.TOO_MUCH_INSIDE)
 
+    def test_a_part_twice_is_refused_and_the_number_part_is_never_read_past_its_limit(self):
+        import warnings
+
+        # A small number part first and a huge one last: the check saw the first, the reader took the last.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")   # zipfile warns about the duplicate name
+            twice = rezip(self.data, add=[("docProps/custom.xml", b" " * (2 * views.MAX_NUMBER_PART))])
+        self.refused(twice, workbook.UNREADABLE)
+        # Past the limit nothing more is unpacked, whatever size the zip states.
+        padded = rezip(self.data, rename=lambda body: b" " * (2 * views.MAX_NUMBER_PART) + body)
+        with zipfile.ZipFile(io.BytesIO(padded)) as archive:
+            self.assertIsNone(workbook.quick_reference(archive, views.MAX_NUMBER_PART))
+            self.assertEqual(workbook.quick_reference(archive, 4 * views.MAX_NUMBER_PART)[0], self.export.pk)
+
     def test_a_lost_forged_or_expired_file_number(self):
         reference = self.export.reference
         forged = rezip(self.data, rename=lambda body: body.replace(reference.encode(), b"RR-%d-%s" % (

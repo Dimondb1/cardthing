@@ -2072,15 +2072,16 @@ def opened_upload(upload):
             if len(parts) > MAX_PARTS or sum(part.file_size for part in parts) > MAX_UNPACKED_BYTES:
                 raise forms.ValidationError(TOO_MUCH_INSIDE)
             names = {part.filename.replace("\\", "/") for part in parts}
+            # Excel never writes one part twice; a reader takes the last of the name, a check the first.
+            if len(names) != len(parts):
+                raise forms.ValidationError(workbook.UNREADABLE)
             if any(name.startswith("/") or ":" in name or ".." in name.split("/") for name in names):
                 raise forms.ValidationError(workbook.UNREADABLE)
             if not {"[Content_Types].xml", "xl/workbook.xml"} <= names:
                 raise forms.ValidationError(workbook.UNREADABLE)
             if any(name.lower().endswith("vbaproject.bin") for name in names):
                 raise forms.ValidationError(MACROS)
-            number = next((part for part in parts if part.filename == "docProps/custom.xml"), None)
-            reference = (workbook.quick_reference(archive)
-                         if number is not None and number.file_size <= MAX_NUMBER_PART else None)
+            reference = workbook.quick_reference(archive, MAX_NUMBER_PART)
     except (zipfile.BadZipFile, zipfile.LargeZipFile, RuntimeError, NotImplementedError, EOFError, OSError,
             zlib.error) as exc:
         raise forms.ValidationError(workbook.UNREADABLE) from exc

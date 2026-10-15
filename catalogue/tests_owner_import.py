@@ -375,6 +375,15 @@ class ProductFieldTests(Base):
         ready = self.only(self.edit(data, ("Products", box.pk, "Name", "Terastal Festival ex Booster Box (Japanese)")))
         self.assertEqual(ready.state, State.READY)
 
+    def test_showing_a_hidden_twin_the_hourly_merge_would_join_is_refused(self):
+        twin = make_product(self.set, name="Pokemon TCG: Surging Sparks Booster Box", slug="ssp-box-tcg",
+                            product_type="booster_box", release_date=date(2024, 11, 8), is_active=False)
+        _export, data = self.download()
+        shown = self.only(self.edit(data, ("Products", twin.pk, "Show on site", "Yes")))
+        self.assertEqual((shown.state, shown.why), (State.PROBLEM, (
+            f'The hourly tidy would join this with {self.box.pk} "Surging Sparks Booster Box". If they are one '
+            f"product, put {self.box.pk} in Same as product id.")))
+
     def test_names_the_hourly_tidy_would_remove_are_refused(self):
         _export, data = self.download()
         generic = self.only(self.edit(data, ("Products", self.etb.pk, "Name", "Elite Trainer Box")))

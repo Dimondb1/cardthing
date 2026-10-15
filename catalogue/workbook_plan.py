@@ -1183,7 +1183,8 @@ class Planner:
         pk = change.object_id
         product = state.products[pk]
         fields = change.fields
-        if fields.keys() & {"name", "type", "set", "language"}:
+        # Shown again, a hidden product meets the hourly merge too, which deletes it rather than switching it off.
+        if fields.keys() & {"name", "type", "set", "language"} or ("show" in fields and fields["show"][3] is True):
             new = state.index.collisions(pk, state.products) - self.site_index.collisions(pk, self.site.products)
             if new:
                 other = min(new, key=str)

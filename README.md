@@ -2303,16 +2303,39 @@ spells it ("csv7C", "csv7 C", "CSV9.5 C", "CBB2 C"), and "Simplified" and
 "Vol" never change which product it is ("Gem Pack Vol. 2" and "Gem 2"), so
 one Chinese box at two shops is one page. The code itself still counts
 ("Storming Emergence csm1b" and "csm1c" are two boxes), and so does the
-size (slim and jumbo boxes stay apart).
+size (slim and jumbo boxes stay apart), except a Gem Pack's code, which
+only says its volume again ("Gem Pack Vol. 4 CBB4 C", "Gem Series 4" and
+"Gem 4" are one box).
+
+Words shops add or drop at will count for nothing: "Booster Display" (or
+"Booster Display Box") for a booster box, but not a display of tins,
+bundles, decks or Elite Trainer Boxes; a plural ("Commander Decks", "House
+of Horrors"); "II" and "Two" for 2; the game's name in words ("League of
+Legends", "Star Wars Unlimited", "Dungeons & Dragons", "Fusion World", "CG");
+and language words, since products are only ever merged within one
+language. For Pokémon also "Booster Bundle" for the bundle, "High Class"
+and a set's "ex" on booster products, "PC" for Pokémon Center, and the
+"Mega Evolution" series. Set codes count in one spelling ("OP-09", "OP 09"
+and "OP09"; "PRB-01" and "PRB01"; "ME02"; Pokémon's Japanese "M1L", "M2a",
+"S6a"). A code drops out of the comparison when other words name the
+product ("OP-09 Emperors in the New World" and "Emperors in the New World"),
+and stays when nothing else does ("OP-09 Booster Box", "Premium Booster
+PRB-01"). Magic's "M20" and "M21" stay codes.
 
 The hourly merge only joins names whose numbers agree. A volume or set
 number is never read as a pack count ("Gem Pack Vol 4 Booster Pack" and
 "Vol 6" are two products), and two names with different numbers ("Mystery
-Bundle 5 Sealed Booster Packs" and "10") or different booster kinds ("Set
-Booster Box" and "Booster Box") are left apart, with a "left:" line in the
-command's output, and so is a pair the owner said are not the same (Not the
-same on Things to check, or Not the same as in his spreadsheet). What a box holds ("Booster Box (36 Packs)") and series or
-set codes ("SV8.5", "OP-10") do not count as numbers.
+Bundle 5 Sealed Booster Packs" and "10"), different booster kinds ("Set
+Booster Box" and "Booster Box"), different set codes ("M1L" and "M1S") or
+series ("Scarlet & Violet Base Set" and "Mega Evolution Base Set") are left
+apart, with a "left:" line in the command's output, and so is a pair the
+owner said are not the same (Not the same on Things to check, or Not the
+same as in his spreadsheet). What a box holds ("Booster Box (36 Packs)",
+"Booster Box (36)", but not a half box's "(18)") and series or set codes
+("SV8.5", "OP-10") do not count as numbers. Of a group, the product kept is
+the one with most shops, then the one whose name says its language in words
+("Gem 4 Simplified Chinese Booster Box" rather than "Gem Pack Vol. 4
+Booster Box"), then one with a picture, then the shortest name.
 
 ```sh
 python manage.py merge_duplicates --loose --dry-run

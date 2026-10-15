@@ -520,6 +520,16 @@ class ProductFieldTests(Base):
                             ("Products", self.etb.pk, "Barcode", "0820650851247"))
         self.assertEqual({c.state for c in changes}, {State.READY})
 
+    def test_clearing_a_date_when_only_a_link_with_no_price_would_keep_it_is_held(self):
+        item = ShopProduct.objects.create(retailer=self.harbour, title="SSP ETB", url="https://harbour.example/p/9",
+                                          status=Status.REVIEW, suggested=self.etb, last_seen=timezone.now())
+        _export, data = self.download()
+        changes = self.edit(data, ("Products", self.etb.pk, "Release date", ""),
+                            ("Shop items", item.pk, "Decision", "Link"))
+        cleared = self.only(changes, kind=Kind.PRODUCT_FIELDS)
+        self.assertEqual((cleared.state, cleared.why),
+                         (State.HELD, f"{workbook_plan.TIDY_REMOVES} Clearing its date removes it."))
+
     def test_hiding_a_product_the_hourly_tidy_would_then_remove_is_held(self):
         lonely = make_product(self.set, name="Surging Sparks Mini Tin", product_type="tin")
         _export, data = self.download()
@@ -790,6 +800,30 @@ class ListingTests(Base):
         relinked = self.only(self.edit(data, ("Listings", self.listing.pk, "Not this product", "Yes")))
         self.assertEqual(relinked.state, State.PROBLEM)
         self.assertIn("so the shop's next read links it again", relinked.why)
+
+    def test_taking_off_or_moving_a_products_last_page_is_held(self):
+        # Made from a shop's page, with no release date: the hourly tidy-up removes it once it has no listing.
+        bundle = make_product(self.bolt, name="Black Bolt Booster Bundle", slug="blk-bundle", product_type="bundle")
+        page = make_listing(bundle, self.shop, url="https://solent.example/products/blk-bundle")
+        item = ShopProduct.objects.create(retailer=self.harbour, title="BLK Bundle", url="https://harbour.example/p/b",
+                                          status=Status.REVIEW, suggested=bundle, last_seen=timezone.now())
+        _export, data = self.download()
+        off = self.only(self.edit(data, ("Listings", page.pk, "Not this product", "Yes")))
+        self.assertEqual((off.state, off.why), (State.HELD, (
+            f"{workbook_plan.TIDY_REMOVES} Taking its last page off removes it, with your other changes to it.")))
+        move = self.only(self.edit(data, ("Listings", page.pk, "Product id", str(self.etb.pk))))
+        self.assertEqual((move.state, move.why), (State.HELD, (
+            f'{workbook_plan.TIDY_REMOVES} Moving its last page removes {bundle.pk} "Black Bolt Booster Bundle", '
+            "with your other changes to it.")))
+        # A link with no price makes no listing until the shop's next read, so it does not keep the product.
+        changes = self.edit(data, ("Listings", page.pk, "Not this product", "Yes"),
+                            ("Shop items", item.pk, "Decision", "Link"))
+        self.assertEqual(self.only(changes, kind=Kind.TAKE_OFF).state, State.HELD)
+        ShopProduct.objects.filter(pk=item.pk).update(price=Decimal("30.00"))
+        _export, data = self.download()
+        changes = self.edit(data, ("Listings", page.pk, "Not this product", "Yes"),
+                            ("Shop items", item.pk, "Decision", "Link"))
+        self.assertEqual({c.state for c in changes}, {State.READY})
 
     def test_hide_and_show(self):
         hidden = make_listing(self.etb, self.harbour, is_active=False)

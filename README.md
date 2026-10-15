@@ -234,8 +234,11 @@ their own, or a Name or Barcode column sorted on its own. A change is
 where a shop sells both on separate pages, or the barcodes differ, or you
 said before they differ; a page move, link, rename or merge that leaves a
 shop's address contradicting its product's name, which the hourly tidy
-would delete (an address saying Japanese on a name that no longer does); hiding
-a product the hourly tidy would then remove; or a column with 50 or more
+would delete (an address saying Japanese on a name that no longer does);
+hiding a product, clearing its date, or taking off or moving its last
+shop page, when the hourly tidy would then remove it (a link to an item
+with no price makes no listing until the shop's next read, so it does not
+count); or a column with 50 or more
 edits on more than a quarter of its rows, in case a sort mixed them up.
 Every change is judged against the site as it will be once the whole file
 is made, so the order of rows never changes a verdict. The first button

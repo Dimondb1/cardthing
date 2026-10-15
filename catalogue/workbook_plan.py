@@ -421,6 +421,12 @@ class FinalState:
             self._index = Index(self.products)
         return self._index
 
+    def listed(self, pk):
+        """Whether ``pk`` has a listing once the file is made: a shop's page, or a priced shop item linked to
+        it. A link with no price, or a left-out link, makes none until the shop's next read."""
+        return any(whose[0] == "listing" or (whose[0] == "item" and self.site.items[whose[1]].price is not None)
+                   for entries in self.pages[pk].values() for whose, _key, _url in entries)
+
     def others_at(self, product, retailer, own):
         """The pages ``retailer`` has on ``product`` once the file is made, other than ``own``."""
         return [entry for entry in self.pages[product].get(retailer, []) if entry[0] != own]
@@ -1234,7 +1240,7 @@ class Planner:
                             and page_fits(url, before) and not page_fits(url, product)):
                         shop = possessive(self.site.shop_name(retailer))
                         return State.HELD, f"{FITS} The new name contradicts {shop} page {url}."
-        unlisted = not state.pages[pk] and not product.image
+        unlisted = not state.listed(pk) and not product.image
         if "show" in fields and fields["show"][3] is False and unlisted and not product.release_date:
             return State.HELD, f"{TIDY_REMOVES} Hiding it removes it for good."
         if "release_date" in fields and fields["release_date"][3] is None and unlisted:
@@ -1349,7 +1355,17 @@ class Planner:
             return (State.PROBLEM, f"The shop gives the barcode {page.shop_ean}, which is on "
                     f"{self.named(state, other)}, so the shop's next read links it again. Fix that barcode first, "
                     "or use Show on site No.")
+        if self.left_unlisted(page.product_id, state):
+            return State.HELD, f"{TIDY_REMOVES} Taking its last page off removes it, with your other changes to it."
         return None
+
+    def left_unlisted(self, pk, state):
+        """Whether the hourly tidy-up removes this product once the file is made: no listing, no release date and
+        no image. One merged away is kept for Undo."""
+        product = state.products.get(pk)
+        if product is None or pk in state.edges or self.site.merged_into(pk):
+            return False
+        return not product.release_date and not product.image and not state.listed(pk)
 
     def guard_move(self, change, state):
         page = self.site.pages[change.object_id]
@@ -1375,6 +1391,9 @@ class Planner:
             other = min(owners, key=str)
             return (State.PROBLEM, f"The shop gives the barcode {page.shop_ean}, which is on "
                     f"{self.named(state, other)}, so the shop's next read puts it back there.")
+        if self.left_unlisted(page.product_id, state):
+            return (State.HELD, f"{TIDY_REMOVES} Moving its last page removes {self.named(state, page.product_id)}, "
+                    "with your other changes to it.")
         if not page_fits(page.url, product):
             return State.HELD, f"{FITS} Check its address names {self.named(state, keep)}."
         return None

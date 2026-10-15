@@ -78,7 +78,10 @@ class RestockRecordTests(TestCase):
         for days_ago in range(1, 7):
             at = timezone.make_aware(timezone.datetime.combine(timezone.localdate(now) - timedelta(days=days_ago), timezone.datetime.min.time())) + timedelta(hours=9, minutes=30)
             Restock.objects.create(product=self.product, retailer=self.shop if days_ago > 1 else other, at=at, price="140.00")
-        Restock.objects.create(product=self.product, retailer=self.shop, at=now - timedelta(days=45, hours=3), price="140.00")
+        # Outside the 30 days but inside the 90 the band is read from, at 3am: an hour taken from the time the
+        # test runs could land beside 9am and move the band.
+        old = timezone.make_aware(timezone.datetime.combine(timezone.localdate(now) - timedelta(days=45), timezone.datetime.min.time())) + timedelta(hours=3)
+        Restock.objects.create(product=self.product, retailer=self.shop, at=old, price="140.00")
         summary = pricing.restock_summary(self.product, now=now)
         self.assertEqual((summary["count"], summary["days"], summary["latest"].retailer, summary["band"]), (6, 30, other, ("9am", "11am")))
 

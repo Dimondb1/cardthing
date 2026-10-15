@@ -141,6 +141,45 @@ A feed retailer accepts a Google Shopping XML feed (RSS or Atom with the
 `g:` namespace) as well as CSV: barcode (`g:gtin`) first, title second,
 with `g:sale_price` over `g:price`, `g:availability` and `g:shipping`.
 
+## Your data in Excel
+
+The whole catalogue can be downloaded as one Excel workbook to check and
+tidy by hand:
+
+```sh
+python manage.py data_files --export data.xlsx
+python manage.py data_files --export data.xlsx --left-out zatu-games
+```
+
+It has a Read me with the file's number, then Products, Listings, Shop items
+(waiting for a decision, not ours, and linked but not shown), Sets, and with
+`--left-out` one shop's items its latest read left out. Orange headings are
+the columns that may be changed; grey ones come from the shops or the site.
+Products merged away are left out, and their listings say "Merged into"
+the product kept. Look-alike group numbers products that may be one product
+on two pages (the loose duplicate key, a Chinese set code or a shared
+barcode, whatever their types). Each export is kept as a row with the values
+it was written with, so an upload can later be compared with exactly what
+was downloaded. The code is `catalogue/workbook.py` (the sheets, one spec)
+and `catalogue/data_jobs.py`.
+
+Nothing personal or secret goes in: the sheets are built from an allowlist
+of catalogue columns, never from alerts, messages, visitors, searches,
+clicks, users, the admin log, Claude's answers, the import logs, or a
+retailer's affiliate format, source address or session address. eBay and
+Amazon links lose their query string. Every text is written as text, so a
+shop title starting with = is never a formula, and barcodes stay text, so
+Excel cannot turn them into 5.05E+12.
+
+`openpyxl` was added for this (the one new dependency): it writes and reads
+real .xlsx files, which keep barcodes as text and dates as dates and hold
+several sheets with dropdowns. A CSV cannot, and Excel damages barcodes in
+one. It is loaded only by `data_files`, never by a web worker. Making the
+file takes about 9 seconds and 140 MB on a copy of the October catalogue
+(7,626 products, 13,220 listings), or 22 seconds and 210 MB with the left-out
+items of the shop with the longest list (capped at 5,000 rows), so it never
+runs in a web request. No new settings are needed.
+
 ## Adding several shops at once
 
 ```sh

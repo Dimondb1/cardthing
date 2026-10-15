@@ -4,3 +4,4 @@ whitenoise>=6.6
 gunicorn>=22.0
 maxminddb>=2.5
 anthropic>=1.12.1,<2
+openpyxl>=3.1.5,<3.2

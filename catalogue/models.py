@@ -1351,3 +1351,178 @@ class ClaudeAsk(models.Model):
         if self.verdict == "unsure":
             return verdict
         return f"{verdict}, {self.CONFIDENCE_WORDS.get(self.confidence, self.confidence)}"
+
+
+# The owner's catalogue as a spreadsheet (catalogue/workbook.py): a download, the file he sends back,
+# and each change that file makes. Made, checked, applied and undone by `manage.py data_files`, never in
+# a web request.
+
+def data_token():
+    import secrets
+
+    return secrets.token_hex(6)
+
+
+class DataExport(models.Model):
+    """One spreadsheet made for the owner, and the values it was made with, so his upload is compared with
+    what he downloaded rather than with what the site holds now."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Waiting"
+        BUILDING = "building", "Being made"
+        READY = "ready", "Ready"
+        FAILED = "failed", "Failed"
+
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    token = models.CharField(max_length=12, default=data_token)
+    # The one shop whose left-out items go in the file, when the owner chose one.
+    left_out_retailer = models.ForeignKey(Retailer, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    started_at = models.DateTimeField(null=True, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    downloaded_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    counts = models.JSONField(default=dict, blank=True)   # rows per sheet
+    size_bytes = models.PositiveIntegerField(default=0)
+    workbook = models.BinaryField(null=True, editable=False)
+    # Gzipped JSON of the editable values as written: {"v": 1, "sheets": {sheet: {key: {column: value}}}}.
+    base = models.BinaryField(null=True, editable=False)
+    error = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "spreadsheet download"
+
+    def __str__(self):
+        return self.reference
+
+    @property
+    def reference(self):
+        """The file number written into the workbook, so an upload finds the download it came from."""
+        return f"RR-{self.pk}-{self.token}"
+
+    @property
+    def filename(self):
+        return f"ripraptor-data-{timezone.localtime(self.created_at):%Y-%m-%d}-RR{self.pk}.xlsx"
+
+
+class DataImport(models.Model):
+    """One spreadsheet the owner uploaded: checked into a list of changes, then applied, discarded or undone."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Waiting to be checked"
+        CHECKING = "checking", "Being checked"
+        CHECKED = "checked", "Checked"
+        REFUSED = "refused", "Could not be read"
+        APPLY_QUEUED = "apply_queued", "Waiting to make the changes"
+        APPLYING = "applying", "Making the changes"
+        APPLIED = "applied", "Changes made"
+        UNDO_QUEUED = "undo_queued", "Waiting to undo"
+        UNDOING = "undoing", "Being undone"
+        UNDONE = "undone", "Undone"
+        DISCARDED = "discarded", "Discarded"
+        FAILED = "failed", "Failed"
+
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    export = models.ForeignKey(DataExport, on_delete=models.SET_NULL, null=True, blank=True, related_name="imports")
+    file_name = models.CharField(max_length=200)
+    size_bytes = models.PositiveIntegerField(default=0)
+    sha256 = models.CharField(max_length=64, db_index=True)
+    upload = models.BinaryField(null=True, editable=False)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    # New on every check: an apply sent from an older preview is refused.
+    check_token = models.CharField(max_length=12, blank=True)
+    include_held = models.BooleanField(default=False)
+    checked_at = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    total = models.PositiveIntegerField(default=0)
+    done = models.PositiveIntegerField(default=0)
+    counts = models.JSONField(default=dict, blank=True)   # by state, by kind, and the sheets and columns not read
+    note = models.CharField(max_length=300, blank=True)
+    error = models.CharField(max_length=300, blank=True)
+    backup_name = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "spreadsheet upload"
+
+    def __str__(self):
+        return self.file_name
+
+
+class DataChange(models.Model):
+    """One change an uploaded spreadsheet makes, in plain words, with what the site held when it was checked
+    so it is made only if nothing changed since, and what undoing it needs."""
+
+    class Kind(models.TextChoices):
+        NEW_SET = "new_set", "New set"
+        SET_FIELDS = "set_fields", "Set change"
+        NEW_PRODUCT = "new_product", "New product"
+        PRODUCT_FIELDS = "product_fields", "Product change"
+        TAKE_OFF = "take_off", "Not this product"
+        MOVE = "move", "Move a shop's page"
+        HIDE = "hide", "Hide"
+        SHOW = "show", "Show"
+        MERGE = "merge", "Merge"
+        APART = "apart", "Not the same"
+        LINK = "link", "Link a shop's item"
+        IGNORE = "ignore", "Not ours"
+        REVIEW = "review", "Look again"
+        LEFT_LINK = "left_link", "Link a left-out item"
+        LEFT_IGNORE = "left_ignore", "Left-out item not ours"
+
+    class State(models.TextChoices):
+        READY = "ready", "Ready"
+        HELD = "held", "Held for your say"
+        PROBLEM = "problem", "Not made"
+        CONFLICT = "conflict", "Changed on the site since your download"
+        SAME = "same", "Already so"
+
+    class Outcome(models.TextChoices):
+        NONE = "", "Not made yet"
+        APPLIED = "applied", "Made"
+        SKIPPED = "skipped", "Left as it was"
+        FAILED = "failed", "Failed"
+        UNDONE = "undone", "Undone"
+        UNDO_SKIPPED = "undo_skipped", "Not undone"
+
+    data_import = models.ForeignKey(DataImport, on_delete=models.CASCADE, related_name="changes")
+    step = models.PositiveSmallIntegerField()   # 1 to 7, the order changes are made in
+    seq = models.PositiveIntegerField()
+    sheet = models.CharField(max_length=20)
+    row = models.PositiveIntegerField(default=0)   # the Excel row number
+    kind = models.CharField(max_length=15, choices=Kind.choices)
+    state = models.CharField(max_length=10, choices=State.choices, db_index=True)
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    target_id = models.PositiveIntegerField(null=True, blank=True)
+    ref = models.CharField(max_length=40, blank=True)   # new1, new2 and so on, or the left-out key
+    fields = models.JSONField(default=dict, blank=True)   # {field: [base, file, seen, new]}
+    data = models.JSONField(default=dict, blank=True)   # a new row's values; a left-out item's title, link and barcode
+    what = models.CharField(max_length=300)
+    why = models.CharField(max_length=300, blank=True)
+    warning = models.CharField(max_length=300, blank=True)
+    outcome = models.CharField(max_length=12, choices=Outcome.choices, default=Outcome.NONE, blank=True)
+    outcome_note = models.CharField(max_length=300, blank=True)
+    answer = models.ForeignKey(CheckAnswer, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    undo = models.JSONField(default=dict, blank=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    undone_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["step", "seq"]
+        unique_together = [("data_import", "seq")]
+        indexes = [models.Index(fields=["data_import", "state", "step", "seq"])]
+        verbose_name = "spreadsheet change"
+
+    def __str__(self):
+        return self.what

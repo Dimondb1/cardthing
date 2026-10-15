@@ -292,6 +292,19 @@ class HourlyMergeGuardTests(TestCase):
         self.assertIn("their booster kinds differ", self.merge())
         self.assertEqual(Product.objects.count(), 2)
 
+    def test_a_pair_the_owner_kept_apart_is_never_merged(self):
+        from .models import CheckAnswer
+
+        box = self.product("Surging Sparks Booster Box (36 Packs)", "Total Cards", "booster_box")
+        other = self.product("Surging Sparks Booster Box", "Magic Madhouse", "booster_box")
+        answer = CheckAnswer.objects.create(kind=CheckAnswer.Kind.APART, by_owner=True, what="Not the same",
+                                            product=box, other=other)
+        self.assertIn("you said they are not the same", self.merge())
+        self.assertEqual(Product.objects.count(), 2)
+        # Once his answer is undone, they merge as before.
+        CheckAnswer.objects.filter(pk=answer.pk).update(undone_at=answer.created_at)
+        self.assertIn("1 products merged", self.merge())
+
     def test_the_same_box_written_two_ways_still_merges(self):
         self.product("Surging Sparks Booster Box (36 Packs)", "Total Cards", "booster_box")
         self.product("Surging Sparks Booster Box", "Magic Madhouse", "booster_box")

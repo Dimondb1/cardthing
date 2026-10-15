@@ -2275,7 +2275,8 @@ number is never read as a pack count ("Gem Pack Vol 4 Booster Pack" and
 "Vol 6" are two products), and two names with different numbers ("Mystery
 Bundle 5 Sealed Booster Packs" and "10") or different booster kinds ("Set
 Booster Box" and "Booster Box") are left apart, with a "left:" line in the
-command's output. What a box holds ("Booster Box (36 Packs)") and series or
+command's output, and so is a pair the owner said are not the same (Not the
+same on Things to check, or Not the same as in his spreadsheet). What a box holds ("Booster Box (36 Packs)") and series or
 set codes ("SV8.5", "OP-10") do not count as numbers.
 
 ```sh

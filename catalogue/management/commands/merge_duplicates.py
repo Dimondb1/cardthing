@@ -21,7 +21,8 @@ watchlists saved in browsers follow them. Run with --dry-run first.
 
 The hourly run merges only what is certain: two names whose numbers differ
 ("Vol 4" and "Vol 6", "5 packs" and "10") or whose booster kind differs
-("Set Booster" and "Booster") are left for Things to check instead.
+("Set Booster" and "Booster") are left for Things to check instead, and a
+pair the owner said are not the same is never merged.
 """
 
 import re
@@ -377,8 +378,11 @@ def duplicate_groups(loose=False):
 BOOSTER_KIND = re.compile(r"\b(set|draft|play|collector|jumpstart|gift|prerelease) booster", re.I)
 
 
-def why_not_merge(keep, other):
-    """Why two products a key groups must not be merged without a person or Claude, or "" when it is safe."""
+def why_not_merge(keep, other, apart=frozenset()):
+    """Why two products a key groups must not be merged without a person or Claude, or "" when it is safe.
+    ``apart`` holds the pairs the owner said are not the same (checks.kept_apart)."""
+    if frozenset((keep.pk, other.pk)) in apart:
+        return "you said they are not the same"
     if identity_numbers(keep.name) != identity_numbers(other.name):
         return "their numbers differ"
     if {k.lower() for k in BOOSTER_KIND.findall(keep.name)} != {k.lower() for k in BOOSTER_KIND.findall(other.name)}:
@@ -394,14 +398,18 @@ class Command(BaseCommand):
         parser.add_argument("--loose", action="store_true", help="Also ignore filler and series words. Review a dry run first.")
 
     def handle(self, *args, dry_run=False, loose=False, **options):
+        from catalogue.checks import kept_apart
+
         merged = moved = 0
+        # His Not the same (on Things to check or in his spreadsheet) stands: such a pair is never merged here.
+        apart = kept_apart()
         # Each group is its own short transaction, so a group that fails leaves the earlier ones merged
         # and nothing else waits for the whole walk. A dry run wraps them all and rolls back.
         with transaction.atomic() if dry_run else nullcontext():
             for keep, group in duplicate_groups(loose):
                 others = []
                 for other in group:
-                    why = why_not_merge(keep, other)
+                    why = why_not_merge(keep, other, apart)
                     if why:
                         self.stdout.write(f"left: {other.name} and {keep.name}, {why}")
                     else:

@@ -1,6 +1,7 @@
 import json
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 from urllib.parse import urlencode
 
 from django import forms
@@ -8,6 +9,7 @@ from django.conf import settings
 from django.templatetags.static import static
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Case, Count, Exists, F, IntegerField, Max, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
@@ -15,6 +17,7 @@ from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect, Ht
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_POST
 
@@ -1951,3 +1954,423 @@ def crawl_page(request):
         "alerts": {"on": settings.RIPRAPTOR_CRAWL_PUSHES, "push": notify.can_push(), "email": notify.can_email()},
     }
     return render(request, "admin/crawl.html", context)
+
+
+# Your data in Excel ---------------------------------------------------------------------------------------
+# The owner downloads the catalogue as a workbook, tidies it in Excel and uploads it (catalogue/workbook.py).
+# Making, checking, making the changes and undoing them run in the data_files process (catalogue/data_jobs.py),
+# never in a request: these pages queue the work, start the runner and show where it has got. A web worker never
+# loads openpyxl: an upload is checked here only as a zip.
+
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+# A download from here unpacks to about 30 MB in about 20 parts. A file far past that is not one of ours, and is
+# refused before anything unpacks it.
+MAX_UNPACKED_BYTES = 100 * 1024 * 1024
+MAX_PARTS = 200
+# The part that carries the file number is a few hundred bytes.
+MAX_NUMBER_PART = 64 * 1024
+# A list of changes is judged against the site as it was when it was checked; after a day it is checked again.
+PREVIEW_FRESH = timedelta(hours=24)
+LINES_PER_PAGE = 200
+
+NOT_XLSX = "This is not an .xlsx file. Save it as Excel Workbook (.xlsx) and upload that."
+TOO_LARGE = "This file is over 10 MB, far bigger than a download from here. Upload the spreadsheet you downloaded."
+TOO_MUCH_INSIDE = ("This file unpacks to far more than a download from here, so it was not opened. Upload the "
+                   "spreadsheet you downloaded.")
+MACROS = ("This file holds macros. Save it as Excel Workbook (.xlsx), not Excel Macro-Enabled Workbook, and upload "
+          "that.")
+BUSY = "The database was busy, so nothing changed. Tap the button again."
+RECHECKED = ("This file was checked again since the page loaded, so nothing was made. Read the list below, then "
+             "tap to make the changes.")
+OLD_PREVIEW = ("This list was checked over a day ago, so nothing was made. Tap Check again, read the list, then make "
+               "the changes.")
+
+
+def owner_only(view):
+    """The owner alone: staff sign in first (anyone else is sent to the login page), then only a superuser gets
+    in, since one upload changes thousands of rows. Never cached, so the back button shows where a file is now
+    and a download stays out of shared caches."""
+
+    @wraps(view)
+    def owner_view(request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise PermissionDenied
+        return view(request, *args, **kwargs)
+
+    return staff_member_required(never_cache(owner_view))
+
+
+def megabytes(size):
+    return f"{max(size, 100_000) / 1_000_000:.1f} MB"
+
+
+def when(moment):
+    from django.utils.dateformat import format as date_format
+
+    local = timezone.localtime(moment)
+    return f"{date_format(local, 'j M')} at {local:%H:%M}"
+
+
+class ExportForm(forms.Form):
+    left_out_shop = forms.ModelChoiceField(
+        label="Add the items one shop's latest read left out", required=False, empty_label="No shop",
+        queryset=Retailer.objects.filter(is_active=True).exclude(source_type=Retailer.Source.MANUAL).order_by("name"),
+    )
+
+
+class UploadForm(forms.Form):
+    file = forms.FileField(
+        label="Your edited spreadsheet (.xlsx, up to 10 MB)",
+        widget=forms.FileInput(attrs={"accept": f".xlsx,{XLSX}"}),
+        error_messages={"required": "Choose your spreadsheet first, then tap Check this file.",
+                        "empty": "This file is empty. Upload the spreadsheet you saved in Excel."},
+    )
+
+    def clean_file(self):
+        upload = self.cleaned_data["file"]
+        self.contents, self.reference = opened_upload(upload)
+        return upload
+
+
+def opened_upload(upload):
+    """(bytes, file number or None) of an uploaded workbook that passes what can be checked without reading it as
+    a workbook: its name and size, that it is a zip holding a workbook's parts and no macros, what it unpacks to,
+    and its file number. Raises forms.ValidationError with the sentence he sees. The runner reads the sheets.
+
+    A file that lost its number property is let through: the runner finds the number on its Read me sheet."""
+    import zipfile
+    import zlib
+    from io import BytesIO
+
+    from catalogue import workbook
+    from catalogue.models import DataExport
+
+    if not (upload.name or "").lower().endswith(".xlsx"):
+        raise forms.ValidationError(NOT_XLSX)
+    if upload.size > MAX_UPLOAD_BYTES:
+        raise forms.ValidationError(TOO_LARGE)
+    data = upload.read()
+    if not data.startswith(b"PK\x03\x04"):
+        raise forms.ValidationError(workbook.UNREADABLE)
+    try:
+        with zipfile.ZipFile(BytesIO(data)) as archive:
+            parts = archive.infolist()
+            # The sizes a zip states are the most its parts unpack to: Python stops there.
+            if len(parts) > MAX_PARTS or sum(part.file_size for part in parts) > MAX_UNPACKED_BYTES:
+                raise forms.ValidationError(TOO_MUCH_INSIDE)
+            names = {part.filename.replace("\\", "/") for part in parts}
+            if any(name.startswith("/") or ":" in name or ".." in name.split("/") for name in names):
+                raise forms.ValidationError(workbook.UNREADABLE)
+            if not {"[Content_Types].xml", "xl/workbook.xml"} <= names:
+                raise forms.ValidationError(workbook.UNREADABLE)
+            if any(name.lower().endswith("vbaproject.bin") for name in names):
+                raise forms.ValidationError(MACROS)
+            number = next((part for part in parts if part.filename == "docProps/custom.xml"), None)
+            reference = (workbook.quick_reference(archive)
+                         if number is not None and number.file_size <= MAX_NUMBER_PART else None)
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, RuntimeError, NotImplementedError, EOFError, OSError,
+            zlib.error) as exc:
+        raise forms.ValidationError(workbook.UNREADABLE) from exc
+    if reference is not None:
+        pk, token = reference
+        if not DataExport.objects.filter(pk=pk, token=token, base__isnull=False).exists():
+            raise forms.ValidationError(workbook.LOST_NUMBER)
+    return data, reference
+
+
+def make_spreadsheet(request):
+    from django.contrib import messages
+
+    from catalogue import data_jobs
+    from catalogue.models import DataExport
+
+    form = ExportForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "That shop is no longer in the list. Pick another, or none.")
+        return
+    if DataExport.objects.filter(status__in=[DataExport.Status.QUEUED, DataExport.Status.BUILDING]).exists():
+        messages.info(request, "A spreadsheet is being made already. Its Download button appears below when it is "
+                               "ready.")
+        return
+    DataExport.objects.create(created_by=request.user, left_out_retailer=form.cleaned_data["left_out_shop"])
+    data_jobs.start_now()
+    messages.success(request, "Making the spreadsheet. It takes up to a minute, and its Download button appears "
+                              "below when it is ready.")
+
+
+def take_upload(request):
+    """Keep an uploaded file and queue its check. Returns the page to go to: the file's own, or the Your data
+    page when the file was refused."""
+    import hashlib
+
+    from django.contrib import messages
+
+    from catalogue import data_jobs
+    from catalogue.models import DataImport
+
+    Status = DataImport.Status
+    form = UploadForm(request.POST, request.FILES)
+    if not form.is_valid():
+        for error in form.errors.get("file", []) or ["Choose your spreadsheet first, then tap Check this file."]:
+            messages.error(request, error)
+        return reverse("data")
+    data, reference = form.contents, form.reference
+    sha256 = hashlib.sha256(data).hexdigest()
+    # A list of changes whose file is no longer kept cannot be checked again, so this upload takes its place.
+    DataImport.objects.filter(sha256=sha256, status=Status.CHECKED, upload__isnull=True).update(
+        status=Status.DISCARDED, check_token="")
+    # The same file twice is shown where it got to, so it is never made twice. One refused, discarded, failed or
+    # undone may be uploaded again.
+    earlier = (DataImport.objects.filter(sha256=sha256)
+               .exclude(status__in=[Status.REFUSED, Status.DISCARDED, Status.FAILED, Status.UNDONE])
+               .only("pk", "created_at").order_by("-created_at", "-pk").first())
+    if earlier is not None:
+        messages.info(request, f"You uploaded this file already, on {when(earlier.created_at)}. This is where it "
+                               "has got to.")
+        return reverse("data_import", args=[earlier.pk])
+    upload = DataImport.objects.create(
+        created_by=request.user, export_id=reference[0] if reference else None, size_bytes=len(data),
+        file_name=form.cleaned_data["file"].name[:200], sha256=sha256, upload=data,
+    )
+    data_jobs.start_now()
+    messages.success(request, "Checking the file. Nothing changes until you have read the list of changes and "
+                              "tapped to make them.")
+    return reverse("data_import", args=[upload.pk])
+
+
+@owner_only
+def data_page(request):
+    """Your data in Excel: make a spreadsheet of the catalogue, download it, and upload it once it is tidied. The
+    page refreshes itself while something runs, and starts the runner again when a job waits with none."""
+    from django.contrib import messages
+    from django.db import DatabaseError
+    from django.db.models import BooleanField, ExpressionWrapper
+
+    from catalogue import data_jobs
+    from catalogue.models import DataExport, DataImport
+
+    if request.method == "POST":
+        target = reverse("data")
+        try:
+            if request.POST.get("action") == "make":
+                make_spreadsheet(request)
+            elif request.POST.get("action") == "upload":
+                target = take_upload(request)
+        except DatabaseError:
+            messages.error(request, BUSY)
+        return HttpResponseRedirect(target)
+    now = timezone.now()
+    going = data_jobs.WAITING | data_jobs.RUNNING
+    working = [*DataExport.objects.filter(status__in=going).values_list("status", "created_at", "heartbeat_at"),
+               *DataImport.objects.filter(status__in=going).values_list("status", "created_at", "heartbeat_at")]
+    if any(data_jobs.needs_runner(*job, now) for job in working):
+        data_jobs.start_now()
+    exports = list(
+        DataExport.objects.defer("workbook", "base").select_related("left_out_retailer")
+        .annotate(kept=ExpressionWrapper(Q(workbook__isnull=False), output_field=BooleanField()))[:5]
+    )
+    for export in exports:
+        export.size_label = megabytes(export.size_bytes)
+        export.rows = ", ".join(f"{name} {count:,}" for name, count in (export.counts or {}).items())
+    context = {
+        **admin.site.each_context(request), "title": "Your data in Excel", "refresh": bool(working),
+        "exports": exports, "imports": list(DataImport.objects.defer("upload")[:10]),
+        "export_form": ExportForm(), "upload_form": UploadForm(),
+    }
+    return render(request, "admin/data.html", context)
+
+
+@owner_only
+@require_GET
+def data_download(request, pk):
+    from django.contrib import messages
+
+    from catalogue.models import DataExport
+
+    found = (DataExport.objects.filter(pk=pk, status=DataExport.Status.READY)
+             .values_list("workbook", "created_at").first())
+    if found is None or found[0] is None:
+        messages.warning(request, "That spreadsheet is no longer kept. Make a fresh one.")
+        return HttpResponseRedirect(reverse("data"))
+    data, created_at = found
+    response = HttpResponse(bytes(data), content_type=XLSX)
+    response["Content-Disposition"] = f'attachment; filename="{DataExport(pk=pk, created_at=created_at).filename}"'
+    with pricing.drop_if_locked("Spreadsheet download time"):
+        DataExport.objects.filter(pk=pk).update(downloaded_at=timezone.now())
+    return response
+
+
+def import_tap(request, pk):
+    """One of the buttons on an uploaded file's page. Each moves the file on only from the state the page showed,
+    so a second tap, or a tap from an older page, does nothing."""
+    from django.contrib import messages
+
+    from catalogue import data_jobs
+    from catalogue.models import DataChange, DataImport
+
+    Status = DataImport.Status
+    action = request.POST.get("action", "")
+    now = timezone.now()
+    jobs = DataImport.objects.filter(pk=pk)
+    job = jobs.only("pk", "status", "check_token", "checked_at").first()
+    if job is None:
+        raise Http404("No such upload.")
+    made_some = Exists(DataChange.objects.filter(data_import=OuterRef("pk"), outcome=DataChange.Outcome.APPLIED))
+    queued = {"heartbeat_at": now, "attempts": 0, "note": "", "error": ""}
+    if action in ("apply", "apply_all"):
+        token = request.POST.get("check_token", "")
+        if job.status in (Status.APPLY_QUEUED, Status.APPLYING, Status.APPLIED):
+            messages.info(request, "Its changes are being made already.")
+        elif job.status != Status.CHECKED or not token or token != job.check_token:
+            messages.warning(request, RECHECKED)
+        elif job.checked_at is None or job.checked_at < now - PREVIEW_FRESH:
+            messages.warning(request, OLD_PREVIEW)
+        elif jobs.filter(status=Status.CHECKED, check_token=token).update(
+                status=Status.APPLY_QUEUED, include_held=action == "apply_all", done=0, **queued):
+            data_jobs.start_now()
+            messages.success(request, "Making the changes. This page shows how far it has got.")
+        else:
+            messages.warning(request, RECHECKED)
+    elif action == "check_again":
+        if jobs.filter(status=Status.CHECKED).update(status=Status.QUEUED, check_token="", **queued):
+            data_jobs.start_now()
+            messages.success(request, "Checking the file again, against the site as it is now.")
+        else:
+            messages.warning(request, "Only a checked file whose changes have not been made can be checked again.")
+    elif action == "discard":
+        if jobs.filter(Q(status=Status.CHECKED) | Q(status=Status.FAILED) & ~made_some).update(
+                status=Status.DISCARDED, upload=None, check_token=""):
+            messages.success(request, "Discarded. Nothing in this file was made.")
+        else:
+            messages.warning(request, "Only a file whose changes have not been made can be discarded.")
+    elif action == "undo":
+        if jobs.filter(Q(status=Status.APPLIED) | Q(status=Status.FAILED), made_some).update(
+                status=Status.UNDO_QUEUED, **queued):
+            data_jobs.start_now()
+            messages.success(request, "Undoing the file, newest change first. Each is undone only while the site "
+                                      "still holds what the file left.")
+        else:
+            messages.warning(request, "This file has no changes to undo.")
+
+
+def change_sections(job, wanted, page):
+    """The preview's sections, each with one page of its lines: one query a section, however long the list."""
+    from catalogue.management.commands.data_files import SECTIONS
+    from catalogue.models import DataChange
+
+    states = (job.counts or {}).get("state", {})
+    sections = []
+    for state, heading in SECTIONS:
+        count = states.get(state, 0)
+        if not count:
+            continue
+        pages = -(-count // LINES_PER_PAGE)
+        number = min(page, pages) if wanted == state else 1
+        start = (number - 1) * LINES_PER_PAGE
+        # Not job.changes: through the relation each row would load its own upload id again.
+        lines = DataChange.objects.filter(data_import_id=job.pk, state=state).order_by("step", "seq").only(
+            "sheet", "row", "what", "why", "warning", "state", "kind", "outcome", "outcome_note")[
+            start:start + LINES_PER_PAGE]
+        sections.append({
+            "state": state, "heading": f"{heading} ({count:,})", "lines": list(lines), "page": number, "pages": pages,
+            "where": f"Lines {start + 1:,} to {min(start + LINES_PER_PAGE, count):,} of {count:,}",
+            # What needs his eye is open; what is already so, or changed on the site, is a tap away.
+            "open": wanted == state or (not wanted and state in ("ready", "held", "problem")),
+        })
+    return sections
+
+
+def plural(count, one, many):
+    return f"{count:,} {one if count == 1 else many}"
+
+
+def result_line(job):
+    """What making or undoing the file did, in a sentence or two."""
+    from catalogue.models import DataChange, DataImport
+
+    Outcome = DataChange.Outcome
+    counts = job.counts or {}
+    if job.status == DataImport.Status.APPLIED:
+        made = counts.get("outcome", {})
+        text = f"Made {plural(made.get(Outcome.APPLIED, 0), 'change', 'changes')}."
+        left = [(made.get(Outcome.SKIPPED, 0), "was left as it was", "were left as they were"),
+                (made.get(Outcome.FAILED, 0), "could not be made", "could not be made")]
+    elif job.status == DataImport.Status.UNDONE:
+        undone = counts.get("undo", {})
+        text = f"Undid {plural(undone.get(Outcome.UNDONE, 0), 'change', 'changes')}."
+        left = [(undone.get(Outcome.UNDO_SKIPPED, 0), "was left as it is", "were left as they are")]
+    else:
+        return ""
+    parts = [plural(count, one, many) for count, one, many in left if count]
+    if parts:
+        listed = sum(count for count, _one, _many in left)
+        text += (f" {' and '.join(parts)}. {'It is' if listed == 1 else 'Each is'} listed below with the reason.")
+    return text
+
+
+@owner_only
+def data_import_page(request, pk):
+    """One uploaded spreadsheet: being checked, then its changes in plain words with the buttons to make them,
+    how far making or undoing them has got, and what was made or left as it was."""
+    from django.contrib import messages
+    from django.db import DatabaseError
+    from django.db.models import BooleanField, ExpressionWrapper
+
+    from catalogue import data_jobs
+    from catalogue.models import DataChange, DataImport
+
+    if request.method == "POST":
+        try:
+            import_tap(request, pk)
+        except DatabaseError:
+            messages.error(request, BUSY)
+        return HttpResponseRedirect(reverse("data_import", args=[pk]))
+    Status, Outcome, State = DataImport.Status, DataChange.Outcome, DataChange.State
+    job = get_object_or_404(
+        DataImport.objects.defer("upload")
+        .annotate(kept=ExpressionWrapper(Q(upload__isnull=False), output_field=BooleanField())), pk=pk)
+    now = timezone.now()
+    if data_jobs.needs_runner(job.status, job.created_at, job.heartbeat_at, now):
+        data_jobs.start_now()
+    counts = job.counts or {}
+    states = counts.get("state", {})
+    ready, held = states.get(State.READY, 0), states.get(State.HELD, 0)
+    page = request.GET.get("page", "")
+    page = int(page) if page.isdigit() and int(page) > 0 else 1
+    listed = job.status not in (Status.QUEUED, Status.CHECKING, Status.REFUSED) and job.checked_at is not None
+    made, undone = counts.get("outcome", {}), counts.get("undo", {})
+    # A file stopped three times while being made may have made some changes: those can be undone.
+    changes = DataChange.objects.filter(data_import_id=job.pk)
+    failed_part_made = job.status == Status.FAILED and changes.filter(outcome=Outcome.APPLIED).exists()
+    merged = (job.status == Status.APPLIED
+              and changes.filter(kind=DataChange.Kind.MERGE, outcome=Outcome.APPLIED).exists())
+    left = []
+    if job.status == Status.APPLIED and (made.get(Outcome.SKIPPED) or made.get(Outcome.FAILED)):
+        left = changes.filter(outcome__in=[Outcome.SKIPPED, Outcome.FAILED])
+    elif job.status == Status.UNDONE and undone.get(Outcome.UNDO_SKIPPED):
+        left = changes.filter(outcome=Outcome.UNDO_SKIPPED)
+    if left:
+        left = list(left.order_by("step", "seq").only("what", "outcome", "outcome_note")[:LINES_PER_PAGE])
+    progress = ""
+    if job.status in (Status.APPLYING, Status.UNDOING):
+        doing = "Making" if job.status == Status.APPLYING else "Undoing"
+        progress = f"{doing} changes: {job.done:,} of {job.total:,}."
+    elif job.status in (Status.APPLY_QUEUED, Status.UNDO_QUEUED):
+        progress = f"Waiting to {'make' if job.status == Status.APPLY_QUEUED else 'undo'} the changes."
+    if progress and job.note:
+        progress += f" {job.note}."
+    context = {
+        **admin.site.each_context(request), "title": job.file_name, "job": job, "progress": progress,
+        "refresh": job.status in data_jobs.WAITING | data_jobs.RUNNING,
+        "listed": listed, "summary": counts.get("summary", ""), "unread": counts.get("unread", []),
+        "sections": change_sections(job, request.GET.get("section", ""), page) if listed else [],
+        "fresh": job.checked_at is not None and job.checked_at >= now - PREVIEW_FRESH,
+        "make_label": f"Make {plural(ready, 'change', 'changes')}" if ready else "",
+        "make_all_label": (f"Make {plural(ready + held, 'change', 'changes')}, including the {held:,} held for your "
+                           "say") if held else "",
+        "can_undo": (job.status == Status.APPLIED and made.get(Outcome.APPLIED)) or failed_part_made,
+        "can_discard": job.status == Status.CHECKED or (job.status == Status.FAILED and not failed_part_made),
+        "result": result_line(job), "left": left, "merges": merged,
+    }
+    return render(request, "admin/data_import.html", context)

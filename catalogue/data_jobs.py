@@ -69,6 +69,24 @@ QUEUES = (
 )
 
 
+WAITING = {waiting for _model, waiting, _running in QUEUES}
+RUNNING = {running for _model, _waiting, running in QUEUES}
+# The page starts the runner at once; a job still waiting after this was never taken.
+TAKEN_WITHIN = timedelta(seconds=30)
+
+
+def needs_runner(status, created_at, heartbeat_at, now):
+    """True when a job's runner is not there: it was never started (no process could be made, or the server
+    restarted) or it was stopped. The page then starts one; a second is harmless, as it finds the lock taken.
+    A job queued again by a tap, or by a runner that waited its whole run for a shop read, has its heartbeat
+    set then, so its 30 seconds count from that moment."""
+    if status in WAITING:
+        return (heartbeat_at or created_at) < now - TAKEN_WITHIN
+    if status in RUNNING:
+        return heartbeat_at is None or heartbeat_at < now - STALE_AFTER
+    return False
+
+
 def pack_base(base):
     return gzip.compress(json.dumps(base, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
 

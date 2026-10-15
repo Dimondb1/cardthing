@@ -1,0 +1,32 @@
+<style>
+  .data { display: grid; gap: 28px; max-width: 60rem; }
+  .data h2 { margin: 0 0 6px; }
+  .data h3 { margin: 14px 0 6px; }
+  .data p { margin: 0 0 8px; }
+  .data p.note, .data .why, .data .none { color: var(--body-quiet-color); }
+  .data .bad { color: var(--error-fg); }
+  .data ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .data ul li { list-style-type: none; }
+  .data li.item { padding: 12px 14px; border: 1px solid var(--hairline-color); border-radius: 8px; background: var(--body-bg); overflow-wrap: anywhere; }
+  .data li.item b { display: block; margin-bottom: 4px; }
+  .data li.item p:last-child { margin-bottom: 0; }
+  .data ul.files { margin-top: 16px; }
+  .data ul.lines { gap: 0; }
+  .data ul.lines li { padding: 8px 0; border-bottom: 1px solid var(--hairline-color); overflow-wrap: anywhere; }
+  .data .why, .data .outcome { display: block; margin-top: 2px; }
+  .data .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 10px; }
+  .data form { margin: 0; }
+  .data .field { display: grid; gap: 4px; max-width: 30rem; margin: 0 0 10px; }
+  .data .field select, .data .field input[type=file] { max-width: 100%; min-height: 36px; box-sizing: border-box; }
+  .data button.act { min-height: 40px; max-width: 100%; padding: 8px 14px; border: 0; border-radius: 4px; background: var(--button-bg);
+    color: var(--button-fg); font: inherit; text-align: left; cursor: pointer; }
+  .data button.act:hover, .data button.act:focus { background: var(--button-hover-bg); }
+  .data button.quiet { background: var(--close-button-bg); }
+  .data button.quiet:hover, .data button.quiet:focus { background: var(--close-button-hover-bg); }
+  .data a.button { display: inline-flex; align-items: center; min-height: 40px; box-sizing: border-box; }
+  .data summary { cursor: pointer; }
+  .data summary h2 { display: inline; }
+  .data details > ul, .data details > p, .data details > h3:first-of-type { margin-top: 8px; }
+  .data .pages { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; }
+  .data .progress { font-weight: 600; }
+</style>

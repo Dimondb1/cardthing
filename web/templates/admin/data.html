@@ -1,0 +1,49 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}{% if refresh %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block extrastyle %}{{ block.super }}{% include "admin/_data_style.html" %}{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Your data in Excel</div>{% endblock %}
+{% block content %}
+<div class="data">
+  <section id="download">
+    <h2>Download</h2>
+    <p>The spreadsheet holds every product, every shop's page, the shop items waiting for you and every set. In Excel, change the orange columns, save it as Excel Workbook (.xlsx) and upload it below within 90 days. Its Read me sheet says how.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="make">
+      <div class="field"><label for="{{ export_form.left_out_shop.id_for_label }}">{{ export_form.left_out_shop.label }} (optional)</label>{{ export_form.left_out_shop }}</div>
+      <button type="submit" class="act">Make a spreadsheet</button>
+    </form>
+    {% if exports %}<ul class="files">
+      {% for export in exports %}
+      <li class="item" id="export-{{ export.pk }}"><b>{{ export.filename }}</b>
+        {% if export.status == "ready" and export.kept %}
+        <p class="note">Made {{ export.finished_at|date:"j M, H:i" }}{% if export.left_out_retailer %}, with the items {{ export.left_out_retailer.name }}'s latest read left out{% endif %}. {{ export.rows }}.{% if export.downloaded_at %} Downloaded {{ export.downloaded_at|date:"j M, H:i" }}.{% endif %}</p>
+        <div class="row"><a class="button" href="{% url 'data_download' export.pk %}">Download spreadsheet ({{ export.size_label }})</a></div>
+        {% elif export.status == "ready" %}
+        <p class="note">No longer kept: a file can be downloaded for 14 days. Make a fresh one.</p>
+        {% elif export.status == "failed" %}
+        <p class="bad">{{ export.error }}</p>
+        {% else %}
+        <p class="note">Being made. It takes up to a minute, and this page refreshes itself until it is ready.</p>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>{% endif %}
+  </section>
+
+  <section id="upload">
+    <h2>Upload</h2>
+    <p>Upload the spreadsheet once your changes are saved. Nothing changes yet: you see every change in plain words first, then tap to make them, and you can undo the file afterwards.</p>
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="action" value="upload">
+      <div class="field"><label for="{{ upload_form.file.id_for_label }}">{{ upload_form.file.label }}</label>{{ upload_form.file }}</div>
+      <button type="submit" class="act">Check this file</button>
+    </form>
+    {% if imports %}<ul class="files">
+      {% for upload in imports %}
+      <li class="item" id="upload-{{ upload.pk }}"><b><a href="{% url 'data_import' upload.pk %}">{{ upload.file_name }}</a></b>
+        <p class="note">Uploaded {{ upload.created_at|date:"j M, H:i" }}. {{ upload.get_status_display }}.{% if upload.status == "checked" and upload.counts.summary %} {{ upload.counts.summary }}{% endif %}</p>
+      </li>
+      {% endfor %}
+    </ul>{% endif %}
+  </section>
+</div>
+{% endblock %}

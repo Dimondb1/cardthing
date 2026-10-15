@@ -1,0 +1,86 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}{% if refresh %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block extrastyle %}{{ block.super }}{% include "admin/_data_style.html" %}{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; <a href="{% url 'data' %}">Your data in Excel</a> &rsaquo; {{ job.file_name }}</div>{% endblock %}
+{% block content %}
+<div class="data">
+  <section id="status">
+    <p class="note">Uploaded {{ job.created_at|date:"j M, H:i" }}{% if job.export_id %}, from spreadsheet RR{{ job.export_id }}{% endif %}. {{ job.get_status_display }}.</p>
+    {% if job.status == "queued" or job.status == "checking" %}
+    <p class="progress">Checking the file against the site. This page refreshes itself until the list of changes is ready.</p>
+    {% elif job.status == "refused" %}
+    <p class="bad">{{ job.error }}</p>
+    <p><a href="{% url 'data' %}#upload">Upload a file on Your data in Excel</a></p>
+    {% elif progress %}
+    <p class="progress">{{ progress }} This page refreshes itself until it is done.</p>
+    {% elif job.status == "applied" or job.status == "undone" %}
+    <p class="progress">{{ result }}</p>
+    {% if merges and job.status == "applied" %}<p class="note">Its merges are also under Sorted for you on <a href="{% url 'checks' %}">Things to check</a>, each with its own Undo.</p>{% endif %}
+    {% elif job.status == "discarded" %}
+    <p class="progress">Discarded. Nothing in this file was made.</p>
+    {% elif job.status == "failed" %}
+    <p class="bad">{{ job.error }}</p>
+    {% endif %}
+
+    {% if left %}<ul class="lines">
+      {% for change in left %}<li>{{ change.what }}<span class="why">{{ change.get_outcome_display }}: {{ change.outcome_note }}</span></li>{% endfor %}
+    </ul>{% endif %}
+
+    {% if job.status == "checked" %}
+    <p>{{ summary }}</p>
+    {% if fresh %}
+    <p class="note">Nothing is made until you tap. Each change is made only while the site still holds what it held at this check.</p>
+    <div class="row">
+      {% if make_label %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="apply"><input type="hidden" name="check_token" value="{{ job.check_token }}"><button type="submit" class="act">{{ make_label }}</button></form>{% endif %}
+      {% if make_all_label %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="apply_all"><input type="hidden" name="check_token" value="{{ job.check_token }}"><button type="submit" class="act">{{ make_all_label }}</button></form>{% endif %}
+    </div>
+    {% elif job.kept %}
+    <p class="bad">This list was checked over a day ago. Check it again before you make the changes.</p>
+    {% else %}
+    <p class="bad">This list was checked over a day ago, and the file is no longer kept. <a href="{% url 'data' %}#upload">Upload it again</a> to check it against the site as it is now.</p>
+    {% endif %}
+    <div class="row">
+      {% if job.kept %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="check_again"><button type="submit" class="act quiet">Check again</button></form>{% endif %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="discard"><button type="submit" class="act quiet">Discard this file</button></form>
+    </div>
+    {% elif can_discard %}
+    <div class="row"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="discard"><button type="submit" class="act quiet">Discard this file</button></form></div>
+    {% endif %}
+    {% if can_undo %}
+    <p class="note">Undo this file takes its changes back, newest first. A change the site has changed again since is left as it is.</p>
+    <div class="row"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="undo"><button type="submit" class="act">Undo this file</button></form></div>
+    {% endif %}
+  </section>
+
+  {% for section in sections %}
+  <details id="{{ section.state }}"{% if section.open %} open{% endif %}>
+    <summary><h2>{{ section.heading }}</h2></summary>
+    {% if section.state == "held" %}<p class="note">Made only with the button that includes them. Each says why it waits for you.</p>{% elif section.state == "conflict" %}<p class="note">You changed these, but so did the site since your download. The site's value is kept.</p>{% endif %}
+    {% if section.state == "ready" %}
+    {% regroup section.lines by get_kind_display as kinds %}
+    {% for kind in kinds %}<h3>{{ kind.grouper }}</h3>
+    <ul class="lines">{% for change in kind.list %}{% include "admin/_data_change.html" %}{% endfor %}</ul>
+    {% endfor %}
+    {% else %}
+    <ul class="lines">{% for change in section.lines %}{% include "admin/_data_change.html" %}{% endfor %}</ul>
+    {% endif %}
+    {% if section.pages > 1 %}
+    <div class="pages">
+      <span class="note">{{ section.where }}</span>
+      {% if section.page > 1 %}<a href="?section={{ section.state }}&amp;page={{ section.page|add:-1 }}#{{ section.state }}">Previous 200</a>{% endif %}
+      {% if section.page < section.pages %}<a href="?section={{ section.state }}&amp;page={{ section.page|add:1 }}#{{ section.state }}">Next 200</a>{% endif %}
+    </div>
+    {% endif %}
+  </details>
+  {% endfor %}
+
+  {% if listed and unread %}
+  <details id="unread">
+    <summary><h2>Not read ({{ unread|length }})</h2></summary>
+    <p class="note">Sheets and columns that are not ours, or that cannot be changed from the file. Nothing in them was read.</p>
+    <ul class="lines">{% for line in unread %}<li>{{ line }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}

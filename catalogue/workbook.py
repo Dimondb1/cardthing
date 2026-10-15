@@ -179,8 +179,8 @@ README_LINES = (
     "To change a language, pick it in Language and the site adds it to the name.",
     "Barcodes stay as text. 5.05E+12 means Excel damaged a barcode.",
     "Prices, stock and shop titles come from the shops and are never changed from this file.",
-    "Save as Excel Workbook (.xlsx) and upload it on the Your data page within 90 days. You see every change "
-    "before anything happens, and you can undo the file.",
+    "Save as Excel Workbook (.xlsx) and upload it on the Your data in Excel page in admin within 90 days. You see "
+    "every change before anything happens, and you can undo the file.",
     "If Claude or someone else edits this file, ask them to change only orange columns and keep every id, then "
     "read the list of changes before you apply them.",
 )

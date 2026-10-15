@@ -199,6 +199,10 @@ JAPANESE_SETS = re.compile(
 JAPANESE_SETS_WITH_KIND = re.compile(
     r"\b(?:wild forces?|battle partners|infinity zone|inferno x)\s+(?:\w+\s+){0,2}?(?:booster|pack|box|bundle)\b"
     r"|\binferno x\b.*\bm2\b")
+# Kinds of Pokémon product made only for mainland China, so Simplified Chinese when the title names no
+# language: Solent Cards' "2026 Pokémon Mid-Autumn Festival Gift Box" is the Simplified Chinese box the
+# other shops call so, and was kept apart from it as English (15 Oct 2026).
+SIMPLIFIED_KINDS = re.compile(r"\bmid[- ]?autumn(?: festival)?\b")
 # A Japanese-only set joined to another: a mixed bundle.
 JOINED = re.compile(r"\s(?:/|&|\+|and)\s")
 
@@ -278,14 +282,16 @@ def stated(text, game="", loose=False):
 
 @lru_cache(maxsize=65536)
 def implied(text, game=""):
-    """The language a Pokémon code, kind or set name implies: Japanese, or "". Only for Pokémon, so only
-    when the game is known."""
+    """The language a Pokémon code, kind or set name implies: Japanese, Simplified Chinese, or "". Only for
+    Pokémon, so only when the game is known."""
     if game != POKEMON:
         return ENGLISH
     low = _guarded(text)
     if (any(pattern.search(low) for pattern in POKEMON_CODE) or OTHER_JAPANESE_CODE.search(low)
             or JAPANESE_KINDS.search(low) or JAPANESE_SETS.search(low) or JAPANESE_SETS_WITH_KIND.search(low)):
         return JAPANESE
+    if SIMPLIFIED_KINDS.search(low):
+        return SIMPLIFIED
     return ENGLISH
 
 

@@ -266,3 +266,40 @@ class MatchingTests(TestCase):
         jp = make_product(self.set, name="151 (sv2a) Booster Box", product_type="booster_box")
         make_listing(jp, make_retailer("Japan Shop", delivery_cost=Decimal("0")), price="120.00")
         self.assertEqual(Product.objects.for_lists().get(pk=jp.pk).language, "ja")
+
+
+class MidAutumnTests(TestCase):
+    """Pokémon's Mid-Autumn Festival boxes are made only for mainland China: a title that names no language
+    is Simplified Chinese, so a shop that leaves the language out joins the other shops' page (Solent Cards,
+    15 Oct 2026)."""
+
+    def test_the_box_is_simplified_chinese_unless_the_title_says_otherwise(self):
+        self.assertEqual(languages.language_of("2026 Pokémon Mid-Autumn Festival Gift Box", "pokemon"),
+                         languages.SIMPLIFIED)
+        self.assertEqual(languages.language_of("Pokemon Mid Autumn Gift Box", "pokemon"), languages.SIMPLIFIED)
+        self.assertEqual(languages.language_of("Mid-Autumn Festival Gift Box Traditional Chinese", "pokemon"),
+                         languages.TRADITIONAL)
+        # Only Pokémon's: another game's festival box says nothing about China.
+        self.assertEqual(languages.language_of("Mid-Autumn Festival Gift Box", "one-piece"), languages.ENGLISH)
+
+    def test_the_shop_that_left_out_the_language_is_offered_as_a_duplicate_of_the_chinese_page(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from . import checks
+
+        game = make_game()
+        pset = make_set(game)
+        chinese = make_product(pset, name="2026 Mid Autumn Festival Simplified Chinese Gift Box",
+                               slug="2026-mid-autumn-festival-simplified-chinese-gift-box", product_type="collection_box")
+        solent = make_product(pset, name="2026 Pokémon Mid Autumn Festival Gift Box",
+                              slug="2026-pokemon-mid-autumn-festival-gift-box", product_type="collection_box")
+        make_listing(chinese, make_retailer("eBay"), price="27.99")
+        make_listing(solent, make_retailer("Solent Cards"), price="20.00", delivery="3.65")
+        call_command("set_languages", stdout=StringIO())
+        # Never merged unasked (the strict rule keeps "Chinese" in the name): one tap on Things to check.
+        call_command("merge_duplicates", stdout=StringIO())
+        self.assertEqual(Product.objects.filter(pk__in=[chinese.pk, solent.pk], is_active=True).count(), 2)
+        [(keep, others)] = checks.duplicates()
+        self.assertEqual({keep.pk, *(o.pk for o in others)}, {chinese.pk, solent.pk})

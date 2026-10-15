@@ -1,5 +1,5 @@
-"""The database stays small: old import records are cleared, the update shrinks it before copying it, and the
-copy makes room first and never fills the disk."""
+"""The database stays small: old import records and spreadsheets are cleared, the update shrinks it before
+copying it, and the copy makes room first and never fills the disk."""
 
 import datetime
 import tempfile
@@ -15,7 +15,7 @@ from django.utils import timezone
 from . import housekeeping, notify
 from .importers import unmatched_text
 from .management.commands.backup_db import backup_name
-from .models import ImportRun
+from .models import DataChange, DataExport, DataImport, ImportRun
 from .testing import make_retailer
 from .tests_db import file_database
 
@@ -70,6 +70,56 @@ class PruneRunsTests(TestCase):
     def test_a_run_keeps_every_unmatched_line_for_the_stockist_finder(self):
         lines = [f"line {n}" for n in range(5000)]
         self.assertEqual(unmatched_text(lines).count("\n"), 4999)
+
+
+class PruneDataFilesTests(TestCase):
+    def export(self, days_ago):
+        return DataExport.objects.create(created_at=timezone.now() - datetime.timedelta(days=days_ago),
+                                         status=DataExport.Status.READY, workbook=b"PK workbook", base=b"base")
+
+    def upload(self, days_ago, status, export=None):
+        upload = DataImport.objects.create(created_at=timezone.now() - datetime.timedelta(days=days_ago),
+                                           status=status, upload=b"PK upload", export=export, sha256="0" * 64)
+        DataChange.objects.create(data_import=upload, step=3, seq=1, sheet="Products", kind=DataChange.Kind.HIDE,
+                                  state=DataChange.State.READY, what="Hide 1.")
+        return upload
+
+    def test_files_are_cleared_when_nothing_needs_them_and_rows_go_after_their_time(self):
+        Status = DataImport.Status
+        fresh, fortnight, old = self.export(13), self.export(15), self.export(91)
+        made = self.upload(1, Status.APPLIED, export=old)
+        checked, waiting = self.upload(1, Status.CHECKED), self.upload(0, Status.QUEUED)
+        stale = self.upload(8, Status.CHECKED)
+        thrown = [self.upload(1, status) for status in (Status.DISCARDED, Status.REFUSED, Status.UNDONE)]
+        ancient = self.upload(181, Status.APPLIED)
+        self.assertEqual(housekeeping.prune_data_files(), (1, 1, 5, 1))
+        workbooks = dict(DataExport.objects.values_list("pk", "workbook"))
+        self.assertEqual(bytes(workbooks[fresh.pk]), b"PK workbook")
+        self.assertIsNone(workbooks[fortnight.pk])
+        self.assertNotIn(old.pk, workbooks)
+        # The values it was made with stay as long as the download: an upload of it is compared with them.
+        self.assertEqual(bytes(DataExport.objects.get(pk=fortnight.pk).base), b"base")
+        uploads = dict(DataImport.objects.values_list("pk", "upload"))
+        for kept in (checked, waiting):
+            self.assertEqual(bytes(uploads[kept.pk]), b"PK upload")
+        for cleared in (made, stale, *thrown):
+            self.assertIsNone(uploads[cleared.pk])
+        self.assertNotIn(ancient.pk, uploads)
+        self.assertFalse(DataChange.objects.filter(data_import_id=ancient.pk).exists())
+        # A file made from a download now deleted keeps its list of changes, so it can still be undone.
+        made.refresh_from_db()
+        self.assertIsNone(made.export_id)
+        self.assertEqual(made.changes.count(), 1)
+        self.assertEqual(housekeeping.prune_data_files(), (0, 0, 0, 0))
+
+    def test_tidy_all_clears_them_every_hour(self):
+        self.export(15)
+        self.upload(181, DataImport.Status.APPLIED)
+        out = StringIO()
+        call_command("tidy_all", stdout=out)
+        self.assertIn("1 old spreadsheet files cleared, 0 downloads and 1 uploads deleted.", out.getvalue())
+        self.assertFalse(DataImport.objects.exists())
+        self.assertIsNone(DataExport.objects.get().workbook)
 
 
 class CompactTests(TestCase):

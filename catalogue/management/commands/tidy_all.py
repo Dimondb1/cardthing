@@ -9,9 +9,9 @@ the rules), then files products without a set under the set their name or
 code names (catalogue/releases.py attach_sets), sets each product's language from its name and set
 (catalogue/languages.py), retypes products whose name plainly says another type (catalogue/types.py),
 forgets website shop pages
-no sitemap has listed for 30 days, clears old import records (catalogue/housekeeping.py) so
-the database stays small, and lets the autopilot answer the Things to check rows the evidence
-settles (catalogue/autopilot.py). Run by start.bat, update_prices and the server's hourly import,
+no sitemap has listed for 30 days, clears old import records and the owner's old spreadsheets
+(catalogue/housekeeping.py) so the database stays small, and lets the autopilot answer the Things to
+check rows the evidence settles (catalogue/autopilot.py). Run by start.bat, update_prices and the server's hourly import,
 so a rule added in code is applied to data already in the database.
 """
 
@@ -70,6 +70,16 @@ class Command(BaseCommand):
 
             cleared, deleted = prune_runs()
             self.stdout.write(f"{cleared} lists of unmatched products cleared, {deleted} old runs deleted.")
+
+        self.stdout.write("== spreadsheets")
+        if dry_run:
+            self.stdout.write("Old spreadsheet files would be cleared.")
+        else:
+            from catalogue.housekeeping import prune_data_files
+
+            workbooks, exports, uploads, imports = prune_data_files()
+            self.stdout.write(f"{workbooks + uploads} old spreadsheet files cleared, {exports} downloads and "
+                              f"{imports} uploads deleted.")
 
         # Counted here, never while the Insights page waits: a big shop's list runs to thousands of lines.
         from catalogue.insights import count_left_out

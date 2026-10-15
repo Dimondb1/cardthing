@@ -66,3 +66,37 @@ def vacuum():
         # In WAL mode the fresh copy is first written to the -wal file; this moves it into the database
         # and empties the -wal file, so the space really comes back to the disk.
         cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+
+# The owner's spreadsheets (catalogue/data_jobs.py). A download is a few megabytes and is kept for a fortnight
+# to download again; the values it was made with are kept for the 90 days an upload of it is accepted. An
+# upload is needed only until it is checked into its list of changes; the list stays for half a year, so a
+# file can be undone and what it did is on record.
+WORKBOOKS_KEPT_DAYS = 14
+EXPORTS_KEPT_DAYS = 90
+UPLOADS_KEPT_DAYS = 7
+IMPORTS_KEPT_DAYS = 180
+
+
+def prune_data_files(now=None):
+    """Clear old spreadsheet files and delete old downloads and uploads with their changes. Returns
+    (workbooks cleared, downloads deleted, uploads cleared, uploads deleted)."""
+    from django.db.models import Q
+
+    from .models import DataExport, DataImport
+
+    now = now or timezone.now()
+    Status = DataImport.Status
+    # Rows first, so a file is never counted as cleared and then deleted. Deferred, so the delete never reads
+    # the files it throws away.
+    _, exports = DataExport.objects.filter(
+        created_at__lt=now - timedelta(days=EXPORTS_KEPT_DAYS)).defer("workbook", "base").delete()
+    _, imports = DataImport.objects.filter(
+        created_at__lt=now - timedelta(days=IMPORTS_KEPT_DAYS)).defer("upload").delete()
+    workbooks = DataExport.objects.filter(
+        created_at__lt=now - timedelta(days=WORKBOOKS_KEPT_DAYS), workbook__isnull=False).update(workbook=None)
+    # Only a check reads the upload; once it is made, discarded or refused nothing reads it again.
+    uploads = DataImport.objects.filter(upload__isnull=False).filter(
+        ~Q(status__in=[Status.QUEUED, Status.CHECKING, Status.CHECKED])
+        | Q(created_at__lt=now - timedelta(days=UPLOADS_KEPT_DAYS))).update(upload=None)
+    return workbooks, exports.get(DataExport._meta.label, 0), uploads, imports.get(DataImport._meta.label, 0)

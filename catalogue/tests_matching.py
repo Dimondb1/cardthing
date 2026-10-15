@@ -262,7 +262,7 @@ class ChineseDuplicateTests(TestCase):
         out = StringIO()
         call_command("merge_duplicates", stdout=out)
         self.assertIn("2 products merged", out.getvalue())
-        self.assertEqual(Product.objects.filter(name__startswith="Blade Awakening").count(), 2)
+        self.assertEqual(Product.objects.filter(name__startswith="Blade Awakening", is_active=True).count(), 2)
 
     def test_a_box_without_its_code_or_with_another_name_is_suggested_not_merged(self):
         from . import checks
@@ -520,7 +520,7 @@ class ShopNamingTests(TestCase):
         call_command("merge_duplicates", stdout=out)
         self.assertIn("2 products merged", out.getvalue())
         self.assertIn("one says Collector's Edition, Case or the like and the other does not", out.getvalue())
-        self.assertEqual(sorted(Product.objects.values_list("name", flat=True)), [
+        self.assertEqual(sorted(Product.objects.filter(is_active=True).values_list("name", flat=True)), [
             "Doctor Who Collector's Edition Commander Deck Masters of Evil", "Doctor Who Masters of Evil Collector Commander Deck",
             "Final Fantasy Collector Booster Box", "Final Fantasy Play Booster Box", "Mega Evolution Base Set Booster Box",
             "Scarlet & Violet Base Set Booster Box", "Surging Sparks Booster Box"])

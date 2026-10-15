@@ -1320,12 +1320,12 @@ class MergeDuplicatesTests(TestCase):
         other = make_product(pset, name="Commander Legends: Battle for Baldur's Gate Booster Box", product_type="booster_box")
         make_listing(keep, shop_a)
         make_listing(keep, shop_b)
-        make_listing(dupe, shop_b)
+        make_listing(dupe, make_retailer("Shop C"))
         call_command("merge_duplicates", stdout=StringIO())
-        self.assertFalse(Product.objects.filter(pk=dupe.pk).exists())
-        self.assertTrue(Product.objects.filter(pk=other.pk).exists())
+        self.assertFalse(Product.objects.get(pk=dupe.pk).is_active)
+        self.assertTrue(Product.objects.get(pk=other.pk).is_active)
         keep.refresh_from_db()
-        self.assertEqual(keep.listings.count(), 2)
+        self.assertEqual(keep.listings.count(), 3)
         self.assertEqual(keep.image_url, "https://img.example/x.jpg")
 
 

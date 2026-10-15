@@ -366,11 +366,18 @@ def stale_release_sources(now=None):
     return [{"state": state, "source": BY_NAME[state.name]} for state in states]
 
 
+def undoable():
+    """The answers Sorted for you lists with Undo: the autopilot's, Claude's and the hourly merge's, and the
+    owner's own merges (Merge these), which can be undone like any other."""
+    return CheckAnswer.objects.filter(Q(by_owner=False) | Q(kind=CheckAnswer.Kind.MERGE))
+
+
 def recent_answers(now=None):
-    """What the autopilot answered in the last ANSWERS_DAYS days, newest first, in one query."""
+    """What the autopilot, Claude and the hourly merge answered, and what the owner merged, in the last
+    ANSWERS_DAYS days, newest first, in one query."""
     since = (now or timezone.now()) - timedelta(days=ANSWERS_DAYS)
     return list(
-        CheckAnswer.objects.filter(by_owner=False, created_at__gte=since)
+        undoable().filter(created_at__gte=since)
         .select_related("listing", "shop_product", "product", "release")
         .order_by("-created_at", "-pk")
     )

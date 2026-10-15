@@ -274,7 +274,6 @@ class ShortTidyTransactionTests(TestCase):
         keep = make_product(self.set, name=name, slug=slug, product_type="booster_box")
         dupe = make_product(self.set, name=f"{name} Box", slug=f"{slug}-2", product_type="booster_box")
         make_listing(keep, self.shop_a)
-        make_listing(keep, self.shop_b)
         make_listing(dupe, self.shop_b)
         return keep, dupe
 
@@ -312,7 +311,9 @@ class ShortTidyTransactionTests(TestCase):
         self.assertEqual(Product.objects.filter(pk__in=[dupe.pk, orphan.pk]).count(), 2)
         self.assertTrue(Listing.objects.filter(pk=wrong.pk).exists())
         call_command("tidy_all", stdout=StringIO())
-        self.assertFalse(Product.objects.filter(pk__in=[dupe.pk, orphan.pk]).exists())
+        # The duplicate is switched off, so the merge can be undone; the unlisted product is removed.
+        self.assertFalse(Product.objects.get(pk=dupe.pk).is_active)
+        self.assertFalse(Product.objects.filter(pk=orphan.pk).exists())
         self.assertFalse(Listing.objects.filter(pk=wrong.pk).exists())
 
     def test_merge_duplicates_commits_per_group(self):
@@ -320,21 +321,21 @@ class ShortTidyTransactionTests(TestCase):
 
         _first_keep, first_dupe = self.duplicates("Alpha Booster Box", "alpha")
         _second_keep, second_dupe = self.duplicates("Beta Booster Box", "beta")
-        real_merge = command.merge
+        real_merge = command.merge_with_undo
         seen = []
 
-        def merge_then_fail(keep, others):
+        def merge_then_fail(keep, other, why, **kwargs):
             seen.append(keep.name)
             if len(seen) > 1:
                 raise RuntimeError("the shop went away mid-merge")
-            return real_merge(keep, others)
+            return real_merge(keep, other, why, **kwargs)
 
-        with mock.patch.object(command, "merge", merge_then_fail):
+        with mock.patch.object(command, "merge_with_undo", merge_then_fail):
             with self.assertRaises(RuntimeError):
                 call_command("merge_duplicates", stdout=StringIO())
         self.assertEqual(seen, ["Alpha Booster Box", "Beta Booster Box"])
-        self.assertFalse(Product.objects.filter(pk=first_dupe.pk).exists())
-        self.assertTrue(Product.objects.filter(pk=second_dupe.pk).exists())
+        self.assertFalse(Product.objects.get(pk=first_dupe.pk).is_active)
+        self.assertTrue(Product.objects.get(pk=second_dupe.pk).is_active)
 
     def test_tidy_catalogue_dry_run_reports_without_deleting(self):
         orphan = make_product(self.set, name="Nobody Sells This Booster Box", slug="orphan")

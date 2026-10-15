@@ -15,14 +15,18 @@ Baldur's Gate Bundle" and "Commander Legends Battle For Baldurs Gate
 Bundle"), so one product can end up on two pages, each with one shop. This
 groups products of one game and type whose names share the same matching
 key, keeps the one with the most listings (or an image), moves the other
-listings, price history, restocks, clicks and stock alerts across, and
-deletes the rest. The old addresses redirect to the kept product, and
-watchlists saved in browsers follow them. Run with --dry-run first.
+listings, price history, restocks, clicks, shop pages and stock alerts
+across, and switches the rest off (merge_undoable). The old addresses
+redirect to the kept product, and watchlists saved in browsers follow them.
+Each merge is listed under Sorted for you on Things to check with Undo, and
+no shop's listing is ever deleted. Run with --dry-run first.
 
 The hourly run merges only what is certain: two names whose numbers differ
 ("Vol 4" and "Vol 6", "5 packs" and "10") or whose booster kind differs
-("Set Booster" and "Booster") are left for Things to check instead, and a
-pair the owner said are not the same is never merged.
+("Set Booster" and "Booster") are left for Things to check instead, and so
+is a pair a shop shows both of (two products, to that shop) or whose merge
+would take a shop's shown price off the site. A pair the owner said are not
+the same, or whose merge anyone undid, is never merged here.
 """
 
 from collections import defaultdict
@@ -125,6 +129,31 @@ def merge(keep, others):
         other.delete()
         ProductAlias.objects.create(slug=other.slug, product=keep)
     return moved
+
+
+# Why the hourly merge joined two products, as Sorted for you on Things to check says it.
+HOURLY_WHY = "The hourly tidy merged them: their names say the same product in other words"
+
+
+def merge_with_undo(keep, other, why, by_owner=False, **refs):
+    """Merge ``other`` into ``keep`` so it can be undone (merge_undoable), and write it down as a CheckAnswer
+    MERGE holding what Undo needs, inside the caller's transaction. Returns the answer."""
+    from catalogue.models import CheckAnswer
+
+    note = merge_undoable(keep, [other])
+    return CheckAnswer.objects.create(
+        kind=CheckAnswer.Kind.MERGE, by_owner=by_owner, product=keep, other=other, undo_note=note,
+        what=f"Merged {other.name} into {keep.name}"[:300], why=why[:300], **refs,
+    )
+
+
+def undone_merges():
+    """{frozenset of two product pks} for every merge someone undid: Undo says they are not one product."""
+    from catalogue.models import CheckAnswer
+
+    return {frozenset(pair) for pair in CheckAnswer.objects.filter(
+        kind=CheckAnswer.Kind.MERGE, undone_at__isnull=False, product__isnull=False, other__isnull=False,
+    ).values_list("product_id", "other_id")}
 
 
 def merge_undoable(keep, others):
@@ -551,31 +580,44 @@ class Command(BaseCommand):
         parser.add_argument("--loose", action="store_true", help="Also ignore filler and series words. Review a dry run first.")
 
     def handle(self, *args, dry_run=False, loose=False, **options):
-        from catalogue.checks import kept_apart
+        from catalogue.checks import kept_apart, shop_listings, shops_in_the_way
 
         merged = moved = 0
-        # His Not the same (on Things to check or in his spreadsheet) stands: such a pair is never merged here.
-        apart = kept_apart()
-        # Each group is its own short transaction, so a group that fails leaves the earlier ones merged
-        # and nothing else waits for the whole walk. A dry run wraps them all and rolls back.
+        # His Not the same (on Things to check or in his spreadsheet) stands, and so does an Undo of a merge:
+        # such a pair is never merged here.
+        apart = kept_apart() | undone_merges()
+        shops = shop_listings()
+        # Each merge is its own short transaction, so one that fails leaves the earlier ones merged and
+        # nothing else waits for the whole walk. A dry run wraps them all and rolls back.
         with transaction.atomic() if dry_run else nullcontext():
             for keep, group in duplicate_groups(loose):
-                others = []
+                others, taken = [], dict(shops.get(keep.pk, {}))
                 for other in group:
-                    why = why_not_merge(keep, other, apart)
+                    theirs = shops.get(other.pk, {})
+                    # A shop showing both, or two of the others, sells two products.
+                    why = why_not_merge(keep, other, apart) or shops_in_the_way(taken, theirs)
                     if why:
                         self.stdout.write(f"left: {other.name} and {keep.name}, {why}")
-                    else:
-                        others.append(other)
+                        continue
+                    taken.update({shop: shown or taken.get(shop, False) for shop, shown in theirs.items()})
+                    others.append(other)
                 if not others:
                     continue
                 self.stdout.write(f"{'would keep' if dry_run else 'kept'}: {keep.name}")
                 for other in others:
                     self.stdout.write(f"    merged: {other.name}")
                 merged += len(others)
-                if not dry_run:
+                if dry_run:
+                    continue
+                for other in others:
                     with transaction.atomic():
-                        moved += merge(keep, others)
+                        answer = merge_with_undo(keep, other, HOURLY_WHY)
+                    moved += sum(len(entry["listings"]) for entry in answer.undo_note["others"])
             if dry_run:
                 transaction.set_rollback(True)
-        self.stdout.write(f"{merged} products merged, {moved} listings moved. {Product.objects.count()} products remain.")
+        if merged and not dry_run:
+            from catalogue.signals import clear_list_caches
+
+            clear_list_caches(force=True)
+        shown = Product.objects.filter(is_active=True).count()
+        self.stdout.write(f"{merged} products merged, {moved} listings moved. {shown} products are shown.")

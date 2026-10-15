@@ -8,6 +8,8 @@ from unittest import mock
 from django.core.management import call_command
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.utils.html import escape
+from django.utils.timezone import now as timezone_now
 
 from . import autopilot, checks, judge, sanity
 from .models import CheckAnswer, ClaudeAsk, ClaudeJudge, Listing, OutboundClick, Product, Retailer
@@ -298,3 +300,114 @@ class AskingOrderTests(PairBase):
         with mock.patch.object(judge, "worth", side_effect=lambda row: lanes[row.key]):
             order = [row.key for row in judge.take_turns(rows)]
         self.assertEqual(order, ["offer:1", "pair:1:2", "found:1", "offer:2", "offer:3", "pair:3:4", "found:2"])
+
+
+class UndoableMergeTests(PairBase):
+    """The hourly merge and the owner's Merge these switch the other product off rather than delete it, write
+    each merge down with Undo, and never delete a shop's listing."""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.url = reverse("checks")
+
+    def hourly(self):
+        out = StringIO()
+        call_command("tidy_all", stdout=out)
+        return out.getvalue()
+
+    def test_every_hourly_merge_can_be_undone_and_is_never_made_again(self):
+        keep, other = self.pair()
+        listings = Listing.objects.count()
+        self.hourly()
+        self.assertEqual(Listing.objects.count(), listings)
+        self.assertFalse(Product.objects.get(pk=other.pk).is_active)
+        [answer] = CheckAnswer.objects.all()
+        self.assertEqual((answer.kind, answer.by_owner, answer.product, answer.other),
+                         (CheckAnswer.Kind.MERGE, False, keep, other))
+        self.assertTrue(answer.undo_note)
+        page = self.client.get(self.url)
+        self.assertContains(page, escape(f"Merged {other.name} into {keep.name}"))
+        self.assertContains(page, "The hourly tidy merged them")
+        self.assertNotContains(page, "A merge cannot be undone")
+        response = self.client.post(self.url, {"action": "undo", "answer": answer.pk}, follow=True)
+        self.assertContains(response, "is its own product again")
+        self.assertTrue(Product.objects.get(pk=other.pk).is_active)
+        self.assertEqual(Listing.objects.get(title=other.name).product, other)
+        # Undo said they are not one product: the next hour leaves them, and Claude is not asked.
+        self.assertIn("you said they are not the same", self.hourly())
+        self.assertTrue(Product.objects.get(pk=other.pk).is_active)
+        self.assertEqual([row.kind for row in judge.waiting()], [])
+
+    def test_the_hourly_merge_never_deletes_or_hides_a_shops_listing(self):
+        keep, other = self.pair()
+        both = make_retailer("Both")
+        shown = make_listing(keep, both)
+        theirs = make_listing(other, both, url=f"{both.website}p/other")
+        listings = Listing.objects.count()
+        self.assertIn("a shop sells both", self.hourly())
+        self.assertEqual(Product.objects.filter(pk__in=[keep.pk, other.pk], is_active=True).count(), 2)
+        Listing.objects.filter(pk=shown.pk).update(is_active=False)
+        self.assertIn("a shop's price would leave the site", self.hourly())
+        self.assertEqual(Product.objects.filter(pk__in=[keep.pk, other.pk], is_active=True).count(), 2)
+        self.assertEqual(Listing.objects.count(), listings)
+        # Things to check offers it the other way round, so the shop's shown price stays.
+        self.assertEqual(self.offered(), [(other, keep)])
+        Listing.objects.filter(pk=theirs.pk).update(is_active=False)
+        self.hourly()
+        self.assertFalse(Product.objects.get(pk=other.pk).is_active)
+        self.assertEqual(Listing.objects.count(), listings)
+
+    def test_marketplaces_on_both_never_stop_the_hourly_merge_and_lose_nothing(self):
+        keep, other = self.pair()
+        ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
+        make_listing(keep, ebay, url=f"{ebay.website}itm/1")
+        make_listing(other, ebay, url=f"{ebay.website}itm/2")
+        listings = Listing.objects.count()
+        self.hourly()
+        self.assertFalse(Product.objects.get(pk=other.pk).is_active)
+        self.assertEqual(Listing.objects.count(), listings)
+        self.assertEqual(Listing.objects.filter(product=other, retailer=ebay).count(), 1)
+
+    def test_two_others_one_shop_shows_side_by_side_are_never_merged_together(self):
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        first = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        second = make_product(self.set, name="Pokemon Surging Sparks Elite Trainer Box")
+        for product in (keep, keep, first, second):
+            self.shop(50, product=product, title=product.name)
+        both = make_retailer("Both")
+        make_listing(first, both)
+        make_listing(second, both, url=f"{both.website}p/second")
+        self.assertIn("a shop sells both", self.hourly())
+        self.assertEqual(CheckAnswer.objects.filter(kind=CheckAnswer.Kind.MERGE).count(), 1)
+        self.assertEqual(Product.objects.filter(pk__in=[first.pk, second.pk], is_active=True).count(), 1)
+
+    def test_the_owners_merge_these_is_his_and_each_pair_can_be_undone(self):
+        keep = make_product(self.set, name="SSP Elite Trainer Box")
+        first = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        second = make_product(self.set, name="Surging Sparks ETB")
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(50, product=keep, title=keep.name)
+        for product in (first, second):
+            self.shop(51, product=product, title=product.name)
+        self.assertEqual(Product.objects.filter(is_active=True).count(), 4)   # the hourly merge would join the last two
+        [(kept, others)] = [(k, o) for k, o in checks.duplicates() if k == keep]
+        response = self.client.post(self.url, {"action": "merge", "keep": keep.pk, "other": [o.pk for o in others]},
+                                    follow=True)
+        self.assertContains(response, "Each merge is listed under Sorted for you, with Undo.")
+        answers = list(CheckAnswer.objects.order_by("pk"))
+        self.assertEqual([(a.kind, a.by_owner, a.other_id) for a in answers],
+                         [(CheckAnswer.Kind.MERGE, True, other.pk) for other in others])
+        self.assertTrue(all(a.undo_note for a in answers))
+        self.assertEqual(Product.objects.filter(pk__in=[o.pk for o in others], is_active=True).count(), 0)
+        page = self.client.get(self.url)
+        self.assertContains(page, "You tapped Merge these")
+        # Newest first: an undo puts that one product back with its listing.
+        last = answers[-1]
+        response = self.client.post(self.url, {"action": "undo", "answer": last.pk}, follow=True)
+        self.assertContains(response, "is its own product again")
+        self.assertTrue(Product.objects.get(pk=last.other_id).is_active)
+        self.assertFalse(judge.too_many_undone(timezone_now()))

@@ -202,6 +202,31 @@ class VerdictTests(Shops, TestCase):
         sanity.judge_product(self.product.pk)
         self.assertEqual(self.verdicts(shops[0], cheap), [OK, DOUBTFUL])
 
+    def test_a_marketplace_price_far_under_the_shops_is_never_a_saving(self):
+        # eBay at £28.99 against one shop at £85.99 was shown on the home page as "Save £57.00": with one
+        # shop, a third of its price passed. A search result that far under is usually another item.
+        ebay_shop = make_retailer("eBay", slug="ebay", source_type=Retailer.Source.EBAY, delivery_cost=Decimal("0"))
+        shop = self.shop("85.99")
+        cheap = make_listing(self.product, ebay_shop, price="28.99")
+        sanity.judge_product(self.product.pk)
+        self.assertEqual(self.verdicts(shop, cheap), [OK, DOUBTFUL])
+        self.assertIn("found by a search", Listing.objects.get(pk=cheap.pk).sanity_reason)
+        summary = self.summary()
+        self.assertIsNone(summary.saving)
+        self.assertTrue(summary.suspect)
+
+    def test_a_marketplace_price_a_little_under_the_shops_is_still_a_saving(self):
+        ebay_shop = make_retailer("eBay", slug="ebay", source_type=Retailer.Source.EBAY, delivery_cost=Decimal("0"))
+        shops = [self.shop(100), self.shop(110)]
+        fair = make_listing(self.product, ebay_shop, price="70.00")
+        sanity.judge_product(self.product.pk)
+        self.assertEqual(self.verdicts(*shops, fair), [OK, OK, OK])
+        self.assertEqual(self.summary().saving, Decimal("30.00"))
+        # 60 percent of what two shops charge passes for a shop, not for a search result.
+        Listing.objects.filter(pk=fair.pk).update(price=Decimal("63.00"))
+        sanity.judge_product(self.product.pk)
+        self.assertEqual(self.verdicts(*shops, fair), [OK, OK, DOUBTFUL])
+
     def test_the_reason_says_when_an_item_price_was_compared(self):
         shops = [self.shop(120), self.shop(125)]
         Listing.objects.filter(pk=shops[0].pk).update(delivery_known=False)

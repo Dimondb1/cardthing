@@ -46,6 +46,10 @@ PEER_EXCLUDE_LOW = Decimal("0.30")
 PEER_DOUBT_LOW = Decimal("0.55")
 PEER_DOUBT_HIGH = Decimal("2.0")
 PEER_EXCLUDE_HIGH = Decimal("4.0")
+# eBay and Amazon prices come from searching for the product, so one far under the shops is usually
+# another item (a single pack, another language, one card). Under this share of what the shops charge it
+# is doubtful however many shops there are: shown, never claimed as a saving, and put to Claude.
+MARKET_DOUBT_LOW = Decimal("0.65")
 # With only one other shop we cannot tell which is wrong: a gap this wide makes both doubtful.
 ONE_PEER_LOW = Decimal("0.30")
 ONE_PEER_HIGH = Decimal("3.33")
@@ -131,6 +135,9 @@ def peer_verdict(row, peers):
     n = len(peers)
     who = f"what {n} other shops charge" if n > 1 else "what the other shop charges"
     around = f", around {money(ref)}"
+    if row["retailer__source_type"] in MARKETPLACES and r < MARKET_DOUBT_LOW and not (n > 1 and r < PEER_EXCLUDE_LOW):
+        # Only ever this listing: a search result never makes a shop's own price doubtful.
+        return DOUBTFUL, noted(f"well under {who}{around}, for a price found by a search", row, peers), ratio_of(r), False
     if n == 1:
         if ONE_PEER_LOW <= r <= ONE_PEER_HIGH:
             # Two shops are allowed the gap the saving cap allows: a real half-price offer stays a saving.

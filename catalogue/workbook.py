@@ -413,8 +413,9 @@ def listing_rows(index):
     )
     for (pk, retailer_id, shop, source, title, url, product_id, product, product_active, slug, price, delivery,
          delivery_known, stock, checked, sanity, reason, shop_ean, active) in rows:
-        index.add(retailer_id, url, product_id, title)
         link = shown_link(url, source)
+        # A page with no title is named by its link as the file shows it, never with eBay's or Amazon's tags.
+        index.add(retailer_id, url, product_id, title or link)
         if not product_active and slug in merged:
             shown = f"Merged into {merged[slug]}"
         else:

@@ -221,7 +221,12 @@ class CellTests(Base):
         on_ebay = make_listing(self.box, ebay, url="https://www.ebay.co.uk/itm/123?mkcid=1&campid=5338")
         on_amazon = make_listing(self.box, amazon, url="https://www.amazon.co.uk/dp/B0TEST?tag=ripraptor-21")
         shop = make_listing(self.box, self.shop, url="https://solent.example/products/box?variant=7")
+        # Waiting with the box suggested, where eBay's page (with no title) is already shown.
+        item = ShopProduct.objects.create(retailer=ebay, title="SSP box", url="https://www.ebay.co.uk/itm/9?campid=5338",
+                                          status=ShopProduct.Status.REVIEW, suggested=self.box)
         _export, data, base, _counts = self.export()
+        shown_there = self.by_id(data, "Shop items", "Shop item id")[item.pk]["Already shown there"]
+        self.assertEqual(shown_there, "https://www.ebay.co.uk/itm/123")
         links = {pk: row["Link"] for pk, row in self.by_id(data, "Listings", "Listing id").items()}
         self.assertEqual(links[on_ebay.pk], "https://www.ebay.co.uk/itm/123")
         self.assertEqual(links[on_amazon.pk], "https://www.amazon.co.uk/dp/B0TEST")

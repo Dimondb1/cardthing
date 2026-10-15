@@ -952,8 +952,8 @@ def link(row):
         product=product, retailer=row.retailer,
         defaults={"url": row.url, "price": row.price,
                   "availability": row.availability or Listing.Availability.OUT_OF_STOCK,
-                  # The price and stock were seen then, not now.
-                  "last_checked": min(row.last_seen, timezone.now())},
+                  # The price and stock were seen then, not now; the page gains a shop now.
+                  "last_checked": min(row.last_seen, timezone.now()), "changed_at": timezone.now()},
     )
     if listing.url != row.url:
         listing.url = row.url

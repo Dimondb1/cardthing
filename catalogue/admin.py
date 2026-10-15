@@ -1,9 +1,23 @@
 from django.contrib import admin, messages
 from django.db.models import Count
+from django.utils import timezone
 from django.utils.html import format_html
 
 from . import pricing, sanity
-from .models import ClaudeAsk, ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release, Restock, Retailer, ShopProduct, StockAlert, TypeBand
+from .models import (
+    ClaudeAsk, ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    Restock, Retailer, ShopProduct, StockAlert, TypeBand,
+)
+
+# A listing field the product page shows. Changing one here stamps the listing's changed_at, the sitemap's
+# record of when the page last changed.
+SHOWN_LISTING_FIELDS = {"product", "retailer", "url", "price", "delivery_cost", "delivery_known", "availability", "is_active"}
+
+
+def stamp_shown_change(form):
+    """Stamp a listing form's instance as changed when it is new or a field the page shows was changed."""
+    if form.instance.pk is None or SHOWN_LISTING_FIELDS & set(form.changed_data):
+        form.instance.changed_at = timezone.now()
 
 
 @admin.register(Game)
@@ -138,6 +152,13 @@ class ProductAdmin(admin.ModelAdmin):
         source = "uploaded" if obj.image else "from a retailer feed"
         return format_html('<img src="{}" alt="" style="max-height: 160px;"><br>{}', obj.image_src, source)
 
+    def save_formset(self, request, form, formset, change):
+        if formset.model is Listing:
+            for listing_form in formset.forms:
+                if listing_form.has_changed():
+                    stamp_shown_change(listing_form)
+        super().save_formset(request, form, formset, change)
+
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         pricing.update_daily_lowest(form.instance)
@@ -191,9 +212,10 @@ class ListingAdmin(admin.ModelAdmin):
     date_hierarchy = "last_checked"
     # Verdicts are worked out from the other shops' prices; the owner acts on them from Things to check.
     readonly_fields = ("sanity", "sanity_reason", "sanity_ratio", "sanity_at", "last_ok_price", "trusted_price", "trusted_at",
-                       "shop_published_at", "first_preorder_at", "deal_quantity", "deal_price")
+                       "shop_published_at", "first_preorder_at", "deal_quantity", "deal_price", "changed_at")
 
     def save_model(self, request, obj, form, change):
+        stamp_shown_change(form)
         super().save_model(request, obj, form, change)
         # A price, stock or shop typed in here is judged like any check, and so is the product it left.
         moved_from = form.initial.get("product") if change and "product" in form.changed_data else None

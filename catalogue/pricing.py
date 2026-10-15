@@ -101,7 +101,11 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
             moved = listing.availability != availability
             listing.availability = availability
             listing.last_checked = checked_at
-            listing.save(update_fields=["availability", "last_checked"])
+            fields = ["availability", "last_checked"]
+            if moved:
+                listing.changed_at = checked_at
+                fields.append("changed_at")
+            listing.save(update_fields=fields)
             if moved:
                 # No longer a price the other shops are judged against.
                 judge(listing, checked_at)
@@ -118,6 +122,11 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
         or (listing.trusted_at is not None and listing.trusted_at < trust_expiry(checked_at))
     )
     fields = ["price", "delivery_cost", "delivery_known", "availability", "last_checked"]
+    if new or repriced or listing.availability != availability:
+        # What the page shows for this shop changed: the sitemap's lastmod moves. A check that only confirms
+        # what we hold never gets here (importers.stamp_checked), and a verdict alone is stamped by sanity.
+        listing.changed_at = checked_at
+        fields.append("changed_at")
     was_in_stock = listing.availability == Listing.Availability.IN_STOCK
     restocked = availability == Listing.Availability.IN_STOCK and not was_in_stock and listing.pk and not listing._state.adding
     if restocked:
@@ -174,7 +183,7 @@ def apply_delivery_rules(retailer):
         cost = delivery if known else Decimal("0.00")
         unknown += not known
         if listing.delivery_known != known or listing.delivery_cost != cost:
-            Listing.objects.filter(pk=listing.pk).update(delivery_cost=cost, delivery_known=known)
+            Listing.objects.filter(pk=listing.pk).update(delivery_cost=cost, delivery_known=known, changed_at=timezone.now())
     from .signals import clear_list_caches
 
     clear_list_caches(force=True)

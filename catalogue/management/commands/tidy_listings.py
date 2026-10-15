@@ -18,6 +18,7 @@ from contextlib import nullcontext
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from catalogue.classify import NOT_SEALED, box_contents, find_game
 from catalogue.ebay import EbayError, fill_titles, too_cheap_listings
@@ -140,8 +141,10 @@ class Command(BaseCommand):
                 self.stdout.write(f"{'would hide' if dry_run else 'hidden'}: {listing.product.name} <- eBay £{listing.delivered_price}")
             if not dry_run:
                 with transaction.atomic():
-                    Listing.objects.filter(pk__in=[listing.pk for listing in cheap]).update(
+                    Listing.objects.filter(pk__in=[listing.pk for listing in cheap]).exclude(
                         availability=Listing.Availability.OUT_OF_STOCK
+                    ).update(
+                        availability=Listing.Availability.OUT_OF_STOCK, changed_at=timezone.now()
                     )
                 if cheap:
                     clear_list_caches(force=True)

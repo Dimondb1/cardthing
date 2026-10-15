@@ -1501,7 +1501,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     if complete:
         Listing.objects.filter(retailer=retailer).exclude(product_id__in=seen_products).exclude(
             availability=Listing.Availability.OUT_OF_STOCK
-        ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at)
+        ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at, changed_at=checked_at)
 
     return found, updated, unmatched
 

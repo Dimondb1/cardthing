@@ -203,6 +203,10 @@ class Product(models.Model):
         if self.product_set_id and self.game_id and self.product_set.game_id != self.game_id:
             raise ValidationError({"product_set": "This set belongs to a different game."})
 
+    # Fields the product page shows. Saving one moves updated_at, the time the page's own content last changed
+    # (the sitemap's lastmod with its listings' changed_at); saving only the record of a lookup does not.
+    PAGE_FIELDS = {"name", "game", "product_set", "product_type", "image", "image_url", "ean", "release_date"}
+
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)[:220]
@@ -210,7 +214,10 @@ class Product(models.Model):
         self.search_text = build_search_text(self)
         update_fields = kwargs.get("update_fields")
         if update_fields is not None:
-            kwargs["update_fields"] = list(set(update_fields) | {"search_text", "language"})
+            fields = set(update_fields) | {"search_text", "language"}
+            if fields & self.PAGE_FIELDS:
+                fields.add("updated_at")
+            kwargs["update_fields"] = list(fields)
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
@@ -563,6 +570,11 @@ class Listing(models.Model):
         null=True, blank=True, db_index=True,
         help_text="When this shop last went from not having it to having it in stock.",
     )
+    # When what the product page shows for this shop last changed: its price, delivery or stock, whether it is
+    # shown or kept out of the comparison, or the product it is listed under. A check that finds nothing new
+    # leaves it alone, so the sitemap can tell search engines when a page really changed (web/sitemaps.py).
+    # Empty for a listing not changed since the field was added.
+    changed_at = models.DateTimeField("price or stock changed", null=True, blank=True, editable=False)
     is_active = models.BooleanField("show on site", default=True)
     # The verdict from the other shops' prices (catalogue/sanity.py). Written only when it changes.
     sanity = models.CharField(

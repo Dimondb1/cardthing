@@ -2272,6 +2272,36 @@ and `/llms.txt` describes the site in plain Markdown with links to the
 games, the how it works page and the sitemap. Search, swipe and the
 click redirect stay out of the index.
 
+## Sitemap
+
+`/sitemap.xml` (`web/sitemaps.py`) lists the product pages worth a search
+engine's visit, not every product:
+
+- on sale now: a shop has it in stock or on pre-order, checked within the
+  last 72 hours and not kept out of the comparison;
+- coming soon: its release date (or its set's) is still ahead;
+- priced recently: a shop had it on sale in the last 30 days
+  (`RECENT_DAYS`), so a page stays listed through a sell-out.
+
+The rest, products no shop has priced for a month, stay on the site, are
+linked from their set and game pages and are not `noindex`; they are only
+left out of the list so Google spends its visits on pages with a price. On
+the 3 October snapshot that is 2,785 of 7,626 products. Every game, set and
+the fixed pages are listed too.
+
+Each product's `lastmod` is when its page really changed: the latest of its
+own edits (`updated_at`, which moves only when a field the page shows is
+saved, not when a lookup is recorded) and the last change of any shown
+shop's price, delivery or stock (`Listing.changed_at`). A check that finds
+the same price and stock leaves `changed_at` alone, so `lastmod` does not
+move every hour; a new price, a sell-out, a restock, a price kept out of or
+let back into the comparison, a shop hidden or shown, or a shop moved onto
+the product does. Listings changed before `changed_at` existed fall back to
+their last restock. A set's `lastmod` is the latest of its products'.
+`changefreq` and `priority` are not sent: Google ignores them. Each part
+of the sitemap costs two queries, a count and the page, however many
+products there are.
+
 ## Insights
 
 Admin, Insights (`/admin/insights/`) shows what visitors do: page views

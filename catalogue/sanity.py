@@ -361,6 +361,9 @@ def judge_product(product_id, now=None, repriced=()):
             update = {"sanity": sanity, "sanity_reason": reason, "sanity_ratio": ratio}
             if row["sanity_at"] is None or (sanity == OK) != (row["sanity"] == OK):
                 update["sanity_at"] = now
+            if (sanity == EXCLUDED) != (row["sanity"] == EXCLUDED):
+                # Into or out of the comparison: the page shows the price differently.
+                update["changed_at"] = now
             if sanity == OK and row["pk"] not in lone:
                 update["last_ok_price"] = row["price"]
             if lost_trust:

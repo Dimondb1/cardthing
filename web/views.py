@@ -1435,7 +1435,8 @@ def llms_txt(request):
         f"- [Every game and set]({request.build_absolute_uri(reverse('web:games'))})",
         f"- [How it works]({request.build_absolute_uri(reverse('web:about'))})",
         f"- [Terms and disclosures]({request.build_absolute_uri(reverse('web:terms'))})",
-        f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product page",
+        f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product on sale, coming soon or priced "
+        "in the last month, and every game and set",
         "",
     ]
     return HttpResponse("\n".join(lines), content_type="text/markdown; charset=utf-8")

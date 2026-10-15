@@ -488,7 +488,10 @@ def make_show(change, applying):
 def make_merge(change, applying):
     other = Product.objects.select_related("game").filter(pk=change.object_id).first()
     keep = applying.product(change)
-    if other is None or not other.is_active or not keep.is_active or keep.pk == other.pk:
+    if other is None or not keep.is_active or keep.pk == other.pk:
+        raise Stale
+    # A hidden product may be merged (and stays hidden if the merge is undone); one merged away already may not.
+    if not other.is_active and ProductAlias.objects.filter(slug=other.slug).exclude(product=other).exists():
         raise Stale
     answers = CheckAnswer.objects.filter(pair(keep.pk, other.pk), undone_at__isnull=True)
     if answers.filter(kind=CheckAnswer.Kind.MERGE).exists():

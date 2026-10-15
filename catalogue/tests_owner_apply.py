@@ -323,6 +323,17 @@ class MergeTests(Base):
                          [self.box.pk])
         self.assertEqual(Listing.objects.get(retailer=kingdom, url=item.url).product_id, self.box.pk)
 
+    def test_a_hidden_product_is_merged_and_stays_hidden_once_undone(self):
+        Product.objects.filter(pk=self.display.pk).update(is_active=False)
+        _export, data = self.download()
+        upload = self.same_as(data, (self.display, self.box))
+        self.made(upload)
+        self.assertEqual(Listing.objects.get(pk=self.display_page.pk).product_id, self.box.pk)
+        self.assertTrue(ProductAlias.objects.filter(slug=self.display.slug, product=self.box).exists())
+        self.undo(upload)
+        self.assertFalse(Product.objects.get(pk=self.display.pk).is_active)
+        self.assertEqual(Listing.objects.get(pk=self.display_page.pk).product_id, self.display.pk)
+
     def test_ebay_listing_both_does_not_hold_it(self):
         make_listing(self.display, self.ebay, url="https://www.ebay.co.uk/itm/1")
         make_listing(self.box, self.ebay, url="https://www.ebay.co.uk/itm/2")

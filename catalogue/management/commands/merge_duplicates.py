@@ -152,7 +152,7 @@ def merge_undoable(keep, others):
     for other in others:
         entry = {"pk": other.pk, "listings": [], "restocks": [], "clicks": [], "alerts": [], "aliases": [],
                  "pages": [], "found": [], "lows_added": [], "lows_lowered": [], "alias": None, "alias_was": None,
-                 "ean": other.ean}
+                 "ean": other.ean, "active": other.is_active}
         shops = set(keep.listings.values_list("retailer_id", flat=True))
         for listing in other.listings.all():
             if listing.retailer_id not in shops:
@@ -257,7 +257,9 @@ def unmerge(note):
         else:
             ProductAlias.objects.filter(pk=entry["alias"]).delete()
         ProductAlias.objects.filter(pk__in=entry["aliases"], product=keep).update(product=other)
-        Product.objects.filter(pk=other.pk).update(is_active=True, ean=entry.get("ean", "") or other.ean)
+        # A product the owner had hidden before he merged it stays hidden.
+        Product.objects.filter(pk=other.pk).update(is_active=entry.get("active", True),
+                                                   ean=entry.get("ean", "") or other.ean)
         restored.append(other)
     if note.get("image_url") and keep.image_url == note["image_url"]:
         Product.objects.filter(pk=keep.pk).update(image_url="")

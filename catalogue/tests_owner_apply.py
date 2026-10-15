@@ -1099,7 +1099,10 @@ class CommandTests(Base):
                 mock.patch.object(data_files.Path, "write_text") as wrote:
             data_files.lower_priority()
         nice.assert_called_once_with(10)
-        wrote.assert_called_once_with("500")
+        # Before the shop reader (OOMScoreAdjust=500), so a runner smaller than the reader still goes first.
+        wrote.assert_called_once_with("1000")
+        reader = (Path(__file__).resolve().parent.parent / "deploy" / "ripraptor-worker.service").read_text()
+        self.assertIn("OOMScoreAdjust=500\n", reader)
         with mock.patch.object(data_files.os, "nice", side_effect=OSError), \
                 mock.patch.object(data_files.Path, "write_text", side_effect=PermissionError):
             data_files.lower_priority()

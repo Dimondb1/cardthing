@@ -31,6 +31,9 @@ from django.utils import timezone
 from catalogue import data_jobs
 from catalogue.models import DataChange, DataExport, Retailer
 
+# The most the kernel allows: above the shop reader's 500, so the runner goes first however small it is.
+OOM_SCORE_ADJ = "1000"
+
 # The preview's sections, in its order.
 SECTIONS = (
     (DataChange.State.READY, "Ready"),
@@ -126,12 +129,13 @@ class Command(BaseCommand):
 
 def lower_priority():
     """Below the site's workers for the processor, and first to go when memory runs out: a spreadsheet can
-    wait, a visitor cannot."""
+    wait, a visitor cannot, and the shop reader (OOMScoreAdjust=500) keeps the prices fresh. A file stopped
+    part way is finished at the next start (data_jobs.part_made). Raising the score needs no privilege."""
     try:
         os.nice(10)
     except OSError:
         pass
     try:
-        Path("/proc/self/oom_score_adj").write_text("500")
+        Path("/proc/self/oom_score_adj").write_text(OOM_SCORE_ADJ)
     except OSError:
         pass

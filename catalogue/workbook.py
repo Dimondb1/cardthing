@@ -839,6 +839,9 @@ def read_sheet(ws, sheet):
 # except where blank means empty text.
 
 FORMULA_STARTS = ("=", "+", "-", "@")
+# No product or set is named with these, and in a name they could pass for page markup.
+MARKUP = re.compile(r"[<>]")
+NO_MARKUP = "A name cannot hold < or >."
 INTEGRAL = re.compile(r"\d+(?:\.0+)?")
 NEW_REF = re.compile(r"new\s*(\d{1,6})", re.I)
 REF_SPLIT = re.compile(r"[,;\s]+")
@@ -869,6 +872,8 @@ def as_name(value, removable=True):
         return "", "A product needs a name."
     if name.startswith(FORMULA_STARTS):
         return name, "A name cannot start with = + - or @, which Excel reads as a formula."
+    if MARKUP.search(name):
+        return name, NO_MARKUP
     if len(name) > 200:
         return name, "Names are at most 200 characters."
     if removable and NOT_SEALED.search(name):

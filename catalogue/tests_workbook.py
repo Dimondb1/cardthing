@@ -809,7 +809,8 @@ class NormaliserTests(TestCase):
         self.assertEqual(workbook.as_name("Surging\xa0Sparks  Booster Box! "), ("Surging Sparks Booster Box", ""))
         self.assertEqual(workbook.as_name("Surging Sparks Booster Box - Pre-Order"), ("Surging Sparks Booster Box", ""))
         for value in ("", None, "Booster Box", "Pikachu ex 063/091 Single", "+Surging Sparks Box",
-                      "Surging Sparks Card Sleeves"):
+                      "Surging Sparks Card Sleeves", "Surging Sparks Box </script><script>alert(1)</script>",
+                      "Surging Sparks Box &lt;img src=x&gt;"):
             self.assertTrue(workbook.as_name(value)[1], value)
 
     def test_choices_and_text(self):

@@ -417,6 +417,15 @@ class ProductFieldTests(Base):
         cleared = self.only(self.edit(data, ("Products", plain.pk, "Set", "")))
         self.assertEqual((cleared.state, cleared.fields["set"][3]), (State.READY, None))
 
+    def test_a_set_name_or_code_holding_markup_is_refused(self):
+        _export, data = self.download()
+        for heading, value in (("Name", "Surging Sparks <img src=x>"), ("Code", "SV08>")):
+            refused = self.only(self.edit(data, ("Sets", self.set.pk, heading, value)))
+            self.assertEqual((refused.state, refused.why), (State.PROBLEM, "A set's name or code cannot hold < or >."))
+        added = self.only(self.edit(data, insert_rows=[("Sets", {"Set id": "new1", "Game": "Pokémon",
+                                                                 "Name": "Destined </script> Rivals"})]))
+        self.assertEqual(added.state, State.PROBLEM)
+
     def test_a_set_added_in_the_same_file(self):
         _export, data = self.download()
         changes = self.edit(

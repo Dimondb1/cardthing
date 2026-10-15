@@ -651,6 +651,8 @@ class Planner:
     def set_field_problem(self, field, value):
         if field == "name" and not value:
             return "A set needs a name."
+        if field in ("name", "code") and wb.MARKUP.search(value or ""):
+            return "A set's name or code cannot hold < or >."
         if field == "name" and len(value) > 120:
             return "Set names are at most 120 characters."
         if field == "code" and len(value) > 20:

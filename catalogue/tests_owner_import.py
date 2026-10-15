@@ -606,6 +606,20 @@ class ProductFieldTests(Base):
         self.assertEqual((cleared.state, cleared.why),
                          (State.HELD, f"{workbook_plan.TIDY_REMOVES} Clearing its date removes it."))
 
+    def test_a_barcode_a_hidden_product_holds_is_refused(self):
+        # A shop's read steers a price by barcode to a hidden product too.
+        old = make_product(self.set, name="Surging Sparks Elite Trainer Box Old Page", slug="ssp-etb-old",
+                           ean="5053222123458", is_active=False)
+        _export, data = self.download()
+        taken = self.only(self.edit(data, ("Products", self.etb.pk, "Barcode", "5053222123458")))
+        self.assertEqual(taken.state, State.PROBLEM)
+        self.assertTrue(taken.why.startswith(
+            f'Already on hidden {old.pk} "Surging Sparks Elite Trainer Box Old Page". Two products'), taken.why)
+        # Cleared on the hidden one in the same file, it is free.
+        changes = self.edit(data, ("Products", self.etb.pk, "Barcode", "5053222123458"),
+                            ("Products", old.pk, "Barcode", ""))
+        self.assertEqual({c.state for c in changes}, {State.READY})
+
     def test_hiding_a_product_the_hourly_tidy_would_then_remove_is_held(self):
         lonely = make_product(self.set, name="Surging Sparks Mini Tin", product_type="tin")
         _export, data = self.download()

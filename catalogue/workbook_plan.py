@@ -404,9 +404,11 @@ class FinalState:
                     del pages[other][retailer]
         self.products = products
         self.pages = pages
+        # Hidden products too: a shop's read steers a price by barcode to any product holding it. One merged
+        # away holds none (merge_undoable clears it).
         self.eans = defaultdict(set)
         for pk, product in products.items():
-            if product.active and ean_key(product.ean):
+            if ean_key(product.ean):
                 self.eans[ean_key(product.ean)].add(pk)
         self._index = None
 
@@ -1295,8 +1297,9 @@ class Planner:
             owners = state.barcode_owners(fields["barcode"][3], but=pk)
             if owners:
                 other = min(owners, key=str)
-                return (State.PROBLEM, f"Already on {self.named(state, other)}. Two products with one barcode steer "
-                        "shop prices to one of them. Merge them, or fix the other one's barcode in this file.")
+                hidden = "" if state.products[other].active else "hidden "
+                return (State.PROBLEM, f"Already on {hidden}{self.named(state, other)}. Two products with one barcode "
+                        "steer shop prices to one of them. Merge them, or fix the other one's barcode in this file.")
         if "set" in fields:
             new_set = fields["set"][3]
             if isinstance(new_set, str) and new_set not in state.new_sets:

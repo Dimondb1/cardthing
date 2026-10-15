@@ -426,6 +426,29 @@ class ProductFieldTests(Base):
         cleared = self.only(self.edit(data, ("Products", plain.pk, "Set", "")))
         self.assertEqual((cleared.state, cleared.fields["set"][3]), (State.READY, None))
 
+    def test_a_set_code_that_changes_its_products_language(self):
+        mew = make_set(self.game, name="151", slug="151", code="MEW", release_date=date(2023, 9, 22))
+        bundle = make_product(mew, name="151 Booster Bundle", slug="151-bundle", product_type="bundle",
+                              release_date=date(2023, 9, 22))
+        _export, data = self.download()
+        change = self.only(self.edit(data, ("Sets", mew.pk, "Code", "SV2a")))
+        self.assertEqual((change.state, change.what), (State.READY, (
+            f'Change the code of the set {mew.pk} "151" to SV2a (was MEW) (Sets row {change.row}). 1 product '
+            "becomes Japanese.")))
+        # With a Japanese twin, the hourly merge would join the two and delete one.
+        jset = make_set(self.game, name="Pokemon Card 151", slug="pokemon-card-151", code="sv2a",
+                        release_date=date(2023, 6, 16))
+        twin = make_product(jset, name="Pokemon 151 Booster Bundle", slug="151-bundle-jp", product_type="bundle",
+                            release_date=date(2023, 6, 16))
+        _export, data = self.download()
+        refused = self.only(self.edit(data, ("Sets", mew.pk, "Code", "SV2a")))
+        self.assertEqual((refused.state, refused.why), (State.PROBLEM, (
+            f'{bundle.pk} "151 Booster Bundle" becomes Japanese, and the hourly tidy would join it with {twin.pk} '
+            f'"Pokemon 151 Booster Bundle". If they are one product, put {twin.pk} in its Same as product id.')))
+        # A release date says nothing about language.
+        self.assertEqual(self.only(self.edit(data, ("Sets", mew.pk, "Release date", "23/09/2023"))).state,
+                         State.READY)
+
     def test_a_set_name_or_code_holding_markup_is_refused(self):
         _export, data = self.download()
         for heading, value in (("Name", "Surging Sparks <img src=x>"), ("Code", "SV08>")):

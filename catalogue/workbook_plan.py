@@ -16,7 +16,7 @@ plan() writes nothing. It returns unsaved DataChange rows, each with a plain sen
 the ones he says yes to.
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from copy import copy
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
@@ -294,10 +294,28 @@ class FinalState:
     changes, never from the database."""
 
     def __init__(self, site, live, set_rows):
-        """``set_rows`` are the sets as the file leaves them: {set id or newN: SetRow}."""
+        """``set_rows`` are the sets on the site and the sets the file adds: {set id or newN: SetRow}. The
+        file's changes to a set's name or code are made here."""
         self.site = site
         products = dict(site.products)
         touched = set()
+        sets = dict(set_rows)
+        renamed = set()
+        for change in live:
+            if change.kind == Kind.SET_FIELDS and change.fields.keys() & {"name", "code"}:
+                pk = change.object_id
+                sets[pk] = replace(sets[pk], **{field: values[3] or "" for field, values in change.fields.items()
+                                                if field in ("name", "code")})
+                renamed.add(pk)
+        # A set's name and code give its products their language, and the site works it out again for every
+        # product in the set when the set is saved (signals.set_saved).
+        self.in_sets = defaultdict(list)
+        if renamed:
+            for pk, product in site.products.items():
+                if product.set_id in renamed:
+                    self.in_sets[product.set_id].append(pk)
+                    touched.add(pk)
+                    products[pk] = replace(product)
         for change in live:
             if change.kind == Kind.NEW_PRODUCT:
                 d = change.data
@@ -324,7 +342,7 @@ class FinalState:
                         product.active = new
         for pk in touched:
             product = products[pk]
-            product.language = language_of(product, set_rows.get(product.set_id))
+            product.language = language_of(product, sets.get(product.set_id))
         self.new_sets = {change.ref for change in live if change.kind == Kind.NEW_SET}
         self.edges = {change.object_id: change.data["target"] for change in live if change.kind == Kind.MERGE}
 
@@ -1221,6 +1239,26 @@ class Planner:
             return State.HELD, f"{TIDY_REMOVES} Clearing its date removes it."
         return None
 
+    def guard_set_fields(self, change, state):
+        """A set's new name or code gives its products another language at once, and with it maybe a twin the
+        hourly merge joins (and deletes)."""
+        for pk in self.relanguaged(change, state):
+            new = state.index.collisions(pk, state.products) - self.site_index.collisions(pk, self.site.products)
+            if new:
+                other = min(new, key=str)
+                return (State.PROBLEM, f"{self.named(state, pk)} becomes "
+                        f"{languages.name(state.products[pk].language)}, and the hourly tidy would join it with "
+                        f"{self.named(state, other)}. If they are one product, put {other} in its Same as product id.")
+        return None
+
+    def relanguaged(self, change, state):
+        """The products of the set whose language this change of its name or code changes."""
+        if change.kind != Kind.SET_FIELDS or not change.fields.keys() & {"name", "code"}:
+            return []
+        set_pk = change.object_id
+        return [pk for pk in state.in_sets.get(set_pk, ()) if state.products[pk].set_id == set_pk
+                and state.products[pk].language != self.site.products[pk].language]
+
     def set_chosen(self, product):
         """The set the hourly filing (releases.attach_sets) would put a set-less product under, or None."""
         from .releases import choose_set, set_rules
@@ -1408,8 +1446,14 @@ class Planner:
 
     def finish(self, state):
         """Name each change's final product, and note a language a rename or a set change brings."""
+        noted = set()
         for change in self.changes:
             d = change.data
+            if change.state in LIVE and change.object_id not in noted:
+                after = Counter(state.products[pk].language for pk in self.relanguaged(change, state))
+                if after:
+                    noted.add(change.object_id)
+                    d["languages_after"] = sorted(after.items(), key=lambda pair: (-pair[1], pair[0]))
             if (change.kind in (Kind.MOVE, Kind.LINK, Kind.LEFT_LINK, Kind.MERGE) and d.get("target") is not None
                     and change.state in (*LIVE, State.SAME)):
                 keep = state.keeper(d["target"])
@@ -1481,10 +1525,13 @@ def describe(change):
     if kind == Kind.SET_FIELDS:
         field, (base, file, _seen, _new) = next(iter(change.fields.items()))
         name = f"the set {change.object_id} {quoted(d.get('name'))}"
+        # The site works out the language of every product in the set again when it is saved.
+        after = "".join(f" {n:,} product{'s become' if n != 1 else ' becomes'} {languages.name(code)}."
+                        for code, n in d.get("languages_after") or [])
         if field == "name":
-            return f"Rename {name} to {quoted(file)} {where}."
+            return f"Rename {name} to {quoted(file)} {where}.{after}"
         if field == "code":
-            return f"Change the code of {name} to {file or 'none'} (was {base or 'none'}) {where}."
+            return f"Change the code of {name} to {file or 'none'} (was {base or 'none'}) {where}.{after}"
         return (f"Change the release date of {name} to {day_text(file)} (was {day_text(base)}) {where}. Release "
                 "sources never change a date you set.")
     if kind in (Kind.TAKE_OFF, Kind.MOVE, Kind.HIDE, Kind.SHOW):

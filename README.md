@@ -192,6 +192,11 @@ Excel cannot turn them into 5.05E+12.
   through the same form as Django Admin, with an admin history line. A type
   set here is kept from the hourly retype. A language is added to the name
   ("(Japanese)"), as the site reads language from the name and set.
+- **Name, Code, Release date** on Sets change the set. A new name or code
+  can change the language of every product in the set at once, as the site
+  reads language from the name and set: the preview says how many products
+  change, and the change is not made when one of them would then be joined
+  to its twin by the hourly merge.
 - **Show on site** No hides a product, or one shop's price on Listings; Yes
   shows it again.
 - **Same as product id**: put the id of the product to keep, and this row is

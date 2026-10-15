@@ -292,8 +292,16 @@ file in the cache folder keeps a second copy from running. It runs at a lower pr
 first in line for the memory killer, so visitors come first on the 1 GB
 server. A runner that is stopped is taken up again where it stopped,
 without making any change twice; after three stops the file is given up.
-Its log, with the details of any change that could not be made, goes to
-the web app's log on the server (`journalctl -u ripraptor`).
+An update (`deploy/install.sh`) waits for a file being made before it
+touches the database or restarts the site, which would stop the runner
+with it. If a runner is stopped part way all the same (the memory killer,
+a crash), the hourly `tidy_all` leaves the products alone for that hour,
+since it could remove or join what the rest of the file counts on, and
+starts the runner to finish the file, so it is finished within the hour
+even with the page closed. Its log, with the details of any change that
+could not be made, goes to the web app's log on the server
+(`journalctl -u ripraptor`), or to `/var/log/ripraptor-import.log` when
+the hourly tidy-up started it.
 `--export` makes a file that can be uploaded on the page like one made
 there. `--check` prints every change in plain words and changes nothing;
 changes are made only from the page, after its preview. The code is

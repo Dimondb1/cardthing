@@ -153,6 +153,22 @@ class OneAddressTests(TestCase):
         self.assertNotIn("$DOMAIN, www.$DOMAIN", caddy)
 
 
+class SpreadsheetDeployTests(TestCase):
+    """A deploy restarts the web app, and the spreadsheet runner it started with it: the update waits for a
+    file being made first, so it is never stopped part way and the database is not shrunk or migrated under it."""
+
+    def test_install_waits_for_a_spreadsheet_being_made(self):
+        from . import data_jobs
+
+        text = (DEPLOY / "install.sh").read_text()
+        self.assertIn('DATA_LOCK="${RIPRAPTOR_CACHE_DIR:-/var/lib/ripraptor/cache}/data-files.lock"', text)
+        self.assertEqual(data_jobs.lock_path().name, "data-files.lock")
+        wait = text.index('sudo -u ripraptor timeout 1800 flock "$DATA_LOCK" true')
+        self.assertGreater(wait, text.index("set -a; . ./.env; set +a"))
+        for later in ("manage.py compact_db", "manage.py migrate", "systemctl restart ripraptor"):
+            self.assertLess(wait, text.index(later), later)
+
+
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()

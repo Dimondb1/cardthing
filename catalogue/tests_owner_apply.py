@@ -750,6 +750,37 @@ class RunnerTests(Base):
         self.assertEqual((upload.status, upload.attempts, upload.done, upload.total), (Upload.APPLIED, 1, 15, 15))
         self.each_made_once(products)
 
+    def test_the_hourly_tidy_leaves_a_file_cut_short_alone_and_wakes_its_runner(self):
+        # A new product with no release date, kept by the page the file moves onto it after adding it.
+        tin = make_product(self.set, name="Surging Sparks Tin Pokemon Centre", product_type="tin",
+                           release_date=date(2024, 11, 8))
+        page = make_listing(tin, self.shop, url="https://solent.example/products/777")
+        _export, data = self.download()
+        upload = self.upload(excel_resave(data, [("Listings", page.pk, "Product id", "new1")], insert_rows=[(
+            "Products", {"Product id": "new1", "Game": "Pokémon", "Name": "Surging Sparks Mini Tin", "Type": "Tin"})]))
+        DataImport.objects.filter(pk=upload.pk).update(status=Upload.APPLY_QUEUED)
+        # A deploy stops the runner straight after the new product is added.
+        with mock.patch.object(owner_edits, "move_listing", side_effect=SystemExit("killed")), \
+                self.assertRaises(SystemExit):
+            call_command("data_files")
+        added = Product.objects.get(name="Surging Sparks Mini Tin")
+        out = StringIO()
+        with mock.patch.object(data_jobs, "wake_runner") as woke:
+            call_command("tidy_all", stdout=out)
+        self.assertTrue(Product.objects.filter(pk=added.pk).exists())
+        self.assertEqual(woke.call_args.args[0][0][0], Upload.APPLYING)
+        self.assertIn(f"spreadsheet upload {upload.pk} is part made", out.getvalue())
+        # Taken up again, the file is finished, and the next hour tidies as usual.
+        DataImport.objects.filter(pk=upload.pk).update(heartbeat_at=timezone.now() - timedelta(minutes=6))
+        call_command("data_files")
+        upload.refresh_from_db()
+        self.assertEqual(upload.status, Upload.APPLIED)
+        self.assertEqual(Listing.objects.get(pk=page.pk).product_id, added.pk)
+        out = StringIO()
+        call_command("tidy_all", stdout=out)
+        self.assertNotIn("part made", out.getvalue())
+        self.assertTrue(Product.objects.filter(pk=added.pk).exists())
+
     def test_an_error_between_changes_is_tried_again_at_once(self):
         products = self.dated(15)
         upload = self.upload(self.edited(products))

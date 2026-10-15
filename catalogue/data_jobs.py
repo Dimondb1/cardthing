@@ -7,7 +7,8 @@ The page queues a job and starts the runner at once (start_now). The runner take
 kind in turn: downloads to make, uploads to check, files to apply, files to undo. A job writes a heartbeat as
 it goes; one whose heartbeat stops (the process was killed) is taken up again, and after three stops it is
 given up with a reason. Applying a file resumes at the first change not yet made, so a change is never made
-twice.
+twice. The page starts the runner again when it finds a job stopped, and so does the hourly tidy-up, which
+leaves the catalogue alone while a file is part made (part_made).
 
 Each change is made in its own short transaction through catalogue/owner_edits.py, the code his buttons
 use. One the site has changed since he checked the file is left as it is and listed; one that fails is
@@ -27,7 +28,7 @@ from time import sleep
 from django.conf import settings
 from django.core.management import CommandError, call_command
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import Exists, F, OuterRef, Q
 from django.utils import timezone
 
 from .models import DataChange, DataExport, DataImport
@@ -116,6 +117,21 @@ def wake_runner(jobs, now=None):
     return False
 
 
+def part_made():
+    """(pk, status, created_at, heartbeat_at) of uploads whose making or undoing was cut short part way (a
+    deploy or the memory killer stopped the runner). Until they finish, the hourly tidy-up leaves the
+    catalogue alone: it could remove a product the rest of the file gives a page, or join what it keeps apart."""
+    changes = DataChange.objects.filter(data_import=OuterRef("pk"))
+    return list(
+        DataImport.objects.annotate(
+            made=Exists(changes.exclude(outcome=Outcome.NONE)),
+            unmade=Exists(changes.filter(outcome__in=[Outcome.UNDONE, Outcome.UNDO_SKIPPED])),
+        ).filter(Q(status__in=[Status.APPLY_QUEUED, Status.APPLYING], made=True)
+                 | Q(status__in=[Status.UNDO_QUEUED, Status.UNDOING], unmade=True))
+        .values_list("pk", "status", "created_at", "heartbeat_at")
+    )
+
+
 def pack_base(base):
     return gzip.compress(json.dumps(base, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
 
@@ -129,7 +145,8 @@ def start_now():
     lock, so a second runner never starts. Never in tests.
 
     Its log (every failure's traceback) goes where the starting process's goes: the web app's journal
-    (journalctl -u ripraptor) on the server, the console when run by hand."""
+    (journalctl -u ripraptor) on the server, the import log when the hourly tidy-up starts it, the console
+    when run by hand."""
     import subprocess
     import sys
 

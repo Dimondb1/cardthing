@@ -13,6 +13,9 @@ no sitemap has listed for 30 days, clears old import records and the owner's old
 (catalogue/housekeeping.py) so the database stays small, and lets the autopilot answer the Things to
 check rows the evidence settles (catalogue/autopilot.py). Run by start.bat, update_prices and the server's hourly import,
 so a rule added in code is applied to data already in the database.
+
+While an uploaded spreadsheet is part made (its runner was stopped part way, by a deploy say), the products
+and the autopilot are left alone for the hour, and the runner is started to finish the file.
 """
 
 from django.core.management import call_command
@@ -27,36 +30,10 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="Report what each would do and change nothing.")
 
     def handle(self, *args, dry_run=False, **options):
-        for name in ("tidy_listings", "merge_duplicates", "tidy_catalogue"):
-            self.stdout.write(f"== {name}")
-            call_command(name, dry_run=dry_run, stdout=self.stdout)
-        from django.db import transaction
-
+        tidying = not self.spreadsheet_part_made()
+        if tidying:
+            self.tidy_products(dry_run)
         from catalogue.importers import forget_pages
-        from catalogue.releases import attach_sets
-        from catalogue.models import Game
-
-        self.stdout.write("== sets")
-        filed = 0
-        for game in Game.objects.all():
-            # One transaction per game, so a writer waiting behind this one waits only briefly.
-            with transaction.atomic():
-                filed += attach_sets(game)
-                if dry_run:
-                    transaction.set_rollback(True)
-        self.stdout.write(f"{filed} products {'would be filed' if dry_run else 'filed'} under their sets.")
-
-        from catalogue.languages import refresh_languages
-
-        self.stdout.write("== languages")
-        changed = refresh_languages(dry_run=dry_run)
-        self.stdout.write(f"{changed} product languages {'would change' if dry_run else 'set'}.")
-
-        from catalogue.types import refresh_types
-
-        self.stdout.write("== types")
-        changed = refresh_types(dry_run=dry_run)
-        self.stdout.write(f"{changed} product types {'would change' if dry_run else 'set'}.")
 
         self.stdout.write("== shop pages")
         gone = forget_pages(dry_run=dry_run)
@@ -89,9 +66,55 @@ class Command(BaseCommand):
 
         from catalogue import autopilot
 
-        if autopilot.enabled():
+        if tidying and autopilot.enabled():
             self.stdout.write("== autopilot")
             done = autopilot.run(dry_run=dry_run)
             for kind, what, why in done:
                 self.stdout.write(f"{what}: {why}.")
             self.stdout.write(f"{len(done)} things to check {'would be answered' if dry_run else 'answered'}.")
+
+    def spreadsheet_part_made(self):
+        """True while an uploaded spreadsheet is part made or part undone (its runner was stopped part way).
+        The products are then left as they are for this hour, since tidying them could remove or join what
+        the rest of the file counts on, and its runner is started to finish it."""
+        from catalogue import data_jobs
+
+        waiting = data_jobs.part_made()
+        if not waiting:
+            return False
+        data_jobs.wake_runner([(status, created_at, heartbeat_at) for _pk, status, created_at, heartbeat_at in waiting])
+        uploads = ", ".join(str(pk) for pk, *_rest in waiting)
+        self.stdout.write(f"== products left as they are: spreadsheet upload {uploads} is part made. Its runner is "
+                          "started to finish it, and the next hour tidies them.")
+        return True
+
+    def tidy_products(self, dry_run):
+        for name in ("tidy_listings", "merge_duplicates", "tidy_catalogue"):
+            self.stdout.write(f"== {name}")
+            call_command(name, dry_run=dry_run, stdout=self.stdout)
+        from django.db import transaction
+
+        from catalogue.releases import attach_sets
+        from catalogue.models import Game
+
+        self.stdout.write("== sets")
+        filed = 0
+        for game in Game.objects.all():
+            # One transaction per game, so a writer waiting behind this one waits only briefly.
+            with transaction.atomic():
+                filed += attach_sets(game)
+                if dry_run:
+                    transaction.set_rollback(True)
+        self.stdout.write(f"{filed} products {'would be filed' if dry_run else 'filed'} under their sets.")
+
+        from catalogue.languages import refresh_languages
+
+        self.stdout.write("== languages")
+        changed = refresh_languages(dry_run=dry_run)
+        self.stdout.write(f"{changed} product languages {'would change' if dry_run else 'set'}.")
+
+        from catalogue.types import refresh_types
+
+        self.stdout.write("== types")
+        changed = refresh_types(dry_run=dry_run)
+        self.stdout.write(f"{changed} product types {'would change' if dry_run else 'set'}.")

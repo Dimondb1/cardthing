@@ -63,6 +63,13 @@ mkdir -p /var/lib/ripraptor media
 # belong to ripraptor: a folder the site cannot write falls back to a cache per process.
 install -d -o ripraptor -g ripraptor /var/lib/ripraptor/cache
 set -a; . ./.env; set +a
+# A spreadsheet being made (manage.py data_files, which the site starts) holds this lock until its run
+# ends, at most 25 minutes. Wait for it, so the restart below never stops a file part way and the
+# database is not shrunk or migrated under it. As ripraptor, so the lock file stays the runner's.
+DATA_LOCK="${RIPRAPTOR_CACHE_DIR:-/var/lib/ripraptor/cache}/data-files.lock"
+if [ -f "$DATA_LOCK" ]; then
+  sudo -u ripraptor timeout 1800 flock "$DATA_LOCK" true || echo "A spreadsheet is still being made; carrying on."
+fi
 # First shrink the database (old import records once filled the disk), so the copy below copies only
 # what is in use. Then a copy of the database before any change, so an update can be rolled back.
 # backup_db uses SQLite's own backup, which is safe while the site is running; cp is not (it misses

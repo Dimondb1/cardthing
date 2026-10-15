@@ -77,7 +77,8 @@ NOT_SEALED = re.compile(
     # Pokemon promo card numbers ("Iron Bundle SVP 066 - Holo"): set codes have one or two digits, promos three.
     r"\b(?:svp|swshp?|smp?|xyp?|bwp?)[ -]?\d{3}\b|\bholo\b(?!\s*(?:collection|box|tin|booster|pack))|\bplaymat\b|\bsleeves?\b|\bbinder\b|"
     r"\bdeck box\b|\bportfolio\b|\btoploader|\bevent\b|\bpre[\s-]?release event\b|\bticket\b|\bcase\b(?! of)|\bcarton\b|"
-    r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b|\bkeyring\b|\bposter\b(?! box)|"
+    # A plush packed in a tin with booster packs is the tin ("Electric Plush Blind Box Tin", Solent Cards).
+    r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b(?!.*\btins?\b)|\bkeyring\b|\bposter\b(?! box)|"
     r"\bcode card\b|\bgraded\b|\bpsa\b|\bcgc\b|\bproxy\b|\bbulk\b|\blot of\b|\bjapanese single|\bpromo card\b|"
     r"\(near mint\)|\bnear mint\b|\blightly played\b|\bmoderately played\b|\(nm\)|\bpromo pack\b|\bpromotion pack\b|\bpower pack\b|"
     r"\bborderless\b|\bextended art\b|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"
@@ -184,8 +185,10 @@ PREFIXES = re.compile(
     re.I,
 )
 KIND_FIRST = re.compile(r"^(Booster Box|Booster Pack|Trial Deck\+?|Start Deck|Starter Deck|Extra Booster(?: Box| Pack)?)\s*[:\-–]\s*(.+)$", re.I)
+# A bracketed code goes ("(OP-09)"), but not a Simplified Chinese one: "Chasing Glory Together Slim Booster Box
+# (csv10)" is the box other shops call "Pursue Glory Together csv10 C", and only the code says so.
 NOISE = re.compile(
-    r"\s*\((?:en|eng|english|uk|new|sealed|in stock|pre-?order|\d+ (?:sealed )?(?:booster )?packs?|\d+ boosters?|\d+ ct|[a-z]{2,3}-?\d{2,3}[a-z]?)\)"
+    r"\s*\((?:en|eng|english|uk|new|sealed|in stock|pre-?order|\d+ (?:sealed )?(?:booster )?packs?|\d+ boosters?|\d+ ct|(?!c(?:sv|sm|bb))[a-z]{2,3}-?\d{2,3}[a-z]?)\)"
     r"|\s*\[[^\]]*\]|\s*[-–:|]\s*(?:english|en|sealed|new|pre-?order|in stock)\s*$|\s*[-–]\s*$|^\s*[-–:]\s*",
     re.I,
 )
@@ -368,6 +371,7 @@ def union_arena_name(name):
 def clean_name(title, game=""):
     code = languages.language_of(title or "", game)
     name = tidy_name(title)
+    name = re.sub(r"(?<=[a-z])\((?=[a-z])", " (", name, flags=re.I)   # "Blind Box Tin(Simplified Chinese)"
     name = re.sub(r"\s+", " ", name).strip()
     name = drop_repeated_tail(PREFIXES.sub("", name))
     # Some shops write the kind first: "Booster Box - Kaguya-sama" becomes "Kaguya-sama Booster Box".

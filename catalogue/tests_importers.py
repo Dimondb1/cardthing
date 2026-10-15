@@ -674,10 +674,11 @@ class ChineseShopTests(TestCase):
         self.assertTrue(run.ok, run.error)
 
         listed = Product.objects.filter(listings__retailer=shop).order_by("name")
+        # The set code stays in the name: it is what tells one Chinese box from another.
         self.assertEqual([p.name for p in listed], [
-            "Chasing Glory Together Booster Box Simplified Chinese SLIM",
+            "Chasing Glory Together Booster Box Simplified Chinese (CSV10C) SLIM",
             "Gem Pack Vol.5 Booster Box Simplified Chinese (CBB5C)",
-            "Team Rocket's Grand Ambition Exclusive Gift Box Simplified Chinese",
+            "Team Rocket's Grand Ambition Exclusive Gift Box Simplified Chinese (CSV10C)",
         ])
         self.assertEqual({p.language for p in listed}, {"zh-hans"})
         self.assertFalse(any("—" in p.name for p in Product.objects.all()))

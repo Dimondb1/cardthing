@@ -24,7 +24,7 @@ from catalogue.classify import NOT_SEALED, box_contents, find_game
 from catalogue.ebay import EbayError, fill_titles, too_cheap_listings
 from catalogue.importers import slug_words
 from catalogue.matching import DIFFERENT, expand, match_key
-from catalogue.models import Game, Listing, Product
+from catalogue.models import Game, Listing, Product, shown_change
 from catalogue.signals import clear_list_caches
 
 
@@ -144,7 +144,7 @@ class Command(BaseCommand):
                     Listing.objects.filter(pk__in=[listing.pk for listing in cheap]).exclude(
                         availability=Listing.Availability.OUT_OF_STOCK
                     ).update(
-                        availability=Listing.Availability.OUT_OF_STOCK, changed_at=timezone.now()
+                        availability=Listing.Availability.OUT_OF_STOCK, changed_at=shown_change(timezone.now())
                     )
                 if cheap:
                     clear_list_caches(force=True)

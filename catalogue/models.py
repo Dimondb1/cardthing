@@ -5,7 +5,7 @@ from urllib.parse import quote, urlparse
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Count, F, Min, Q
+from django.db.models import Case, Count, F, Min, Q, Value, When
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
@@ -19,6 +19,12 @@ def stale_cutoff(now=None):
     """Listings checked before this moment are out of date."""
     hours = settings.RIPRAPTOR_STALE_AFTER_HOURS
     return (now or timezone.now()) - timedelta(hours=hours)
+
+
+def shown_change(at):
+    """Listing.changed_at for a queryset update: ``at`` on a listing the page shows, unchanged on a hidden one,
+    whose changes the page does not show (hiding it was stamped when it happened)."""
+    return Case(When(is_active=True, then=Value(at)), default=F("changed_at"))
 
 
 class Game(models.Model):
@@ -625,6 +631,7 @@ class Listing(models.Model):
     # When what the product page shows for this shop last changed: its price, delivery or stock, whether it is
     # shown or kept out of the comparison, or the product it is listed under. A check that finds nothing new
     # leaves it alone, so the sitemap can tell search engines when a page really changed (web/sitemaps.py).
+    # Hiding the listing, or switching its shop off, stamps it; while hidden, its changes do not.
     # Empty for a listing not changed since the field was added.
     changed_at = models.DateTimeField("price or stock changed", null=True, blank=True, editable=False)
     is_active = models.BooleanField("show on site", default=True)

@@ -2312,7 +2312,7 @@ the 3 October snapshot that is 2,785 of 7,626 products. Every game, set and
 the fixed pages are listed too.
 
 Each product's `lastmod` is when its page really changed: the latest of its
-own edits, its set's edits and the last change of any shown shop's price,
+own edits, its set's edits and the last change of any of its shops' price,
 delivery or stock.
 
 - `Product.updated_at` moves when a field the page shows is saved,
@@ -2329,9 +2329,13 @@ delivery or stock.
   hour; a new price, a sell-out, a restock, a shop's price back on sale
   after being out of date, a multi-buy that starts, changes or ends, a buy
   link moved to another of the shop's pages (not another variant of the
-  same page), a price kept out of or let back into the comparison, a shop
-  hidden or shown, or a shop moved onto the product does. Listings changed
-  before `changed_at` existed fall back to their last restock.
+  same page), a price kept out of or let back into the comparison, a
+  listing hidden or shown, a shop switched off or on in admin, or a shop
+  moved onto the product does. A hidden listing (or one of a shop switched
+  off) still counts, by when it was hidden, so taking a shop off a page
+  moves `lastmod` forward; while hidden, its own changes are not stamped,
+  as the page does not show them. Listings changed before `changed_at`
+  existed fall back to their last restock, if they are shown.
 
 A set's `lastmod` is the latest of its own edits and its products', so a
 product filed under it moves it too.

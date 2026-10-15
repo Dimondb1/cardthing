@@ -8,9 +8,11 @@ list, so a crawler spends its visits on pages with a price.
 
 lastmod is the latest of the product's own edits (Product.updated_at, which moves only when a field the page
 shows is saved), its set's (ProductSet.updated_at: the set's name, code and date are on the product page too)
-and the last change of any shown shop's price, delivery or stock (Listing.changed_at, which a check that finds
-nothing new leaves alone). Before changed_at existed the only such record is the last time a shop came back
-into stock. changefreq and priority are left out: Google ignores them.
+and the last change of any shop's price, delivery or stock (Listing.changed_at, which a check that finds
+nothing new leaves alone). A hidden listing, or one of a shop switched off, counts by when it was hidden or
+switched off: that took a shop off the page, and nothing it does while hidden is stamped. Before changed_at
+existed the only such record is the last time a shown shop came back into stock. changefreq and priority are
+left out: Google ignores them.
 
 Each section costs two queries per sitemap page, however many products there are: a count and the page.
 """
@@ -18,7 +20,7 @@ Each section costs two queries per sitemap page, however many products there are
 from datetime import timedelta
 
 from django.contrib.sitemaps import Sitemap
-from django.db.models import Exists, F, Max, OuterRef, Q, Subquery
+from django.db.models import Case, Exists, F, Max, OuterRef, Q, Subquery, When
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
@@ -33,11 +35,12 @@ RECENT_DAYS = 30
 
 
 def last_listing_change(listings, group):
-    """A subquery: the latest change of a shown listing among ``listings`` (filtered on an OuterRef and all
-    sharing one ``group`` value), or None when none has a recorded change."""
-    shown = listings.filter(is_active=True, retailer__is_active=True).order_by()
-    changed = Max(Coalesce("changed_at", "back_in_stock_at"))
-    return Subquery(shown.values(group).annotate(at=changed).values("at")[:1])
+    """A subquery: the latest change among ``listings`` (filtered on an OuterRef and all sharing one ``group``
+    value), or None when none has a recorded change. Hidden listings count, by when they were hidden; the
+    last restock stands in only for a shown listing with no recorded change."""
+    restock = Case(When(is_active=True, retailer__is_active=True, then="back_in_stock_at"))
+    changed = Max(Coalesce("changed_at", restock))
+    return Subquery(listings.order_by().values(group).annotate(at=changed).values("at")[:1])
 
 
 def indexable_products(now=None):

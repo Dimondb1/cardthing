@@ -41,7 +41,8 @@ from . import languages, pricing
 from .classify import GAMES, classify, find_game, variant_differs
 from .matching import AUTO_LINK, SUGGEST, best_match, covers, match_key, score, shop_title
 from .models import (
-    Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, stale_cutoff,
+    Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, shown_change,
+    stale_cutoff,
 )
 from .sanity import judge_product, trust_expiry
 
@@ -1264,7 +1265,7 @@ def stamp_checked(pks, checked_at):
     page, so the same stamp also records that as a change (changed_at, the sitemap's lastmod).
     """
     cutoff = stale_cutoff(checked_at)
-    back = Q(availability__in=Listing.BUYABLE) & (Q(last_checked__lt=cutoff) | Q(last_checked__isnull=True))
+    back = Q(is_active=True, availability__in=Listing.BUYABLE) & (Q(last_checked__lt=cutoff) | Q(last_checked__isnull=True))
     again = (
         ~Q(sanity=Listing.Sanity.OK)
         | Q(trusted_at__lt=trust_expiry(checked_at))
@@ -1380,7 +1381,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
                 or deal != held):
             # The page shows the multi-buy and links to the shop's page: a new one of either is a change.
-            shown = not created and (deal != held or link_key(listing.url) != link_key(offer.url))
+            shown = not created and listing.is_active and (deal != held or link_key(listing.url) != link_key(offer.url))
             listing.url = offer.url
             listing.title = title
             listing.shop_ean = shop_ean
@@ -1567,7 +1568,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     if complete:
         Listing.objects.filter(retailer=retailer).exclude(product_id__in=seen_products).exclude(
             availability=Listing.Availability.OUT_OF_STOCK
-        ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at, changed_at=checked_at)
+        ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at,
+                 changed_at=shown_change(checked_at))
 
     return found, updated, unmatched
 

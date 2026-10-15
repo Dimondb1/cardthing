@@ -36,6 +36,7 @@ from catalogue.languages import CHINESE, SIMPLIFIED, product_language
 from catalogue.matching import chinese_code, identity_numbers, match_key
 from catalogue.models import (
     DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, ProductAlias, Restock, ShopProduct, StockAlert,
+    shown_change,
 )
 
 
@@ -103,9 +104,12 @@ def merge(keep, others):
                 listing.delete()
             else:
                 listing.product = keep
-                # The kept page gains this shop.
-                listing.changed_at = timezone.now()
-                listing.save(update_fields=["product", "changed_at"])
+                fields = ["product"]
+                if listing.is_active:
+                    # The kept page gains this shop.
+                    listing.changed_at = timezone.now()
+                    fields.append("changed_at")
+                listing.save(update_fields=fields)
                 moved += 1
         carry_history(keep, other)
         if not keep.image_url and other.image_url:
@@ -159,7 +163,7 @@ def merge_undoable(keep, others):
         shops = set(keep.listings.values_list("retailer_id", flat=True))
         for listing in other.listings.all():
             if listing.retailer_id not in shops:
-                Listing.objects.filter(pk=listing.pk).update(product=keep, changed_at=timezone.now())
+                Listing.objects.filter(pk=listing.pk).update(product=keep, changed_at=shown_change(timezone.now()))
                 entry["listings"].append(listing.pk)
                 shops.add(listing.retailer_id)
         lows = dict(DailyLowestPrice.objects.filter(product=keep).values_list("date", "price"))
@@ -240,13 +244,13 @@ def unmerge(note):
             continue
         on_keep = {"product": keep}
         Listing.objects.filter(pk__in=entry["listings"], **on_keep).exclude(retailer__listings__product=other).update(
-            product=other, changed_at=timezone.now())
+            product=other, changed_at=shown_change(timezone.now()))
         for row in ShopProduct.objects.filter(pk__in=entry.get("found", []), suggested=keep).select_related("retailer"):
             # A listing the row's shop gained on the kept product while merged belongs to the other product.
             if saved is not None and not Listing.objects.filter(product=other, retailer=row.retailer).exists():
                 for listing in Listing.objects.filter(product=keep, retailer=row.retailer).exclude(pk__in=[int(k) for k in saved]):
                     if link_key(listing.url) == link_key(row.url):
-                        Listing.objects.filter(pk=listing.pk).update(product=other, changed_at=timezone.now())
+                        Listing.objects.filter(pk=listing.pk).update(product=other, changed_at=shown_change(timezone.now()))
             ShopProduct.objects.filter(pk=row.pk).update(suggested=other)
         Restock.objects.filter(pk__in=entry["restocks"], **on_keep).update(product=other)
         OutboundClick.objects.filter(pk__in=entry["clicks"], **on_keep).update(product=other)

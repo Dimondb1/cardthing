@@ -124,12 +124,16 @@ class SitemapTests(TestCase):
                              availability=IN_STOCK, checked_at=checked)
         self.assertEqual(sitemap_entries(self.client)[url], day(checked))
 
-    def test_lastmod_follows_the_products_own_edits_and_ignores_hidden_listings(self):
+    def test_lastmod_follows_the_products_own_edits_and_not_a_hidden_listings_checks(self):
         now = timezone.now()
         Product.objects.filter(pk=self.recently_sold_out.pk).update(updated_at=now - timedelta(days=9))
         self.recently_sold_out.listings.update(changed_at=now - timedelta(days=20))
         hidden = make_listing(self.recently_sold_out, self.other_shop, is_active=False)
-        Listing.objects.filter(pk=hidden.pk).update(changed_at=now - timedelta(days=1))
+        # A hidden listing's new price and stock are not on the page, so they are not a change.
+        pricing.record_check(hidden, price=Decimal("41.00"), delivery_cost=Decimal("0.00"), availability=OUT)
+        pricing.record_check(hidden, price=Decimal("0"), delivery_cost=None, availability=OUT)
+        hidden.refresh_from_db()
+        self.assertEqual((hidden.price, hidden.changed_at), (Decimal("41.00"), None))
         self.assertEqual(sitemap_entries(self.client)[self.recently_sold_out.get_absolute_url()],
                          day(now - timedelta(days=9)))
 
@@ -168,6 +172,80 @@ class SitemapTests(TestCase):
         with self.assertNumQueries(6):
             response = self.client.get("/sitemap.xml")
         self.assertContains(response, "/products/extra-14/")
+
+
+class HiddenShopTests(TestCase):
+    """Taking a shop off a page moves its lastmod forward, whether the listing is hidden or the shop switched off."""
+
+    def setUp(self):
+        cache.clear()
+        self.set = make_set(make_game())
+        ProductSet.objects.update(updated_at=None)
+        self.product = make_product(self.set, slug="pe-etb")
+        self.shop, self.other = make_retailer("Harbour Games"), make_retailer("Northgate Cards")
+        self.a = make_listing(self.product, self.shop)
+        self.b = make_listing(self.product, self.other, price="45.00")
+        now = timezone.now()
+        Product.objects.filter(pk=self.product.pk).update(updated_at=now - timedelta(days=60))
+        Listing.objects.filter(pk=self.a.pk).update(changed_at=now - timedelta(days=20))
+        Listing.objects.filter(pk=self.b.pk).update(changed_at=now - timedelta(days=10))
+        self.url = self.product.get_absolute_url()
+        self.assertEqual(sitemap_entries(self.client)[self.url], day(now - timedelta(days=10)))
+
+    def test_hiding_a_listing_moves_lastmod_forward(self):
+        from catalogue import autopilot
+
+        autopilot.hide(Listing.objects.get(pk=self.b.pk))
+        self.assertEqual(sitemap_entries(self.client)[self.url], day(timezone.now()))
+
+    def test_switching_a_shop_off_or_on_moves_lastmod_forward(self):
+        from django.contrib.admin import site
+
+        from catalogue.models import Retailer
+
+        admin = site._registry[Retailer]
+        for active in (False, True):
+            Listing.objects.filter(pk=self.b.pk).update(changed_at=timezone.now() - timedelta(days=10))
+            self.other.is_active = active
+            admin.save_model(None, self.other, SimpleNamespace(changed_data=["is_active"]), True)
+            cache.clear()
+            self.assertEqual(sitemap_entries(self.client)[self.url], day(timezone.now()))
+        # Any other edit of the shop leaves its listings alone.
+        Listing.objects.filter(pk=self.b.pk).update(changed_at=timezone.now() - timedelta(days=10))
+        admin.save_model(None, self.other, SimpleNamespace(changed_data=["name"]), True)
+        self.assertEqual(Listing.objects.get(pk=self.b.pk).changed_at.date(), (timezone.now() - timedelta(days=10)).date())
+
+    def test_admin_stamps_a_hidden_listing_only_when_it_is_hidden_or_shown(self):
+        from catalogue.admin import stamp_shown_change
+
+        Listing.objects.filter(pk=self.b.pk).update(is_active=False, changed_at=None)
+        hidden = Listing.objects.get(pk=self.b.pk)
+        stamp_shown_change(SimpleNamespace(instance=hidden, changed_data=["price"]))
+        self.assertIsNone(hidden.changed_at)
+        hidden.is_active = True
+        stamp_shown_change(SimpleNamespace(instance=hidden, changed_data=["is_active", "price"]))
+        self.assertIsNotNone(hidden.changed_at)
+
+    def test_a_read_leaves_a_hidden_listing_undated(self):
+        from catalogue.importers import Offer, apply_offers
+        from catalogue.models import Retailer
+
+        shop = make_retailer("Reader", source_type=Retailer.Source.SHOPIFY, source_url="https://reader.example",
+                             delivery_cost=Decimal("0"))
+        hidden = make_listing(self.product, shop, price="50.00", url="https://reader.example/products/pe-etb",
+                              is_active=False, hours_ago=100, deal_quantity=None)
+        swept = make_listing(make_product(self.set, name="Prismatic Evolutions Booster Bundle", slug="pe-bundle"), shop,
+                             url="https://reader.example/products/pe-bundle", is_active=False)
+        # Back from out of date, a multi-buy, then a new price: none of it is on the page. The bundle is swept
+        # out of stock by the same reads.
+        apply_offers(shop, [Offer(title=self.product.name, url=hidden.url, price=Decimal("50.00"))])
+        apply_offers(shop, [Offer(title=self.product.name, url=hidden.url, price=Decimal("50.00"),
+                                  deal=(2, Decimal("90.00")))])
+        apply_offers(shop, [Offer(title=self.product.name, url=hidden.url, price=Decimal("48.00"))])
+        hidden.refresh_from_db()
+        swept.refresh_from_db()
+        self.assertEqual((hidden.price, hidden.deal_quantity, hidden.changed_at), (Decimal("48.00"), 2, None))
+        self.assertEqual((swept.availability, swept.changed_at), (OUT, None))
 
 
 class PageEditTests(TestCase):
@@ -366,11 +444,28 @@ class ChangedAtTests(TestCase):
         self.assertFalse(Listing.objects.exclude(pk=self.listing.pk).filter(changed_at__isnull=False).exists())
 
     def test_new_delivery_rules_stamp_the_listings_they_change(self):
+        hidden = make_listing(make_product(self.set, name="Surging Sparks Elite Trainer Box", slug="ss-etb"), self.shop,
+                              is_active=False)
         self.shop.delivery_cost = Decimal("3.99")
         self.shop.save()
         pricing.apply_delivery_rules(self.shop)
         self.listing.refresh_from_db()
+        hidden.refresh_from_db()
         self.assertIsNotNone(self.listing.changed_at)
+        # Not on its page: its new delivery is not a change there.
+        self.assertEqual((hidden.delivery_cost, hidden.changed_at), (Decimal("3.99"), None))
+
+    def test_moving_a_listing_stamps_only_a_shown_one(self):
+        from catalogue.owner_edits import move_listing
+
+        target = make_product(self.set, name="Surging Sparks Elite Trainer Box", slug="ss-etb")
+        hidden = make_listing(make_product(self.set, name="Surging Sparks Booster Bundle", slug="ss-bundle"),
+                              make_retailer("Other"), is_active=False)
+        move_listing(self.listing, target)
+        move_listing(hidden, target)
+        self.listing.refresh_from_db()
+        hidden.refresh_from_db()
+        self.assertEqual((self.listing.changed_at is not None, hidden.changed_at), (True, None))
 
     def test_a_product_save_moves_updated_at_only_for_what_the_page_shows(self):
         before = timezone.now() - timedelta(days=3)

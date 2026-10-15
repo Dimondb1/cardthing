@@ -15,8 +15,10 @@ SHOWN_LISTING_FIELDS = {"product", "retailer", "url", "price", "delivery_cost", 
 
 
 def stamp_shown_change(form):
-    """Stamp a listing form's instance as changed when it is new or a field the page shows was changed."""
-    if form.instance.pk is None or SHOWN_LISTING_FIELDS & set(form.changed_data):
+    """Stamp a listing form's instance as changed when it is new, hidden or shown, or when a field the page
+    shows was changed on a listing the page shows."""
+    changed = set(form.changed_data)
+    if form.instance.pk is None or "is_active" in changed or (form.instance.is_active and SHOWN_LISTING_FIELDS & changed):
         form.instance.changed_at = timezone.now()
 
 
@@ -208,6 +210,9 @@ class RetailerAdmin(admin.ModelAdmin):
         # New delivery rules apply to the shop's prices at once, not at its next import.
         if change and {"delivery_cost", "delivery_cost_up_to", "free_delivery_over"} & set(form.changed_data):
             pricing.apply_delivery_rules(obj)
+        if change and "is_active" in form.changed_data:
+            # The shop leaves or joins every page it is listed on: those pages changed (the sitemap's lastmod).
+            Listing.objects.filter(retailer=obj, is_active=True).update(changed_at=timezone.now())
 
 
 @admin.register(Listing)

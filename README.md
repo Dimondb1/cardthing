@@ -661,10 +661,11 @@ All of this can be done from a phone, without the server console: admin
 has a **Things to check** page (`/admin/checks/`) that lists doubtful prices
 with "This price is right" (it then counts while it moves less than 10% for
 30 days) and "Hide this one", the prices excluded automatically with "Show it
-anyway", the wrong matches with a Hide button under each price, the possible duplicates the
-`--loose` rule finds with a Merge button for each group (only the group
-exactly as shown is merged) and "Not the same" beside each product (the
-pair is never suggested again), the products the stockist finder may have
+anyway", the wrong matches with a Hide button under each price, the possible duplicates
+(see "Possible duplicates" below) with a Merge these button for each group
+(only the group exactly as shown is merged, the undoable kind, each pair
+listed under Sorted for you with Undo) and "Not the same" beside each
+product (the pair is never suggested again), the products the stockist finder may have
 found at another shop with "Yes, link it" and "No, not this" (see
 "Stockist finder" below), the ones visitors want most first, and the shops
 whose delivery charge is not known with a link to fill it in.
@@ -673,9 +674,38 @@ Only rows that change what a visitor sees are listed. A doubtful price is
 listed only while it is the product's cheapest buyable price: one that is
 dearer than another shop, or out of stock, never shows as the cheapest and
 is left as it is (the page says how many). A product whose second price is
-doubtful is not a wrong match. Two products a shop sells side by side are
+doubtful is not a wrong match. Two products a shop shows side by side are
 never suggested as duplicates. A set showing its publisher's date is not
 listed because a community source says otherwise.
+
+### Possible duplicates
+
+Possible duplicates are pairs, each a product to keep and one to merge into
+it, found by any key two names of one product share in one game and
+language (`merge_duplicates.duplicate_pairs`):
+
+- the same words once shop wording is set aside (the `--loose` key below),
+  whatever type each is filed under, since shops file one product under two
+  ("Booster Display" as an Elite Trainer Box, "Gift Set" and "Gift Box");
+- one set code with the box size and kind of product ("Triple Beat sv1a
+  Booster Box" and "Triplet Beat sv1a Japanese Booster Box");
+- for Pokémon, one Simplified Chinese set code ("Pursue Glory Together" and
+  "Chasing Glory Together csv10");
+- for products filed under a set, the words that are not the set's ("SV10
+  Booster Box" and "Destined Rivals Booster Box", both under Destined
+  Rivals);
+- the same barcode.
+
+A pair found only by a set code or a set must also agree on numbers, set
+codes, booster kinds, the words that mark another product ("Collector's
+Edition", "Case"), size and wrapping ("No Shrink", "Half"). Each pair stands
+alone: a product is never pulled in because it looks like a third. A pair
+you said are not the same is left out, and so is one a shop shows both of.
+eBay and Amazon search for every product and a hidden listing is not shown,
+so neither counts. When a shop shows one product and has its listing on the
+other hidden, the one it shows is kept, so its price stays on the site. Two
+products one shop shows side by side are listed under their kept product
+separately, so Merge these never joins them.
 
 ### The autopilot
 
@@ -761,12 +791,23 @@ confidence; a "low" one counts as could not tell.
 - **A wrong match:** "different" hides that price only when Claude is sure
   or fairly sure the other price is the product. Both called the same stay
   with you.
-- **Possible duplicates:** "different" keeps the pair apart, sure or fairly
-  sure. A sure "same" merges them, the undoable kind, unless their barcodes
-  differ, their shops charge far apart, a shop lists both or they are in
-  different languages. A fairly sure "same" stays with you; **Merge the
-  pairs Claude is sure are the same** merges any sure pairs left on your
-  tap. The merged product is switched
+- **Possible duplicates:** a sure "different" naming a difference that makes
+  another product (game, set, kind, quantity, language or edition) keeps the
+  pair apart for good. Any other "different" (a variant, a condition, or a
+  fairly sure one) stays with you and is asked again when the pair changes.
+  A sure "same" merges them, the undoable kind, unless their barcodes
+  differ, their shops charge far apart, a shop shows both or they are in
+  different languages. A fairly sure "same" merges them too when the names
+  agree on every point a rule can check: the same words once shop wording
+  is set aside, one language, equal numbers, set codes and booster kinds,
+  and no "Collector's Edition", "Case", size or wrapping on one side only.
+  A set code shared by names whose other words differ is not enough.
+  Otherwise it stays with you; **Merge the pairs Claude is sure are the
+  same** merges any sure pairs left on your tap. "Far apart" means outside
+  0.75 to 1.33 of each other when each product has two or more shop prices,
+  and more than twice apart when either has only one, since one shop's price
+  may be a sale's or a pre-order's (Solent's £20 against another shop's
+  £27.99 is close enough). The merged product is switched
   off, not deleted; its barcode, shop pages and linked shop rows move to the
   kept product so shop reads never price it; and Undo puts back its listings,
   history and address. A price that has not changed since the merge gets
@@ -779,8 +820,9 @@ confidence; a "low" one counts as could not tell.
   the page says which.
 - **Could not tell:** the row is asked once more at high effort (at once, if
   your effort setting is high). Still not able to tell, it is settled the
-  way that adds nothing to the site: the found page is not linked, the pair
-  stays apart, the doubtful price is hidden. A wrong match stays with you.
+  way that adds nothing to the site: the found page is not linked, the
+  doubtful price is hidden. A pair and a wrong match stay with you; a pair
+  is never kept apart for good on a could not tell.
   A "different" that names only the price counts as a fairly sure "same".
 
 It starts in **trial**: it only suggests, and its answer shows under each
@@ -796,15 +838,18 @@ answer, only while the row is unchanged, never one from a fallback, never on
 a row anyone answered before (an undone answer included). While Claude may
 act, every answer it leaves for you says why under its row ("Left for you:
 the shop's barcode is not ours, so only you can say.", "Claude was only
-fairly sure, and merges only when sure.", and so on). The run line says how
+fairly sure, and the names leave room for another product.", and so on). The run line says how
 many rows were sorted from earlier answers.
 
 Every act needs the exact price Claude saw. A fallback model's answer is
 shown but never acts, and the row is asked again at the next run. A row is
 asked again when its titles, price or barcode change, at most five times.
-Rows an answer can clear are asked first: doubtful prices a "same" would
-tick off and wrong matches, then duplicate pairs, then found pages a "same"
-would link, then the rest, then the careful second looks. An hourly run
+Rows an answer can clear are asked first, taking turns: a doubtful price a
+"same" would tick off (or a wrong match, its two prices together), a
+duplicate pair, a found page a "same" would link, and round again, so a
+long list of prices never keeps the pairs waiting. Pairs and found pages
+visitors want most come first in their turn. Then the rest, then the
+careful second looks. An hourly run
 asks up to 25 rows; one you ask for with **Ask Claude now** up to 100,
 within the same $1 and 10 minute limits. **Ask Claude now** starts the run
 at once in its own process (`judge_checks` holds a lock file in the cache
@@ -843,7 +888,10 @@ limit, or one run past $1. A row is asked again only when its titles or
 price band change, at most five times. Roughly, per answer at medium
 effort: Claude Opus 5.5 (the default) $0.023, Claude Sonnet 5.5 $0.012,
 Claude Haiku 5.5 under $0.001. The limit defaults to $10 a month, about 430
-answers on Opus. Low effort costs about half, high about twice.
+answers on Opus. To raise it, open **Claude settings and key**, set
+**Monthly limit in US dollars** and tap **Save settings**: $25, the most the
+page accepts unless `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` is raised, is about
+1,080 answers on Opus. Low effort costs about half, high about twice.
 
 **Setting it up by phone.** Sign up at console.anthropic.com; under Billing
 buy credit; under Limits set a monthly spend limit (Anthropic then stops the
@@ -858,8 +906,7 @@ off**, **Forget the key**, or delete the key in the Console.
 It does something only when you tapped **Ask Claude now**, or an hour after
 its last run when rows are waiting, and never while Pause all is on. Each
 run lets the free autopilot answer first, then asks Claude about up to 25
-rows, one per request: the cheapest doubtful prices, the wrong matches, the
-found pages (most wanted first), then the duplicates. A wrong key, no
+rows, one per request, in the turns above. A wrong key, no
 credit or a model the key cannot use stops it and tells you once a day by
 push and email; it starts again when you save a key, change the model or tap
 Ask Claude now, or after a day. A busy Anthropic only ends that run.
@@ -2292,9 +2339,17 @@ by a check appears on the next request.
 product's old address, and a visit to an old address is sent to the
 kept product with a permanent redirect, so links, search results and
 watchlists saved in browsers keep working. Old addresses are listed in
-admin under "Old product addresses". Price history, restocks, pre-order
-openings, clicks and stock alerts move to the kept product. `tidy_catalogue`
-merges the same way when it tidies a name onto another product's. A count
+admin under "Old product addresses". Listings, price history, restocks,
+pre-order openings, clicks, shop pages, linked shop rows and stock alerts
+move to the kept product. Every merge it makes is the undoable kind: the
+other product is switched off rather than deleted, and each pair is listed
+under Sorted for you on Things to check ("The hourly tidy merged them")
+with an Undo that brings it back with its listings, history and address. A
+pair whose merge anyone undid is never merged by the hourly run again, and
+nor is a pair a shop shows both of (two products, to that shop), or whose
+merge would take a shop's shown price off the site; those are left for
+Things to check. No shop's listing is ever deleted. `tidy_catalogue`
+merges the old way when it tidies a name onto another product's. A count
 with and without its noun ("Display (10 Bundles)" and "Display (10)")
 counts as the same name; a name
 with nothing but the kind of product left ("Scarlet & Violet Elite Trainer
@@ -2350,7 +2405,8 @@ Box". For Pokémon it also pairs a Chinese box with the same box named
 without its code, a box called only "Chinese" with the Simplified one, and
 two boxes of one code and size whose shops translate the set name
 differently ("Pursue Glory Together" and "Chasing Glory Together csv10").
-Things to check shows these pairs for a yes or no. It never runs on its own: read the dry run, and run it without
+Things to check shows these pairs, and more (see "Possible duplicates"),
+for a yes or no. It never runs on its own: read the dry run, and run it without
 `--dry-run` only when every group is right.
 
 A merge made from the owner's spreadsheet (Same as product id, see "Your

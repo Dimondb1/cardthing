@@ -1,5 +1,6 @@
 """The owner's spreadsheet download: the sheets, what each row says, cells Excel keeps as written, the values
-an upload is compared with, and nothing personal in the file."""
+an upload is compared with, and nothing personal in the file. Then reading a file back as Excel saves it,
+and turning each cell into what the site stores."""
 
 import gzip
 import json
@@ -26,7 +27,7 @@ from .models import (
     CheckAnswer, ClaudeJudge, DailySearch, DailyVisitor, DataExport, ImportRun, Listing, Product, ProductAlias,
     Retailer, ShopProduct, StockAlert,
 )
-from .testing import make_game, make_listing, make_product, make_retailer, make_set
+from .testing import Pasted, excel_resave, make_game, make_listing, make_product, make_retailer, make_set
 
 Kind = CheckAnswer.Kind
 Status = ShopProduct.Status
@@ -591,10 +592,258 @@ class CommandTests(Base):
 
         from django.conf import settings
 
-        code = ("import django, sys; django.setup(); import catalogue.workbook, catalogue.data_jobs; "
-                "print('openpyxl' in sys.modules)")
+        code = ("import django, sys; django.setup(); import catalogue.workbook, catalogue.data_jobs, "
+                "catalogue.workbook_plan; print('openpyxl' in sys.modules)")
         result = subprocess.run([sys.executable, "-c", code], cwd=settings.BASE_DIR, capture_output=True, text=True,
                                 env={**os.environ, "DJANGO_SETTINGS_MODULE": "ripraptor.settings"},
                                 timeout=60)
         self.assertEqual(result.stdout.strip(), "False", result.stderr)
 
+
+
+class ReadUploadTests(Base):
+    def test_a_file_as_excel_saves_it_reads_back_cell_by_cell(self):
+        listing = make_listing(self.box, self.shop, url="https://solent.example/products/ssp-box")
+        export, data, _base, _counts = self.export()
+        parsed = workbook.read_upload(excel_resave(data))
+        self.assertEqual(parsed.reference, (export.pk, export.token))
+        self.assertEqual(list(parsed.sheets), ["Products", "Listings", "Shop items", "Sets"])
+        self.assertEqual(parsed.unread, [])
+        [(number, cells)] = parsed.sheets["Products"]
+        self.assertEqual(number, 2)
+        self.assertEqual((cells["id"], cells["name"], cells["barcode"], cells["show"]),
+                         (self.box.pk, "Surging Sparks Booster Box", "0123456789012", "Yes"))
+        self.assertEqual(cells["release_date"], datetime(2026, 11, 15))
+        self.assertEqual(parsed.sheets["Listings"][0][1]["id"], listing.pk)
+        self.assertIn("name", parsed.columns["Products"])
+
+    def test_sheets_and_columns_are_found_however_they_are_moved_or_written(self):
+        export, data, _base, _counts = self.export()
+        moved = excel_resave(data, reorder_columns=True, extra_column=True, drop_custom_props=True)
+        book = load_workbook(BytesIO(moved))
+        book["Products"]["A1"].value = "NOTES  "  # the last heading, now first after the reorder
+        book["Products"].cell(row=1, column=book["Products"].max_column).value = "my notes"
+        heading = next(cell for cell in book["Products"][1] if cell.value == "Product id")
+        heading.value = "product  ID"
+        book.create_sheet("Workings")["A1"] = "sums"
+        book.move_sheet("Sets", offset=-3)
+        out = BytesIO()
+        book.save(out)
+        parsed = workbook.read_upload(out.getvalue())
+        # The number is on Read me too, for a program that drops custom properties.
+        self.assertEqual(parsed.reference, (export.pk, export.token))
+        self.assertEqual(parsed.sheets["Products"][0][1]["id"], self.box.pk)
+        self.assertEqual(parsed.sheets["Products"][0][1]["name"], "Surging Sparks Booster Box")
+        self.assertIn("The sheet Workings, which is not one of ours.", parsed.unread)
+        self.assertIn("Products, the column my notes.", parsed.unread)
+        self.assertIn("Listings, the column My notes.", parsed.unread)
+
+    def test_a_sheet_without_its_id_column_is_not_read(self):
+        _export, data, _base, _counts = self.export()
+        book = load_workbook(BytesIO(data))
+        book["Products"].delete_cols(1)
+        book["Sets"].delete_cols(5)   # Code: a missing column only means no changes from it
+        out = BytesIO()
+        book.save(out)
+        parsed = workbook.read_upload(out.getvalue())
+        self.assertNotIn("Products", parsed.sheets)
+        self.assertIn("Products has no Product id column, so nothing on it was read.", parsed.unread)
+        self.assertIn("Sets", parsed.sheets)
+        self.assertNotIn("code", parsed.columns["Sets"])
+
+    def test_blank_rows_are_skipped_and_rows_keep_their_excel_numbers(self):
+        second = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        _export, data, _base, _counts = self.export()
+        book = load_workbook(BytesIO(data))
+        book["Products"].insert_rows(3, amount=2)
+        out = BytesIO()
+        book.save(out)
+        rows = workbook.read_upload(out.getvalue()).sheets["Products"]
+        self.assertEqual([number for number, _cells in rows], [2, 5])
+        self.assertEqual({cells["id"] for _number, cells in rows}, {self.box.pk, second.pk})
+
+    def test_a_formula_reads_back_as_its_formula(self):
+        _export, data, _base, _counts = self.export()
+        changed = excel_resave(data, [("Products", self.box.pk, "Name", Pasted('=PROPER("box")'))])
+        [(_number, cells)] = workbook.read_upload(changed).sheets["Products"]
+        self.assertEqual(cells["name"], '=PROPER("box")')
+
+    def test_a_file_that_is_not_a_workbook_or_is_too_big_is_refused(self):
+        with self.assertRaisesMessage(workbook.FileRefused, "Save it as Excel Workbook (.xlsx)"):
+            workbook.read_upload(b"name,game\nBox,Pokemon\n")
+        with self.assertRaisesMessage(workbook.FileRefused, "Save it as Excel Workbook (.xlsx)"):
+            workbook.read_upload(zipfile_bytes({"hello.txt": "hi"}))
+        for n in range(3):
+            make_product(self.set, name=f"Surging Sparks Thing {n}")
+        _export, data, _base, _counts = self.export()
+        with mock.patch.object(workbook, "MAX_SHEET_ROWS", 3), \
+                self.assertRaisesMessage(workbook.FileRefused, "Products has more than 3 rows. Split your changes"):
+            workbook.read_upload(data)
+
+    def test_a_file_without_its_number_reads_with_none(self):
+        _export, data, _base, _counts = self.export()
+        book = load_workbook(BytesIO(excel_resave(data, drop_custom_props=True)))
+        book["Read me"]["B2"] = "lost"
+        out = BytesIO()
+        book.save(out)
+        self.assertIsNone(workbook.read_upload(out.getvalue()).reference)
+
+
+def zipfile_bytes(members):
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        for name, text in members.items():
+            archive.writestr(name, text)
+    return out.getvalue()
+
+
+class ExcelTypingTests(TestCase):
+    """The stand-in for Excel used by the upload tests behaves as Excel does with typing."""
+
+    def test_typing_into_text_and_general_cells(self):
+        from .testing import excel_typed
+
+        self.assertEqual(excel_typed("0123456789012", "@"), "0123456789012")
+        self.assertEqual(excel_typed("0123456789012", "General"), 123456789012)
+        self.assertEqual(excel_typed("5.05322E+12", "General"), 5.05322e12)
+        self.assertIs(excel_typed("TRUE", "General"), True)
+        self.assertEqual(excel_typed("TRUE", "@"), "TRUE")
+        self.assertEqual(excel_typed("15/11/2026", "dd/mm/yyyy"), datetime(2026, 11, 15))
+        self.assertIsInstance(excel_typed("=A1", "General"), Pasted)
+        self.assertEqual(excel_typed("=A1", "@"), "=A1")
+        self.assertEqual(excel_typed("Box\xa0 ", "@"), "Box\xa0 ")
+
+    def test_the_file_is_saved_with_shared_strings(self):
+        game = make_game()
+        make_product(make_set(game), name="Prismatic Evolutions Elite Trainer Box")
+        export = DataExport.objects.create()
+        data, _base, _counts = workbook.build_export(export)
+        with zipfile.ZipFile(BytesIO(excel_resave(data))) as archive:
+            self.assertIn("xl/sharedStrings.xml", archive.namelist())
+            sheet = archive.read("xl/worksheets/sheet2.xml").decode()
+            self.assertNotIn("inlineStr", sheet.split("<sheetData>")[1].split("</sheetData>")[0].replace(
+                't="inlineStr"/>', ""))
+            self.assertIn("Prismatic Evolutions Elite Trainer Box", archive.read("xl/sharedStrings.xml").decode())
+
+
+class NormaliserTests(TestCase):
+    def test_yes_and_no(self):
+        for value in ("Yes", "y", "TRUE", "true", "1", 1, 1.0, True, " YES "):
+            self.assertEqual(workbook.as_yes_no(value), (True, ""), value)
+        for value in ("No", "n", "False", "0", 0, False):
+            self.assertEqual(workbook.as_yes_no(value), (False, ""), value)
+        for value in (None, "", "  "):
+            self.assertEqual(workbook.as_yes_no(value), (None, ""))
+        self.assertEqual(workbook.as_yes_no("Maybe"), (None, "Maybe is not Yes or No."))
+
+    def test_ids_and_new_rows(self):
+        self.assertEqual(workbook.as_ref(12381.0), (12381, ""))
+        self.assertEqual(workbook.as_ref(12381), (12381, ""))
+        self.assertEqual(workbook.as_ref(" 12381 "), (12381, ""))
+        self.assertEqual(workbook.as_ref("12381.0"), (12381, ""))
+        self.assertEqual(workbook.as_ref("New 3"), ("new3", ""))
+        self.assertEqual(workbook.as_ref(None), (None, ""))
+        for value in ("abc", 12.5, 0, -3, True, "new"):
+            ref, problem = workbook.as_ref(value)
+            self.assertIsNone(ref, value)
+            self.assertTrue(problem, value)
+        self.assertEqual(workbook.as_refs("455, 812;  9 455"), ([455, 812, 9], ""))
+        self.assertEqual(workbook.as_refs(455.0), ([455], ""))
+        self.assertEqual(workbook.as_refs("455, x")[0], [])
+
+    def test_barcodes(self):
+        self.assertEqual(workbook.as_barcode("0123456789012"), ("0123456789012", ""))
+        # Excel dropped the leading zero from a barcode typed into a number cell: the same barcode.
+        self.assertEqual(workbook.as_barcode(123456789012), ("123456789012", ""))
+        self.assertTrue(workbook.same_barcode("123456789012", "0123456789012"))
+        self.assertFalse(workbook.same_barcode("123456789013", "0123456789012"))
+        self.assertEqual(workbook.as_barcode(5053222123458.0), ("5053222123458", ""))
+        self.assertEqual(workbook.as_barcode("5053 2221 2345 8"), ("5053222123458", ""))
+        self.assertEqual(workbook.as_barcode(None), ("", ""))
+        for damaged in ("5.05322E+12", "5,053,222,123,458", 5.05322e20, 12.5):
+            self.assertEqual(workbook.as_barcode(damaged), (None, workbook.EXCEL_NUMBER), damaged)
+        self.assertEqual(workbook.as_barcode("ABC123")[0], None)
+        self.assertTrue(workbook.gs1_ok("5053222123458"))
+        self.assertTrue(workbook.gs1_ok("0820650851247"))
+        self.assertTrue(workbook.gs1_ok("820650851247"))   # leading zeros do not change the check
+        self.assertFalse(workbook.gs1_ok("5053222123456"))
+        self.assertFalse(workbook.gs1_ok("1234567"))
+
+    def test_dates_are_read_day_first(self):
+        for value in ("15/11/2026", "15/11/26", "15-11-2026", "2026-11-15", "15 Nov 2026", "15 November 2026",
+                      datetime(2026, 11, 15, 0, 0), date(2026, 11, 15), 46341, 46341.0):
+            self.assertEqual(workbook.as_date(value), ("2026-11-15", ""), value)
+        self.assertEqual(workbook.as_date("05/11/2026"), ("2026-11-05", ""))
+        self.assertEqual(workbook.as_date(None), (None, ""))
+        for value in ("Jan 2026", "11/15/2026", "soon", "31/02/2026", 12, "01/01/1900"):
+            day, problem = workbook.as_date(value)
+            self.assertIsNone(day, value)
+            self.assertTrue(problem, value)
+
+    def test_types_by_code_name_game_name_or_short_name(self):
+        self.assertEqual(workbook.as_type("Booster box", "pokemon"), ("booster_box", ""))
+        self.assertEqual(workbook.as_type("booster_box", "pokemon"), ("booster_box", ""))
+        self.assertEqual(workbook.as_type("Booster bundle", "pokemon"), ("bundle", ""))
+        self.assertEqual(workbook.as_type("Bundle", "pokemon"), ("bundle", ""))
+        self.assertEqual(workbook.as_type("ETB", "pokemon"), ("elite_trainer_box", ""))
+        self.assertEqual(workbook.as_type("Commander deck", "magic-the-gathering"), ("deck", ""))
+        self.assertEqual(workbook.as_type("Collector booster box", "magic-the-gathering"),
+                         ("collector_booster_box", ""))
+        self.assertEqual(workbook.as_type("Collector booster box", "a-game-with-plain-names"),
+                         ("collector_booster_box", ""))
+        # A type the game does not use is still read, so a product filed under one keeps it while untouched.
+        code, problem = workbook.as_type("Collector booster box", "pokemon")
+        self.assertEqual(code, "collector_booster_box")
+        self.assertIn("not a type this game uses", problem)
+        self.assertTrue(workbook.as_type("Playmat", "pokemon")[1])
+        self.assertTrue(workbook.as_type("", "pokemon")[1])
+
+    def test_languages(self):
+        self.assertEqual(workbook.as_language("English"), ("", ""))
+        self.assertEqual(workbook.as_language("japanese"), ("ja", ""))
+        self.assertEqual(workbook.as_language("Simplified Chinese"), ("zh-hans", ""))
+        self.assertEqual(workbook.as_language("ko"), ("ko", ""))
+        self.assertTrue(workbook.as_language("Klingon")[1])
+
+    def test_names_are_tidied_and_refused_as_the_hourly_tidy_would(self):
+        self.assertEqual(workbook.as_name("Surging\xa0Sparks  Booster Box! "), ("Surging Sparks Booster Box", ""))
+        self.assertEqual(workbook.as_name("Surging Sparks Booster Box - Pre-Order"), ("Surging Sparks Booster Box", ""))
+        for value in ("", None, "Booster Box", "Pikachu ex 063/091 Single", "+Surging Sparks Box",
+                      "Surging Sparks Card Sleeves"):
+            self.assertTrue(workbook.as_name(value)[1], value)
+
+    def test_choices_and_text(self):
+        self.assertEqual(workbook.as_choice("not OURS", workbook.DECISIONS), ("Not ours", ""))
+        self.assertEqual(workbook.as_choice(None, workbook.DECISIONS), (None, ""))
+        self.assertTrue(workbook.as_choice("Maybe", workbook.DECISIONS)[1])
+        self.assertEqual(workbook.as_text(151), ("151", ""))
+        self.assertEqual(workbook.as_text(151.0), ("151", ""))
+        self.assertEqual(workbook.as_text(" SV\x0b08 "), ("SV08", ""))
+
+    def test_sets_by_name_address_code_or_new_row(self):
+        names = workbook.SetNames()
+        names.add(1, 10, "Surging Sparks", "SV08")
+        names.add(1, 11, "Black Bolt", "BLK")
+        names.add(2, 20, "Foundations", "FDN")
+        names.add(1, "new1", "Mega Evolution", "MEG")
+        self.assertEqual(names("surging sparks", 1), (10, ""))
+        self.assertEqual(names("Surging-Sparks", 1), (10, ""))
+        self.assertEqual(names("sv08", 1), (10, ""))
+        self.assertEqual(names("new1", 1), ("new1", ""))
+        self.assertEqual(names("Mega Evolution", 1), ("new1", ""))
+        self.assertEqual(names(None, 1), (None, ""))
+        self.assertEqual(names("Foundations", 1), (None, "Foundations is a set of another game."))
+        self.assertIn("no set called", names("Nowhere", 1)[1])
+        self.assertIn("No new set new2", names("new2", 1)[1])
+        # The row's own set keeps its name even when another set has the same one.
+        names.add(1, 12, "Surging Sparks", "")
+        self.assertEqual(names("Surging Sparks", 1, current=12, current_name="Surging Sparks"), (12, ""))
+
+    def test_games_by_name_short_name_or_address(self):
+        games = workbook.GameNames([(1, "Pokémon", "", "pokemon"), (2, "Magic: The Gathering", "Magic",
+                                                                   "magic-the-gathering")])
+        self.assertEqual(games("pokémon"), (1, ""))
+        self.assertEqual(games("Magic"), (2, ""))
+        self.assertEqual(games("magic-the-gathering"), (2, ""))
+        self.assertTrue(games("Yu-Gi-Oh")[1])
+        self.assertTrue(games(None)[1])

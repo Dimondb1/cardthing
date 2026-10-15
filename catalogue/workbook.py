@@ -11,6 +11,8 @@ so a web worker never loads it: the page that takes an upload only needs quick_r
 
 import re
 from collections import defaultdict
+from datetime import date, datetime
+from io import BytesIO
 from tempfile import SpooledTemporaryFile
 from typing import NamedTuple
 
@@ -20,12 +22,14 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import checks, languages, types
+from .classify import NOT_SEALED, is_generic, tidy_name
 from .importers import ean_key, link_key
 from .insights import left_out_lines
 from .languages import CHINESE, SIMPLIFIED
+from .management.commands.import_products import TYPES as TYPE_ALIASES
 from .management.commands.merge_duplicates import chinese_code_key, loose_key
 from .models import CheckAnswer, Game, ImportRun, Listing, Product, ProductAlias, ProductSet, ShopProduct
-from .releases import OWNER
+from .releases import OWNER, compact_code, month_number, name_key
 from .sanity import MARKETPLACES
 
 # Orange headings mark what he may change: --color-brand-soft in web/static/css/tokens.css. The tokens rule is
@@ -698,3 +702,426 @@ def quick_reference(archive):
         return None
     found = REFERENCE.search(text)
     return (int(found.group(1)), found.group(2)) if found else None
+
+
+# Reading an upload ------------------------------------------------------------------------------------------
+# The file comes back from Excel, not from us: sheets may be reordered, columns moved or added, rows sorted,
+# deleted or added, and every value typed may have become a number, a date, a true or false, or a formula.
+# Reading keeps each cell as Excel stored it; the normalisers below turn it into what the site stores, and are
+# applied alike to the download's values, the file's and the site's, so only a real change ever counts.
+
+MAX_SHEET_ROWS = 50_000
+UNREADABLE = "This file could not be read as an Excel workbook. Save it as Excel Workbook (.xlsx) and upload that."
+LOST_NUMBER = ("This file has lost its file number or is over 90 days old. Download a fresh file and copy your "
+               "changes into it.")
+TOO_BIG = "Split your changes over several uploads."
+
+
+class FileRefused(Exception):
+    """A whole file that is not read, with the sentence the owner is shown."""
+
+
+class Parsed(NamedTuple):
+    reference: tuple   # (download pk, token), or None when the file has lost its number
+    sheets: dict       # {sheet name: [(Excel row number, {column key: value as Excel stored it})]}
+    columns: dict      # {sheet name: the column keys the sheet still has}
+    unread: list       # plain lines: the sheets and columns not read, and why
+
+
+def fold(text):
+    """A sheet name or heading as it is matched: no spaces, any case."""
+    return re.sub(r"\s+", "", str(text or "")).casefold()
+
+
+SHEET_BY_NAME = {fold(sheet.name): sheet for sheet in SHEETS}
+KNOWN_SHEETS = {fold(README), fold(LISTS)}
+
+
+def blank(value):
+    return value is None or (isinstance(value, str) and not clean_text(value))
+
+
+def parse_reference(text):
+    found = REFERENCE.search(str(text or ""))
+    return (int(found.group(1)), found.group(2)) if found else None
+
+
+def read_upload(data):
+    """The workbook in ``data`` as Parsed. Sheets are found by name and columns by heading, ignoring case and
+    spaces, wherever they now are. A sheet without its id column is not read; a column not in the spec is
+    listed as not read. Raises FileRefused for a file that is not a workbook or holds too many rows."""
+    from openpyxl import load_workbook
+
+    try:
+        book = load_workbook(BytesIO(data), read_only=True, data_only=False)
+    except Exception as exc:
+        raise FileRefused(UNREADABLE) from exc
+    try:
+        reference = None
+        for prop in book.custom_doc_props:
+            if prop.name == REFERENCE_PROPERTY:
+                reference = parse_reference(prop.value)
+        sheets, columns, unread = {}, {}, []
+        for ws in book.worksheets:
+            key = fold(ws.title)
+            if key == fold(README) and reference is None:
+                # Excel keeps custom properties, but another program may not: the number is on Read me too.
+                for row in ws.iter_rows(min_row=1, max_row=10, max_col=2, values_only=True):
+                    for value in row:
+                        reference = reference or parse_reference(value)
+                continue
+            if key in KNOWN_SHEETS:
+                continue
+            sheet = SHEET_BY_NAME.get(key)
+            if sheet is None:
+                unread.append(f"The sheet {ws.title}, which is not one of ours.")
+                continue
+            if sheet.name in sheets:
+                unread.append(f"A second sheet called {ws.title}.")
+                continue
+            rows, present, notes = read_sheet(ws, sheet)
+            unread.extend(notes)
+            if rows is not None:
+                sheets[sheet.name] = rows
+                columns[sheet.name] = present
+    except FileRefused:
+        raise
+    except Exception as exc:
+        raise FileRefused(UNREADABLE) from exc
+    finally:
+        book.close()
+    return Parsed(reference, sheets, columns, unread)
+
+
+def read_sheet(ws, sheet):
+    """(rows, column keys present, notes) for one sheet; rows is None when the sheet has no id column."""
+    by_heading = {fold(column.heading): column for column in sheet.columns}
+    # Read-only mode trusts the size the file states, which another program may get wrong.
+    ws.reset_dimensions()
+    rows = ws.iter_rows(values_only=True)
+    heading_row = None
+    for number, values in enumerate(rows, start=1):
+        if any(not blank(value) for value in values):
+            heading_row = number, values
+            break
+        if number >= 10:
+            break
+    if heading_row is None:
+        return None, set(), [f"{sheet.name} has no headings, so nothing on it was read."]
+    start, headings = heading_row
+    place, notes = {}, []
+    for index, heading in enumerate(headings):
+        if blank(heading):
+            continue
+        column = by_heading.get(fold(heading))
+        if column is None:
+            notes.append(f"{sheet.name}, the column {clean_text(heading)}.")
+        elif column.key in place.values():
+            notes.append(f"{sheet.name}, a second column called {clean_text(heading)}.")
+        else:
+            place[index] = column.key
+    key_heading = next(column.heading for column in sheet.columns if column.key == sheet.key)
+    if sheet.key not in place.values():
+        notes.append(f"{sheet.name} has no {key_heading} column, so nothing on it was read.")
+        return None, set(), notes
+    found = []
+    for number, values in enumerate(rows, start=start + 1):
+        cells = {key: values[index] for index, key in place.items() if index < len(values)}
+        if all(blank(value) for value in cells.values()):
+            continue
+        found.append((number, cells))
+        if len(found) > MAX_SHEET_ROWS:
+            raise FileRefused(f"{sheet.name} has more than {MAX_SHEET_ROWS:,} rows. {TOO_BIG}")
+    return found, set(place.values()), notes
+
+
+# Normalisers: each returns (value, problem), the problem a plain sentence or "". A blank cell gives None,
+# except where blank means empty text.
+
+FORMULA_STARTS = ("=", "+", "-", "@")
+INTEGRAL = re.compile(r"\d+(?:\.0+)?")
+NEW_REF = re.compile(r"new\s*(\d{1,6})", re.I)
+REF_SPLIT = re.compile(r"[,;\s]+")
+YES = {"yes", "y", "true", "1"}
+NO = {"no", "n", "false", "0"}
+
+
+def as_text(value):
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, datetime):
+        value = value.date()
+    return clean_text(value), ""
+
+
+def tidy(value):
+    """A name as it is compared and saved: clean text, tidied as the hourly tidy-up would tidy it."""
+    text = clean_text(value)
+    return tidy_name(text) if text else ""
+
+
+def as_name(value, removable=True):
+    """A product name as it is saved: tidied as the hourly tidy-up would, so it is never renamed again. Refused
+    when the hourly tidy-up would remove a product with it; it never removes one with an uploaded image, which
+    ``removable`` False says."""
+    name = tidy(as_text(value)[0])
+    if not name:
+        return "", "A product needs a name."
+    if name.startswith(FORMULA_STARTS):
+        return name, "A name cannot start with = + - or @, which Excel reads as a formula."
+    if len(name) > 200:
+        return name, "Names are at most 200 characters."
+    if removable and NOT_SEALED.search(name):
+        return name, "This name reads as a single card or an accessory, so the hourly tidy-up would remove it."
+    if is_generic(name):
+        return name, "This name says only what kind of product it is. Add the set or the product's own name."
+    return name, ""
+
+
+def as_yes_no(value):
+    """True, False, or None for a blank cell, which changes nothing."""
+    if blank(value):
+        return None, ""
+    if isinstance(value, bool):
+        return value, ""
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value), ""
+    text = clean_text(value).casefold()
+    if text in YES:
+        return True, ""
+    if text in NO:
+        return False, ""
+    return None, f"{clean_text(value)} is not Yes or No."
+
+
+def as_ref(value):
+    """A row's id: a whole number, or new1, new2 and so on for a row added in this file. None when blank."""
+    if blank(value):
+        return None, ""
+    if isinstance(value, bool):
+        return None, f"{value} is not an id."
+    if isinstance(value, int):
+        return (value, "") if value > 0 else (None, f"{value} is not an id.")
+    if isinstance(value, float):
+        return (int(value), "") if value.is_integer() and value > 0 else (None, f"{value} is not an id.")
+    text = clean_text(value)
+    if INTEGRAL.fullmatch(text) and int(float(text)) > 0:
+        return int(float(text)), ""
+    new = NEW_REF.fullmatch(text)
+    if new:
+        return f"new{int(new.group(1))}", ""
+    return None, f"{text} is not an id. Use a product id, or new1, new2 and so on."
+
+
+def as_refs(value):
+    """Ids split on commas, semicolons or spaces, each once, in the order given."""
+    if blank(value):
+        return [], ""
+    parts = [value] if isinstance(value, (int, float)) else [p for p in REF_SPLIT.split(clean_text(value)) if p]
+    refs = []
+    for part in parts:
+        ref, problem = as_ref(part)
+        if problem:
+            return [], problem
+        if ref not in refs:
+            refs.append(ref)
+    return refs, ""
+
+
+EXCEL_NUMBER = "Excel turned this barcode into a number. Format the column as Text and type it again."
+
+
+def as_barcode(value):
+    """The barcode's digits, "" for a blank cell (which clears it), None for one that cannot be read. A
+    barcode Excel has rounded is refused: the digits it lost cannot be got back."""
+    if blank(value):
+        return "", ""
+    if isinstance(value, bool):
+        return None, f"{value} is not a barcode."
+    if isinstance(value, int):
+        return str(value), ""
+    if isinstance(value, float):
+        if value.is_integer() and 0 < value < 1e15:
+            return str(int(value)), ""
+        return None, EXCEL_NUMBER
+    text = clean_text(value)
+    if re.search(r"[eE][+-]|[.,]", text):
+        return None, EXCEL_NUMBER
+    digits = re.sub(r"[\s-]", "", text)
+    if not digits.isdigit():
+        return None, f"{text} is not a barcode: a barcode is 8 to 14 digits."
+    return digits, ""
+
+
+def same_barcode(a, b):
+    """Leading zeros never count: Excel drops them from a barcode typed into a number cell, and a UPC is an
+    EAN-13 without its first zero."""
+    return (a or "").lstrip("0") == (b or "").lstrip("0")
+
+
+def gs1_ok(digits):
+    """Whether a barcode has 8 to 14 digits and its last digit checks out, as on every shop's scanner."""
+    if not digits or not digits.isdigit() or not 8 <= len(digits) <= 14:
+        return False
+    body = digits[:-1]
+    total = sum(int(d) * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(body)))
+    return (10 - total % 10) % 10 == int(digits[-1])
+
+
+DAY_FIRST = re.compile(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})")
+ISO_DAY = re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})")
+DAY_MONTH_NAME = re.compile(r"(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})")
+SERIAL = (30000, 80000)   # 1982 to 2119, as Excel counts days
+YEARS = (1990, 2100)
+
+
+def as_date(value):
+    """An ISO date, or None for a blank cell (which clears the date). Day first, as in the UK: 05/11/2026
+    is 5 November, never 11 May."""
+    from openpyxl.utils.datetime import from_excel
+
+    if blank(value):
+        return None, ""
+    day = None
+    if isinstance(value, datetime):
+        day = value.date()
+    elif isinstance(value, date):
+        day = value
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        if SERIAL[0] <= value <= SERIAL[1]:
+            day = from_excel(value).date()
+    else:
+        text = clean_text(value)
+        try:
+            found = DAY_FIRST.fullmatch(text)
+            if found:
+                d, m, y = found.groups()
+                day = date(int(y) + (2000 if len(y) == 2 else 0), int(m), int(d))
+            elif ISO_DAY.fullmatch(text):
+                y, m, d = ISO_DAY.fullmatch(text).groups()
+                day = date(int(y), int(m), int(d))
+            elif DAY_MONTH_NAME.fullmatch(text):
+                d, month, y = DAY_MONTH_NAME.fullmatch(text).groups()
+                number = month_number(month)
+                day = date(int(y), number, int(d)) if number else None
+        except ValueError:
+            day = None
+    if day is None:
+        return None, f"{clean_text(value)} is not a date. Type it as 15/11/2026."
+    if not YEARS[0] <= day.year <= YEARS[1]:
+        return None, f"{day:%d/%m/%Y} is not a likely release date."
+    return day.isoformat(), ""
+
+
+def as_type(value, game_slug):
+    """A type's code, from the code, the game's own name for it, the plain name or a short name (ETB). Only a
+    type the game uses is taken."""
+    text = clean_text(value).casefold()
+    if not text:
+        return None, "Type is blank. Pick one from the list."
+    choices = types.type_choices(game_slug)
+    known = {code for code, _label in choices}
+    code = None
+    for kind, label in choices:
+        if text in (kind, label.casefold()):
+            code = kind
+    if code is None:
+        for kind, label in types.DEFAULT:
+            if text in (kind, label.casefold()):
+                code = kind
+    code = code or TYPE_ALIASES.get(text)
+    if code is None:
+        return None, f"{clean_text(value)} is not a type. Pick one from the list."
+    if code not in known:
+        # Still the code: a product filed under a type its game does not list keeps it while untouched.
+        return code, f"{clean_text(value)} is not a type this game uses. Pick one from the list."
+    return code, ""
+
+
+LANGUAGE_BY_NAME = {"english": languages.ENGLISH, "en": languages.ENGLISH,
+                    **{label.casefold(): code for code, label in languages.NAMES.items()},
+                    **{code: code for code in languages.NAMES}}
+
+
+def as_language(value):
+    """A language's code ("" for English) from its name or its code."""
+    text = clean_text(value).casefold()
+    if not text:
+        return None, "Language is blank. Pick one from the list."
+    if text in LANGUAGE_BY_NAME:
+        return LANGUAGE_BY_NAME[text], ""
+    return None, f"{clean_text(value)} is not a language the site knows. Pick one from the list."
+
+
+def as_choice(value, choices):
+    """One of ``choices`` in any case, or None when blank."""
+    text = clean_text(value)
+    if not text:
+        return None, ""
+    for choice in choices:
+        if text.casefold() == choice.casefold():
+            return choice, ""
+    return None, f"{text} is not one of {', '.join(choices)}."
+
+
+class GameNames:
+    """Finds a game from what the Game column says: its name, short name or slug, in any case. A game is never
+    added from a file."""
+
+    def __init__(self, rows):
+        self.found = {}
+        for pk, name, short, slug in rows:
+            for text in (slug, short, name):
+                if text:
+                    self.found.setdefault(clean_text(text).casefold(), pk)
+
+    def __call__(self, value):
+        text = clean_text(value)
+        if not text:
+            return None, "A new row needs a game."
+        pk = self.found.get(text.casefold())
+        return (pk, "") if pk else (None, f"The site has no game called {text}.")
+
+
+class SetNames:
+    """Finds a set from what the Set column says, within one game: its name in any case, its address, or its
+    code; or a set the same file adds on the Sets sheet, by its newN or its name."""
+
+    def __init__(self):
+        self.found = {}                     # (game id, kind, key): set pk or newN
+        self.games = defaultdict(set)       # (kind, key): game ids with such a set
+
+    @staticmethod
+    def keys(name, code=""):
+        keys = [("name", clean_text(name).casefold()), ("slug", name_key(clean_text(name)))]
+        if compact_code(code):
+            keys.append(("code", compact_code(code)))
+        return [(kind, key) for kind, key in keys if key]
+
+    def add(self, game_id, ref, name, code=""):
+        for kind, key in self.keys(name, code):
+            self.found.setdefault((game_id, kind, key), ref)
+            self.games[(kind, key)].add(game_id)
+        if isinstance(ref, str):
+            self.found[(game_id, "ref", ref)] = ref
+
+    def __call__(self, value, game_id, current=None, current_name=""):
+        """(set pk or newN or None, problem). ``current`` is the set the row had, kept when its name is
+        unchanged, so two sets of one name never swap."""
+        text = clean_text(value)
+        if not text:
+            return None, ""
+        if current is not None and current_name and text.casefold() == clean_text(current_name).casefold():
+            return current, ""
+        new = NEW_REF.fullmatch(text)
+        if new:
+            ref = f"new{int(new.group(1))}"
+            found = self.found.get((game_id, "ref", ref))
+            return (found, "") if found else (None, f"No new set {ref} for this game on the Sets sheet.")
+        for kind, key in (("name", text.casefold()), ("slug", name_key(text)), ("code", compact_code(text))):
+            if key and (game_id, kind, key) in self.found:
+                return self.found[(game_id, kind, key)], ""
+        for kind, key in (("name", text.casefold()), ("slug", name_key(text))):
+            if key and self.games.get((kind, key)):
+                return None, f"{text} is a set of another game."
+        return None, f"This game has no set called {text}. Add it on the Sets sheet as new1, or pick one from the list."

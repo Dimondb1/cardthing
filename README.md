@@ -180,6 +180,28 @@ file takes about 9 seconds and 140 MB on a copy of the October catalogue
 items of the shop with the longest list (capped at 5,000 rows), so it never
 runs in a web request. No new settings are needed.
 
+An edited file can be read back to see what it would change:
+
+```sh
+python manage.py data_files --check edited.xlsx
+```
+
+It prints every change in plain words (ready, held for a say, not made and
+why, changed on the site since the download, already so) and the sheets and
+columns it did not read, and changes nothing. Each cell is compared three
+ways: with the download, with the file and with the site now, so only a cell
+that was edited counts, and a cell the site changed since the download is
+left as the site has it. Sheets and columns are found by name wherever they
+are, so sorting whole rows, deleting rows, moving columns and adding a column
+change nothing. A file whose ids were sorted on their own, a Name or Barcode
+column sorted on its own, a formula, an id twice or an id not in the download
+is refused where it happens; a column changed on more than a quarter of its
+rows is held. Every change is then judged against the site as it will be once
+the whole file is made, and against the hourly tidy-up, so nothing is made
+that the next hour would merge, refile or remove. The code is
+`catalogue/workbook.py` (reading) and `catalogue/workbook_plan.py`. Applying a
+file happens only from the admin page, after its preview.
+
 ## Adding several shops at once
 
 ```sh

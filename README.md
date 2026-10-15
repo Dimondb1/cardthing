@@ -271,8 +271,8 @@ python manage.py data_files --check edited.xlsx     # print what it would change
 With no arguments it runs whatever the page queued (downloads to make,
 uploads to check, files to make or undo). The page starts it at once in its
 own process and starts it again when a job waits 30 seconds with nobody
-taking it, or its heartbeat stops. A lock file in the cache folder keeps a
-second copy from running. It runs at a lower priority than the site and is
+taking it, or its heartbeat stops, unless a runner is going already. A lock
+file in the cache folder keeps a second copy from running. It runs at a lower priority than the site and is
 first in line for the memory killer, so visitors come first on the 1 GB
 server. A runner that is stopped is taken up again where it stopped,
 without making any change twice; after three stops the file is given up.

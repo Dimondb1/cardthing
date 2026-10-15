@@ -2164,8 +2164,7 @@ def data_page(request):
     going = data_jobs.WAITING | data_jobs.RUNNING
     working = [*DataExport.objects.filter(status__in=going).values_list("status", "created_at", "heartbeat_at"),
                *DataImport.objects.filter(status__in=going).values_list("status", "created_at", "heartbeat_at")]
-    if any(data_jobs.needs_runner(*job, now) for job in working):
-        data_jobs.start_now()
+    data_jobs.wake_runner(working, now)
     exports = list(
         DataExport.objects.defer("workbook", "base").select_related("left_out_retailer")
         .annotate(kept=ExpressionWrapper(Q(workbook__isnull=False), output_field=BooleanField()))[:5]
@@ -2331,8 +2330,7 @@ def data_import_page(request, pk):
         DataImport.objects.defer("upload")
         .annotate(kept=ExpressionWrapper(Q(upload__isnull=False), output_field=BooleanField())), pk=pk)
     now = timezone.now()
-    if data_jobs.needs_runner(job.status, job.created_at, job.heartbeat_at, now):
-        data_jobs.start_now()
+    data_jobs.wake_runner([(job.status, job.created_at, job.heartbeat_at)], now)
     counts = job.counts or {}
     states = counts.get("state", {})
     ready, held = states.get(State.READY, 0), states.get(State.HELD, 0)

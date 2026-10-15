@@ -3,6 +3,7 @@ Excel, reading what it would change, making the changes and undoing the file. On
 checked as a zip before it is kept, every button acts only from the state the page showed, and a web worker never
 loads openpyxl."""
 
+import fcntl
 import io
 import os
 import re
@@ -193,6 +194,14 @@ class DownloadTests(DataPageBase):
         with mock.patch.object(data_jobs, "start_now") as started:
             self.page()
         started.assert_called_once()
+        # A runner going already (busy with another file) holds its lock: no copy is started to find it taken.
+        data_jobs.lock_path().parent.mkdir(parents=True, exist_ok=True)
+        with open(data_jobs.lock_path(), "w") as lock, mock.patch.object(data_jobs, "start_now") as started:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.page()
+            self.page(DataImport.objects.create(file_name="data.xlsx", sha256="3" * 64,
+                                                created_at=now - timedelta(minutes=1)).pk)
+        started.assert_not_called()
 
 
 class UploadRefusalTests(DataPageBase):

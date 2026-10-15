@@ -62,9 +62,9 @@ class Command(BaseCommand):
         return self.run_jobs()
 
     def run_jobs(self):
-        folder = Path(settings.RIPRAPTOR_CACHE_DIR)
-        folder.mkdir(parents=True, exist_ok=True)
-        with open(folder / "data-files.lock", "w") as lock:
+        path = data_jobs.lock_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w") as lock:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:

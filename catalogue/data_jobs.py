@@ -87,6 +87,35 @@ def needs_runner(status, created_at, heartbeat_at, now):
     return False
 
 
+def lock_path():
+    return Path(settings.RIPRAPTOR_CACHE_DIR) / "data-files.lock"
+
+
+def runner_running():
+    """True while a runner holds its lock: a second one started now would only find it taken and stop."""
+    import fcntl
+
+    try:
+        with open(lock_path(), "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(lock, fcntl.LOCK_UN)
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def wake_runner(jobs, now=None):
+    """Start the runner when one of ``jobs`` ((status, created_at, heartbeat_at) rows) needs it and none is
+    going. The page asks on every look, every few seconds while it refreshes, so a runner busy with a long job
+    is never sent a stream of copies. Returns True when one was started."""
+    now = now or timezone.now()
+    if any(needs_runner(*job, now) for job in jobs) and not runner_running():
+        return start_now()
+    return False
+
+
 def pack_base(base):
     return gzip.compress(json.dumps(base, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
 

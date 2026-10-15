@@ -764,6 +764,15 @@ class Finder:
                 sealed = None
         return sealed
 
+    def page_naming(self, page_pk, words, game):
+        """A page's naming words for one game, worked out once a batch: the matching cache is too small to keep
+        every shop's pages for every game."""
+        cache = self.__dict__.setdefault("_page_naming", {})
+        key = (page_pk, game)
+        if key not in cache:
+            cache[key] = naming_words(words, game)
+        return cache[key]
+
     def from_pages(self, product, shop):
         """The unclaimed page whose address words best name this product, at SUGGEST or more, or None."""
         game = product.game.slug
@@ -771,7 +780,7 @@ class Finder:
         best, best_rank = None, None
         for page_pk, url, words in self.shop_pages(shop) or ():
             # judge() caps a title this short of our naming words below SUGGEST, so it is not judged at all.
-            if ours and len(ours & naming_words(words, game)) < NAMING_SHARE * len(ours):
+            if ours and len(ours & self.page_naming(page_pk, words, game)) < NAMING_SHARE * len(ours):
                 continue
             sealed = self.page_kind(product, page_pk, words)
             named = self.page_kinds[page_pk]   # what the address says by itself

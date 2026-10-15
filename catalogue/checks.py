@@ -36,6 +36,9 @@ DATE_GAP_DAYS = 1
 # The autopilot's answers are listed at the top of the page, with Undo, for this long, this many at once.
 ANSWERS_DAYS = 7
 ANSWER_ROWS = 100
+# The hourly merge's own answers are listed after the others and do not count against ANSWER_ROWS: its
+# first run after a rule change can make hundreds, and each must keep its Undo.
+HOURLY_MERGE_ROWS = 1000
 
 
 def judged():
@@ -370,6 +373,18 @@ def undoable():
     """The answers Sorted for you lists with Undo: the autopilot's, Claude's and the hourly merge's, and the
     owner's own merges (Merge these), which can be undone like any other."""
     return CheckAnswer.objects.filter(Q(by_owner=False) | Q(kind=CheckAnswer.Kind.MERGE))
+
+
+def hourly_merge(answer):
+    """Whether an answer is the hourly merge's: a merge nobody asked Claude about and the owner did not make."""
+    return answer.kind == CheckAnswer.Kind.MERGE and not answer.by_owner and answer.ask_id is None
+
+
+def listed_answers(answers):
+    """The answers the page lists: the newest ANSWER_ROWS of everyone else's, then the hourly merge's."""
+    others = [answer for answer in answers if not hourly_merge(answer)]
+    hourly = [answer for answer in answers if hourly_merge(answer)]
+    return others[:ANSWER_ROWS] + hourly[:HOURLY_MERGE_ROWS]
 
 
 def recent_answers(now=None):

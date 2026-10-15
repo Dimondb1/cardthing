@@ -73,8 +73,10 @@ PHRASES = ("universes beyond", "trading card game", "card game", "dragon ball su
 # Words that name a language. Every use of a key checks the language apart (duplicate groups are made per
 # language, the importer compares the title's language with the product's), and shops put the word anywhere
 # or leave it out: "Japanese Pokemon Mega Dream Booster Box" and "Mega Dream ex Japanese Booster Box".
-LANGUAGE_WORDS = re.compile(r"\b(?:japanese|chinese|korean|traditional|thai|indonesian|german|french|italian|spanish|"
-                            r"portuguese|russian|english|eng|jpn|jp|chn|chs|cht)\b")
+# "JP", "CHS", "CHT", "CHN" and a bare "Traditional" stay: the language reader takes them only in some places,
+# so dropping them anywhere would let a Japanese name meet the English one.
+LANGUAGE_WORDS = re.compile(r"\b(?:japanese|chinese|korean|thai|indonesian|german|french|italian|spanish|"
+                            r"portuguese|russian|english|eng|jpn)\b")
 # Series prefixes shops add or drop, with any set number after them:
 # "Scarlet & Violet 8 Surging Sparks", "SV8.5 Prismatic Evolutions", "SWSH Evolving Skies". Each becomes one
 # code ("sv8", "sv8.5", "swsh"), which a name keeps only when nothing else in it names the product.
@@ -259,6 +261,7 @@ CODES = re.compile(r"\b(?:(?:op|eb|prb)[ck]?|st|bt|ex|lm|pb|fb|fs|sd|b|sv|swsh|s
                    r"|\bu[ae]\d{1,2} ?(?:bt|st)\b")
 # A box's packs in brackets, as a shop writes what the box holds: "Booster Box M2A High Class Packs (10 Booster
 # Packs)". Only in a box's name: a bundle's "(5 Packs)" says which bundle it is.
+HALF_BOX = re.compile(r"\b(?:12|18)\b")
 BRACKETED_PACKS = re.compile(r"\(\s*\d{1,2}\s*[x×]?\s*(?:sealed\s+)?(?:booster\s+)?packs?\s*\)", re.I)
 BOX_NAME = re.compile(r"\bbooster\s+box\b|\bdisplay\b|\belite\s+trainer\s+box\b|\betb\b", re.I)
 
@@ -268,7 +271,10 @@ def identity_numbers(name):
     """The numbers that say which product a name is: a volume, a set number, how many packs a multi-pack
     holds. Not a series or set code, nor what a box holds. Two names with different ones are two products,
     even when every word matches ("Gem Pack Vol 4" and "Vol 6", "5 Sealed Booster Packs" and "10")."""
+    half = set()
     if BOX_NAME.search(name or ""):
+        # A half box ("(18 Packs)", "(12 Packs)") is another product from the full box, so its count stays.
+        half = {f"{n} packs" for m in BRACKETED_PACKS.finditer(name) for n in HALF_BOX.findall(m.group(0))}
         name = BRACKETED_PACKS.sub(" ", name)
     text = " " + expand(name) + " "
     for pattern, number in NUMBER_WORDS:
@@ -278,7 +284,7 @@ def identity_numbers(name):
     text = SHARED_CHINESE_CODE.sub(r" \1 ", text)
     text = CODES.sub(" ", text)
     text = BOX_CONTENTS.sub(" ", text)
-    return frozenset(re.findall(r"\d+", text))
+    return frozenset(re.findall(r"\d+", text)) | half
 
 
 def chinese_code(word):
@@ -425,7 +431,7 @@ def same_product(a, b, game=""):
 # Sizes of one set's box: a slim box and a jumbo box of one code are two products.
 BOX_SIZES = {"slim", "jumbo", "standard", "mini", "half"}
 # Words that make a product a variant of another with the same name: an unwrapped box, a case of boxes.
-VARIANT_WORDS = {"noshrink", "case", "half", "damaged", "mini"}
+VARIANT_WORDS = {"noshrink", "case", "half", "damaged", "mini", "center", "enhanced", "deluxe", "premium", "frame"}
 
 
 def code_key(name, game=""):

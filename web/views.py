@@ -1712,7 +1712,7 @@ def checks_page(request):
     claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates, may_act=bool(state and state.may_act))
     context = {
         **admin.site.each_context(request), "title": "Things to check",
-        "answers": answers[:checks.ANSWER_ROWS], "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
+        "answers": checks.listed_answers(answers), "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
         "tally": [(CheckAnswer.Kind(kind).label, n) for kind, n in tally.most_common()],
         "doubtful": doubtful, "doubtful_count": doubtful_count,
         "doubtful_left": max(0, counts["doubtful"] - doubtful_count - checked_count), "checked_count": checked_count,

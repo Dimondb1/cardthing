@@ -255,7 +255,8 @@ class JudgeRuleTests(PairBase):
                              product_type="bundle")
         second = make_product(self.set, name="Scarlet & Violet 3 Obsidian Flames Checklane Blister (Annihilape)",
                               product_type="bundle")
-        self.assertIn(frozenset((first.pk, second.pk)), self.pairs())
+        # "Premium" marks a variant, so the pair is not even offered; were it offered, it would not agree.
+        self.assertNotIn(frozenset((first.pk, second.pk)), self.pairs())
         self.assertFalse(judge.Evidence({first.pk, second.pk}).pair(first, second).agrees)
 
     def test_prices_say_no_only_when_plainly_apart(self):

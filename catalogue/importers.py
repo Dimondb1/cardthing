@@ -1465,7 +1465,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url}")
                     continue
                 if (match is None or value < AUTO_LINK) and getattr(settings, "RIPRAPTOR_AUTO_CATALOGUE", True):
-                    created_pk = create_from_offer(offer, catalogue, sealed=sealed)
+                    created_pk = create_from_offer(offer, catalogue, sealed=sealed, refused=refused.get(offer.url, ()))
                     if created_pk is not None:
                         product_pk = created_pk
                 if product_pk is not None:
@@ -1635,10 +1635,14 @@ class Catalogue:
         def same_language(pk):
             return languages.same(languages.language_of(self.names[pk], slug), language)
 
+        # The shop's own title is judged too: classify's clean name drops "(20 Packs)" and other words that
+        # tell a box from a pack.
+        plain = shop_title(title)
         key = match_key(name, slug)
         if names_something(key):
             for pk in self.by_key.get((game, key), ()):
-                if same_language(pk) and same_product(name, self.names[pk], slug):
+                if (same_language(pk) and same_product(name, self.names[pk], slug)
+                        and same_product(plain, self.names[pk], slug)):
                     return pk
         code = code_key(name, slug)
         if not code:
@@ -1704,7 +1708,7 @@ class Catalogue:
         return match, value
 
 
-def create_from_offer(offer, catalogue, sealed=None):
+def create_from_offer(offer, catalogue, sealed=None, refused=()):
     """Make a product for a sealed item no catalogue product matches. Returns its pk or None.
 
     ``catalogue`` is the live list of (pk, name, game) and is extended in place
@@ -1715,11 +1719,13 @@ def create_from_offer(offer, catalogue, sealed=None):
         return None
     # The clean name may already exist under a slightly different shop title.
     match, value = catalogue.best_match(sealed.name, game=sealed.game)
-    if match and value >= AUTO_LINK and score(sealed.name, match[1]) >= AUTO_LINK:
+    if match and value >= AUTO_LINK and score(sealed.name, match[1]) >= AUTO_LINK and match[0] not in refused:
         return match[0]
     # Or under other shops' words for the same thing ("Booster Display", a set code, a translation).
     twin = catalogue.twin(sealed.name, offer.title, game=sealed.game)
-    if twin is not None:
+    # Never a product the owner or Claude said this page is not, and never another kind of product.
+    if twin is not None and twin not in refused and Product.objects.filter(
+            pk=twin, product_type=sealed.product_type).exists():
         return twin
     game = Game.objects.filter(slug=sealed.game).first()
     if game is None:
@@ -1736,6 +1742,8 @@ def create_from_offer(offer, catalogue, sealed=None):
         alias = ProductAlias.objects.filter(slug=slug, product__is_active=True).select_related("product").first()
         if alias is not None:
             existing = alias.product
+    if existing is not None and existing.pk in refused:
+        return None   # the owner or Claude said this page is not that product
     if existing is not None and existing.game_id == game.pk:
         catalogue.append((existing.pk, existing.name, game.slug))
         return existing.pk

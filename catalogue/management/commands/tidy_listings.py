@@ -23,7 +23,7 @@ from django.utils import timezone
 from catalogue import languages
 from catalogue.classify import NOT_SEALED, box_contents, find_game
 from catalogue.ebay import EbayError, fill_titles, too_cheap_listings
-from catalogue.importers import ean_key, link_key, listing_page, slug_words, valid_gtin
+from catalogue.importers import barcode_owners, ean_key, link_key, listing_page, slug_words, valid_gtin
 from catalogue.matching import (
     AUTO_LINK, DIFFERENT, LANGUAGE_DIFFERENT, contradiction, expand, key_words, match_key, score, shop_title,
 )
@@ -44,6 +44,18 @@ def same_language(title, product):
 
 
 MARKETPLACES = ("ebay", "amazon")
+_OWNED = {}
+
+
+def owned_barcodes():
+    """The barcodes that name one product, read once per tidy run (clear_owned_barcodes starts a run)."""
+    if "keys" not in _OWNED:
+        _OWNED["keys"] = set(barcode_owners())
+    return _OWNED["keys"]
+
+
+def clear_owned_barcodes():
+    _OWNED.clear()
 
 
 def title_misfit(title, name, game, language="", shop_ean="", ean="", marketplace=False):
@@ -70,8 +82,10 @@ def fits(listing):
         return False
     product = listing.product
     marketplace = bool(listing.retailer_id) and listing.retailer.source_type in MARKETPLACES
+    # A barcode two of our products carry proves nothing (importers.barcode_owners).
+    ean = product.ean if product.ean and ean_key(product.ean) in owned_barcodes() else ""
     if title_misfit(listing.title, product.name, product.game.slug, getattr(product, "language", ""),
-                    listing.shop_ean or "", product.ean, marketplace):
+                    listing.shop_ean or "", ean, marketplace):
         return False
     title = slug_words(listing.url)
     if not title:
@@ -164,6 +178,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, dry_run=False, **options):
         removed = 0
+        clear_owned_barcodes()
         # eBay listings saved before titles were kept cannot be judged by their title, so ask eBay for it.
         # Not in a dry run: fetching saves each title, and a dry run changes nothing.
         if dry_run:

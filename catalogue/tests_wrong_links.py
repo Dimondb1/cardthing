@@ -360,3 +360,41 @@ class TidyTests(TestCase):
                      url="https://eternacards.co.uk/products/one-piece-op19-booster-box")
         self.tidy()
         self.assertEqual(Listing.objects.count(), 1)
+
+
+@override_settings(RIPRAPTOR_AUTO_CATALOGUE=False)
+class SharedBarcodeTests(TestCase):
+    """Chaos Origins carried Glorious Gallery's barcode, so Unicorn Cards' Glorious Gallery page (listing 11998)
+    went to Chaos Origins by barcode."""
+
+    def setUp(self):
+        yugioh = make_game("Yu-Gi-Oh!", "yu-gi-oh")
+        self.gallery = make_product(make_set(yugioh, "Glorious Gallery", "glorious-gallery", code="BLGG"),
+                                    "Battles of Legend: Glorious Gallery Booster Box (1st Edition)", slug="gallery",
+                                    product_type="booster_box", ean="4012927170304")
+        self.chaos = make_product(make_set(yugioh, "Chaos Origins", "chaos-origins", code="CHOR"),
+                                  "Chaos Origins Booster Box (1st Edition)", slug="chaos", product_type="booster_box",
+                                  ean="4012927170304")
+        self.shop = make_retailer("Unicorn Cards", source_type=Retailer.Source.WEBSITE, source_url="https://unicorncards.co.uk")
+
+    def test_a_barcode_two_products_carry_names_neither(self):
+        from .importers import barcode_owners, ean_key
+
+        self.assertNotIn(ean_key("4012927170304"), barcode_owners())
+        offer = Offer(title="YuGiOh! Battles of Legend: Glorious Gallery 1st Edition Booster Display Box",
+                      url="https://unicorncards.co.uk/yugioh-battles-of-legend-glorious-gallery-1st-edition-booster-display-box",
+                      price=Decimal("59.90"), ean="4012927170304")
+        apply_offers(self.shop, [offer], complete=False)
+        self.assertEqual(list(Listing.objects.values_list("product_id", flat=True)), [self.gallery.pk])
+
+    def test_nor_does_it_keep_the_wrong_one_of_two_listings_on_its_page(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        url = "https://unicorncards.co.uk/yugioh-battles-of-legend-glorious-gallery-1st-edition-booster-display-box"
+        make_listing(self.gallery, self.shop, url=url, title="")
+        make_listing(self.chaos, self.shop, url=url, shop_ean="4012927170304",
+                     title="YuGiOh! Battles of Legend: Glorious Gallery 1st Edition Booster Display Box")
+        call_command("tidy_listings", stdout=StringIO())
+        self.assertEqual(list(Listing.objects.values_list("product_id", flat=True)), [self.gallery.pk])

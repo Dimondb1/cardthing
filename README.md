@@ -1212,7 +1212,8 @@ it again after changing the mark and commit the files.
   against the sealed one, another unit of sale (a case, a box, a pack, an
   Elite Trainer Box) or another number of packs ("3-Pack Blister" on a 1 Pack
   Blister). Only the shop's own barcode settles it the other way, when it is
-  ours and a valid GTIN. The rule is `matching.contradiction`; such offers are
+  ours and a valid GTIN. A barcode two products shown on the site carry names
+  neither of them: a read matches such a page by its link or name instead. The rule is `matching.contradiction`; such offers are
   in the run's unmatched list with the reason. One eBay listing is only ever
   on one product.
 - A price of £0.00 or less is not a price, whatever the stock state says (a

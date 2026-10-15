@@ -1462,10 +1462,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         ((url, pk) for pk, url in Listing.objects.filter(retailer=retailer).values_list("product_id", "url")),
         names=catalogue.names,
     )
-    products_by_ean = {}
-    for pk, ean in Product.objects.exclude(ean="").values_list("pk", "ean"):
-        if ean_key(ean):
-            products_by_ean[ean_key(ean)] = pk
+    products_by_ean = barcode_owners()
     found = updated = 0
     unmatched = []
     seen_products = set()
@@ -1499,7 +1496,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         name, game, language, ean = identities.get(product_pk)
         if name is None:
             return ""
-        if not marketplace and offer.ean and ean_key(offer.ean) == ean_key(ean) and valid_gtin(ean):
+        if (not marketplace and offer.ean and ean_key(offer.ean) == ean_key(ean) and valid_gtin(ean)
+                and products_by_ean.get(ean_key(ean)) == product_pk):
             return ""
         return contradiction(name, offer.title, game or "", language)
 
@@ -1749,6 +1747,25 @@ def notice_release(shop_signals, offer, checked_at):
         shop_signals.see(offer, now=checked_at)
     except Exception:  # noqa: BLE001 - a release note must never cost a price read
         logger.warning("Could not note a release from %r", offer.title, exc_info=True)
+
+
+def barcode_owners():
+    """{barcode key: product pk} for each barcode that names one product: the one shown on the site that
+    carries it, else the one switched-off product that does. A barcode two shown products carry (144
+    groups in the October 2026 export: Chaos Origins carried Glorious Gallery's) names neither, so a
+    shop page is matched by its link or its name instead."""
+    shown, hidden = {}, {}
+    for pk, ean, active in Product.objects.exclude(ean="").values_list("pk", "ean", "is_active"):
+        key = ean_key(ean)
+        if key:
+            (shown if active else hidden).setdefault(key, set()).add(pk)
+    owners = {key: next(iter(pks)) for key, pks in hidden.items() if len(pks) == 1}
+    for key, pks in shown.items():
+        if len(pks) == 1:
+            owners[key] = next(iter(pks))
+        else:
+            owners.pop(key, None)
+    return owners
 
 
 def valid_gtin(value):

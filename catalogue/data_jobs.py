@@ -227,9 +227,9 @@ def work(job, deadline):
         undo_import(job, deadline)
 
 
-def claim():
+def claim(queues=QUEUES):
     """The next job, marked running: only one runner can mark it."""
-    for model, waiting, running in QUEUES:
+    for model, waiting, running in queues:
         for pk in model.objects.filter(status=waiting).order_by("created_at", "pk").values_list("pk", flat=True)[:5]:
             now = timezone.now()
             if model.objects.filter(pk=pk, status=waiting).update(status=running, started_at=now, heartbeat_at=now):
@@ -354,7 +354,23 @@ def wait_for_import_lock(job, until):
             beat(job)
         if now >= until:
             return None
-        sleep(LOCK_POLL_SECONDS)
+        if not run_unlocked(until):
+            sleep(LOCK_POLL_SECONDS)
+
+
+def run_unlocked(deadline):
+    """Make one queued download, or check one upload, while a file waits for a shop read: neither needs the
+    import lock, so neither waits behind it. Returns True when one ran."""
+    job = claim(QUEUES[:2])
+    if job is None:
+        return False
+    try:
+        work(job, deadline)
+    except Exception:
+        logger.exception("Spreadsheet job %s %s stopped", type(job).__name__, job.pk)
+        with drop_if_locked("Spreadsheet job stop"):
+            type(job).objects.filter(pk=job.pk).update(heartbeat_at=None)
+    return True
 
 
 def newest_backup():

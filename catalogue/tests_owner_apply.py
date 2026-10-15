@@ -916,6 +916,29 @@ class RunnerTests(Base):
         self.assertEqual((upload.status, upload.note), (Upload.APPLIED, ""))
         self.assertEqual(Product.objects.get(pk=self.etb.pk).name, "Surging Sparks ETB")
 
+    def test_a_download_or_check_is_made_while_a_file_waits_for_a_shop_read(self):
+        _export, data = self.download()
+        upload = self.upload(excel_resave(data, [("Products", self.etb.pk, "Name", "Surging Sparks ETB")]))
+        DataImport.objects.filter(pk=upload.pk).update(status=Upload.APPLYING)
+        export = DataExport.objects.create()
+        check = DataImport.objects.create(created_by=self.owner, file_name="b.xlsx", sha256="b",
+                                          upload=excel_resave(data, [("Products", self.box.pk, "Name", "SSP Box")]))
+        waits = []
+        with open(self.import_lock, "w") as read:
+            fcntl.flock(read, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+            def read_finishes(seconds):
+                waits.append(seconds)
+                fcntl.flock(read, fcntl.LOCK_UN)
+
+            with mock.patch.object(data_jobs, "sleep", side_effect=read_finishes):
+                data_jobs.apply_import(DataImport.objects.get(pk=upload.pk), timezone.now() + timedelta(minutes=5))
+        # Both were done before the first pause: neither waited behind the read.
+        self.assertEqual(waits, [data_jobs.LOCK_POLL_SECONDS])
+        self.assertEqual(DataExport.objects.get(pk=export.pk).status, DataExport.Status.READY)
+        self.assertEqual(DataImport.objects.get(pk=check.pk).status, Upload.CHECKED)
+        self.assertEqual(DataImport.objects.get(pk=upload.pk).status, Upload.APPLIED)
+
     def test_a_wait_past_the_end_of_the_run_leaves_it_queued(self):
         _export, data = self.download()
         upload = self.upload(excel_resave(data, [("Products", self.etb.pk, "Name", "Surging Sparks ETB")]))

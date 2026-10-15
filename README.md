@@ -261,7 +261,8 @@ less with no macros. Each change is made in its own short transaction
 through `catalogue/owner_edits.py`, the code paths the owner's own buttons
 use, and only while the site still holds what it held at the check: one
 changed since is left as it was and listed with the reason. A file waits
-while a shop read holds the import lock, and a copy of the database is made
+while a shop read holds the import lock (downloads and checks, which need
+no lock, are made meanwhile), and a copy of the database is made
 first when it merges, takes pages off or makes more than 200 changes,
 unless the newest copy is under six hours old.
 

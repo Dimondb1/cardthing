@@ -226,6 +226,17 @@ class Site:
             self.items[item.pk] = item
             self.item_at[(item.retailer_id, link_key(item.url))] = item.pk
         self.apart = checks.kept_apart()
+        self._pages_by_ean = None
+
+    @property
+    def pages_by_ean(self):
+        """{barcode key: [shop pages giving it]}, made once and only when a change needs it."""
+        if self._pages_by_ean is None:
+            self._pages_by_ean = defaultdict(list)
+            for page in self.pages.values():
+                if ean_key(page.shop_ean):
+                    self._pages_by_ean[ean_key(page.shop_ean)].append(page)
+        return self._pages_by_ean
 
     def merged_into(self, pk):
         """The product kept when ``pk`` was merged away (switched off, its address an old address of
@@ -361,7 +372,7 @@ class FinalState:
                       sorted((c for c in live if c.kind == Kind.MERGE), key=lambda c: (c.row, c.seq))}
 
         # Shop pages before the merges: take-offs gone, moves made, links added, each on its final product.
-        taken = {change.object_id for change in live if change.kind == Kind.TAKE_OFF}
+        taken = self.taken = {change.object_id for change in live if change.kind == Kind.TAKE_OFF}
         moved = self.moved = {change.object_id: self.keeper(change.data["target"])
                               for change in live if change.kind == Kind.MOVE}
         pages = defaultdict(lambda: defaultdict(list))   # product: {retailer: [(whose, link key, url)]}
@@ -1300,6 +1311,14 @@ class Planner:
                 hidden = "" if state.products[other].active else "hidden "
                 return (State.PROBLEM, f"Already on {hidden}{self.named(state, other)}. Two products with one barcode "
                         "steer shop prices to one of them. Merge them, or fix the other one's barcode in this file.")
+            # A shop's read matches its page to the product with the page's barcode before anything else.
+            for page in self.site.pages_by_ean.get(ean_key(fields["barcode"][3]), ()):
+                on = state.keeper(state.moved.get(page.pk, page.product_id))
+                if page.pk not in state.taken and on != pk:
+                    shop = possessive(self.site.shop_name(page.retailer_id))
+                    return (State.PROBLEM, f"{shop} page on {self.named(state, on)} gives this barcode, so the shop's "
+                            "next read moves its price here. If it is this product, move that page here in Listings; "
+                            "if not, check the barcode.")
         if "set" in fields:
             new_set = fields["set"][3]
             if isinstance(new_set, str) and new_set not in state.new_sets:

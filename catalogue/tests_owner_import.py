@@ -606,6 +606,21 @@ class ProductFieldTests(Base):
         self.assertEqual((cleared.state, cleared.why),
                          (State.HELD, f"{workbook_plan.TIDY_REMOVES} Clearing its date removes it."))
 
+    def test_a_barcode_another_products_shop_page_gives_is_refused(self):
+        centre = make_product(self.set, name="Surging Sparks Elite Trainer Box Pokemon Center", slug="ssp-pc-etb",
+                              release_date=date(2024, 11, 8))
+        page = make_listing(centre, self.harbour, url="https://harbour.example/p/pc-etb", shop_ean="5053222123458")
+        _export, data = self.download()
+        refused = self.only(self.edit(data, ("Products", self.etb.pk, "Barcode", "5053222123458")))
+        self.assertEqual((refused.state, refused.why), (State.PROBLEM, (
+            f'Harbour Games\' page on {centre.pk} "Surging Sparks Elite Trainer Box Pokemon Center" gives this '
+            "barcode, so the shop's next read moves its price here. If it is this product, move that page here in "
+            "Listings; if not, check the barcode.")))
+        # Moved here in the same file, the page and the barcode agree.
+        changes = self.edit(data, ("Products", self.etb.pk, "Barcode", "5053222123458"),
+                            ("Listings", page.pk, "Product id", str(self.etb.pk)))
+        self.assertEqual({c.state for c in changes}, {State.READY}, [(c.what, c.why) for c in changes])
+
     def test_a_barcode_a_hidden_product_holds_is_refused(self):
         # A shop's read steers a price by barcode to a hidden product too.
         old = make_product(self.set, name="Surging Sparks Elite Trainer Box Old Page", slug="ssp-etb-old",

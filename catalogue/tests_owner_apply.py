@@ -1040,6 +1040,8 @@ class CommandTests(Base):
             self.assertTrue(data_jobs.start_now())
         self.assertEqual(popen.call_args.args[0][-1], "data_files")
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
+        # Its log goes where the site's goes, so a failure's traceback can be found.
+        self.assertIsNone(popen.call_args.kwargs["stderr"])
 
 
 class WordingTests(Base):

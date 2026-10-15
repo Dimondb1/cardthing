@@ -126,7 +126,10 @@ def unpack_base(blob):
 
 def start_now():
     """Start the runner at once in its own process, so the page returns straight away. data_files takes a
-    lock, so a second runner never starts. Never in tests."""
+    lock, so a second runner never starts. Never in tests.
+
+    Its log (every failure's traceback) goes where the starting process's goes: the web app's journal
+    (journalctl -u ripraptor) on the server, the console when run by hand."""
     import subprocess
     import sys
 
@@ -135,7 +138,7 @@ def start_now():
     try:
         subprocess.Popen(
             [sys.executable, str(Path(settings.BASE_DIR) / "manage.py"), "data_files"], cwd=settings.BASE_DIR,
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=None, start_new_session=True,
         )
     except OSError:
         logger.warning("Spreadsheets: could not start the runner; the next look at the page starts it.", exc_info=True)

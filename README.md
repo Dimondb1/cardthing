@@ -292,6 +292,8 @@ file in the cache folder keeps a second copy from running. It runs at a lower pr
 first in line for the memory killer, so visitors come first on the 1 GB
 server. A runner that is stopped is taken up again where it stopped,
 without making any change twice; after three stops the file is given up.
+Its log, with the details of any change that could not be made, goes to
+the web app's log on the server (`journalctl -u ripraptor`).
 `--export` makes a file that can be uploaded on the page like one made
 there. `--check` prints every change in plain words and changes nothing;
 changes are made only from the page, after its preview. The code is

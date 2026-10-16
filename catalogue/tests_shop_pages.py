@@ -334,3 +334,94 @@ class JudgeEvidenceTests(ReaderBase):
         client, _ = self.ask()
         self.assertNotIn("shop_page", client.sent[0][1]["messages"][0]["content"])
         self.assertEqual(self.pages.asked, [])
+
+
+PRODUCT_PAGE = (b'<html><head><title>Elsewhere</title><script type="application/ld+json">{"@type":"Product",'
+                b'"name":"Another Site Product","offers":{"@type":"Offer","price":"9.99","priceCurrency":"GBP",'
+                b'"availability":"InStock"}}</script></head><body><h1>Elsewhere</h1></body></html>')
+
+
+def serve(answer):
+    """A local web server whose GET is answered by ``answer(path) -> (status, headers, body)``. Returns
+    (base address, the paths asked)."""
+    import http.server
+    import socketserver
+    import threading
+
+    asked = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            asked.append(self.path)
+            status, headers, body = answer(self.path)
+            self.send_response(status)
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = socketserver.TCPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, asked
+
+
+class RedirectTests(ReaderBase):
+    """The judge's own fetch, against local servers: a redirect never leaves the shop's site."""
+
+    def start(self, answer):
+        server, asked = serve(answer)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return f"http://127.0.0.1:{server.server_address[1]}", asked
+
+    def local_shop(self, base):
+        return make_retailer("Local Shop", source_type=Retailer.Source.WEBSITE, source_url=base + "/",
+                             delivery_cost=Decimal("0"))
+
+    def local_reader(self):
+        return shop_pages.Reader(fetch_for=lambda shop: shop_pages.page_fetch(shop, allow_private=True),
+                                 sleep=lambda seconds: None)
+
+    def test_a_redirect_to_another_site_is_refused_and_never_fetched(self):
+        other, other_asked = self.start(lambda path: (200, {}, PRODUCT_PAGE))
+        other = other.replace("127.0.0.1", "localhost")
+        base, asked = self.start(lambda path: (404, {}, b"") if path == "/robots.txt"
+                                 else (302, {"Location": other + "/internal"}, b""))
+        store = self.local_shop(base)
+        reader = self.local_reader()
+        said = shop_pages.evidence(reader.facts(base + "/product/box", store), self.product)
+        self.assertEqual(said, {"read_from_shop": False, "why_not": "the shop sent the page to another site"})
+        self.assertEqual(other_asked, [])
+        self.assertEqual(asked, ["/robots.txt", "/product/box"])
+        self.assertNotIn(store.pk, reader.blocked)
+        self.assertEqual(reader.errors.get(store.pk, 0), 0)
+
+    def test_a_redirect_within_the_shop_is_followed_and_reported_as_moved(self):
+        def answer(path):
+            if path == "/robots.txt":
+                return 404, {}, b""
+            if path == "/product/old-box":
+                return 301, {"Location": "/product/new-box"}, b""
+            return 200, {}, PRODUCT_PAGE
+        base, asked = self.start(answer)
+        store = self.local_shop(base)
+        said = shop_pages.evidence(self.local_reader().facts(base + "/product/old-box", store), self.product)
+        self.assertEqual((said["page"], said["shop_now_at"], said["page_price"]),
+                         ("the address now opens another product page", "/product/new-box", "£9.99"))
+        self.assertEqual(asked, ["/robots.txt", "/product/old-box", "/product/new-box"])
+
+    def test_private_addresses_and_other_schemes_are_never_asked(self):
+        base, asked = self.start(lambda path: (200, {}, PRODUCT_PAGE))
+        store = self.local_shop(base)
+        reader = shop_pages.Reader(sleep=lambda seconds: None)   # the real fetch, private addresses refused
+        facts = reader.facts(base + "/product/box", store)
+        self.assertEqual(facts["status"], "not read")
+        self.assertEqual(asked, [])
+        self.assertEqual(shop_pages.refused("file:///etc/passwd", {""}), "the address is not a web page")
+        self.assertEqual(shop_pages.refused("http://169.254.169.254/latest", {"169.254.169.254"}),
+                         "the address is inside a private network")
+        self.assertEqual(self.reader(Pages({})).facts("ftp://www.shopify-shop.example/x", self.shopify())["why"],
+                         "the address is not a web page")

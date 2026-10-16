@@ -962,7 +962,10 @@ title and heading, and an eBay listing through eBay's own item lookup
 (never its page). Amazon, feed shops (affiliate links the site never
 follows) and hand-entered prices are not read, nor is a shop that is
 paused, switched off, waiting after errors or being read right now, nor a
-page the shop's robots.txt keeps robots away from. Each shop is asked no
+page the shop's robots.txt keeps robots away from. A redirect is followed
+only within the shop's own site and never into a private network: a page
+that redirects to another site is "not read", and one that redirects to
+another page of the shop is reported as having moved. Each shop is asked no
 faster than its reads, one try with a 10 second limit; a 429 or three
 failures stop that shop for the run without touching its read back-off. A
 run reads at most 60 pages in 3 minutes. What a page said is kept for a

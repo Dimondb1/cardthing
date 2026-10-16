@@ -16,8 +16,10 @@ Only the shops the owner added are asked, and only the way their reads already a
 
 Amazon, feed shops (their links are affiliate clicks a server never follows) and prices entered by hand
 are not read. Neither is a shop that is paused, switched off, waiting after errors, being read right
-now, or whose robots.txt asks robots to stay away from the page. Each shop is asked no faster than its
-reads (worker.RATES), with one try, a short timeout and no retries; a 429 or three failures in a row
+now, or whose robots.txt asks robots to stay away from the page. A redirect is followed only within the shop's own site
+(another site's page is never read and never reported as the shop's), never into a private network,
+and a redirect to another page of the shop is reported as the address having moved. Each shop is asked
+no faster than its reads (worker.RATES), with one try, a short timeout and no retries; a 429 or three failures in a row
 stop the shop being asked for the rest of the run, and nothing here touches the shop's read back-off.
 A run reads at most PAGES_PER_RUN pages in PAGE_SECONDS.
 
@@ -28,10 +30,14 @@ again after an hour. A page that was not read is said to be "not read", with why
 
 import hashlib
 import html as html_
+import ipaddress
 import json
 import logging
 import re
+import socket
 import time
+import urllib.error
+import urllib.request
 import urllib.robotparser
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
@@ -106,10 +112,115 @@ def stock_word(availability):
     return STOCK_WORDS.get(str(availability), str(availability or "not given"))
 
 
-def default_fetch_for(retailer):
+class Refused(ImportError_):
+    """A request the judge will not make or follow: another site, an address inside a private network,
+    or a scheme other than http(s). It says nothing about the shop, so it never counts as its failure."""
+
+    def __init__(self, url, why):
+        super().__init__(f"Could not fetch {url}: {why}")
+        self.why = why
+
+
+def private_address(name):
+    """Whether ``name`` resolves to an address that is not on the public internet (loopback, a private
+    network, link-local, reserved). A name that does not resolve is left for the fetch to fail on."""
+    try:
+        found = socket.getaddrinfo(name, None)
+    except (OSError, UnicodeError):
+        return False
+    for *_, address in found:
+        try:
+            if not ipaddress.ip_address(address[0].split("%")[0]).is_global:
+                return True
+        except ValueError:
+            return True
+    return False
+
+
+def refused(url, hosts, allow_private=False):
+    """Why the judge must not ask for ``url`` for a shop whose sites are ``hosts``, or ""."""
+    parts = urlsplit(url or "")
+    if parts.scheme not in ("http", "https"):
+        return "the address is not a web page"
+    if host(url) not in hosts:
+        return "the shop sent the page to another site"
+    if not allow_private and private_address(parts.hostname or ""):
+        return "the address is inside a private network"
+    return ""
+
+
+class Page(bytes):
+    """A page's body, with the address it was finally read from after the shop's own redirects."""
+
+    def __new__(cls, body, url):
+        page = super().__new__(cls, body)
+        page.url = url
+        return page
+
+
+class ShopRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect only to the same shop's site; any other is refused, never fetched."""
+
+    def __init__(self, hosts, allow_private=False):
+        self.hosts, self.allow_private = hosts, allow_private
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        why = refused(newurl, self.hosts, self.allow_private)
+        if why:
+            fp.close()
+            raise Refused(req.full_url, why)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def page_fetch(retailer, allow_private=False):
+    """The judge's fetch for one shop: one try with a deadline, redirects followed only within the shop's
+    own site, never into a private network, and with the shop's cookies when it needs a session (as
+    importers.session_fetch). Returns a Page; a failure is an ImportError_ worded as importers.fetch's."""
+    import http.client
+    import http.cookiejar
+
+    hosts = shop_hosts(retailer)
+    handlers = [ShopRedirects(hosts, allow_private)]
     if retailer.session_url:
-        return importers.session_fetch(retailer.session_url)
-    return importers.fetch
+        handlers.append(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    opener = urllib.request.build_opener(*handlers)
+    state = {"session": not retailer.session_url or bool(refused(retailer.session_url, hosts, allow_private))}
+
+    def one(url, deadline):
+        why = refused(url, hosts, allow_private)
+        if why:
+            raise Refused(url, why)
+        request = urllib.request.Request(importers.safe_url(url), headers={"User-Agent": importers.USER_AGENT})
+        try:
+            with opener.open(request, timeout=importers.socket_timeout(deadline)) as response:
+                return Page(importers.read_body(response, deadline), response.geturl())
+        except urllib.error.HTTPError as exc:
+            raise ImportError_(f"Could not fetch {url}: HTTP Error {exc.code}") from exc
+        except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
+            raise ImportError_(f"Could not fetch {url}: {exc}") from exc
+
+    def fetch(url, retries=0, deadline=None):
+        if not state["session"]:
+            state["session"] = True
+            try:
+                one(retailer.session_url, deadline)
+            except ImportError_:
+                pass
+        return one(url, deadline)
+
+    return fetch
+
+
+def default_fetch_for(retailer):
+    return page_fetch(retailer)
+
+
+def moved_to(body, url):
+    """The path a same-shop redirect took ``url`` to, or "" when the page answered at its own address."""
+    final = getattr(body, "url", "") or url
+    if urlsplit(final).path.rstrip("/") == urlsplit(url).path.rstrip("/"):
+        return ""
+    return urlsplit(final).path[:TEXT_CHARS]
 
 
 class Reader:
@@ -183,6 +294,8 @@ class Reader:
         if retailer.pk in self.blocked:
             return self.blocked[retailer.pk]
         if retailer.source_type != Retailer.Source.EBAY:
+            if urlsplit(url).scheme not in ("http", "https"):
+                return "the address is not a web page"
             if host(url) not in shop_hosts(retailer):
                 return "the address is not on this shop's site"
             if self.being_read(retailer):
@@ -229,7 +342,7 @@ class Reader:
             body = self.fetches[retailer.pk](url, retries=0, deadline=time.monotonic() + FETCH_SECONDS)
         except ImportError_ as exc:
             status = crawl.http_status(str(exc))
-            if not importers.gone(exc):
+            if not importers.gone(exc) and not isinstance(exc, Refused):
                 self.errors[retailer.pk] = self.errors.get(retailer.pk, 0) + 1
                 if status == 429:
                     self.blocked[retailer.pk] = "the shop asked the site to slow down"
@@ -264,13 +377,16 @@ class Reader:
             return None, {"status": "not read", "why": "the shop's robots.txt asks robots not to read this page"}
         try:
             return self.get(url, retailer), None
+        except Refused as exc:
+            return None, {"status": "not read", "why": exc.why}
         except ImportError_ as exc:
             if importers.gone(exc):
                 return None, {"status": "gone", "http": crawl.http_status(str(exc))}
             return None, {"status": "not read", "why": "the shop did not answer"}
 
     def read_shopify(self, url, retailer):
-        body, said = self.fetch_or_fact(shopify_js_url(url), retailer)
+        address = shopify_js_url(url)
+        body, said = self.fetch_or_fact(address, retailer)
         if said:
             return said
         try:
@@ -282,6 +398,8 @@ class Reader:
         handle = data.get("handle") or ""
         if handle and handle_of(url) and handle != handle_of(url):
             found.update(status="moved", now_at=f"/products/{handle}"[:TEXT_CHARS])
+        elif moved_to(body, address):
+            found.update(status="moved", now_at=moved_to(body, address).removesuffix(".js"))
         names = [text_of(v.get("title"), 60) for v in variants if v.get("title") not in (None, "", "Default Title")]
         if len(variants) > 1:
             found["variants"] = names[:VARIANTS_SHOWN]
@@ -339,6 +457,9 @@ class Reader:
         description = description or meta.get("og:description") or meta.get("description") or ""
         found["excerpt"] = text_of(description, EXCERPT_CHARS)
         found["scan"] = text_of(description, SCAN_CHARS)
+        if moved_to(body, url):
+            # The shop redirected the address to another page of its own site.
+            found["now_at"] = moved_to(body, url)
         if listing_page(url) or len(names) > 1:
             found.update(status="category", listed=len(names))
             return found
@@ -351,7 +472,7 @@ class Reader:
                      availability=stock_word(offer.availability), barcode=offer.ean)
         canonical = CANONICAL.search(page)
         named = (canonical.group(1) if canonical else "") or meta.get("og:url", "")
-        if named and host(named) == host(url) and urlsplit(named).path.rstrip("/") != urlsplit(url).path.rstrip("/"):
+        if "now_at" not in found and named and host(named) == host(url) and urlsplit(named).path.rstrip("/") != urlsplit(url).path.rstrip("/"):
             found["now_at"] = urlsplit(named).path[:TEXT_CHARS]
         return found
 
@@ -441,9 +562,12 @@ def evidence(facts, product):
         said["page"] = PAGE_SAYS["gone"] + (f" (HTTP {facts['http']})" if facts.get("http") else "")
         return said
     said["page"] = PAGE_SAYS.get(status, "")
-    if status == "moved" or facts.get("now_at"):
+    if status in ("product", "moved") and (status == "moved" or facts.get("now_at")):
         said["page"] = "the address now opens another product page"
         said["shop_now_at"] = facts.get("now_at", "")
+    elif facts.get("now_at"):
+        said["page"] = "the address now opens another page of the shop: " + said["page"]
+        said["shop_now_at"] = facts["now_at"]
     if status == "category" and facts.get("listed"):
         said["page"] += f" ({facts['listed']} listed)"
     for key, label in (("title", "shop_page_title"), ("h1", "shop_heading"), ("name", "shop_product_name"),

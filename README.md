@@ -888,12 +888,14 @@ Before a request is sent, the most it could cost is reserved, and nothing is
 sent that could take the month (a UTC month, as Anthropic counts) past your
 limit, or one run past $1. A row is asked again only when its titles or
 price band change, at most five times. Roughly, per answer at medium
-effort: Claude Opus 5.5 (the default) $0.023, Claude Sonnet 5.5 $0.012,
-Claude Haiku 5.5 under $0.001. The limit defaults to $10 a month, about 430
-answers on Opus. To raise it, open **Claude settings and key**, set
-**Monthly limit in US dollars** and tap **Save settings**: $25, the most the
-page accepts unless `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` is raised, is about
-1,080 answers on Opus. Low effort costs about half, high about twice.
+effort: Claude Opus 5.5 (the default) $0.024, Claude Sonnet 5.5 $0.012,
+Claude Haiku 5.5 under $0.001. The shop page's facts add about 200 input
+tokens to a request (about $0.001 on Opus, two pages for a pair), and are
+part of each request's reserved worst case, so the limits hold. The limit
+defaults to $10 a month, about 410 answers on Opus. To raise it, open
+**Claude settings and key**, set **Monthly limit in US dollars** and tap
+**Save settings**: $25, the most the page accepts unless
+`RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` is raised, is about 1,040 answers on Opus. Low effort costs about half, high about twice.
 
 **Setting it up by phone.** Sign up at console.anthropic.com; under Billing
 buy credit; under Limits set a monthly spend limit (Anthropic then stops the
@@ -932,8 +934,52 @@ waiting.
 **What is sent.** Our product's name, game, kind and set; the shop's name,
 title, price, stock and page address; up to five other shops' titles for the
 product; whether its price is close to or far from the other shops' (never
-their prices); the site's own note on the price. Never anything about
-visitors, alerts or messages.
+their prices); the site's own note on the price; and what the shop's own
+page said when it was read (below). Never anything about visitors, alerts
+or messages.
+
+**The shop's own page.** Titles and prices alone often leave Claude unsure,
+so before each row is asked the site reads the shop page(s) it is about:
+the found page, the listing's page, or for a duplicate pair one shop page
+of each product (a Shopify shop first). From each it keeps a few plain
+facts, sent as `shop_page` (`first_shop_page` and `second_shop_page` for a
+pair) with the time they were read: the page's title and heading, the
+product's name, the variant the address selects (`?variant=` is respected)
+and the variants on offer, the price, the stock, how its barcode compares
+with ours, the pack counts and languages the description names, a 300
+character excerpt of it, and whether the page shows one product at all.
+Each page's facts come to at most 1,200 characters: a long page keeps at
+least 120 characters of the excerpt and loses its last item specifics or
+variants first. A page that answers 404, a category page listing several products, or an
+address that now opens another product's page is a fact too. Claude may
+then answer "different" naming the page (a new answer, `page`), which
+refuses a found page or hides a price like any other plain difference, but
+never keeps a pair apart for good. The prompt is version 5, so every row is
+asked once more with its page.
+
+Only shops you added are read, the way their reads already read them: a
+Shopify shop through `/products/<handle>.js` (as the stock probe does),
+any other shop's page for its schema.org product data, Open Graph tags,
+title and heading, and an eBay listing through eBay's own item lookup
+(never its page). Amazon, feed shops (affiliate links the site never
+follows) and hand-entered prices are not read, nor is a shop that is
+paused, switched off, waiting after errors, being read right now (asked
+again before every request) or asked by the background reader in the last
+30 seconds (it notes each shop it asks in the shared cache, so the two
+never add up to more than the shop's pace), nor a
+page the shop's robots.txt keeps robots away from (a robots.txt that answers
+401 or 403 keeps robots away from every page; one that cannot be read, a
+5xx, a 429 or a timeout, stops that shop's pages for an hour). A redirect is followed
+only within the shop's own site and never into a private network: a page
+that redirects to another site is "not read", and one that redirects to
+another page of the shop is reported as having moved. Each shop is asked no
+faster than its reads, one try with a 10 second limit; a 429 or three
+failures stop that shop for the run without touching its read back-off. A
+run reads at most 60 pages in 3 minutes. What a page said is kept for a
+day per address, so a second look or the next run does not read it again;
+a page that could not be read is tried again after an hour and is sent as
+"not read", with why. `RIPRAPTOR_CLAUDE_PAGES=0` stops the reading, and
+Claude is then sent what it was sent before. A dry run reads no page.
 
 On the server the background reader (see "Background reader" below) asks
 shops about single products all day: the products people look at, save,
@@ -1902,6 +1948,7 @@ site's cache.
 | `RIPRAPTOR_CLAUDE_API_KEY`     |         | An Anthropic API key. Leave empty and save the key from Things to check instead; set here, it wins over the saved one. |
 | `RIPRAPTOR_CLAUDE_KEY_FILE`    | `claude-key` beside the database | Where a key saved from the page is kept, readable only by the site's user. Never in the database or its backups: save the key again after restoring onto a new server. |
 | `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` | `25` | The highest monthly limit the page accepts, in US dollars. |
+| `RIPRAPTOR_CLAUDE_PAGES`       | on      | Before Claude is asked about a row, read the shop page(s) it is about for evidence (see "The shop's own page"). `0` sends only what the site holds. |
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 | `RIPRAPTOR_GA_ID`              | `G-TZW5ZVM9H8` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |

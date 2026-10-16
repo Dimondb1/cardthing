@@ -1867,7 +1867,9 @@ class PromptTests(Base):
         for field in ('"barcode"', '"title_language"', "sv2a"):
             self.assertIn(field, judge.SYSTEM_PROMPT)
         self.assertNotIn(chr(0x2014), judge.SYSTEM_PROMPT)
-        self.assertEqual(judge.PROMPT_VERSION, 4)
+        for field in ("shop_page", "shop_selected_variant", "page_barcode", "read_from_shop"):
+            self.assertIn(field, judge.SYSTEM_PROMPT)
+        self.assertEqual(judge.PROMPT_VERSION, 5)
 
     def test_the_evidence_says_both_languages(self):
         self.shop(100)

@@ -55,6 +55,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import connections
 from django.db.models import Q
 from django.utils import timezone
@@ -189,6 +190,24 @@ class TokenBucket:
             return (1 - self.tokens) / self.rate
 
 
+# When the worker last asked each shop (wall-clock seconds), in the shared cache, so the Claude judge's
+# page reads (catalogue/shop_pages.py) in another process leave a shop alone while the worker asks it
+# and never add to the worker's pace. Written at most once a NOTE_EVERY_SECONDS per shop.
+ASKED_KEY = "worker-asked:{}"
+ASKED_KEPT_SECONDS = 600
+NOTE_EVERY_SECONDS = 1.0
+
+
+def note_asked(retailer_id, at=None):
+    """Record that the worker is asking the shop now."""
+    cache.set(ASKED_KEY.format(retailer_id), time.time() if at is None else at, ASKED_KEPT_SECONDS)
+
+
+def last_asked(retailer_id):
+    """When the worker last asked the shop (time.time() seconds), or None when not in the last while."""
+    return cache.get(ASKED_KEY.format(retailer_id))
+
+
 class Politeness:
     """The buckets, and the fetch wrapper every request of the worker goes through."""
 
@@ -196,6 +215,7 @@ class Politeness:
         self.clock, self.sleep = clock, sleep
         self.everyone = TokenBucket(*GLOBAL_RATE, clock)
         self.shops = {}
+        self.noted = {}
         self.lock = threading.Lock()
         self.requests = deque()
 
@@ -219,6 +239,12 @@ class Politeness:
                 self.sleep(wait)
         with self.lock:
             self.requests.append(self.clock())
+            now = time.monotonic()
+            note = retailer.pk is not None and now - self.noted.get(retailer.pk, -NOTE_EVERY_SECONDS) >= NOTE_EVERY_SECONDS
+            if note:
+                self.noted[retailer.pk] = now
+        if note:
+            note_asked(retailer.pk)
 
     def wrap(self, retailer, base):
         def polite_fetch(url, *args, **kwargs):

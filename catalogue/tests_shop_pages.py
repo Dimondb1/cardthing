@@ -527,3 +527,37 @@ class SharingTheShopTests(ReaderBase):
         # A probe that starts mid-run stops the judge's next request.
         reader = self.reader(self.pages)
         self.assertEqual(reader.facts(self.second, self.store)["why"], "the stock watcher is asking this shop now")
+
+
+class BlockCapTests(ReaderBase):
+    """Every page block fits MAX_FACT_CHARS, keeping some of the description, whatever the shop wrote."""
+
+    def longest(self, source, **extra):
+        facts = {"status": "product", "source": source, "fetched_at": timezone.now().isoformat(),
+                 "name": "N" * shop_pages.TEXT_CHARS, "price": "1234.99", "availability": "out of stock",
+                 "barcode": "", "excerpt": "x" * shop_pages.EXCERPT_CHARS, "scan": "x", **extra}
+        return shop_pages.evidence(facts, self.product, shop="S" * 200)
+
+    def assert_capped(self, said):
+        self.assertLessEqual(len(json.dumps(said, ensure_ascii=False)), shop_pages.MAX_FACT_CHARS)
+        self.assertGreaterEqual(len(said["shop_description_excerpt"]), shop_pages.EXCERPT_KEPT)
+
+    def test_an_ebay_block_at_every_limit(self):
+        said = self.longest("ebay", condition="C" * 60, aspects=["A" * 80] * shop_pages.ASPECTS_SHOWN)
+        self.assert_capped(said)
+        self.assertGreaterEqual(len(said["shop_item_specifics"]), 1)
+        self.assertEqual(said["shop_condition"], "C" * 60)
+
+    def test_a_shopify_block_at_every_limit(self):
+        said = self.longest("shopify", variant="V" * 80, variants=["V" * 60] * shop_pages.VARIANTS_SHOWN,
+                            barcodes=[EAN] * shop_pages.VARIANTS_SHOWN)
+        self.assert_capped(said)
+
+    def test_a_page_block_at_every_limit(self):
+        said = self.longest("page", title="T" * shop_pages.TEXT_CHARS, h1="H" * shop_pages.TEXT_CHARS,
+                            now_at="/" + "p" * (shop_pages.TEXT_CHARS - 1))
+        self.assert_capped(said)
+
+    def test_quotes_and_backslashes_count_as_sent(self):
+        said = self.longest("ebay", condition='"' * 60, aspects=['\\' * 80] * shop_pages.ASPECTS_SHOWN)
+        self.assertLessEqual(len(json.dumps(said, ensure_ascii=False)), shop_pages.MAX_FACT_CHARS)

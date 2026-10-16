@@ -74,6 +74,8 @@ SCAN_CHARS = 3000
 VARIANTS_SHOWN = 8
 TEXT_CHARS = 160
 MAX_FACT_CHARS = 1200
+# The excerpt a block keeps before lists and other words are cut to fit MAX_FACT_CHARS.
+EXCERPT_KEPT = 120
 ASPECTS_SHOWN = 8
 # How the site reads each kind of shop's pages. Any other is never read.
 READ = (Retailer.Source.SHOPIFY, Retailer.Source.WEBSITE, Retailer.Source.EBAY)
@@ -586,7 +588,16 @@ PAGE_SAYS = {
 }
 
 
-def evidence(facts, product):
+def evidence(facts, product, shop=""):
+    """What Claude is sent about one page (page_evidence), with ``shop`` naming the shop when the row does
+    not (a pair), at most MAX_FACT_CHARS characters as JSON (capped)."""
+    said = page_evidence(facts, product)
+    if shop:
+        said["shop"] = text_of(shop, 80)
+    return capped(said)
+
+
+def page_evidence(facts, product):
     """The facts of one page as the judge sends them, labelled as read from the shop. Every field that
     holds the shop's own words starts with "shop_" (the prompt's rule 2). ``product`` is the product the
     page is compared with, for the barcode and the languages."""
@@ -646,9 +657,32 @@ def evidence(facts, product):
             said["languages_in_description"].append("English")
     if facts.get("excerpt"):
         said["shop_description_excerpt"] = facts["excerpt"]
-    # Bounded, whatever the shop wrote: the excerpt gives way first.
-    while len(json.dumps(said, ensure_ascii=False)) > MAX_FACT_CHARS and said.get("shop_description_excerpt"):
-        said["shop_description_excerpt"] = said["shop_description_excerpt"][:-50]
+    return said
+
+
+def size(said):
+    return len(json.dumps(said, ensure_ascii=False))
+
+
+def capped(said):
+    """``said`` cut to at most MAX_FACT_CHARS characters as JSON, whatever the shop wrote. The excerpt
+    gives way first, down to EXCERPT_KEPT; then the longer of the item specifics and the variants lose
+    their last entries, down to one; then the longest of the shop's words is shortened."""
+    excerpt = "shop_description_excerpt"
+    while size(said) > MAX_FACT_CHARS and len(said.get(excerpt, "")) > EXCERPT_KEPT:
+        said[excerpt] = said[excerpt][:max(EXCERPT_KEPT, len(said[excerpt]) - 50)]
+    while size(said) > MAX_FACT_CHARS:
+        lists = [key for key in ("shop_item_specifics", "shop_variants_on_page") if len(said.get(key) or []) > 1]
+        if not lists:
+            break
+        longest = max(lists, key=lambda key: size(said[key]))
+        said[longest] = said[longest][:-1]
+    while size(said) > MAX_FACT_CHARS:
+        words = [key for key, value in said.items() if key.startswith("shop_") and isinstance(value, str) and value]
+        if not words:
+            break
+        longest = max(words, key=lambda key: len(said[key]))
+        said[longest] = said[longest][:-20]
     return said
 
 
@@ -680,7 +714,6 @@ def attach(row, reader):
             if listing is None:
                 row.evidence[label] = {"read_from_shop": False, "why_not": "no shop page of ours to read"}
                 continue
-            said = evidence(reader.facts(listing.url, listing.retailer), product)
-            said["shop"] = listing.retailer.name
-            row.evidence[label] = said
+            row.evidence[label] = evidence(reader.facts(listing.url, listing.retailer), product,
+                                           shop=listing.retailer.name)
     return row

@@ -947,8 +947,10 @@ pair) with the time they were read: the page's title and heading, the
 product's name, the variant the address selects (`?variant=` is respected)
 and the variants on offer, the price, the stock, how its barcode compares
 with ours, the pack counts and languages the description names, a 300
-character excerpt of it, and whether the page shows one product at all. A
-page that answers 404, a category page listing several products, or an
+character excerpt of it, and whether the page shows one product at all.
+Each page's facts come to at most 1,200 characters: a long page keeps at
+least 120 characters of the excerpt and loses its last item specifics or
+variants first. A page that answers 404, a category page listing several products, or an
 address that now opens another product's page is a fact too. Claude may
 then answer "different" naming the page (a new answer, `page`), which
 refuses a found page or hides a price like any other plain difference, but

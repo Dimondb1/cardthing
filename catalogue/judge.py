@@ -124,8 +124,9 @@ BACK_TO_SUGGESTING = "Claude went back to suggesting"
 BACK_TO_SUGGESTING_DETAIL = (f"You undid {UNDONE_LIMIT} of Claude's acts this week, so it now only suggests. Tap "
                              "Let Claude act when you are happy with its answers again.")
 # Evidence characters a typical request carries, for the most a request could cost before one is built:
-# the site's own facts, and the shop page's (shop_pages, at most MAX_FACT_CHARS a page, two for a pair).
-TYPICAL_EVIDENCE = 2500 + 1200
+# the site's own facts (typical, not a cap) and the shop pages' at their cap (shop_pages.MAX_FACT_CHARS
+# a page, two for a pair). Each request's own reservation is worked out from what it really carries.
+TYPICAL_EVIDENCE = 2500 + 2 * shop_pages.MAX_FACT_CHARS
 
 STOPPED = "Claude has stopped"
 AT_LIMIT = "Claude reached its monthly limit"

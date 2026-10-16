@@ -775,10 +775,12 @@ What the free checks leave, Claude can answer (`catalogue/judge.py`). It is
 a paid Anthropic service, so it does nothing until you save a key and
 switch it on in the **Claude** box at the top of Things to check.
 
-Claude only says whether two things the site already holds are the same
-product: a found shop page and our product, a shop's price and our product,
-or two of our products. It never supplies a price, a date, a barcode or a
-product, and never touches sets, release dates or delivery charges. The
+For prices, found pages and duplicates, Claude only says whether two things
+the site already holds are the same product: a found shop page and our
+product, a shop's price and our product, or two of our products. It never
+supplies a price, a barcode or a product, and never touches delivery
+charges. The one place it supplies anything is an announced set, and only
+what a trusted web page it cites states (see "Announced sets" below). The
 site's own rules decide whether its answer may act:
 
 Claude settles every row itself, so Things to check ends up nearly empty
@@ -940,6 +942,22 @@ facts and the stored description add about 500 input tokens to a request
 so the limits hold. A careful second look, at high effort, costs about
 twice.
 
+An announced set costs more, because of the web search: Anthropic charges
+$10 per 1,000 searches (a cent each, in a batch too) on top of the tokens,
+and the pages found are read as input. Claude may run at most 3 searches a
+set (`set_judge.SET_SEARCHES`), and one run, or one batch, holds at most 60
+searches' worth of sets (`SEARCHES_PER_RUN`, so 20 sets); the other rows
+carry on. Each reply's searches are counted from Anthropic's usage figures
+and saved with the answer. Estimated, not yet measured on real traffic: about
+$0.10 to $0.20 a set on Opus 5.5 one by one (two searches, about 20,000
+input tokens), about $0.06 to $0.12 in a batch, and Sonnet 5.5 about half
+the token part. A backlog of 50 sets is therefore about $5 to $10. Before a
+set is asked, its worst case is reserved like any other: every search, each
+search's results at 15,000 tokens carried through every round, and every
+output token, which is $1.51 on Opus 5.5 one by one (a fallback could run it
+twice) and $0.35 in a batch, so the monthly limit holds whatever a search
+returns.
+
 At **$100 a month on Opus 5.5** that is about 4,000 answers one by one, or
 about 8,000 through batches: about 130 a day one by one, or 265 a day in
 batches, spread over the month. A backlog goes faster: hourly runs can ask
@@ -1052,6 +1070,55 @@ day per address, so a second look or the next run does not read it again;
 a page that could not be read is tried again after an hour and is sent as
 "not read", with why. `RIPRAPTOR_CLAUDE_PAGES=0` stops the reading, and
 Claude is then sent what it was sent before. A dry run reads no page.
+
+**Announced sets** (`catalogue/set_judge.py`). The sets under Announced sets
+to check that no release rule could add are Claude's too, in the same runs,
+batches, monthly limit and Let Claude act. Before it answers, Claude checks
+the set on the web with Anthropic's web search tool, limited to trusted
+domains for the set's game: the publisher's own sites first (pokemon.com and
+tcg.pokemon.com, the Japanese pokemon-card.com and pokemon.co.jp and the
+Korean pokemoncard.co.kr, magic.wizards.com, onepiece-cardgame.com,
+disneylorcana.com, starwarsunlimited.com, yugioh-card.com and the other
+publishers in `set_judge.DOMAINS`), then long-standing references
+(Bulbapedia, Serebii, PokeBeach, the MTG Wiki, Scryfall, Yugipedia and a few
+more). A game with no domains there (Football) is not sent; those rows stay
+yours. Claude is also sent the eight sets the site already has that are most
+like the announced one (same code, shared name words, then a date within six
+weeks), so it can say "the same as set N". What its answer may do:
+
+- **A new set** is added under the name, code and date Claude found, but
+  only what a page it cited states: the name must be on a cited page (or a
+  trusted page's title), or nothing is added; a code or date only counts
+  when the page naming the set states it too, and is left off otherwise. A
+  set the site already has under that name or code, or under the source's
+  name, is used instead: one set is never added twice. Claude's date is
+  written as "claude", so it never replaces your date or a source's, and a
+  publisher's date replaces it later.
+- **The same as a set the site has**: the row is filed under that set, only
+  when it is one of the sets Claude was sent and it cited a trusted page. A
+  date it found is written only where the set has none.
+- **Not a set** (a promo, a deck, an event, a misread title): dismissed as
+  your Not a set does, only when Claude is sure.
+- **Not sure**, after a careful second look at high effort, or nothing on
+  the trusted pages backs the answer: the safe choice. The set is **left
+  unadded for now**: off the list, not marked Needs you, and asked about
+  again when anything Claude was sent changes (a date, a code, a new set
+  like it) or after 14 days, as new pages may say more, at most five asks
+  in all. With Claude switched off those rows are back on your list.
+
+Each announced set on the page shows Claude's answer, the name, code and
+date its sources state, and the pages it rests on (marked "publisher" for
+the publisher's own), and the list shrinks as Claude settles rows. Every
+act is under Sorted for you with its sources and Undo: undoing an added set
+takes the set away again (while no other source has taken it and its date
+is still Claude's), undoing a filing takes off only the date Claude wrote,
+and either way the row is back for you and never Claude's again. Your own
+Add set or Not a set always wins, even while Claude's question is out.
+
+Search results are web pages, so they are treated as data: the prompt says
+so, and nothing a page says counts unless it passes the checks above
+(trusted domain, cited, naming the set). An answer given before a search it
+started has come back is not an answer.
 
 On the server the background reader (see "Background reader" below) asks
 shops about single products all day: the products people look at, save,

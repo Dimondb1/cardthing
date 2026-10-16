@@ -101,9 +101,11 @@ def barcode_bars_link(product, shop_row):
     return ""
 
 
-# Answers that change nothing on the site (Checked) or only hold a pair back for now (Kept apart for now). Undoing
-# one asks the owner to look himself; it does not say Claude was wrong.
-SAFE_KINDS = (Kind.CHECKED, Kind.HELD)
+# Answers that change nothing on the site (Checked, Set left unadded for now) or only hold a pair back for now (Kept
+# apart for now). Undoing one asks the owner to look himself; it does not say Claude was wrong.
+SAFE_KINDS = (Kind.CHECKED, Kind.HELD, Kind.SET_HELD)
+# Claude's answers about an announced set, undone by set_judge.undo.
+CLAUDE_SET_KINDS = (Kind.ADD_SET, Kind.SAME_SET, Kind.NOT_SET, Kind.SET_HELD)
 
 
 class Stale(Exception):
@@ -496,6 +498,10 @@ def undo(answer, now=None):
             # Nothing on the site changed, so nothing is put back: the price waits for the owner again.
             message = (f"Undone: {answer.listing.retailer.name}'s price for {answer.listing.product.name} is back "
                        "under Doubtful prices for you.")
+        elif answer.kind in CLAUDE_SET_KINDS and answer.ask_id and answer.release is not None:
+            from . import set_judge
+
+            message = set_judge.undo(answer)
         elif answer.kind == Kind.ADD_SET and answer.release is not None:
             message = undo_set(answer)
         elif answer.kind == Kind.APART:
@@ -522,7 +528,7 @@ def undo(answer, now=None):
                 # asks to look at the price himself.
                 from .models import ClaudeAsk
 
-                opposite = "look" if answer.kind in SAFE_KINDS else (
+                opposite = "look" if answer.kind in SAFE_KINDS else "undone" if answer.kind in CLAUDE_SET_KINDS else (
                     "different" if answer.ask.verdict == "same" else "same")
                 ClaudeAsk.objects.filter(pk=answer.ask_id).update(owner_answer=opposite)
     if message and answer.ask_id and answer.kind not in SAFE_KINDS:

@@ -311,7 +311,7 @@ class AskingOrderTests(PairBase):
         rows = [judge.Row("offer", "offer:1", {}), judge.Row("offer", "offer:2", {}, partner="offer:3"),
                 judge.Row("offer", "offer:3", {}, partner="offer:2"), judge.Row("pair", "pair:1:2", {}),
                 judge.Row("pair", "pair:3:4", {}), judge.Row("found", "found:1", {}), judge.Row("found", "found:2", {})]
-        lanes = {"offer:1": 0, "offer:2": 0, "offer:3": 0, "pair:1:2": 1, "pair:3:4": 1, "found:1": 2, "found:2": 3}
+        lanes = {"offer:1": 0, "offer:2": 0, "offer:3": 0, "pair:1:2": 1, "pair:3:4": 1, "found:1": 2, "found:2": 4}
         with mock.patch.object(judge, "worth", side_effect=lambda row: lanes[row.key]):
             order = [row.key for row in judge.take_turns(rows)]
         self.assertEqual(order, ["offer:1", "pair:1:2", "found:1", "offer:2", "offer:3", "pair:3:4", "found:2"])

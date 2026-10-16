@@ -112,6 +112,7 @@
         {% for answer in answers %}
         <li class="item"><b>{{ answer.what }}</b>
           <span class="why">{{ answer.why|capfirst }}. {{ answer.created_at|date:"j M H:i" }}.</span>
+          {% if answer.ask.sources %}<span class="why">Sources: {% for source in answer.ask.sources %}<a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.title|default:source.url }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.</span>{% endif %}
           <div class="row">{% if answer.undone_at %}<span class="none">Undone {{ answer.undone_at|date:"j M H:i" }}.</span>{% elif answer.kind == "merge" and not answer.undo_note %}<span class="none">A merge cannot be undone.</span>{% else %}
             <form method="post">{% csrf_token %}<input type="hidden" name="action" value="undo"><input type="hidden" name="answer" value="{{ answer.pk }}"><input type="submit" value="Undo"></form>{% endif %}</div>
         </li>
@@ -231,7 +232,7 @@
 
   <section>
     <h2>Announced sets to check ({{ releases|length }})</h2>
-    <p class="note">New sets named by a source. Check the name and date, then tap Add set, or Not a set.</p>
+    <p class="note">New sets named by a source. Check the name and date, then tap Add set, or Not a set.{% if claude.state.enabled and claude.server_on %} Claude checks each one on the publisher's site and trusted references first, and the list shrinks as it settles them; each answer shows the pages it rests on.{% endif %}</p>
     {% if releases %}<ul>
       {% for row in releases %}
       <li class="item"><b>{{ row.name }}{% if row.code and row.code != row.name %} ({{ row.code }}){% endif %}</b>
@@ -239,6 +240,7 @@
         {% if row.precision == "day" %}Out {{ row.release_date|date:"j F Y" }}.{% elif row.precision == "month" %}Out in {{ row.release_date|date:"F Y" }}, day not given.{% else %}No date given.{% endif %}
         {% if row.note %}Shop title: "{{ row.note }}".{% endif %}
         {% if row.product_set %}The site has this set, as {{ row.product_set.name }}, with no date yet.{% endif %}
+        {% include "admin/_claude_set.html" with ask=row.claude %}
         <div class="row">
           <details><summary>Add set</summary>
             <form method="post" class="addset">{% csrf_token %}<input type="hidden" name="action" value="add_set"><input type="hidden" name="release" value="{{ row.pk }}">

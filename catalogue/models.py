@@ -1259,6 +1259,11 @@ class CheckAnswer(models.Model):
         ADD_SET = "add_set", "Added an announced set"
         CHECKED = "checked", "Checked, left as shown"
         HELD = "held", "Kept apart for now"
+        # Claude's answers about an announced set (judge.act_set), each with Undo. ADD_SET above is Claude's too
+        # when the answer has an ask.
+        SAME_SET = "same_set", "Filed under a set the site has"
+        NOT_SET = "not_set", "Not a set"
+        SET_HELD = "set_held", "Set left unadded for now"
 
     kind = models.CharField(max_length=10, choices=Kind.choices)
     by_owner = models.BooleanField(default=False)
@@ -1354,6 +1359,7 @@ class ClaudeAsk(models.Model):
         FOUND = "found", "Found at another shop"
         OFFER = "offer", "A shop's price"
         PAIR = "pair", "Possible duplicates"
+        SET = "set", "Announced set"
 
     class Outcome(models.TextChoices):
         SENT = "sent", "Sent"
@@ -1402,6 +1408,13 @@ class ClaudeAsk(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     other = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # An announced set (kind set): the row asked about; what Claude found for it (name, code, date, the set the
+    # site has that it is the same as, and which of those a cited source states); the web searches it ran; and
+    # the pages it cited, each {"url", "title", "cited_text", "official"}.
+    release = models.ForeignKey(Release, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    set_answer = models.JSONField(default=dict, blank=True)
+    web_searches = models.PositiveSmallIntegerField(default=0)
+    sources = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["-asked_at", "-pk"]
@@ -1424,7 +1437,9 @@ class ClaudeAsk(models.Model):
         e = self.evidence or {}
         if self.kind == self.Kind.PAIR:
             return f"{(e.get('first') or {}).get('name', '')} and {(e.get('second') or {}).get('name', '')}"
-        ours = (e.get("ours") or {}).get("name", "")
+        if self.kind == self.Kind.SET:
+            return f"the announced set {e.get('announced_name', '')} for {e.get('game', '')}"
+        ours =(e.get("ours") or {}).get("name", "")
         if self.kind == self.Kind.FOUND:
             return f'"{e.get("shop_title", "")}" at {e.get("shop", "")} for {ours}'
         return f"{ours} at {e.get('shop', '')}, £{e.get('price', '')}"
@@ -1436,7 +1451,18 @@ class ClaudeAsk(models.Model):
             return self.RESULT_WORDS.get(self.action, "answered")
         return self.RESULT_WORDS.get(self.outcome, self.get_outcome_display())
 
-    VERDICT_WORDS = {"same": "same product", "different": "a different product", "unsure": "cannot tell"}
+    @property
+    def found_date(self):
+        """The release date an announced set's sources state, as a date, or None."""
+        from datetime import date
+
+        try:
+            return date.fromisoformat((self.set_answer or {}).get("release_date") or "")
+        except ValueError:
+            return None
+
+    VERDICT_WORDS = {"same": "same product", "different": "a different product", "unsure": "cannot tell",
+                     "new": "a new set", "existing": "a set the site has", "not_a_set": "not a set"}
     CONFIDENCE_WORDS = {"high": "sure", "medium": "fairly sure", "low": "not sure"}
 
     @property

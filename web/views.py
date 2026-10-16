@@ -1737,6 +1737,8 @@ def checks_page(request):
     claude = judge.page_status(now)
     state = claude["state"]
     claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates, may_act=bool(state and state.may_act))
+    release_rows = checks.release_candidates(now)
+    judge.attach_set_answers(release_rows, may_act=bool(state and state.may_act))
     context = {
         **admin.site.each_context(request), "title": "Things to check",
         "answers": checks.listed_answers(answers), "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
@@ -1750,7 +1752,7 @@ def checks_page(request):
         "max_percent": offers.MAX_REAL_PERCENT,
         "found": found, "found_count": checks.found_waiting().count(),
         "claude": claude, "claude_counts": claude_counts,
-        "releases": checks.release_candidates(now), "disagreements": checks.release_disagreements(now),
+        "releases": release_rows, "disagreements": checks.release_disagreements(now),
         "stale_sources": checks.stale_release_sources(now),
     }
     # The owner reads a source's name, never its internal key (tcgdex_sets, shop:total-cards).
@@ -1903,8 +1905,12 @@ def release_tap(request, action):
     if row is None:
         messages.warning(request, changed)
         return
+    from catalogue import judge
+
     if action == "not_a_set":
         releases.dismiss(row)
+        # The owner's tap is final: Claude's answer about the row, if any, is marked as his.
+        judge.note_owner(f"set:{row.pk}", "not_set")
         messages.success(request, f"Noted: {row.name} is not a set. {row.game.name} sets called that are not "
                                   "suggested again from this source.")
         return
@@ -1926,6 +1932,7 @@ def release_tap(request, action):
         return
     with transaction.atomic():
         product_set = releases.add_set(row, name, released)
+        judge.note_owner(f"set:{row.pk}", "added")
     clear_list_caches(force=True)
     when = f" It comes out on {product_set.release_date:%-d %B %Y}." if product_set.release_date else ""
     messages.success(request, f"Added the set {product_set.name} to {row.game.name}.{when} Products named after it "

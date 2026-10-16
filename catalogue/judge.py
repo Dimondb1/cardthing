@@ -102,9 +102,25 @@ PRICES = {
 DEAREST = (5, 6.25, 0.50, 25)
 
 MAX_TOKENS = 6000
-ROWS_PER_RUN = 25
-RUN_BUDGET_USD = Decimal("1.00")
-RUN_SECONDS = 600
+# A run asks at most this many rows one by one (hourly), and spends at most RUN_BUDGET_USD in RUN_SECONDS. At
+# about $0.025 an answer on Opus that is about $1.25 an hour, so $100 a month is reached in about three days
+# of backlog, and the monthly limit stops it there.
+ROWS_PER_RUN = 50
+RUN_BUDGET_USD = Decimal("3.00")
+RUN_SECONDS = 900
+# Sort everything sends a backlog through Anthropic's Message Batches API at half price: one batch at a time,
+# of at least BATCH_MIN and at most BATCH_ROWS rows, reserving at most BATCH_BUDGET_USD of worst cases. Each
+# run collects a batch that has ended; most end within the hour, all within a day. Fewer rows than BATCH_MIN
+# are asked one by one, so a short list is settled at once. Batches take no server-side fallback.
+BATCH_MIN = 20
+# The judge looks at up to this many doubtful prices and found pages each, far past the page's 50, so rows
+# left waiting (a barcode not read yet, one that needs the owner) never hide the rest of a backlog.
+OPEN_ROWS = 3000
+BATCH_ROWS = 300
+BATCH_BUDGET_USD = Decimal("25.00")
+# A batch's rows are read from the shop's pages within these limits (shop_pages.Reader), at the shop's pace.
+BATCH_PAGES = 200
+BATCH_PAGE_SECONDS = 420
 ASK_LIMIT = 5
 # Without a tap, a run starts this long after the last one, when rows are waiting.
 RUN_EVERY = timedelta(hours=1)
@@ -132,7 +148,7 @@ NOT_THE_OWNERS = {CAREFUL_LOOK, PARTNER_FIRST, BARCODE_NEXT_READ}
 # merge_duplicates.certainty's levels (a test keeps them the same): a pair is never merged across DIFFERENT.
 CERTAIN, LIKELY, DIFFERENT = "certain", "likely", "different"
 # A run the owner asked for looks further than the hourly one, within the same time and money limits.
-OWNER_ROWS_PER_RUN = 100
+OWNER_ROWS_PER_RUN = 150
 # A link that would claim more than this saving on the cheapest price is left for the owner.
 LINK_SAVING_MAX = 25
 # The owner undoing this many of Claude's acts in a week puts it back to suggesting.
@@ -329,26 +345,32 @@ def price_usage(usage, model):
     return math.ceil(total)
 
 
-def cost_micros(message, model_asked):
-    """What a reply cost: each iteration (the model asked, and any fallback) at its own model's rates."""
+def cost_micros(message, model_asked, batch=False):
+    """What a reply cost: each iteration (the model asked, and any fallback) at its own model's rates, and
+    half that for an answer from a batch."""
     usage = message.usage
     iterations = getattr(usage, "iterations", None) or []
     if iterations:
-        return sum(price_usage(step, getattr(step, "model", None) or model_asked) for step in iterations)
-    return price_usage(usage, getattr(message, "model", None) or model_asked)
+        total = sum(price_usage(step, getattr(step, "model", None) or model_asked) for step in iterations)
+    else:
+        total = price_usage(usage, getattr(message, "model", None) or model_asked)
+    return math.ceil(total / 2) if batch else total
 
 
-def worst_case_micros(params, model):
+def worst_case_micros(params, model, batch=False):
     """The most one request could cost: its whole prompt written to the cache and every output token,
-    and the same again at the dearest rates when a fallback could run it a second time."""
+    and the same again at the dearest rates when a fallback could run it a second time. In a batch there is
+    no fallback and every token is half price."""
     characters = len(params["system"][0]["text"]) + sum(len(m["content"]) for m in params["messages"])
-    return worst_from_characters(characters, model)
+    return worst_from_characters(characters, model, batch)
 
 
-def worst_from_characters(characters, model):
+def worst_from_characters(characters, model, batch=False):
     tokens = math.ceil(characters / 3)
     _, write, _, out = rates(model)
     worst = tokens * write + MAX_TOKENS * out
+    if batch:
+        return math.ceil(worst / 2)
     if model in FALLBACK_MODELS:
         worst += tokens * DEAREST[1] + MAX_TOKENS * DEAREST[3]
     return math.ceil(worst)
@@ -626,10 +648,10 @@ def open_rows(now=None):
     def open_offer(listing):
         return bool(listing.title) and listing.pk not in answered and listing.trusted_price is None
 
-    doubtful = [listing for listing in checks.doubtful_prices(now) if open_offer(listing)]
+    doubtful = [listing for listing in checks.doubtful_prices(now, limit=OPEN_ROWS) if open_offer(listing)]
     wrong = [(product, summary) for product, summary in checks.wrong_matches()
              if open_offer(summary.best) and open_offer(summary.second)]
-    found = [row for row in checks.found_stockists(now) if row.title and row.pk not in answered_rows]
+    found = [row for row in checks.found_stockists(now, limit=OPEN_ROWS) if row.title and row.pk not in answered_rows]
     pairs = [(keep, other) for keep, others in checks.duplicates() for other in others
              if frozenset((keep.pk, other.pk)) not in settled]
     scores = interest_scores(now, visitors_only=True) if found or pairs else {}
@@ -670,6 +692,8 @@ def waiting(now=None):
     (ruling's CAREFUL_LOOK) is asked once more at high effort, after the rest."""
     rows = open_rows(now)
     owner_said = set(Ask.objects.exclude(owner_answer="").values_list("row_key", flat=True))
+    # A row whose question waits in a batch is not asked again meanwhile.
+    owner_said |= set(Ask.objects.filter(outcome=Ask.Outcome.SENT).exclude(batch_id="").values_list("row_key", flat=True))
     before = asked_before()
     latest = latest_answers({row.key for row in rows})
     keep, again, seen_keys = [], [], set()
@@ -739,7 +763,8 @@ def clean(text):
 
 def read_answer(message, row):
     """(outcome, answer dict or None, refusal category) from a reply. Only a whole, valid reply that
-    names this row counts as an answer."""
+    names this row (a Row, or its key) counts as an answer."""
+    row_key = getattr(row, "key", row)
     reason = getattr(message, "stop_reason", None)
     if reason == "refusal":
         details = getattr(message, "stop_details", None)
@@ -754,7 +779,7 @@ def read_answer(message, row):
     except (TypeError, ValueError):
         return Ask.Outcome.INVALID, None, ""
     valid = (
-        isinstance(answer, dict) and answer.get("row") == row.key
+        isinstance(answer, dict) and answer.get("row") == row_key
         and answer.get("verdict") in ("same", "different", "unsure")
         and answer.get("confidence") in ("high", "medium", "low")
         and isinstance(answer.get("differences"), list) and isinstance(answer.get("reason"), str)
@@ -763,6 +788,161 @@ def read_answer(message, row):
     if not valid:
         return Ask.Outcome.INVALID, None, ""
     return Ask.Outcome.ANSWERED, answer, ""
+
+
+def record_reply(ask, message, batch=False):
+    """Save what a reply said and cost on its ClaudeAsk (``batch``: an answer from a Message Batch, at half
+    price). Returns (the answer, with whether it was the careful look, or None; its cost in micro-dollars)."""
+    outcome, answer, category = read_answer(message, ask.row_key)
+    cost = cost_micros(message, ask.model_asked, batch=batch)
+    usage = message.usage
+    fields = {
+        "outcome": outcome, "refusal_category": category, "model_answered": getattr(message, "model", "")[:40],
+        "input_tokens": getattr(usage, "input_tokens", 0) or 0,
+        "cache_write_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        "cache_read_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
+        "output_tokens": getattr(usage, "output_tokens", 0) or 0,
+        "reserved_micros": 0, "cost_micros": cost, "fallback": from_fallback(message, ask.model_asked),
+        "request_id": (getattr(message, "_request_id", None) or getattr(message, "id", "") or "")[:80],
+    }
+    if answer is not None:
+        answer["careful"] = ask.effort == "high"
+        fields.update(verdict=answer["verdict"], confidence=answer["confidence"],
+                      differences=answer["differences"], reason=clean(answer["reason"]))
+    Ask.objects.filter(pk=ask.pk).update(**fields)
+    return answer, cost
+
+
+# Batches ------------------------------------------------------------------------------------------
+
+def pending_batch_ids():
+    """The Message Batches still holding questions: sent, in a batch, not collected yet."""
+    return list(Ask.objects.filter(outcome=Ask.Outcome.SENT).exclude(batch_id="")
+                .order_by("batch_id").values_list("batch_id", flat=True).distinct())
+
+
+def custom_id(ask):
+    return f"ask-{ask.pk}"
+
+
+def batch_failed(error):
+    """The PROBLEMS kind for a batch call that failed (raising Stop for one that stops the runs), or "busy"
+    for one that only ends this look."""
+    kind = problem_of(error)
+    if kind in ("busy", "rejected"):
+        logger.warning("Claude judge: a batch call failed (%s): %s", kind, str(error)[:300])
+        return "busy"
+    raise Stop(kind, str(error)) from error
+
+
+def any_ended(client, batch_ids):
+    """Whether any of these batches has ended. Free."""
+    for batch_id in batch_ids:
+        try:
+            batch = client.messages.batches.retrieve(batch_id)
+        except Exception as error:
+            if isinstance(error, _not_found()):
+                return True   # gone: the next full run settles its questions
+            batch_failed(error)
+            return False
+        if getattr(batch, "processing_status", "") == "ended":
+            return True
+    return False
+
+
+def _not_found():
+    import anthropic
+
+    return anthropic.NotFoundError
+
+
+def collect_batches(client):
+    """Save the answers of every batch that has ended, as a run saves its own; act_on_earlier then acts on
+    them by the same rules. A question the batch errored on, cancelled or let expire was not billed: it is
+    settled as not sent, its reservation freed, and asked again. Returns how many answers came back."""
+    collected = 0
+    for batch_id in pending_batch_ids():
+        asks = {custom_id(ask): ask for ask in Ask.objects.filter(batch_id=batch_id, outcome=Ask.Outcome.SENT)}
+        try:
+            batch = client.messages.batches.retrieve(batch_id)
+            if getattr(batch, "processing_status", "") != "ended":
+                continue
+            results = list(client.messages.batches.results(batch_id))
+        except Exception as error:
+            if isinstance(error, _not_found()):
+                Ask.objects.filter(pk__in=[a.pk for a in asks.values()]).update(
+                    outcome=Ask.Outcome.ERROR, reserved_micros=0, reason="Anthropic no longer holds this batch")
+                continue
+            if batch_failed(error) == "busy":
+                return collected
+        invalid = 0
+        for item in results:
+            ask = asks.pop(getattr(item, "custom_id", ""), None)
+            if ask is None:
+                continue
+            kind = getattr(item.result, "type", "")
+            if kind == "succeeded":
+                record_reply(ask, item.result.message, batch=True)
+                collected += 1
+                continue
+            error = getattr(getattr(item.result, "error", None), "type", "") or ""
+            invalid += error == "invalid_request"
+            Ask.objects.filter(pk=ask.pk).update(outcome=Ask.Outcome.ERROR, reserved_micros=0,
+                                                 reason=clean(f"Anthropic's batch: {kind} {error}".strip()))
+        # A question the results leave out was not answered, and not billed.
+        Ask.objects.filter(pk__in=[a.pk for a in asks.values()]).update(
+            outcome=Ask.Outcome.ERROR, reserved_micros=0, reason="Anthropic's batch did not answer it")
+        if results and invalid == len(results):
+            # Anthropic refused every question: the fault is the site's. They are asked again tomorrow.
+            raise Stop("bug", "every question in the batch was refused")
+    return collected
+
+
+def submit_batch(client, state, rows, reader, now):
+    """Send ``rows`` as one Message Batch at half price, each with its worst case reserved, within the
+    monthly limit and BATCH_BUDGET_USD. Returns (how many were sent, a note or "")."""
+    from . import notify
+
+    started = time.monotonic()
+    requests, asks, reserved, note = [], [], 0, ""
+    for row in rows:
+        if time.monotonic() - started > RUN_SECONDS:
+            note = "Stopped for time"
+            break
+        if reader is not None:
+            shop_pages.attach(row, reader)
+        params = request_params(state, row, cache=True)
+        worst = worst_case_micros(params, state.model, batch=True)
+        moment = timezone.now()
+        # The reservations of the questions already made for this batch are counted in the month's spend.
+        if spent_this_month(moment) + worst > monthly_limit_micros(state):
+            notify.owner(AT_LIMIT, AT_LIMIT, notify.CHECKS_PATH,
+                         "Claude waits until next month, or until you raise its monthly limit.", now=moment)
+            note = "Reached the monthly limit"
+            break
+        if reserved + worst > BATCH_BUDGET_USD * 1_000_000:
+            note = "Reached the limit for one batch"
+            break
+        ask = Ask.objects.create(
+            kind=row.kind, row_key=row.key, fingerprint=row.fingerprint, model_asked=state.model,
+            effort=row.effort or state.effort, evidence=row.evidence, reserved_micros=worst, asked_at=moment,
+            shop_product=row.shop_product, listing=row.listing, product=row.product, other=row.other,
+        )
+        requests.append({"custom_id": custom_id(ask), "params": params})
+        asks.append(ask.pk)
+        reserved += worst
+    if not requests:
+        return 0, note
+    try:
+        batch = client.messages.batches.create(requests=requests)
+    except Exception as error:
+        # Nothing was sent: nothing is owed and the rows are asked again.
+        Ask.objects.filter(pk__in=asks).update(outcome=Ask.Outcome.ERROR, reserved_micros=0,
+                                               reason=clean(f"Anthropic: {getattr(error, 'message', '') or error}"))
+        batch_failed(error)
+        return 0, "Anthropic was busy"
+    Ask.objects.filter(pk__in=asks).update(batch_id=str(batch.id)[:80])
+    return len(requests), note
 
 
 def from_fallback(message, model):
@@ -1328,7 +1508,8 @@ def due(state, now):
     if state.problem in STOPPING and state.problem_at and now - state.problem_at < STOPPED_FOR:
         if not (asked and state.asked_at > state.problem_at):
             return "Claude has stopped."
-    if asked or keep_going(state):
+    if asked or keep_going(state) or pending_batch_ids():
+        # A batch waiting at Anthropic is looked at every five minutes, for free (run's quick look).
         return ""
     if state.last_run_at is not None and now - state.last_run_at < RUN_EVERY:
         return "Claude ran less than an hour ago."
@@ -1355,6 +1536,8 @@ def stop(state, kind, now):
 @dataclass
 class Result:
     asked: int = 0
+    sent: int = 0          # questions sent in a batch, answered at a later run
+    collected: int = 0     # answers that came back from a batch
     acted: int = 0
     earlier: int = 0
     suggested: int = 0
@@ -1387,6 +1570,19 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
         return result
     previous_run = state.last_run_at
     asked_by_owner = state.asked_at is not None and (previous_run is None or state.asked_at > previous_run)
+    pending = [] if dry_run else pending_batch_ids()
+    if (pending and not force and not asked_by_owner and not keep_going(state) and previous_run is not None
+            and now - previous_run < RUN_EVERY):
+        # Due only because a batch waits: one free look, and nothing more until it has ended.
+        client = client or make_client(key())
+        try:
+            if not any_ended(client, pending):
+                result.note = "Waiting for Anthropic's batch"
+                return result
+        except Stop as stopped:
+            stop(state, stopped.kind, now)
+            result.note = problem_text(stopped.kind)
+            return result
     hides = {"left": HIDES_PER_RUN}
     if not dry_run and autopilot.enabled():
         autopilot.run(now=now)
@@ -1395,14 +1591,37 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
         lift_holds()
         # Answers given in trial, or before the row's other checks agreed, are free to act on now.
         result.earlier = result.acted = act_on_earlier(now, hides)
+    if pending:
+        # A batch that has ended: its answers are saved, then acted on by the same rules, free.
+        client = client or make_client(key())
+        try:
+            check_key(client, state, previous_run)
+            result.collected = collect_batches(client)
+        except Stop as stopped:
+            stop(state, stopped.kind, now)
+            result.note = problem_text(stopped.kind)
+            finish(state, now, result, result.note)
+            return result
+        if result.collected:
+            more = act_on_earlier(now, hides)
+            result.earlier += more
+            result.acted += more
     rows = waiting(now)
     total = len(rows)
-    # Sort everything asks about every row, within the run's time and money; the next run goes on at once.
-    if not state.sort_all:
+    batch = False
+    if state.sort_all and (dry_run or not pending_batch_ids()) and len(rows) >= BATCH_MIN:
+        # Sort everything sends the backlog in one batch at half price; a short list is asked one by one.
+        batch, rows = True, rows[:BATCH_ROWS]
+    elif state.sort_all and not dry_run and pending_batch_ids():
+        # One batch at a time: the rest wait for it, rather than being asked at full price meanwhile.
+        rows = []
+        result.note = "Waiting for Anthropic's batch"
+    elif not state.sort_all:
         rows = rows[:OWNER_ROWS_PER_RUN if asked_by_owner else ROWS_PER_RUN]
     reader = None
     if settings.RIPRAPTOR_CLAUDE_PAGES or pages is not None:
-        reader = pages or shop_pages.Reader(now=now, cache_only=dry_run)
+        reader = pages or (shop_pages.Reader(now=now, cache_only=dry_run, pages=BATCH_PAGES, seconds=BATCH_PAGE_SECONDS)
+                           if batch else shop_pages.Reader(now=now, cache_only=dry_run))
     if dry_run:
         would = act_on_earlier(now, dry_run=True)
         result.lines.append("From answers already given, at no cost: " + (
@@ -1410,10 +1629,11 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
         for row in rows:
             if reader is not None:
                 shop_pages.attach(row, reader)
-            params = request_params(state, row, cache=len(rows) > 1)
-            result.lines.append(f"{row.key}: worst case {dollars(worst_case_micros(params, state.model))}")
+            params = request_params(state, row, cache=batch or len(rows) > 1)
+            result.lines.append(f"{row.key}: worst case {dollars(worst_case_micros(params, state.model, batch))}")
             result.lines.append(json.dumps(row.evidence, sort_keys=True, ensure_ascii=False))
-        result.note = f"Would ask about {len(rows)} rows"
+        result.note = (f"Would send {len(rows)} rows in a batch at half price" if batch
+                       else f"Would ask about {len(rows)} rows")
         return result
     started = time.monotonic()
     client = client or make_client(key())
@@ -1424,6 +1644,10 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
         check_key(client, state, previous_run)
         from . import crawl
 
+        if batch:
+            result.sent, note = submit_batch(client, state, rows, reader, now)
+            result.note = result.note or note
+            rows = []
         for row in rows:
             state = ClaudeJudge.load()
             if not state.enabled or not key():
@@ -1470,23 +1694,7 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
                     continue
                 raise Stop(kind, str(error)) from error
             rejected, rejected_asks = 0, []
-            outcome, answer, category = read_answer(message, row)
-            cost = cost_micros(message, state.model)
-            usage = message.usage
-            fields = {
-                "outcome": outcome, "refusal_category": category, "model_answered": getattr(message, "model", "")[:40],
-                "input_tokens": getattr(usage, "input_tokens", 0) or 0,
-                "cache_write_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
-                "cache_read_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
-                "output_tokens": getattr(usage, "output_tokens", 0) or 0,
-                "reserved_micros": 0, "cost_micros": cost, "fallback": from_fallback(message, state.model),
-                "request_id": (getattr(message, "_request_id", None) or getattr(message, "id", "") or "")[:80],
-            }
-            if answer is not None:
-                answer["careful"] = (row.effort or state.effort) == "high"
-                fields.update(verdict=answer["verdict"], confidence=answer["confidence"],
-                              differences=answer["differences"], reason=clean(answer["reason"]))
-            Ask.objects.filter(pk=ask.pk).update(**fields)
+            answer, cost = record_reply(ask, message)
             ask.refresh_from_db()
             result.asked += 1
             result.spent += cost
@@ -1537,9 +1745,13 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
         result.note = "The database was busy"
     else:
         ClaudeJudge.objects.filter(pk=state.pk).update(problem="", problem_at=None)
-    not_asked = result.left = max(0, total - result.asked)
+    not_asked = result.left = max(0, total - result.asked - result.sent)
     earlier = f" ({result.earlier} from earlier answers)" if result.earlier else ""
     note = f"looked at {result.asked}, sorted {result.acted}{earlier}, {result.need_you} need you"
+    if result.collected:
+        note += f", {result.collected} answers back from a batch"
+    if result.sent:
+        note += f", {result.sent} sent in a batch at half price"
     if not_asked:
         note += f", {not_asked} still to look at"
     if result.note:
@@ -1555,7 +1767,8 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
 
 def finish(state, now, result, note):
     """The run is over: say so, and keep it at the top of the page's list of runs."""
-    entry = {"at": now.isoformat(), "asked": result.asked, "sorted": result.acted, "earlier": result.earlier,
+    entry = {"at": now.isoformat(), "asked": result.asked, "sent": result.sent, "collected": result.collected,
+             "sorted": result.acted, "earlier": result.earlier,
              "suggested": result.suggested, "need_you": result.need_you, "can_wait": result.can_wait,
              "left": result.left, "spent": result.spent, "note": result.note.rstrip(".")}
     runs = [entry, *(ClaudeJudge.objects.filter(pk=state.pk).values_list("runs", flat=True).first() or [])][:RUNS_KEPT]

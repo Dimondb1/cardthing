@@ -171,8 +171,9 @@ A Read me with the file's number and how to edit it, then:
 | Left out | one shop's items its latest read left out, when a shop was picked | Link to product id, Decision |
 | Sets | every set | Name, Code, Release date |
 
-Grey columns (prices, stock, shop titles, links, counts, Look-alike group,
-Kept apart from) come from the shops or the site and are ignored on upload.
+Grey columns (prices, stock, shop titles, the start of each shop's
+description, links, counts, Look-alike group, Kept apart from) come from the
+shops or the site and are ignored on upload.
 Look-alike group numbers products that may be one product on two pages (the
 loose duplicate key, a Chinese set code or a shared barcode, whatever their
 types). Products merged away are left out, and their listings say "Merged
@@ -881,8 +882,10 @@ duplicate pair, a found page a "same" would link, and round again, so a
 long list of prices never keeps the pairs waiting. Pairs and found pages
 visitors want most come first in their turn. Then the rest, then the
 careful second looks. An hourly run
-asks up to 25 rows; one you ask for with **Ask Claude now** up to 100,
-within the same $1 and 10 minute limits. **Ask Claude now** starts the run
+asks up to 50 rows; one you ask for with **Ask Claude now** up to 150,
+within the same $3 and 15 minute limits. Claude looks at up to 3,000
+doubtful prices and 3,000 found pages, far past the 50 the page lists, so
+rows left waiting never hide the rest of a backlog. **Ask Claude now** starts the run
 at once in its own process (`judge_checks` holds a lock file in the cache
 directory, so two runs never overlap). At most 30 prices are hidden in one
 run; the rest are hidden from their answers at the next. If you undo three
@@ -892,11 +895,21 @@ to suggesting and tells you. Undoing a Checked price or a pair kept apart for
 now never counts: those were the safe choice.
 
 **Sort everything** (a button in the Claude box, off by default) works
-through the whole list now rather than 25 rows an hour. It turns on Let
-Claude act and starts a run at once; each run then asks about every waiting
-row within its $1 and 10 minutes, and while rows are left the next run
-starts at the next five-minute tick instead of an hour later. The rules are
-the same either way. The monthly limit still holds.
+through the whole list now rather than 50 rows an hour. It turns on Let
+Claude act and starts a run at once. With 20 or more rows waiting, the run
+sends up to 300 of them to Anthropic as one **Message Batch**, at half
+price: one batch at a time, each question's worst case reserved against the
+monthly limit (and at most $25 of worst cases in one batch), its shop pages
+read first (up to 200 pages in 7 minutes, at each shop's pace). Most
+batches come back within the hour, all within a day. While a batch is out,
+each five-minute tick only looks at it, which is free, and the rows in it
+are not asked again; once it has ended, the run saves its answers at half
+price and acts on them by the same rules, then sends the next batch. A
+question the batch did not answer (expired, errored, cancelled) costs
+nothing and is asked again. Fewer than 20 rows are asked one by one at once,
+within the run's $3 and 15 minutes. Batches take no server-side fallback: a
+refusal is recorded as declined, as on Haiku. The rules are the same either
+way. The monthly limit still holds.
 
 **Answering what is left.** Each list (doubtful prices, wrong matches,
 duplicates, found pages) has a tick box on every row and buttons at its top
@@ -914,19 +927,30 @@ answers already given would sort, at no cost, and what the next run would
 send.
 
 **Cost.** Each request is priced from Anthropic's usage figures at the
-model's rates and saved (Claude's answers are listed read-only in admin).
-Before a request is sent, the most it could cost is reserved, and nothing is
-sent that could take the month (a UTC month, as Anthropic counts) past your
-limit, or one run past $1. A row is asked again only when its titles or
-price band change, at most five times. Roughly, per answer at medium
-effort: Claude Opus 5.5 (the default) $0.024, Claude Sonnet 5.5 $0.012,
-Claude Haiku 5.5 under $0.001. The shop page's facts add about 200 input
-tokens to a request (about $0.001 on Opus, two pages for a pair), and are
-part of each request's reserved worst case, so the limits hold. The limit
-defaults to $10 a month, about 410 answers on Opus. To raise it, open
-**Claude settings and key**, set **Monthly limit in US dollars** and tap
-**Save settings**: $25, the most the page accepts unless
-`RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` is raised, is about 1,040 answers on Opus. Low effort costs about half, high about twice.
+model's rates and saved (Claude's answers are listed read-only in admin), at
+half for an answer from a batch. Before a request is sent, the most it
+could cost is reserved, and nothing is sent that could take the month (a
+UTC month, as Anthropic counts) past your limit, or one run past $3. A row
+is asked again only when its titles, price band, barcode or the shop's
+description change, at most five times. Roughly, per answer at medium
+effort: Claude Opus 5.5 (the default) $0.025, Claude Sonnet 5.5 $0.013,
+Claude Haiku 5.5 under $0.001, and half that in a batch. The shop page's
+facts and the stored description add about 500 input tokens to a request
+(about $0.002 on Opus), and are part of each request's reserved worst case,
+so the limits hold. A careful second look, at high effort, costs about
+twice.
+
+At **$100 a month on Opus 5.5** that is about 4,000 answers one by one, or
+about 8,000 through batches: about 130 a day one by one, or 265 a day in
+batches, spread over the month. A backlog goes faster: hourly runs can ask
+1,200 rows a day and batches several thousand, so a backlog of a few
+thousand rows is settled within a day or two and the monthly limit then
+stops Claude until the next month or until you raise it. The ceiling,
+`RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD`, is $100, and a new site's limit starts
+there. To change yours, open **Claude settings and key**, set **Monthly
+limit in US dollars** and tap **Save settings**: anything from $0 to the
+ceiling. A site set up before this change keeps the limit it had (it was $10)
+until you raise it. Low effort costs about half, high about twice.
 
 **Setting it up by phone.** Sign up at console.anthropic.com; under Billing
 buy credit; under Limits set a monthly spend limit (Anthropic then stops the
@@ -940,8 +964,9 @@ off**, **Forget the key**, or delete the key in the Console.
 **When it runs.** Cron runs `judge_checks` every five minutes on its own lock.
 It does something only when you tapped **Ask Claude now**, or an hour after
 its last run when rows are waiting, and never while Pause all is on. Each
-run lets the free autopilot answer first, then asks Claude about up to 25
-rows, one per request, in the turns above. A wrong key, no
+run lets the free autopilot answer first, then asks Claude about up to 50
+rows, one per request, in the turns above (Sort everything sends a long list
+as a batch instead). A wrong key, no
 credit or a model the key cannot use stops it and tells you once a day by
 push and email; it starts again when you save a key, change the model or tap
 Ask Claude now, or after a day. A busy Anthropic only ends that run.
@@ -965,9 +990,25 @@ waiting.
 **What is sent.** Our product's name, game, kind and set; the shop's name,
 title, price, stock and page address; up to five other shops' titles for the
 product; whether its price is close to or far from the other shops' (never
-their prices); the site's own note on the price; and what the shop's own
-page said when it was read (below). Never anything about visitors, alerts
-or messages.
+their prices); the site's own note on the price; the shop's own description
+as its last read stored it (below); and what the shop's own page said when
+it was read (below). Never anything about visitors, alerts or messages.
+
+**The shop's description.** Every read already fetches each product's
+description: Shopify's `body_html`, a website page's schema.org or Open Graph
+description, a feed's description column, eBay's short description. The read
+keeps it on the listing (and on a row waiting on Things to check) as plain
+text, at most 1,500 characters, and writes it only when it changed, so reads
+make no extra request and write no more than before; lists and the
+background reader never load it. Claude is sent the first 1,200 characters
+as `shop_description` (for a pair, one shop's description of each product, a
+shop's before a marketplace's), with the pack counts, languages, edition
+words (Pokemon Center, first edition, exclusive, limited edition, premium)
+and condition words (damaged, opened, no shrink wrap) it names. The prompt
+treats it as the shop's words, never as instructions. A row whose shop gives
+no description keeps its earlier answer; a description that arrives or
+changes is new evidence and the row is asked again. The Excel export shows
+the first 300 characters on the Listings sheet, read-only.
 
 **The shop's own page.** Titles and prices alone often leave Claude unsure,
 so before each row is asked the site reads the shop page(s) it is about:
@@ -1978,7 +2019,7 @@ site's cache.
 | `RIPRAPTOR_CLAUDE`             | on      | The Claude judge may run (see "The Claude judge"). It still sends nothing until a key is saved and it is switched on in Things to check. `RIPRAPTOR_CLAUDE=0` stops it whatever the page says. |
 | `RIPRAPTOR_CLAUDE_API_KEY`     |         | An Anthropic API key. Leave empty and save the key from Things to check instead; set here, it wins over the saved one. |
 | `RIPRAPTOR_CLAUDE_KEY_FILE`    | `claude-key` beside the database | Where a key saved from the page is kept, readable only by the site's user. Never in the database or its backups: save the key again after restoring onto a new server. |
-| `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` | `25` | The highest monthly limit the page accepts, in US dollars. |
+| `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` | `100` | The highest monthly limit the page accepts, in US dollars. |
 | `RIPRAPTOR_CLAUDE_PAGES`       | on      | Before Claude is asked about a row, read the shop page(s) it is about for evidence (see "The shop's own page"). `0` sends only what the site holds. |
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |

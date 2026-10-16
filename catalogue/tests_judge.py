@@ -1187,6 +1187,7 @@ class RecheckTests(Base):
         client, _ = self.ask()
         self.assertEqual(len(client.sent), 4)
 
+    @mock.patch.object(judge, "ROWS_PER_RUN", 25)
     def test_the_cron_log_says_how_many_rows_are_left(self):
         self.switch_on(may_act=False)
         for n in range(judge.ROWS_PER_RUN + 2):
@@ -1854,6 +1855,7 @@ class ClearsTheQueueTests(Base):
         self.assertEqual(order[1][:5], "pair:")
         self.assertEqual(set(order[2:]), {f"offer:{unread.pk}", f"found:{lone.pk}"})
 
+    @mock.patch.object(judge, "ROWS_PER_RUN", 25)
     def test_a_run_the_owner_asks_for_looks_past_25_rows(self):
         self.shop(100)
         self.shop(104)

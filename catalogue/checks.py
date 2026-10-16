@@ -92,8 +92,9 @@ def checked_count():
     return doubtful_waiting(checked=True).count()
 
 
-def doubtful_prices(now=None):
-    """Doubtful prices that wait for the owner, most clicked products first, then oldest verdict."""
+def doubtful_prices(now=None, limit=SANITY_ROWS):
+    """Doubtful prices that wait for the owner, most clicked products first, then oldest verdict: the first
+    ``limit`` (the page's SANITY_ROWS; the Claude judge looks further)."""
     since = (now or timezone.now()) - timedelta(days=CLICK_DAYS)
     clicks = (
         OutboundClick.objects.filter(product=OuterRef("product_id"), created_at__gte=since)
@@ -103,7 +104,7 @@ def doubtful_prices(now=None):
         doubtful_waiting()
         .annotate(clicks=Coalesce(Subquery(clicks, output_field=IntegerField()), Value(0)))
         .select_related("product__game", "product__product_set", "retailer")
-        .order_by("-clicks", "sanity_at", "pk")[:SANITY_ROWS]
+        .order_by("-clicks", "sanity_at", "pk")[:limit]
     )
 
 
@@ -289,8 +290,9 @@ def found_waiting():
     )
 
 
-def found_stockists(now=None):
-    """Products the finder may have found at another shop, the ones visitors want most first, then newest.
+def found_stockists(now=None, limit=FOUND_ROWS):
+    """Products the finder may have found at another shop, the ones visitors want most first, then newest:
+    the first ``limit`` (the page's FOUND_ROWS; the Claude judge looks further).
 
     One query for the rows and the finder's interest queries for the order.
     """
@@ -301,7 +303,7 @@ def found_stockists(now=None):
     if len(rows) > 1:
         scores = interest_scores(now, visitors_only=True)
         rows.sort(key=lambda row: -scores.get(row.suggested_id, 0))
-    return rows[:FOUND_ROWS]
+    return rows[:limit]
 
 
 def release_candidates(now=None, limit=RELEASE_ROWS):

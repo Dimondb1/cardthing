@@ -1310,7 +1310,7 @@ class ClaudeJudge(models.Model):
     )
     model = models.CharField(max_length=40, default="claude-opus-5-5")
     effort = models.CharField(max_length=8, choices=Effort.choices, default=Effort.MEDIUM)
-    monthly_budget_usd = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("10.00"))
+    monthly_budget_usd = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("100.00"))
     asked_at = models.DateTimeField(null=True, blank=True, help_text="When the owner tapped Ask Claude now.")
     last_run_at = models.DateTimeField(null=True, blank=True)
     last_run_note = models.CharField(max_length=200, blank=True)
@@ -1392,6 +1392,10 @@ class ClaudeAsk(models.Model):
     reserved_micros = models.PositiveBigIntegerField(default=0)
     cost_micros = models.PositiveBigIntegerField(default=0, help_text="US dollars times a million.")
     request_id = models.CharField(max_length=80, blank=True)
+    batch_id = models.CharField(
+        max_length=80, blank=True, db_index=True,
+        help_text="The Message Batch it was sent in at half price, if any. Still Sent: it waits there.",
+    )
     action = models.CharField(max_length=10, choices=Action.choices, default=Action.NONE)
     owner_answer = models.CharField(max_length=10, blank=True, help_text="same, different or hid: what the owner did.")
     shop_product = models.ForeignKey(ShopProduct, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")

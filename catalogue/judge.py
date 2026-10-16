@@ -1,31 +1,34 @@
 """
-The Claude judge: Claude answers the Things to check rows the free autopilot leaves, so the owner only
-sees the ones nobody can settle. It is a paid service the owner switches on from Things to check, with a
-monthly limit he sets there.
+The Claude judge: Claude settles the Things to check rows the free autopilot leaves, so the owner only
+sees the few that a rule forbids it to settle. It is a paid service the owner switches on from Things to
+check, with a monthly limit he sets there.
 
 Claude only ever says whether two things the site already holds are the same product. It never supplies
-a price, a date, a barcode or a product. The site's own rules then decide whether that answer may act:
+a price, a date, a barcode or a product. The site's own rules then decide what that answer does (ruling):
 
-- found at another shop: "different" (for a reason other than the price) refuses the page; a sure "same"
-  links it, and the site judges the new price like any other; a fairly sure one only when the price is
-  within 0.75 to 1.33 of what the other shops charge. Never when the title plainly names another kind or
-  set, the barcode is not ours, the shop lists the product already, or another shop's good price would
-  turn doubtful.
-- a shop's price (the cheapest doubtful price, or either price of a wrong match): "different" hides it;
-  for a wrong match, only when Claude calls the other price "same". "Same" ticks a doubtful price off as
-  checked, which changes nothing visitors see. "Same" never counts a price.
+- found at another shop: "same" links the page when the rules allow it (a fairly sure one only within 0.75
+  to 1.33 of the other shops' price, after a careful second look otherwise); anything else refuses it, as
+  does a title naming another kind, a barcode that is not ours, or a link that would make another shop's
+  good price doubtful or claim a big saving.
+- a doubtful price: "same" checks it (it stays as shown and claims no saving), "different" hides it. A
+  deposit is hidden. Claude's "same" against a title naming another kind or a barcode not ours is the one
+  conflict left to the owner.
+- a wrong match: "different" hides that price (the dearer one only once the cheaper is settled); "same"
+  checks it, and a checked cheapest price takes the wrong match off the list.
 - possible duplicates: a sure "different" naming a difference that makes another product (game, set, kind,
-  quantity, language, edition) keeps the pair apart for good; any other "different" is left for the owner and
-  asked again when what the site holds about the pair changes. A sure "same" merges them when their barcodes
-  and prices agree, and a fairly sure one when the names also agree on every point a rule can check
-  (merge_duplicates.names_agree). Every merge can be undone.
-- could not tell: the row is asked once more at high effort. Still not able to tell, the row is settled the
-  way that adds nothing to the site (ruling); a pair is left for the owner instead, never kept apart for good.
+  quantity, language, edition) keeps the pair apart for good. A "same" merges them only when the rules
+  allow it (never across a DIFFERENT certainty, never with two barcodes or far-apart prices; a fairly sure
+  one only when the names agree and the certainty is CERTAIN or LIKELY). Anything else keeps the pair apart
+  for now (HELD), lifted when what the site holds about the pair changes (lift_holds). Never merged on a doubt.
+- could not tell, or fairly sure where the rules want more: the row is asked once more at high effort.
+  Still not able to tell, the row gets the safe choice for its kind: a doubtful price checked, a found page
+  refused, the cheaper price of a wrong match hidden, a pair kept apart for now.
 
 An answer acts only when the owner has tapped Let Claude act, the answer came from the model asked (not a
-fallback), and the row is still as Claude saw it. What is left is a suggestion shown under the row, with why.
-Every act is a CheckAnswer with Claude's reason and an Undo, and three undos in a week put Claude back to
-suggesting.
+fallback), and the row is still as Claude saw it. The owner's own answers always come first: a row he has
+answered, an undone answer included, is never Claude's again. Every act is a CheckAnswer with Claude's
+reason and an Undo; undoing UNDONE_LIMIT acts in a week, when they are UNDONE_PERCENT or more of what it
+did, puts Claude back to suggesting (undoing a safe choice never counts).
 
 Cost: every request is priced from its usage at the model's rates and saved; before a request is sent its
 worst case is reserved, and nothing is sent that could take the month past the owner's limit (counted per
@@ -121,15 +124,24 @@ REJECTED_IN_A_ROW = 3
 HARD = {"game", "set", "kind", "quantity", "language", "edition"}
 # At most this many prices are hidden in one run; the rest are sorted at the next.
 HIDES_PER_RUN = 30
+# Why an answer has not acted yet, when it waits for Claude or a read rather than the owner (needs_you).
+CAREFUL_LOOK = "Claude takes a careful second look before it acts"
+PARTNER_FIRST = "Claude settles the cheaper price first"
+BARCODE_NEXT_READ = "the shop's barcode is not recorded yet. Claude acts after its next read records it"
+NOT_THE_OWNERS = {CAREFUL_LOOK, PARTNER_FIRST, BARCODE_NEXT_READ}
+# merge_duplicates.certainty's levels (a test keeps them the same): a pair is never merged across DIFFERENT.
+CERTAIN, LIKELY, DIFFERENT = "certain", "likely", "different"
 # A run the owner asked for looks further than the hourly one, within the same time and money limits.
 OWNER_ROWS_PER_RUN = 100
 # A link that would claim more than this saving on the cheapest price is left for the owner.
 LINK_SAVING_MAX = 25
 # The owner undoing this many of Claude's acts in a week puts it back to suggesting.
 UNDONE_LIMIT = 3
+UNDONE_PERCENT = 5
 BACK_TO_SUGGESTING = "Claude went back to suggesting"
-BACK_TO_SUGGESTING_DETAIL = (f"You undid {UNDONE_LIMIT} of Claude's acts this week, so it now only suggests. Tap "
-                             "Let Claude act when you are happy with its answers again.")
+BACK_TO_SUGGESTING_DETAIL = (f"You undid {UNDONE_LIMIT} or more of Claude's acts this week, at least one in "
+                             f"{100 // UNDONE_PERCENT}, so it now only suggests. Tap Let Claude act when you are "
+                             "happy with its answers again.")
 # Evidence characters a typical request carries, for the most a request could cost before one is built:
 # the site's own facts (typical, not a cap) and the shop pages' at their cap (shop_pages.MAX_FACT_CHARS
 # a page, two for a pair). Each request's own reservation is worked out from what it really carries.
@@ -449,6 +461,8 @@ class Row:
     others: list = field(default_factory=list)
     effort: str = ""           # set for a second, more careful look; the owner's setting otherwise
     agrees: bool = False       # a pair whose names agree on every point a rule can check
+    certainty: str = ""         # a pair's merge_duplicates.certainty
+    cheaper: bool = False      # the cheaper price of a wrong match
 
     @property
     def fingerprint(self):
@@ -531,7 +545,7 @@ class Evidence:
         return Row("found", key, evidence, shop_product=row, product=product,
                    rate=median(others) if others else None, others=others)
 
-    def offer(self, listing, partner=""):
+    def offer(self, listing, partner="", cheaper=False):
         product = listing.product
         others = self.peers(product.pk, listing.retailer_id)
         key = f"offer:{listing.pk}"
@@ -547,7 +561,7 @@ class Evidence:
             "shop_titles_elsewhere": self.elsewhere(product.pk, listing.retailer_id),
             **described(self.text_of(listing), product),
         }
-        return Row("offer", key, evidence, listing=listing, product=product, partner=partner)
+        return Row("offer", key, evidence, listing=listing, product=product, partner=partner, cheaper=cheaper)
 
     def pair(self, keep, other):
         def side(product):
@@ -563,9 +577,10 @@ class Evidence:
             else "only one has one" if any(codes) else "neither has one",
         }
 
-        from .management.commands.merge_duplicates import names_agree
+        from .management.commands.merge_duplicates import certainty, names_agree
 
         return Row("pair", key, evidence, product=keep, other=other, agrees=names_agree(keep, other),
+                   certainty=getattr(other, "certainty", None) or certainty(keep, other),
                    others=[self.peers(keep.pk, None), self.peers(other.pk, None)])
 
 
@@ -627,7 +642,7 @@ def open_rows(now=None):
     for product, summary in wrong:
         best, second = summary.best, summary.second
         best.product = second.product = product
-        rows += [build.offer(best, partner=f"offer:{second.pk}"), build.offer(second, partner=f"offer:{best.pk}")]
+        rows += [build.offer(best, partner=f"offer:{second.pk}", cheaper=True), build.offer(second, partner=f"offer:{best.pk}")]
     found.sort(key=lambda row: -scores.get(row.suggested_id, 0))
     rows += [build.found(row) for row in found]
     rows += [build.pair(keep, other) for keep, other in pairs]
@@ -651,8 +666,8 @@ def worth(row):
 def waiting(now=None):
     """The open rows to ask about, in the order of worth (each group keeps open_rows' order). Left out as
     well: rows the owner answered after Claude, unchanged rows already asked, and rows asked ASK_LIMIT
-    times. An unchanged row Claude could not tell about, or was only fairly sure of, and so left for the
-    owner, is asked once more at high effort, after the rest: a careful answer may settle it."""
+    times. An unchanged row whose answer cannot act until Claude has taken a careful second look
+    (ruling's CAREFUL_LOOK) is asked once more at high effort, after the rest."""
     rows = open_rows(now)
     owner_said = set(Ask.objects.exclude(owner_answer="").values_list("row_key", flat=True))
     before = asked_before()
@@ -665,8 +680,7 @@ def waiting(now=None):
         if row.fingerprint in seen:
             ask = latest.get(row.key)
             if (ask is not None and ask.fingerprint == row.fingerprint and own_answer(ask) and ask.effort != "high"
-                    and (ask.verdict == "unsure" or ask.confidence != "high")
-                    and ruling(row, as_answer(ask), as_answer(latest.get(row.partner)))[0] is None):
+                    and ruling(row, as_answer(ask), as_answer(latest.get(row.partner)))[1] == CAREFUL_LOOK):
                 row.effort = "high"
                 seen_keys.add(row.key)
                 again.append(row)
@@ -872,91 +886,100 @@ def decide(row, answer, may_act, partner=None):
 
 
 def ruling(row, answer, partner=None):
-    """(action, "") when the answer may act once Claude is let act, else (None, why it is left for the
-    owner, in a few words).
+    """(action, "") when the answer acts once Claude is let act, else (None, why not, in a few words).
 
-    Claude sorts every row it can, so the owner sees only real conflicts, and each act has Undo:
+    Claude settles every row itself, and every act is a CheckAnswer with Undo (POLICY in the README):
 
-    - sure or fairly sure of a plain difference: a page is refused, a doubtful price hidden (fairly sure
-      only for a difference that makes another product: game, set, kind and so on). A pair is kept apart for
-      good only when Claude is sure of such a difference.
-    - sure or fairly sure of the same product: a doubtful price is ticked off as checked, which changes
-      nothing visitors see; a page is linked (when only fairly sure, only near other shops' price); a
-      pair is merged when their barcodes and prices agree, and when only fairly sure, only when the names
-      agree on every point a rule can check (Row.agrees).
-    - could not tell: asked once more, carefully. Still not able to tell, the row is settled the way that
-      adds nothing to the site: the page is not linked, the doubtful price is hidden. A pair waits for the
-      owner, and is asked again when what the site holds about it changes.
+    - sure or fairly sure, and the site's rules agree: a found page is linked or refused, a price is hidden
+      or checked (left as shown with no saving claimed), a pair is merged or kept apart. A fairly sure
+      "different" that names no difference making another product (a variant, a condition, the page), and
+      a fairly sure "same" the rules cannot confirm, get a careful second look first.
+    - still unsure after the careful second look: the safe choice for the kind of row, never one that adds
+      to the site. A doubtful price is checked (it stays shown and claims no saving); a found page is
+      refused; the cheaper price of a wrong match is hidden and the dearer checked; a pair is kept apart
+      for now (HELD), and asked about again when what the site holds about it changes. Never merged.
+    - a pair is merged only when the deterministic rules allow it: never across a DIFFERENT certainty
+      (merge_duplicates.certainty), never with two barcodes or far-apart prices, and when only fairly sure,
+      only when the names agree on every point a rule can check and the certainty is CERTAIN or LIKELY.
+      Anything else Claude calls the same is kept apart for now.
 
-    Left for the owner: a barcode or a title that contradicts Claude's same, a deposit, two wrong-match
-    prices both called the product, a fairly sure same about a pair whose names leave room for doubt, and a
-    pair Claude could not tell about or calls different for a reason that does not make another product.
+    Left (None): CAREFUL_LOOK and PARTNER_FIRST until the second look, BARCODE_NEXT_READ until the shop's
+    next read records its barcode, and, for the owner (needs_you), only a price Claude says is the product
+    while a rule says it is not: the title names another kind of product, or the barcode is not ours. The
+    owner's own answers keep their rows out of all this (open_rows).
     """
     verdict, confidence = reading(answer)
+    careful = bool(answer.get("careful"))
     plain = set(answer["differences"]) - {"price"}
-    if verdict == "unsure":
-        if not answer.get("careful"):
-            return None, "Claude could not tell, so it takes a careful second look"
-        if row.kind == "found":
-            return "refuse", ""
-        if row.kind == "pair":
-            return None, "Claude could not tell, so the pair waits for you"
-        if row.kind == "offer" and not row.partner:
-            return "hide", ""
-        return None, "Claude could not tell"
+    acting = confidence == "high" or bool(plain & HARD)
+    if verdict == "unsure" and not careful:
+        return None, CAREFUL_LOOK
     if row.kind == "found":
-        if verdict == "different":
+        if verdict != "same":
             return "refuse", ""
-        if autopilot.contradiction(row.product, row.shop_product.title):
-            return None, "the shop's title names another kind of product"
         barred = autopilot.barcode_bars_link(row.product, row.shop_product)
-        if barred:
-            return None, barred
-        if confidence == "high":
+        if barred == autopilot.FOUND_BARCODE_NOT_RECORDED:
+            return None, BARCODE_NEXT_READ
+        if barred or autopilot.contradiction(row.product, row.shop_product.title):
+            # The rules say no: refusing the page adds nothing to the site.
+            return "refuse", ""
+        if confidence == "high" or near_others(row):
             # The site judges the new price like any other: far from the rest, it is doubtful, not counted.
             return "link", ""
-        price = row.shop_product.price
-        if not price or price <= 0:
-            return None, "the shop shows no price"
-        if not row.others:
-            return None, "Claude was only fairly sure, and no other shop sells it to compare the price"
-        if not autopilot.LINK_LOW <= price / row.rate <= autopilot.LINK_HIGH:
-            return None, "Claude was only fairly sure, and the price is far from what other shops charge"
-        return "link", ""
+        return (None, CAREFUL_LOOK) if not careful else ("refuse", "")
     if row.kind == "offer":
-        if row.partner:
-            # A wrong match: only the price Claude names as another product is hidden, and only when it
-            # vouches for the other. Hiding the dearer one beside an unvouched cheaper one could open a
-            # saving nobody checked.
-            if verdict == "same":
-                if leaning(partner, "same"):
-                    return None, "Claude says both prices are this product, so one of them is unusual"
-                return None, "Claude says this price is the product. The other price was not shown to be another"
-            if confidence != "high" and not plain & HARD:
-                return None, "Claude was only fairly sure"
-            if not leaning(partner, "same"):
-                return None, "Claude was not sure the other price is this product"
+        listing = row.listing
+        if verdict == "unsure":
+            # Careful, and still unsure: the rules decide, or the price stays as shown with no saving claimed.
+            # The cheaper price of a wrong match is the one that would mislead, so it is taken off.
+            if row.partner and row.cheaper:
+                return "hide", ""
+            barred = autopilot.check_bars(listing, marketplace_ok=True)
+            if barred == autopilot.BARCODE_NOT_RECORDED:
+                return None, BARCODE_NEXT_READ
+            return ("hide", "") if barred else ("check", "")
+        if verdict == "different":
+            if not acting and not careful:
+                return None, CAREFUL_LOOK
+            if row.partner and not row.cheaper:
+                # The dearer price of a wrong match goes only once the cheaper one is settled too.
+                if partner is None or (reading(partner)[0] == "unsure" and not partner.get("careful")):
+                    return None, PARTNER_FIRST
             return "hide", ""
-        if verdict == "same":
-            barred = autopilot.check_bars(row.listing, marketplace_ok=confidence == "high")
-            return (None, barred) if barred else ("check", "")
-        if confidence != "high" and not plain & HARD:
-            return None, "Claude was only fairly sure, and named no difference that makes another product"
-        return "hide", ""
+        barred = autopilot.check_bars(listing, marketplace_ok=confidence == "high" or careful)
+        if not barred:
+            return "check", ""
+        if autopilot.DEPOSIT.search(listing.title or ""):
+            # A deposit is not the whole price, whatever product it is for.
+            return "hide", ""
+        if barred == autopilot.BARCODE_NOT_RECORDED:
+            return None, BARCODE_NEXT_READ
+        if not careful:
+            return None, CAREFUL_LOOK
+        return None, barred
     if row.kind == "pair":
-        if verdict == "same":
-            why = pair_disagrees(row)
-            if why:
-                return None, why
-            if confidence != "high" and not row.agrees:
-                return None, "Claude was only fairly sure, and the names leave room for another product"
+        if verdict == "different":
+            # Kept apart for good only on a sure difference that makes another product; anything else is kept
+            # apart for now and asked again when the pair changes.
+            return ("apart", "") if confidence == "high" and plain & HARD else ("held", "")
+        if verdict == "unsure" or row.certainty == DIFFERENT or pair_disagrees(row):
+            return "held", ""
+        if confidence == "high" or (row.agrees and row.certainty in (CERTAIN, LIKELY)):
             return "merge", ""
-        # Kept apart for good only on a sure, plain difference: a variant, a condition or a fairly sure answer
-        # is the owner's, and is asked again when the pair changes.
-        if confidence != "high" or not plain & HARD:
-            return None, "Claude named no sure difference that makes another product, so the pair waits for you"
-        return "apart", ""
+        return (None, CAREFUL_LOOK) if not careful else ("held", "")
     return None, ""
+
+
+def near_others(row):
+    """Whether a found page's price is within LINK_LOW to LINK_HIGH of what the other shops charge."""
+    price = row.shop_product.price
+    return bool(price and price > 0 and row.others and row.rate
+                and autopilot.LINK_LOW <= price / row.rate <= autopilot.LINK_HIGH)
+
+
+def needs_you(why):
+    """Whether a row left with this reason waits for the owner, rather than for Claude's next look."""
+    return bool(why) and why not in NOT_THE_OWNERS
 
 
 # Two products' shop prices further apart than this are left for the owner. With two or more prices on each
@@ -989,6 +1012,36 @@ def pair_disagrees(row):
     return ""
 
 
+def earlier_answer(row_key):
+    """The latest answer the model asked gave about a row, in the shape decide reads, or None."""
+    if not row_key:
+        return None
+    ask = Ask.objects.filter(row_key=row_key, outcome=Ask.Outcome.ANSWERED).order_by("-pk").first()
+    return as_answer(ask) if ask is not None and own_answer(ask) else None
+
+
+def lift_holds():
+    """Lift each pair Claude keeps apart for now whose evidence has changed since (its fingerprint): the pair
+    is back under Possible duplicates, and Claude is asked about it again. Free: nothing is sent. Returns how
+    many it lifted. A hold on a pair one of whose products has gone stands: there is nothing to ask."""
+    holds = list(CheckAnswer.objects.filter(kind=Kind.HELD, undone_at__isnull=True, ask__isnull=False).select_related(
+        "ask", "product__game", "product__product_set", "other__game", "other__product_set"))
+    if not holds:
+        return 0
+    build = Evidence({pk for answer in holds for pk in (answer.product_id, answer.other_id) if pk})
+    lifted = []
+    for answer in holds:
+        keep, other = answer.product, answer.other
+        if keep is None or other is None or not (keep.is_active and other.is_active):
+            continue
+        if build.pair(keep, other).fingerprint != answer.ask.fingerprint:
+            lifted.append(answer.pk)
+    if lifted:
+        # The hold was only ever for now: it goes, rather than being undone, so the pair stays Claude's.
+        CheckAnswer.objects.filter(pk__in=lifted).delete()
+    return len(lifted)
+
+
 def as_answer(ask):
     """A stored answer in the shape decide reads, or None."""
     if ask is None or ask.outcome != Ask.Outcome.ANSWERED:
@@ -999,10 +1052,13 @@ def as_answer(ask):
 
 # Acting ------------------------------------------------------------------------------------------
 
-def act(row, ask, action, now):
+def act(row, ask, action, now, note=""):
     """Do what decide allowed, as one CheckAnswer with Claude's reason, in one IMMEDIATE transaction that
-    first checks the row is still as Claude saw it. Returns whether it acted."""
-    why = f"Claude: {ask.reason}"
+    first checks the row is still as Claude saw it. Returns whether it acted.
+
+    A found page Claude may link that the site's price checks stop (another shop's good price would turn
+    doubtful, or a big saving would be claimed) is refused instead: the safe choice, with Undo."""
+    why = f"Claude: {ask.reason}{note}"
     pilot = autopilot.Autopilot(now=now)
     refs = {"ask": ask}
     # Only the exact price Claude saw: the price band in the evidence can hide a move.
@@ -1020,6 +1076,7 @@ def act(row, ask, action, now):
                      act=refuse, shop_product=shop_row, product=product, price=shop_row.price, **refs)
     elif action == "link":
         shop_row, product = row.shop_product, row.product
+        blocked = {}
 
         def link():
             unchanged(row)
@@ -1028,6 +1085,10 @@ def act(row, ask, action, now):
             if (fresh.price, fresh.availability, fresh.last_seen, fresh.suggested_id) != (
                     shop_row.price, shop_row.availability, shop_row.last_seen, shop_row.suggested_id):
                 raise autopilot.Stale
+            if Listing.objects.filter(product=product, retailer_id=fresh.retailer_id).exists():
+                raise autopilot.Stale
+            # From here a Stale is the price checks saying no.
+            blocked["price"] = True
             # Close to other shops' price, it must be judged OK too; otherwise (Sort everything) the site
             # judges it like any other price. Either way no other shop's good price may turn doubtful.
             in_band = bool(row.others and row.rate and fresh.price and fresh.price > 0
@@ -1043,6 +1104,9 @@ def act(row, ask, action, now):
         pilot.answer(Kind.LINK, f"Linked {product.name} at {shop_row.retailer.name}, {price}",
                      f"{why} Checked: no other shop's good price turns doubtful and no big saving is claimed",
                      act=link, shop_product=shop_row, product=product, price=shop_row.price, **refs)
+        if not pilot.done and blocked.get("price"):
+            return act(row, ask, "refuse", now, note=" Linking it would have made another shop's price doubtful or "
+                       "claimed a big saving, so it is not compared.")
     elif action == "hide":
         listing = row.listing
 
@@ -1063,7 +1127,8 @@ def act(row, ask, action, now):
 
         def check():
             unchanged(row)
-            return autopilot.check(listing)
+            # A wrong match's prices are not doubtful: the site already claims no saving for them.
+            return autopilot.check(listing, doubtful_only=not row.partner)
 
         pilot.answer(Kind.CHECKED, f"Checked {sanity.money(listing.shown_price)} for {listing.product.name} at "
                      f"{listing.retailer.name}", f"{why} It stays on the site with no saving claimed, and comes back "
@@ -1090,6 +1155,16 @@ def act(row, ask, action, now):
 
         pilot.answer(Kind.APART, f"{other.name} is not {keep.name}", f"{why} Checked: still suggested as duplicates",
                      act=apart, product=keep, other=other, **refs)
+    elif action == "held":
+        keep, other = row.product, row.other
+
+        def held():
+            if not checks.still_offered(keep, other):
+                raise autopilot.Stale
+
+        pilot.answer(Kind.HELD, f"{other.name} and {keep.name} are kept apart for now",
+                     f"{why} Never merged on a doubt: they come back to be asked about when anything about them "
+                     "changes", act=held, product=keep, other=other, **refs)
     return bool(pilot.done)
 
 
@@ -1106,6 +1181,10 @@ def still_duplicates(keep, other):
     if checks.shops_in_the_way(shops.get(keep.pk, {}), shops.get(other.pk, {})):
         raise autopilot.Stale
     if not languages.same(languages.product_language(keep), languages.product_language(other)):
+        raise autopilot.Stale
+    from .management.commands.merge_duplicates import certainty
+
+    if certainty(keep, other) == DIFFERENT:
         raise autopilot.Stale
 
 
@@ -1136,7 +1215,7 @@ def refetch(row):
     if row.kind == "offer":
         listing = Listing.objects.live().select_related("retailer", "product__game", "product__product_set") \
             .filter(pk=row.listing.pk).first()
-        return Evidence({listing.product_id}).offer(listing, partner=row.partner) if listing else None
+        return Evidence({listing.product_id}).offer(listing, partner=row.partner, cheaper=row.cheaper) if listing else None
     return row
 
 
@@ -1170,8 +1249,8 @@ def act_on_earlier(now=None, hides=None, dry_run=False):
     try:
         for row in rows:
             ask = usable.get(row.key)
-            # A wrong match is decided only with both prices answered.
-            if ask is None or (row.partner and row.partner not in usable):
+            # The other price of a wrong match counts while its answer still stands; ruling says when it must.
+            if ask is None:
                 continue
             action = decide(row, as_answer(ask), True, partner=as_answer(usable.get(row.partner)))
             if action is None or (ask.evidence or {}).get("price") != row.evidence.get("price"):
@@ -1208,8 +1287,8 @@ def claudes_acts():
 
 def too_many_undone(now):
     """After the owner undoes one of Claude's acts: once he has undone UNDONE_LIMIT in a week (counted from
-    when he last let it act, if later), Claude goes back to suggesting and he hears why. Returns whether
-    it did."""
+    when he last let it act, if later), and they are at least UNDONE_PERCENT of what it did in that time,
+    Claude goes back to suggesting and he hears why. Returns whether it did."""
     from . import notify
 
     state = ClaudeJudge.current()
@@ -1218,8 +1297,11 @@ def too_many_undone(now):
     since = now - timedelta(days=7)
     if state.acting_since and state.acting_since > since:
         since = state.acting_since
-    undone = claudes_acts().filter(undone_at__gte=since).exclude(kind=Kind.CHECKED).count()
-    if undone < UNDONE_LIMIT:
+    # Only acts that said Claude was right: undoing a safe choice (Checked, Kept apart for now) only asks the
+    # owner to look himself. And a share, not a count: at hundreds of acts a week, three undone is not a pattern.
+    acts = claudes_acts().filter(created_at__gte=since).exclude(kind__in=autopilot.SAFE_KINDS)
+    undone = acts.filter(undone_at__isnull=False).count()
+    if undone < UNDONE_LIMIT or undone * 100 < UNDONE_PERCENT * acts.count():
         return False
     ClaudeJudge.objects.filter(pk=state.pk).update(may_act=False)
     notify.owner(BACK_TO_SUGGESTING, BACK_TO_SUGGESTING, notify.CHECKS_PATH, BACK_TO_SUGGESTING_DETAIL, now=now)
@@ -1309,6 +1391,8 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
     if not dry_run and autopilot.enabled():
         autopilot.run(now=now)
     if not dry_run:
+        # Pairs kept apart for now whose evidence changed come back to be asked about.
+        lift_holds()
         # Answers given in trial, or before the row's other checks agreed, are free to act on now.
         result.earlier = result.acted = act_on_earlier(now, hides)
     rows = waiting(now)
@@ -1419,9 +1503,11 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
             for todo in ([row] if not row.partner else [r for r in rows if r.key in (row.key, row.partner)]):
                 todo_ask = ask if todo.key == row.key else Ask.objects.filter(row_key=todo.key).order_by("-pk").first()
                 todo_answer = answers.get(todo.key)
+                # The other price of a wrong match: answered in this run, else its latest own answer.
+                partner = answers.get(todo.partner) if todo.partner in answers else earlier_answer(todo.partner)
                 may_act = allowed and trusted.get(todo.key, False) and (
-                    not todo.partner or trusted.get(todo.partner, False))
-                action = decide(todo, todo_answer, may_act, partner=answers.get(todo.partner))
+                    not todo.partner or todo.partner not in answers or trusted.get(todo.partner, False))
+                action = decide(todo, todo_answer, may_act, partner=partner)
                 if action == "hide" and hides["left"] <= 0:
                     # Over the run's hides: left as a suggestion, sorted from the answer at the next run.
                     action = None
@@ -1429,12 +1515,12 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
                     if todo_ask and todo_answer is not None:
                         Ask.objects.filter(pk=todo_ask.pk).update(action=Ask.Action.SUGGESTED)
                         result.suggested += 1
-                        # A price may be wrong on the site while it waits; a page or a pair can wait.
-                        # A wrong match counts once.
-                        if todo.kind != "offer":
-                            result.can_wait += 1
-                        elif not todo.partner or todo.key < todo.partner or todo.partner not in answers:
+                        # Only a conflict the rules forbid Claude to settle needs the owner (and, in trial,
+                        # every answer); the rest wait for Claude's careful second look, the next read or run.
+                        if not allowed or needs_you(ruling(todo, todo_answer, partner)[1]):
                             result.need_you += 1
+                        else:
+                            result.can_wait += 1
                     continue
                 if action == "hide":
                     hides["left"] -= 1
@@ -1453,7 +1539,7 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
         ClaudeJudge.objects.filter(pk=state.pk).update(problem="", problem_at=None)
     not_asked = result.left = max(0, total - result.asked)
     earlier = f" ({result.earlier} from earlier answers)" if result.earlier else ""
-    note = f"looked at {result.asked}, sorted {result.acted}{earlier}, {result.suggested} left for you"
+    note = f"looked at {result.asked}, sorted {result.acted}{earlier}, {result.need_you} need you"
     if not_asked:
         note += f", {not_asked} still to look at"
     if result.note:
@@ -1485,19 +1571,19 @@ def tell_owner(result, asked_by_owner, now):
     if not (result.asked or result.earlier):
         return
     if asked_by_owner:
-        title = f"Claude looked at {result.asked}: {result.acted} sorted, {result.suggested} left for you"
+        title = f"Claude looked at {result.asked}: {result.acted} sorted, {result.need_you} need you"
         notify.owner(FINISHED, title, notify.CHECKS_PATH, f"{title}. It cost about {dollars(result.spent)}.",
                      now=now, once_a_day=False)
         return
     since = now - timedelta(hours=24)
     day = Ask.objects.filter(asked_at__gte=since).exclude(outcome=Ask.Outcome.ERROR).aggregate(
-        asked=Count("pk"), spent=Sum("cost_micros"),
-        need_you=Count("pk", filter=Q(action=Ask.Action.SUGGESTED, kind=Ask.Kind.OFFER)),
-        can_wait=Count("pk", filter=Q(action=Ask.Action.SUGGESTED) & ~Q(kind=Ask.Kind.OFFER)),
-    )
-    # Sorted counts every act of the day, those from earlier answers included.
+        asked=Count("pk"), spent=Sum("cost_micros"), suggested=Count("pk", filter=Q(action=Ask.Action.SUGGESTED)))
+    # Sorted counts every act of the day, those from earlier answers included. Need you is the last run's
+    # conflicts, or in trial every answer of the day, since nothing acts until the owner lets Claude act.
     acted = claudes_acts().filter(created_at__gte=since).count()
-    title = f"Claude today: {day['asked']} looked at, {acted} sorted, {day['need_you'] + day['can_wait']} left for you"
+    state = ClaudeJudge.current()
+    need_you = result.need_you if state is not None and state.may_act else day["suggested"]
+    title = f"Claude today: {day['asked']} looked at, {acted} sorted, {need_you} need you"
     notify.owner(DAILY, title, notify.CHECKS_PATH, f"{title}. It cost about {dollars(day['spent'] or 0)}.", now=now)
 
 
@@ -1558,9 +1644,11 @@ def latest_answers(keys):
 def attach_answers(doubtful, wrong, found, duplicates, may_act=False):
     """Give each row the page shows a ``claude`` attribute: Claude's latest answer about it while the row is
     still what Claude was asked about and the owner has not answered it since, else None. While Claude may
-    act, each answer also says why it was left for the owner. Returns, for each section, how many rows
-    Claude called the same, different or could not tell, and how many it has not answered. Three
-    queries, and one more while Claude may act."""
+    act, each answer also says why it has not acted: ``left_because`` when it needs the owner (a conflict
+    the rules forbid Claude to settle, or a row he answered before), ``next_step`` when it waits for Claude.
+    Returns, for each section, how many rows Claude called the same, different or could not tell, and how
+    many it has not answered, and "needs_you": how many need the owner. A few queries, and one more while
+    Claude may act."""
     ids = ({listing.product_id for listing in doubtful} | {product.pk for product, _ in wrong}
            | {row.suggested_id for row in found} | {p.pk for keep, others in duplicates for p in [keep, *others]})
     build = Evidence(ids, listings=[*doubtful, *(o for _, summary in wrong for o in (summary.best, summary.second))])
@@ -1568,7 +1656,7 @@ def attach_answers(doubtful, wrong, found, duplicates, may_act=False):
     for product, summary in wrong:
         best, second = summary.best, summary.second
         best.product = second.product = product
-        rows += [(build.offer(best, partner=f"offer:{second.pk}"), best),
+        rows += [(build.offer(best, partner=f"offer:{second.pk}", cheaper=True), best),
                  (build.offer(second, partner=f"offer:{best.pk}"), second)]
     rows += [(build.found(row), row) for row in found]
     rows += [(build.pair(keep, other), other) for keep, others in duplicates for other in others]
@@ -1579,10 +1667,13 @@ def attach_answers(doubtful, wrong, found, duplicates, may_act=False):
     counts = {}
     for row, item in rows:
         item.claude = current.get(row.key)
-        if item.claude is not None and may_act:
-            item.claude.left_because = left_because(row, item.claude, current.get(row.partner), row.key in before)
         section = "pairs" if row.kind == "pair" else "found" if row.kind == "found" else "wrong" if row.partner else "doubtful"
         tally = counts.setdefault(section, {"same": 0, "different": 0, "unsure": 0, "none": 0, "total": 0})
+        if item.claude is not None and may_act:
+            why, yours = left_reason(row, item.claude, current.get(row.partner), row.key in before)
+            item.claude.left_because = why if yours else ""
+            item.claude.next_step = "" if yours else why
+            counts["needs_you"] = counts.get("needs_you", 0) + bool(yours)
         tally[item.claude.verdict if item.claude is not None else "none"] += 1
         tally["total"] += 1
     return counts
@@ -1610,16 +1701,23 @@ def answered_before(rows):
     return keys
 
 
-def left_because(row, ask, partner_ask=None, answered=False):
-    """Why an answer on the page has not acted, in a few words."""
+def left_reason(row, ask, partner_ask=None, answered=False):
+    """(why an answer on the page has not acted, in a few words; whether that needs the owner)."""
     if answered:
-        return "the row was answered before, so it stays with you"
+        return "the row was answered before, so it stays with you", True
     if not own_answer(ask):
-        return "another model answered while Claude was busy. Claude asks again at its next look"
+        return "another model answered while Claude was busy. Claude asks again at its next look", False
     if partner_ask is not None and not own_answer(partner_ask):
         partner_ask = None
     action, why = ruling(row, as_answer(ask), as_answer(partner_ask))
-    return why if action is None else "Claude sorts this at its next look"
+    if action is not None:
+        return "Claude sorts this at its next look", False
+    return why, needs_you(why)
+
+
+def left_because(row, ask, partner_ask=None, answered=False):
+    """Why an answer on the page has not acted, in a few words."""
+    return left_reason(row, ask, partner_ask, answered)[0]
 
 
 def page_status(now=None):
@@ -1654,7 +1752,7 @@ def page_status(now=None):
     elif state.may_act and state.sort_all:
         status = "Claude is on and sorting everything."
     elif state.may_act:
-        status = "Claude is on and sorts what it can, 25 an hour."
+        status = f"Claude is on and settles every row itself, {ROWS_PER_RUN} an hour."
     else:
         status = "Claude is on, in trial: it only suggests."
     asked = state.asked_at is not None and (state.last_run_at is None or state.asked_at > state.last_run_at)
@@ -1677,7 +1775,7 @@ def page_status(now=None):
         "each": dollars(spent // answers) if answers else "",
         "agreed": agreement["agreed"], "agreement_total": agreement["total"],
         "models": [(code, label, cost) for code, (label, cost) in MODELS.items()],
-        "max_monthly": settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD,
+        "max_monthly": settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD, "per_run": ROWS_PER_RUN,
         "asked": asked and settings.RIPRAPTOR_CLAUDE and due(state, now) == "",
         "open_settings": not has_key or state.problem in ("key", "model"),
     }

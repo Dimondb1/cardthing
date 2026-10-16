@@ -1258,6 +1258,7 @@ class CheckAnswer(models.Model):
         APART = "apart", "Not the same product"
         ADD_SET = "add_set", "Added an announced set"
         CHECKED = "checked", "Checked, left as shown"
+        HELD = "held", "Kept apart for now"
 
     kind = models.CharField(max_length=10, choices=Kind.choices)
     by_owner = models.BooleanField(default=False)

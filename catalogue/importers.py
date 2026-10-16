@@ -86,6 +86,9 @@ class Offer:
     # The shop's multi-buy on it as (quantity, price for them all), NO_DEAL when the read found it in none,
     # None when the read did not look, which leaves a listing's deal as it was.
     deal: tuple | None = None
+    # The shop's description as plain text (clean_description): "" when the shop gives none, None when the
+    # read did not carry one, which leaves the listing's as it was.
+    description: str | None = None
 
 
 NO_DEAL = (None, None)
@@ -190,6 +193,30 @@ def out_of_time(deadline):
 def clean_ean(value):
     digits = re.sub(r"\D", "", str(value or ""))
     return digits if 8 <= len(digits) <= 14 else ""
+
+
+# A shop's own description of a product, as plain text, is kept on its listing (and on a row waiting on
+# Things to check) for the Claude judge to read. It is cut at about this many characters, at a word.
+DESCRIPTION_CHARS = 1500
+DESCRIPTION_SCRIPTS = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.I | re.S)
+DESCRIPTION_BREAKS = re.compile(r"<\s*(?:br|/p|/li|/h\d|/div|/tr)\b[^>]*>", re.I)
+DESCRIPTION_TAGS = re.compile(r"<[^>]*>")
+DESCRIPTION_CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def clean_description(markup, limit=DESCRIPTION_CHARS):
+    """A shop's description as plain text: tags, scripts and styles gone, entities read, whitespace
+    collapsed, at most ``limit`` characters, cut at a word. "" for nothing. Only the first few times
+    ``limit`` characters of the markup are looked at, so a huge description never costs much."""
+    if not markup:
+        return ""
+    text = str(markup)[:limit * 20]
+    text = DESCRIPTION_BREAKS.sub(" ", DESCRIPTION_SCRIPTS.sub(" ", text))
+    text = html_.unescape(DESCRIPTION_TAGS.sub(" ", text))
+    text = " ".join(DESCRIPTION_CONTROLS.sub(" ", text).split())
+    if len(text) > limit:
+        text = text[:limit + 1].rsplit(" ", 1)[0] if " " in text[limit // 2:limit + 1] else text[:limit]
+    return text[:limit]
 
 
 def ean_key(value):
@@ -421,6 +448,8 @@ def product_offers(base, product, preorder=False):
     images = product.get("images") or []
     product_image = images[0].get("src", "") if images else ""
     published_at = parse_published(product.get("published_at"))
+    # One string for every variant of the page, so the page's variants never hold it more than once.
+    description = clean_description(product.get("body_html")) if "body_html" in product else None
     for variant in product.get("variants", []):
         price = money(variant.get("price"))
         if price is None:
@@ -450,6 +479,7 @@ def product_offers(base, product, preorder=False):
             vendor=product.get("vendor", "") or "",
             tags=tuple(product.get("tags", []) or []),
             published_at=published_at,
+            description=description,
             # Only a page with several variants can mix products up; a lone "6 Packs" variant is the page itself.
             variant=variant["title"] if len(product.get("variants") or []) > 1 and variant.get("title") not in (None, "", "Default Title") else "",
         )
@@ -532,6 +562,7 @@ def js_product(data):
     return {
         "handle": data.get("handle", ""), "title": data.get("title", ""), "product_type": data.get("type", ""),
         "vendor": data.get("vendor", ""), "tags": data.get("tags") or [], "published_at": data.get("published_at"),
+        "body_html": data.get("description") or "",
         "images": [{"src": absolute(src)} for src in data.get("images") or [] if isinstance(src, str)],
         "variants": [
             {"id": v.get("id"), "title": v.get("title"), "available": bool(v.get("available")), "barcode": v.get("barcode"),
@@ -1040,6 +1071,13 @@ def page_stock_hint(html):
     return ""
 
 
+def page_description(html, meta=None):
+    """The page's Open Graph or meta description, or "" (the schema.org description comes first)."""
+    if meta is None:
+        meta = {key.lower(): value for key, value in META.findall(html)}
+    return meta.get("og:description") or meta.get("description") or ""
+
+
 def page_offer(url, html):
     """An Offer from a product page's schema.org data or Open Graph tags, or None. A page whose data names
     several products is a list of them (a shop's category page), not one product's page: None."""
@@ -1090,6 +1128,7 @@ def page_offer(url, html):
                 ean=ean,
                 availability=_availability(str(offers.get("availability", ""))),
                 image=image,
+                description=clean_description(node.get("description") or page_description(html)),
             )
     meta = {key.lower(): value for key, value in META.findall(html)}
     upc = re.search(r'"(?:upc|gtin|ean|barcode)"\s*:\s*"(\d{8,14})"', html)
@@ -1102,6 +1141,7 @@ def page_offer(url, html):
                 ean=clean_ean(meta.get("product:gtin13") or meta.get("product:ean") or meta.get("product:gtin") or (upc.group(1) if upc else "")),
                 availability=_availability(meta.get("product:availability", "") or page_stock_hint(html)),
                 image=meta.get("og:image", ""),
+                description=clean_description(page_description(html, meta)),
             )
     return None
 
@@ -1245,6 +1285,7 @@ def xml_feed_offers(text):
             availability=AVAILABILITY_WORDS.get(field(item, "availability").lower(), Listing.Availability.IN_STOCK),
             delivery=delivery,
             image=field(item, "image_link"),
+            description=clean_description(field(item, "description")) or None,
         )
 
 
@@ -1261,6 +1302,10 @@ def feed_offers(text):
             if name in fields:
                 return (row.get(fields[name]) or "").strip()
         return ""
+
+    # A feed with no description column says nothing about descriptions: the listings keep theirs.
+    has_description = any(name in fields for name in (
+        "description", "product_short_description", "short_description", "product_description"))
 
     for row in reader:
         # Awin: search_price / store_price; Google Merchant: price "44.99 GBP".
@@ -1282,6 +1327,8 @@ def feed_offers(text):
             availability=availability,
             delivery=money(col(row, "delivery", "shipping", "delivery_cost", "delivery_cost_gbp")),
             image=col(row, "image_link", "image_url", "aw_image_url", "merchant_image_url", "image"),
+            description=clean_description(col(row, "description", "product_short_description", "short_description",
+                                              "product_description")) if has_description else None,
         )
 
 
@@ -1386,6 +1433,12 @@ def unchanged(listing, offer, delivery):
         and listing.delivery_cost == (delivery if delivery is not None else Decimal("0.00"))
         and link_key(listing.url) == link_key(offer.url)
     )
+
+
+def described(offer):
+    """{"description": ...} for a row written from ``offer`` when the read carried the shop's description,
+    else {} so the row keeps its own."""
+    return {} if offer.description is None else {"description": offer.description}
 
 
 def better(offer, than):
@@ -1516,7 +1569,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         page than the listing's waits in ``late`` while the listing's own page has not been read yet. An offer
         that names its product (eBay's, one per product) never waits: eBay's reads keep each as it comes, so
         an interrupted run keeps its work."""
-        listing, created = Listing.objects.get_or_create(
+        listing, created = Listing.objects.defer(None).get_or_create(
             product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
         )
         other_page = page_key(listing.url) != page_key(offer.url) and page_key(listing.url) not in pages
@@ -1532,8 +1585,13 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         # A read that looked for multi-buys sets or clears the listing's; one that did not leaves it.
         held = (listing.deal_quantity, listing.deal_price)
         deal = held if offer.deal is None else offer.deal
+        # A read that carried the shop's description sets it; one that did not leaves it. It is written only
+        # when it changed, with the rest, and is never shown to visitors, so it is no change on the page.
+        description = listing.description if offer.description is None else offer.description
+        # Written once: the offer stays in this read's best offers, which then never hold every description.
+        offer.description = None
         if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
-                or deal != held):
+                or deal != held or listing.description != description):
             # The page shows the multi-buy and links to the shop's page: a new one of either is a change. Another
             # variant of the same page is not.
             shown = not created and listing.is_active and (deal != held or page_key(listing.url) != page_key(offer.url))
@@ -1542,6 +1600,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             listing.shop_ean = shop_ean
             listing.deal_quantity, listing.deal_price = deal
             fields = ["url", "title", "shop_ean", "deal_quantity", "deal_price"]
+            if listing.description != description:
+                listing.description = description
+                fields.append("description")
             if published:
                 listing.shop_published_at = published
                 fields.append("shop_published_at")
@@ -1632,14 +1693,14 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                         retailer=retailer, url=offer.url,
                         defaults={"title": offer.title, "price": offer.price, "availability": offer.availability,
                                   "image_url": offer.image, "suggested_id": product_pk, "confidence": value,
-                                  "status": ShopProduct.Status.LINKED, "last_seen": checked_at},
+                                  "status": ShopProduct.Status.LINKED, "last_seen": checked_at, **described(offer)},
                     )
                 elif match and value >= SUGGEST:
                     ShopProduct.objects.update_or_create(
                         retailer=retailer, url=offer.url,
                         defaults={"title": offer.title, "price": offer.price, "availability": offer.availability,
                                   "image_url": offer.image, "suggested_id": match[0], "confidence": value,
-                                  "last_seen": checked_at},
+                                  "last_seen": checked_at, **described(offer)},
                     )
                     unmatched.append(f"{offer.title} -> maybe {match[1]} ({value}%)")
                     continue

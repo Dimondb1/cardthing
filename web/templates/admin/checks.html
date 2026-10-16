@@ -64,9 +64,10 @@
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_on"><input type="submit" value="Switch Claude on"></form>
       {% endif %}
     </div>
-    <p class="note">Claude sorts what it can: what it is sure or fairly sure of, and what it still cannot tell after a careful second look. Sort everything: it works through the whole list now, rather than 25 an hour. Everything it does is under Sorted for you with Undo.</p>{% endif %}
+    <p class="note">Claude settles every row itself. When it is sure or fairly sure and the site's rules agree, it acts. When it still cannot tell after a careful second look, it takes the safe choice: a doubtful price stays as shown with no saving claimed, a found page is not compared, the cheaper price of a wrong match is hidden, and a pair is kept apart for now and asked about again when anything about it changes. A pair is never merged on a doubt. Sort everything: it works through the whole list now, rather than {{ claude.per_run }} an hour, sending a long list to Anthropic in batches at half price (most come back within the hour). Everything it does is under Sorted for you with Undo.</p>{% endif %}
+    {% if claude_counts.needs_you %}<p class="note"><b>Needs you: {{ claude_counts.needs_you }}.</b> Claude's answer and one of the site's rules disagree on {{ claude_counts.needs_you|pluralize:"this row,these rows" }}, so Claude leaves {{ claude_counts.needs_you|pluralize:"it,them" }} to you. Each is marked Needs you below.</p>{% endif %}
     {% if claude.runs %}<details><summary>Recent runs</summary>
-      <ul class="names">{% for run in claude.runs %}<li>{{ run.at|date:"j M H:i" }}: looked at {{ run.asked }}, sorted {{ run.sorted }}, {{ run.suggested }} left for you, {{ run.spent }}{% if run.note %}. {{ run.note }}{% endif %}.</li>{% endfor %}</ul>
+      <ul class="names">{% for run in claude.runs %}<li>{{ run.at|date:"j M H:i" }}: looked at {{ run.asked }}, sorted {{ run.sorted }}, {{ run.need_you }} need you, {{ run.spent }}{% if run.note %}. {{ run.note }}{% endif %}.</li>{% endfor %}</ul>
     </details>{% endif %}
     {% if claude.recent %}<details><summary>Claude's last {{ claude.recent|length }} answer{{ claude.recent|length|pluralize }}</summary>
       <ul>{% for ask in claude.recent %}

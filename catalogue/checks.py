@@ -15,6 +15,7 @@ evidence settles before the owner sees them.
 from copy import copy
 from datetime import timedelta
 
+from django.conf import settings
 from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -91,8 +92,9 @@ def checked_count():
     return doubtful_waiting(checked=True).count()
 
 
-def doubtful_prices(now=None):
-    """Doubtful prices that wait for the owner, most clicked products first, then oldest verdict."""
+def doubtful_prices(now=None, limit=SANITY_ROWS):
+    """Doubtful prices that wait for the owner, most clicked products first, then oldest verdict: the first
+    ``limit`` (the page's SANITY_ROWS; the Claude judge looks further)."""
     since = (now or timezone.now()) - timedelta(days=CLICK_DAYS)
     clicks = (
         OutboundClick.objects.filter(product=OuterRef("product_id"), created_at__gte=since)
@@ -102,7 +104,7 @@ def doubtful_prices(now=None):
         doubtful_waiting()
         .annotate(clicks=Coalesce(Subquery(clicks, output_field=IntegerField()), Value(0)))
         .select_related("product__game", "product__product_set", "retailer")
-        .order_by("-clicks", "sanity_at", "pk")[:SANITY_ROWS]
+        .order_by("-clicks", "sanity_at", "pk")[:limit]
     )
 
 
@@ -139,7 +141,15 @@ def wrong_matches(doubtful_too=False):
         gap = (second.delivered_price - best.delivered_price) / second.delivered_price * 100
         if gap > offers.MAX_REAL_PERCENT:
             rows.append((product, summary))
-    return rows
+    if not rows:
+        return rows
+    # A cheapest price checked as the right product (by Claude, at this price and title) waits for nobody: the
+    # site claims no saving for it already. It comes back when its price or title changes.
+    checked = set(CheckAnswer.objects.filter(
+        kind=CheckAnswer.Kind.CHECKED, undone_at__isnull=True, listing_id__in=[s.best.pk for _, s in rows],
+    ).values_list("listing_id", "price", "title"))
+    return [(product, summary) for product, summary in rows
+            if (summary.best.pk, summary.best.price, summary.best.title) not in checked]
 
 
 def kept_apart():
@@ -147,6 +157,22 @@ def kept_apart():
     return {
         frozenset(pair) for pair in CheckAnswer.objects.filter(
             kind=CheckAnswer.Kind.APART, undone_at__isnull=True, product__isnull=False, other__isnull=False,
+        ).values_list("product_id", "other_id")
+    }
+
+
+def held_apart():
+    """{frozenset of two product pks} Claude keeps apart for now (a standing Kept apart for now answer), while
+    Claude is on: it lifts each hold when what the site holds about the pair changes (judge.lift_holds). With
+    Claude off nobody would, so the pairs are the owner's to see again."""
+    from .models import ClaudeJudge
+
+    state = ClaudeJudge.current()
+    if not (settings.RIPRAPTOR_CLAUDE and state is not None and state.enabled):
+        return set()
+    return {
+        frozenset(pair) for pair in CheckAnswer.objects.filter(
+            kind=CheckAnswer.Kind.HELD, undone_at__isnull=True, product__isnull=False, other__isnull=False,
         ).values_list("product_id", "other_id")
     }
 
@@ -198,7 +224,7 @@ def duplicates():
     pairs = duplicate_pairs()
     if not pairs:
         return []
-    apart = kept_apart()
+    apart = kept_apart() | held_apart()
     shops = shop_listings()
     by_keep = {}
     for keep, other in pairs:
@@ -236,7 +262,7 @@ def still_offered(keep, other):
 
     products = {p.pk: p for p in Product.objects.filter(pk__in=[keep.pk, other.pk], is_active=True)
                 .select_related("game", "product_set")}
-    if len(products) != 2 or frozenset(products) in kept_apart():
+    if len(products) != 2 or frozenset(products) in kept_apart() | held_apart():
         return False
     if not share_a_key(products[keep.pk], products[other.pk]):
         return False
@@ -264,8 +290,9 @@ def found_waiting():
     )
 
 
-def found_stockists(now=None):
-    """Products the finder may have found at another shop, the ones visitors want most first, then newest.
+def found_stockists(now=None, limit=FOUND_ROWS):
+    """Products the finder may have found at another shop, the ones visitors want most first, then newest:
+    the first ``limit`` (the page's FOUND_ROWS; the Claude judge looks further).
 
     One query for the rows and the finder's interest queries for the order.
     """
@@ -276,7 +303,7 @@ def found_stockists(now=None):
     if len(rows) > 1:
         scores = interest_scores(now, visitors_only=True)
         rows.sort(key=lambda row: -scores.get(row.suggested_id, 0))
-    return rows[:FOUND_ROWS]
+    return rows[:limit]
 
 
 def release_candidates(now=None, limit=RELEASE_ROWS):

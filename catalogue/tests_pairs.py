@@ -200,6 +200,7 @@ class JudgeRuleTests(PairBase):
 
     def again(self, verdict="same", confidence="high", differences=()):
         Ask.objects.all().delete()
+        CheckAnswer.objects.filter(kind=CheckAnswer.Kind.HELD).delete()
         ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
         self.ask(lambda key, params: reply(key, verdict, confidence=confidence, differences=list(differences)))
 
@@ -216,10 +217,16 @@ class JudgeRuleTests(PairBase):
         call_command("merge_duplicates", stdout=out)
         self.assertIn("their booster kinds differ", out.getvalue())
         self.switch_on()
-        for verdict, confidence, differences in (("same", "medium", []), ("same", "low", []), ("unsure", "high", []),
-                                                 ("different", "medium", ["kind"]), ("different", "high", ["variant"])):
+        # Their certainty is DIFFERENT (a rule says the booster kinds differ), so not even a sure same merges
+        # them: every answer short of a sure plain difference keeps them apart for now, or first asks again.
+        for verdict, confidence, differences, kinds in (
+                ("same", "high", [], [CheckAnswer.Kind.HELD]), ("same", "medium", [], [CheckAnswer.Kind.HELD]),
+                ("same", "low", [], []), ("unsure", "high", [], []),
+                ("different", "medium", ["kind"], [CheckAnswer.Kind.HELD]),
+                ("different", "high", ["variant"], [CheckAnswer.Kind.HELD])):
             self.again(verdict, confidence, differences)
-            self.assertEqual(self.answers(), [])
+            self.assertEqual([a.kind for a in self.answers()], kinds, (verdict, confidence, differences))
+            self.assertEqual(Product.objects.filter(pk__in=[set_box.pk, draft.pk], is_active=True).count(), 2)
         self.again("different", "high", ["kind"])
         self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.APART])
         self.assertEqual(Product.objects.filter(pk__in=[set_box.pk, draft.pk], is_active=True).count(), 2)
@@ -231,11 +238,11 @@ class JudgeRuleTests(PairBase):
         Product.objects.filter(pk=keep.pk).update(ean="0820650851230")
         Product.objects.filter(pk=other.pk).update(ean="0820650851247")
         self.again(confidence="medium")
-        self.assertEqual(self.answers(), [])
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.HELD])
         Product.objects.filter(pk=other.pk).update(ean="")
         Listing.objects.filter(product=other).update(price=Decimal("120.00"))
         self.again(confidence="medium")
-        self.assertEqual(self.answers(), [])
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.HELD])
         Listing.objects.filter(product=other).update(price=Decimal("51.00"))
         self.again(confidence="medium")
         self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.MERGE])

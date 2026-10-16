@@ -213,15 +213,16 @@ class FoundTests(Base):
         self.assertEqual(dear.status, ShopProduct.Status.LINKED)
         self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.LINK])
 
-    def test_claude_never_links_a_found_page_whose_barcode_differs(self):
+    def test_claude_never_links_a_found_page_whose_barcode_differs_and_refuses_it(self):
         self.switch_on()
         Product.objects.filter(pk=self.product.pk).update(ean="0820650851230")
         row = self.found(price="101.00")
         ShopProduct.objects.filter(pk=row.pk).update(shop_ean="5099999999999")
         self.ask()
         row.refresh_from_db()
-        self.assertEqual(row.status, ShopProduct.Status.REVIEW)
-        self.assertEqual(Ask.objects.get().action, Ask.Action.SUGGESTED)
+        self.assertEqual(row.status, ShopProduct.Status.IGNORED)
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.REFUSE])
+        self.assertEqual(Ask.objects.get().action, Ask.Action.ACTED)
 
     def test_no_fairly_sure_link_when_no_other_shop_sells_it(self):
         self.switch_on()
@@ -283,15 +284,16 @@ class FoundTests(Base):
         self.assertEqual(row.status, ShopProduct.Status.REVIEW)
         self.assertEqual(Ask.objects.get().action, Ask.Action.STALE)
 
-    def test_the_link_rolls_back_when_the_new_price_is_doubtful_beside_the_others(self):
+    def test_the_link_rolls_back_when_the_new_price_is_doubtful_beside_the_others_and_is_refused(self):
         self.switch_on()
         row = self.found(price="101.00")
         with mock.patch.object(sanity, "judge_product", side_effect=lambda pk, **kw: Listing.objects.filter(
                 product_id=pk, retailer=row.retailer).update(sanity=Listing.Sanity.DOUBTFUL)):
             self.ask()
         row.refresh_from_db()
-        self.assertEqual(row.status, ShopProduct.Status.REVIEW)
+        self.assertEqual(row.status, ShopProduct.Status.IGNORED)
         self.assertFalse(Listing.objects.filter(retailer=row.retailer).exists())
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.REFUSE])
 
 
 class OfferAndPairTests(Base):
@@ -318,18 +320,36 @@ class OfferAndPairTests(Base):
         self.assertEqual((cheap.is_active, cheap.trusted_price, cheap.sanity), (True, None, Listing.Sanity.DOUBTFUL))
         self.assertEqual(Ask.objects.get().action, Ask.Action.SUGGESTED)
 
-    def test_a_wrong_match_hides_one_price_only_when_the_other_is_surely_the_product(self):
+    def test_a_wrong_match_hides_the_cheaper_price_claude_calls_another_product(self):
         self.switch_on()
         best = self.shop(20, title="Surging Sparks Booster Box Opened")
         second = self.shop(100)
         self.assertEqual(len(checks.wrong_matches()), 1)
         verdicts = {f"offer:{best.pk}": "different", f"offer:{second.pk}": "unsure"}
         self.ask(lambda key, params: reply(key, verdicts[key], differences=["condition"] if verdicts[key] == "different" else []))
-        self.assertTrue(Listing.objects.get(pk=best.pk).is_active)
-        Ask.objects.all().delete()
+        self.assertFalse(Listing.objects.get(pk=best.pk).is_active)
+        self.assertTrue(Listing.objects.get(pk=second.pk).is_active)
+
+    def test_the_dearer_price_of_a_wrong_match_waits_for_the_cheaper_one(self):
+        self.switch_on()
+        best = self.shop(20, title="Surging Sparks Booster Box Opened")
+        second = self.shop(100)
+        verdicts = {f"offer:{best.pk}": "unsure", f"offer:{second.pk}": "different"}
+
+        def answer(key, params):
+            return reply(key, verdicts[key], differences=["condition"] if verdicts[key] == "different" else [])
+
+        self.ask(answer)
+        self.assertEqual(self.answers(), [])
+        rows = {row.key: row for row in judge.open_rows()}
+        latest = judge.latest_answers(set(rows))
+        dearer = rows[f"offer:{second.pk}"]
+        self.assertEqual(judge.ruling(dearer, judge.as_answer(latest[dearer.key]),
+                                      judge.as_answer(latest[f"offer:{best.pk}"])), (None, judge.PARTNER_FIRST))
+        # Still unsure after the careful look, the cheaper price is taken off: the safe choice.
         ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
-        verdicts[f"offer:{second.pk}"] = "same"
-        self.ask(lambda key, params: reply(key, verdicts[key], differences=["condition"] if verdicts[key] == "different" else []))
+        client, _ = self.ask(answer)
+        self.assertEqual([(params["output_config"]["effort"]) for _, params in client.sent], ["high"])
         self.assertFalse(Listing.objects.get(pk=best.pk).is_active)
         self.assertTrue(Listing.objects.get(pk=second.pk).is_active)
 
@@ -360,7 +380,12 @@ class OfferAndPairTests(Base):
             Ask.objects.all().delete()
             ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
             self.ask(lambda key, params: reply(key, "different", confidence=confidence, differences=differences))
-            self.assertEqual(self.answers(), [])
+            # Kept apart for now: off the list, never for good, never merged.
+            [held] = self.answers()
+            self.assertEqual(held.kind, CheckAnswer.Kind.HELD)
+            self.assertEqual(checks.duplicates(), [])
+            self.assertTrue(Product.objects.get(pk=other.pk).is_active)
+            CheckAnswer.objects.all().delete()
             self.assertEqual(len(checks.duplicates()), 1)
         Ask.objects.all().delete()
         ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
@@ -635,7 +660,7 @@ class PageTests(Base):
         self.assertContains(response, "Claude is looking now.")
         self.assertIsNotNone(ClaudeJudge.objects.get().asked_at)
         response = self.client.post(self.url, {"action": "claude_act_on"}, follow=True)
-        self.assertContains(response, "Claude is on and sorts what it can, 25 an hour.")
+        self.assertContains(response, f"Claude is on and settles every row itself, {judge.ROWS_PER_RUN} an hour.")
         response = self.client.post(self.url, {"action": "claude_settings", "model": "claude-haiku-5-5",
                                                "effort": "low", "budget": "99"}, follow=True)
         self.assertContains(response, "a monthly limit from 0 to 25 dollars")
@@ -1162,6 +1187,7 @@ class RecheckTests(Base):
         client, _ = self.ask()
         self.assertEqual(len(client.sent), 4)
 
+    @mock.patch.object(judge, "ROWS_PER_RUN", 25)
     def test_the_cron_log_says_how_many_rows_are_left(self):
         self.switch_on(may_act=False)
         for n in range(judge.ROWS_PER_RUN + 2):
@@ -1218,7 +1244,7 @@ class FeedbackTests(Base):
         self.ask(lambda key, params: reply(key, reason="The display is the booster box."))
         page = self.client.get(self.url)
         self.assertContains(page, "Recent runs")
-        self.assertContains(page, "looked at 1, sorted 0, 1 left for you, $0.02")
+        self.assertContains(page, "looked at 1, sorted 0, 1 need you, $0.02")
         self.assertContains(page, "Claude's last 1 answer")
         self.assertContains(page, f"&quot;Pokemon Surging Sparks Display&quot; at {row.retailer.name} for {BOX}")
         self.assertContains(page, "Same product, sure. The display is the booster box. Suggested, waiting for you.")
@@ -1241,14 +1267,14 @@ class FeedbackTests(Base):
             self.ask(now=timezone.now() + timedelta(seconds=1))
         subject, title = told.call_args[0][:2]
         self.assertEqual(subject, judge.FINISHED)
-        self.assertEqual(title, "Claude looked at 1: 0 sorted, 1 left for you")
+        self.assertEqual(title, "Claude looked at 1: 0 sorted, 1 need you")
         self.assertFalse(told.call_args.kwargs["once_a_day"])
         self.found(title="Surging Sparks Booster Display Box")
         ClaudeJudge.objects.filter(pk=1).update(last_run_at=None, asked_at=None)
         with mock.patch("catalogue.notify.owner", return_value=True) as told:
             self.ask()
         self.assertEqual(told.call_args[0][0], judge.DAILY)
-        self.assertEqual(told.call_args[0][1], "Claude today: 2 looked at, 0 sorted, 2 left for you")
+        self.assertEqual(told.call_args[0][1], "Claude today: 2 looked at, 0 sorted, 2 need you")
 
     def test_a_run_that_dies_says_so_on_the_page(self):
         self.switch_on(may_act=False)
@@ -1398,16 +1424,15 @@ class EarlierAnswerTests(Base):
         self.trial({f"found:{unsure.pk}": {"verdict": "unsure", "confidence": "medium"},
                     f"found:{far.pk}": {"confidence": "medium"},
                     judge.pair_key(keep, other): {"confidence": "medium"}})
-        page = self.client.get(self.url).content.decode()
-        self.assertIn("Left for you: Claude could not tell, so it takes a careful second look.", page)
-        self.assertIn("Left for you: Claude was only fairly sure, and the price is far from what other shops charge.",
-                      page)
-        self.assertIn("Left for you: Claude was only fairly sure, and the names leave room for another product.", page)
-        self.assertIn("Left for you: the shop&#x27;s barcode is not recorded yet. Its next read records it.", page)
+        page = self.client.get(self.url).content.decode().replace("&#x27;", "'")
+        # Each waits for Claude, not the owner: three for a careful second look, one for the shop's next read.
+        self.assertEqual(page.count(f"Next: {judge.CAREFUL_LOOK}."), 3)
+        self.assertIn(f"Next: {judge.BARCODE_NEXT_READ}.", page)
+        self.assertNotIn("Needs you", page)
         self.assertEqual(judge.act_on_earlier(), 0)
         self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
         ClaudeJudge.objects.filter(pk=1).update(may_act=False)
-        self.assertNotIn("Left for you", self.client.get(self.url).content.decode())
+        self.assertNotIn("Next: ", self.client.get(self.url).content.decode())
 
     def test_decide_and_the_reasons_agree(self):
         """decide never acts where the page says an answer was left, and the page never gives a reason for
@@ -1443,7 +1468,7 @@ class EarlierAnswerTests(Base):
                                    product=bundle, undone_at=timezone.now())
         self.assertEqual(judge.act_on_earlier(), 0)
         self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
-        self.assertContains(self.client.get(self.url), "Left for you: the row was answered before, so it stays with you.")
+        self.assertContains(self.client.get(self.url), "Needs you: the row was answered before, so it stays with you.")
 
     def test_the_reasons_cost_the_same_queries_however_many_answers(self):
         self.switch_on(may_act=True)
@@ -1464,8 +1489,7 @@ class EarlierAnswerTests(Base):
             said(row)
         with CaptureQueriesContext(connection) as six:
             page = self.client.get(self.url)
-        self.assertContains(page, "Left for you: Claude was only fairly sure, and the price is far from what "
-                                  "other shops charge.", count=6)
+        self.assertContains(page, f"Next: {judge.CAREFUL_LOOK}.", count=6)
         self.assertEqual(len(one), len(six))
 
     def test_an_act_made_meanwhile_is_never_relabelled_as_a_changed_row(self):
@@ -1552,7 +1576,7 @@ class ClearsTheQueueTests(Base):
         self.assertEqual(judge.page_status()["agreement_total"], 0)
         self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
 
-    def test_deposit_and_barcode_doubts_are_never_checked_and_say_why(self):
+    def test_deposit_marketplace_and_barcode_doubts_follow_the_policy_and_say_why(self):
         from .models import Retailer
 
         cases = {
@@ -1569,13 +1593,31 @@ class ClearsTheQueueTests(Base):
         }
         Retailer.objects.filter(pk=cases["seller"].retailer_id).update(source_type=Retailer.Source.EBAY)
         self.switch_on()
-        self.ask(lambda key, params: reply(key, "same", confidence="medium" if key == f"offer:{cases['seller'].pk}"
-                                           else "high"))
-        self.assertEqual(self.answers(), [])
+
+        def answer(key, params):
+            return reply(key, "same", confidence="medium" if key == f"offer:{cases['seller'].pk}" else "high")
+
+        self.ask(answer)
+        # A deposit is never the whole price: hidden, whatever product it is for.
+        [hid] = self.answers()
+        self.assertEqual((hid.kind, hid.listing), (CheckAnswer.Kind.HIDE, cases["deposit"]))
         page = self.client.get(self.url).content.decode().replace("&#x27;", "'")
-        for words in ("eBay and Amazon titles are the seller's own words", "the shop's title says deposit",
-                      "the shop's barcode is not ours, so only you can say", "the shop's barcode is not recorded yet"):
-            self.assertIn(words, page)
+        self.assertIn(f"Next: {judge.CAREFUL_LOOK}", page)
+        self.assertIn("the shop's barcode is not recorded yet", page)
+        self.assertNotIn("Needs you", page)
+        # The careful second look: the seller's price is checked; the barcode that is not ours against
+        # Claude's sure same is the one conflict left to the owner; the unread barcode waits for its read.
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        client, _ = self.ask(answer)
+        self.assertEqual({params["output_config"]["effort"] for _, params in client.sent}, {"high"})
+        kinds = {answer.listing_id: answer.kind for answer in self.answers()}
+        self.assertEqual(kinds[cases["seller"].pk], CheckAnswer.Kind.CHECKED)
+        self.assertNotIn(cases["barcode"].pk, kinds)
+        self.assertNotIn(cases["unread"].pk, kinds)
+        page = self.client.get(self.url).content.decode().replace("&#x27;", "'")
+        self.assertIn("Needs you: the shop's barcode is not ours, so only you can say", page)
+        self.assertIn("Needs you: 1.", page)
+        self.assertIn(f"Next: {judge.BARCODE_NEXT_READ}", page)
 
     def test_a_marketplace_price_claude_is_sure_of_is_checked_and_stays_as_shown(self):
         from .models import Retailer
@@ -1627,7 +1669,7 @@ class ClearsTheQueueTests(Base):
                                 answer = {"verdict": verdict, "confidence": confidence,
                                           "differences": differences, "careful": careful}
                                 self.assertIn(judge.decide(r, answer, True, partner=partner),
-                                              {None, "hide", "refuse", "apart", "check", "link", "merge"})
+                                              {None, "hide", "refuse", "apart", "held", "check", "link", "merge"})
         self.switch_on()
         self.ask()
         self.assertFalse(CheckAnswer.objects.filter(kind=CheckAnswer.Kind.TRUST).exists())
@@ -1648,9 +1690,10 @@ class ClearsTheQueueTests(Base):
         self.ask(lambda key, params: reply(key, "different", confidence="medium", differences=["language"]))
         row.refresh_from_db()
         self.assertEqual(row.status, ShopProduct.Status.IGNORED)
-        # A pair is kept apart for good only when Claude is sure: a fairly sure one waits for the owner.
-        self.assertEqual(len(checks.duplicates()), 1)
+        # A pair is kept apart for good only when Claude is sure: a fairly sure one is kept apart for now.
+        self.assertEqual(checks.duplicates(), [])
         self.assertFalse(CheckAnswer.objects.filter(kind=CheckAnswer.Kind.APART).exists())
+        self.assertTrue(CheckAnswer.objects.filter(kind=CheckAnswer.Kind.HELD).exists())
         self.assertFalse(Listing.objects.get(pk=cheap.pk).is_active)
         for answer in self.answers():
             autopilot.undo(answer)
@@ -1659,10 +1702,15 @@ class ClearsTheQueueTests(Base):
         ShopProduct.objects.filter(pk=row.pk).update(status=ShopProduct.Status.REVIEW)
         ClaudeJudge.objects.filter(pk=1).update(last_run_at=None, may_act=True)
         self.ask(lambda key, params: reply(key, "different", confidence="medium", differences=["condition"]))
-        # Saying no to a page changes nothing visitors see; a fairly sure condition never hides a price.
+        # Saying no to a page changes nothing visitors see; a fairly sure condition hides a price only after
+        # a careful second look.
         row.refresh_from_db()
         self.assertEqual(row.status, ShopProduct.Status.IGNORED)
         self.assertTrue(Listing.objects.get(pk=cheap.pk).is_active)
+        ClaudeJudge.objects.filter(pk=1).update(last_run_at=None)
+        client, _ = self.ask(lambda key, params: reply(key, "different", confidence="medium", differences=["condition"]))
+        self.assertEqual([params["output_config"]["effort"] for _, params in client.sent], ["high"])
+        self.assertFalse(Listing.objects.get(pk=cheap.pk).is_active)
 
     def test_a_fairly_sure_same_doubtful_price_is_checked(self):
         cheap = self.doubtful()
@@ -1688,15 +1736,20 @@ class ClearsTheQueueTests(Base):
         client, _ = self.ask(lambda key, params: reply(key, "unsure", confidence="low"))
         self.assertEqual({params["output_config"]["effort"] for _, params in client.sent}, {"high"})
         self.assertEqual(len(client.sent), 3)
-        self.assertEqual(sorted(a.kind for a in self.answers()), sorted([CheckAnswer.Kind.HIDE, CheckAnswer.Kind.REFUSE]))
+        self.assertEqual(sorted(a.kind for a in self.answers()),
+                         sorted([CheckAnswer.Kind.CHECKED, CheckAnswer.Kind.REFUSE, CheckAnswer.Kind.HELD]))
         row.refresh_from_db()
         self.assertEqual(row.status, ShopProduct.Status.IGNORED)
-        self.assertFalse(Listing.objects.get(pk=cheap.pk).is_active)
-        # A pair Claude could not tell about is never kept apart for good: it waits for the owner.
+        # The doubtful price stays as shown, with no saving claimed.
+        cheap.refresh_from_db()
+        self.assertEqual((cheap.is_active, cheap.sanity, cheap.trusted_price), (True, Listing.Sanity.DOUBTFUL, None))
+        # A pair Claude could not tell about is never merged nor kept apart for good: it is kept apart for now.
         self.assertTrue(Product.objects.get(pk=other.pk).is_active)
+        self.assertEqual(checks.duplicates(), [])
+        self.assertContains(self.client.get(self.url), "are kept apart for now")
+        held = CheckAnswer.objects.get(kind=CheckAnswer.Kind.HELD)
+        self.assertIn("back under Possible duplicates", autopilot.undo(held))
         self.assertEqual(len(checks.duplicates()), 1)
-        self.assertIn("could not tell, so the pair waits for you",
-                      self.client.get(self.url).content.decode())
 
     def test_at_high_effort_could_not_tell_settles_at_the_first_look(self):
         row = self.found(price="101.00")
@@ -1705,16 +1758,22 @@ class ClearsTheQueueTests(Base):
         row.refresh_from_db()
         self.assertEqual(row.status, ShopProduct.Status.IGNORED)
 
-    def test_both_wrong_match_prices_called_the_same_stay_with_the_owner(self):
-        best = self.shop(20, title="Surging Sparks Booster Box Opened")
-        second = self.shop(100)
+    def test_both_wrong_match_prices_called_the_same_are_checked_and_stay_as_shown(self):
+        best = self.shop(20, title="Surging Sparks Booster Box", shop_ean="")
+        second = self.shop(100, shop_ean="")
         self.shop(104)
         self.assertEqual(len(checks.wrong_matches()), 1)
         self.switch_on()
         self.ask()
-        self.assertEqual(self.answers(), [])
+        self.assertEqual({(a.kind, a.listing_id) for a in self.answers()},
+                         {(CheckAnswer.Kind.CHECKED, best.pk), (CheckAnswer.Kind.CHECKED, second.pk)})
         self.assertTrue(Listing.objects.get(pk=best.pk).is_active and Listing.objects.get(pk=second.pk).is_active)
-        self.assertContains(self.client.get(self.url), "Claude says both prices are this product")
+        # The site claims no saving for a wrong match already, so a checked one waits for nobody...
+        self.assertEqual(checks.wrong_matches(), [])
+        self.assertEqual(judge.open_rows(), [])
+        # ...until its price changes.
+        Listing.objects.filter(pk=best.pk).update(price=Decimal("21.00"))
+        self.assertEqual(len(checks.wrong_matches()), 1)
 
     def test_an_earlier_answer_acts_only_on_the_exact_price_claude_saw(self):
         cheap = self.doubtful()
@@ -1726,7 +1785,7 @@ class ClearsTheQueueTests(Base):
         self.assertEqual(judge.act_on_earlier(), 0)
         self.assertEqual(self.answers(), [])
 
-    def test_a_link_that_would_claim_a_big_saving_rolls_back(self):
+    def test_a_link_that_would_claim_a_big_saving_rolls_back_and_the_page_is_refused(self):
         self.shop(100)
         self.shop(104)
         row = self.found(price="101.00")
@@ -1734,8 +1793,12 @@ class ClearsTheQueueTests(Base):
         with mock.patch.object(judge, "LINK_SAVING_MAX", 0):
             self.ask()
         row.refresh_from_db()
-        self.assertEqual(row.status, ShopProduct.Status.REVIEW)
-        self.assertEqual(Ask.objects.get().action, Ask.Action.STALE)
+        self.assertEqual(row.status, ShopProduct.Status.IGNORED)
+        self.assertFalse(Listing.objects.filter(retailer=row.retailer).exists())
+        [answer] = self.answers()
+        self.assertEqual(answer.kind, CheckAnswer.Kind.REFUSE)
+        self.assertIn("claimed a big saving", answer.why)
+        self.assertEqual(Ask.objects.get().action, Ask.Action.ACTED)
 
     def test_the_merge_button_leaves_out_pairs_whose_barcodes_or_prices_disagree(self):
         keep = make_product(self.set, name="Surging Sparks Elite Trainer Box", ean="0820650851230")
@@ -1792,6 +1855,7 @@ class ClearsTheQueueTests(Base):
         self.assertEqual(order[1][:5], "pair:")
         self.assertEqual(set(order[2:]), {f"offer:{unread.pk}", f"found:{lone.pk}"})
 
+    @mock.patch.object(judge, "ROWS_PER_RUN", 25)
     def test_a_run_the_owner_asks_for_looks_past_25_rows(self):
         self.shop(100)
         self.shop(104)
@@ -1855,7 +1919,7 @@ class ClearsTheQueueTests(Base):
         with mock.patch("catalogue.notify.owner", return_value=True) as told:
             self.ask()
         title = told.call_args[0][1]
-        self.assertEqual(title, "Claude looked at 2: 1 sorted, 1 left for you")
+        self.assertEqual(title, "Claude looked at 2: 1 sorted, 0 need you")
         self.assertNotIn(chr(0x2014), title)
         self.assertNotIn("!", title)
 
@@ -1907,13 +1971,13 @@ class SortEverythingTests(Base):
         self.assertIn("is its own product again", autopilot.undo(answer))
         self.assertTrue(Product.objects.get(pk=other.pk).is_active)
 
-    def test_never_a_merge_when_barcodes_differ(self):
+    def test_never_a_merge_when_barcodes_differ_the_pair_is_kept_apart_for_now(self):
         keep, other = self.pair()
         Product.objects.filter(pk=other.pk).update(ean="5099999999999")
         self.switch_on()
         self.ask()
         self.assertTrue(Product.objects.get(pk=other.pk).is_active)
-        self.assertEqual(self.answers(), [])
+        self.assertEqual([a.kind for a in self.answers()], [CheckAnswer.Kind.HELD])
 
     def test_a_sure_page_is_linked_whatever_its_price_and_the_site_judges_it(self):
         lone = make_product(self.set, name="Surging Sparks Tin", product_type="tin")

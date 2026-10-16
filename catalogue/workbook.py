@@ -19,6 +19,7 @@ from typing import NamedTuple
 
 from django.conf import settings
 from django.db.models import Case, Count, F, IntegerField, Q, Value, When
+from django.db.models.functions import Left
 from django.urls import reverse
 from django.utils import timezone
 
@@ -108,6 +109,7 @@ LISTINGS = Sheet("Listings", "id", "link", (
     Column("Last checked", "checked", R, "datetime", 16),
     Column("Price check", "price_check", R, "text", 28),
     Column("Shop's barcode", "shop_barcode", R, "barcode", 16),
+    Column("Shop's description", "description", R, "text", 50),
     Column("Hidden by", "hidden_by", R, "text", 11),
     Column("Show on site", "show", E, "yes_no", 12, "yes_no"),
     Column("Not this product", "not_this", A, "yes_no", 14, "yes_no"),
@@ -395,6 +397,10 @@ class ListingIndex:
         self.by_product[(product_id, retailer_id)] = (title or url, key)
 
 
+# The Listings sheet shows the start of each shop's description, read-only.
+DESCRIPTION_SHOWN = 300
+
+
 def listing_rows(index):
     """Every listing, hidden ones and ones on switched-off products included, by shop then product."""
     merged = merged_into()
@@ -405,14 +411,16 @@ def listing_rows(index):
     ):
         hidden_by.setdefault(listing_id, "you" if by_owner else "Claude" if ask_id else "autopilot")
     rows = (
-        Listing.objects.order_by("retailer__name", "product__name", "pk").values_list(
+        Listing.objects.order_by("retailer__name", "product__name", "pk")
+        .annotate(description_start=Left("description", DESCRIPTION_SHOWN + 1)).values_list(
             "pk", "retailer_id", "retailer__name", "retailer__source_type", "title", "url", "product_id",
             "product__name", "product__is_active", "product__slug", "price", "delivery_cost", "delivery_known",
             "availability", "last_checked", "sanity", "sanity_reason", "shop_ean", "is_active",
+            "description_start",
         ).iterator(chunk_size=2000)
     )
     for (pk, retailer_id, shop, source, title, url, product_id, product, product_active, slug, price, delivery,
-         delivery_known, stock, checked, sanity, reason, shop_ean, active) in rows:
+         delivery_known, stock, checked, sanity, reason, shop_ean, active, description) in rows:
         link = shown_link(url, source)
         # A page with no title is named by its link as the file shows it, never with eBay's or Amazon's tags.
         index.add(retailer_id, url, product_id, title or link)
@@ -428,10 +436,17 @@ def listing_rows(index):
             "id": pk, "shop": shop, "title": title, "link": link, "product": product_id, "product_name": product,
             "product_shown": shown, "price": price, "delivery": delivery if delivery_known else None,
             "stock": STOCK.get(stock, stock), "checked": local(checked), "price_check": check,
-            "shop_barcode": shop_ean or "", "hidden_by": "" if active else hidden_by.get(pk, ""),
-            "show": YES_NO[0] if active else YES_NO[1],
+            "shop_barcode": shop_ean or "", "description": shown_description(description),
+            "hidden_by": "" if active else hidden_by.get(pk, ""), "show": YES_NO[0] if active else YES_NO[1],
         }
         yield pk, values, {"link": link, "product": product_id, "show": bool(active)}
+
+
+def shown_description(text):
+    """The start of a shop's description for the Listings sheet: DESCRIPTION_SHOWN characters at most (cut
+    in the query), so the file stays small. The whole of it stays on the site for Claude."""
+    text = text or ""
+    return text if len(text) <= DESCRIPTION_SHOWN else text[:DESCRIPTION_SHOWN - 3].rstrip() + "..."
 
 
 def shop_item_status(status, suggested_id, suggested_active, price, there, key):

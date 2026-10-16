@@ -316,7 +316,7 @@ RIPRAPTOR_CLAUDE_API_KEY = os.environ.get("RIPRAPTOR_CLAUDE_API_KEY", "").strip(
 RIPRAPTOR_CLAUDE_KEY_FILE = os.environ.get("RIPRAPTOR_CLAUDE_KEY_FILE", "").strip() or str(
     Path(DATABASES["default"]["NAME"]).with_name("claude-key")
 )
-RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD = int(os.environ.get("RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD", "25") or 25)
+RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD = int(os.environ.get("RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD", "100") or 100)
 # Before Claude is asked about a row, the shop pages involved are read for evidence (catalogue/shop_pages.py),
 # politely and at most 60 a run. Off in tests, which give it recorded pages.
 RIPRAPTOR_CLAUDE_PAGES = env_bool("RIPRAPTOR_CLAUDE_PAGES", default=True) and not TESTING

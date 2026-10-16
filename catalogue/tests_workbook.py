@@ -39,7 +39,7 @@ PRODUCT_HEADINGS = [
 ]
 LISTING_HEADINGS = [
     "Listing id", "Shop", "Shop's title", "Link", "Product id", "Product", "Product shown", "Price", "Delivery",
-    "Stock", "Last checked", "Price check", "Shop's barcode", "Hidden by", "Show on site", "Not this product",
+    "Stock", "Last checked", "Price check", "Shop's barcode", "Shop's description", "Hidden by", "Show on site", "Not this product",
 ]
 SHOP_ITEM_HEADINGS = [
     "Shop item id", "Shop", "Shop's title", "Link", "Shop's barcode", "Price seen", "Stock seen", "Last seen",
@@ -350,6 +350,21 @@ class ListingSheetTests(Base):
         self.assertEqual((row["Show on site"], row["Hidden by"], row["Not this product"]), ("Yes", None, None))
         self.assertIsNone(rows[unknown.pk]["Delivery"])
         self.assertEqual(rows[unknown.pk]["Price check"], "Kept out: far below every other shop")
+        self.assertIsNone(row["Shop's description"])
+
+    def test_the_shops_description_is_shown_read_only_and_short(self):
+        from .workbook import DESCRIPTION_SHOWN
+
+        short = make_listing(self.box, self.shop, title="SSP Booster Box")
+        Listing.objects.filter(pk=short.pk).update(description="36 packs. English. =SUM(A1)")
+        other = make_listing(make_product(self.set, name="Surging Sparks Tin", product_type="tin"), self.shop)
+        Listing.objects.filter(pk=other.pk).update(description="word " * 400)
+        _export, data, _base, _counts = self.export()
+        rows = self.by_id(data, "Listings", "Listing id")
+        self.assertEqual(rows[short.pk]["Shop's description"], "36 packs. English. =SUM(A1)")
+        cut = rows[other.pk]["Shop's description"]
+        self.assertLessEqual(len(cut), DESCRIPTION_SHOWN)
+        self.assertTrue(cut.endswith("..."))
 
     def test_hidden_by_says_who_hid_it(self):
         from .models import ClaudeAsk

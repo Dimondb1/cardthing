@@ -171,8 +171,9 @@ A Read me with the file's number and how to edit it, then:
 | Left out | one shop's items its latest read left out, when a shop was picked | Link to product id, Decision |
 | Sets | every set | Name, Code, Release date |
 
-Grey columns (prices, stock, shop titles, links, counts, Look-alike group,
-Kept apart from) come from the shops or the site and are ignored on upload.
+Grey columns (prices, stock, shop titles, the start of each shop's
+description, links, counts, Look-alike group, Kept apart from) come from the
+shops or the site and are ignored on upload.
 Look-alike group numbers products that may be one product on two pages (the
 loose duplicate key, a Chinese set code or a shared barcode, whatever their
 types). Products merged away are left out, and their listings say "Merged
@@ -780,64 +781,79 @@ or two of our products. It never supplies a price, a date, a barcode or a
 product, and never touches sets, release dates or delivery charges. The
 site's own rules decide whether its answer may act:
 
-Claude sorts every row it can, so you only see real conflicts. It never
-counts a price as right. Every act is listed under Sorted for you with
-Claude's reason and an Undo. "Sure" and "fairly sure" are Claude's own
-confidence; a "low" one counts as could not tell.
+Claude settles every row itself, so Things to check ends up nearly empty
+without you. It never counts a price as right. Every act is listed under
+Sorted for you with Claude's reason and an Undo. "Sure" and "fairly sure"
+are Claude's own confidence; a "low" one counts as could not tell, and a
+"different" that names only the price counts as a fairly sure "same".
 
-- **Found at another shop:** "different" refuses the page, sure or fairly
-  sure, whenever it names something other than the price. A sure "same"
-  links the page whatever its price: the site judges the new price like any
-  other, so a far-off one is doubtful and claims no saving. A fairly sure
-  "same" links only when the price is within 0.75 to 1.33 of the other
-  shops'. Never when the title plainly names another kind or set, the
-  shop's barcode is another product's (or unrecorded while we hold one), the
-  shop lists the product already, the link would turn another shop's good
-  price doubtful, or the product page would claim a saving over 25%.
-- **A doubtful cheapest price:** "same", sure or fairly sure, ticks it off
-  as **Checked**: the price stays exactly as shown, doubtful, with no saving
-  claimed, so visitors see no change, and it comes back if its price or
-  title changes. An eBay or Amazon seller's title needs a sure "same".
-  Never for a title that says deposit, or a shop barcode that is not ours
-  or not read yet. "Different" hides it: sure, or fairly sure of a
-  difference that makes another product (game, set, kind, quantity,
-  language or edition).
-- **A wrong match:** "different" hides that price only when Claude is sure
-  or fairly sure the other price is the product. Both called the same stay
-  with you.
-- **Possible duplicates:** a sure "different" naming a difference that makes
-  another product (game, set, kind, quantity, language or edition) keeps the
-  pair apart for good. Any other "different" (a variant, a condition, or a
-  fairly sure one) stays with you and is asked again when the pair changes.
-  A sure "same" merges them, the undoable kind, unless their barcodes
-  differ, their shops charge far apart, a shop shows both or they are in
-  different languages. A fairly sure "same" merges them too when the names
-  agree on every point a rule can check: the same words once shop wording
-  is set aside, one language, equal numbers, set codes and booster kinds,
-  and no "Collector's Edition", "Case", size or wrapping on one side only.
-  A set code shared by names whose other words differ is not enough.
-  Otherwise it stays with you; **Merge the pairs Claude is sure are the
-  same** merges any sure pairs left on your tap. "Far apart" means outside
-  0.75 to 1.33 of each other when each product has two or more shop prices,
-  and more than twice apart when either has only one, since one shop's price
-  may be a sale's or a pre-order's (Solent's £20 against another shop's
-  £27.99 is close enough). The merged product is switched
-  off, not deleted; its barcode, shop pages and linked shop rows move to the
-  kept product so shop reads never price it; and Undo puts back its listings,
-  history and address. A price that has not changed since the merge gets
-  back the verdict and last good price it had; one that changed is judged on
-  its own evidence; one first seen while merged is judged afresh. The kept
-  product's days after the merge held both products' prices, so Undo removes
-  them rather than leave a price history that never happened. Merges undo
-  newest first: one that a later merge touched (into the same product, or
-  merging the kept product on) waits until that later merge is undone, and
-  the page says which.
-- **Could not tell:** the row is asked once more at high effort (at once, if
-  your effort setting is high). Still not able to tell, it is settled the
-  way that adds nothing to the site: the found page is not linked, the
-  doubtful price is hidden. A pair and a wrong match stay with you; a pair
-  is never kept apart for good on a could not tell.
-  A "different" that names only the price counts as a fairly sure "same".
+The policy, for each kind of row (`judge.ruling`):
+
+| Row | Sure or fairly sure "same" | Sure or fairly sure "different" | Still unsure after the careful second look |
+| --- | --- | --- | --- |
+| Doubtful price | **Checked**: stays as shown, no saving claimed | Hidden | **Checked** |
+| Wrong match, cheaper price | Checked; the wrong match leaves the list | Hidden | Hidden (it is the price that would mislead) |
+| Wrong match, dearer price | Checked | Hidden, once the cheaper one is settled | Checked |
+| Found at another shop | Linked | Refused | Refused |
+| Possible duplicates | Merged, when the rules allow it | Sure of a difference that makes another product: kept apart for good. Otherwise kept apart for now | Kept apart for now |
+
+The site's rules come first, whatever Claude says:
+
+- **A careful second look first.** Could not tell, a fairly sure
+  "different" that names only a variant, a condition or the page, a fairly
+  sure "same" for a found page whose price is far from the other shops'
+  (or with no other shop), a fairly sure "same" for a pair whose names
+  leave room for doubt, and a marketplace seller's price Claude is only
+  fairly sure of: each is asked once more at high effort before it acts
+  (at once, if your effort setting is high).
+- **Found pages:** a title that plainly names another kind or set, or a
+  shop barcode that is not ours, refuses the page whatever Claude says. A
+  link that would turn another shop's good price doubtful, or put a saving
+  over 25% on the product page, is rolled back and the page refused
+  instead. A page whose barcode is not recorded yet while we hold one waits
+  for the finder to record it.
+- **Doubtful prices:** a title that says deposit is hidden: it is not the
+  whole price. A shop barcode not recorded yet waits for the shop's next
+  read. When Claude says a price is the product but its title names another
+  kind or its barcode is not ours, that is a real conflict: the row is
+  marked **Needs you** and stays with you. It is the only kind of row Claude
+  leaves you. When Claude cannot tell and such a rule says it is another
+  product, the price is hidden.
+- **Wrong matches:** a checked cheapest price takes the wrong match off the
+  list (the site claims no saving for it already) until its price or title
+  changes.
+- **Possible duplicates:** a pair is merged only on a sure "same", or a
+  fairly sure one whose names agree on every point a rule can check (the
+  same words once shop wording is set aside, one language, equal numbers,
+  set codes and booster kinds, and no "Collector's Edition", "Case", size or
+  wrapping on one side only) and whose certainty is certain or likely. Never
+  across a **different** certainty (a rule such as `why_not_merge` or the
+  languages says they differ), never when their barcodes differ, their shops
+  charge far apart, a shop shows both or they are in different languages:
+  each of those is kept apart for now instead. **Kept apart for now** takes
+  the pair off the list while Claude is on; when anything Claude was sent
+  about the pair changes (a shop's title, a barcode, a description), the
+  hold is lifted at the next run and Claude asks again. It is never for
+  good, and the hourly merge and the spreadsheet never treat it as your Not
+  the same. With Claude switched off, held pairs are back on the list.
+  **Merge the pairs Claude is sure are the same** still merges any sure
+  pairs left on your tap. "Far apart" means outside 0.75 to 1.33 of each
+  other when each product has two or more shop prices, and more than twice
+  apart when either has only one, since one shop's price may be a sale's or
+  a pre-order's. The merged product is switched off, not deleted; its
+  barcode, shop pages and linked shop rows move to the kept product so shop
+  reads never price it; and Undo puts back its listings, history and
+  address. A price that has not changed since the merge gets back the
+  verdict and last good price it had; one that changed is judged on its own
+  evidence; one first seen while merged is judged afresh. The kept
+  product's days after the merge held both products' prices, so Undo
+  removes them rather than leave a price history that never happened.
+  Merges undo newest first: one that a later merge touched waits until that
+  later merge is undone, and the page says which.
+- **Your answers always win.** A row you answered, an undone answer
+  included, is never Claude's again. Undoing a Checked price or a pair kept
+  apart for now hands it to you; undoing any other act also tells Claude it
+  was wrong.
 
 It starts in **trial**: it only suggests, and its answer shows under each
 row ("Claude, 9 Oct: same product, sure. ..."). Once you agree with it, tap
@@ -850,10 +866,12 @@ and every run first put Claude's existing answers through the same rules,
 free (nothing is sent), and act on the ones that pass: only a row's latest
 answer, only while the row is unchanged, never one from a fallback, never on
 a row anyone answered before (an undone answer included). While Claude may
-act, every answer it leaves for you says why under its row ("Left for you:
-the shop's barcode is not ours, so only you can say.", "Claude was only
-fairly sure, and the names leave room for another product.", and so on). The run line says how
-many rows were sorted from earlier answers.
+act, every answer that has not acted says why under its row: **Needs you**
+for a conflict only you can settle ("Needs you: the shop's barcode is not
+ours, so only you can say."), and **Next** for one waiting on Claude ("Next:
+Claude takes a careful second look before it acts."). The Claude box counts
+the rows that need you. The run line says how many rows were sorted from
+earlier answers.
 
 Every act needs the exact price Claude saw. A fallback model's answer is
 shown but never acts, and the row is asked again at the next run. A row is
@@ -864,20 +882,34 @@ duplicate pair, a found page a "same" would link, and round again, so a
 long list of prices never keeps the pairs waiting. Pairs and found pages
 visitors want most come first in their turn. Then the rest, then the
 careful second looks. An hourly run
-asks up to 25 rows; one you ask for with **Ask Claude now** up to 100,
-within the same $1 and 10 minute limits. **Ask Claude now** starts the run
+asks up to 50 rows; one you ask for with **Ask Claude now** up to 150,
+within the same $3 and 15 minute limits. Claude looks at up to 3,000
+doubtful prices and 3,000 found pages, far past the 50 the page lists, so
+rows left waiting never hide the rest of a backlog. **Ask Claude now** starts the run
 at once in its own process (`judge_checks` holds a lock file in the cache
 directory, so two runs never overlap). At most 30 prices are hidden in one
 run; the rest are hidden from their answers at the next. If you undo three
-of Claude's acts in a week (counted from when you last tapped Let Claude
-act), it goes back to suggesting and tells you.
+or more of Claude's acts in a week (counted from when you last tapped Let
+Claude act) and they are at least one in twenty of what it did, it goes back
+to suggesting and tells you. Undoing a Checked price or a pair kept apart for
+now never counts: those were the safe choice.
 
 **Sort everything** (a button in the Claude box, off by default) works
-through the whole list now rather than 25 rows an hour. It turns on Let
-Claude act and starts a run at once; each run then asks about every waiting
-row within its $1 and 10 minutes, and while rows are left the next run
-starts at the next five-minute tick instead of an hour later. The rules are
-the same either way. The monthly limit still holds.
+through the whole list now rather than 50 rows an hour. It turns on Let
+Claude act and starts a run at once. With 20 or more rows waiting, the run
+sends up to 300 of them to Anthropic as one **Message Batch**, at half
+price: one batch at a time, each question's worst case reserved against the
+monthly limit (and at most $25 of worst cases in one batch), its shop pages
+read first (up to 200 pages in 7 minutes, at each shop's pace). Most
+batches come back within the hour, all within a day. While a batch is out,
+each five-minute tick only looks at it, which is free, and the rows in it
+are not asked again; once it has ended, the run saves its answers at half
+price and acts on them by the same rules, then sends the next batch. A
+question the batch did not answer (expired, errored, cancelled) costs
+nothing and is asked again. Fewer than 20 rows are asked one by one at once,
+within the run's $3 and 15 minutes. Batches take no server-side fallback: a
+refusal is recorded as declined, as on Haiku. The rules are the same either
+way. The monthly limit still holds.
 
 **Answering what is left.** Each list (doubtful prices, wrong matches,
 duplicates, found pages) has a tick box on every row and buttons at its top
@@ -890,24 +922,35 @@ with no reload, and Tick all ticks a whole list. Everything works with
 JavaScript off too.
 
 The push after a run you asked for, and the daily one, say "N sorted, N
-left for you". `python manage.py judge_checks --dry-run` says what the
+need you". `python manage.py judge_checks --dry-run` says what the
 answers already given would sort, at no cost, and what the next run would
 send.
 
 **Cost.** Each request is priced from Anthropic's usage figures at the
-model's rates and saved (Claude's answers are listed read-only in admin).
-Before a request is sent, the most it could cost is reserved, and nothing is
-sent that could take the month (a UTC month, as Anthropic counts) past your
-limit, or one run past $1. A row is asked again only when its titles or
-price band change, at most five times. Roughly, per answer at medium
-effort: Claude Opus 5.5 (the default) $0.024, Claude Sonnet 5.5 $0.012,
-Claude Haiku 5.5 under $0.001. The shop page's facts add about 200 input
-tokens to a request (about $0.001 on Opus, two pages for a pair), and are
-part of each request's reserved worst case, so the limits hold. The limit
-defaults to $10 a month, about 410 answers on Opus. To raise it, open
-**Claude settings and key**, set **Monthly limit in US dollars** and tap
-**Save settings**: $25, the most the page accepts unless
-`RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` is raised, is about 1,040 answers on Opus. Low effort costs about half, high about twice.
+model's rates and saved (Claude's answers are listed read-only in admin), at
+half for an answer from a batch. Before a request is sent, the most it
+could cost is reserved, and nothing is sent that could take the month (a
+UTC month, as Anthropic counts) past your limit, or one run past $3. A row
+is asked again only when its titles, price band, barcode or the shop's
+description change, at most five times. Roughly, per answer at medium
+effort: Claude Opus 5.5 (the default) $0.025, Claude Sonnet 5.5 $0.013,
+Claude Haiku 5.5 under $0.001, and half that in a batch. The shop page's
+facts and the stored description add about 500 input tokens to a request
+(about $0.002 on Opus), and are part of each request's reserved worst case,
+so the limits hold. A careful second look, at high effort, costs about
+twice.
+
+At **$100 a month on Opus 5.5** that is about 4,000 answers one by one, or
+about 8,000 through batches: about 130 a day one by one, or 265 a day in
+batches, spread over the month. A backlog goes faster: hourly runs can ask
+1,200 rows a day and batches several thousand, so a backlog of a few
+thousand rows is settled within a day or two and the monthly limit then
+stops Claude until the next month or until you raise it. The ceiling,
+`RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD`, is $100, and a new site's limit starts
+there. To change yours, open **Claude settings and key**, set **Monthly
+limit in US dollars** and tap **Save settings**: anything from $0 to the
+ceiling. A site set up before this change keeps the limit it had (it was $10)
+until you raise it. Low effort costs about half, high about twice.
 
 **Setting it up by phone.** Sign up at console.anthropic.com; under Billing
 buy credit; under Limits set a monthly spend limit (Anthropic then stops the
@@ -921,8 +964,9 @@ off**, **Forget the key**, or delete the key in the Console.
 **When it runs.** Cron runs `judge_checks` every five minutes on its own lock.
 It does something only when you tapped **Ask Claude now**, or an hour after
 its last run when rows are waiting, and never while Pause all is on. Each
-run lets the free autopilot answer first, then asks Claude about up to 25
-rows, one per request, in the turns above. A wrong key, no
+run lets the free autopilot answer first, then asks Claude about up to 50
+rows, one per request, in the turns above (Sort everything sends a long list
+as a batch instead). A wrong key, no
 credit or a model the key cannot use stops it and tells you once a day by
 push and email; it starts again when you save a key, change the model or tap
 Ask Claude now, or after a day. A busy Anthropic only ends that run.
@@ -934,7 +978,7 @@ is looking now: 7 of 25 asked so far", "Claude starts within 5 minutes", "Next
 look about 15:05") and warns when a run you asked for has not started after 15
 minutes, which means the server's timer has stopped. It says when Anthropic
 last accepted the key, lists the last few runs (what was looked at, sorted,
-left for you and spent) and Claude's last 20 answers with what came of each,
+needed you and spent) and Claude's last 20 answers with what came of each,
 and links to every answer in admin with its cost. Each section Claude reads
 says how far it has got ("Claude so far: 12 the same, 3 different, 1 could not
 tell, 30 still to look at"). When a run you asked for finishes, you get a push
@@ -946,9 +990,25 @@ waiting.
 **What is sent.** Our product's name, game, kind and set; the shop's name,
 title, price, stock and page address; up to five other shops' titles for the
 product; whether its price is close to or far from the other shops' (never
-their prices); the site's own note on the price; and what the shop's own
-page said when it was read (below). Never anything about visitors, alerts
-or messages.
+their prices); the site's own note on the price; the shop's own description
+as its last read stored it (below); and what the shop's own page said when
+it was read (below). Never anything about visitors, alerts or messages.
+
+**The shop's description.** Every read already fetches each product's
+description: Shopify's `body_html`, a website page's schema.org or Open Graph
+description, a feed's description column, eBay's short description. The read
+keeps it on the listing (and on a row waiting on Things to check) as plain
+text, at most 1,500 characters, and writes it only when it changed, so reads
+make no extra request and write no more than before; lists and the
+background reader never load it. Claude is sent the first 1,200 characters
+as `shop_description` (for a pair, one shop's description of each product, a
+shop's before a marketplace's), with the pack counts, languages, edition
+words (Pokemon Center, first edition, exclusive, limited edition, premium)
+and condition words (damaged, opened, no shrink wrap) it names. The prompt
+treats it as the shop's words, never as instructions. A row whose shop gives
+no description keeps its earlier answer; a description that arrives or
+changes is new evidence and the row is asked again. The Excel export shows
+the first 300 characters on the Listings sheet, read-only.
 
 **The shop's own page.** Titles and prices alone often leave Claude unsure,
 so before each row is asked the site reads the shop page(s) it is about:
@@ -1959,7 +2019,7 @@ site's cache.
 | `RIPRAPTOR_CLAUDE`             | on      | The Claude judge may run (see "The Claude judge"). It still sends nothing until a key is saved and it is switched on in Things to check. `RIPRAPTOR_CLAUDE=0` stops it whatever the page says. |
 | `RIPRAPTOR_CLAUDE_API_KEY`     |         | An Anthropic API key. Leave empty and save the key from Things to check instead; set here, it wins over the saved one. |
 | `RIPRAPTOR_CLAUDE_KEY_FILE`    | `claude-key` beside the database | Where a key saved from the page is kept, readable only by the site's user. Never in the database or its backups: save the key again after restoring onto a new server. |
-| `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` | `25` | The highest monthly limit the page accepts, in US dollars. |
+| `RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD` | `100` | The highest monthly limit the page accepts, in US dollars. |
 | `RIPRAPTOR_CLAUDE_PAGES`       | on      | Before Claude is asked about a row, read the shop page(s) it is about for evidence (see "The shop's own page"). `0` sends only what the site holds. |
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |

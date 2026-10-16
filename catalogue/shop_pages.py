@@ -647,17 +647,43 @@ def page_evidence(facts, product):
                                     else autopilot.barcode_check(product, facts["barcodes"][0]))
     scan = facts.get("scan", "")
     if scan:
-        game = product.game.slug if product.game_id else ""
-        counts = sorted({int(m.group(1)) for m in PACK_COUNT.finditer(scan) if 0 < int(m.group(1)) < 1000})
-        said["pack_counts_in_description"] = counts[:6]
-        said["languages_in_description"] = [languages.name(code) or "English"
-                                            for code in languages.stated_all(scan, game)][:4]
-        english = re.search(r"\benglish\b", scan, re.I)
-        if english and "English" not in said["languages_in_description"]:
-            said["languages_in_description"].append("English")
+        found = words_in(scan, product)
+        said["pack_counts_in_description"] = found["pack_counts"]
+        said["languages_in_description"] = found["languages"]
+        for key, label in (("editions", "editions_in_description"), ("conditions", "conditions_in_description")):
+            if found[key]:
+                said[label] = found[key]
     if facts.get("excerpt"):
         said["shop_description_excerpt"] = facts["excerpt"]
     return said
+
+
+# Edition words a description can name: each is another product from the shops' plain edition.
+EDITIONS = (
+    ("Pokemon Center", re.compile(r"\bpok[eé]mon cent(?:er|re)\b|\bpc (?:etb|elite trainer)\b", re.I)),
+    ("first edition", re.compile(r"\b(?:1st|first) edition\b", re.I)),
+    ("exclusive", re.compile(r"\bexclusive\b", re.I)),
+    ("limited edition", re.compile(r"\blimited edition\b", re.I)),
+    ("premium", re.compile(r"\bpremium\b", re.I)),
+)
+
+
+def words_in(text, product):
+    """What a shop's description names that can tell products apart: pack counts, languages, edition words
+    and condition words (damaged, opened, no shrink wrap), each a short list. Read the same way for a page's
+    description and for the description a read stored."""
+    from .matching import conditions
+
+    game = product.game.slug if product.game_id else ""
+    counts = sorted({int(m.group(1)) for m in PACK_COUNT.finditer(text) if 0 < int(m.group(1)) < 1000})
+    named = [languages.name(code) or "English" for code in languages.stated_all(text, game)][:4]
+    if re.search(r"\benglish\b", text, re.I) and "English" not in named:
+        named.append("English")
+    return {
+        "pack_counts": counts[:6], "languages": named,
+        "editions": [name for name, pattern in EDITIONS if pattern.search(text)],
+        "conditions": sorted({"no shrink wrap" if state == "noshrink" else state for state in conditions(text)}),
+    }
 
 
 def size(said):

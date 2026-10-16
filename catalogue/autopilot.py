@@ -85,6 +85,11 @@ def barcode_check(product, shop_ean, marketplace=False):
     return "we hold none" if theirs else "shop gives none" if ours else "neither has one"
 
 
+# Why a price or a page waits for its barcode: the next read or look records it.
+BARCODE_NOT_RECORDED = "the shop's barcode is not recorded yet. Its next read records it"
+FOUND_BARCODE_NOT_RECORDED = "the shop's barcode is not recorded yet. The finder records it when it looks again"
+
+
 def barcode_bars_link(product, shop_row):
     """Why a found page may not be linked on its name, or "": its barcode is not ours, or it is not
     recorded yet while we hold one. The finder sends exactly these pages to the owner."""
@@ -92,8 +97,13 @@ def barcode_bars_link(product, shop_row):
     if check == "different":
         return "the shop's barcode is not ours, so only you can say"
     if check == "not recorded" and product.ean:
-        return "the shop's barcode is not recorded yet. The finder records it when it looks again"
+        return FOUND_BARCODE_NOT_RECORDED
     return ""
+
+
+# Answers that change nothing on the site (Checked) or only hold a pair back for now (Kept apart for now). Undoing
+# one asks the owner to look himself; it does not say Claude was wrong.
+SAFE_KINDS = (Kind.CHECKED, Kind.HELD)
 
 
 class Stale(Exception):
@@ -254,16 +264,21 @@ def check_bars(listing, marketplace_ok=False):
     if barcode == "different":
         return "the shop's barcode is not ours, so only you can say"
     if barcode == "not recorded":
-        return "the shop's barcode is not recorded yet. Its next read records it"
+        return BARCODE_NOT_RECORDED
     return ""
 
 
-def check(listing):
+def check(listing, doubtful_only=True):
     """Tick a doubtful price off as the right product, inside the caller's transaction. Nothing on the site
     changes: it stays doubtful, so it is shown and claims no saving. Raises Stale unless the price is still
-    the one looked at: shown, doubtful, not counted, the same price and title, and nobody's to answer."""
+    the one looked at: shown, doubtful, not counted, the same price and title, and nobody's to answer.
+
+    Without ``doubtful_only`` it ticks off a price of a wrong match, which need not be doubtful: the site
+    claims no saving for a wrong match already, and checks.wrong_matches leaves a checked one out."""
     current = Listing.objects.filter(pk=listing.pk, is_active=True, price=listing.price, title=listing.title,
-                                     sanity=DOUBTFUL, trusted_price__isnull=True)
+                                     trusted_price__isnull=True)
+    if doubtful_only:
+        current = current.filter(sanity=DOUBTFUL)
     if not current.exists() or owners_answers().filter(listing_id=listing.pk).exists():
         raise Stale
     if CheckAnswer.objects.filter(kind=Kind.CHECKED, undone_at__isnull=True, listing_id=listing.pk,
@@ -485,6 +500,8 @@ def undo(answer, now=None):
             message = undo_set(answer)
         elif answer.kind == Kind.APART:
             message = "Undone: the two products may be suggested as duplicates again."
+        elif answer.kind == Kind.HELD:
+            message = "Undone: the two products are back under Possible duplicates for you."
         elif answer.kind == Kind.MERGE and answer.undo_note and answer.product is not None and answer.product.is_active \
                 and not later_merges(answer).exists():
             # Merges undo newest first: one that a later merge built on waits until that merge is undone.
@@ -505,10 +522,10 @@ def undo(answer, now=None):
                 # asks to look at the price himself.
                 from .models import ClaudeAsk
 
-                opposite = "look" if answer.kind == Kind.CHECKED else (
+                opposite = "look" if answer.kind in SAFE_KINDS else (
                     "different" if answer.ask.verdict == "same" else "same")
                 ClaudeAsk.objects.filter(pk=answer.ask_id).update(owner_answer=opposite)
-    if message and answer.ask_id and answer.kind != Kind.CHECKED:
+    if message and answer.ask_id and answer.kind not in SAFE_KINDS:
         # Outside the transaction: it may send the owner a message.
         from . import judge
 

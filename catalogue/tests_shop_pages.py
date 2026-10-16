@@ -1,10 +1,11 @@
 """The shop's own page as the Claude judge's evidence (catalogue/shop_pages.py). Every page here is a
-recorded body in testdata/shop_pages: no test touches the network."""
+recorded body in testdata/shop_pages, or a local server started by the test: no test touches the internet."""
 
 import json
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 
 from django.core.cache import cache
 from django.test import override_settings
@@ -418,10 +419,63 @@ class RedirectTests(ReaderBase):
         store = self.local_shop(base)
         reader = shop_pages.Reader(sleep=lambda seconds: None)   # the real fetch, private addresses refused
         facts = reader.facts(base + "/product/box", store)
-        self.assertEqual(facts["status"], "not read")
+        self.assertEqual(facts["why"], "the shop's robots.txt could not be read")
         self.assertEqual(asked, [])
         self.assertEqual(shop_pages.refused("file:///etc/passwd", {""}), "the address is not a web page")
         self.assertEqual(shop_pages.refused("http://169.254.169.254/latest", {"169.254.169.254"}),
                          "the address is inside a private network")
         self.assertEqual(self.reader(Pages({})).facts("ftp://www.shopify-shop.example/x", self.shopify())["why"],
                          "the address is not a web page")
+
+
+class RobotsTests(ReaderBase):
+    """robots.txt as the convention has it: missing allows, 401/403 forbids, unreadable means not now."""
+
+    def setUp(self):
+        super().setUp()
+        self.store = self.website()
+        self.page = f"{self.store.website}product/surging-sparks-booster-display"
+        self.robots = f"https://{self.store.website.split('/')[2]}/robots.txt"
+        self.key = "judge-robots:" + __import__("hashlib").sha256(self.robots[:-len("/robots.txt")].encode()).hexdigest()
+
+    def read(self, robots_answer):
+        cache.clear()
+        pages = Pages({self.robots: robots_answer, self.page: recorded("website_product.html")})
+        facts = self.reader(pages).facts(self.page, self.store)
+        return facts, pages
+
+    def test_no_robots_txt_allows_the_page(self):
+        for code in ("404: Not Found", "410: Gone"):
+            facts, pages = self.read(ImportError_(f"Could not fetch {self.robots}: HTTP Error {code}"))
+            self.assertEqual(facts["status"], "product")
+            self.assertEqual(pages.pages_asked(), [self.page])
+
+    def test_a_forbidden_robots_txt_forbids_every_page_for_a_day(self):
+        for code in ("401: Unauthorized", "403: Forbidden"):
+            with mock.patch.object(shop_pages.cache, "set", wraps=cache.set) as kept:
+                facts, pages = self.read(ImportError_(f"Could not fetch {self.robots}: HTTP Error {code}"))
+            self.assertEqual(facts["why"], "the shop's robots.txt asks robots not to read this page")
+            self.assertEqual(pages.pages_asked(), [])
+            [seconds] = [call.args[2] for call in kept.call_args_list if call.args[0] == self.key]
+            self.assertEqual(seconds, int(shop_pages.ROBOTS_CACHE_FOR.total_seconds()))
+
+    def test_an_unreadable_robots_txt_stops_the_shop_for_an_hour_only(self):
+        for error in ("HTTP Error 503: Service Unavailable", "HTTP Error 500: Internal Server Error",
+                      "HTTP Error 429: Too Many Requests", "timed out"):
+            with mock.patch.object(shop_pages.cache, "set", wraps=cache.set) as kept:
+                facts, pages = self.read(ImportError_(f"Could not fetch {self.robots}: {error}"))
+            self.assertEqual(facts["why"], "the shop's robots.txt could not be read", error)
+            self.assertEqual(pages.pages_asked(), [], error)
+            [seconds] = [call.args[2] for call in kept.call_args_list if call.args[0] == self.key]
+            self.assertEqual(seconds, int(shop_pages.FAILED_CACHE_FOR.total_seconds()))
+        # Within the hour robots.txt is not asked again and the page still waits.
+        pages = Pages({self.page: recorded("website_product.html")})
+        cache.delete(shop_pages.cache_key(self.page))
+        self.assertEqual(self.reader(pages).facts(self.page, self.store)["why"], "the shop's robots.txt could not be read")
+        self.assertEqual(pages.asked, [])
+
+    def test_a_robots_txt_kept_in_the_old_form_still_works(self):
+        cache.set(self.key, "User-agent: *\nDisallow: /product/\n")
+        pages = Pages({})
+        self.assertEqual(self.reader(pages).facts(self.page, self.store)["why"],
+                         "the shop's robots.txt asks robots not to read this page")

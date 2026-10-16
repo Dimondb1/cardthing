@@ -16,7 +16,9 @@ Only the shops the owner added are asked, and only the way their reads already a
 
 Amazon, feed shops (their links are affiliate clicks a server never follows) and prices entered by hand
 are not read. Neither is a shop that is paused, switched off, waiting after errors, being read right
-now, or whose robots.txt asks robots to stay away from the page. A redirect is followed only within the shop's own site
+now, or whose robots.txt asks robots to stay away from the page (a 401 or 403 for robots.txt counts as
+asking robots to stay away from every page; one that could not be read stops that shop's pages for an
+hour). A redirect is followed only within the shop's own site
 (another site's page is never read and never reported as the shop's), never into a private network,
 and a redirect to another page of the shop is reported as the address having moved. Each shop is asked
 no faster than its reads (worker.RATES), with one try, a short timeout and no retries; a 429 or three failures in a row
@@ -354,27 +356,45 @@ class Reader:
         self.errors[retailer.pk] = 0
         return body
 
-    def allowed(self, url, retailer):
-        """Whether the shop's robots.txt lets the site's robot read ``url``. A shop with no robots.txt, or
-        one that could not be read, allows it. Kept a day per shop."""
+    def robots_why(self, url, retailer):
+        """Why the shop's robots.txt keeps the site's robot from ``url``, or "" when it may read it.
+
+        As the robots convention (and urllib.robotparser) has it: no robots.txt (404 or 410) allows
+        everything and a 401 or 403 forbids everything, each kept a day per shop. A robots.txt that could
+        not be read (5xx, 429, a timeout, a refused redirect) means no page of that shop is read: that is
+        kept only FAILED_CACHE_FOR, so robots.txt is asked again in the next run after it."""
         parts = urlsplit(url)
         base = f"{parts.scheme}://{parts.netloc}"
         key = "judge-robots:" + hashlib.sha256(base.encode()).hexdigest()
-        rules = cache.get(key)
-        if rules is None:
+        kept = cache.get(key)
+        if isinstance(kept, str):
+            kept = {"rules": kept}
+        if kept is None:
+            keep_for = ROBOTS_CACHE_FOR
             try:
-                rules = self.get(f"{base}/robots.txt", retailer).decode("utf-8", "replace")[:100_000]
-            except ImportError_:
-                rules = ""
-            cache.set(key, rules, int(ROBOTS_CACHE_FOR.total_seconds()))
+                kept = {"rules": self.get(f"{base}/robots.txt", retailer).decode("utf-8", "replace")[:100_000]}
+            except ImportError_ as exc:
+                status = crawl.http_status(str(exc))
+                if importers.gone(exc):
+                    kept = {"rules": ""}
+                elif status in (401, 403) and not isinstance(exc, Refused):
+                    kept = {"rules": "User-agent: *\nDisallow: /\n"}
+                else:
+                    kept, keep_for = {"unreadable": True}, FAILED_CACHE_FOR
+            cache.set(key, kept, int(keep_for.total_seconds()))
+        if kept.get("unreadable"):
+            return "the shop's robots.txt could not be read"
         parser = urllib.robotparser.RobotFileParser()
-        parser.parse(rules.splitlines())
-        return parser.can_fetch(importers.USER_AGENT, url)
+        parser.parse(kept["rules"].splitlines())
+        if parser.can_fetch(importers.USER_AGENT, url):
+            return ""
+        return "the shop's robots.txt asks robots not to read this page"
 
     def fetch_or_fact(self, url, retailer):
         """(body, None), or (None, facts) when robots.txt says no or the shop answered with an error."""
-        if not self.allowed(url, retailer):
-            return None, {"status": "not read", "why": "the shop's robots.txt asks robots not to read this page"}
+        why = self.robots_why(url, retailer)
+        if why:
+            return None, {"status": "not read", "why": why}
         try:
             return self.get(url, retailer), None
         except Refused as exc:

@@ -108,7 +108,13 @@
     if (index !== current) select(index);
   }));
 
+  // Only a visitor's own swipe changes the tab. Placing the list on load can fire scrollend before the snap settles
+  // (straight away when motion is reduced), and that must not move a Pre-orders link onto another list.
+  let touched = false;
+  ["pointerdown", "touchstart", "wheel", "keydown"].forEach((type) => track.addEventListener(type, () => { touched = true; }, { passive: true }));
+
   function settle() {
+    if (!touched) return;
     const index = Math.round(track.scrollLeft / track.clientWidth);
     if (index !== current && index >= 0 && index < keys.length) select(index);
   }

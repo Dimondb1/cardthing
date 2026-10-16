@@ -563,3 +563,11 @@ class StarWarsGameTests(TestCase):
         product = Product.objects.create(game=pokemon, product_set=make_set(pokemon),
                                          name="Star wars Booster Pack Secrets of Power (16 Cards)", product_type="booster_pack")
         self.assertEqual({p.pk: g.slug for p, g in misfiled().items()}, {product.pk: "star-wars-unlimited"})
+
+
+class ToyTests(TestCase):
+    def test_building_toys_are_not_card_products(self):
+        for title in ("Nanoblock Pokemon Character Pack Pikachu", "Pokemon Mega Construx Pikachu Building Set",
+                      "Funko Pop Pokemon Charizard"):
+            with self.subTest(title=title):
+                self.assertIsNone(classify(title, "", "", (), 10), title)

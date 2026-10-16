@@ -530,13 +530,15 @@ class Evidence:
 
     def side_text(self, product_id):
         """One shop's description of a product, for a pair: a live listing's at a shop (not a marketplace),
-        else any live listing's, the most recently checked first. Loaded once for every product, one query."""
+        else any live listing's, the oldest listing first. Always the same listing while it lasts (never the
+        one read last), so the pair's fingerprint moves only when a description does. Loaded once for every
+        product, one query."""
         if self.sides is None:
             from django.db.models import OuterRef, Subquery
 
             best = (Listing.objects.live().filter(product_id=OuterRef("pk")).exclude(description="")
-                    .order_by(Case(When(retailer__source_type__in=sanity.MARKETPLACES, then=1), default=0),
-                              "-last_checked", "pk").values("description")[:1])
+                    .order_by(Case(When(retailer__source_type__in=sanity.MARKETPLACES, then=1), default=0), "pk")
+                    .values("description")[:1])
             self.sides = dict(Product.objects.filter(pk__in=self.product_ids).annotate(text=Subquery(best))
                               .values_list("pk", "text"))
         if product_id not in self.sides:

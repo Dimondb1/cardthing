@@ -7,6 +7,7 @@ from decimal import Decimal
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from . import checks, ebay, judge, sanity
 from .importers import (
@@ -191,6 +192,12 @@ class JudgeEvidenceTests(JudgeBase):
         first, second = row.evidence["first"], row.evidence["second"]
         self.assertEqual(first["shop_description"], "9 packs, English")
         self.assertNotIn("shop_description", second)
+        # A later read of another shop never changes which description stands for the product.
+        later = self.shop(52, product=keep, title="")
+        self.describe(later, "Another shop's words")
+        Listing.objects.filter(pk=later.pk).update(last_checked=timezone.now())
+        [again] = [r for r in judge.open_rows() if r.kind == "pair"]
+        self.assertEqual(again.fingerprint, row.fingerprint)
 
     def test_a_row_without_a_description_keeps_its_fingerprint_and_one_that_gains_one_is_asked_again(self):
         cheap = self.shop(30, title=BOX)

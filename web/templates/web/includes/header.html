@@ -1,7 +1,6 @@
 {% load sitecopy %}
 <header class="masthead{% if hide_header_search %} masthead--home{% endif %}">
   <div class="masthead__inner">
-    {% if not hide_header_search %}<a class="masthead__back" href="{% url 'web:home' %}" aria-label="Back" data-back><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>{% endif %}
     <a class="wordmark" href="{% url 'web:home' %}">{% include "web/includes/wordmark.html" %}<span class="visually-hidden">{{ site_name }}, home</span></a>
     {% if not hide_header_search %}
       <div class="masthead__search">{% include "web/includes/search_form.html" with variant="header" button_key="site.search.button" field_id="header-q" live=True %}</div>

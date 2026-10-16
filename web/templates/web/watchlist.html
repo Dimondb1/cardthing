@@ -30,7 +30,7 @@
       {% endif %}
     </div>
     <div class="watch__actions">
-      {% if summary.best %}<a class="button button--buy button--card" href="{{ summary.best.get_outbound_url }}?from=watchlist" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/bag.html" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>{% endif %}
+      {% if summary.best %}<a class="button button--buy button--card" href="{{ summary.best.get_outbound_url }}?from=watchlist" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/buy_mark.svg" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>{% endif %}
       {% include "web/includes/save_link.html" with price=summary.best.shown_price small=True %}
     </div>
   </li>

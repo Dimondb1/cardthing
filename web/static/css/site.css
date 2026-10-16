@@ -67,7 +67,7 @@ ul, ol { margin: 0; padding: 0; }
   --page-gutter: var(--gutter);
   flex: 1 0 auto; width: 100%;
   max-width: calc(var(--page-width) + 2 * var(--gutter));
-  margin: 0 auto; padding: 0 var(--gutter) var(--space-8);
+  margin: 0 auto; padding: 0 var(--gutter) var(--rhythm-section);
 }
 @media (min-width: 48rem) {
   .page { --page-gutter: var(--gutter-wide); max-width: calc(var(--page-width) + 2 * var(--gutter-wide)); padding-inline: var(--gutter-wide); }
@@ -79,29 +79,38 @@ ul, ol { margin: 0; padding: 0; }
   font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em;
   text-transform: uppercase; color: var(--color-ink-subtle); line-height: var(--leading-snug);
 }
-.page-title { font-size: var(--text-page-title); margin: var(--space-5) 0 var(--space-4); }
-.page-head .page-title { margin-bottom: var(--space-2); }
-.page-intro { max-width: 44rem; margin-bottom: var(--space-5); color: var(--color-ink-muted); }
+.page-title { font-size: var(--text-page-title); margin: var(--rhythm-page-top) 0 var(--rhythm-title); }
+.page-head .page-title, .page-title:has(+ .prose--lead) { margin-bottom: var(--space-2); }   /* an intro under the title is its subtitle */
+.page-intro { max-width: 44rem; margin-bottom: var(--rhythm-title); color: var(--color-ink-muted); }
 .section-title { font-size: var(--text-section); }
 .section-note { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-ink-subtle); }
-.block { margin-top: var(--space-7); }
+.block { margin-top: var(--rhythm-section); }
 .small-print { margin-top: var(--space-4); max-width: 44rem; font-size: var(--text-sm); color: var(--color-ink-subtle); }
-.small-print p + p { margin-top: var(--space-2); }
+.small-print p + p, .small-print + .small-print { margin-top: var(--space-2); }   /* closing lines group together */
+main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* and stand a step clear of the page above them */
 
 .section-head {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--rhythm-title);
 }
-.section-head__title { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-section); font-weight: var(--weight-heading); }
-.section-head__icon { width: 1em; height: 1em; color: var(--color-brand); }
-@media (max-width: 40rem) { .section-head__title { font-size: 1.25rem; } }
+.section-head__title { font-size: var(--text-section); font-weight: var(--weight-heading); }   /* a block, so its box can start at its capitals */
+.section-head__icon { display: inline-block; vertical-align: text-bottom; width: 1em; height: 1em; margin-right: var(--space-2); color: var(--color-brand); }
+@media (max-width: 40rem) { .section-head__title { font-size: var(--text-section-sm); } }
 .section-head__all {
   flex: none; color: var(--color-ink-muted); font-weight: var(--weight-medium); font-size: var(--text-sm);
   text-decoration: none; background: none; border: 0; padding: var(--space-1) 0; font-family: inherit; cursor: pointer;
+  /* The tap area reaches past the line without making the head taller than its title. */
+  margin-block: calc(-1 * var(--space-1)); line-height: var(--leading-snug);
   transition: color var(--motion-fast);
 }
 .section-head__all:hover { color: var(--color-brand-text); }
 .section-head__note { font-size: var(--text-sm); color: var(--color-ink-subtle); }
+/* Rhythm is measured glyph to glyph. A heading's box starts at its capitals and a line of text that closes a section
+   ends at its descenders, so a gap after text looks the same as a gap after a card. Browsers without text-box keep
+   the line's own leading, a few pixels more. */
+.section-head__title, .section-title, .prose-page h2 { text-box: trim-start cap alphabetic; }
+.hero__meta, .section-head__note, .page-intro, .browse-head__count, .small-print:last-child,
+.prose-page section > :last-child:not(:has(.button)) { text-box: trim-end cap text; }
 
 /* Buttons */
 .button {
@@ -130,6 +139,10 @@ ul, ol { margin: 0; padding: 0; }
 .button--buy { flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4); border-radius: var(--radius); }
 .button--buy .icon--bag { width: 1.9rem; height: 1.9rem; }
 .button--card { min-width: 6.5rem; }
+/* The raptor holding a bag, as on the product page's Buy now, at card size. The bag's rim takes the button's colour. */
+.button--buy { --buy-surface: var(--color-brand-action); }
+@media (hover: hover) { .button--buy:hover { --buy-surface: var(--color-brand-hover); } }
+.button--card .buy-mark { --buy-mark: var(--buy-mark-card); --buy-mark-head: var(--buy-mark-head-card); flex: none; }
 .button--big { min-width: 8rem; padding: var(--space-4) var(--space-5); font-size: var(--text-lg); }
 .button--big .icon--bag { width: 2.75rem; height: 2.75rem; }
 
@@ -193,53 +206,45 @@ ul, ol { margin: 0; padding: 0; }
 .masthead__inner {
   max-width: calc(var(--page-width) + 2 * var(--gutter)); margin: 0 auto;
   padding: var(--space-2) var(--gutter);
-  display: grid; grid-template-columns: 2.5rem 1fr 2.5rem;
-  grid-template-areas: "back brand nav" "search search search";
-  align-items: center; gap: var(--space-2);
+  /* The logo at the content's left edge on every page and width, the menu at the right, the search under them. */
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "brand . nav" "search search search";
+  align-items: center; gap: var(--space-2) var(--space-4);
 }
-.masthead--home .masthead__inner { grid-template-areas: "back brand nav"; }
-.masthead__back {
-  grid-area: back; display: grid; place-items: center; width: 2.75rem; height: 2.75rem; margin-left: -0.5rem;
-  color: var(--color-brand); border-radius: var(--radius);
-  transition: transform var(--motion-fast) var(--ease-standard), opacity var(--motion-fast);
-}
-.masthead__back svg { width: 1.75rem; height: 1.75rem; }
-@media (hover: hover) { .masthead__back:hover { transform: translateX(-2px); opacity: 0.85; } }
-.masthead__back:active { transform: translateX(-2px) scale(0.94); }
-.masthead--home .masthead__back { visibility: hidden; }
+.masthead--home .masthead__inner { grid-template-areas: "brand . nav"; }
 
-.wordmark { grid-area: brand; justify-self: center; display: block; line-height: 0; border-radius: var(--radius); }
-.wordmark__img { height: 2rem; width: auto; }
+.wordmark { grid-area: brand; justify-self: start; display: block; line-height: 0; border-radius: var(--radius); }
+/* Never narrower than its own shape: the logo keeps its proportions however crowded the row. */
+.wordmark__img { height: var(--masthead-logo-wide); width: auto; max-width: none; }
 .masthead__search { grid-area: search; position: relative; }
 .masthead__nav { grid-area: nav; justify-self: end; display: flex; gap: var(--space-4); font-size: var(--text-sm); font-weight: var(--weight-strong); }
 .masthead__nav a { text-decoration: none; padding-block: var(--space-1); white-space: nowrap; color: var(--color-ink); transition: color var(--motion-fast); text-underline-offset: 0.35em; text-decoration-thickness: 2px; }
 .masthead__nav a:hover, .masthead__nav a[aria-current="page"] { color: var(--color-brand-text); text-decoration: underline; }
 .wordmark__img { transition: transform var(--motion-normal) var(--ease-out); }
 @media (hover: hover) { .wordmark:hover .wordmark__img { transform: scale(1.03) rotate(-1deg); } }
-.masthead__swipe-icon, .masthead__watch-icon { display: none; width: 1.6rem; height: 1.6rem; }
+.masthead__swipe-icon, .masthead__watch-icon { display: none; width: var(--icon-nav); height: var(--icon-nav); }
 @media (max-width: 47.99rem) {
-  .masthead__inner { grid-template-columns: 2.5rem 1fr auto; }
   .masthead__nav { gap: var(--space-1); }
   .masthead__nav a:not(.masthead__swipe):not(.masthead__watch) { display: none; }
-  .masthead__swipe, .masthead__watch { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-width: 2.75rem; padding: 0.25rem 0.25rem 0.2rem; color: var(--color-brand-text); border-radius: var(--radius-sm); font-size: 0.6875rem; font-weight: var(--weight-medium); letter-spacing: 0.01em; }
-  .masthead__swipe { margin-right: -0.25rem; }
+  .masthead__swipe, .masthead__watch { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-width: var(--tap); padding: var(--space-1); color: var(--color-brand-text); border-radius: var(--radius-sm); font-size: var(--text-2xs); font-weight: var(--weight-medium); letter-spacing: 0.01em; }
+  .masthead__watch { margin-right: calc(-1 * var(--space-1)); }
   .masthead__swipe span, .masthead__watch span { line-height: 1; }
   .masthead__watch [data-watch-count] { display: none; }
-  .masthead__swipe-icon, .masthead__watch-icon { display: block; width: 1.5rem; height: 1.5rem; }
+  .masthead__swipe-icon, .masthead__watch-icon { display: block; }
   .masthead__swipe:active, .masthead__watch:active { transform: scale(0.94); }
   /* Compact on phones: the page under it, not the header, should fill the first screen. */
-  .masthead:not(.masthead--home) .wordmark__img { height: var(--masthead-logo); }
+  .wordmark__img { height: var(--masthead-logo); }
   .masthead .search--header input { height: var(--masthead-search); }
 }
 @media (min-width: 48rem) {
-  .masthead__inner {
-    max-width: calc(var(--page-width) + 2 * var(--gutter-wide)); padding: var(--space-4) var(--gutter-wide);
-    grid-template-columns: auto minmax(0, 30rem) 1fr; grid-template-areas: "brand search nav"; gap: var(--space-5);
-  }
-  .masthead--home .masthead__inner { grid-template-columns: auto 1fr; grid-template-areas: "brand nav"; }
-  .masthead__back { display: none; }
-  .wordmark { justify-self: start; }
-  .masthead__nav { gap: var(--space-6); font-size: var(--text-lg); font-weight: var(--weight-strong); }
+  .masthead__inner { max-width: calc(var(--page-width) + 2 * var(--gutter-wide)); padding: var(--space-4) var(--gutter-wide); gap: var(--space-4) var(--space-5); }
+  .masthead__nav { gap: var(--space-5); font-size: var(--text-base); }
+}
+/* One row once the search box fits beside the logo and the menu; a tablet keeps it on a row of its own. */
+@media (min-width: 60rem) {
+  .masthead__inner { grid-template-columns: auto minmax(0, 30rem) 1fr; grid-template-areas: "brand search nav"; }
+  .masthead--home .masthead__inner { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "brand . nav"; }
+  .masthead__nav { gap: var(--space-6); font-size: var(--text-lg); }
 }
 
 /* Search ------------------------------------------------------------------ */
@@ -313,7 +318,7 @@ ul, ol { margin: 0; padding: 0; }
 .site-footer__line a { color: var(--color-ink); }
 .site-footer__nav { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
 .site-footer__nav a { display: inline-block; padding-block: var(--space-1); color: var(--color-ink); font-weight: var(--weight-strong); }
-.site-footer__line a { display: inline-block; padding-block: var(--space-1); }
+.site-footer__line a { display: inline; padding-block: var(--space-1); }   /* inline: the tap area grows, the line spacing does not */
 .site-footer__choice { padding: var(--space-1) 0; border: 0; background: none; color: var(--color-ink); font: inherit; font-weight: var(--weight-strong); cursor: pointer; }
 @media (min-width: 48rem) {
   .site-footer__inner { max-width: calc(var(--page-width) + 2 * var(--gutter-wide)); padding-inline: var(--gutter-wide); }
@@ -334,7 +339,6 @@ ul, ol { margin: 0; padding: 0; }
    prices were checked. Left aligned on a phone, centred on larger screens. */
 .hero { padding: var(--space-3) 0 0; }
 .hero + .home-section { margin-top: var(--rhythm-hero); }
-.hero + .home-section--games { margin-top: var(--space-6); }
 /* The hero does not animate on load: text arriving in sequence is decoration, not information. */
 .reveal { opacity: 0; transform: translateY(6px); transition: opacity var(--motion-slow) var(--ease-out), transform var(--motion-slow) var(--ease-out); }
 .reveal.is-visible, .no-js .reveal { opacity: 1; transform: none; }
@@ -342,28 +346,25 @@ ul, ol { margin: 0; padding: 0; }
 .hero__title { font-size: var(--text-headline); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-tight); letter-spacing: -0.02em; max-width: 22ch; margin: 0; }
 .hero__accent { display: block; color: var(--color-brand); }
 .hero__subtitle { margin: var(--space-3) 0 0; max-width: 40ch; color: var(--color-ink-muted); font-size: var(--text-base); line-height: var(--leading-snug); }
-.hero__search { margin: var(--space-4) 0 0; max-width: 44rem; text-align: left; }
+.hero__search { margin: var(--space-5) 0 0; max-width: 44rem; text-align: left; }
 .hero .live { text-align: left; max-width: 44rem; }
-.hero__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-subtle); }
-.hero__checked { display: inline-flex; align-items: center; gap: 0.4em; }
-.hero__icon { width: 1em; height: 1em; color: var(--color-brand-text); }
+.hero__meta { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-subtle); }
+.hero__icon { display: inline-block; vertical-align: text-bottom; width: 1em; height: 1em; margin-right: 0.4em; color: var(--color-brand-text); }   /* inline, so the line trims to its text */
 .hero__retailers { color: var(--color-ink-muted); font-weight: var(--weight-medium); }
 .hero__sep { color: var(--color-line-strong); }
-.masthead--home .wordmark__img { height: 2.75rem; }
+.masthead--home .wordmark__img { height: var(--masthead-logo-home); }
 .masthead--home .masthead__inner { padding-bottom: var(--space-2); }
 @media (min-width: 48rem) {
   .hero { padding: var(--space-5) 0 0; text-align: center; }
   .hero__title, .hero__subtitle, .hero__search, .hero .live { margin-inline: auto; }
-  .hero__meta { justify-content: center; }
   .hero__subtitle { font-size: var(--text-lg); }
-  .hero__search { margin-top: var(--space-5); }
-  .masthead--home .wordmark__img { height: 4rem; }
+  .masthead--home .wordmark__img { height: var(--masthead-logo-home-wide); }
 }
 
 /* Tiles: the games under the search box and the product types lower down */
 .tiles { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .tile {
-  display: grid; gap: 2px; height: 100%; padding: var(--space-4); border: 1px solid var(--color-line); border-radius: var(--radius-card);
+  display: grid; gap: 2px; height: 100%; padding: var(--card-pad); border: 1px solid var(--color-line); border-radius: var(--radius-card);
   background: var(--color-paper); text-decoration: none; color: inherit;
   transition: transform var(--motion-normal) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out), border-color var(--motion-normal);
 }
@@ -391,12 +392,13 @@ ul, ol { margin: 0; padding: 0; }
    is more. Scrolled by the browser, so it works without JavaScript. */
 .tiles--games {
   display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none;
-  padding: var(--space-1) var(--gutter) var(--space-3); margin: 0 calc(-1 * var(--gutter)); scroll-padding-inline: var(--gutter);
+  /* Room for the hover lift and shadow, cancelled by the margins so the row's edges are the tiles' own. */
+  padding: var(--space-1) var(--gutter) var(--space-3); margin: calc(-1 * var(--space-1)) calc(-1 * var(--gutter)) calc(-1 * var(--space-3)); scroll-padding-inline: var(--gutter);
 }
 .tiles--games::-webkit-scrollbar { display: none; }
 .tiles--games .tiles__item { flex: 0 0 calc((100% - 2 * var(--space-3)) / 2.4); scroll-snap-align: start; }
 @media (min-width: 48rem) {
-  .tiles--games { margin: 0; padding-inline: 0; scroll-padding-inline: 0; }
+  .tiles--games { margin-inline: 0; padding-inline: 0; scroll-padding-inline: 0; }
   .tiles--games .tiles__item { flex-basis: calc((100% - 3 * var(--space-3)) / 3.5); }
 }
 @media (min-width: 60rem) { .tiles--games .tiles__item { flex-basis: calc((100% - 5 * var(--space-3)) / 5.5); } }
@@ -412,7 +414,7 @@ ul, ol { margin: 0; padding: 0; }
 }
 @media (hover: hover) { .poster:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); } }
 .poster:active { transform: scale(0.99); }
-.poster__body { position: relative; z-index: 1; display: grid; justify-items: start; gap: var(--space-3); max-width: 60%; }
+.poster__body { position: relative; z-index: 1; display: grid; justify-items: start; gap: var(--space-3); max-width: var(--golden-major); }
 .poster__title { font-size: var(--text-poster); font-weight: var(--weight-poster); font-stretch: var(--stretch-poster); line-height: var(--leading-poster); text-transform: uppercase; }
 .poster__line { display: block; }
 .poster__text { font-size: var(--text-xl); font-weight: var(--weight-heading); line-height: var(--leading-snug); }
@@ -480,17 +482,20 @@ ul, ol { margin: 0; padding: 0; }
 
 .home-section { margin-top: var(--rhythm-section); }
 .home-section .section-head { margin-bottom: var(--rhythm-title); }
+/* A note under a title belongs to the title: close under it, the usual title gap before the content. */
+.home-section .section-head:has(+ .section-head__note) { margin-bottom: var(--space-1); }
+.home-section .section-head + .section-head__note { margin-bottom: var(--rhythm-title); }
 
 /* Trending: horizontal row of product cards */
 .trending {
   list-style: none; display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth;
-  padding: var(--space-1) var(--gutter) var(--space-3); margin: 0 calc(-1 * var(--gutter)); scroll-padding-inline: var(--gutter); scrollbar-width: none;
+  padding: var(--space-1) var(--gutter) var(--space-3); margin: calc(-1 * var(--space-1)) calc(-1 * var(--gutter)) calc(-1 * var(--space-3)); scroll-padding-inline: var(--gutter); scrollbar-width: none;
 }
 .trending::-webkit-scrollbar { display: none; }
 .trending__item { flex: 0 0 calc((100% - var(--space-3)) / 1.8); scroll-snap-align: start; }
 .trending__link {
   display: flex; flex-direction: column; gap: var(--space-1);
-  padding: var(--space-2) var(--space-2) var(--space-2); border: 1px solid var(--color-line); border-radius: var(--radius-card);
+  padding: var(--card-pad); border: 1px solid var(--color-line); border-radius: var(--radius-card);
   background: var(--color-paper); text-decoration: none; height: 100%;
   transition: transform var(--motion-normal) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out), border-color var(--motion-normal);
 }
@@ -510,15 +515,14 @@ ul, ol { margin: 0; padding: 0; }
 }
 .trending__link:active { transform: scale(0.99); }
 .trending__link .product-image { border-radius: var(--radius-sm); margin-bottom: var(--space-1); }
-.trending__name { padding: 0 var(--space-1); font-weight: var(--weight-strong); font-size: var(--text-sm); line-height: var(--leading-snug); color: var(--color-ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: calc(2 * 1.3em); }
-.trending__price { padding: 0 var(--space-1); }
+.trending__name { font-weight: var(--weight-strong); font-size: var(--text-sm); line-height: var(--leading-snug); color: var(--color-ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: calc(2 * 1.3em); }
 .trending__price .price { font-size: var(--text-price-md); }
-.trending__retailer { padding: 0 var(--space-1); font-size: var(--text-xs); color: var(--color-ink-subtle); }
-.trending__move { padding: 0 var(--space-1); font-size: var(--text-xs); font-weight: var(--weight-strong); font-variant-numeric: tabular-nums; }
+.trending__retailer { font-size: var(--text-xs); color: var(--color-ink-subtle); }
+.trending__move { font-size: var(--text-xs); font-weight: var(--weight-strong); font-variant-numeric: tabular-nums; }
 .trending__move--down { color: var(--color-price); }
 .trending__move--up { color: var(--color-more); }
 @media (min-width: 48rem) {
-  .trending { margin: 0; padding-inline: 0; }
+  .trending { margin-inline: 0; padding-inline: 0; }
   .trending__item { flex-basis: calc((100% - 4 * var(--space-3)) / 5); }
 }
 
@@ -542,10 +546,16 @@ ul, ol { margin: 0; padding: 0; }
 .saving__pill small { font-size: var(--text-xs); font-weight: var(--weight-medium); }
 .saving__chev { display: none; }
 @media (max-width: 40rem) {
-  .saving { grid-template-columns: 1fr; padding: 0 var(--card-pad) var(--space-3); }
+  /* The text takes the full width beside the picture; the saving and Buy now share one row under it, the same
+     height, the saving on the text's left edge and the button at the right. The button sits over the link's
+     last row, so it is never inside the link. */
+  .saving { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; padding: 0 var(--card-pad); column-gap: 0; row-gap: 0; }
+  .saving__link { grid-column: 1 / -1; grid-row: 1 / span 2; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "img body" ". pill"; padding-inline: 0; row-gap: var(--space-3); }
+  .saving__link > .product-image { grid-area: img; align-self: start; }
+  .saving__body { grid-area: body; }
+  .saving__pill { grid-area: pill; justify-self: start; min-height: var(--tap); align-content: center; padding-block: var(--space-1); }
+  .saving__buy { grid-column: 2; grid-row: 2; align-self: end; position: relative; z-index: 1; min-height: var(--tap); margin-bottom: var(--space-3); }
   .saving__retailer { white-space: normal; }
-  .saving__link { padding-inline: 0; }
-  .saving__buy { justify-self: end; }
 }
 @media (min-width: 48rem) {
   .saving { padding-right: var(--space-5); }
@@ -558,6 +568,10 @@ ul, ol { margin: 0; padding: 0; }
 /* Price drops */
 .drops { list-style: none; }
 .drop + .drop { border-top: 1px solid var(--color-line); }
+/* The first and last rows have no rule beside them, so their padding would read as extra gap: the title gap and the
+   section gap are the list's edges. */
+.section-head + .drops > .drop:first-child > .drop__link { padding-top: 0; }
+.drops:last-child > .drop:last-child > .drop__link { padding-bottom: 0; }
 .drop__link { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; text-decoration: none; }
 .drop__body { display: grid; min-width: 0; }
 .drop__name { font-weight: var(--weight-medium); font-size: var(--text-sm); line-height: var(--leading-snug); }
@@ -590,12 +604,11 @@ ul, ol { margin: 0; padding: 0; }
 
 /* Browse: search, game and set pages ---------------------------------------- */
 
-.browse-head { padding: var(--space-4) 0 var(--space-3); }
+.browse-head { padding: var(--rhythm-page-top) 0 0; margin-bottom: var(--rhythm-control); }
 .browse-head .breadcrumbs { margin: 0 0 var(--space-2); }
 .browse-head__title { font-size: var(--text-page-title); overflow-wrap: anywhere; }
 .browse-head__meta { margin-top: var(--space-2); color: var(--color-ink-muted); }
-.browse-head__count { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-ink-subtle); }
-.browse-head--empty { padding-top: var(--space-5); }
+.browse-head__count { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink-subtle); }
 /* No luck. Yet.: the raptor in ink with an orange question mark, on a card of its own, as the owner drew it. */
 .no-luck {
   display: grid; justify-items: center; gap: var(--space-3); max-width: 38rem; margin: 0 auto; padding: var(--poster-pad);
@@ -606,7 +619,7 @@ ul, ol { margin: 0; padding: 0; }
 .no-luck__query { color: var(--color-ink-muted); overflow-wrap: anywhere; }
 .no-luck .game-links { justify-content: center; margin-top: var(--space-2); }
 
-.set-nav { margin-bottom: var(--space-3); }
+.set-nav { margin-bottom: calc(var(--rhythm-control) - var(--space-1)); }   /* less the list's own room for focus rings */
 .set-nav__title { font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-ink-subtle); margin-bottom: var(--space-2); }
 .set-nav ul { list-style: none; display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-1); scrollbar-width: none; }
 .set-nav ul::-webkit-scrollbar { display: none; }
@@ -615,9 +628,9 @@ ul, ol { margin: 0; padding: 0; }
 .set-nav a[aria-current="page"] { background: var(--color-brand-action); border-color: var(--color-brand-action); color: var(--color-brand-ink); font-weight: var(--weight-strong); }
 
 /* Filter pills */
-.filters { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) 0 var(--space-4); }
+.filters { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: 0 0 calc(var(--rhythm-control) - var(--space-1)); }   /* less the room the list keeps for the hover lift */
 .pill {
-  position: relative; display: inline-flex; align-items: center; gap: var(--space-2); height: 2.75rem; padding: 0 var(--space-3);
+  position: relative; display: inline-flex; align-items: center; gap: var(--space-2); height: var(--tap); padding: 0 var(--space-3);
   border: 1.5px solid var(--color-line); border-radius: var(--radius-pill); background: var(--color-paper);
   font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink);
 }
@@ -648,7 +661,8 @@ ul, ol { margin: 0; padding: 0; }
 @media (hover: hover) { .toggle:hover { border-color: var(--color-ink-subtle); } }
 
 /* Product cards (search results) */
-.cards { list-style: none; display: grid; gap: var(--space-4); }
+/* One column on phones, never wider than the screen; two from tablet width, where a card is the phone card's size. */
+.cards { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
 
 /* Stock tabs on game and set pages: In stock, Pre-orders, Out of stock. The row stays at the top of the
    screen while the list scrolls, edge to edge, so the switch is always in reach. Without script each tab
@@ -656,9 +670,13 @@ ul, ol { margin: 0; padding: 0; }
    snapping into place, and only the browser's scrolling moves during a swipe. */
 .stock-tabs {
   position: sticky; top: 0; z-index: 2; background: var(--color-paper);
-  margin: 0 calc(-1 * var(--page-gutter)) var(--space-4); padding-inline: var(--page-gutter);
+  margin: 0 calc(-1 * var(--page-gutter)) var(--rhythm-control); padding-inline: var(--page-gutter);
   border-bottom: 1px solid var(--color-line);
+  /* The bar has no top edge, so the labels' own padding is the gap above them, not extra to it. */
+  margin-top: calc(-1 * var(--space-3));
 }
+/* Edge to edge on phones, where the lists swipe under it; from tablet width the rule starts and ends with the content. */
+@media (min-width: 48rem) { .stock-tabs { margin-inline: 0; padding-inline: 0; } }
 .stock-tabs ul { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .stock-tabs a {
   display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-3) var(--space-1);
@@ -675,13 +693,23 @@ ul, ol { margin: 0; padding: 0; }
   overscroll-behavior-x: contain; scrollbar-width: none; margin-inline: calc(-1 * var(--page-gutter));
 }
 .stock-panes.is-swipe::-webkit-scrollbar { display: none; }
+.stock-panes.is-swipe { margin-bottom: calc(-1 * var(--space-2)); }   /* cancels the panes' room under the list */
 .stock-panes.is-swipe > .stock-pane {
   flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always;
   padding: var(--space-1) var(--page-gutter) var(--space-2);
 }
 .stock-pane__note { margin-bottom: var(--space-3); color: var(--color-ink-muted); font-size: var(--text-sm); }
 .stock-pane__loading { padding: var(--space-6) 0; color: var(--color-ink-subtle); text-align: center; }
-@media (min-width: 60rem) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 48rem) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Two cards side by side share their rows, so the prices, shops and Check prices line up across the pair. */
+@media (min-width: 48rem) {
+  .card { grid-row: span 4; align-content: start; }
+  .card__foot { grid-row: 4; }
+  @supports (grid-template-rows: subgrid) {
+    .card { grid-template-rows: subgrid; row-gap: var(--space-3); }
+    .card__foot { align-self: end; }
+  }
+}
 .card {
   position: relative; display: grid; gap: var(--space-3); padding: var(--card-pad);
   border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-card);
@@ -689,7 +717,9 @@ ul, ol { margin: 0; padding: 0; }
 }
 @media (hover: hover) { .card:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); } }
 /* Top: picture, then language, name, type and badge, then the save button. */
-.card__top { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; }
+/* The picture and the text column in a golden split: the picture is 38.2% of the two, the text 61.8%. The Save
+   button keeps its own width beside them, outside the split. */
+.card__top { display: grid; grid-template-columns: minmax(0, var(--split-minor)) minmax(0, var(--split-major)) auto; gap: var(--space-3); align-items: start; }
 .card__image { display: block; }
 .card__body { display: grid; gap: var(--space-1); justify-items: start; align-content: start; min-width: 0; }
 .card__lang { padding: 0.2em 0.6em; border-radius: var(--radius-pill); background: var(--color-shelf); color: var(--color-ink-muted); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.4; }
@@ -701,7 +731,9 @@ ul, ol { margin: 0; padding: 0; }
 .card__body .badge { margin-top: var(--space-1); }
 .card__save { position: relative; z-index: 1; }
 /* Middle: the cheapest delivered price and the shop, with Buy now beside them. */
-.card__offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "price buy" "at buy"; align-items: center; column-gap: var(--space-3); row-gap: 2px; }
+/* The price and the button share one row and one centre line; the shop line runs under both. */
+.card__offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "price buy" "at at"; align-items: center; column-gap: var(--space-3); row-gap: var(--space-1); }
+.card__offer > p { margin: 0; }   /* the grid gap spaces these lines, not the usual paragraph margin */
 .card__offer--none { grid-template-columns: minmax(0, 1fr); grid-template-areas: "price" "at"; }
 .card__price { grid-area: price; }
 .card__at { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-muted); }
@@ -711,8 +743,7 @@ ul, ol { margin: 0; padding: 0; }
 .card__offer .stock { grid-area: price; }
 .delivered { font-weight: var(--weight-strong); color: var(--color-price); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .card__offer .button--buy { grid-area: buy; position: relative; z-index: 1; }
-.button--buy.button--card { flex-direction: row; gap: var(--space-2); min-height: 2.75rem; min-width: 0; padding: 0 var(--space-4); }
-.button--buy.button--card .icon--bag { width: 1.3rem; height: 1.3rem; }
+.button--buy.button--card { flex-direction: row; gap: var(--space-2); min-height: var(--tap); min-width: 0; padding: 0 var(--space-4) 0 var(--space-3); }
 /* Bottom: the two cheapest shops as rows, then the links to the full comparison. */
 .shops { list-style: none; border-top: 1px solid var(--color-line-soft); }
 .shops__row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--color-line-soft); font-size: var(--text-sm); }
@@ -726,8 +757,7 @@ ul, ol { margin: 0; padding: 0; }
 .card__check { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.35em; min-height: 2.5rem; font-size: var(--text-sm); color: var(--color-ink-muted); text-decoration: none; white-space: nowrap; transition: color var(--motion-fast); }
 .card__check svg { width: 1em; height: 1em; color: var(--color-brand-text); }
 .card__check:hover { color: var(--color-ink); }
-@media (min-width: 48rem) {
-  .card__top { grid-template-columns: 8.5rem minmax(0, 1fr) auto; }
+@media (min-width: 60rem) {
   .card__name { font-size: var(--text-xl); }
 }
 
@@ -742,7 +772,7 @@ ul, ol { margin: 0; padding: 0; }
 .rank__price--more { color: var(--color-more); }
 
 @media (max-width: 40rem) {
-  .price--card { font-size: 1.75rem; }
+  .price--card { font-size: var(--text-price-card-sm); }
 }
 
 /* Plain result rows (related products) */
@@ -767,7 +797,8 @@ ul, ol { margin: 0; padding: 0; }
 .pagination { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--space-3); margin-top: var(--space-6); }
 .pagination a[rel="next"] { justify-self: end; }
 .pagination__status { font-size: var(--text-sm); color: var(--color-ink-subtle); text-align: center; }
-.empty { padding: var(--space-6) 0; }
+.empty { padding: var(--rhythm-section) 0; }
+.page-head + .empty, .page-head + [data-watchlist] > .empty { padding-top: 0; }   /* under a title, the title's own gap is enough */
 .empty__title { font-size: var(--text-xl); margin-bottom: var(--space-3); overflow-wrap: anywhere; }
 .empty p { color: var(--color-ink-muted); }
 /* Empty states: the raptor looked and found nothing. Ink, above the heading, the same on every page. Where something
@@ -781,13 +812,13 @@ ul, ol { margin: 0; padding: 0; }
 /* A phone sees the name, the picture, the cheapest delivered price and Buy now together on the first screen:
    name and details above the picture, the price straight under it, then the buttons. Wide screens put the picture
    beside the name and the price box. */
-.page--product > .breadcrumbs { margin-top: var(--space-1); }
-.product-head { display: grid; grid-template-areas: "intro" "media" "buy"; gap: var(--space-3); margin-top: var(--space-1); }
+.page--product > .breadcrumbs { margin-top: var(--space-3); }
+.product-head { display: grid; grid-template-areas: "intro" "media" "buy"; gap: var(--space-3); margin-top: var(--space-3); }
 .product-intro { grid-area: intro; display: grid; gap: var(--space-1); min-width: 0; }
 .product-title { font-size: var(--text-product-title); line-height: var(--leading-tight); color: var(--color-ink); overflow-wrap: anywhere; }
 .product-head--long .product-title { font-size: var(--text-product-title-long); line-height: var(--leading-snug); }
 .product-facts { font-size: var(--text-sm); color: var(--color-ink-muted); }
-.product-media { grid-area: media; display: grid; place-items: center; border-radius: var(--radius-card); background: var(--color-shelf); overflow: hidden; }
+.product-media { grid-area: media; position: relative; display: grid; place-items: center; border-radius: var(--radius-card); background: var(--color-shelf); overflow: hidden; }
 @media (max-width: 59.99rem) {
   .product-media { height: var(--product-media-phone); }
   .product-head--long .product-media { height: var(--product-media-phone-long); }
@@ -798,20 +829,22 @@ ul, ol { margin: 0; padding: 0; }
 .product-media .product-image--large { width: auto; height: 100%; max-width: 100%; background: transparent; }
 @media (min-width: 60rem) {
   .product-head {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto 1fr;
-    grid-template-areas: "media intro" "media buy"; column-gap: var(--space-6); row-gap: var(--space-4); align-items: start;
-    margin-top: var(--space-3);
+    /* A golden split: the picture takes 61.8%, the name and price box 38.2%. The picture's well runs the full
+       height of the column beside it, so their bottoms meet. */
+    grid-template-columns: minmax(0, var(--split-major)) minmax(0, var(--split-minor)); grid-template-rows: auto 1fr;
+    grid-template-areas: "media intro" "media buy"; column-gap: var(--split-gap); row-gap: var(--space-4); align-items: start;
   }
-  .product-media { aspect-ratio: var(--product-media-ratio); }
+  .product-media { align-self: stretch; min-height: var(--product-media-min); }
+  .product-media .product-image--large { position: absolute; inset: 0; margin: auto; height: 100%; aspect-ratio: 1; }
 }
 
 .buybox {
-  --buybox-pad: var(--space-3);
+  --buybox-pad: var(--card-pad);   /* the same inner edge as every other card */
   grid-area: buy; position: relative; isolation: isolate; display: grid; gap: var(--space-3); padding: var(--buybox-pad);
   border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-card);
 }
-@media (min-width: 48rem) { .buybox { --buybox-pad: var(--space-4); } }
 /* The price and Buy now, with the arrival sweep behind them. */
+.buybox > p { margin: 0; }   /* the grid gap spaces the box, not the usual paragraph margin */
 .buybox__lead { position: relative; isolation: isolate; display: grid; gap: var(--space-3); }
 .buybox__offer { display: grid; gap: var(--space-1); }
 .buybox__offer > p { margin: 0; }   /* the grid gap spaces these lines, not the usual paragraph margin */
@@ -890,7 +923,7 @@ ul, ol { margin: 0; padding: 0; }
   /* The whole well fades, so the picture blends into its own background throughout; once done nothing is left applied. */
   .product-media { animation: media-in var(--motion-slow) var(--ease-out) backwards; }
   .buybox__sweep::before { animation: sweep-down var(--motion-slow) var(--ease-standard) var(--motion-normal) both; }
-  .buy-mark__bag { animation: bag-swing var(--motion-slow) var(--ease-out) calc(var(--motion-normal) + var(--motion-slow)) both; }
+  .buy-now .buy-mark__bag { animation: bag-swing var(--motion-slow) var(--ease-out) calc(var(--motion-normal) + var(--motion-slow)) both; }
 }
 @media (prefers-reduced-motion: no-preference) and (min-width: 60rem) {
   .buybox__sweep::before { animation-name: sweep-across; }
@@ -922,7 +955,7 @@ ul, ol { margin: 0; padding: 0; }
 .buybox__none { font-size: var(--text-xl); font-weight: var(--weight-heading); line-height: var(--leading-snug); }
 
 /* Check prices */
-.section-head--tight { margin-bottom: var(--space-2); }
+.section-head--tight { margin-bottom: var(--rhythm-title); }
 .refresh { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 2.25rem; padding: 0 var(--space-3); border: 1px solid var(--color-line); border-radius: var(--radius-pill); background: var(--color-paper); color: var(--color-ink-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-strong); cursor: pointer; transition: border-color var(--motion-fast), color var(--motion-fast), transform var(--motion-fast) var(--ease-standard); }
 .refresh .icon { color: var(--color-brand); transition: transform var(--motion-slow) var(--ease-out); }
 @media (hover: hover) { .refresh:hover { border-color: var(--color-brand-line); color: var(--color-ink); } }
@@ -931,8 +964,9 @@ ul, ol { margin: 0; padding: 0; }
 .refresh[aria-busy="true"] .icon { animation: spin 700ms linear infinite; }
 .refresh--done .icon { transform: rotate(360deg); }
 @keyframes spin { to { transform: rotate(360deg); } }
-.refresh__status { min-height: 1.4em; margin-bottom: var(--space-2); font-size: var(--text-sm); color: var(--color-price); opacity: 0; transition: opacity var(--motion-normal); }
+.refresh__status { margin-bottom: var(--rhythm-title); font-size: var(--text-sm); color: var(--color-price); opacity: 0; transition: opacity var(--motion-normal); }
 .refresh__status.is-shown { opacity: 1; }
+.refresh__status:empty { position: absolute; margin: 0; }   /* takes no room until it has something to say, and stays a live region */
 .refresh__status.is-error { color: var(--color-more); }
 .money { display: inline-block; }
 .money--out { animation: money-out var(--motion-fast) var(--ease-standard) both; }
@@ -943,10 +977,9 @@ ul, ol { margin: 0; padding: 0; }
 @keyframes money-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 /* Price list */
-.offers-section .section-title { margin-bottom: var(--space-3); }
 .offers { list-style: none; border: 1px solid var(--color-line); border-radius: var(--radius-card); overflow: hidden; }
 .offers__head { display: none; }
-.offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "retailer total" "stock action" "meta meta"; gap: var(--space-1) var(--space-3); align-items: center; padding: var(--space-3); }
+.offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "retailer total" "stock action" "meta meta"; gap: var(--space-1) var(--space-3); align-items: baseline; padding: var(--space-3) var(--card-pad); }
 .offer + .offer { border-top: 1px solid var(--color-line); }
 .offer { transition: background var(--motion-fast); }
 @media (hover: hover) { .offer:not(.offer--cheapest):hover { background: var(--color-shelf); } }
@@ -959,7 +992,7 @@ ul, ol { margin: 0; padding: 0; }
 .offer__total { grid-area: total; font-stretch: var(--stretch-price); font-weight: var(--weight-price); font-size: var(--text-price-md); line-height: 1.1; color: var(--color-price); }
 .offer__meta { grid-area: meta; font-size: var(--text-sm); color: var(--color-ink-subtle); }
 .offer__deal { grid-column: 1 / -1; font-size: var(--text-sm); color: var(--color-ink); }
-.offer__action { grid-area: action; justify-self: end; }
+.offer__action { grid-area: action; justify-self: end; align-self: center; }
 .offer__action .button { min-width: 5.5rem; }
 .offer__link { display: inline-block; padding: var(--space-1) var(--space-2); font-size: var(--text-sm); font-weight: var(--weight-strong); }
 .offer--muted .offer__name, .offer--muted .offer__total { color: var(--color-ink-muted); }
@@ -974,7 +1007,7 @@ ul, ol { margin: 0; padding: 0; }
 }
 @media (min-width: 60rem) {
   .offers__head, .offer { grid-template-columns: minmax(8rem, 1.6fr) minmax(7rem, 1fr) 5.5rem 5.5rem 6.5rem minmax(6.5rem, 1fr) 6rem; grid-template-areas: "retailer stock price delivery total checked action"; column-gap: var(--space-4); }
-  .offers__head { display: grid; padding: var(--space-2) var(--space-3); background: var(--color-shelf); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-ink-subtle); }
+  .offers__head { display: grid; padding: var(--space-2) var(--card-pad); background: var(--color-shelf); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-ink-subtle); }
   .offer__price, .offer__delivery, .offer__checked { display: block; }
   .offer__price { grid-area: price; } .offer__delivery { grid-area: delivery; }
   .offer__checked { grid-area: checked; font-size: var(--text-sm); color: var(--color-ink-subtle); }
@@ -989,9 +1022,10 @@ ul, ol { margin: 0; padding: 0; }
 .offers-more .offers { margin-top: var(--space-2); }
 
 /* History and details */
-.product-lower { display: grid; gap: var(--space-7); }
-@media (min-width: 60rem) { .product-lower { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-8); } }
-.chart { margin: var(--space-4) 0 0; }
+.product-lower { display: grid; gap: var(--rhythm-section); }
+/* The same golden split and gap as the head above, so Product details starts where the price box does. */
+@media (min-width: 60rem) { .product-lower { grid-template-columns: minmax(0, var(--split-major)) minmax(0, var(--split-minor)); column-gap: var(--split-gap); } }
+.chart { margin: var(--rhythm-title) 0 0; }
 .chart__plot { position: relative; height: 11rem; margin-right: 4.5rem; border-bottom: 1px solid var(--color-line); }
 .chart__plot svg { width: 100%; height: 100%; overflow: visible; }
 .chart__line { fill: none; stroke: var(--color-brand); stroke-width: 2.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
@@ -1052,18 +1086,19 @@ ul, ol { margin: 0; padding: 0; }
 }
 .empty__action { margin-top: var(--space-4); }
 .log__day { margin: var(--space-4) 0 var(--space-1); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink-subtle); }
-.details__list { margin: var(--space-4) 0 0; border-top: 1px solid var(--color-line); }
-.details__list div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line); }
-.details__list dt { color: var(--color-ink-subtle); font-size: var(--text-sm); padding-top: 0.1em; }
+.details__list { margin: var(--rhythm-title) 0 0; border-top: 1px solid var(--color-line); }
+.details__list div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); align-items: baseline; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line); }
+.details__list dt { color: var(--color-ink-subtle); font-size: var(--text-sm); }
 .details__list dd { margin: 0; text-align: left; }
 .details__list dd a, .small-print a, .prose a { display: inline-block; padding-block: 2px; }
-.related .section-title { margin-bottom: var(--space-3); }
+.related .section-title { margin-bottom: var(--rhythm-title); }
 
 /* Games index and text pages ---------------------------------------------- */
 
-.game-index { display: grid; gap: var(--space-6); }
-@media (min-width: 48rem) { .game-index { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6) var(--space-8); } }
-.game-index__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); padding-bottom: var(--space-3); border-bottom: 2px solid var(--color-brand); }
+.game-index { display: grid; gap: var(--rhythm-section); }
+@media (min-width: 48rem) { .game-index { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--rhythm-section) var(--split-gap); } }
+/* Name over count for every game, so the lists beside each other start on the same line. */
+.game-index__head { display: grid; justify-items: start; gap: var(--space-1); padding-bottom: var(--space-3); border-bottom: 2px solid var(--color-brand); }
 .game-index__head h2 { font-size: var(--text-section); }
 .game-index__head h2 a { text-decoration: none; }
 .game-index__head p { font-size: var(--text-sm); }
@@ -1073,8 +1108,8 @@ ul, ol { margin: 0; padding: 0; }
 .game-index__set-meta { font-size: var(--text-sm); color: var(--color-ink-subtle); white-space: nowrap; }
 
 .prose-page { max-width: 42rem; }
-.prose-page section { margin-top: var(--space-6); }
-.prose-page h2 { font-size: var(--text-section); margin-bottom: var(--space-3); }
+.prose-page section { margin-top: var(--rhythm-section); }
+.prose-page h2 { font-size: var(--text-section); margin-bottom: var(--rhythm-title); }
 .prose { color: var(--color-ink-muted); }
 .prose p + p { margin-top: var(--space-4); }
 .prose--lead { font-size: var(--text-lg); color: var(--color-ink); }
@@ -1084,7 +1119,7 @@ ul, ol { margin: 0; padding: 0; }
 .retailer-list__domain, .retailer-list__note { font-size: var(--text-sm); color: var(--color-ink-subtle); }
 @media (min-width: 40rem) { .retailer-list li { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--space-4); align-items: baseline; } }
 .not-found .search { margin-top: var(--space-5); }
-.not-found .empty-mark { margin-top: var(--space-6); }
+.not-found .empty-mark { margin-top: var(--rhythm-page-top); }
 .not-found .empty-mark + .page-title { margin-top: 0; }
 /* A removed product's page: its set and game as plain rows */
 .gone-links { list-style: none; margin-top: var(--space-5); border-top: 1px solid var(--color-line); }
@@ -1093,22 +1128,24 @@ ul, ol { margin: 0; padding: 0; }
 
 /* Swipe deck --------------------------------------------------------------- */
 
-.page--deck { padding-bottom: var(--space-6); }
 .deck-page { max-width: 30rem; margin: 0 auto; }
-.deck-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-1); }
+.deck-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--rhythm-page-top); }
 .deck-title { font-size: var(--text-lg); }
 .filters--deck { padding-bottom: 0; }
 @media (max-width: 47.99rem) {
   /* Phones: the header search goes so the card, buttons and saved count fit on one screen. */
   .body--deck .masthead__search { display: none; }
-  .body--deck .masthead__inner { grid-template-areas: "back brand nav"; }
+  .body--deck .masthead__inner { grid-template-areas: "brand . nav"; }
   .deck-hint { display: none; }
   .deck-title { font-size: var(--text-base); }
-  .filters--deck { padding-top: var(--space-1); padding-bottom: var(--space-1); }
+  /* One row that scrolls sideways, like the game tiles, so the card keeps the height. */
+  .deck-head { margin-top: var(--space-3); }
+  .filters--deck { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: calc(-1 * var(--gutter)); padding: var(--space-3) var(--gutter) var(--space-1); }
+  .filters--deck::-webkit-scrollbar { display: none; }
+  .filters--deck > * { flex: none; }
   /* The deck screen is a column exactly the height of the screen: heading,
      filters, the card taking all that is left, then the two buttons. The
      saved list sits below the fold and never squeezes the card. */
-  .body--deck .page { padding-bottom: 0; }
   .deck-screen { display: flex; flex-direction: column; height: calc(100dvh - var(--masthead-height, 3.75rem)); }
   .deck-head, .filters--deck, .deck-actions { flex: none; }
   .deck { flex: 1 1 auto; height: auto; min-height: 0; max-height: none; margin-top: var(--space-2); }
@@ -1119,8 +1156,7 @@ ul, ol { margin: 0; padding: 0; }
   .swipe__top { grid-template-rows: minmax(0, 1fr) auto auto; }
   .swipe__image { min-height: 10rem; }
   .swipe__name { font-size: var(--text-lg); }
-  .swipe__price { font-size: 1.75rem; }
-  .saved { margin-top: var(--space-5); }
+  .swipe__price { font-size: var(--text-price-card-sm); }
 }
 .deck-hint { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink-subtle); }
 
@@ -1151,12 +1187,15 @@ ul, ol { margin: 0; padding: 0; }
 .swipe__image .placeholder { width: 45%; height: 45%; color: var(--color-ink-subtle); }
 .swipe__name { font-size: var(--text-xl); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); color: var(--color-brand); line-height: var(--leading-tight); text-align: center; }
 .swipe__meta { font-size: var(--text-sm); color: var(--color-ink-subtle); text-align: center; }
-.swipe__bottom { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "offer buy" "rank rank"; align-items: center; gap: var(--space-2) var(--space-3); }
-.swipe__offer { grid-area: offer; display: grid; gap: 2px; justify-items: start; }
-.swipe__price { font-size: var(--text-price-card); }
-.swipe__at { font-size: var(--text-sm); color: var(--color-ink-muted); }
-.swipe .button--buy { grid-area: buy; }
-.swipe .rank { grid-area: rank; }
+.swipe__bottom { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-auto-flow: row dense; align-items: center; gap: var(--space-1) var(--space-3); }
+/* As on product cards: the price and Buy now share one row and one centre line, the shop line runs under both. The
+   offer's pieces are placed in the bottom grid directly; Buy now fills the price's row. */
+.swipe__offer { display: contents; }
+.swipe__offer > .badge { grid-column: 1 / -1; justify-self: start; }
+.swipe__price { grid-column: 1; justify-self: start; font-size: var(--text-price-card); }
+.swipe__at { grid-column: 1 / -1; font-size: var(--text-sm); color: var(--color-ink-muted); }
+.swipe .button--buy { grid-column: 2; }
+.swipe .rank { grid-column: 1 / -1; margin-top: var(--space-1); }
 .swipe__stamp {
   position: absolute; top: var(--space-4); padding: 0.3em 0.8em; border: 3px solid currentColor; border-radius: var(--radius);
   font-size: 1.5rem; font-weight: var(--weight-price); letter-spacing: 0.05em; text-transform: uppercase; opacity: 0; pointer-events: none;
@@ -1176,7 +1215,7 @@ ul, ol { margin: 0; padding: 0; }
 .deck-btn--skip svg { color: var(--color-more); }
 .deck-btn--save svg { color: var(--color-price); }
 
-.saved { margin-top: var(--space-7); }
+.saved { margin-top: var(--rhythm-section); }
 .saved__count { color: var(--color-ink-subtle); font-weight: var(--weight-body); }
 .saved__empty { font-size: var(--text-sm); color: var(--color-ink-subtle); }
 .saved .savings:empty { display: none; }

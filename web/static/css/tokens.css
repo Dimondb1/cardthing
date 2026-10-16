@@ -10,6 +10,7 @@
     Price colour             --color-price
     Product title size       --text-product-title
     Page width               --page-width
+    Every gap on the site    --space-1 to --space-8 and the --rhythm-* tokens (a golden-ratio scale)
 */
 
 @font-face {
@@ -30,21 +31,38 @@
   --panel-width: 30rem;          /* a card pinned to the screen corner on wide screens, such as the analytics question */
   --density: 1;
 
-  /* Spacing scale -------------------------------------------------------- */
-  --space-1: calc(0.25rem * var(--density));
-  --space-2: calc(0.5rem * var(--density));
-  --space-3: calc(0.75rem * var(--density));
-  --space-4: calc(1rem * var(--density));
-  --space-5: calc(1.5rem * var(--density));
-  --space-6: calc(2rem * var(--density));
-  --space-7: calc(3rem * var(--density));
-  --space-8: calc(4.5rem * var(--density));
+  /* Golden ratio ---------------------------------------------------------
+     Spacing, rhythm and side-by-side splits all come from phi (1.618) on a 1rem base, so every gap is a step
+     of one scale and each step is about 1.618 times the one before: 0.236, 0.382, 0.618, 1, 1.618, 2.618, 4.236,
+     6.854rem, rounded to the nearest sixteenth of a rem. */
+  --phi: 1.618;
+  --golden-major: 61.8%;         /* the larger share of a golden split */
+  --golden-minor: 38.2%;         /* the smaller share */
+  --split-major: 1.618fr;        /* the same as grid tracks: picture beside price box, chart beside details */
+  --split-minor: 1fr;
 
-  /* Vertical rhythm (home page and section pages) ------------------------ */
-  --rhythm-hero: 3.5rem;       /* below the hero */
-  --rhythm-section: 3.5rem;    /* between sections */
-  --rhythm-title: 1rem;        /* section title to its content */
-  --card-pad: 1rem;            /* inside cards */
+  /* Spacing scale -------------------------------------------------------- */
+  --space-1: calc(0.25rem * var(--density));    /* 0.236 */
+  --space-2: calc(0.375rem * var(--density));   /* 0.382 */
+  --space-3: calc(0.625rem * var(--density));   /* 0.618 */
+  --space-4: calc(1rem * var(--density));       /* 1 */
+  --space-5: calc(1.625rem * var(--density));   /* 1.618 */
+  --space-6: calc(2.625rem * var(--density));   /* 2.618 */
+  --space-7: calc(4.25rem * var(--density));    /* 4.236 */
+  --space-8: calc(6.875rem * var(--density));   /* 6.854 */
+
+  /* Vertical rhythm: the same four gaps on every page --------------------- */
+  --rhythm-section: var(--space-6);     /* between sections, and from the last one to the footer; a step up on wide screens */
+  --rhythm-hero: var(--rhythm-section); /* below the hero: the same as every other section */
+  --rhythm-title: var(--space-4);       /* a section title to its content: section gap / title gap = phi squared */
+  --rhythm-page-top: var(--space-5);    /* the header to a page's first heading */
+  --rhythm-control: var(--space-4);     /* between stacked controls: set pills, stock tabs, filters, the list */
+  --split-gap: var(--space-6);          /* between two columns side by side */
+  --card-pad: var(--space-4);           /* inside cards and tiles */
+
+  /* Controls -------------------------------------------------------------- */
+  --tap: 2.75rem;                /* the smallest a finger target gets */
+  --icon-nav: 1.5rem;            /* the Swipe and Watchlist icons in the phone header */
 
   /* Corners -------------------------------------------------------------- */
   --radius-sm: 8px;          /* thumbnails, small controls */
@@ -63,6 +81,8 @@
   --text-base: 1rem;
   --text-lg: 1.125rem;
   --text-xl: 1.375rem;
+  --text-2xs: 0.6875rem;        /* the words under the phone header icons */
+  --text-section-sm: 1.25rem;   /* section titles on phones */
   --text-section: clamp(1.375rem, 1.2rem + 0.6vw, 1.625rem);
   --text-page-title: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
   --text-hero: clamp(2.5rem, 1.6rem + 3.6vw, 4.25rem);          /* logo on the home page */
@@ -71,6 +91,7 @@
   --text-price-hero: clamp(2.25rem, 1.8rem + 2vw, 3.5rem);             /* the cheapest price on a product page */
   --text-price-lg: clamp(2.75rem, 2.2rem + 2vw, 3.75rem);
   --text-price-card: 2rem;
+  --text-price-card-sm: 1.75rem;
   --text-price-md: 1.25rem;
   --text-headline: clamp(1.75rem, 1.2rem + 2.4vw, 2.75rem);   /* home page headline */
 
@@ -145,12 +166,17 @@
   --product-media-phone: clamp(8rem, 100vh - 32.5rem, 17rem);
   --product-media-phone-long: clamp(7rem, 100vh - 35.5rem, 15rem);
   --product-media-note: 1.25rem;
-  --product-media-ratio: 5 / 4;     /* the picture well beside the price on wide screens */
+  --product-media-min: 22rem;       /* the picture well beside the price box on wide screens: at least this tall, and as tall as the box */
   --masthead-search: 2.5rem;        /* the header search box: compact, still a full finger wide */
   --masthead-logo: 1.75rem;         /* the header logo's height on phones */
+  --masthead-logo-wide: 2rem;       /* the same on tablets and desktops */
+  --masthead-logo-home: 2.625rem;                                  /* the home page logo on phones: the 2.618rem step, the most a 320px screen holds beside the menu */
+  --masthead-logo-home-wide: 4.25rem;                              /* and on wide screens (4.236rem) */
   --buy-height: 3.75rem;            /* the Buy now button */
   --buy-mark: 3.25rem;              /* the raptor and bag inside it */
   --buy-mark-head: 2.75rem;         /* the raptor head, leaving room for the bag below its jaw */
+  --buy-mark-card: 2rem;            /* the same mark on the Buy now and Pre-order buttons of cards and watchlist rows */
+  --buy-mark-head-card: 1.75rem;
   --buy-bag-left: 60%;              /* the bag hangs from the jaw tip: where it sits and how big, as shares of the mark */
   --buy-bag-top: 38%;
   --buy-bag-size: 40%;
@@ -168,6 +194,11 @@
   --weight-poster: 900;
   --leading-poster: 0.9;
   --poster-pad: clamp(1.5rem, 1rem + 2.5vw, 3rem);
+}
+
+/* Sections sit a phi step further apart once there is room. */
+@media (min-width: 48rem) {
+  :root { --rhythm-section: var(--space-7); }
 }
 
 /* Browsers that know the small viewport unit measure the phone picture against the screen with its bars showing;

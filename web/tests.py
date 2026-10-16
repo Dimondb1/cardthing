@@ -2385,3 +2385,104 @@ class ProductPageRedesignTests(PageTestCase):
         script = open(finders.find("js/product.js"), encoding="utf-8").read()
         self.assertIn('behavior: reduce.matches ? "auto" : "smooth"', script)
         self.assertIn("target.focus({ preventScroll: true })", script)
+
+
+class GoldenLayoutTests(PageTestCase):
+    """One golden-ratio scale for every gap, the logo at the left edge, and the raptor on every card's buy button."""
+
+    def css(self, name):
+        from django.contrib.staticfiles import finders
+
+        return open(finders.find(f"css/{name}"), encoding="utf-8").read()
+
+    def test_tokens_define_the_phi_scale_and_one_section_rhythm(self):
+        tokens = self.css("tokens.css")
+        self.assertIn("--phi: 1.618;", tokens)
+        steps = re.findall(r"--space-\d: calc\(([\d.]+)rem \* var\(--density\)\);", tokens)
+        self.assertEqual(len(steps), 8)
+        steps = [float(step) for step in steps]
+        # Each step from 1rem up and down is phi times its neighbour, to within the sixteenth-of-a-rem rounding.
+        for small, large in zip(steps[2:], steps[3:]):
+            self.assertAlmostEqual(large / small, 1.618, delta=0.1)
+        self.assertIn("--rhythm-hero: var(--rhythm-section);", tokens)
+        self.assertIn("--golden-major: 61.8%;", tokens)
+        self.assertIn("--split-major: 1.618fr;", tokens)
+
+    def test_every_section_gap_uses_the_rhythm_tokens(self):
+        css = self.css("site.css")
+        # The home page's first section no longer has a gap of its own.
+        self.assertNotIn("home-section--games { margin-top", css)
+        for rule in (".block { margin-top: var(--rhythm-section); }",
+                     ".home-section { margin-top: var(--rhythm-section); }",
+                     ".prose-page section { margin-top: var(--rhythm-section); }",
+                     ".saved { margin-top: var(--rhythm-section); }"):
+            self.assertIn(rule, css)
+        # Side by side columns use the golden split.
+        self.assertEqual(css.count("minmax(0, var(--split-major)) minmax(0, var(--split-minor))"), 2)
+
+    def test_the_logo_sits_at_the_left_with_no_back_arrow(self):
+        css = self.css("site.css")
+        self.assertIn(".wordmark { grid-area: brand; justify-self: start;", css)
+        self.assertNotIn("justify-self: center", css[css.index("/* Header"):css.index("/* Search ---")])
+        self.assertIn('grid-template-areas: "brand . nav" "search search search";', css)
+        for url in (reverse("web:home"), reverse("web:deals"), self.etb.get_absolute_url()):
+            html = self.client.get(url).content.decode()
+            self.assertNotIn("masthead__back", html)
+            self.assertNotIn("data-back", html)
+            # The logo's size matches the file, so nothing shifts when it loads.
+            self.assertIn('width="1200" height="304"', html)
+
+    def test_card_buy_buttons_carry_the_raptor_mark(self):
+        html = self.client.get(reverse("web:search"), {"q": "etb"}).content.decode()
+        start = html.index('<a class="button button--buy button--card"')
+        button = html[start:html.index("</a>", start)]
+        self.assertIn('<span class="buy-mark" aria-hidden="true"><span class="buy-mark__head"></span>', button)
+        self.assertNotIn("icon--bag", button)
+        css = self.css("site.css")
+        self.assertIn(".button--card .buy-mark { --buy-mark: var(--buy-mark-card); --buy-mark-head: var(--buy-mark-head-card);", css)
+        # The bag swings only on the product page's Buy now, never in a list.
+        self.assertIn(".buy-now .buy-mark__bag { animation: bag-swing", css)
+
+    def test_card_price_and_button_share_one_row(self):
+        css = self.css("site.css")
+        self.assertIn('grid-template-areas: "price buy" "at at"; align-items: center;', css)
+        self.assertIn(".card__offer > p { margin: 0; }", css)
+        # One column on phones that never grows past the screen.
+        self.assertIn(".cards { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr);", css)
+
+    def test_gaps_are_measured_glyph_to_glyph(self):
+        css = self.css("site.css")
+        # Section headings start at their capitals; text that closes a section or a control ends at its descenders.
+        self.assertIn(".section-head__title, .section-title, .prose-page h2 { text-box: trim-start cap alphabetic; }", css)
+        self.assertIn(".hero__meta, .section-head__note, .page-intro, .browse-head__count, .small-print:last-child,", css)
+        # Trimming needs a block, not a flex box, around the text.
+        self.assertNotIn(".section-head__title { display: flex", css)
+        self.assertNotIn(".hero__meta { display: flex", css)
+        # Room kept for hover lifts and row padding does not add to the section gap.
+        self.assertIn(".stock-panes.is-swipe { margin-bottom: calc(-1 * var(--space-2)); }", css)
+        self.assertIn(".drops:last-child > .drop:last-child > .drop__link { padding-bottom: 0; }", css)
+        # The tab labels' padding is the gap above them, and the tab rule starts with the content from tablet width.
+        self.assertIn("margin-top: calc(-1 * var(--space-3));", css)
+        self.assertIn("@media (min-width: 48rem) { .stock-tabs { margin-inline: 0; padding-inline: 0; } }", css)
+        # A subtitle sits the same distance under its page title on every page.
+        self.assertIn(".page-head .page-title, .page-title:has(+ .prose--lead) { margin-bottom: var(--space-2); }", css)
+        self.assertIn(".small-print p + p, .small-print + .small-print { margin-top: var(--space-2); }", css)
+
+    def test_swipe_price_and_button_share_one_row_and_cards_share_one_inner_edge(self):
+        css = self.css("site.css")
+        self.assertIn(".swipe__offer { display: contents; }", css)
+        self.assertIn(".swipe .button--buy { grid-column: 2; }", css)
+        self.assertIn("--buybox-pad: var(--card-pad);", css)
+        self.assertNotIn("--buybox-pad: var(--space-3)", css)
+
+
+class StockTabsScriptTests(TestCase):
+    def test_only_the_visitors_own_swipe_changes_the_tab(self):
+        # Placing the list on load fires scrollend at once when motion is reduced; that must not move a
+        # Pre-orders link onto Out of stock.
+        from django.contrib.staticfiles import finders
+
+        script = open(finders.find("js/tabs.js"), encoding="utf-8").read()
+        settle = script[script.index("function settle() {"):]
+        self.assertTrue(settle.split("\n")[1].strip() == "if (!touched) return;")
+        self.assertIn('["pointerdown", "touchstart", "wheel", "keydown"]', script)

@@ -1342,6 +1342,29 @@ Every colour, size, radius and spacing value is a CSS custom property in
 | Make product titles bigger   | `--text-product-title` |
 | Widen the page               | `--page-width` |
 | Change heading or price width | `--stretch-display`, `--stretch-price` |
+| Change every gap at once      | `--space-1` to `--space-8` and the `--rhythm-*` tokens |
+
+Spacing follows the golden ratio (`--phi`, 1.618). The scale steps from a
+1rem base by phi in both directions (0.25, 0.375, 0.625, 1, 1.625, 2.625,
+4.25 and 6.875rem). Every page uses the same four gaps: `--rhythm-section`
+between sections and before the footer (2.625rem on phones, 4.25rem from
+tablet width), `--rhythm-title` from a heading to its content (1rem),
+`--rhythm-page-top` from the header to a page's first heading, and
+`--rhythm-control` between the stacked controls on game and search pages.
+Gaps are measured glyph to glyph: a section heading's box starts at its
+capitals and a line of text that ends a section stops at its descenders
+(CSS `text-box`), so the gap after a line of text looks the same as the gap
+after a card. Browsers without `text-box` show a few pixels more.
+Where two columns sit side by side (the product picture beside the price
+box, the price history beside the details, a card's picture beside its
+text column) they split 61.8 to 38.2 (`--split-major`, `--split-minor`).
+On a card the Save button keeps its own width outside that split.
+Every rounded card, the price box included, has the same inner edge
+(`--card-pad`).
+
+The header puts the logo at the content's left edge on every page and at
+every width, with the menu on the right. There is no back arrow: browsers
+have their own. Under 60rem the search box has its own row under them.
 
 The typeface is Archivo, self-hosted from `web/static/fonts/` (SIL Open Font
 License), so there are no requests to Google Fonts.
@@ -2323,6 +2346,10 @@ screens put the picture beside the name and the price box.
   small shopping bag hooked on its lower jaw. The bag is a separate drawing, so
   it can swing from the top of its handle; its place and size are the
   `--buy-bag-*` tokens.
+- The same mark, smaller (`--buy-mark-card`), is on the Buy now and
+  Pre-order buttons of product cards and watchlist rows, so every buy button
+  looks the same. It does not swing there: a list has no reason for motion.
+  On a card the price and the button share one row and one centre line.
 - **Compare prices ↓** is an outlined button under it: a plain link to the
   price list's heading, so it works without JavaScript. With it
   (`js/product.js`) the page glides there, or jumps when the visitor asks for

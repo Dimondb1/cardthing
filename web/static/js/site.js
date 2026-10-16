@@ -210,16 +210,6 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
   });
 });
 
-// Back arrow: go back in history when we came from another RipRaptor page.
-document.querySelectorAll("[data-back]").forEach((link) => {
-  link.addEventListener("click", (event) => {
-    if (document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1) {
-      event.preventDefault();
-      history.back();
-    }
-  });
-});
-
 // One-time reveals for lists below the fold. Nothing replays on scroll.
 if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
   const targets = document.querySelectorAll(".saving, .card, .drop, .trending__item");

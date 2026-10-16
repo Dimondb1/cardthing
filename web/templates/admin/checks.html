@@ -195,7 +195,8 @@
       {% for keep, other in pairs %}
       <li class="item"><label class="pick"><input type="checkbox" name="pick" value="{{ keep.pk }}:{{ other.pk }}" form="ticked-pairs"> Tick</label>
         <a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a> into <a href="{{ keep.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.name }}</a>
-        {% include "admin/_claude_said.html" with ask=other.claude %}
+        {% if other.claude %}{% include "admin/_claude_said.html" with ask=other.claude %}{% else %}<span class="why">Claude has not rated this pair yet.</span>{% endif %}
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="ticked"><input type="hidden" name="do" value="merge"><input type="hidden" name="pick" value="{{ keep.pk }}:{{ other.pk }}"><input type="submit" value="Merge this pair"></form>
         <form method="post">{% csrf_token %}<input type="hidden" name="action" value="apart"><input type="hidden" name="keep" value="{{ keep.pk }}"><input type="hidden" name="other" value="{{ other.pk }}"><input type="submit" value="Not the same"></form>
       </li>
       {% endfor %}

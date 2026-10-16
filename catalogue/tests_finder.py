@@ -291,7 +291,8 @@ class LastReadTests(FinderCase):
         make_listing(origins, self.home, price="100.00")
         # Word for word the same name, but Magic, not Pokemon.
         title = "Magic The Gathering Origins Booster Box"
-        self.assertEqual(finder.judge(origins, title), 100)
+        # The title names another game, so even the name alone is not a match.
+        self.assertLess(finder.judge(origins, title), finder.SUGGEST)
         self.unmatched_read(self.gg, f"{title} [no barcode] {GG}/products/mtg-origins-booster-box")
         shop = Shop({"suggest.json": recorded("empty_suggest.json")})
         self.find(shop)
@@ -358,7 +359,7 @@ class SuggestTests(FinderCase):
         self.assertEqual((row.status, row.source, row.confidence), (ShopProduct.Status.REVIEW, ShopProduct.Source.FINDER, 100))
 
     def test_a_likely_match_writes_a_review_row_and_no_listing(self):
-        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Bonus Elite Trainer Box")
         result = self.find(self.shop(page=product_page(barcode="")))
         self.assertFalse(Listing.objects.filter(retailer=self.gg).exists())
         row = ShopProduct.objects.get(retailer=self.gg)
@@ -399,7 +400,8 @@ class SuggestTests(FinderCase):
         found = suggest_with("Magic The Gathering Origins Booster Box", "Star Wars Unlimited Origins Booster Box")
         for item in found["resources"]["results"]["products"]:
             item.update(vendor="", type="Trading Cards", tags=[])
-            self.assertEqual(finder.judge(origins, item["title"]), 100)
+            # The title names another game, so even the name alone is not a match.
+            self.assertLess(finder.judge(origins, item["title"]), finder.SUGGEST)
         self.assertIsNone(finder.Finder().best_result(origins, self.gg, GG, found["resources"]["results"]["products"]))
 
     def test_a_page_from_another_game_is_not_linked_however_well_it_reads(self):
@@ -728,7 +730,7 @@ class WebsiteTests(FinderCase):
         Listing.objects.filter(retailer=self.site).delete()
         StockistSearch.objects.all().delete()
         ShopPage.objects.update(product=None)
-        self.find(Shop({SITE_ETB: site_page(barcode="", title="Pokemon Prismatic Evolutions Pokemon Center Elite Trainer Box")}))
+        self.find(Shop({SITE_ETB: site_page(barcode="", title="Pokemon Prismatic Evolutions Bonus Elite Trainer Box")}))
         self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
         self.assertEqual(self.search(self.etb, self.site).outcome, StockistSearch.Outcome.REVIEW)
 
@@ -747,7 +749,7 @@ class WebsiteTests(FinderCase):
         self.assertEqual(ShopProduct.objects.get(retailer=self.site).confidence, 100)
 
     def test_a_likely_slug_writes_a_review_row_and_fetches_nothing(self):
-        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Bonus Elite Trainer Box")
         self.etb.refresh_from_db()
         self.assertTrue(finder.SUGGEST <= finder.judge(self.etb, "pokemon prismatic evolutions elite trainer box") < 100)
         shop = Shop({SITE_ETB: site_page()})
@@ -765,7 +767,7 @@ class WebsiteTests(FinderCase):
     def test_a_yes_to_a_page_no_read_priced_shows_nothing_until_a_read_prices_it(self):
         from .importers import apply_offers, website_offers
 
-        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Bonus Elite Trainer Box")
         self.etb.refresh_from_db()
         self.find(Shop({}))
         row = ShopProduct.objects.get(retailer=self.site)
@@ -839,8 +841,8 @@ class WebsiteTests(FinderCase):
         etb = f"{SITE}/shop/pokemon-prismatic-evolutions-elite-trainer-box-2"
         for url in (box, etb):
             ShopPage.objects.create(retailer=self.site, url=url, slug_words=slug_words(url))
-        # Both addresses score the same for our Elite Trainer Box, and the booster box is indexed first.
-        self.assertEqual(finder.judge(self.etb, slug_words(box)), finder.judge(self.etb, slug_words(etb)))
+        # The booster box is indexed first, and its address names another unit of sale than our Elite Trainer Box.
+        self.assertLess(finder.judge(self.etb, slug_words(box)), finder.judge(self.etb, slug_words(etb)))
         self.find(Shop({}))
         self.assertEqual(ShopProduct.objects.get(retailer=self.site).url, etb)
         # With our barcode the one request goes to that page too.
@@ -884,7 +886,7 @@ class WebsiteTests(FinderCase):
         self.assertFalse(ShopProduct.objects.filter(retailer=self.site).exists())
 
     def test_a_likely_slug_keeps_what_an_earlier_read_saw_on_the_page(self):
-        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Bonus Elite Trainer Box")
         seen = self.clock() - timedelta(hours=5)
         ShopProduct.objects.create(retailer=self.site, url=SITE_ETB, title="Prismatic Evolutions ETB", price=Decimal("58.00"),
                                    availability=Listing.Availability.IN_STOCK, confidence=70, last_seen=seen)
@@ -897,7 +899,7 @@ class WebsiteTests(FinderCase):
                           ShopProduct.Source.FINDER))
 
     def test_a_likely_slug_is_read_when_our_barcode_can_make_it_sure(self):
-        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box",
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Bonus Elite Trainer Box",
                                                      ean=PE_BARCODE)
         shop = Shop({SITE_ETB: site_page()})
         self.find(shop)
@@ -1000,7 +1002,7 @@ class CommandTests(FinderCase):
 class OwnerTests(FinderCase):
     def setUp(self):
         super().setUp()
-        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Bonus Elite Trainer Box")
         self.etb.refresh_from_db()
         self.find(Shop({"suggest.json": recorded("gathering_games_suggest.json"), ".js": product_page(available=True, barcode="")}))
         self.row = ShopProduct.objects.get(retailer=self.gg)
@@ -1103,7 +1105,7 @@ class YesStockTests(FinderCase):
 
     def setUp(self):
         super().setUp()
-        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Pokemon Center Elite Trainer Box")
+        Product.objects.filter(pk=self.etb.pk).update(name="Prismatic Evolutions Bonus Elite Trainer Box")
         self.etb.refresh_from_db()
         Listing.objects.filter(product=self.etb, retailer=self.home).update(price=Decimal("40.00"))
         self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))

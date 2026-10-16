@@ -30,7 +30,7 @@ from django.utils import timezone
 
 from . import languages
 from .classify import find_type
-from .matching import AUTO_LINK, SUGGEST, key_words, match_key, score
+from .matching import AUTO_LINK, SUGGEST, contradiction, key_words, match_key, score
 from .models import Listing, Product
 
 logger = logging.getLogger(__name__)
@@ -289,8 +289,9 @@ def languages_in(text, loose=True):
 def junk(product, title):
     """Is the listing plainly not one sealed unit of this product, whatever its name says?
 
-    A multi-buy, an online code, a part, another language. Checked on every
-    result, including those that name the product word for word.
+    A multi-buy, an online code, a part, another language, or anything matching.contradiction finds
+    (another game or set code, a Pokémon Center edition, a damaged or opened box, another unit of sale).
+    Checked on every result, including those that name the product word for word, and on known listings.
     """
     game = product.game.slug if product.game_id else ""
     ours = getattr(product, "language", None)
@@ -300,7 +301,10 @@ def junk(product, title):
         return True
     if NOT_THE_THING.search(title) and not NOT_THE_THING.search(product.name):
         return True
-    return product.product_type == "booster_pack" and bool(PACK_COUNT.search(title))
+    if product.product_type == "booster_pack" and PACK_COUNT.search(title):
+        return True
+    # Another game, set code, edition, condition or unit of sale, read as every shop's title is.
+    return bool(contradiction(product.name, title, game, ours))
 
 
 def is_this_product(product, title, specifics):
@@ -380,7 +384,7 @@ def verdict(product, item, Offer, catalogue, specifics, shops):
     if product.pk in shops and offer.price + offer.delivery < shops[product.pk] * PRICE_FLOOR:
         return offer, f"too cheap to be the sealed product (under £{shops[product.pk] * PRICE_FLOOR:.2f})"
     if junk(product, offer.title):
-        return offer, "a multi-buy, an online code, a part or another language"
+        return offer, "a multi-buy, an online code, a part, another language or plainly another product"
     match, value = catalogue.best_match(offer.title, game=product.game.slug)
     needed = SUGGEST if product.ean else AUTO_LINK
     # A duplicate catalogue entry with the same key counts as this product.
@@ -462,10 +466,14 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
         # Known listings, twenty at a time through the bulk lookup.
         known = list(products.filter(pk__in=existing).order_by("ebay_checked_at"))
         by_item = {}
+        # One eBay listing is one product: an item already another product's is never taken for a second
+        # (one Future Flash SV4M box was on both our Scarlet ex SV1S and Violet ex SV1V boxes).
+        taken = {}
         for product in known:
             item_id = item_id_of(existing[product.pk].url)
-            if item_id:
+            if item_id and item_id not in by_item:
                 by_item[item_id] = product
+                taken[item_id] = product.pk
             else:
                 gone.append(product)
         ids = list(by_item)
@@ -585,8 +593,12 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
             best = None
             for item in answer.get("itemSummaries", []) or []:
                 offer, reason = verdict(product, item, Offer, catalogue, specifics_for(product.game.slug), shops)
+                if reason is None and taken.get(item_id_of(offer.url) or None, product.pk) != product.pk:
+                    continue   # another product's listing already
                 if reason is None and (best is None or offer.price + offer.delivery < best.price + best.delivery):
                     best = offer
+            if best is not None and best.availability != Listing.Availability.OUT_OF_STOCK and item_id_of(best.url):
+                taken[item_id_of(best.url)] = product.pk
             if best is None and product.pk in existing:
                 best = out_of_stock(product)
             if best is not None:

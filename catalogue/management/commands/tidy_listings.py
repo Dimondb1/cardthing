@@ -23,8 +23,10 @@ from django.utils import timezone
 from catalogue import languages
 from catalogue.classify import NOT_SEALED, box_contents, find_game
 from catalogue.ebay import EbayError, fill_titles, too_cheap_listings
-from catalogue.importers import slug_words
-from catalogue.matching import DIFFERENT, LANGUAGE_DIFFERENT, expand, match_key
+from catalogue.importers import barcode_owners, ean_key, link_key, listing_page, slug_words, valid_gtin
+from catalogue.matching import (
+    AUTO_LINK, DIFFERENT, LANGUAGE_DIFFERENT, contradiction, expand, key_words, match_key, score, shop_title,
+)
 from catalogue.models import Game, Listing, Product, shown_change
 from catalogue.signals import clear_list_caches
 
@@ -41,15 +43,50 @@ def same_language(title, product):
     return bool(theirs) and not languages.mixed(title, game) and languages.same(theirs, ours)
 
 
-def fits(listing):
-    """Could the shop address be this product? Only a clear contradiction says no.
+MARKETPLACES = ("ebay", "amazon")
+_OWNED = {}
 
-    The address is a slug, not the title the importer matched on, so it often
-    lacks or garbles words. It is judged only on what it plainly says: a
-    different game, a word that marks a different product (a language, an
-    edition, an accessory), a different kind of thing (box against pack), or
-    a single card.
+
+def owned_barcodes():
+    """The barcodes that name one product, read once per tidy run (clear_owned_barcodes starts a run)."""
+    if "keys" not in _OWNED:
+        _OWNED["keys"] = set(barcode_owners())
+    return _OWNED["keys"]
+
+
+def clear_owned_barcodes():
+    _OWNED.clear()
+
+
+def title_misfit(title, name, game, language="", shop_ean="", ean="", marketplace=False):
+    """Why the shop's own title plainly names another product than ours (matching.contradiction, the rule
+    every read applies), or "". A shop barcode that is ours and a valid GTIN settles it the other way; a
+    marketplace's barcode is our own, copied in, so it never does."""
+    if not title:
+        return ""
+    if not marketplace and shop_ean and ean_key(shop_ean) == ean_key(ean) and valid_gtin(ean):
+        return ""
+    return contradiction(name, title, game, language)
+
+
+def fits(listing):
+    """Could the shop page be this product? Only a clear contradiction says no.
+
+    A shop's list of products (a category page) is never one product's page. The shop's own title, when
+    the listing kept it, is judged as every read judges it (title_misfit). The address is a slug, not the
+    title the importer matched on, so it often lacks or garbles words. It is judged only on what it
+    plainly says: a different game, a word that marks a different product (a language, an edition, an
+    accessory), a different kind of thing (box against pack), or a single card.
     """
+    if listing_page(listing.url):
+        return False
+    product = listing.product
+    marketplace = bool(listing.retailer_id) and listing.retailer.source_type in MARKETPLACES
+    # A barcode two of our products carry proves nothing (importers.barcode_owners).
+    ean = product.ean if product.ean and ean_key(product.ean) in owned_barcodes() else ""
+    if title_misfit(listing.title, product.name, product.game.slug, getattr(product, "language", ""),
+                    listing.shop_ean or "", ean, marketplace):
+        return False
     title = slug_words(listing.url)
     if not title:
         return True  # nothing to check against
@@ -82,6 +119,36 @@ def fits(listing):
     return True
 
 
+def names_in_full(name, title, game):
+    """Whether a shop title names every identifying word of our product's name, in the words matching uses
+    (plurals and set codes spelt one way), and says nothing against it."""
+    named = score(name, title, game) >= AUTO_LINK or key_words(name, game) <= key_words(shop_title(title), game)
+    return named and not contradiction(name, title, game)
+
+
+def shared_link_misfits(rows):
+    """The listings to take off where one shop's link (its variant included) is on several of our products.
+
+    ``rows`` are (listing, retailer id, link, shop title, product name, game slug). A link is one product.
+    When the shop's titles on that link name exactly one of the products in full (every word of its name,
+    and nothing matching.contradiction finds), the others go: Travelling Man's Avengers Assemble variant was
+    on both our Avengers Assemble and Fantastic Four decks. When they name none or several, all stay for
+    a person: nothing says which is right.
+    """
+    groups = {}
+    for row in rows:
+        groups.setdefault((row[1], link_key(row[2])), []).append(row)
+    misfits = []
+    for group in groups.values():
+        if len({row[4] for row in group}) < 2:
+            continue
+        titles = {row[3] for row in group if row[3]}
+        named = [row for row in group if any(names_in_full(row[4], title, row[5]) for title in titles)]
+        if len(named) == 1:
+            misfits += [row[0] for row in group if row is not named[0]]
+    return misfits
+
+
 def misfiled():
     """{product: game} for products whose shop addresses all name one other game.
 
@@ -111,6 +178,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, dry_run=False, **options):
         removed = 0
+        clear_owned_barcodes()
         # eBay listings saved before titles were kept cannot be judged by their title, so ask eBay for it.
         # Not in a dry run: fetching saves each title, and a dry run changes nothing.
         if dry_run:
@@ -138,10 +206,13 @@ class Command(BaseCommand):
             # Judge every listing first, then delete. A write while the chunked read is still open would
             # find its snapshot out of date as soon as another process commits, and SQLite then reports
             # the database locked at once rather than waiting.
-            misfits = [
-                listing for listing in Listing.objects.select_related("product__game", "retailer").iterator()
-                if not fits(listing)
-            ]
+            listings = list(Listing.objects.select_related("product__game", "retailer").iterator())
+            misfits = [listing for listing in listings if not fits(listing)]
+            gone = {listing.pk for listing in misfits}
+            misfits += shared_link_misfits([
+                (listing, listing.retailer_id, listing.url, listing.title, listing.product.name, listing.product.game.slug)
+                for listing in listings if listing.pk not in gone
+            ])
             for listing in misfits:
                 removed += 1
                 self.stdout.write(f"{'would remove' if dry_run else 'removed'}: {listing.product.name} <- {listing.retailer.name} {listing.url}")

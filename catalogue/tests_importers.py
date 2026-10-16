@@ -1239,7 +1239,8 @@ class PreorderTagTests(TestCase):
         self.assertEqual(Listing.objects.get(product=product).availability, Listing.Availability.PREORDER)
 
     def test_a_collection_that_excludes_preorders_is_not_a_preorder_list(self):
-        product = make_product(make_set(make_game()), name="Supreme Darkness Booster Pack", ean="4012927154422")
+        product = make_product(make_set(make_game("Yu-Gi-Oh!", "yu-gi-oh")), name="Supreme Darkness Booster Pack",
+                               ean="4012927154422")
         self.run_shop(
             [{
                 "title": "Yu-Gi-Oh! Supreme Darkness Booster Pack", "handle": "supreme-darkness-booster-pack", "tags": ["TCG"],
@@ -1366,7 +1367,8 @@ class WriteSkippingTests(TestCase):
             # its product, the day's lowest price; with nothing to judge it, its price is not stored as a last
             # good price), one look for verdicts to heal and one stamp for the other two, and the
             # out-of-stock sweep. Rewriting all three would cost about thirty.
-            with self.assertNumQueries(19):
+            # 20: the read also loads our products' names, languages and barcodes once, to judge titles.
+            with self.assertNumQueries(20):
                 found, updated, unmatched = apply_offers(self.retailer, offers, checked_at=checked_at)
         self.assertEqual((found, updated, unmatched), (3, 3, []))
         self.assertEqual(cleared.call_count, 1)

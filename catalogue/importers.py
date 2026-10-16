@@ -40,8 +40,8 @@ from django.utils.dateparse import parse_datetime
 from . import languages, pricing
 from .classify import GAMES, classify, find_game, variant_differs
 from .matching import (
-    AUTO_LINK, SUGGEST, VARIANT_WORDS, best_match, chinese_code, code_key, covers, match_key, names_something, naming_words,
-    same_product, score, set_codes, shop_title,
+    AUTO_LINK, SUGGEST, VARIANT_WORDS, best_match, chinese_code, code_key, contradiction, covers, match_key, names_something,
+    naming_words, same_product, score, set_codes, shop_title,
 )
 from .models import (
     Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, shown_change,
@@ -928,6 +928,59 @@ def slug_words(url):
     return re.sub(r"[-_+]+", " ", path.rsplit("/", 1)[-1]).strip()
 
 
+# Path segments under which shops list many products: "/collections/booster-boxes", "/product-category/pokemon".
+LIST_MARKS = {"collections", "collection", "category", "categories", "product-category", "shop"}
+# Words of a section of a shop: its games, languages and kinds of product in the plural ("booster-boxes",
+# "3-pack-blisters", "mini-tins", "other"). A page named only by these lists products.
+SECTION_WORDS = {
+    "english", "japanese", "korean", "chinese", "simplified", "traditional", "thai", "indonesian", "german", "french",
+    "italian", "spanish", "portuguese", "booster", "boosters", "box", "boxes", "pack", "packs", "bundles", "tins",
+    "mini", "blisters", "sleeved", "collections", "illustration", "super", "premium", "ultra", "special", "ex",
+    "elite", "trainer", "decks", "starter", "battle", "other", "sealed", "products", "accessories", "displays",
+    "cases", "etbs", "all", "new", "pre", "orders", "preorders", "latest", "arrivals", "sale", "collection", "blister",
+    "tin", "bundle", "deck", "display", "case", "etb", "kits", "gift", "sets",
+}
+
+
+def listing_page(url):
+    """True when a shop's address is a list of products, not one product: a Shopify collection without
+    "/products/", or a section of the shop named only by its game, language and kinds of product
+    ("maxoncards.co.uk/shop/pokemon/japanese/booster-boxes", "/shop/dandadan"). Such a page shows many
+    products, so whatever one title a read takes from it is never a listing."""
+    path = urllib.parse.urlsplit(url or "").path.lower().strip("/")
+    segments = [segment for segment in path.split("/") if segment]
+    if not segments or "products" in segments or "product" in segments:
+        return False
+    marks = [i for i, segment in enumerate(segments) if segment in LIST_MARKS]
+    if not marks:
+        return False
+    rest = segments[marks[0] + 1:]
+    if segments[marks[0]] in ("collections", "collection"):
+        return True
+    if not rest:
+        return True
+    return all(section_segment(segment) for segment in rest)
+
+
+def section_segment(segment):
+    """Whether one segment of an address names a section of a shop rather than a product."""
+    words = [word for word in re.split(r"[-_+]+", segment) if word]
+    if len(words) == 1 and not any(ch.isdigit() for ch in words[0]):
+        return True   # "pokemon", "dandadan", "english": a product's address names more than one word
+    text = " ".join(words)
+    game = find_game(text)
+    if game is not None:
+        names = next(names for slug, _n, _s, names in GAMES if slug == game)
+        for name in names:
+            text = text.replace(name, " ")
+        if not text.strip(" -"):
+            return True
+    # A number only as a count of packs ("3-pack-blisters"): "151-booster-packs" is a set's packs.
+    counts = all(word in SECTION_WORDS or (word.isdigit() and words[i + 1:i + 2] == ["pack"])
+                 for i, word in enumerate(words))
+    return counts and any(word.endswith("s") for word in words if not word.isdigit())
+
+
 def page_rank(url):
     """Order sitemap pages so the ones worth fetching come first.
 
@@ -937,6 +990,8 @@ def page_rank(url):
     nothing about a game, and a page whose address names a game but reads as a
     single card or accessory is skipped (None).
     """
+    if listing_page(url):
+        return None
     words = slug_words(url)
     if classify(words):
         return 0
@@ -986,7 +1041,22 @@ def page_stock_hint(html):
 
 
 def page_offer(url, html):
-    """An Offer from a product page's schema.org data or Open Graph tags, or None."""
+    """An Offer from a product page's schema.org data or Open Graph tags, or None. A page whose data names
+    several products is a list of them (a shop's category page), not one product's page: None."""
+    if listing_page(url):
+        return None
+    named = set()
+    for block in JSON_LD.findall(html):
+        try:
+            data = json.loads(block.strip(), strict=False)
+        except json.JSONDecodeError:
+            continue
+        for node in _walk(data):
+            kind = node.get("@type", "")
+            if "Product" in (kind if isinstance(kind, list) else [kind]) and node.get("name"):
+                named.add(" ".join(str(node["name"]).lower().split()))
+    if len(named) > 1:
+        return None
     for block in JSON_LD.findall(html):
         try:
             data = json.loads(block.strip(), strict=False)  # some shops leave control characters in descriptions
@@ -1217,8 +1287,9 @@ def feed_offers(text):
 
 # Applying offers ------------------------------------------------------------
 
-def link_key(url):
-    """Product links compare without scheme, www, query string or trailing slash."""
+def page_key(url):
+    """The shop's page a link is on: without scheme, www, query string or trailing slash. Every variant of
+    one Shopify page shares it."""
     parsed = urllib.parse.urlsplit(url.strip().lower())
     host = parsed.netloc.removeprefix("www.")
     path = parsed.path.rstrip("/")
@@ -1226,6 +1297,74 @@ def link_key(url):
     if "/products/" in path:
         path = "/products/" + path.split("/products/", 1)[1]
     return host + path
+
+
+def variant_of(url):
+    """The Shopify variant a link selects (?variant=123), or ""."""
+    found = urllib.parse.parse_qs(urllib.parse.urlsplit(url.strip()).query).get("variant") or [""]
+    return found[0] if found[0].isdigit() else ""
+
+
+def link_key(url):
+    """Product links compare without scheme, www, query string or trailing slash, but keep the Shopify
+    variant they select: "Avengers Assemble" and "Fantastic Four" on one Commander deck page are two
+    products at one address, told apart only by ?variant=."""
+    variant = variant_of(url)
+    return page_key(url) + (f"?variant={variant}" if variant else "")
+
+
+class LinkIndex:
+    """Which product each of one shop's links is, for a read.
+
+    A link that selects a variant matches only that variant. A shop's link to the bare page (one added by
+    hand, or from before the page had variants) still matches the page's offers, but an offer for one of
+    several variants takes it only when its title names the product in full (``names``). Two listings on
+    one exact link (left by reads before variants were told apart) go to the one whose name the title
+    names, or to neither.
+    """
+
+    def __init__(self, rows, names=None):
+        self.exact, self.bare, self.on_page = {}, {}, {}
+        self.names = names if names is not None else {}
+        for url, pk in rows:
+            self.add(url, pk)
+
+    def add(self, url, pk):
+        key = link_key(url)
+        held = self.exact.setdefault(key, [])
+        if pk not in held:
+            held.append(pk)
+        page = page_key(url)
+        self.on_page.setdefault(page, set()).add(pk)
+        if not variant_of(url):
+            self.bare.setdefault(page, set()).add(pk)
+
+    def set(self, url, pk):
+        """The link is now this product's alone."""
+        self.exact[link_key(url)] = [pk]
+        self.on_page.setdefault(page_key(url), set()).add(pk)
+
+    def named(self, pks, title, game=None):
+        """The one product of ``pks`` whose name the title names in full, or None."""
+        sure = [pk for pk in pks if pk in self.names and score(self.names[pk], title, game or "") >= AUTO_LINK]
+        return sure[0] if len(sure) == 1 else None
+
+    def get(self, url, title="", variant="", game=None):
+        held = self.exact.get(link_key(url))
+        if held:
+            return held[0] if len(held) == 1 else self.named(held, title, game)
+        page = page_key(url)
+        if not variant_of(url):
+            # The page now sells one thing: the product listed at it, if only one is.
+            pks = self.on_page.get(page, set())
+            return next(iter(pks)) if len(pks) == 1 else None
+        bare = self.bare.get(page, set())
+        if len(bare) != 1:
+            return None
+        pk = next(iter(bare))
+        if not variant or self.named([pk], title, game) == pk:
+            return pk
+        return None
 
 
 # Unchanged listings are stamped this many at a time: one short UPDATE each.
@@ -1317,25 +1456,23 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     """
     checked_at = checked_at or timezone.now()
     marketplace = retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY)
-    products_by_link = {
-        link_key(url): pk
-        for pk, url in Listing.objects.filter(retailer=retailer).values_list("product_id", "url")
-    }
-    products_by_ean = {}
-    for pk, ean in Product.objects.exclude(ean="").values_list("pk", "ean"):
-        if ean_key(ean):
-            products_by_ean[ean_key(ean)] = pk
+    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
+    # Each listing's link, the variant it selects included, so one variant never takes over another's listing.
+    links = LinkIndex(
+        ((url, pk) for pk, url in Listing.objects.filter(retailer=retailer).values_list("product_id", "url")),
+        names=catalogue.names,
+    )
+    products_by_ean = barcode_owners()
     found = updated = 0
     unmatched = []
     seen_products = set()
     images_by_product = {}
-    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
     # A page the owner said is not one of ours is never matched by name. A No to the stockist finder is
     # about one product only: the page can still be matched by name to any other.
     # A page the owner said Yes to before any read had priced it (a website page the stockist finder
     # found by its address) waits: the first read that prices it adds its listing. Read in the same query.
     ignored, refused, waiting = set(), {}, {}
-    listed = set(products_by_link.values())
+    listed = {pk for pks in links.on_page.values() for pk in pks}
     answers = ShopProduct.objects.filter(retailer=retailer).filter(
         Q(status=ShopProduct.Status.IGNORED)
         | (Q(status=ShopProduct.Status.LINKED, suggested__isnull=False) & (Q(price__isnull=True) | Q(price__lte=0)))
@@ -1351,11 +1488,25 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         else:
             ignored.add(url)
 
+    identities = Identities()
+
+    def wrong_product(product_pk, offer, marketplace):
+        """Why the offer's title plainly names another product than ``product_pk``, or "". A shop's own barcode
+        that is ours and valid settles it; a marketplace's barcode is our own, copied in, so it never does."""
+        name, game, language, ean = identities.get(product_pk)
+        if name is None:
+            return ""
+        if (not marketplace and offer.ean and ean_key(offer.ean) == ean_key(ean) and valid_gtin(ean)
+                and products_by_ean.get(ean_key(ean)) == product_pk):
+            return ""
+        return contradiction(name, offer.title, game or "", language)
+
     to_stamp = []
     # Product pk -> (first offer without a price, whether every such offer said out of stock).
     unpriced = {}
     # Product pk -> its best priced offer so far in this read; the ones still to write for the page being
-    # read (pending) and at the end of the read (late); and the pages read so far, by link_key.
+    # read (pending) and at the end of the read (late); and the pages read so far, by page_key (a page's
+    # variants are one page).
     best, pending, late = {}, {}, {}
     pages = set()
     page = None
@@ -1368,7 +1519,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         listing, created = Listing.objects.get_or_create(
             product_id=product_pk, retailer=retailer, defaults={"url": offer.url, "price": offer.price}
         )
-        other_page = link_key(listing.url) != link_key(offer.url) and link_key(listing.url) not in pages
+        other_page = page_key(listing.url) != page_key(offer.url) and page_key(listing.url) not in pages
         if not (final or created) and offer.product_pk is None and other_page:
             late[product_pk] = offer
             return
@@ -1383,8 +1534,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         deal = held if offer.deal is None else offer.deal
         if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
                 or deal != held):
-            # The page shows the multi-buy and links to the shop's page: a new one of either is a change.
-            shown = not created and listing.is_active and (deal != held or link_key(listing.url) != link_key(offer.url))
+            # The page shows the multi-buy and links to the shop's page: a new one of either is a change. Another
+            # variant of the same page is not.
+            shown = not created and listing.is_active and (deal != held or page_key(listing.url) != page_key(offer.url))
             listing.url = offer.url
             listing.title = title
             listing.shop_ean = shop_ean
@@ -1434,6 +1586,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             found += 1
             notice_release(shop_signals, offer, checked_at)
+            if listing_page(offer.url):
+                # A shop's list of products: whichever title came with it is not this page's product.
+                unmatched.append(f"{offer.title} [a page listing many products] {offer.url}")
+                continue
             if offer.variant:
                 # "1 Pack", "18 Packs", "Half Box" or "Case" on a booster box page is another product at another
                 # price. It is judged against the page before any matching, so it can never take over the
@@ -1447,7 +1603,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if product_pk is None:
                 product_pk = products_by_ean.get(ean_key(offer.ean)) if offer.ean else None
             if product_pk is None:
-                product_pk = products_by_link.get(link_key(offer.url))
+                product_pk = links.get(offer.url, offer.title, offer.variant)
             answer = None
             if product_pk is None and link_key(offer.url) in waiting:
                 answer, product_pk = waiting[link_key(offer.url)]
@@ -1493,6 +1649,14 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if not offer.url.lower().startswith(("http://", "https://")):
                 unmatched.append(f"{offer.title} [link is not a web address]")
                 continue
+            # A product named from this very title (create_from_offer) is the title's own product.
+            why = "" if sealed is not None and identities.name(product_pk) == sealed.name else wrong_product(
+                product_pk, offer, marketplace)
+            if why:
+                # However the page came to this product (its link, the owner's Yes, its name, eBay's search,
+                # the stockist finder), a title that plainly names another product never prices it.
+                unmatched.append(f"{offer.title} [{why}, not {identities.name(product_pk)}] {offer.url}")
+                continue
             if offer.page_pk is not None:
                 # The shop's page now names its product, so a search can find it without a fetch.
                 ShopPage.objects.filter(pk=offer.page_pk).exclude(product_id=product_pk).update(product_id=product_pk)
@@ -1507,11 +1671,11 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                 ShopProduct.objects.filter(pk=answer).update(price=offer.price, availability=offer.availability,
                                                              last_seen=checked_at)
                 waiting.pop(link_key(offer.url), None)
-                products_by_link[link_key(offer.url)] = product_pk
-            if link_key(offer.url) != page:
+                links.set(offer.url, product_pk)
+            if page_key(offer.url) != page:
                 # The read moved on to another page: the last page's products are written.
                 write_pending()
-                page = link_key(offer.url)
+                page = page_key(offer.url)
                 pages.add(page)
             if product_pk in best and not better(offer, best[product_pk]):
                 continue
@@ -1583,6 +1747,57 @@ def notice_release(shop_signals, offer, checked_at):
         shop_signals.see(offer, now=checked_at)
     except Exception:  # noqa: BLE001 - a release note must never cost a price read
         logger.warning("Could not note a release from %r", offer.title, exc_info=True)
+
+
+def barcode_owners():
+    """{barcode key: product pk} for each barcode that names one product: the one shown on the site that
+    carries it, else the one switched-off product that does. A barcode two shown products carry (144
+    groups in the October 2026 export: Chaos Origins carried Glorious Gallery's) names neither, so a
+    shop page is matched by its link or its name instead."""
+    shown, hidden = {}, {}
+    for pk, ean, active in Product.objects.exclude(ean="").values_list("pk", "ean", "is_active"):
+        key = ean_key(ean)
+        if key:
+            (shown if active else hidden).setdefault(key, set()).add(pk)
+    owners = {key: next(iter(pks)) for key, pks in hidden.items() if len(pks) == 1}
+    for key, pks in shown.items():
+        if len(pks) == 1:
+            owners[key] = next(iter(pks))
+        else:
+            owners.pop(key, None)
+    return owners
+
+
+def valid_gtin(value):
+    """Whether a barcode is a well-formed GTIN (8, 12, 13 or 14 digits) with the right check digit."""
+    digits = clean_ean(value)
+    if len(digits) not in (8, 12, 13, 14):
+        return False
+    body, check = digits[:-1], int(digits[-1])
+    total = sum(int(d) * (3 if i % 2 == 0 else 1) for i, d in enumerate(reversed(body)))
+    return (10 - total % 10) % 10 == check
+
+
+class Identities:
+    """Name, game, language and barcode of our products, read once a read and only when first needed."""
+
+    def __init__(self):
+        self.rows = None
+
+    def get(self, pk):
+        if self.rows is None:
+            self.rows = {
+                pk: (name, game, language, ean)
+                for pk, name, game, language, ean in Product.objects.values_list("pk", "name", "game__slug", "language", "ean")
+            }
+        if pk not in self.rows:
+            # Made during this read.
+            row = Product.objects.filter(pk=pk).values_list("name", "game__slug", "language", "ean").first()
+            self.rows[pk] = row or (None, None, None, None)
+        return self.rows[pk]
+
+    def name(self, pk):
+        return self.get(pk)[0]
 
 
 class Catalogue:
@@ -1673,6 +1888,14 @@ class Catalogue:
         return iter(self.names.items())
 
     def best_match(self, title, game=None):
+        """(product, score) for the shop title, only among products of ``game``: _best_match's, below
+        SUGGEST when the title plainly names another product (matching.contradiction)."""
+        match, value = self._best_match(title, game)
+        if match is not None and value >= SUGGEST and contradiction(match[1], title, game or ""):
+            value = SUGGEST - 1
+        return match, value
+
+    def _best_match(self, title, game=None):
         """(product, score) for the shop title, only among products of ``game``.
 
         A full score needs every meaningful word of our name in the title

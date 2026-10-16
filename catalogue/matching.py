@@ -496,3 +496,123 @@ def best_match(title, products, game=""):
         if value > best_score or (value == best_score and best is not None and len(name) > len(best[1])):
             best, best_score = (pk, name), value
     return best, best_score
+
+
+# What a shop's page or a product can say about its state: damaged, opened or unwrapped is never the plain
+# sealed product, nor the plain product the damaged one. Read on expand()ed text.
+CONDITIONS = (
+    ("damaged", re.compile(r"\b(?:damaged?|dent(?:ed|s)?|crushed|torn|creased|packaging damage)\b")),
+    # Not "unsealed": eBay sellers write it of One Piece boxes, which Bandai does not shrink wrap, nor
+    # "resealed", which they write in warnings ("beware of resealed boxes").
+    ("opened", re.compile(r"\b(?:opened|ripped seals?|cut seals?|seal (?:ripped|cut|broken)|broken seals?)\b")),
+    ("noshrink", NO_SHRINK),
+)
+# A Pokémon Center edition ("Pokémon Center Elite Trainer Box", our "Center Perfect Order Elite Trainer Box",
+# a shop's "PC ETB") is another product from the shops' edition.
+POKEMON_CENTER = re.compile(r"\bcent(?:er|re)\b|\bpc (?:etb|elite trainer)\b")
+# The unit a product is sold as, read after what a box holds is taken out ("Booster Box (36 Packs)").
+UNITS = (
+    ("case", re.compile(r"\bcases?\b")),
+    ("box", re.compile(r"\bbooster box\b|\bboosters? display\b|\bdisplay box\b|\bbox of \d+|\bhobby box\b|\bdisplay$|"
+                       r"\bmany packs\b")),
+    ("etb", re.compile(r"\belite trainer\b|\betb\b")),
+    ("bundle", re.compile(r"\bbundle\b")),
+    ("pack", re.compile(r"\bbooster pack\b|\bblister\b|\bsleeved booster\b|\bbooster$|\bpacks?$")),
+)
+CONTAINER = re.compile(r"\bbox\b|\bdisplay\b|\belite trainer\b|\betb\b|\bbundle\b|\bcases?\b|\bcollection\b|\btin\b|\bblister\b")
+CONTENTS = re.compile(r"(?<!\bvol )(?<!\bvolume )(?<!\bseries )(?<!\bset )(?<!\bgem )(?<!\bwave )"
+                      r"\b(?:x ?)?(\d{1,3}) ?x? (?:sealed )?(?:booster )?(packs?)\b")
+# How many packs a pack product is: "3 Pack Blister", "3-Pack Blister", "2 Booster Packs". Not a volume, set or
+# series number ("Vol. 3 Booster Pack", "Gem 4 Booster Pack", "Set 2 Booster Pack").
+PACK_COUNT = re.compile(r"(?<!\bvol )(?<!\bvolume )(?<!\bseries )(?<!\bset )(?<!\bgem )(?<!\bwave )"
+                        r"\b(\d{1,2}) ?(?:x )?(?:sealed )?(?:booster )?packs?\b")
+
+
+def conditions(text):
+    """Which states the text says, of CONDITIONS."""
+    expanded = expand(text)
+    return frozenset(name for name, pattern in CONDITIONS if pattern.search(expanded))
+
+
+def units(text):
+    """The units of sale the text names: case, box, etb, bundle or pack. A box's contents are not a unit."""
+    expanded = expand(text)
+    if CONTAINER.search(CONTENTS.sub(" ", expanded)):
+        expanded = CONTENTS.sub(" ", expanded)   # what the box, bundle or blister holds
+    else:
+        # Six packs or more on their own are a box's worth ("Attack on Titan (16 Booster Packs)").
+        expanded = CONTENTS.sub(lambda m: " many packs " if m.group(2) == "packs" and 6 <= int(m.group(1)) <= 60
+                                else m.group(0), expanded)
+    expanded = " ".join(expanded.split())
+    return frozenset(name for name, pattern in UNITS if pattern.search(expanded))
+
+
+def pack_count(text):
+    """How many packs a pack product holds, when it says so and is not a box, case or bundle; else None."""
+    expanded = expand(text)
+    if re.search(r"\bbox\b|\bdisplay\b|\belite trainer\b|\betb\b|\bcases?\b|\bbundle\b|\bcollection\b|\btin\b", expanded):
+        return None
+    counts = {int(n) for n in PACK_COUNT.findall(expanded)}
+    return counts.pop() if len(counts) == 1 else None
+
+
+def _code(word):
+    """One spelling for Dragon Ball's set codes: "B31" and "BT31" are one set."""
+    return re.sub(r"^b(?=\d)", "bt", word)
+
+
+def codes_conflict(title, name, game=""):
+    """True when a title's set codes and our name's have nothing to say for each other: neither holds the
+    other's ("OP15" against "OP18", "SV4M" against "SV1S"), or they name two series. A title that adds a code
+    to ours ("Starter Decks ST31-ST36 (Blue Kuzan (ST-33))" for "Starter Decks ST31 ST36 (Blue Kuzan)") or
+    leaves one of ours out ("OP15" for "OP 15 EB 04") is not plainly another product."""
+    first = {_code(code) for code in set_codes(title, game)}
+    second = {_code(code) for code in set_codes(name, game)}
+    if first and second and not (first <= second or second <= first):
+        return True
+    first, second = series_of(title, game), series_of(name, game)
+    return bool(first and second and not first & second)
+
+
+def contradiction(name, title, game="", language=None):
+    """Why a shop's ``title`` plainly names another product than our product ``name``, or "".
+
+    Only what the title says outright counts, never what it leaves out: another game, another set code
+    ("OP15" on our OP18 box, "SV4M" on our SV1S), another language, a Pokémon Center edition against the
+    shops' edition, a damaged, opened or unwrapped item against the sealed one, another unit of sale (a
+    case, a box, a pack) or another number of packs ("3-Pack Blister" on our 1 Pack Blister). ``language``
+    is our product's language when known ("" for English). The same rules as same_product, read for a shop's
+    title against our name: every way a page joins a product (link, name, barcode not ours, eBay's search,
+    the stockist finder) and the hourly tidy ask it.
+    """
+    from .classify import find_game   # classify reads this module
+
+    if not title or not name:
+        return ""
+    named = find_game(title)
+    if game and named is not None and named != game and find_game(name) is None:
+        return "another game"
+    clean = shop_title(title)
+    if codes_conflict(clean, name, game):
+        return "another set code"
+    # Our product's language field, or the one its name states: either may be the fuller.
+    ours = {languages.language_of(name, game)} | ({language} if language is not None else set())
+    theirs = languages.language_of(title, game)
+    if languages.mixed(title, game) and not languages.mixed(name, game):
+        return "another language"
+    if not any(languages.same(code, theirs) for code in ours) and not languages.mixed(name, game):
+        if theirs or languages.ENGLISH_WORDS.search(title.lower()):
+            return "another language"
+    if game == POKEMON and bool(POKEMON_CENTER.search(expand(clean))) != bool(POKEMON_CENTER.search(expand(name))):
+        return "Pokémon Center against the shops' edition"
+    if conditions(clean) != conditions(name):
+        return "another condition"
+    mine, theirs_units = units(name), units(clean)
+    if ("case" in mine) != ("case" in theirs_units):
+        return "another unit of sale"
+    if mine and theirs_units and not mine & theirs_units:
+        return "another unit of sale"
+    ours_count, their_count = pack_count(name), pack_count(clean)
+    if ours_count is not None and their_count is not None and ours_count != their_count:
+        return "another number of packs"
+    return ""

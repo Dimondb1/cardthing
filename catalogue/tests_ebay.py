@@ -532,7 +532,8 @@ class FallbackSearchTests(TestCase):
     def test_a_listing_far_below_the_shops_price_is_refused(self):
         from .testing import make_retailer
 
-        bundle = make_product(self.set, name="The Hobbit Bundle", slug="hobbit-bundle", product_type="bundle")
+        magic = make_set(make_game("Magic: The Gathering", "magic-the-gathering"), name="The Hobbit", slug="the-hobbit")
+        bundle = make_product(magic, name="The Hobbit Bundle", slug="hobbit-bundle", product_type="bundle")
         make_listing(bundle, make_retailer("Shop"), price="50.00")
         api = FakeApi([
             item("MTG The Hobbit Bundle 50 card bundle", price="8.66", item_id="v1|1|0"),
@@ -704,7 +705,7 @@ class FallbackSearchTests(TestCase):
         text = out.getvalue()
         self.assertIn("PICK    £5.99  Pokemon Darkness Ablaze Booster Pack X1 Sealed", text)
         self.assertIn("too cheap to be the sealed product (under £3.16)", text)
-        self.assertEqual(text.count("a multi-buy, an online code, a part or another language"), 6)
+        self.assertEqual(text.count("a multi-buy, an online code, a part, another language or plainly another product"), 6)
 
     def test_check_command_says_when_the_allowance_is_spent(self):
         from io import StringIO
@@ -839,3 +840,40 @@ class RunTimeTests(TestCase):
         self.assertEqual(words("Pokémon Surging Sparks ETB"), ["surging", "sparks", "elite", "trainer", "box"])
         self.assertEqual(score("Surging Sparks Elite Trainer Box", "Pokemon Surging Sparks ETB New"), 100)
         self.assertGreater(expand.cache_info().hits, 0)
+
+
+@override_settings(**KEYS)
+class WrongItemTests(TestCase):
+    """eBay listings 41626 and 41627: one Future Flash SV4M box on our Scarlet ex SV1S and Violet ex SV1V boxes;
+    28790: a Dragon Ball BT26 pack on our Magic Ultimate Masters pack."""
+
+    def setUp(self):
+        self.retailer = Retailer.objects.create(
+            name="eBay", slug="ebay", website="https://www.ebay.co.uk/", source_type=Retailer.Source.EBAY
+        )
+        pokemon = make_set(make_game(), name="Scarlet ex", slug="scarlet-ex", code="SV1S")
+        self.scarlet = make_product(pokemon, name="Japanese TCG: Scarlet ex SV1S Japanese Booster Box", slug="sv1s",
+                                    product_type="booster_box")
+        self.violet = make_product(pokemon, name="Japanese TCG: Violet ex SV1V Japanese Booster Box", slug="sv1v",
+                                   product_type="booster_box")
+
+    def test_a_title_with_another_set_code_or_game_is_refused(self):
+        future = item("Pokemon TCG Scarlet Violet Future Flash SV4M  new  Booster Box Japanese Edition", price="70")
+        self.assertTrue(ebay.junk(self.scarlet, future["title"]))
+        offers = ebay.ebay_offers(self.retailer, limit=5, request=FakeApi([future]), pause=0)
+        self.assertEqual(offers, [])
+        magic = make_set(make_game("Magic: The Gathering", "magic-the-gathering"), name="Ultimate Masters", slug="uma")
+        masters = make_product(magic, name="Ultimate Masters Booster Pack", slug="uma-pack", product_type="booster_pack")
+        self.assertTrue(ebay.junk(masters, "Dragon ball super masters TCG Ultimate Advent booster pack factory sealed BT26"))
+
+    def test_one_ebay_listing_stays_on_one_product(self):
+        url = "https://www.ebay.co.uk/itm/336645392554"
+        make_listing(self.scarlet, self.retailer, url=url, price="70.00")
+        make_listing(self.violet, self.retailer, url=url, price="70.00")
+        Product.objects.filter(pk=self.violet.pk).update(ebay_checked_at=timezone.now())
+        both = item("Pokemon Scarlet ex SV1S Japanese Booster Box", price="70", item_id="v1|336645392554|0")
+        api = FakeApi([both], items=[both])
+        offers = ebay.ebay_offers(self.retailer, limit=5, request=api, pause=0)
+        live = [o for o in offers if o.availability != Listing.Availability.OUT_OF_STOCK]
+        self.assertEqual([o.product_pk for o in live], [self.scarlet.pk])
+        self.assertEqual([o.product_pk for o in offers if o not in live], [self.violet.pk])

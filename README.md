@@ -2318,9 +2318,11 @@ screens put the picture beside the name and the price box.
   bag, the words "Buy now", the shop it goes to ("at Harbour Games") and an
   arrow. It links through `/go/` to the cheapest offer a visitor can buy now,
   the first row of the price list, so clicks are counted and the shop's
-  affiliate link applies. The drawing is `includes/buy_mark.svg`, traced from
-  the owner's mascot, with the head and bag as separate shapes; the bag's
-  pivot is the top of its handle, in the raptor's mouth.
+  affiliate link applies. The mark is `includes/buy_mark.svg`: the site's own
+  raptor head (`img/raptor.png` through the same mask as the logo marks) with a
+  small shopping bag hooked on its lower jaw. The bag is a separate drawing, so
+  it can swing from the top of its handle; its place and size are the
+  `--buy-bag-*` tokens.
 - **Compare prices ↓** is an outlined button under it: a plain link to the
   price list's heading, so it works without JavaScript. With it
   (`js/product.js`) the page glides there, or jumps when the visitor asks for

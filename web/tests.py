@@ -2116,6 +2116,7 @@ class RaptorMarkTests(PageTestCase):
         self.assertNotContains(self.client.get(reverse("web:deals")), 'class="mark"')
 
     def test_the_money_page_has_no_raptor(self):
+        # Apart from the head on Buy now, which is the button's own drawing (buy-mark) and hidden from screen readers.
         for product in (self.etb, self.sold_out, self.unpriced):
             html = self.client.get(product.get_absolute_url()).content.decode()
             self.assertNotIn('class="mark ', html)
@@ -2288,9 +2289,8 @@ class ProductPageRedesignTests(PageTestCase):
         self.assertIn('<span class="buy-now__label">Buy now</span>', button)
         self.assertIn('<span class="buy-now__shop">at Harbour Games</span>', button)
         self.assertIn("£54.99 (opens in a new tab)", button)
-        # The raptor and bag: head and bag drawn apart, so the bag can swing from the mouth, and hidden from readers.
-        self.assertIn('<svg class="buy-mark" viewBox="0 0 1170 830" aria-hidden="true" focusable="false"><g class="buy-mark__bag">', button)
-        self.assertIn('class="buy-mark__head"', button)
+        # The logo's own raptor head and a bag drawn apart, so the bag can swing from the jaw, and hidden from readers.
+        self.assertIn('<span class="buy-mark" aria-hidden="true"><span class="buy-mark__head"></span><svg class="buy-mark__bag"', button)
 
     def test_a_cheaper_shop_that_is_sold_out_is_not_where_buy_now_goes(self):
         sold = make_listing(self.etb, make_retailer("Cheap But Gone"), price="10.00",
@@ -2376,7 +2376,8 @@ class ProductPageRedesignTests(PageTestCase):
         for frames in keyframes:
             for prop in re.findall(r"([a-z-]+):", frames):
                 self.assertIn(prop, ("opacity", "transform"))
-        self.assertIn(".buy-mark__bag { transform-box: view-box; transform-origin: 916px 408px; }", css)
+        # The bag swings from the top of its handle, placed and sized by tokens.
+        self.assertIn(".buy-mark__bag { position: absolute; left: var(--buy-bag-left); top: var(--buy-bag-top); width: var(--buy-bag-size); height: auto; overflow: visible; transform-origin: 50% 0; }", css)
 
     def test_compare_prices_script_honours_reduced_motion_and_moves_focus(self):
         from django.contrib.staticfiles import finders

@@ -149,7 +149,13 @@
   --masthead-search: 2.5rem;        /* the header search box: compact, still a full finger wide */
   --masthead-logo: 1.75rem;         /* the header logo's height on phones */
   --buy-height: 3.75rem;            /* the Buy now button */
-  --buy-mark: 3rem;                 /* the raptor and bag inside it */
+  --buy-mark: 3.25rem;              /* the raptor and bag inside it */
+  --buy-mark-head: 2.75rem;         /* the raptor head, leaving room for the bag below its jaw */
+  --buy-bag-left: 60%;              /* the bag hangs from the jaw tip: where it sits and how big, as shares of the mark */
+  --buy-bag-top: 38%;
+  --buy-bag-size: 40%;
+  --buy-bag-rim: 1.5px;             /* the orange gap that parts the bag from the jaw */
+  --buy-bag-rim-svg: 3;             /* the same gap in the bag drawing's own units */
   --buy-arrow: 1.5rem;              /* the arrow at its right end */
   --compare-height: 3rem;           /* the outlined Compare prices button under it */
   --color-on-brand-line: rgb(255 255 255 / 0.4);   /* the divider inside the Buy now button */

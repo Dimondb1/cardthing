@@ -38,7 +38,7 @@ from django.utils import timezone
 
 from catalogue.languages import CHINESE, SIMPLIFIED, name as language_name, plain, product_language
 from catalogue.matching import (
-    BOX_SIZES, KIND_MARKS, KIND_WORDS, VARIANT_WORDS, booster_kinds, chinese_code, code_key, codes_differ,
+    BOX_SIZES, KIND_MARKS, KIND_WORDS, VARIANT_WORDS, booster_kinds, chinese_code, code_key, codes_differ, contradiction,
     identity_numbers, key_text, key_words, marked_different, match_key, naming_words, same_product, set_codes,
 )
 from catalogue.models import (
@@ -570,6 +570,11 @@ def why_not_merge(keep, other, apart=frozenset()):
         return "their booster kinds differ"
     if marked_different(keep.name) != marked_different(other.name):
         return "one says Collector's Edition, Case or the like and the other does not"
+    # The rule every shop read applies to a title (matching.contradiction): a Pokémon Center edition, a damaged
+    # or unwrapped box, another unit of sale or pack count is never merged into the plain product.
+    why = contradiction(keep.name, other.name, game_slug_of(keep))
+    if why:
+        return f"their names differ: {why}"
     return ""
 
 

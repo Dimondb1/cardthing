@@ -398,3 +398,26 @@ class SharedBarcodeTests(TestCase):
                      title="YuGiOh! Battles of Legend: Glorious Gallery 1st Edition Booster Display Box")
         call_command("tidy_listings", stdout=StringIO())
         self.assertEqual(list(Listing.objects.values_list("product_id", flat=True)), [self.gallery.pk])
+
+
+class MergeRuleTests(TestCase):
+    """The hourly merge reads two of our names by the rule a read applies to a shop's title."""
+
+    def test_editions_conditions_and_units_are_never_merged(self):
+        from types import SimpleNamespace
+
+        from .management.commands.merge_duplicates import why_not_merge
+
+        def product(pk, name, game="pokemon"):
+            return SimpleNamespace(pk=pk, name=name, game_slug=game)
+
+        for keep, other, game in (
+            ("Black Bolt Elite Trainer Box (Normal)", "Black Bolt Elite Trainer Box (Damaged)", "pokemon"),
+            ("Perfect Order Elite Trainer Box", "Center Perfect Order Elite Trainer Box", "pokemon"),
+            ("Ninja Spinner m4 Japanese Booster Box (Shrinked Booster Box)",
+             "Ninja Spinner m4 Japanese Booster Box (No Shrink Booster Box)", "pokemon"),
+            ("Star Trek Collector Booster", "Star Trek Collector Booster (Booster Box)", "magic-the-gathering"),
+        ):
+            self.assertTrue(why_not_merge(product(1, keep, game), product(2, other, game)), other)
+        self.assertEqual(why_not_merge(product(1, "Surging Sparks Booster Box"),
+                                       product(2, "Surging Sparks Booster Display Box")), "")

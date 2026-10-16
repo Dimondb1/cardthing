@@ -573,6 +573,14 @@ class ListingQuerySet(models.QuerySet):
         return self.current().filter(availability__in=Listing.BUYABLE).exclude(sanity=Listing.Sanity.EXCLUDED)
 
 
+class ListingManager(models.Manager.from_queryset(ListingQuerySet)):
+    """Listings without the shop's description: lists, pages and the reader never load it, so a long
+    description costs nothing where it is not read. ``.defer(None)`` loads it where it is."""
+
+    def get_queryset(self):
+        return super().get_queryset().defer("description")
+
+
 class Listing(models.Model):
     """One retailer's offer for one product."""
 
@@ -665,7 +673,14 @@ class Listing(models.Model):
         help_text="What the shop charges for the multi-buy quantity together, read from the shop.",
     )
 
-    objects = ListingQuerySet.as_manager()
+    # The shop's own description as plain text (at most importers.DESCRIPTION_CHARS), from what each read
+    # already fetches, written only when it changes. Never shown to visitors: the Claude judge reads it.
+    description = models.TextField(
+        "shop's description", blank=True, editable=False,
+        help_text="The shop's own description, kept as plain text for Claude's checks. Never shown on the site.",
+    )
+
+    objects = ListingManager()
 
     class Meta:
         ordering = ["delivered_price"]
@@ -809,6 +824,10 @@ class ShopProduct(models.Model):
     )
     first_seen = models.DateTimeField(default=timezone.now)
     last_seen = models.DateTimeField(default=timezone.now)
+    description = models.TextField(
+        "shop's description", blank=True, editable=False,
+        help_text="The shop's own description from the read that wrote this row, as plain text, for Claude's checks.",
+    )
 
     class Meta:
         ordering = ["-confidence", "title"]

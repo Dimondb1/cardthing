@@ -373,7 +373,18 @@ def item_offer(item, product, Offer):
         delivery=cost,
         image=(item.get("image", {}) or {}).get("imageUrl", ""),
         product_pk=product.pk,
+        description=item_description(item),
     )
+
+
+def item_description(item):
+    """The seller's description as plain text, from what eBay already sent (the short description, else the
+    description the item lookup gives), or None when eBay sent neither, which leaves the listing's."""
+    from .importers import clean_description
+
+    if "shortDescription" not in item and "description" not in item:
+        return None
+    return clean_description(item.get("shortDescription") or item.get("description"))
 
 
 def verdict(product, item, Offer, catalogue, specifics, shops):

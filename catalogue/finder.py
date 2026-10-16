@@ -53,7 +53,7 @@ from django.utils import timezone
 from . import crawl, importers
 from .classify import classify
 from .importers import (
-    Catalogue, ImportError_, LinkIndex, apply_offers, ean_key, link_key, money, page_key, product_offers,
+    Catalogue, ImportError_, LinkIndex, apply_offers, described, ean_key, link_key, money, page_key, product_offers,
 )
 from .classify import TYPES, label_kind
 from .matching import AUTO_LINK, SUGGEST, TYPE_WORDS, contradiction, covers, key_words, shop_title
@@ -426,6 +426,7 @@ def as_listing(data):
         "product_type": data.get("type") or "",
         "vendor": data.get("vendor") or "",
         "published_at": data.get("published_at"),
+        "body_html": data.get("description") or "",
         "images": images,
         "variants": [
             {**variant, "price": pounds(variant.get("price")), "featured_image": None}
@@ -913,7 +914,7 @@ class Finder:
             "image_url": (offer.image or "")[:1000], "shop_ean": (offer.ean or "")[:20],
             "suggested": product, "product": product, "confidence": value,
             "status": ShopProduct.Status.REVIEW, "source": ShopProduct.Source.FINDER,
-            "last_seen": self.clock(),
+            "last_seen": self.clock(), **described(offer),
         })
 
     def ask_owner(self, product, shop, url, value, defaults, create_defaults=None):

@@ -181,23 +181,27 @@
 
   <section>
     <h2>Possible duplicates ({{ duplicates|length }})</h2>
-    {% if duplicate_levels %}<p class="note">{% for level, count in duplicate_levels %}{{ count }} {{ level }}{% if not forloop.last %}, {% endif %}{% endfor %}. Certain means the names, numbers and language all agree. Claude's rating sits beside each pair.</p>{% endif %}
     {% if sure_pairs %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge_sure">{% for keep, other, ask in sure_pairs %}<input type="hidden" name="pair" value="{{ keep.pk }}:{{ other.pk }}">{% endfor %}<input type="submit" value="Merge the {{ sure_pairs|length }} pair{{ sure_pairs|pluralize }} Claude is sure are the same"></form>{% endif %}
     <p class="note">Merge only when they are the same product. Tap Not the same if not.</p>
-    {% if duplicates %}<form method="post" id="ticked-pairs" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
+    {% if duplicate_sections %}<form method="post" id="ticked-pairs" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
       <label class="pick" hidden><input type="checkbox" data-all="ticked-pairs"> Tick all</label>
+      <button type="submit" class="act" name="do" value="merge">Merge ticked</button>
       <button type="submit" class="act" name="do" value="apart">Ticked are not the same</button>
     </form>
+    <p class="note">Tick the pairs you have checked, then tap Merge ticked. Each merge can be undone under Sorted for you.</p>
+    {% for label, count, pairs in duplicate_sections %}
+    <h3>{{ label }} ({{ count }})</h3>
     <ul>
-      {% for keep, others in duplicates %}
-      <li class="item"><b>Keep: <a href="{{ keep.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.name }}</a></b>
-        Merge into it:
-        <ul class="names">{% for other in others %}<li><a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a> <span class="pill">{{ other.certainty }}</span>{% include "admin/_claude_said.html" with ask=other.claude %}
-          <div class="row"><label class="pick"><input type="checkbox" name="pick" value="{{ keep.pk }}:{{ other.pk }}" form="ticked-pairs"> Tick</label><form method="post">{% csrf_token %}<input type="hidden" name="action" value="apart"><input type="hidden" name="keep" value="{{ keep.pk }}"><input type="hidden" name="other" value="{{ other.pk }}"><input type="submit" value="Not the same"></form></div></li>{% endfor %}</ul>
-        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge"><input type="hidden" name="keep" value="{{ keep.pk }}">{% for other in others %}<input type="hidden" name="other" value="{{ other.pk }}">{% endfor %}<input type="submit" value="Merge these"></form>
+      {% for keep, other in pairs %}
+      <li class="item"><label class="pick"><input type="checkbox" name="pick" value="{{ keep.pk }}:{{ other.pk }}" form="ticked-pairs"> Tick</label>
+        <a href="{{ other.get_absolute_url }}" target="_blank" rel="noopener">{{ other.name }}</a> into <a href="{{ keep.get_absolute_url }}" target="_blank" rel="noopener">{{ keep.name }}</a>
+        {% include "admin/_claude_said.html" with ask=other.claude %}
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="apart"><input type="hidden" name="keep" value="{{ keep.pk }}"><input type="hidden" name="other" value="{{ other.pk }}"><input type="submit" value="Not the same"></form>
       </li>
       {% endfor %}
-    </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
+    </ul>
+    {% endfor %}
+    {% else %}<p class="none">Nothing to check.</p>{% endif %}
   </section>
 
   <section>

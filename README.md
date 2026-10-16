@@ -688,6 +688,8 @@ Each pair is labelled with how sure the rules are, from the names alone:
 - **Possible:** shares only a code or set.
 - **Different:** a number, language, edition or kind differs. Never merged.
 
+The page lists them in those four sections, most certain first. Tick the pairs you have
+checked and tap **Merge ticked**; each is merged on its own and listed under Sorted for you with Undo.
 Claude's rating sits beside each pair. Labels come from the rules, not from Claude, so a
 percentage is never taken as proof. `python manage.py certainty_sample` prints a random sample
 of each level, for checking by hand before trusting a level.

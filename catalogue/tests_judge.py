@@ -2038,6 +2038,22 @@ class TickedTests(Base):
         self.client.post(self.url, {"action": "ticked", "do": "apart", "pick": [f"{shown.pk}:{shown_other.pk}"]})
         self.assertEqual(checks.duplicates(), [])
 
+    def test_merge_ticked_merges_only_the_ticked_pairs_and_can_be_undone(self):
+        keep = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        other = make_product(self.set, name="Scarlet & Violet Surging Sparks Elite Trainer Box")
+        self.shop(50, product=keep, title=keep.name)
+        self.shop(51, product=other, title=other.name)
+        [(shown, [shown_other])] = checks.duplicates()
+        self.assertContains(self.client.get(self.url), 'name="do" value="merge"')
+        reply_ = self.client.post(self.url, {"action": "ticked", "do": "merge",
+                                             "pick": [f"{shown.pk}:{shown_other.pk}"]}, follow=True)
+        self.assertContains(reply_, "Merged 1 pair")
+        shown_other.refresh_from_db()
+        self.assertFalse(shown_other.is_active)
+        self.assertEqual(checks.duplicates(), [])
+        undo = CheckAnswer.objects.get(kind=CheckAnswer.Kind.MERGE, product=shown, other=shown_other)
+        self.assertTrue(undo.undo_note)
+
     def test_a_tap_from_the_script_answers_without_a_reload(self):
         cheap, gone = self.doubtful("Surging Sparks Tin"), self.doubtful("Surging Sparks Mini Tin")
         Listing.objects.filter(pk=gone.pk).update(price=Decimal("31.00"))

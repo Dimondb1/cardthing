@@ -1542,6 +1542,18 @@ def apart_tap(keep, other):
     return f"Noted: {other.name} is not {keep.name}. They are not suggested together again."
 
 
+def merge_pair_tap(keep, other):
+    """Merge one possible duplicate pair the owner ticked, as the Merge these button does for its group."""
+    from django.db import transaction
+
+    from catalogue import judge
+    from catalogue.management.commands.merge_duplicates import merge_with_undo
+
+    with transaction.atomic():
+        merge_with_undo(keep, other, "You ticked Merge ticked", by_owner=True)
+        judge.note_owner(judge.pair_key(keep, other), "same")
+
+
 def ticked_tap(request):
     """One tap for every ticked row of a list: hide them, count them, link them, say no to them or keep
     pairs apart. Each row is answered as its own button would, and only while it is as the page showed
@@ -1552,20 +1564,23 @@ def ticked_tap(request):
     from catalogue.signals import clear_list_caches
 
     do, picks = request.POST.get("do", ""), request.POST.getlist("pick")[:TICKED_LIMIT]
-    if do not in ("trust", "hide", "link_found", "not_found", "apart") or not picks:
+    if do not in ("trust", "hide", "link_found", "not_found", "apart", "merge") or not picks:
         messages.warning(request, "Tick at least one row first, then tap what to do with them.")
         return []
     pairs = {f"{keep.pk}:{other.pk}": (keep, other) for keep, others in checks.duplicates() for other in others} \
-        if do == "apart" else {}
+        if do in ("apart", "merge") else {}
     done, changed = [], 0
     for pick in dict.fromkeys(picks):
         first, _, second = pick.partition(":")
-        if do == "apart":
+        if do in ("apart", "merge"):
             pair = pairs.get(pick)
-            if pair is None:
+            if pair is None or not pair[0].is_active or not pair[1].is_active:
                 changed += 1
                 continue
-            apart_tap(*pair)
+            if do == "apart":
+                apart_tap(*pair)
+            else:
+                merge_pair_tap(*pair)
         elif not first.isdigit():
             changed += 1
             continue
@@ -1592,6 +1607,8 @@ def ticked_tap(request):
         "link_found": f"Linked {rows}. The next read of each shop checks its price and stock.",
         "not_found": f"Noted {rows}: the shops are not asked about them again.",
         "apart": f"Noted {n} pair{'s' if n != 1 else ''} as not the same.",
+        "merge": f"Merged {n} pair{'s' if n != 1 else ''}. The old addresses redirect to the kept products, and each "
+                 "merge is listed under Sorted for you, with Undo.",
     }[do]
     if n:
         messages.success(request, said)
@@ -1599,6 +1616,16 @@ def ticked_tap(request):
         messages.warning(request, f"{changed} ticked row{'s' if changed != 1 else ''} had changed since the page "
                                   "loaded. Check again below.")
     return done
+
+
+def duplicate_sections(groups):
+    """The possible duplicate pairs in four sections, most certain first: (level label, count, [(keep, other)]).
+    A level with no pairs is left out."""
+    from catalogue.management.commands.merge_duplicates import CERTAINTY_LABELS
+
+    rows = [(keep, other) for keep, others in groups for other in others]
+    return [(CERTAINTY_LABELS[level], len(found), found) for level in CERTAINTY_LABELS
+            if (found := [row for row in rows if row[1].certainty == level])]
 
 
 @staff_member_required
@@ -1718,7 +1745,7 @@ def checks_page(request):
         "doubtful_left": max(0, counts["doubtful"] - doubtful_count - checked_count), "checked_count": checked_count,
         "excluded": checks.excluded_prices(), "counts": counts,
         "wrong": wrong, "duplicates": duplicates, "sure_pairs": judge.sure_pairs(duplicates),
-        "duplicate_levels": sorted(Counter(other.certainty for _, others in duplicates for other in others).items()),
+        "duplicate_sections": duplicate_sections(duplicates),
         "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
         "found": found, "found_count": checks.found_waiting().count(),

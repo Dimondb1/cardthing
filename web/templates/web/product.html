@@ -2,6 +2,7 @@
 {% load sitecopy ripraptor %}
 
 {% block scripts %}{% load static %}<script src="{% static 'js/product.js' %}" defer></script>{% endblock %}
+{% block page_class %}page--product{% endblock %}
 {% block content %}
 <nav class="breadcrumbs" aria-label="Breadcrumb">
   <ol>
@@ -10,42 +11,38 @@
   </ol>
 </nav>
 
-<div class="product-head" data-viewed-slug="{{ product.slug }}" data-viewed-name="{{ product.name }}">
-  <div class="hero-card">
-    <div class="hero-card__image">{% product_image product "large" %}</div>
-    <p class="eyebrow">{{ product.type_name }}{% if product.language_name %} · {{ product.language_name }}{% endif %}</p>
+<div class="product-head{% if product.name|length > 60 %} product-head--long{% endif %}{% if cheapest and not cheapest.delivery_known %} product-head--note{% endif %}" data-viewed-slug="{{ product.slug }}" data-viewed-name="{{ product.name }}">
+  <div class="product-intro">
     <h1 class="product-title">{{ product.name }}</h1>
+    <p class="product-facts">{{ product.type_name }} · {{ product.language_name|default:"English" }}</p>
   </div>
 
-  <section class="buybox" aria-label="{% copy 'product.cheapest.label' %}">
+  <div class="product-media">{% product_image product "large" %}</div>
+
+  <section class="buybox{% if cheapest %} buybox--buy{% endif %}" aria-label="{% copy 'product.cheapest.label' %}">
     {% if cheapest %}
-      <div class="buybox__main">
-        <div class="buybox__offer">
-          {% include "web/includes/badge.html" %}
+      <div class="buybox__lead">
+      {# Decoration for the one-off entrance: an orange sweep from the picture down to the buy button. #}
+      <span class="buybox__sweep" aria-hidden="true"></span>
+      <div class="buybox__offer">
+        <div class="buybox__top">
           <p class="buybox__label">{% if cheapest.delivery_known %}{% copy "product.cheapest.label" %}{% else %}{% copy "product.cheapest.label_unknown" %}{% endif %}</p>
-          <p class="buybox__price"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span></p>
-          <p class="buybox__delivered"><span class="money" data-note-for="{{ cheapest.pk }}">{% include "web/includes/price_note.html" with listing=cheapest %}</span>{% if not cheapest.delivery_known %} {% copy "product.delivery.unknown_check" %}{% endif %}</p>
-          <p class="buybox__retailer">{% copy "product.cheapest.retailer" retailer=cheapest.retailer.name %}</p>
-          {% with deal=summary.deal %}{% if deal %}<p class="buybox__deal">{% copy "product.deal.better" quantity=deal.deal_quantity price=deal.deal_price|gbp retailer=deal.retailer.name each=deal.deal_each|gbp %}</p>{% endif %}{% endwith %}
+          {% include "web/includes/badge.html" %}
         </div>
-        <a class="button button--buy button--big" href="{{ cheapest.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">
-          {% include "web/includes/bag.html" %}
-          <span>{% if cheapest.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}</span>
-          <span class="visually-hidden">{{ cheapest.shown_price|gbp }} at {{ cheapest.retailer.name }} (opens in a new tab)</span>
-        </a>
+        <p class="buybox__price"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span></p>
+        <p class="buybox__delivered"><span class="money" data-note-for="{{ cheapest.pk }}">{% include "web/includes/price_note.html" with listing=cheapest %}</span>{% if not cheapest.delivery_known %} {% copy "product.delivery.unknown_check" %}{% endif %}</p>
       </div>
-      <div class="buybox__rank">{% include "web/includes/rank_row.html" %}</div>
-      <p class="buybox__breakdown">
-        <span class="stock-inline stock-inline--{{ cheapest.availability }}">{{ cheapest.get_availability_display }}</span>
-        {% if shop_count > 1 %}<span aria-hidden="true" class="buybox__sep">·</span>
-        <a href="#offers-title">{% copy "product.compare.shops" count=shop_count %}</a>{% else %}<span aria-hidden="true" class="buybox__sep">·</span>
-        {% copy "product.compare.one_shop" %}{% endif %}
-      </p>
-      <p class="buybox__summary">
-        {% if in_stock_count %}{% copy_count "product.availability.in_stock" in_stock_count %}{% elif preorder_count %}{% copy_count "product.availability.preorder" preorder_count %}{% endif %}
-        {# The time of the price shown above, at its own shop: never a newer check of some other shop. #}
-        <span data-checked-for="{{ cheapest.pk }}">{% copy "product.cheapest.checked" retailer=cheapest.retailer.name time=cheapest.last_checked|ago %}</span>
-      </p>
+      {# The cheapest offer a visitor can buy now, through /go/ so the click is counted and the shop's tracking applies. #}
+      <a class="buy-now" href="{{ cheapest.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener" data-buy-now>
+        <span class="buy-now__mark">{% include "web/includes/buy_mark.svg" %}</span>
+        <span class="buy-now__text">
+          <span class="buy-now__label">{% if cheapest.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}</span>
+          <span class="buy-now__shop">{% copy "product.cheapest.retailer" retailer=cheapest.retailer.name %}</span>
+        </span>
+        <svg class="buy-now__arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12h15m-6-6.5 6.5 6.5-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="visually-hidden">{{ cheapest.shown_price|gbp }} (opens in a new tab)</span>
+      </a>
+      </div>
     {% elif has_listings %}
       <p class="buybox__none">{% copy "product.out_of_stock.message" %}</p>
       <p class="buybox__summary">
@@ -63,6 +60,23 @@
         <p class="buybox__summary">{% copy "product.marketplaces.note_sold_out" %}{% if amazon_search %} {% copy "terms.amazon" %}{% endif %}</p>
       </div>
     {% endif %}
+    {% if has_listings %}
+      {# A plain link to the price list, so it works without script; product.js scrolls there smoothly and moves focus. #}
+      <a class="compare-jump" href="#offers-title" data-jump>
+        <span class="compare-jump__label">{% copy "product.compare.jump" %}<span class="compare-jump__arrow" aria-hidden="true">↓</span></span>
+        {% if shop_count > 1 %}<span class="compare-jump__note">{% copy "product.compare.jump_note" count=shop_count %}</span>{% elif shop_count %}<span class="compare-jump__note">{% copy "product.compare.one_shop" %}</span>{% endif %}
+      </a>
+    {% endif %}
+    {% if cheapest %}
+      {% with deal=summary.deal %}{% if deal %}<p class="buybox__deal">{% copy "product.deal.better" quantity=deal.deal_quantity price=deal.deal_price|gbp retailer=deal.retailer.name each=deal.deal_each|gbp %}</p>{% endif %}{% endwith %}
+      <div class="buybox__rank">{% include "web/includes/rank_row.html" %}</div>
+      <p class="buybox__summary">
+        <span class="stock-inline stock-inline--{{ cheapest.availability }}">{{ cheapest.get_availability_display }}</span>
+        {% if in_stock_count %}{% copy_count "product.availability.in_stock" in_stock_count %}{% elif preorder_count %}{% copy_count "product.availability.preorder" preorder_count %}{% endif %}
+        {# The time of the price shown above, at its own shop: never a newer check of some other shop. #}
+        <span data-checked-for="{{ cheapest.pk }}">{% copy "product.cheapest.checked" retailer=cheapest.retailer.name time=cheapest.last_checked|ago %}</span>
+      </p>
+    {% endif %}
     {% if alerts_on %}{% include "web/includes/alert_form.html" %}{% endif %}
     <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.shown_price %}</div>
     {% if amazon_search and cheapest %}
@@ -77,7 +91,7 @@
 {% if has_listings or amazon_search %}
 <section class="block offers-section" aria-labelledby="offers-title">
   <div class="section-head section-head--tight">
-    <h2 id="offers-title" class="section-title">{% copy "product.compare.title" %}</h2>
+    <h2 id="offers-title" class="section-title" tabindex="-1">{% copy "product.compare.title" %}</h2>
     {% if has_listings %}<button type="button" class="refresh" data-refresh="{% url 'web:product_prices_api' product.slug %}" data-done="{% copy 'product.refresh.done' %}" data-failed="{% copy 'product.refresh.failed' %}">
       <span class="icon icon--refresh" aria-hidden="true"></span><span class="refresh__label">{% copy "product.reload_prices" %}</span>
     </button>{% endif %}

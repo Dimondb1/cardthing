@@ -2,6 +2,33 @@
 // the numbers in place. It does not ask the shops; the hourly import and the
 // ten-minute stock watcher do that. The icon turns once; prices that changed slide to the
 // new value, green if lower, red if higher.
+
+// Compare prices: a plain link to the price list's heading, so it works without this file. Here it glides there
+// (or jumps, when the visitor asks for less motion), lands the heading clear of anything stuck to the top of the
+// screen, and moves keyboard focus to it so the next Tab goes through the shops.
+(() => {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+  // Anything fixed or sticky at the top of the screen, measured when it matters: the heading's scroll margin allows for it.
+  const stuckHeight = () => {
+    let height = 0;
+    document.querySelectorAll(".masthead, .stock-tabs").forEach((el) => {
+      const position = getComputedStyle(el).position;
+      if (position === "fixed" || position === "sticky") height = Math.max(height, el.getBoundingClientRect().bottom);
+    });
+    return Math.max(0, Math.round(height));
+  };
+  document.querySelectorAll("a[data-jump]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const target = document.getElementById(decodeURIComponent(link.hash.slice(1)));
+      if (!target) return;
+      event.preventDefault();
+      document.documentElement.style.setProperty("--sticky-top", `${stuckHeight()}px`);
+      target.scrollIntoView({ behavior: reduce.matches ? "auto" : "smooth", block: "start" });
+      target.focus({ preventScroll: true });
+    });
+  });
+})();
+
 (() => {
   const button = document.querySelector("[data-refresh]");
   if (!button) return;

@@ -66,7 +66,9 @@
   --text-section: clamp(1.375rem, 1.2rem + 0.6vw, 1.625rem);
   --text-page-title: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
   --text-hero: clamp(2.5rem, 1.6rem + 3.6vw, 4.25rem);          /* logo on the home page */
-  --text-product-title: clamp(1.625rem, 1.3rem + 1.4vw, 2.25rem);
+  --text-product-title: clamp(1.375rem, 1.1rem + 1.2vw, 2.25rem);
+  --text-product-title-long: clamp(1.125rem, 1rem + 0.8vw, 1.75rem);   /* names over 60 characters */
+  --text-price-hero: clamp(2.25rem, 1.8rem + 2vw, 3.5rem);             /* the cheapest price on a product page */
   --text-price-lg: clamp(2.75rem, 2.2rem + 2vw, 3.75rem);
   --text-price-card: 2rem;
   --text-price-md: 1.25rem;
@@ -136,6 +138,23 @@
   --mark-poster-sm: clamp(13rem, 7rem + 18vw, 24rem); /* the same on the shorter watchlist card */
   --mark-ratio: 417 / 400;       /* the image's own proportions, width to height */
 
+  /* Product page ---------------------------------------------------------- */
+  /* On a phone the picture takes what the first screen leaves after the header, title, price and Buy now, so all four
+     show together. svh is the screen with the browser's bars showing. The allowance fits a two-line name; names over
+     60 characters take two more lines, and an unconfirmed delivery charge one more under the price. */
+  --product-media-phone: clamp(8rem, 100vh - 32.5rem, 17rem);
+  --product-media-phone-long: clamp(7rem, 100vh - 35.5rem, 15rem);
+  --product-media-note: 1.25rem;
+  --product-media-ratio: 5 / 4;     /* the picture well beside the price on wide screens */
+  --masthead-search: 2.5rem;        /* the header search box: compact, still a full finger wide */
+  --masthead-logo: 1.75rem;         /* the header logo's height on phones */
+  --buy-height: 3.75rem;            /* the Buy now button */
+  --buy-mark: 3rem;                 /* the raptor and bag inside it */
+  --buy-arrow: 1.5rem;              /* the arrow at its right end */
+  --compare-height: 3rem;           /* the outlined Compare prices button under it */
+  --color-on-brand-line: rgb(255 255 255 / 0.4);   /* the divider inside the Buy now button */
+  --swing: 9deg;                    /* how far the bag swings once on arrival */
+
   /* Raptor panels: the owner's poster style, on the home page panels and the no-results card only ---- */
   --text-poster: clamp(2.75rem, 1.5rem + 5.4vw, 5.75rem);
   --text-poster-sm: clamp(2.25rem, 1.4rem + 3.4vw, 3.75rem);
@@ -143,4 +162,13 @@
   --weight-poster: 900;
   --leading-poster: 0.9;
   --poster-pad: clamp(1.5rem, 1rem + 2.5vw, 3rem);
+}
+
+/* Browsers that know the small viewport unit measure the phone picture against the screen with its bars showing;
+   others fall back to vh with a larger allowance for them. */
+@supports (height: 100svh) {
+  :root {
+    --product-media-phone: clamp(8rem, 100svh - 29rem, 17rem);
+    --product-media-phone-long: clamp(7rem, 100svh - 32rem, 15rem);
+  }
 }

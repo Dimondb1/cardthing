@@ -685,7 +685,7 @@ ENTRIES = [
     Entry(
         "product.cheapest.retailer", T, "Cheapest retailer",
         "at {retailer}",
-        "Shown next to the main price.",
+        "Inside the Buy now button on a product page: the shop the button goes to.",
         placeholders=("retailer",),
     ),
     Entry(
@@ -867,14 +867,24 @@ ENTRIES = [
     Entry(
         "product.compare.shops", T, "Shop count link",
         "Compare {count} shops",
-        "Next to the stock line on a product page, and at the foot of a product card with two or more shops; "
-        "jumps to the price list.",
+        "At the foot of a product card with two or more shops; jumps to the product page's price list.",
         placeholders=("count",),
     ),
     Entry(
         "product.compare.one_shop", T, "One shop",
         "1 shop found",
-        "Next to the stock line when only one shop has a price.",
+        "Under Compare prices on a product page when only one shop has a price.",
+    ),
+    Entry(
+        "product.compare.jump", B, "Compare prices button",
+        "Compare prices",
+        "Outlined button under Buy now on a product page. Jumps down to the price list.",
+    ),
+    Entry(
+        "product.compare.jump_note", T, "Compare prices button, shop count",
+        "{count} shops, cheapest delivered first",
+        "Small line inside the Compare prices button when two or more shops have a price.",
+        placeholders=("count",),
     ),
     Entry(
         "product.compare.buy", B, "Row button: buy",

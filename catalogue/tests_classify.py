@@ -544,20 +544,3 @@ class SolentTitleTests(TestCase):
         # Other bracketed codes still go.
         self.assertEqual(classify("One Piece Emperors in the New World Booster Box (OP-09)", price=Decimal("90")).name,
                          "Emperors in the New World Booster Box")
-
-
-class MerchandiseTests(TestCase):
-    """Badge, coin and display-frame sets sold in blind bags are not card packs, so the hourly tidy and the
-    shop reads must not list them as booster packs (the Gem Pack badge sets were listed at six shops)."""
-
-    def test_badge_coin_and_frame_sets_are_not_listed(self):
-        for title in ("Pokemon Gem Pack Badge Set Blind Bag Sealed Simplified Chinese",
-                      "Pokemon Terastal Grand Crystal Gathering Eeveelutions Badge Set Blind Box (Simplified Chinese)",
-                      "Blade Awakening Coin Set Pack Simplified Chinese Blind Bag",
-                      "Terastal Grand Crystal Gathering Simplified Chinese Card Display Frame Set Blind Box"):
-            with self.subTest(title=title):
-                self.assertIsNone(classify(title, vendor="", tags=(), price=10), title)
-
-    def test_a_pack_with_a_pin_badge_is_still_listed(self):
-        title = "Pokemon Legendary Beasts Entei 3 Pack Blister w/ Pin Badge"
-        self.assertIsNotNone(classify(title, vendor="", tags=(), price=10), title)

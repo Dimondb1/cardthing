@@ -2263,3 +2263,124 @@ class StockTabsTests(TestCase):
         with CaptureQueriesContext(connection) as many:
             self.client.get(self.url)
         self.assertEqual(len(few), len(many))
+
+
+class ProductPageRedesignTests(PageTestCase):
+    """The product page's first screen: name, picture, cheapest delivered price, Buy now, then Compare prices."""
+
+    def page(self, product):
+        return self.client.get(product.get_absolute_url()).content.decode()
+
+    def test_the_first_screen_runs_name_picture_price_buy_then_compare(self):
+        html = self.page(self.etb)
+        order = [html.index(marker) for marker in (
+            'class="breadcrumbs"', '<h1 class="product-title">', 'class="product-facts">Elite Trainer Box · English<',
+            'class="product-media"', 'class="buybox__price"', 'class="buy-now"', 'class="compare-jump"',
+            'id="offers-title"',
+        )]
+        self.assertEqual(order, sorted(order))
+
+    def test_buy_now_goes_to_the_cheapest_available_offer_through_go(self):
+        html = self.page(self.etb)
+        button = html[html.index('<a class="buy-now"'):html.index("</a>", html.index('<a class="buy-now"'))]
+        self.assertIn(f'href="{self.cheap.get_outbound_url()}"', button)
+        self.assertIn('rel="sponsored nofollow noopener"', button)
+        self.assertIn('<span class="buy-now__label">Buy now</span>', button)
+        self.assertIn('<span class="buy-now__shop">at Harbour Games</span>', button)
+        self.assertIn("£54.99 (opens in a new tab)", button)
+        # The raptor and bag: head and bag drawn apart, so the bag can swing from the mouth, and hidden from readers.
+        self.assertIn('<svg class="buy-mark" viewBox="0 0 1170 830" aria-hidden="true" focusable="false"><g class="buy-mark__bag">', button)
+        self.assertIn('class="buy-mark__head"', button)
+
+    def test_a_cheaper_shop_that_is_sold_out_is_not_where_buy_now_goes(self):
+        sold = make_listing(self.etb, make_retailer("Cheap But Gone"), price="10.00",
+                            availability=Listing.Availability.OUT_OF_STOCK)
+        html = self.page(self.etb)
+        button = html[html.index('<a class="buy-now"'):html.index("</a>", html.index('<a class="buy-now"'))]
+        self.assertIn(f'href="{self.cheap.get_outbound_url()}"', button)
+        self.assertNotIn(sold.get_outbound_url(), button)
+
+    def test_compare_prices_is_a_plain_link_to_a_focusable_heading(self):
+        html = self.page(self.etb)
+        self.assertIn('<a class="compare-jump" href="#offers-title" data-jump>', html)
+        self.assertIn('Compare prices<span class="compare-jump__arrow" aria-hidden="true">↓</span>', html)
+        self.assertIn('<span class="compare-jump__note">2 shops, cheapest delivered first</span>', html)
+        self.assertIn('<h2 id="offers-title" class="section-title" tabindex="-1">', html)
+
+    def test_sold_out_and_unpriced_products(self):
+        sold = self.page(self.sold_out)
+        self.assertNotIn('class="buy-now"', sold)
+        self.assertNotIn("buybox__sweep", sold)
+        self.assertIn('class="compare-jump"', sold)   # the shops' last prices are still worth seeing
+        self.assertNotIn("compare-jump__note", sold)
+        unpriced = self.page(self.unpriced)
+        self.assertNotIn('class="buy-now"', unpriced)
+        self.assertNotIn('class="compare-jump"', unpriced)
+        self.assertIn('class="product-media"><span class="product-image product-image--large"><svg class="placeholder"', unpriced)
+
+    def test_unknown_delivery_says_so_and_leaves_room_for_the_note(self):
+        Listing.objects.filter(product=self.etb).update(delivery_known=False)
+        html = self.page(self.etb)
+        self.assertIn("product-head--note", html)
+        self.assertIn("Lowest item price", html)
+        self.assertIn("£52.00</span></span> <span class=\"delivered\">+ delivery</span>", html)
+        self.assertIn("Check the total at the shop before you buy.", html)
+
+    def test_long_names_get_the_smaller_title(self):
+        long = make_product(self.pre, name="Prismatic Evolutions Super Premium Collection With Extra Promo Cards And Sleeves",
+                            slug="long-name")
+        make_listing(long, self.harbour, price="99.00")
+        self.assertIn("product-head--long", self.page(long))
+        self.assertNotIn("product-head--long", self.page(self.etb))
+
+    def test_best_in_7_days_only_with_the_price_history_behind_it(self):
+        self.assertIn("Best in 7 days", self.page(self.etb))
+        from catalogue.models import DailyLowestPrice
+        DailyLowestPrice.objects.filter(product=self.etb).delete()
+        self.assertNotIn("Best in 7 days", self.page(self.etb))
+
+    def test_the_hero_picture_loads_first(self):
+        Product.objects.filter(pk=self.etb.pk).update(image_url="https://img.example/etb.png")
+        html = self.page(self.etb)
+        media = html[html.index('class="product-media"'):html.index("</div>", html.index('class="product-media"'))]
+        self.assertIn('fetchpriority="high"', media)
+        self.assertNotIn('loading="lazy"', media)
+
+    def test_the_queries_do_not_grow_with_the_shops(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self.page(self.etb)
+        with CaptureQueriesContext(connection) as few:
+            self.page(self.etb)
+        for n in range(5):
+            make_listing(self.etb, make_retailer(f"Shop {n}"), price=f"6{n}.00")
+        self.page(self.etb)
+        with CaptureQueriesContext(connection) as many:
+            self.page(self.etb)
+        self.assertEqual(len(few), len(many))
+
+    def test_the_arrival_animation_keeps_to_the_motion_rules(self):
+        from django.contrib.staticfiles import finders
+
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        start = css.index("/* Arrival, once per page view")
+        block = css[start:css.index("@keyframes bag-swing", start)]
+        block += css[css.index("@keyframes bag-swing"):css.index("}\n}", css.index("@keyframes bag-swing"))]
+        # Only when motion is allowed, from the motion tokens, and only opacity and transforms change.
+        self.assertIn("@media (prefers-reduced-motion: no-preference) {", block)
+        for rule in re.findall(r"animation: [^;]+;", block):
+            self.assertRegex(rule, r"var\(--motion-(fast|normal|slow)\)")
+        keyframes = re.findall(r"@keyframes [\w-]+ \{(.*?)\}\s*$", block, re.S | re.M)
+        self.assertEqual(len(keyframes), 4)   # media-in, sweep-down, sweep-across, bag-swing
+        for frames in keyframes:
+            for prop in re.findall(r"([a-z-]+):", frames):
+                self.assertIn(prop, ("opacity", "transform"))
+        self.assertIn(".buy-mark__bag { transform-box: view-box; transform-origin: 916px 408px; }", css)
+
+    def test_compare_prices_script_honours_reduced_motion_and_moves_focus(self):
+        from django.contrib.staticfiles import finders
+
+        script = open(finders.find("js/product.js"), encoding="utf-8").read()
+        self.assertIn('behavior: reduce.matches ? "auto" : "smooth"', script)
+        self.assertIn("target.focus({ preventScroll: true })", script)

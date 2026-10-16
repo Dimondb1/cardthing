@@ -2273,8 +2273,9 @@ set is on the Games page. Every product card in a row ends with the same
 ### The raptor
 
 The head from the logo appears where it has something to say, as the owner
-drew it, and never on a product page, beside section headings or in the
-footer. The whole logo stays in the masthead on every page.
+drew it, and never beside section headings or in the footer. On a product
+page it appears only inside the Buy now button, holding a shopping bag (see
+"The product page" below). The whole logo stays in the masthead on every page.
 
 - "Prices. Dropped.": an orange panel on the home page after Featured
   deals, leading to the Deals page, with the head in paper on the right.
@@ -2300,6 +2301,39 @@ icons, so it takes any token colour at any size; the panels use
 re-sharpened, so it stays crisp at panel size. `mark.png` stays the source
 `make_icons` builds the home screen icons from. Sizes are the `--mark-*`
 tokens; `--mark-sm` is the floor, below which the crest smudges.
+
+### The product page
+
+On a phone the first screen holds the product's name, its picture, the
+cheapest delivered price and Buy now, in that order: the breadcrumb, name
+and a short details line (type and language) above the picture, the price
+straight under it, then the buttons. The header and search box are compact
+on phones for the same reason. The picture's height is whatever the first
+screen leaves (`--product-media-phone`, measured against the screen with the
+browser's bars showing), with a smaller allowance for names over 60
+characters and for an unconfirmed delivery charge, which adds a line. Wide
+screens put the picture beside the name and the price box.
+
+- **Buy now** is one wide orange button: the raptor head holding a shopping
+  bag, the words "Buy now", the shop it goes to ("at Harbour Games") and an
+  arrow. It links through `/go/` to the cheapest offer a visitor can buy now,
+  the first row of the price list, so clicks are counted and the shop's
+  affiliate link applies. The drawing is `includes/buy_mark.svg`, traced from
+  the owner's mascot, with the head and bag as separate shapes; the bag's
+  pivot is the top of its handle, in the raptor's mouth.
+- **Compare prices ↓** is an outlined button under it: a plain link to the
+  price list's heading, so it works without JavaScript. With it
+  (`js/product.js`) the page glides there, or jumps when the visitor asks for
+  less motion, lands the heading clear of anything stuck to the top of the
+  screen, and moves keyboard focus to it.
+- On arrival, once per page view and only when motion is allowed, the
+  picture fades in, a soft orange sweep runs from it to Buy now, and the bag
+  swings once and settles: about a second in all, each step under 400ms,
+  opacity and transforms only. The price and button are readable and
+  pressable throughout; with reduced motion the page simply appears finished.
+
+The wording ("Compare prices", "{count} shops, cheapest delivered first",
+"at {retailer}") is under Product page in Site wording.
 
 ### When a price was checked
 

@@ -178,7 +178,7 @@ class ShownPriceTests(TestCase):
         page = self.client.get(self.product.get_absolute_url()).content.decode()
         self.assertIn('<span class="price price--lg">£24.44</span>', page)
         self.assertIn("£21.50 plus £2.94 delivery", page)
-        self.assertIn("Compare 2 shops", page)
+        self.assertIn("2 shops, cheapest delivered first", page)
         card = self.client.get(reverse("web:search")).content.decode()
         self.assertIn("£24.44", card)
 

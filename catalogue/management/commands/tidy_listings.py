@@ -165,6 +165,12 @@ def misfiled():
             continue
         named.setdefault(product_id, (current, set()))[1].add(game)
     moves = {pk: games.pop() for pk, (current, games) in named.items() if len(games) == 1 and current not in games}
+    # A product whose own name names another game ("Star wars Booster Pack", filed as Pokemon from the shop's
+    # tag) goes to the game its name says.
+    for pk, name, current in Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug").iterator():
+        game = find_game(name)
+        if game is not None and game != current:
+            moves[pk] = game
     games = {game.slug: game for game in Game.objects.filter(slug__in=set(moves.values()))}
     return {product: games[moves[product.pk]] for product in Product.objects.filter(pk__in=moves).select_related("game", "product_set")
             if moves[product.pk] in games}

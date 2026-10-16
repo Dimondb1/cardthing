@@ -544,3 +544,22 @@ class SolentTitleTests(TestCase):
         # Other bracketed codes still go.
         self.assertEqual(classify("One Piece Emperors in the New World Booster Box (OP-09)", price=Decimal("90")).name,
                          "Emperors in the New World Booster Box")
+
+
+class StarWarsGameTests(TestCase):
+    """Cosmic Collectables titles say only "Star wars", and the shop tags them Pokemon."""
+
+    def test_star_wars_alone_names_star_wars_unlimited(self):
+        sealed = classify("Star wars Booster Pack Ashes of the Empire (16 Cards)", "Booster Pack", "Pokemon", ("pokemon",), 9)
+        self.assertEqual(sealed.game, "star-wars-unlimited")
+
+    def test_a_product_filed_under_the_wrong_game_moves_to_the_one_its_name_says(self):
+        from .management.commands.tidy_listings import misfiled
+        from .testing import make_game, make_set
+        from .models import Product
+
+        pokemon = make_game()
+        make_game(name="Star Wars Unlimited", slug="star-wars-unlimited")
+        product = Product.objects.create(game=pokemon, product_set=make_set(pokemon),
+                                         name="Star wars Booster Pack Secrets of Power (16 Cards)", product_type="booster_pack")
+        self.assertEqual({p.pk: g.slug for p, g in misfiled().items()}, {product.pk: "star-wars-unlimited"})

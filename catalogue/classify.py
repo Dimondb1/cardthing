@@ -26,7 +26,7 @@ GAMES = [
     ("one-piece", "One Piece Card Game", "One Piece", ("one piece",)),
     ("lorcana", "Disney Lorcana", "Lorcana", ("lorcana",)),
     ("yu-gi-oh", "Yu-Gi-Oh!", "Yu-Gi-Oh", ("yu-gi-oh", "yugioh", "yu gi oh")),
-    ("star-wars-unlimited", "Star Wars Unlimited", "Star Wars", ("star wars unlimited", "star wars: unlimited")),
+    ("star-wars-unlimited", "Star Wars Unlimited", "Star Wars", ("star wars unlimited", "star wars: unlimited", "star wars")),
     ("flesh-and-blood", "Flesh and Blood", "Flesh and Blood", ("flesh and blood", "flesh & blood")),
     ("digimon", "Digimon Card Game", "Digimon", ("digimon",)),
     ("dragon-ball", "Dragon Ball Super Card Game", "Dragon Ball", ("dragon ball",)),

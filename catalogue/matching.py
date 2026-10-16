@@ -58,7 +58,9 @@ def words(text):
 # its number stays ("Gem Pack Vol. 2" and "Gem 2"). "Simplified" goes too: whether a box is Simplified
 # Chinese is the product's language, which every use of the key checks apart, and shops write "Chinese"
 # for the same box.
-LOOSE = STOP | {"edition", "reprint", "reprinted", "sealed", "new", "official", "version", "ver", "release",
+# "Blind bag" and "blind box" say how a shop packs a product, not which one it is: one badge set sold as a bag
+# at one shop and a box at another is one product.
+LOOSE = STOP | {"blind", "bag", "edition", "reprint", "reprinted", "sealed", "new", "official", "version", "ver", "release",
                 "structure", "starter", "theme", "preconstructed", "precon", "box", "boxes", "set", "sets",
                 "pack", "packs", "yugioh", "yu", "gi", "oh", "digimon", "riftbound",
                 "star", "wars", "flesh", "blood", "tm", "vol", "volume", "simplified",

@@ -569,3 +569,17 @@ class KeyLinkTests(TestCase):
             with self.subTest(title=title):
                 match, value = self.catalogue(*names, game=game).best_match(title, game=game)
                 self.assertLess(value, AUTO_LINK, match)
+
+
+class BlindPackingTests(TestCase):
+    """The Gem Pack badge set is one product whether a shop calls it a bag, a box or neither."""
+
+    def test_a_blind_bag_and_a_blind_box_are_the_same_product(self):
+        self.assertEqual(match_key("Pokemon Gem Pack Badge Set Pack Simplified Chinese Blind Bag"),
+                         match_key("Chinese Pokemon Gem Pack Badge Set Blind Box"))
+        self.assertEqual(match_key("Pokemon Gem Pack Badge Set Pack Simplified Chinese Blind Bag"),
+                         match_key("Chinese Gem Pack Badge Set"))
+
+    def test_a_numbered_volume_is_still_a_different_product(self):
+        self.assertNotEqual(match_key("Pokemon Gem Pack Badge Set (Vol 1 + 2 + 3) Blind Bag Simplified Chinese"),
+                            match_key("Pokemon Gem Pack Badge Set Pack Simplified Chinese Blind Bag"))

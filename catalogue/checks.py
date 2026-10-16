@@ -312,14 +312,23 @@ def release_candidates(now=None, limit=RELEASE_ROWS):
     A row about a set the site has is listed only when it gives a full date and the set has none (a lone
     community source's date for a set added by hand, say): otherwise it has nothing to add, and a date
     that differs from the set's is under release dates to confirm. Rows about sets released long ago are
-    recorded but never listed.
+    recorded but never listed. Nor, while Claude is on, is a row Claude left unadded for now (set_judge): it
+    is Claude's until what it was sent changes or set_judge.SET_RECHECK passes (set_judge.lift_holds), or the
+    owner undoes it. With Claude off nobody would look again, so those rows are the owner's to see.
     """
+    from .models import ClaudeJudge
     from .releases import local_today, recent_cutoff
 
     cutoff = recent_cutoff(local_today(now or timezone.now()))
     undated_set = Q(product_set__release_date__isnull=True, precision=Release.Precision.DAY)
+    rows = Release.objects.filter(status=Release.Status.PENDING, game__is_active=True)
+    if settings.RIPRAPTOR_CLAUDE:
+        # Still one query: whether Claude is switched on is asked inside it.
+        held = CheckAnswer.objects.filter(kind=CheckAnswer.Kind.SET_HELD, undone_at__isnull=True, release__isnull=False)
+        held = held.filter(Exists(ClaudeJudge.objects.filter(pk=1, enabled=True)))
+        rows = rows.exclude(pk__in=held.values("release_id"))
     return list(
-        Release.objects.filter(status=Release.Status.PENDING, game__is_active=True)
+        rows
         .filter(Q(product_set__isnull=True) | undated_set)
         .filter(Q(release_date__isnull=True) | Q(release_date__gte=cutoff))
         .select_related("game", "product_set").order_by("-first_seen_at", "-pk")[:limit]
@@ -422,6 +431,6 @@ def recent_answers(now=None):
     since = (now or timezone.now()) - timedelta(days=ANSWERS_DAYS)
     return list(
         undoable().filter(created_at__gte=since)
-        .select_related("listing", "shop_product", "product", "release")
+        .select_related("listing", "shop_product", "product", "release", "ask")
         .order_by("-created_at", "-pk")
     )

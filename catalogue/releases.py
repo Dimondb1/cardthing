@@ -1223,6 +1223,77 @@ def add_set(row, name, released=None):
     return product_set
 
 
+# Claude's answers (catalogue/judge.py): a date Claude found on a cited page is written with this source, so
+# it never replaces the owner's date or one a source wrote, and a publisher's date replaces it later.
+CLAUDE = "claude"
+
+
+def claude_file(row, product_set, released=None):
+    """File an announced set under a set the site has, as Claude's answer: the row is accepted under it, and
+    the date Claude verified is written only where may_write_date lets Claude write one (never over the
+    owner's or a source's). Returns {"date_written": the date written or None, "row_set": the row's set
+    before}, what Undo needs."""
+    before = row.product_set_id
+    written = None
+    if released is not None and write_date(product_set, released, CLAUDE):
+        written = released.isoformat()
+    row.product_set = product_set
+    row.status = Release.Status.ACCEPTED
+    row.save(update_fields=["product_set", "status"])
+    link_rows(product_set, row.game, row.name)
+    attach_sets(row.game)
+    return {"date_written": written, "row_set": before}
+
+
+def claude_add_set(row, name, code="", released=None):
+    """Add an announced set under the name, code and date Claude verified. A set the site already has under
+    that code or name, or under the name the source gave, is used instead: never a second set for one set.
+    Returns (the set, whether it was created, what Undo needs)."""
+    existing = (row.product_set or find_set(row.game, name, code) or find_set(row.game, row.name, row.code))
+    if existing is not None:
+        return existing, False, claude_file(row, existing, released)
+    product_set = set_for(row.game, name, code if code and code != name else "")
+    return product_set, True, claude_file(row, product_set, released)
+
+
+def undo_claude_file(row, product_set, note):
+    """Put back what claude_file did: the row waits again, filed where it was, and a date Claude wrote is
+    taken off when it is still Claude's."""
+    written = (note or {}).get("date_written")
+    if product_set is not None and written and product_set.release_date_source == CLAUDE \
+            and product_set.release_date and product_set.release_date.isoformat() == written:
+        product_set.release_date = None
+        product_set.release_date_source = ""
+        product_set.save(update_fields=["release_date", "release_date_source"])
+    row.product_set_id = (note or {}).get("row_set")
+    row.status = Release.Status.PENDING
+    row.save(update_fields=["product_set", "status"])
+
+
+DATE_YMD = re.compile(r"\b(\d{4})[/.](\d{1,2})[/.](\d{1,2})\b")
+DATE_JAPANESE = re.compile(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日")
+
+
+def dates_in(text):
+    """Every full date a text gives, in any of the forms parse_date reads, and 2026/01/23 or 2026年1月23日 as
+    Japanese and Chinese pages write them."""
+    text = " ".join(html.unescape(text or "").split())
+    found = set()
+    for pattern in (ISO_DATE, DATE_YMD, DATE_JAPANESE):
+        for match in pattern.finditer(text):
+            day = safe_date(*match.groups())
+            if day:
+                found.add(day)
+    for pattern, order in ((MONTH_DAY_YEAR, (3, 1, 2)), (DAY_MONTH_YEAR, (3, 2, 1))):
+        for match in pattern.finditer(text):
+            year, month, day = (match.group(i) for i in order)
+            number = month_number(month)
+            day = safe_date(year, number, day) if number else None
+            if day:
+                found.add(day)
+    return found
+
+
 def dismiss(row):
     """The owner's Not a set: the row is never shown again for its game, name and source."""
     row.status = Release.Status.DISMISSED

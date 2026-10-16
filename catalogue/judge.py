@@ -3,8 +3,10 @@ The Claude judge: Claude settles the Things to check rows the free autopilot lea
 sees the few that a rule forbids it to settle. It is a paid service the owner switches on from Things to
 check, with a monthly limit he sets there.
 
-Claude only ever says whether two things the site already holds are the same product. It never supplies
-a price, a date, a barcode or a product. The site's own rules then decide what that answer does (ruling):
+For prices, found pages and pairs, Claude only says whether two things the site already holds are the same
+product. It never supplies a price, a barcode or a product. Announced sets are set_judge's: there Claude
+checks the set on trusted web pages and gives only a name, code and date a page it cites states. The site's
+own rules then decide what that answer does (ruling):
 
 - found at another shop: "same" links the page when the rules allow it (a fairly sure one only within 0.75
   to 1.33 of the other shops' price, after a careful second look otherwise); anything else refuses it, as
@@ -69,7 +71,7 @@ from django.db import DatabaseError
 from django.db.models import Case, Count, Q, Sum, When
 from django.utils import timezone
 
-from . import autopilot, checks, languages, sanity, shop_pages
+from . import autopilot, checks, languages, sanity, set_judge, shop_pages
 from .importers import ean_key
 from .classify import box_contents, find_type
 from .models import CheckAnswer, ClaudeAsk, ClaudeJudge, Listing, Product, ShopProduct
@@ -347,20 +349,23 @@ def price_usage(usage, model):
 
 def cost_micros(message, model_asked, batch=False):
     """What a reply cost: each iteration (the model asked, and any fallback) at its own model's rates, and
-    half that for an answer from a batch."""
+    half that for an answer from a batch, plus every web search it ran at $10 per 1,000, in a batch too."""
     usage = message.usage
     iterations = getattr(usage, "iterations", None) or []
     if iterations:
         total = sum(price_usage(step, getattr(step, "model", None) or model_asked) for step in iterations)
     else:
         total = price_usage(usage, getattr(message, "model", None) or model_asked)
-    return math.ceil(total / 2) if batch else total
+    searches = set_judge.searches_in(usage) * set_judge.SEARCH_MICROS
+    return (math.ceil(total / 2) if batch else total) + searches
 
 
 def worst_case_micros(params, model, batch=False):
     """The most one request could cost: its whole prompt written to the cache and every output token,
     and the same again at the dearest rates when a fallback could run it a second time. In a batch there is
-    no fallback and every token is half price."""
+    no fallback and every token is half price. A set question, with its web searches, is set_judge's."""
+    if params.get("tools"):
+        return set_judge.worst_micros(params, model, batch)
     characters = len(params["system"][0]["text"]) + sum(len(m["content"]) for m in params["messages"])
     return worst_from_characters(characters, model, batch)
 
@@ -458,7 +463,9 @@ def pair_key(first, second):
 
 def fingerprint(evidence):
     """What decides whether a row is asked again: the row, its titles, its price and barcode, never other
-    shops' prices, the model or the effort."""
+    shops' prices, the model or the effort. An announced set's is everything it is sent (set_judge)."""
+    if evidence.get("kind") == "set":
+        return set_judge.fingerprint(evidence)
     keep = {k: evidence.get(k) for k in ("kind", "row", "ours", "first", "second", "shop_title", "price", "price_band",
                                          "barcode", "shop_titles_elsewhere")}
     # Only when the shop gave one: a row without a description keeps the fingerprint it had, so its earlier
@@ -485,6 +492,7 @@ class Row:
     agrees: bool = False       # a pair whose names agree on every point a rule can check
     certainty: str = ""         # a pair's merge_duplicates.certainty
     cheaper: bool = False      # the cheaper price of a wrong match
+    release: object = None     # an announced set (set_judge)
 
     @property
     def fingerprint(self):
@@ -670,6 +678,8 @@ def open_rows(now=None):
     found.sort(key=lambda row: -scores.get(row.suggested_id, 0))
     rows += [build.found(row) for row in found]
     rows += [build.pair(keep, other) for keep, other in pairs]
+    # Announced sets no release rule could settle, of games with trusted domains to search (set_judge).
+    rows += set_judge.rows(now)
     return rows
 
 
@@ -678,20 +688,24 @@ SURE_SAME = {"verdict": "same", "confidence": "high", "differences": []}
 
 def worth(row):
     """Which lane of the asking order a row is in (take_turns): 0 for prices a sure same would tick off (and
-    wrong matches), 1 for duplicate pairs, 2 for found pages a sure same would link, 3 for rows only a
-    "different" can clear."""
+    wrong matches), 1 for duplicate pairs, 2 for found pages a sure same would link, 3 for announced sets,
+    4 for rows only a "different" can clear."""
+    if row.kind == "set":
+        return 3
     if row.kind == "offer":
-        return 0 if row.partner or ruling(row, SURE_SAME)[0] else 3
+        return 0 if row.partner or ruling(row, SURE_SAME)[0] else 4
     if row.kind == "pair":
         return 1
-    return 2 if ruling(row, SURE_SAME)[0] else 3
+    return 2 if ruling(row, SURE_SAME)[0] else 4
 
 
 def waiting(now=None):
     """The open rows to ask about, in the order of worth (each group keeps open_rows' order). Left out as
     well: rows the owner answered after Claude, unchanged rows already asked, and rows asked ASK_LIMIT
     times. An unchanged row whose answer cannot act until Claude has taken a careful second look
-    (ruling's CAREFUL_LOOK) is asked once more at high effort, after the rest."""
+    (ruling's CAREFUL_LOOK) is asked once more at high effort, after the rest, and so is an announced set
+    Claude left unadded for now once set_judge.SET_RECHECK has passed (new pages may say more)."""
+    now = now or timezone.now()
     rows = open_rows(now)
     owner_said = set(Ask.objects.exclude(owner_answer="").values_list("row_key", flat=True))
     # A row whose question waits in a batch is not asked again meanwhile.
@@ -705,6 +719,12 @@ def waiting(now=None):
             continue
         if row.fingerprint in seen:
             ask = latest.get(row.key)
+            if (row.kind == "set" and ask is not None and ask.fingerprint == row.fingerprint and own_answer(ask)
+                    and set_judge.recheck_due(ask, row, now)):
+                row.effort = "high"
+                seen_keys.add(row.key)
+                again.append(row)
+                continue
             if (ask is not None and ask.fingerprint == row.fingerprint and own_answer(ask) and ask.effort != "high"
                     and ruling(row, as_answer(ask), as_answer(latest.get(row.partner)))[1] == CAREFUL_LOOK):
                 row.effort = "high"
@@ -718,29 +738,36 @@ def waiting(now=None):
 
 def take_turns(rows):
     """The rows in the order to ask: a price an answer can clear, a duplicate pair, a found page a sure same
-    would link, and round again, so no kind of row waits behind every row of another however long the list
-    (each lane keeps open_rows' order); then the rows only a "different" can clear. A wrong match's two
-    prices stay together, so one run asks both."""
-    lanes = ([], [], [], [])
+    would link, an announced set, and round again, so no kind of row waits behind every row of another
+    however long the list (each lane keeps open_rows' order); then the rows only a "different" can clear. A
+    wrong match's two prices stay together, so one run asks both."""
+    lanes = ([], [], [], [], [])
     i = 0
     while i < len(rows):
         unit = rows[i:i + 2] if rows[i].partner and rows[i + 1:i + 2] and rows[i + 1].key == rows[i].partner \
             else rows[i:i + 1]
         lanes[worth(unit[0])].append(unit)
         i += len(unit)
-    ordered = [row for turn in zip_longest(*lanes[:3]) for unit in turn if unit for row in unit]
-    return ordered + [row for unit in lanes[3] for row in unit]
+    ordered = [row for turn in zip_longest(*lanes[:4]) for unit in turn if unit for row in unit]
+    return ordered + [row for unit in lanes[4] for row in unit]
 
 
 # Asking ------------------------------------------------------------------------------------------
 
+def evidence_text(evidence):
+    """The evidence as Claude is sent it. No shop's text can close the evidence tag: angle brackets are
+    written as JSON escapes."""
+    data = json.dumps(evidence, sort_keys=True, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
+    return "<evidence>" + data + "</evidence>"
+
+
 def request_params(state, row, cache):
+    if row.kind == "set":
+        return set_judge.request_params(state, row, cache)
     system = {"type": "text", "text": SYSTEM_PROMPT}
     if cache:
         system["cache_control"] = {"type": "ephemeral"}
-    # No shop's text can close the evidence tag: angle brackets are written as JSON escapes.
-    data = json.dumps(row.evidence, sort_keys=True, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
-    content = "<evidence>" + data + "</evidence>"
+    content = evidence_text(row.evidence)
     return {
         "model": state.model,
         "max_tokens": MAX_TOKENS,
@@ -795,7 +822,10 @@ def read_answer(message, row):
 def record_reply(ask, message, batch=False):
     """Save what a reply said and cost on its ClaudeAsk (``batch``: an answer from a Message Batch, at half
     price). Returns (the answer, with whether it was the careful look, or None; its cost in micro-dollars)."""
-    outcome, answer, category = read_answer(message, ask.row_key)
+    if ask.kind == Ask.Kind.SET:
+        outcome, answer, category, sources, searches = set_judge.read(message, ask.row_key, ask.evidence)
+    else:
+        (outcome, answer, category), sources, searches = read_answer(message, ask.row_key), [], 0
     cost = cost_micros(message, ask.model_asked, batch=batch)
     usage = message.usage
     fields = {
@@ -806,11 +836,14 @@ def record_reply(ask, message, batch=False):
         "output_tokens": getattr(usage, "output_tokens", 0) or 0,
         "reserved_micros": 0, "cost_micros": cost, "fallback": from_fallback(message, ask.model_asked),
         "request_id": (getattr(message, "_request_id", None) or getattr(message, "id", "") or "")[:80],
+        "web_searches": min(searches, 32767), "sources": sources,
     }
     if answer is not None:
         answer["careful"] = ask.effort == "high"
         fields.update(verdict=answer["verdict"], confidence=answer["confidence"],
                       differences=answer["differences"], reason=clean(answer["reason"]))
+        if ask.kind == Ask.Kind.SET:
+            fields["set_answer"] = {key: answer[key] for key in set_judge.ANSWER_FIELDS}
     Ask.objects.filter(pk=ask.pk).update(**fields)
     return answer, cost
 
@@ -907,10 +940,16 @@ def submit_batch(client, state, rows, reader, now):
 
     started = time.monotonic()
     requests, asks, reserved, note = [], [], 0, ""
+    searches = 0
     for row in rows:
         if time.monotonic() - started > RUN_SECONDS:
             note = "Stopped for time"
             break
+        if row.kind == "set":
+            # A set question may run up to SET_SEARCHES web searches; a batch holds SEARCHES_PER_RUN at most.
+            if searches + set_judge.SET_SEARCHES > set_judge.SEARCHES_PER_RUN:
+                continue
+            searches += set_judge.SET_SEARCHES
         if reader is not None:
             shop_pages.attach(row, reader)
         params = request_params(state, row, cache=True)
@@ -928,7 +967,7 @@ def submit_batch(client, state, rows, reader, now):
         ask = Ask.objects.create(
             kind=row.kind, row_key=row.key, fingerprint=row.fingerprint, model_asked=state.model,
             effort=row.effort or state.effort, evidence=row.evidence, reserved_micros=worst, asked_at=moment,
-            shop_product=row.shop_product, listing=row.listing, product=row.product, other=row.other,
+            shop_product=row.shop_product, listing=row.listing, product=row.product, other=row.other, release=row.release,
         )
         requests.append({"custom_id": custom_id(ask), "params": params})
         asks.append(ask.pk)
@@ -1088,8 +1127,10 @@ def ruling(row, answer, partner=None):
     Left (None): CAREFUL_LOOK and PARTNER_FIRST until the second look, BARCODE_NEXT_READ until the shop's
     next read records its barcode, and, for the owner (needs_you), only a price Claude says is the product
     while a rule says it is not: the title names another kind of product, or the barcode is not ours. The
-    owner's own answers keep their rows out of all this (open_rows).
+    owner's own answers keep their rows out of all this (open_rows). An announced set is set_judge's.
     """
+    if row.kind == "set":
+        return set_judge.ruling(row, answer)
     verdict, confidence = reading(answer)
     careful = bool(answer.get("careful"))
     plain = set(answer["differences"]) - {"price"}
@@ -1228,6 +1269,8 @@ def as_answer(ask):
     """A stored answer in the shape decide reads, or None."""
     if ask is None or ask.outcome != Ask.Outcome.ANSWERED:
         return None
+    if ask.kind == Ask.Kind.SET:
+        return set_judge.as_answer(ask)
     return {"verdict": ask.verdict, "confidence": ask.confidence, "differences": ask.differences or [],
             "careful": ask.effort == "high"}
 
@@ -1239,7 +1282,10 @@ def act(row, ask, action, now, note=""):
     first checks the row is still as Claude saw it. Returns whether it acted.
 
     A found page Claude may link that the site's price checks stop (another shop's good price would turn
-    doubtful, or a big saving would be claimed) is refused instead: the safe choice, with Undo."""
+    doubtful, or a big saving would be claimed) is refused instead: the safe choice, with Undo. An announced set is
+    set_judge's."""
+    if row.kind == "set":
+        return set_judge.act(row, ask, action, now)
     why = f"Claude: {ask.reason}{note}"
     pilot = autopilot.Autopilot(now=now)
     refs = {"ask": ask}
@@ -1390,6 +1436,8 @@ def unchanged(row):
 
 def refetch(row):
     """The row as it stands now, built the same way, or None when it no longer waits."""
+    if row.kind == "set":
+        return set_judge.refetch(row)
     if row.kind == "found":
         shop_row = checks.found_waiting().select_related("retailer", "suggested__game", "suggested__product_set") \
             .filter(pk=row.shop_product.pk).first()
@@ -1589,8 +1637,10 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
     if not dry_run and autopilot.enabled():
         autopilot.run(now=now)
     if not dry_run:
-        # Pairs kept apart for now whose evidence changed come back to be asked about.
+        # Pairs kept apart for now, and sets left unadded for now, whose evidence changed come back to be asked
+        # about (a set also once set_judge.SET_RECHECK has passed).
         lift_holds()
+        set_judge.lift_holds(now)
         # Answers given in trial, or before the row's other checks agreed, are free to act on now.
         result.earlier = result.acted = act_on_earlier(now, hides)
     if pending:
@@ -1650,6 +1700,7 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
             result.sent, note = submit_batch(client, state, rows, reader, now)
             result.note = result.note or note
             rows = []
+        searches = 0
         for row in rows:
             state = ClaudeJudge.load()
             if not state.enabled or not key():
@@ -1661,6 +1712,12 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
             if time.monotonic() - started > RUN_SECONDS:
                 result.note = "Stopped for time"
                 break
+            if row.kind == "set":
+                # A set question may run up to SET_SEARCHES web searches; a run holds SEARCHES_PER_RUN at most,
+                # and the other rows go on.
+                if searches + set_judge.SET_SEARCHES > set_judge.SEARCHES_PER_RUN:
+                    continue
+                searches += set_judge.SET_SEARCHES
             if reader is not None:
                 # The shop's own page, read now (or kept from a read in the last day). Its facts are
                 # sent, and counted in the request's worst case below, but never in the fingerprint.
@@ -1679,7 +1736,7 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
             ask = Ask.objects.create(
                 kind=row.kind, row_key=row.key, fingerprint=row.fingerprint, model_asked=state.model,
                 effort=row.effort or state.effort, evidence=row.evidence, reserved_micros=worst, asked_at=moment,
-                shop_product=row.shop_product, listing=row.listing, product=row.product, other=row.other,
+                shop_product=row.shop_product, listing=row.listing, product=row.product, other=row.other, release=row.release,
             )
             try:
                 message = send(client, params)
@@ -1892,6 +1949,34 @@ def attach_answers(doubtful, wrong, found, duplicates, may_act=False):
         tally[item.claude.verdict if item.claude is not None else "none"] += 1
         tally["total"] += 1
     return counts
+
+
+def attach_set_answers(rows, may_act=False):
+    """Give each announced set the page lists a ``claude`` attribute: Claude's latest answer about it (with its
+    sources) while the row is still what Claude was asked about and the owner has not answered it, else None.
+    While Claude may act, each answer says why it has not acted, as attach_answers does. Returns how many rows
+    Claude has answered. A few queries, whatever the number of rows."""
+    rows = list(rows)
+    for row in rows:
+        row.claude = None
+    if not rows:
+        return 0
+    build = set_judge.Builder(rows)
+    built = {f"set:{row.pk}": (build.row(row), row) for row in rows}
+    latest = latest_answers(set(built))
+    answered = set_judge.answered_rows([row.pk for row in rows]) if may_act else set()
+    shown = 0
+    for key, (row, release) in built.items():
+        ask = latest.get(key)
+        if ask is None or ask.fingerprint != row.fingerprint or ask.owner_answer:
+            continue
+        release.claude = ask
+        shown += 1
+        if may_act:
+            why, yours = left_reason(row, ask, answered=release.pk in answered)
+            ask.left_because = why if yours else ""
+            ask.next_step = "" if yours else why
+    return shown
 
 
 def answered_before(rows):

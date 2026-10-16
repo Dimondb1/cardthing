@@ -80,6 +80,8 @@ NOT_SEALED = re.compile(
     # A plush packed in a tin with booster packs is the tin ("Electric Plush Blind Box Tin", Solent Cards), also
     # in an address that glues the tin to the next word ("...-blind-box-tinsimplified-chinese"). Not "tiny".
     r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b(?!.*\btins?(?![a-rt-z]))|\bkeyring\b|\bposter\b(?! box)|"
+    # Merchandise sold in a blind bag or box, not a card pack: the Gem Pack badge, coin and display-frame sets.
+    r"\bbadge sets?\b|\bcoin sets?\b|\bdisplay frame\b|"
     r"\bcode card\b|\bgraded\b|\bpsa\b|\bcgc\b|\bproxy\b|\bbulk\b|\blot of\b|\bjapanese single|\bpromo card\b|"
     r"\(near mint\)|\bnear mint\b|\blightly played\b|\bmoderately played\b|\(nm\)|\bpromo pack\b|\bpromotion pack\b|\bpower pack\b|"
     r"\bborderless\b|\bextended art\b|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"

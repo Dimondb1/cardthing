@@ -961,7 +961,10 @@ any other shop's page for its schema.org product data, Open Graph tags,
 title and heading, and an eBay listing through eBay's own item lookup
 (never its page). Amazon, feed shops (affiliate links the site never
 follows) and hand-entered prices are not read, nor is a shop that is
-paused, switched off, waiting after errors or being read right now, nor a
+paused, switched off, waiting after errors, being read right now (asked
+again before every request) or asked by the background reader in the last
+30 seconds (it notes each shop it asks in the shared cache, so the two
+never add up to more than the shop's pace), nor a
 page the shop's robots.txt keeps robots away from (a robots.txt that answers
 401 or 403 keeps robots away from every page; one that cannot be read, a
 5xx, a 429 or a timeout, stops that shop's pages for an hour). A redirect is followed

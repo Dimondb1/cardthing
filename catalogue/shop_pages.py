@@ -16,14 +16,15 @@ Only the shops the owner added are asked, and only the way their reads already a
 
 Amazon, feed shops (their links are affiliate clicks a server never follows) and prices entered by hand
 are not read. Neither is a shop that is paused, switched off, waiting after errors, being read right
-now, or whose robots.txt asks robots to stay away from the page (a 401 or 403 for robots.txt counts as
-asking robots to stay away from every page; one that could not be read stops that shop's pages for an
-hour). A redirect is followed only within the shop's own site
-(another site's page is never read and never reported as the shop's), never into a private network,
-and a redirect to another page of the shop is reported as the address having moved. Each shop is asked
-no faster than its reads (worker.RATES), with one try, a short timeout and no retries; a 429 or three failures in a row
-stop the shop being asked for the rest of the run, and nothing here touches the shop's read back-off.
-A run reads at most PAGES_PER_RUN pages in PAGE_SECONDS.
+now (checked before every request), or asked by the background reader in the last WORKER_QUIET (its
+probes, pulses and reads note each shop they ask in the shared cache, worker.note_asked), nor a page the
+shop's robots.txt keeps robots away from (a 401 or 403 for robots.txt keeps them from every page; one
+that could not be read stops that shop's pages for an hour). A redirect is followed only within the
+shop's own site (another site's page is never read and never reported as the shop's), never into a
+private network, and a redirect to another page of the shop is reported as the address having moved.
+Each shop is asked no faster than its reads (worker.RATES), with one try, a short timeout and no
+retries; a 429 or three failures in a row stop the shop being asked for the rest of the run, and
+nothing here touches the shop's read back-off. A run reads at most PAGES_PER_RUN pages in PAGE_SECONDS.
 
 What a page said is kept for a day per address (Django's cache), so asking again, the high-effort
 second look and the next run never read the same page twice; a page that could not be read is tried
@@ -64,6 +65,8 @@ PAGES_PER_RUN = 60
 PAGE_SECONDS = 180
 FETCH_SECONDS = 10
 ERRORS_IN_A_ROW = 3
+# A shop the background reader asked this recently is left alone: its pace is the worker's.
+WORKER_QUIET = timedelta(seconds=30)
 # How much of a page is sent: a short excerpt of the description, a few variant names. The facts of one
 # page come to well under MAX_FACT_CHARS characters of evidence (about 300 tokens).
 EXCERPT_CHARS = 300
@@ -231,10 +234,11 @@ class Reader:
     reads nothing new (a dry run)."""
 
     def __init__(self, fetch_for=None, ebay_request=None, clock=None, sleep=None, now=None,
-                 pages=PAGES_PER_RUN, seconds=PAGE_SECONDS, cache_only=False):
+                 pages=PAGES_PER_RUN, seconds=PAGE_SECONDS, cache_only=False, wall=None):
         self.fetch_for = fetch_for or default_fetch_for
         self.ebay_request = ebay_request
         self.clock = clock or time.monotonic
+        self.wall = wall or time.time
         self.sleep = sleep or time.sleep
         self.now = now
         self.pages_left = pages
@@ -245,7 +249,6 @@ class Reader:
         self.last = {}
         self.errors = {}
         self.blocked = {}
-        self.reading = {}
         self.ebay_headers = None
         self.requests = 0
 
@@ -269,7 +272,7 @@ class Reader:
                 found = self.read_shopify(url, retailer)
             else:
                 found = self.read_page(url, retailer)
-        except OutOfTime as stopped:
+        except NotNow as stopped:
             return {"status": "not read", "why": str(stopped)}
         except Exception:   # a page must never stop a run
             logger.warning("Claude judge: reading %s failed", url, exc_info=True)
@@ -302,6 +305,8 @@ class Reader:
                 return "the address is not on this shop's site"
             if self.being_read(retailer):
                 return "the shop is being read now"
+            if self.worker_asking(retailer):
+                return "the stock watcher is asking this shop now"
         return self.out_of_budget()
 
     def out_of_budget(self):
@@ -312,12 +317,20 @@ class Reader:
         return ""
 
     def being_read(self, retailer):
-        """Whether a read of the shop is running now: the page waits, so the judge never competes with it."""
-        if retailer.pk not in self.reading:
-            since = timezone.now() - importers.ABANDONED_AFTER
-            self.reading[retailer.pk] = ImportRun.objects.filter(
-                retailer_id=retailer.pk, finished_at__isnull=True, started_at__gte=since).exists()
-        return self.reading[retailer.pk]
+        """Whether a read of the shop is running now: the page waits, so the judge never competes with it.
+        Asked again before every request (one small query), so a read that starts mid-run is seen."""
+        since = timezone.now() - importers.ABANDONED_AFTER
+        return ImportRun.objects.filter(
+            retailer_id=retailer.pk, finished_at__isnull=True, started_at__gte=since).exists()
+
+    def worker_asking(self, retailer):
+        """Whether the background reader (its probes, pulses and reads) asked the shop in the last
+        WORKER_QUIET: the judge then leaves the shop alone, so the two never add up to more than the
+        shop's pace and the judge never slows the worker."""
+        from .worker import last_asked
+
+        asked = last_asked(retailer.pk)
+        return asked is not None and self.wall() - asked < WORKER_QUIET.total_seconds()
 
     # Asking the shop ----------------------------------------------------------------------------
 
@@ -336,6 +349,12 @@ class Reader:
             wait = last + 1 / rate - self.clock()
             if wait > 0:
                 self.sleep(wait)
+        # Checked right before the request, after any wait: a shop read or the stock watcher that
+        # started since the run began has the shop to itself.
+        if self.being_read(retailer):
+            raise NotNow("the shop is being read now")
+        if self.worker_asking(retailer):
+            raise NotNow("the stock watcher is asking this shop now")
         self.pages_left -= 1
         self.requests += 1
         if retailer.pk not in self.fetches:
@@ -540,7 +559,11 @@ class Reader:
         return found
 
 
-class OutOfTime(Exception):
+class NotNow(Exception):
+    """The page is not read in this run (nothing is kept, so a later run reads it)."""
+
+
+class OutOfTime(NotNow):
     pass
 
 

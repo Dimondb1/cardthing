@@ -479,3 +479,51 @@ class RobotsTests(ReaderBase):
         pages = Pages({})
         self.assertEqual(self.reader(pages).facts(self.page, self.store)["why"],
                          "the shop's robots.txt asks robots not to read this page")
+
+
+class SharingTheShopTests(ReaderBase):
+    """The judge never reads alongside a shop read or the background reader, whenever they start."""
+
+    def setUp(self):
+        super().setUp()
+        self.store = self.website()
+        self.first, self.second = f"{self.store.website}product/a", f"{self.store.website}product/b"
+        self.pages = Pages({self.first: recorded("website_product.html"), self.second: recorded("website_product.html")})
+
+    def test_a_read_that_starts_mid_run_is_seen_before_the_next_request(self):
+        reader = self.reader(self.pages)
+        self.assertEqual(reader.facts(self.first, self.store)["status"], "product")
+        ImportRun.objects.create(retailer=self.store, started_at=timezone.now())
+        self.assertEqual(reader.facts(self.second, self.store)["why"], "the shop is being read now")
+        self.assertEqual(self.pages.pages_asked(), [self.first])
+        # Nothing was kept for the page it left, so the next run reads it.
+        self.assertIsNone(cache.get(shop_pages.cache_key(self.second)))
+
+    def test_a_read_that_starts_during_the_pace_wait_is_seen(self):
+        def sleep(seconds):
+            ImportRun.objects.create(retailer=self.store, started_at=timezone.now())
+        reader = self.reader(self.pages, sleep=sleep)
+        reader.facts(self.first, self.store)   # robots.txt, then a wait before the page
+        self.assertEqual(self.pages.pages_asked(), [])
+
+    def test_a_shop_the_background_reader_is_asking_is_left_alone(self):
+        from . import worker
+
+        worker.note_asked(self.store.pk, at=1000.0)
+        reader = self.reader(self.pages, wall=lambda: 1000.0 + shop_pages.WORKER_QUIET.total_seconds() - 1)
+        self.assertEqual(reader.facts(self.first, self.store)["why"], "the stock watcher is asking this shop now")
+        self.assertEqual(self.pages.asked, [])
+        reader = self.reader(self.pages, wall=lambda: 1000.0 + shop_pages.WORKER_QUIET.total_seconds() + 1)
+        self.assertEqual(reader.facts(self.first, self.store)["status"], "product")
+
+    def test_the_background_reader_notes_each_shop_it_asks(self):
+        from . import worker
+
+        politeness = worker.Politeness(lambda: 0.0, lambda seconds: None)
+        fetch = politeness.wrap(self.store, lambda url: b"ok")
+        self.assertIsNone(worker.last_asked(self.store.pk))
+        fetch(self.first)
+        self.assertAlmostEqual(worker.last_asked(self.store.pk), __import__("time").time(), delta=5)
+        # A probe that starts mid-run stops the judge's next request.
+        reader = self.reader(self.pages)
+        self.assertEqual(reader.facts(self.second, self.store)["why"], "the stock watcher is asking this shop now")

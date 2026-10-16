@@ -583,3 +583,31 @@ class BlindPackingTests(TestCase):
     def test_a_numbered_volume_is_still_a_different_product(self):
         self.assertNotEqual(match_key("Pokemon Gem Pack Badge Set (Vol 1 + 2 + 3) Blind Bag Simplified Chinese"),
                             match_key("Pokemon Gem Pack Badge Set Pack Simplified Chinese Blind Bag"))
+
+
+class CertaintyLevelTests(TestCase):
+    def setUp(self):
+        self.game = make_game()
+        self.set = make_set(self.game)
+        self.count = 0
+
+    def product(self, name, product_type="booster_box"):
+        self.count += 1
+        return Product.objects.create(game=self.game, product_set=self.set, name=name, product_type=product_type,
+                                      slug=f"product-{self.count}")
+
+    def level(self, first, second, first_type="booster_box", second_type="booster_box"):
+        from .management.commands.merge_duplicates import certainty
+
+        return certainty(self.product(first, first_type), self.product(second, second_type))
+
+    def test_the_four_levels(self):
+        from .management.commands.merge_duplicates import CERTAIN, DIFFERENT, LIKELY, POSSIBLE
+
+        self.assertEqual(self.level("Surging Sparks Booster Box", "Surging Sparks Booster Display Box"), CERTAIN)
+        self.assertEqual(self.level("Surging Sparks Booster Box Exclusive", "Surging Sparks Booster Box"), LIKELY)
+        self.assertEqual(self.level("Gem Pack Vol 4 Booster Box", "Gem Pack Vol 6 Booster Box"), DIFFERENT)
+        self.assertEqual(self.level("Surging Sparks Booster Box", "Surging Sparks Collector Booster Box"), DIFFERENT)
+        self.assertEqual(self.level("Surging Sparks Booster Box", "Surging Sparks Booster Box Japanese"), DIFFERENT)
+        self.assertEqual(self.level("Surging Sparks Booster Box", "Surging Sparks Booster Box", "booster_box", "bundle"),
+                         POSSIBLE)

@@ -627,3 +627,31 @@ class Command(BaseCommand):
             clear_list_caches(force=True)
         shown = Product.objects.filter(is_active=True).count()
         self.stdout.write(f"{merged} products merged, {moved} listings moved. {shown} products are shown.")
+
+
+# How sure a possible duplicate is, from the rules alone (Claude's own rating is shown beside it).
+CERTAIN, LIKELY, POSSIBLE, DIFFERENT = "certain", "likely", "possible", "different"
+CERTAINTY_LABELS = {
+    CERTAIN: "Certain: same name, numbers and language",
+    LIKELY: "Likely: same product words, one detail to check",
+    POSSIBLE: "Possible: shares a code or set only",
+    DIFFERENT: "Different: a number, language, edition or kind differs",
+}
+
+
+def certainty(keep, other):
+    """One of CERTAIN, LIKELY, POSSIBLE or DIFFERENT for a pair duplicate_pairs found.
+
+    DIFFERENT is any conflict why_not_merge names. CERTAIN is the strict key the hourly merge uses, of the same
+    kind of product. LIKELY shares the loose key of the same kind. Anything else only shares a code or set."""
+    if why_not_merge(keep, other):
+        return DIFFERENT
+    if product_language(keep) != product_language(other):
+        return DIFFERENT
+    if keep.product_type != other.product_type:
+        return POSSIBLE
+    if merge_key(keep.name, keep.game.slug) == merge_key(other.name, other.game.slug) and merge_key(keep.name, keep.game.slug):
+        return CERTAIN
+    if loose_key(keep.name, keep.game.slug) == loose_key(other.name, other.game.slug) and loose_key(keep.name, keep.game.slug):
+        return LIKELY
+    return POSSIBLE

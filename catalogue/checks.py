@@ -193,7 +193,7 @@ def duplicates():
     kept, so its price stays on the site. Two others one shop shows side by side go under their keep
     separately, so Merge these never joins them.
     """
-    from .management.commands.merge_duplicates import duplicate_pairs
+    from .management.commands.merge_duplicates import certainty, duplicate_pairs
 
     pairs = duplicate_pairs()
     if not pairs:
@@ -222,7 +222,9 @@ def duplicates():
             taken, members = group
             taken.update({shop: shown or taken.get(shop, False) for shop, shown in theirs.items()})
             # Its own copy for each pair: the page hangs Claude's answer about this pair on it.
-            members.append(copy(other))
+            member = copy(other)
+            member.certainty = certainty(keep, other)
+            members.append(member)
         found += [(keep, members) for _, members in groups]
     return found
 

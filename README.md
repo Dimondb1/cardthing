@@ -682,6 +682,16 @@ listed because a community source says otherwise.
 
 ### Possible duplicates
 
+Each pair is labelled with how sure the rules are, from the names alone:
+- **Certain:** the same strict name, numbers and language. The hourly merge joins these itself.
+- **Likely:** the same product words, with one detail (such as a word like "Exclusive") to check.
+- **Possible:** shares only a code or set.
+- **Different:** a number, language, edition or kind differs. Never merged.
+
+Claude's rating sits beside each pair. Labels come from the rules, not from Claude, so a
+percentage is never taken as proof. `python manage.py certainty_sample` prints a random sample
+of each level, for checking by hand before trusting a level.
+
 Possible duplicates are pairs, each a product to keep and one to merge into
 it, found by any key two names of one product share in one game and
 language (`merge_duplicates.duplicate_pairs`):

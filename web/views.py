@@ -1718,6 +1718,7 @@ def checks_page(request):
         "doubtful_left": max(0, counts["doubtful"] - doubtful_count - checked_count), "checked_count": checked_count,
         "excluded": checks.excluded_prices(), "counts": counts,
         "wrong": wrong, "duplicates": duplicates, "sure_pairs": judge.sure_pairs(duplicates),
+        "duplicate_levels": sorted(Counter(other.certainty for _, others in duplicates for other in others).items()),
         "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
         "found": found, "found_count": checks.found_waiting().count(),

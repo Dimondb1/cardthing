@@ -1208,6 +1208,7 @@ ENTRIES = [
     Entry("contact.thread.forgot", T, "Email deleted note", "Your email address has been deleted. Replies still show on this page.", "After the email address is deleted."),
 
     # Footer ---------------------------------------------------------------
+    Entry("footer.follow", T, "Footer follow heading", "Follow us", "Above the social media icons in the footer."),
     Entry(
         "footer.line", T, "Footer line",
         "Prices include UK delivery. RipRaptor may earn a commission when you buy, and featured deals favour shops that pay one.",

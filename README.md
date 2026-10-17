@@ -1257,7 +1257,7 @@ with no listings says so.
 
 The full commission, independence, price and data statements live on
 `/terms/`. Every page's footer carries one short line and a link to it. All
-of that wording is under Admin > Site wording > Legal and disclosure text.
+of that wording is under Admin > Site wording > Legal and disclosure text. The footer also has "Follow us" with Instagram (`ripraptor_uk`), Facebook (`ripraptor`) and TikTok (`@ripraptoruk`) icons. They are drawn in `includes/social/` and take their size from `--icon-social`; they open in a new tab.
 
 ## Swipe page
 

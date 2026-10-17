@@ -2486,3 +2486,19 @@ class StockTabsScriptTests(TestCase):
         settle = script[script.index("function settle() {"):]
         self.assertTrue(settle.split("\n")[1].strip() == "if (!touched) return;")
         self.assertIn('["pointerdown", "touchstart", "wheel", "keydown"]', script)
+
+
+class SocialLinksTests(TestCase):
+    def test_every_page_footer_links_to_the_three_accounts_in_a_new_tab(self):
+        html = self.client.get(reverse("web:home")).content.decode()
+        footer = html[html.index('<footer class="site-footer">'):]
+        self.assertIn("<p class=\"site-footer__follow-title\">Follow us</p>", footer)
+        for href, name in (
+            ("https://www.instagram.com/ripraptor_uk/", "Instagram"),
+            ("https://www.facebook.com/ripraptor", "Facebook"),
+            ("https://www.tiktok.com/@ripraptoruk", "TikTok"),
+        ):
+            with self.subTest(name=name):
+                link = footer[footer.index(f'href="{href}"') - 60:footer.index(f"RipRaptor on {name}")]
+                self.assertIn('target="_blank" rel="noopener"', link)
+                self.assertIn('class="social__link"', link)

@@ -1,7 +1,17 @@
 {% load sitecopy %}
 <footer class="site-footer">
   <div class="site-footer__inner">
-    <p class="site-footer__line">{% copy "footer.line" %}{% if amazon_associate %} {% copy "terms.amazon" %}{% endif %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
+    <div class="site-footer__about">
+      <p class="site-footer__line">{% copy "footer.line" %}{% if amazon_associate %} {% copy "terms.amazon" %}{% endif %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
+      <div class="site-footer__follow">
+        <p class="site-footer__follow-title">{% copy "footer.follow" %}</p>
+        <ul class="social">
+          <li><a class="social__link" href="https://www.instagram.com/ripraptor_uk/" target="_blank" rel="noopener">{% include "web/includes/social/instagram.svg" %}<span class="visually-hidden">RipRaptor on Instagram (opens in a new tab)</span></a></li>
+          <li><a class="social__link" href="https://www.facebook.com/ripraptor" target="_blank" rel="noopener">{% include "web/includes/social/facebook.svg" %}<span class="visually-hidden">RipRaptor on Facebook (opens in a new tab)</span></a></li>
+          <li><a class="social__link" href="https://www.tiktok.com/@ripraptoruk" target="_blank" rel="noopener">{% include "web/includes/social/tiktok.svg" %}<span class="visually-hidden">RipRaptor on TikTok (opens in a new tab)</span></a></li>
+        </ul>
+      </div>
+    </div>
     <nav class="site-footer__nav" aria-label="Footer">
       <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a>
       <a href="{% url 'web:deals' %}">{% copy "site.nav.deals" %}</a>

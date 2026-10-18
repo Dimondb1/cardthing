@@ -141,8 +141,15 @@ RETURN_COOKIE = "rr_back"
 RETURN_COOKIE_DAYS = 365
 
 
-def record_visitor(request):
-    """Note this visitor's page for today. False once they are past the daily cap, so the page is not counted."""
+def landing_of(kind, key=""):
+    """The page a visitor's day started on, as "kind:key" or just the kind: no query string, nothing personal."""
+    return (f"{kind}:{key}" if key else str(kind))[:120]
+
+
+def record_visitor(request, kind="", key=""):
+    """Note this visitor's page for today. False once they are past the daily cap, so the page is not counted.
+
+    A new visitor's row also keeps when they arrived and the page they arrived on, for the traffic explainer."""
     day = timezone.localdate()
     token = visitor_token(request, day)
     seen = DailyVisitor.objects.filter(date=day, token=token, views__lt=VIEWS_PER_VISITOR_CAP)
@@ -155,6 +162,7 @@ def record_visitor(request):
                 date=day, token=token, country=geo.country_of(client_ip(request)),
                 device=device_of(request), source=source_of(request),
                 returning=request.COOKIES.get(RETURN_COOKIE) == "1", views=1,
+                first_seen=timezone.now(), landing=landing_of(kind, key) if kind else "",
             )
 
     try:
@@ -170,7 +178,7 @@ def record_view(request, kind, key=""):
         # The first count that finds the database locked ends counting for this page, so a visitor
         # waits at most one busy timeout, never one per count.
         with drop_if_locked("Page view"):
-            if record_visitor(request):
+            if record_visitor(request, kind, key):
                 bump(DailyPageView, kind=kind, key=key[:220])
 
 

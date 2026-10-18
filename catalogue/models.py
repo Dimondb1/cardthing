@@ -1182,6 +1182,11 @@ class DailyVisitor(models.Model):
     source = models.CharField(max_length=80, blank=True)   # the site that sent them, domain only; empty means typed or bookmarked
     returning = models.BooleanField(default=False)         # their browser carried the "been here before" cookie
     views = models.PositiveIntegerField(default=0)         # pages they opened that day, so a scraper can be capped
+    # When their first counted page of the day was opened (empty on rows from before 18 Oct 2026), so part of
+    # a day can be compared with the same hours of another day, and the kind of that page with its slug, for
+    # example "product:prismatic-evolutions-etb", "game:pokemon" or "home". Neither says who they are.
+    first_seen = models.DateTimeField(null=True, blank=True)
+    landing = models.CharField(max_length=120, blank=True)
 
     class Meta:
         unique_together = [("date", "token")]

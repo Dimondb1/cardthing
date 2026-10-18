@@ -1,12 +1,14 @@
 {% extends "admin/base_site.html" %}
+{% load sitecopy %}
 {% block title %}Insights | {{ site_title }}{% endblock %}
 {% block extrastyle %}{{ block.super }}<style>
-  .ins { display: grid; gap: 24px; max-width: 70rem; }
+  .ins { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; max-width: 70rem; }
   .ins__totals { display: flex; flex-wrap: wrap; gap: 16px; }
   .ins__total { padding: 12px 16px; border: 1px solid var(--hairline-color, #ddd); border-radius: 8px; min-width: 10rem; }
   .ins__total b { display: block; font-size: 1.6rem; }
-  .ins__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 24px; }
+  .ins__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr)); gap: 24px; }
   .ins table { width: 100%; }
+  .ins .module { overflow-x: auto; }
   .ins td.wrap { overflow-wrap: anywhere; }
   .ins td.wrap .bad { display: block; }
   .ins td.n { text-align: right; white-space: nowrap; }
@@ -39,6 +41,40 @@
     <span>{{ since }} to {{ today }}. A visitor is one person for one day; nobody is identified and only their country is kept.</span>
   </form>
 
+  <div class="module ins__why" id="why">
+    <h2>{% copy "insights.why.heading" %}</h2>
+    <p class="quiet">{% copy "insights.why.intro" %}</p>
+    {% if why.enough %}
+    <p><b>{{ why.headline }}</b></p>
+    {% if why.findings|length > 1 %}<ol class="ins__todo">
+      {% for f in why.findings|slice:"1:" %}<li><p{% if f.tone == "bad" %} class="bad"{% endif %}>{{ f.text }}</p>{% if f.check %}<span class="quiet">{{ f.check }}</span>{% endif %}</li>{% endfor %}
+    </ol>{% elif why.findings.0.check %}<p class="quiet">{{ why.findings.0.check }}</p>{% endif %}
+
+    {% for cmp in why.comparisons %}
+    <h3>{{ cmp.label }}</h3>
+    <table>
+      <thead><tr><th></th><th class="n">Then</th><th class="n">Now</th><th class="n">Change</th></tr></thead>
+      <tbody>
+        <tr><td>People <span class="quiet">{{ cmp.basis }}</span></td><td class="n">{{ cmp.then|floatformat:0 }}</td><td class="n">{{ cmp.now }}</td><td class="n">{{ cmp.drivers.signed }}</td></tr>
+        <tr><td>Clicks to shops</td><td class="n">{{ cmp.then_clicks|floatformat:0 }}</td><td class="n">{{ cmp.now_clicks }}</td><td class="n"></td></tr>
+        {% for ref in cmp.references|slice:"1:" %}<tr><td>People <span class="quiet">{{ ref.basis }}</span></td><td class="n">{{ ref.then }}</td><td class="n">{{ cmp.now }}</td><td class="n"></td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% if cmp.drivers.sources %}<table>
+      <thead><tr><th>Source</th><th class="n">Then</th><th class="n">Now</th><th class="n">Change</th></tr></thead>
+      <tbody>{% for row in cmp.drivers.sources %}<tr><td class="wrap">{{ row.label }}</td><td class="n">{{ row.then|floatformat:0 }}</td><td class="n">{{ row.now }}</td><td class="n">{{ row.signed }} ({{ row.share }}%)</td></tr>{% endfor %}</tbody>
+    </table>{% endif %}
+    {% endfor %}
+
+    {% if why.bursts %}<h3>Burst days, left out of the averages</h3>
+    <ul class="ins__rows">{% for b in why.bursts %}<li>{{ b.date|date:"D j M" }}{% if b.today %} (so far){% endif %}: {{ b.reasons|join:"; " }}</li>{% endfor %}</ul>{% endif %}
+
+    <h3>Health</h3>
+    {% if why.health %}<ul class="ins__rows">{% for h in why.health %}<li class="bad">{{ h.text }}</li>{% endfor %}</ul>
+    {% else %}<p>{{ why.healthy }}</p>{% endif %}
+    {% else %}<p>{{ why.headline }}</p>{% endif %}
+  </div>
+
   <div class="module">
     <h2>Areas to improve</h2>
     {% if improvements %}
@@ -65,7 +101,7 @@
     <h2>By day</h2>
     <table>
       <thead><tr><th>Day</th><th>Visitors</th><th>Returning</th><th>Page views</th><th>Clicks</th></tr></thead>
-      <tbody>{% for d in by_day reversed %}<tr><td>{{ d.date|date:"D j M" }}</td><td class="n">{{ d.visitors }}</td><td class="n">{{ d.returning }}</td><td class="n">{{ d.views }}</td><td class="n">{{ d.clicks }}</td></tr>{% endfor %}</tbody>
+      <tbody>{% for d in by_day reversed %}<tr><td>{{ d.date|date:"D j M" }}{% if d.date == today %}<span class="quiet">so far, to {{ why.now|time:"H:i" }}</span>{% endif %}{% if d.burst %}<span class="quiet bad">burst, left out</span>{% endif %}</td><td class="n">{{ d.visitors }}</td><td class="n">{{ d.returning }}</td><td class="n">{{ d.views }}</td><td class="n">{{ d.clicks }}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 

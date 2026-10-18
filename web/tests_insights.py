@@ -618,3 +618,75 @@ class LeftOutLinesTests(TestCase):
         self.assertEqual(list(insights.each_line("a\r\nb\n\nc")), ["a", "b", "", "c"])
         self.assertEqual(list(insights.each_line("a\n")), ["a"])
         self.assertEqual(list(insights.each_line("")), [])
+
+
+class TrafficExplainerPageTests(TestCase):
+    """The "Why traffic changed" section at the top of Insights, and what counting keeps for it."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user("ben", password="pw", is_staff=True)
+        self.product = make_product(make_set(make_game()))
+
+    def fill(self, days, people):
+        from catalogue.models import DailyVisitor
+
+        today = timezone.localdate()
+        rows = []
+        for back in range(1, days + 1):
+            day = today - timedelta(days=back)
+            for n in range(people):
+                rows.append(DailyVisitor(date=day, token=f"{back}-{n}", views=2, source="google.com" if n % 2 else "",
+                                         landing="home", first_seen=timezone.now() - timedelta(days=back)))
+        # One day of scripts: a hundred visitors at the cap.
+        burst = today - timedelta(days=3)
+        rows += [DailyVisitor(date=burst, token=f"s{n}", views=insights.VIEWS_PER_VISITOR_CAP) for n in range(100)]
+        DailyVisitor.objects.bulk_create(rows)
+        return burst
+
+    def test_the_explainer_renders_above_by_day_with_the_burst_and_today_marked(self):
+        burst = self.fill(20, 40)
+        self.client.force_login(self.staff)
+        self.client.get(self.product.get_absolute_url(), **HUMAN)
+        html = self.client.get(reverse("insights")).content.decode()
+        self.assertIn("Why traffic changed", html)
+        self.assertLess(html.index("Why traffic changed"), html.index("By day"))
+        self.assertIn("so far, to ", html)
+        self.assertIn("burst, left out", html)
+        self.assertIn(f"{burst:%a} {burst.day} {burst:%b}", html)
+        self.assertNotIn("—", html)
+        self.assertNotIn("!", html[html.index('id="why"'):html.index("By day")])
+
+    def test_the_page_runs_in_a_bounded_number_of_queries_whatever_the_traffic(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self.client.force_login(self.staff)
+        self.fill(10, 25)
+        with CaptureQueriesContext(connection) as small:
+            self.client.get(reverse("insights"))
+        from catalogue.models import DailyVisitor
+
+        DailyVisitor.objects.all().delete()
+        self.fill(30, 60)
+        with CaptureQueriesContext(connection) as large:
+            self.client.get(reverse("insights"))
+        self.assertEqual(len(small), len(large))
+        self.assertLessEqual(len(large), 60)
+
+    def test_a_new_visitor_keeps_when_and_where_they_arrived_at_no_extra_cost(self):
+        from django.test import RequestFactory
+
+        from catalogue.models import DailyVisitor
+
+        factory = RequestFactory()
+        # 8 queries for a new visitor and 4 for their next page, the same as before arrival times were kept.
+        with self.assertNumQueries(8):
+            insights.record_view(factory.get("/x/", **HUMAN), DailyPageView.Kind.PRODUCT, self.product.slug)
+        with self.assertNumQueries(4):
+            insights.record_view(factory.get("/x/", **HUMAN), DailyPageView.Kind.PRODUCT, self.product.slug)
+        row = DailyVisitor.objects.get()
+        self.assertEqual(row.landing, f"product:{self.product.slug}")
+        self.assertIsNotNone(row.first_seen)
+        self.assertEqual(row.views, 2)
+        self.client.get(reverse("web:home"), HTTP_USER_AGENT="Mozilla/5.0 (Windows NT 10.0) Chrome/124")
+        self.assertEqual(DailyVisitor.objects.exclude(pk=row.pk).get().landing, "home")

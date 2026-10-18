@@ -21,7 +21,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_POST
 
-from catalogue import alerts, insights, mail, offers, pricing
+from catalogue import alerts, insights, mail, offers, pricing, traffic
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, RemovedProduct, Retailer, stale_cutoff,
@@ -1476,7 +1476,11 @@ def insights_page(request):
         days = min(max(int(request.GET.get("days", 30)), 1), 365)
     except ValueError:
         days = 30
-    context = {**admin.site.each_context(request), "title": "Insights", **insights.report(days)}
+    data = insights.report(days)
+    why = traffic.explain(store=copy.for_request(request))
+    for day in data["by_day"]:
+        day["burst"] = day["date"] in why["burst_dates"]
+    context = {**admin.site.each_context(request), "title": "Insights", **data, "why": why}
     return render(request, "admin/insights.html", context)
 
 

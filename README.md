@@ -2812,20 +2812,30 @@ visitors at the 150 page cap are scripts and are left out.
   per click, are far above normal (5 robust spreads above the median over
   the last five weeks and at least 3 times the median; never under 4 pages
   or 8 visitors per click; a visitors-per-click burst must also bring 1.5
-  times the usual visitors), or when 3 or fewer visitors (or 5% of the day)
-  open half its pages. Burst days are labelled in By day and left out of
-  every average.
+  times the usual visitors), or when 3 or fewer visitors below the cap (or
+  5% of the day) open half of the pages people opened. A day's page views
+  are the By day figure (page counts), because each visitor's own count
+  only exists from 7 Oct 2026. Burst days are labelled in By day and left
+  out of every average. A day with more clicks to shops than people is not
+  a burst (its people still count) but is listed and left out of the usual
+  clicks per person, since clicks are saved for any browser that follows a
+  Buy now link.
 - **What drove it.** The change in people is broken down by source, landing
   page type, landing page, country, device and new or returning. A driver is
   named only when it moved at least 20 people, carries a quarter of the
   change, and moved out of proportion to the rest; otherwise the page says
-  the change is spread out. A change within day to day noise (5 people, 15%
+  the change is spread out. A source is named before a page, device or
+  country, and a change shown always keeps its driver in the top five. A change within day to day noise (5 people, 15%
   or two Poisson standard deviations) is called normal and not explained.
 - **Health.** Two or more hours today with no visitors when about 6 usually
   arrive (counting may be broken); three or more hours with 15+ people and
-  no clicks when 5+ were expected (check the Buy now links); clicks per
-  person under half the usual and 10+ short; the background reader stopped;
-  shops overdue a read.
+  no clicks when 5+ were expected (check the Buy now links), at the click
+  rate of the comparison shown for today; clicks per person under half the
+  usual and 10+ short, counting only the usual number of people (a new
+  crowd from one site may click less without anything being broken); the
+  background reader stopped; shops overdue a read. When today's rows have
+  no arrival times, the clicks check uses the day so far as a whole, and
+  the page never says a check passed that could not run.
 
 Each finding gives its numbers and, where the data cannot decide, what to
 check next, for example Google Search Console for a search drop, since the
@@ -2838,8 +2848,16 @@ first counted page of the day is opened: `first_seen` (when) and `landing`
 (the page kind and slug, such as `product:prismatic-evolutions-etb` or
 `home`; never a query string or anything about the person). Rows from
 before these fields existed have neither, so they are left out of
-same-time comparisons and landing page breakdowns, and the page says when
-same-time comparisons with last week begin.
+same-time comparisons and landing page breakdowns. The day the change goes
+live is only partly timed, so the first whole timed day is the next one,
+and the page says that same-time comparisons with last week begin a week
+after it. `explain_traffic --at` counts only visitors who had arrived by
+that moment.
+
+On SQLite, migration `catalogue/0056` rebuilds the visitor-day table
+(Django copies the table to add the non-null `landing` column). A copy of
+89,000 rows took about a third of a second in a test; page counts that
+arrive during the copy are dropped, as at any busy database moment.
 
 The same findings print on the server with:
 

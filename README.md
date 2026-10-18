@@ -2113,7 +2113,7 @@ site's cache.
 | `RIPRAPTOR_CLAUDE_PAGES`       | on      | Before Claude is asked about a row, read the shop page(s) it is about for evidence (see "The shop's own page"). `0` sends only what the site holds. |
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
-| `RIPRAPTOR_GA_ID`              | `G-TZW5ZVM9H8` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |
+| `RIPRAPTOR_GA_ID`              | `G-LGFBHYP6JC` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |
 
 ## Games
 
@@ -2796,6 +2796,57 @@ low search engine traffic and products with no picture. Below it are
 shop health (last good read, stock, whether clicks can earn, latest
 error), clicks that earn nothing, and the catalogue's comparison
 coverage.
+
+### Why traffic changed
+
+Above everything else, "Why traffic changed" (`catalogue/traffic.py`,
+`explain()`) answers what the By day table cannot. It counts people only:
+visitors at the 150 page cap are scripts and are left out.
+
+- **Like with like.** Today so far is compared with the same hours of the
+  same weekday last week, then with yesterday up to the same time. Yesterday
+  is compared with the average of the previous four of the same weekday, or
+  the seven days before when fewer than two of those are usable. The By day
+  table marks today "so far, to HH:MM".
+- **Bursts apart.** A day is a burst when its pages per visitor, or visitors
+  per click, are far above normal (5 robust spreads above the median over
+  the last five weeks and at least 3 times the median; never under 4 pages
+  or 8 visitors per click; a visitors-per-click burst must also bring 1.5
+  times the usual visitors), or when 3 or fewer visitors (or 5% of the day)
+  open half its pages. Burst days are labelled in By day and left out of
+  every average.
+- **What drove it.** The change in people is broken down by source, landing
+  page type, landing page, country, device and new or returning. A driver is
+  named only when it moved at least 20 people, carries a quarter of the
+  change, and moved out of proportion to the rest; otherwise the page says
+  the change is spread out. A change within day to day noise (5 people, 15%
+  or two Poisson standard deviations) is called normal and not explained.
+- **Health.** Two or more hours today with no visitors when about 6 usually
+  arrive (counting may be broken); three or more hours with 15+ people and
+  no clicks when 5+ were expected (check the Buy now links); clicks per
+  person under half the usual and 10+ short; the background reader stopped;
+  shops overdue a read.
+
+Each finding gives its numbers and, where the data cannot decide, what to
+check next, for example Google Search Console for a search drop, since the
+site cannot see rankings. The site keeps no record of when it was updated,
+so a change after an update is not marked. All its wording is in Site
+wording under "Insights page in admin" and can be edited there.
+
+It needs two fields on each visitor-day row, set once when the visitor's
+first counted page of the day is opened: `first_seen` (when) and `landing`
+(the page kind and slug, such as `product:prismatic-evolutions-etb` or
+`home`; never a query string or anything about the person). Rows from
+before these fields existed have neither, so they are left out of
+same-time comparisons and landing page breakdowns, and the page says when
+same-time comparisons with last week begin.
+
+The same findings print on the server with:
+
+```sh
+python manage.py explain_traffic
+python manage.py explain_traffic --at 2026-10-18T13:13   # as at a past moment, local time
+```
 
 ## Tests
 

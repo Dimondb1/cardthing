@@ -39,6 +39,7 @@ TIMEOUTS = {
     "tidy_all": 1500,
     "watch_stock": 540,
     "send_stock_alerts": 540,
+    "send_drop_alerts": 540,
     "snapshot_daily_prices": 1800,
     "check_delivery": 3000,
     "fetch_geoip": 1800,
@@ -187,13 +188,13 @@ class UploadLimitTests(TestCase):
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()
-        self.assertEqual(len(installed), 10)
+        self.assertEqual(len(installed), 11)
         self.assertEqual(installed, file_cron())
 
     def test_both_files_load_the_settings_before_every_command(self):
         for name, block in (("install.sh", install_block()), ("crontab", (DEPLOY / "crontab").read_text())):
             commands = [SCHEDULE.match(raw.strip()).group(2) for raw in block.splitlines() if "manage.py" in raw]
-            self.assertEqual(len(commands), 10, name)
+            self.assertEqual(len(commands), 11, name)
             for command in commands:
                 self.assertRegex(command, PREFIX, name)
 
@@ -304,6 +305,10 @@ class CronTests(TestCase):
         self.assertIn("backup_db --keep 5", lines["backup_db"][1])
         # The stock alerts never depend on the reader.
         self.assertNotIn("--if-worker-dead", lines["send_stock_alerts"][1])
+        # The drop reminders run every 15 minutes on their own lock, at minutes no other command starts on.
+        self.assertEqual(lines["send_drop_alerts"][0], "9-59/15 * * * *")
+        self.assertIn("flock -n /tmp/ripraptor-drops.lock .venv/bin/python manage.py send_drop_alerts", lines["send_drop_alerts"][1])
+        self.assertNotIn("--if-worker-dead", lines["send_drop_alerts"][1])
 
     def test_the_worker_unit_restarts_it_under_a_watchdog_and_install_starts_it(self):
         unit = (DEPLOY / "ripraptor-worker.service").read_text()

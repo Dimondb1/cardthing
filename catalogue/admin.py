@@ -5,7 +5,7 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    ClaudeAsk, ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    ClaudeAsk, DropAlert, ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -379,6 +379,19 @@ class StockAlertAdmin(admin.ModelAdmin):
     search_fields = ("product__name", "email")
     list_select_related = ("product",)
     readonly_fields = ("product", "email", "token", "created_at", "confirmed_at")
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(DropAlert)
+class DropAlertAdmin(admin.ModelAdmin):
+    list_display = ("product_set", "email", "created_at", "confirmed_at", "preorder_sent_at", "eve_sent_at")
+    list_filter = ("confirmed_at",)
+    search_fields = ("product_set__name", "email")
+    list_select_related = ("product_set",)
+    readonly_fields = ("product_set", "email", "token", "created_at", "confirmed_at", "confirm_sent_at",
+                       "preorder_sent_at", "eve_sent_at", "eve_for", "day_sent_at")
 
     def has_add_permission(self, request):
         return False

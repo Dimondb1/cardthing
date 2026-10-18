@@ -1,0 +1,19 @@
+{% load sitecopy %}{% autoescape off %}{{ subject }}
+
+{% if stage == "preorder" %}{% copy "drops.email.preorder.body" set=values.set names=values.names %}{% elif stage == "eve" %}{% copy "drops.email.eve.body" set=values.set date=values.date %}{% else %}{% copy "drops.email.day.body" set=values.set %}{% endif %}
+{% if offers %}
+{% copy "drops.email.offers" %}:
+{% for offer in offers %}
+{{ offer.product }}
+{{ offer.price }} at {{ offer.retailer }}{% if offer.preorder %} (pre-order){% endif %}. {{ offer.checked }}.
+{{ offer.url }}
+{% endfor %}{% else %}
+{% copy "drops.email.none" %}
+{% endif %}
+{% copy "drops.email.button" %}: {{ drop_url }}
+
+{% if last %}{% copy "drops.email.last" set=values.set %}{% else %}{% copy "drops.email.more" %}{% endif %}
+
+Unsubscribe and delete your email address: {{ stop_url }}
+
+{{ site_name }} may earn a commission when you buy through its links.{% endautoescape %}

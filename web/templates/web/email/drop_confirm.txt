@@ -1,0 +1,8 @@
+{% load sitecopy %}{% autoescape off %}{% copy "drops.email.confirm.body" set=values.set site_name=values.site_name %}
+
+{% copy "drops.email.confirm.button" %}:
+{{ confirm_url }}
+
+{% copy "drops.email.confirm.note" %}
+
+Unsubscribe and delete your email address: {{ stop_url }}{% endautoescape %}

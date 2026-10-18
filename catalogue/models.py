@@ -1116,6 +1116,39 @@ class StockAlert(models.Model):
         return f"{self.product} for {self.email}"
 
 
+class DropAlert(models.Model):
+    """One email address waiting to hear about one set's drop (the drop tracker, catalogue/drops.py).
+
+    Kept like a StockAlert: for this and nothing else, confirmed by a link before anything else is sent,
+    and every email carries a link that deletes it at once. Up to three emails, each sent once: when a shop
+    opens pre-orders before the drop, the morning before a day-dated drop (again if the day moves) and on its
+    morning. It is deleted after the drop-day email, when the drop has passed, unconfirmed after a week, or
+    after a year.
+    """
+
+    product_set = models.ForeignKey(ProductSet, on_delete=models.CASCADE, related_name="drop_alerts", verbose_name="set")
+    email = models.EmailField(max_length=254)
+    token = models.CharField(max_length=40, unique=True, default=alert_token)
+    created_at = models.DateTimeField(default=timezone.now)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    confirm_sent_at = models.DateTimeField("confirmation sent", null=True, blank=True)
+    preorder_sent_at = models.DateTimeField("pre-order email sent", null=True, blank=True)
+    eve_sent_at = models.DateTimeField("day-before email sent", null=True, blank=True)
+    eve_for = models.DateField(
+        "day-before email was for", null=True, blank=True,
+        help_text="The drop day the day-before email named. When the set's date moves, it is sent again for the new day.",
+    )
+    day_sent_at = models.DateTimeField("drop-day email sent", null=True, blank=True)
+
+    class Meta:
+        unique_together = [("product_set", "email")]
+        ordering = ["-created_at"]
+        verbose_name = "drop reminder"
+
+    def __str__(self):
+        return f"{self.product_set} for {self.email}"
+
+
 class DailyPageView(models.Model):
     """How many times a kind of page was opened on one day. No personal data."""
 

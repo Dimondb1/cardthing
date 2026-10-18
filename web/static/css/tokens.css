@@ -188,6 +188,9 @@
   --color-on-brand-line: rgb(255 255 255 / 0.4);   /* the divider inside the Buy now button */
   --swing: 9deg;                    /* how far the bag swings once on arrival */
 
+  /* Drop tracker ------------------------------------------------------------ */
+  --drop-tile: 3.75rem;             /* the calendar tile beside each drop's name: month over day */
+
   /* Raptor panels: the owner's poster style, on the home page panels and the no-results card only ---- */
   --text-poster: clamp(2.75rem, 1.5rem + 5.4vw, 5.75rem);
   --text-poster-sm: clamp(2.25rem, 1.4rem + 3.4vw, 3.75rem);

@@ -1278,6 +1278,162 @@ def alert_stop(request, token):
                                                     "meta_title": heading, "noindex": True})
 
 
+# Drop tracker ------------------------------------------------------------------------------------
+
+DROP_STATES = ("sent", "invalid", "failed", "busy")
+# What a visitor reads after asking for a reminder: (heading, message) keys per state. "sent" is the answer
+# for any address, new, already signed up or at its limit, so the page never tells a stranger about one.
+DROP_STATE_COPY = {
+    "sent": ("drops.done.sent.title", "drops.done.sent.body"),
+    "invalid": ("drops.done.problem.title", "alerts.form.invalid"),
+    "failed": ("drops.done.problem.title", "alerts.form.failed"),
+    "busy": ("drops.done.problem.title", "drops.form.busy"),
+}
+
+
+def drop_words(request, drop, today):
+    """Attach the words a drop card shows about its date: ``date_text`` ("Fri 23 Oct", or "November 2026" for
+    a month-only drop) and ``when_text`` ("Out in 5 days", "Out tomorrow", "Out today", "Day not announced
+    yet", "Came out 3 days ago"), and ``countdown`` (the drop's start, for a live countdown) when it is a
+    day or more away."""
+    from django.utils.formats import date_format
+
+    drop.countdown = None
+    if drop.day is None:
+        drop.date_text = date_format(drop.month, "F Y")
+        drop.when_text = text(request, "drops.when.month")
+        return drop
+    drop.date_text = date_format(drop.day, "D j M")
+    days = (drop.day - today).days
+    if days < 0:
+        drop.when_text = text(request, "drops.when.out_yesterday" if days == -1 else "drops.when.out", days=-days)
+    elif days == 0:
+        drop.when_text = text(request, "drops.when.today")
+    else:
+        drop.when_text = text(request, "drops.when.tomorrow" if days == 1 else "drops.when.days", days=days)
+        drop.countdown = drop.starts_at.isoformat()
+    return drop
+
+
+@require_GET
+def drops(request):
+    """The drop tracker: sets still to come, soonest first, with the cheapest shop offers, a countdown and a
+    reminder by email; then the last fortnight's drops. A game chip keeps one game's, as a plain link."""
+    from django.utils.formats import date_format
+
+    from catalogue import drops as tracker
+
+    today = timezone.localdate()
+    upcoming, recent = tracker.tracker(today)
+    counts = {}
+    for drop in upcoming:
+        counts[drop.product_set.game] = counts.get(drop.product_set.game, 0) + 1
+    chips = sorted(counts.items(), key=lambda row: (row[0].sort_order, row[0].name))
+    chosen = next((game for game, _ in chips if game.slug == request.GET.get("game")), None)
+    if chosen is not None:
+        upcoming = [d for d in upcoming if d.product_set.game_id == chosen.pk]
+        recent = [d for d in recent if d.product_set.game_id == chosen.pk]
+    for drop in (*upcoming, *recent):
+        drop_words(request, drop, today)
+    labels = {tracker.WEEK: text(request, "drops.group.week"), tracker.MONTH: text(request, "drops.group.month")}
+    groups = [
+        {"key": key, "label": labels.get(key) or date_format(month, "F Y"), "drops": rows}
+        for key, month, rows in tracker.group(upcoming, today)
+    ]
+    heading = text(request, "drops.title")
+    canonical = reverse("web:drops") + (f"?game={chosen.slug}" if chosen else "")
+    return render(request, "web/drops.html", {
+        "heading": heading,
+        "groups": groups,
+        "upcoming_count": len(upcoming),
+        "recent": recent,
+        "chips": chips,
+        "chosen": chosen,
+        "reminders_on": mail.enabled(),
+        "meta_title": text(request, "meta.drops.title"),
+        "meta_description": text(request, "meta.drops.description"),
+        "canonical_url": request.build_absolute_uri(canonical),
+        "structured_json": ld_json(breadcrumbs_json(request, [(heading, reverse("web:drops"))])),
+    })
+
+
+def ask_for_drop(request, product_set):
+    """Take the form's address for this set's reminder. Returns a state from DROP_STATES."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    from catalogue import drop_alerts
+
+    email = request.POST.get("email", "").strip()
+    try:
+        validate_email(email)
+    except ValidationError:
+        return "invalid"
+    if not drop_alerts.address_allowed(insights.client_ip(request)):
+        return "busy"
+    try:
+        return drop_alerts.ask(product_set, email)
+    except mail.MailError:
+        return "failed"
+
+
+def drop_ask(request, set_id):
+    """A reminder for one drop. POST takes the address and, without JavaScript, sends the visitor to this same
+    address with ?state= (a page saying what happened, safe to reload); with JavaScript the drop card asks for
+    JSON and shows the message in place. GET shows that page."""
+    from catalogue.drops import upcoming_drop
+
+    product_set = get_object_or_404(ProductSet.objects.select_related("game"), pk=set_id, game__is_active=True)
+    back = reverse("web:drops") + f"#drop-{product_set.pk}"
+    if request.method == "POST":
+        if request.POST.get("website") or not mail.enabled():
+            return HttpResponseRedirect(back)   # the hidden field is only ever filled by robots
+        if upcoming_drop(product_set) is None:
+            raise Http404("That drop has passed.")
+        state = ask_for_drop(request, product_set)
+        if "application/json" in request.headers.get("Accept", ""):
+            title, body = DROP_STATE_COPY[state]
+            return JsonResponse({"state": state, "message": text(request, body, set=product_set.name)})
+        return HttpResponseRedirect(f"{reverse('web:drop_ask', args=[product_set.pk])}?state={state}")
+    if request.method != "GET":
+        return HttpResponse(status=405)
+    state = request.GET.get("state")
+    if state not in DROP_STATES:
+        return HttpResponseRedirect(back)
+    title, body = DROP_STATE_COPY[state]
+    heading = text(request, title)
+    return render(request, "web/drop_done.html", {
+        "heading": heading, "message": text(request, body, set=product_set.name), "back_url": back,
+        "meta_title": heading, "noindex": True,
+    })
+
+
+@require_GET
+def drop_confirm(request, token):
+    from catalogue import drop_alerts
+
+    alert = drop_alerts.confirm(token)
+    if alert is None:
+        heading, message, back = text(request, "alerts.gone.title"), text(request, "drops.gone.body"), reverse("web:drops")
+    else:
+        heading = text(request, "drops.confirmed.title")
+        message = text(request, "drops.confirmed.body", set=alert.product_set.name)
+        back = reverse("web:drops") + f"#drop-{alert.product_set_id}"
+    return render(request, "web/drop_done.html", {"heading": heading, "message": message, "back_url": back,
+                                                  "meta_title": heading, "noindex": True})
+
+
+@require_GET
+def drop_stop(request, token):
+    from catalogue import drop_alerts
+
+    drop_alerts.stop(token)
+    heading = text(request, "drops.stopped.title")
+    return render(request, "web/drop_done.html", {"heading": heading, "message": text(request, "alerts.stopped.body"),
+                                                  "back_url": reverse("web:drops"), "meta_title": heading,
+                                                  "noindex": True})
+
+
 INBOX_COOKIE = "rr_inbox"
 
 
@@ -1460,6 +1616,7 @@ def llms_txt(request):
         "## Pages",
         "",
         f"- [Every game and set]({request.build_absolute_uri(reverse('web:games'))})",
+        f"- [Upcoming drops with dates and pre-order prices]({request.build_absolute_uri(reverse('web:drops'))})",
         f"- [How it works]({request.build_absolute_uri(reverse('web:about'))})",
         f"- [Terms and disclosures]({request.build_absolute_uri(reverse('web:terms'))})",
         f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product on sale, coming soon or priced "

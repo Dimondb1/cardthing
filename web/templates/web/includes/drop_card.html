@@ -1,0 +1,43 @@
+{% load sitecopy ripraptor %}{# One drop on the tracker: the date tile, the set, the cheapest shop offer per product with Buy or Pre-order through /go/, and the reminder form. Takes drop and reminders_on. #}
+<li class="drop-card" id="drop-{{ drop.pk }}">
+  <div class="drop-card__head">
+    <p class="drop-card__tile{% if not drop.day %} drop-card__tile--month{% endif %}" aria-hidden="true">{% if drop.day %}<span class="drop-card__tile-top">{{ drop.day|date:"M" }}</span><span class="drop-card__tile-big">{{ drop.day|date:"j" }}</span>{% else %}<span class="drop-card__tile-top">{{ drop.month|date:"M" }}</span><span class="drop-card__tile-big">{{ drop.month|date:"Y" }}</span>{% endif %}</p>
+    <div class="drop-card__title">
+      <p class="drop-card__game">{{ drop.product_set.game.display_short }}{% if drop.product_set.code %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ drop.product_set.code }}{% endif %}</p>
+      <h3 class="drop-card__name"><a href="{{ drop.product_set.get_absolute_url }}">{{ drop.product_set.name }}</a></h3>
+      <p class="drop-card__when"><span class="drop-card__date">{{ drop.date_text }}</span><span aria-hidden="true"> · </span><span class="visually-hidden">, </span><span class="drop-card__left">{{ drop.when_text }}</span></p>
+    </div>
+  </div>
+  {% if drop.countdown %}<p class="countdown" data-countdown="{{ drop.countdown }}" hidden aria-hidden="true"><span class="countdown__part"><span class="countdown__n" data-unit="d">0</span><span class="countdown__u">d</span></span><span class="countdown__part"><span class="countdown__n" data-unit="h">00</span><span class="countdown__u">h</span></span><span class="countdown__part"><span class="countdown__n" data-unit="m">00</span><span class="countdown__u">m</span></span><span class="countdown__part" data-seconds><span class="countdown__n" data-unit="s">00</span><span class="countdown__u">s</span></span></p>{% endif %}
+  <div class="drop-card__shops">
+  {% if drop.offers %}
+  <ul class="drop-offers">
+    {% for offer in drop.shown_offers %}{% with listing=offer.listing %}
+    <li class="drop-offer">
+      <span class="drop-offer__body">
+        <a class="drop-offer__name" href="{{ offer.product.get_absolute_url }}">{{ offer.product.name }}</a>
+        <span class="drop-offer__meta"><span class="drop-offer__price">{{ listing.shown_price|gbp }}</span> <span class="delivered">{% include "web/includes/price_basis.html" %}</span><span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ listing.retailer.name }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span><span class="drop-offer__checked">{% copy "drops.checked" time=listing.last_checked|ago %}</span></span>
+      </span>
+      <a class="button button--buy button--card drop-offer__buy" href="{{ listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/buy_mark.svg" %}{% if listing.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ offer.product.name }} at {{ listing.retailer.name }} (opens in a new tab)</span></a>
+    </li>
+    {% endwith %}{% endfor %}
+  </ul>
+  <p class="drop-card__status">{% if drop.preorder_shops %}{% copy_count "drops.preorders" drop.preorder_shops %}{% elif drop.in_stock %}{% copy "new.coming_soon.in_stock" %}{% endif %}{% if drop.more %}{% if drop.preorder_shops or drop.in_stock %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}<a class="drop-card__more" href="{{ drop.product_set.get_absolute_url }}">{% copy_count "drops.more" drop.product_count %}<span aria-hidden="true"> ›</span></a>{% endif %}</p>
+  {% else %}
+  <p class="drop-card__none">{% if reminders_on %}{% copy "drops.none.remind" %}{% else %}{% copy "drops.none" %}{% endif %}</p>
+  {% endif %}
+  </div>
+  {% if reminders_on %}
+  <form class="drop-remind" method="post" action="{% url 'web:drop_ask' drop.pk %}" data-drop-remind>
+    {% csrf_token %}
+    <label class="drop-remind__label" for="remind-{{ drop.pk }}">{% copy "drops.form.title" %}</label>
+    <div class="drop-remind__row">
+      <input id="remind-{{ drop.pk }}" class="alert-box__input drop-remind__input" type="email" name="email" required autocomplete="email" inputmode="email" maxlength="254" placeholder="{% copy 'alerts.form.placeholder' %}">
+      <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+      <button class="button button--small drop-remind__button" type="submit">{% copy "drops.form.button" %}</button>
+    </div>
+    <p class="drop-remind__note">{% copy "drops.form.note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
+    <p class="drop-remind__status" data-drop-status role="status" hidden></p>
+  </form>
+  {% endif %}
+</li>

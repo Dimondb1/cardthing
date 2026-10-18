@@ -2094,7 +2094,7 @@ site's cache.
 | `RIPRAPTOR_EBAY_DAILY_LIMIT`   | 4000    | Products checked on eBay per day. |
 | `RIPRAPTOR_GEOIP_DB`           |         | Path of the DB-IP country database for visitor countries. Empty means countries are not recorded. |
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
-| `RIPRAPTOR_ZEPTOMAIL_TOKEN`    |         | Send Mail token from a Zoho ZeptoMail Mail Agent. With `RIPRAPTOR_MAIL_FROM` set, turns on back-in-stock emails. |
+| `RIPRAPTOR_ZEPTOMAIL_TOKEN`    |         | Send Mail token from a Zoho ZeptoMail Mail Agent. With `RIPRAPTOR_MAIL_FROM` set, turns on back-in-stock emails and drop reminders. |
 | `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
 | `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
@@ -2248,6 +2248,76 @@ click still goes through `/go/` and is counted. The list is one query
 `web:coming-soon:v1:<game>`, and cleared with the other lists, including
 whenever a set is saved. The wording is under "Coming soon sets" in
 Site wording.
+
+## Drop tracker
+
+`/drops/` (linked as Drops in the header on wide screens, in every footer and
+under each Coming soon list) lists every set still to come that has a date
+the site trusts, soonest first: This week (the next seven days), This month,
+then one heading per later month, and Just dropped (the last 14 days) below.
+A set's own release date is always a full day (the release radar writes one
+only from the publisher or two sources that agree, or you type it), so it
+shows its day, "Out in 5 days" and, with script, a live countdown to
+midnight UK time. A set with no date whose accepted announcement gives a
+month only shows that month and "Day not announced yet", never a day and
+never a countdown. Announcements still waiting on Things to check are never
+read. Game buttons filter the list with plain links (`?game=pokemon`).
+
+Each drop card shows the cheapest current offer for each of the set's
+products (up to four, then a link to the set page) from UK shops, never eBay
+or Amazon, with the shop, when it was checked, and Buy now or Pre-order
+through `/go/`; how many shops take pre-orders; "No UK shop we check lists it
+yet" when none does; and a reminder form. The page is three queries however
+many drops there are (`catalogue/drops.py`). The wording is under "Drop
+tracker and drop reminders" in Site wording.
+
+Reminders (`catalogue/drop_alerts.py`, model `DropAlert`) work like back in
+stock emails and need the same ZeptoMail settings; without them the form
+does not appear. The form works without JavaScript (it posts, then shows a
+"Check your inbox" page); with it the answer replaces the form. A confirm
+email goes first and nothing else is sent until it is pressed. Then up to
+three emails, each once and each listing the cheapest offers with their
+prices, shops, checked times and `/go/` links:
+
+1. Pre-orders open: a UK shop opens pre-orders on one of the drop's products
+   after the reminder was confirmed and before the day before the drop, and
+   still takes them. The email names the shops that opened and always lists
+   their prices, then the cheapest others.
+2. Out tomorrow: from 8am UK time on the day before a dated drop. If the
+   set's date moves after it went, it is sent again the day before the new
+   date (the reminder keeps the day it was for in `eve_for`).
+3. Out today: from 8am on the day, after which the address is deleted.
+
+A product with its own later release date (a collection that follows the
+set) is not part of the drop: it is left off the card and out of the emails.
+A month-only set a shop already sells from stock counts as out, as on the
+Coming soon list: it is not listed as still to come and takes no reminder.
+
+The day-before and drop-day emails go only between 8am and 9pm; a window
+missed is skipped, never sent late. A month-only drop hears only about
+pre-orders until its day is published. Reminders are deleted unconfirmed
+after a week, once their drop has passed, and after a year in any case.
+Every email has an unsubscribe link that deletes the reminder at once. One
+address can wait on 30 confirmed drops; one internet connection can ask ten
+times an hour, and one email address is sent at most three confirmation
+emails a day across every set, however many connections ask (both counted
+in the shared cache under a one-way hash); asking again within ten minutes
+sends no second confirmation. The form answers "Check your inbox" for every
+address, so it never tells a stranger whether an address already has a
+reminder. The Terms page says all this.
+
+`send_drop_alerts` sends what is due. It is safe to run at any time and from
+two processes at once (each email is claimed before it is sent and handed
+back if ZeptoMail fails). Cron runs it every 15 minutes at 9, 24, 39 and 54
+past, minutes no other command starts on, on its own lock
+(`/tmp/ripraptor-drops.lock`). `deploy/install.sh` installs the line; run
+`deploy/install.sh` again after updating, or add it by hand from
+`deploy/crontab`. Reminder events are recorded with the alert counts
+(`drop_asked`, `drop_confirmed`, `drop_sent_<stage>`, `drop_stopped`) but are
+not yet shown on Insights; drop tracker views count with Latest drops.
+
+`seed_demo` adds five fictional "(demo)" sets dated from today so the page
+has something to show locally.
 
 ## Deals page
 

@@ -1,0 +1,49 @@
+{% extends "web/base.html" %}
+{% load static sitecopy ripraptor %}
+{% block scripts %}<script src="{% static 'js/drops.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{{ heading }}</h1>
+  <p class="page-intro">{% copy "drops.intro" %}</p>
+</div>
+{% if chips|length > 1 %}
+<nav class="chips drops-chips" aria-label="{% copy 'drops.filter.label' %}">
+  <ul class="chips__list">
+    <li><a class="chip" href="{% url 'web:drops' %}"{% if not chosen %} aria-current="page"{% endif %}>{% copy "drops.filter.all" %}</a></li>
+    {% for game, count in chips %}<li><a class="chip" href="{% url 'web:drops' %}?game={{ game.slug }}"{% if chosen == game %} aria-current="page"{% endif %}>{{ game.display_short }} <span class="chip__count">{{ count }}</span></a></li>{% endfor %}
+  </ul>
+</nav>
+{% endif %}
+{% for group in groups %}
+<section class="drop-group" aria-labelledby="drops-{{ group.key }}">
+  <h2 class="drop-group__title" id="drops-{{ group.key }}">{{ group.label }}</h2>
+  <ol class="drop-list">
+    {% for drop in group.drops %}{% include "web/includes/drop_card.html" %}{% endfor %}
+  </ol>
+</section>
+{% empty %}
+<div class="empty drops-empty">
+  <h2 class="empty__title">{% if chosen %}{% copy "drops.empty.game" game=chosen.name %}{% else %}{% copy "drops.empty.title" %}{% endif %}</h2>
+  <p>{% copy "drops.empty.body" %}</p>
+</div>
+{% endfor %}
+{% if recent %}
+<section class="drop-recent" aria-labelledby="recent-title">
+  <div class="section-head">
+    <h2 id="recent-title" class="section-head__title">{% copy "drops.recent.title" %}</h2>
+  </div>
+  <ul class="coming__list">
+    {% for drop in recent %}
+    <li class="coming__row" id="drop-{{ drop.pk }}">
+      <span class="coming__set">
+        <a class="coming__name" href="{{ drop.product_set.get_absolute_url }}">{{ drop.product_set.name }}</a>
+        <span class="coming__meta">{{ drop.product_set.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ drop.date_text }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ drop.when_text }}</span>
+      </span>
+      <span class="coming__offer">{% with best=drop.offers.0 %}{% if best %}<a class="coming__price" href="{{ best.product.get_absolute_url }}">{% copy "drops.recent.from" %} <span class="price">{{ best.listing.shown_price|gbp }}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=best.listing %}</span></a> {% copy "drops.recent.at" retailer=best.listing.retailer.name time=best.listing.last_checked|ago %}{% else %}<span class="coming__none">{% copy "drops.recent.none" %}</span>{% endif %}{% endwith %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+<div class="small-print">{% copy "drops.small_print" %}</div>
+{% endblock %}

@@ -22,6 +22,7 @@ from catalogue.models import (
     OutboundClick,
     Product,
     ProductSet,
+    Release,
     Retailer,
 )
 
@@ -122,6 +123,29 @@ POPULAR_WEIGHTS = {
     "A Fist of Divine Speed Booster Box (OP-11)": 8,
 }
 
+# Fictional sets for the drop tracker, dated from today so it always has something to show: game, set name,
+# code, days from today (None for a set announced for a month only, two months on), and its products as
+# (name, type, typical price, availability at the shops that list it, or None when no shop lists it yet).
+UPCOMING = [
+    ("pokemon", "Starlit Harbour (demo)", "DEMO-1", 3, [
+        ("Starlit Harbour Elite Trainer Box (demo)", T.ELITE_TRAINER_BOX, 54, Listing.Availability.PREORDER),
+        ("Starlit Harbour Booster Bundle (demo)", T.BUNDLE, 31, Listing.Availability.PREORDER),
+        ("Starlit Harbour Booster Box (demo)", T.BOOSTER_BOX, 158, Listing.Availability.PREORDER),
+        ("Starlit Harbour Mini Tin (demo)", T.TIN, 12, Listing.Availability.PREORDER),
+        ("Starlit Harbour Collection Box (demo)", T.COLLECTION_BOX, 26, None),
+    ]),
+    ("one-piece", "Tidebreaker (demo)", "OP-D1", 11, [
+        ("Tidebreaker Booster Box (demo)", T.BOOSTER_BOX, 92, Listing.Availability.PREORDER),
+    ]),
+    ("magic-the-gathering", "Ember Crown (demo)", "DEM", 38, [
+        ("Ember Crown Play Booster Box (demo)", T.BOOSTER_BOX, 135, None),
+    ]),
+    ("lorcana", "Glimmerfall (demo)", "", None, []),
+    ("pokemon", "Quiet Tide (demo)", "DEMO-0", -5, [
+        ("Quiet Tide Elite Trainer Box (demo)", T.ELITE_TRAINER_BOX, 49, Listing.Availability.IN_STOCK),
+    ]),
+]
+
 PENNY = Decimal("0.01")
 
 
@@ -217,6 +241,33 @@ class Command(BaseCommand):
             self._history(rng, product, typical, lowest, today)
 
         self._clicks(rng, products, now)
+        self._upcoming(rng, games, retailers, now, today)
+
+    def _upcoming(self, rng, games, retailers, now, today):
+        """The fictional drops in UPCOMING: sets dated from today, one announced for a month only."""
+        for game_slug, name, code, days, rows in UPCOMING:
+            game = games[game_slug]
+            released = today + timedelta(days=days) if days is not None else None
+            product_set = ProductSet.objects.create(game=game, name=name, slug=slugify(name), code=code,
+                                                    release_date=released)
+            if days is None:
+                month = (today.replace(day=1) + timedelta(days=62)).replace(day=1)
+                Release.objects.create(game=game, name=name, release_date=month, precision=Release.Precision.MONTH,
+                                       source="demo", official=True, status=Release.Status.ACCEPTED,
+                                       product_set=product_set)
+            for product_name, product_type, typical, availability in rows:
+                product = Product.objects.create(game=game, product_set=product_set, name=product_name,
+                                                 slug=slugify(product_name), product_type=product_type)
+                if availability is None:
+                    continue
+                for retailer in rng.sample(retailers, rng.randint(2, 4)):
+                    price = shop_price(typical * rng.uniform(0.92, 1.1))
+                    free = retailer.demo_free_over is not None and price >= retailer.demo_free_over
+                    Listing.objects.create(
+                        product=product, retailer=retailer, url=f"{retailer.website}products/{product.slug}",
+                        price=price, delivery_cost=Decimal("0.00") if free else retailer.demo_delivery,
+                        availability=availability, last_checked=now - timedelta(minutes=rng.randint(4, 240)),
+                    )
 
     def _listings(self, rng, product, typical, retailers, now):
         chosen = rng.sample(retailers, rng.randint(3, 6))

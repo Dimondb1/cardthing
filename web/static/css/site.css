@@ -1253,3 +1253,87 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .thread__who { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-sm); font-weight: var(--weight-strong); }
 .thread__who time { font-weight: var(--weight-body); color: var(--color-ink-subtle); }
 .thread__body { margin-top: var(--space-1); overflow-wrap: anywhere; }
+
+/* Drop tracker (/drops/) -------------------------------------------------- */
+/* Each drop is a card with the soft orange border: a calendar tile, the set, a countdown, the cheapest shop offer
+   per product with Buy now or Pre-order, and the reminder form, which sits at the foot so paired cards line up. */
+.drops-chips { margin-bottom: var(--space-2); }
+@media (min-width: 40rem) { .drops-chips .chips__list { justify-content: flex-start; flex-wrap: wrap; } }   /* under a left-aligned title, not centred like the home page's */
+.chip__count { margin-left: var(--space-1); color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
+.chip[aria-current="page"] .chip__count { color: inherit; }
+.drop-group { margin-top: var(--space-5); }
+.drop-group + .drop-group, .drop-recent { margin-top: var(--rhythm-section); }
+.drop-group__title { margin-bottom: var(--rhythm-title); font-size: var(--text-section); font-weight: var(--weight-heading); text-box: trim-start cap alphabetic; }
+@media (max-width: 40rem) { .drop-group__title { font-size: var(--text-section-sm); } }
+/* One card per row at every width, so date order reads straight down and a month with one drop leaves no gap. */
+.drop-list { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+.drop-card {
+  display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; padding: var(--card-pad);
+  border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-paper);
+  box-shadow: var(--shadow-card); scroll-margin-top: var(--space-5);
+  transition: box-shadow var(--motion-normal) var(--ease-out);
+}
+/* A link from a reminder email lands on its drop: the ring says which card it means. */
+.drop-card:target { box-shadow: 0 0 0 3px var(--color-brand-soft), var(--shadow-card); border-color: var(--color-brand); }
+@media (prefers-reduced-motion: no-preference) {
+  .drop-card { animation: rise var(--motion-slow) var(--ease-out) both; }
+}
+.drop-card__shops { display: grid; gap: var(--space-3); min-width: 0; }
+/* Wide screens: the date, countdown and reminder on the left, the shops on the right. */
+@media (min-width: 64rem) {
+  .drop-card {
+    display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); column-gap: var(--space-6);
+    grid-template-areas: "head shops" "count shops" "remind shops"; grid-template-rows: auto auto 1fr;
+  }
+  .drop-card__head { grid-area: head; }
+  .drop-card .countdown { grid-area: count; }
+  .drop-card__shops { grid-area: shops; align-content: start; }
+  .drop-remind { grid-area: remind; align-self: end; }
+}
+.drop-card__head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: center; }
+.drop-card__tile {
+  display: grid; justify-items: center; align-content: center; width: var(--drop-tile); height: var(--drop-tile);
+  border: 1.5px solid var(--color-brand-line); border-radius: var(--radius); background: var(--color-brand-soft);
+  line-height: 1;
+}
+.drop-card__tile-top { font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-brand-text); }
+.drop-card__tile-big { margin-top: var(--space-1); font-size: var(--text-xl); font-weight: var(--weight-price); font-stretch: var(--stretch-display); font-variant-numeric: tabular-nums lining-nums; color: var(--color-ink); }
+.drop-card__tile--month .drop-card__tile-big { font-size: var(--text-base); }   /* the year, under the month: no day yet */
+.drop-card__title { display: grid; gap: var(--space-1); min-width: 0; }
+.drop-card__game { font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-ink-subtle); line-height: var(--leading-snug); }
+.drop-card__name { font-size: var(--text-lg); line-height: var(--leading-snug); overflow-wrap: anywhere; }
+.drop-card__name a { text-decoration: none; }
+.drop-card__name a:hover { color: var(--color-brand-text); text-decoration: underline; }
+.drop-card__when { font-size: var(--text-sm); color: var(--color-ink-muted); line-height: var(--leading-snug); }
+.drop-card__left { font-weight: var(--weight-strong); color: var(--color-ink); }
+/* The countdown: added by web/static/js/drops.js, so only text changes as it ticks. Tabular figures keep every
+   digit the same width, so nothing beside it moves. */
+.countdown { display: flex; flex-wrap: wrap; gap: var(--space-2); font-variant-numeric: tabular-nums lining-nums; }
+.countdown__part { display: inline-flex; align-items: baseline; gap: var(--space-1); padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); background: var(--color-shelf); }
+.countdown__n { font-size: var(--text-lg); font-weight: var(--weight-price); font-stretch: var(--stretch-price); color: var(--color-ink); line-height: var(--leading-snug); }
+.countdown__u { font-size: var(--text-xs); font-weight: var(--weight-strong); color: var(--color-ink-subtle); }
+.drop-offers { list-style: none; border-top: 1px solid var(--color-line-soft); }
+.drop-offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line-soft); }
+.drop-offer__body { display: grid; gap: var(--space-1); min-width: 0; }
+.drop-offer__name { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); text-decoration: none; overflow-wrap: anywhere; }
+.drop-offer__name:hover { color: var(--color-brand-text); text-decoration: underline; }
+.drop-offer__meta { font-size: var(--text-sm); color: var(--color-ink-muted); line-height: var(--leading-snug); }
+.drop-offer__price { font-size: var(--text-base); font-weight: var(--weight-price); font-stretch: var(--stretch-price); color: var(--color-price); font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
+.drop-offer__checked { color: var(--color-ink-subtle); white-space: nowrap; }
+.drop-offer__buy { position: relative; }
+.drop-card__status { font-size: var(--text-sm); color: var(--color-ink-muted); }
+.drop-card__more { color: var(--color-brand-text); font-weight: var(--weight-strong); text-decoration: none; white-space: nowrap; }
+.drop-card__more:hover { text-decoration: underline; }
+.drop-card__none { padding: var(--space-3); border-radius: var(--radius); background: var(--color-shelf); font-size: var(--text-sm); color: var(--color-ink-muted); }
+.drop-remind { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--color-line-soft); }
+.drop-remind__label { font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.drop-remind__row { display: flex; gap: var(--space-2); }
+.drop-remind__input { flex: 1 1 0; width: 100%; }
+.drop-remind__button { flex: none; }
+.drop-remind__note { font-size: var(--text-xs); color: var(--color-ink-muted); }
+.drop-remind__status { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
+.drop-remind.is-done .drop-remind__label, .drop-remind.is-done .drop-remind__row { display: none; }
+.drop-remind.is-busy .drop-remind__button { opacity: 0.55; pointer-events: none; }
+.coming__tracker { margin-top: var(--space-3); font-size: var(--text-sm); }
+.coming__tracker a { color: var(--color-brand-text); font-weight: var(--weight-strong); text-decoration: none; }
+.coming__tracker a:hover { text-decoration: underline; }

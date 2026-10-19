@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from functools import wraps
@@ -239,7 +240,8 @@ def home_lists(fresh=False, candidates=None):
     (web.warming); ``candidates`` is a shared_candidates() to pick from, when the Deals lists are being built too."""
     from catalogue.signals import HOME_CACHE_KEY
 
-    return listcache.get_or_build(HOME_CACHE_KEY, lambda: build_home_lists(candidates), fresh=fresh)
+    return listcache.get_or_build(HOME_CACHE_KEY, lambda: build_home_lists(candidates), fresh=fresh,
+                                  since=read_since(candidates))
 
 
 def build_home_lists(candidates=None):
@@ -274,12 +276,30 @@ def deal_candidates():
     return Product.objects.active().in_stock().only("pk", "name").prefetch_related(offers.buyable_prefetch())
 
 
-def shared_candidates():
+class SharedCandidates:
     """deal_candidates, read once however many callers ask: the home lists and the Deals lists both pick from
-    them, so building both reads the offers once."""
-    from functools import cache
+    them, so building both reads the offers once. ``read_at`` is when that read began (time.time()), or None
+    before it: a list built from them dates from then (web.listcache.store), not from when its own build
+    began, so a price change saved between the two builds leaves the second list stale."""
 
-    return cache(lambda: list(deal_candidates()))
+    def __init__(self):
+        self.rows = None
+        self.read_at = None
+
+    def __call__(self):
+        if self.rows is None:
+            self.read_at = time.time()
+            self.rows = list(deal_candidates())
+        return self.rows
+
+
+def shared_candidates():
+    return SharedCandidates()
+
+
+def read_since(candidates):
+    """For listcache.get_or_build's ``since``: when the shared candidates were read, if they were."""
+    return None if candidates is None else (lambda: getattr(candidates, "read_at", None))
 
 
 def with_list_fields(*groups):
@@ -1218,7 +1238,7 @@ def deals_lists(fresh=False, candidates=None):
             "restock_log": pricing.restock_log(days=7),
         }
 
-    return listcache.get_or_build(DEALS_CACHE_KEY, build, fresh=fresh)
+    return listcache.get_or_build(DEALS_CACHE_KEY, build, fresh=fresh, since=read_since(candidates))
 
 
 @require_GET

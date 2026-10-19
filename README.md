@@ -2071,6 +2071,8 @@ next page load once the background jobs rebuild the lists, seconds later while t
 is `/var/lib/ripraptor/cache` (`install.sh` creates it, owned by
 `ripraptor`); on your own computer it is `.cache` beside the code. Deleting
 the cache files (`*.djcache`) is always safe. The folder also holds
+`listcache/`, the times of the last clears and the build locks for the page
+lists (safe to delete too), and
 `crawl-paused` while Pause all is on: deleting it resumes reading. The folder outlives a restart, so `install.sh`
 empties it once the site has restarted on the new code: lists saved by the
 old code can lack a field a migration added.
@@ -2081,8 +2083,10 @@ before, so changes from imports take up to ten minutes to show. Fix the
 folder's owner and restart the site.
 
 Every saved listing or product clears the cached lists. A clear no longer
-deletes them: it notes the time under one small cache key, and every list
-built before it is stale (`web/listcache.py`). Visitors keep being served the
+deletes them: it notes the time in a small file (`listcache/cleared.json`),
+and every list built before it is stale (`web/listcache.py`). Each kind of
+clear keeps its own time, written under a file lock and only ever raised, so
+two processes clearing at once never undo each other's. Visitors keep being served the
 stale copy, with the time each of its prices was checked, while the
 background jobs build it again and replace it in place, so after the first
 fill the cache is never empty and a visitor never waits for a list because
@@ -2090,17 +2094,30 @@ prices changed:
 
 - a list is built by a visitor only when there is none (an emptied cache) or
   its build started more than `RIPRAPTOR_LIST_MAX_STALE_SECONDS` (ten
-  minutes) ago. That build holds a short lock in the shared cache: other
-  visitors who need the same list wait for it (up to 20 seconds, then build
-  their own) instead of all building it at once;
+  minutes) ago. That build holds a lock file (`flock`, which the system
+  lets go of if the process dies): other visitors and workers who need the
+  same list wait for it (up to 20 seconds, then build their own) instead of
+  all building it at once. Django's own cache cannot be the lock: its file
+  cache checks and writes in two steps, so two workers could both take it;
 - the end of every import, a restock found by the stock watcher,
   `tidy_listings` hiding eBay prices, a delivery rule change and the fixes on
   Things to check force a clear: the jobs build the lists again on their next
   turn. An ordinary save lets a list stay until it is 30 seconds old
   (`RIPRAPTOR_CACHE_CLEAR_SECONDS`), so a shop read that changes a few dozen
   prices causes one build rather than one per price;
+- the owner's own changes clear hard: any form the owner sends while
+  signed in (a save in Django Admin, a hide or a merge on Things to check)
+  stops the copies built before it being served at all
+  (`web.middleware.OwnerEditsMiddleware`). The reader builds them on its
+  next turn, and a visitor who comes first builds them, so a hidden product
+  or a corrected price is gone at once rather than after up to a minute;
 - a clear waits until the change is committed, so another process cannot
-  rebuild the lists from the rows as they were.
+  rebuild the lists from the rows as they were. The home and Deals lists
+  read the same offers once; each is dated from when those offers were read,
+  so a change saved between the two builds leaves the second one stale;
+- the cache keeps up to 20,000 files. Past Django's default of 300, which
+  the Claude judge's entries (one per shop page it read) can pass, Django
+  deletes a random third of the files, the page lists among them.
 
 The feeds, which no job builds, are still deleted by a clear, at most once
 every 30 seconds per process unless forced. The tests keep a cache of their

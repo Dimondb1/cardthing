@@ -1473,6 +1473,7 @@ class SharedCacheTests(PageTestCase):
         caches = shared_caches(folder / "cache")
         self.assertEqual(caches["default"]["BACKEND"], "django.core.cache.backends.filebased.FileBasedCache")
         self.assertEqual(caches["default"]["LOCATION"], str(folder / "cache"))
+        self.assertGreaterEqual(caches["default"]["OPTIONS"]["MAX_ENTRIES"], 10000)   # the lists are not culled
         self.assertEqual(os.listdir(folder / "cache"), [])  # the write check leaves nothing behind
 
         blocker = folder / "a-file"

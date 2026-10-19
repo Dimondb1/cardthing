@@ -1,6 +1,10 @@
 """Cold page speed: the narrowed list queries, the listing_offer index, and keeping the cached lists built."""
 
+import multiprocessing
+import os
 import re
+import shutil
+import tempfile
 import threading
 import time
 from datetime import timedelta
@@ -477,6 +481,199 @@ class StaleWhileRevalidateTests(Catalogue):
         with override_settings(RIPRAPTOR_SERVE_STALE=False):
             self.assertEqual(listcache.get_or_build(self.KEY, build), "new")
         self.assertEqual(calls, ["new"])
+
+
+@override_settings(RIPRAPTOR_SERVE_STALE=True, RIPRAPTOR_CACHE_CLEAR_SECONDS=30)
+class OwnerEditsTests(Catalogue):
+    """The owner's own changes are never served from a copy built before them (web.middleware)."""
+
+    def setUp(self):
+        super().setUp()
+        signals._last_clear = None
+
+    def home_names(self):
+        featured, _, spares = views.home_lists()
+        return [product.name for product, _ in featured + spares]
+
+    def owner_request(self, method="post", staff=True):
+        from django.contrib.auth.models import AnonymousUser
+        from django.test import RequestFactory
+
+        request = getattr(RequestFactory(), method)("/admin/catalogue/product/1/change/")
+        request.user = (mock.Mock(is_staff=True) if staff else AnonymousUser())
+        return request
+
+    def hide_deal(self, request):
+        from web.middleware import OwnerEditsMiddleware
+
+        def admin_save(request):
+            self.deal.is_active = False
+            self.deal.save()   # what Django Admin's change form does: an ordinary save
+            return "saved"
+
+        return OwnerEditsMiddleware(admin_save)(request)
+
+    def test_a_product_the_owner_hides_leaves_the_home_page_at_once(self):
+        warming.warm_pages()
+        self.assertIn("Deal Booster Box", self.home_names())
+        self.assertEqual(self.hide_deal(self.owner_request()), "saved")
+        self.assertTrue(listcache.is_due(signals.HOME_CACHE_KEY))   # the reader builds it on its next turn
+        self.assertNotIn("Deal Booster Box", self.home_names())     # and no visitor is served the old copy
+        self.assertFalse(listcache.owner_editing.get())
+
+    def test_the_same_save_by_a_job_is_served_stale_until_the_jobs_build_it(self):
+        warming.warm_pages()
+        self.hide_deal(self.owner_request(staff=False))
+        self.assertIn("Deal Booster Box", self.home_names())
+        self.hide_deal(self.owner_request(method="get"))
+        self.assertIn("Deal Booster Box", self.home_names())
+
+    def test_an_owner_fix_on_the_site_is_hard_too(self):
+        from django.contrib.auth import get_user_model
+
+        warming.warm_pages()
+        self.assertIn("Deal Booster Box", self.home_names())
+        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.com", "pw"))
+        for listing in self.deal.listings.all():
+            self.client.post(reverse("checks"), {"action": "hide", "listing": listing.pk})
+        self.assertIn("hard_at", listcache.cleared())
+        self.assertNotIn("Deal Booster Box", self.home_names())
+
+    def test_the_reader_builds_after_a_hard_clear_on_its_next_turn(self):
+        warming.warm_pages()
+        reader = worker.Worker(warm=True)
+        now = timezone.now()
+        reader.keep_pages_warm(now)
+        self.hide_deal(self.owner_request())
+        reader.keep_pages_warm(now + timedelta(seconds=5))
+        self.assertFalse(listcache.is_due(signals.HOME_CACHE_KEY))
+        self.assertNotIn("Deal Booster Box", [p.name for p, _ in listcache.peek(signals.HOME_CACHE_KEY)[0]
+                                              + listcache.peek(signals.HOME_CACHE_KEY)[2]])
+
+
+@override_settings(RIPRAPTOR_SERVE_STALE=True)
+class ClearMarksTests(Catalogue):
+    """Two clears at once never undo each other (web.listcache.mark_stale)."""
+
+    def test_an_ordinary_clear_never_drops_a_forced_one(self):
+        listcache.mark_stale(force=True, now=100.0)
+        listcache.mark_stale(now=99.0)   # a slower process that took its time before the forced clear
+        self.assertEqual(listcache.cleared(), {"at": 100.0, "forced_at": 100.0})
+        listcache.mark_stale(hard=True, now=120.0)
+        listcache.mark_stale(now=130.0)
+        self.assertEqual(listcache.cleared(), {"at": 130.0, "forced_at": 120.0, "hard_at": 120.0})
+
+    def test_a_mark_ahead_of_the_clock_is_ignored_and_replaced(self):
+        listcache.mark_stale(force=True, now=time.time() + 3600)   # made before the clock was set back
+        self.assertEqual(listcache.cleared(), {})
+        listcache.mark_stale()
+        self.assertLess(listcache.cleared()["at"], time.time() + 1)
+
+    def test_a_price_saved_between_the_home_and_deals_builds_leaves_the_deals_stale(self):
+        real = views.home_drops_new
+
+        def out_now_then_a_price_change(fresh=False):
+            Listing.objects.filter(product=self.deal, retailer=self.shop).update(price=Decimal("60.00"))
+            signals.clear_list_caches_now(force=True)
+            return real(fresh=fresh)
+
+        with mock.patch.object(views, "home_drops_new", out_now_then_a_price_change):
+            warming.warm_pages(fresh=True)
+        self.assertTrue(listcache.is_due(signals.DEALS_CACHE_KEY))   # built from offers read before the change
+        warming.warm_pages()
+        prices = [str(offer.price) for product, _ in listcache.peek(signals.DEALS_CACHE_KEY)["savings"]
+                  for offer in product.offers]
+        self.assertIn("60.00", prices)
+
+
+def file_cache(folder, **options):
+    from django.core.cache.backends.filebased import FileBasedCache
+
+    return FileBasedCache(folder, {"OPTIONS": options})
+
+
+def build_in_process(folder, key, log, barrier):
+    """One process asking for a missing list at the same moment as the others (ProcessLockTests)."""
+    cache = file_cache(folder)
+
+    def build():
+        with open(log, "a") as handle:
+            handle.write(f"{os.getpid()}\n")
+        time.sleep(0.3)
+        return "built"
+
+    barrier.wait()
+    assert listcache.get_or_build(key, build, cache=cache) == "built"
+
+
+def mark_in_process(folder, force, barrier):
+    cache = file_cache(folder)
+    barrier.wait()
+    for _ in range(40):
+        listcache.mark_stale(force=force, cache=cache)
+
+
+class ProcessLockTests(TestCase):
+    """The shared file cache across real processes, as the web workers and the reader use it in production.
+    Django's FileBasedCache.add is not atomic between processes, so the build lock and the marks keep files of
+    their own (web.listcache.FileState)."""
+
+    def setUp(self):
+        self.folder = tempfile.mkdtemp(prefix="ripraptor-listcache-")
+        self.addCleanup(shutil.rmtree, self.folder, True)
+        self.context = multiprocessing.get_context("fork")
+
+    def run_all(self, target, args_list):
+        """Run ``target`` in a forked process per ``args``. os.fork, not multiprocessing.Process, which refuses
+        to start children from the parallel test runner's own (daemon) processes."""
+        pids = []
+        for args in args_list:
+            pid = os.fork()
+            if pid == 0:   # the child: never returns into the test runner
+                code = 1
+                try:
+                    target(*args)
+                    code = 0
+                finally:
+                    os._exit(code)
+            pids.append(pid)
+        codes = [os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]) for pid in pids]
+        self.assertEqual(codes, [0] * len(pids))
+
+    @override_settings(RIPRAPTOR_SERVE_STALE=True)
+    def test_cold_visitors_in_three_processes_run_one_build(self):
+        log = os.path.join(self.folder, "builds.log")
+        for trial in range(5):
+            barrier = self.context.Barrier(3)
+            self.run_all(build_in_process, [(self.folder, f"web:test-list:{trial}", log, barrier)] * 3)
+        with open(log) as handle:
+            self.assertEqual(len(handle.read().split()), 5)
+
+    def test_a_forced_clear_survives_ordinary_ones_made_at_the_same_time(self):
+        barrier = self.context.Barrier(4)
+        self.run_all(mark_in_process, [(self.folder, True, barrier)] + [(self.folder, False, barrier)] * 3)
+        marks = listcache.cleared(cache=file_cache(self.folder))
+        self.assertIn("forced_at", marks)
+        self.assertGreaterEqual(marks["at"], marks["forced_at"])
+
+    def test_the_marks_are_never_culled_with_the_cache(self):
+        cache = file_cache(self.folder, MAX_ENTRIES=30)
+        listcache.store("web:test-list", lambda: "rows", cache=cache)
+        listcache.mark_stale(force=True, cache=cache)
+        for number in range(100):
+            cache.set(f"other:{number}", number)
+        cache.clear()
+        self.assertIn("forced_at", listcache.cleared(cache=cache))
+
+    def test_a_held_file_lock_is_released_when_its_process_ends(self):
+        cache = file_cache(self.folder)
+        held = listcache.state(cache).take("web:test-list")
+        self.assertIsNotNone(held)
+        self.assertIsNone(listcache.state(cache).take("web:test-list"))
+        listcache.state(cache).release(held)
+        again = listcache.state(cache).take("web:test-list")
+        self.assertIsNotNone(again)
+        listcache.state(cache).release(again)
 
 
 class InstallTests(TestCase):

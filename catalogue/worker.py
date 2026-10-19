@@ -917,7 +917,7 @@ class Worker:
         from web import listcache, warming
 
         try:
-            forced = listcache.cleared().get("forced_at")
+            forced = listcache.cleared().get("forced_at")   # a hard clear raises it too
             looked_lately = self.last_warm is not None and now - self.last_warm < WARM_CHECK
             if looked_lately and forced == self.warm_forced and not warming.missing():
                 return

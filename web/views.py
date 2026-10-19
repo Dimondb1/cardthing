@@ -410,7 +410,8 @@ def coming_soon_queryset(game=None):
         preorders.order_by().values("product__product_set")
         .annotate(shops=Count("retailer", distinct=True)).values("shops")
     )
-    sets = ProductSet.objects.filter(game__is_active=True)
+    # A set sold only at events or direct by the publisher is never coming soon to a UK shop.
+    sets = ProductSet.objects.filter(game__is_active=True, not_in_shops=False)
     if game is not None:
         sets = sets.filter(game=game)
     today = timezone.localdate()
@@ -625,6 +626,8 @@ def set_detail(request, game_slug, set_slug):
             "game": game,
             "product_set": product_set,
             "set_upcoming": upcoming,
+            # A set sold only at events or direct by the publisher says so where its release would be.
+            "set_out_later": bool(product_set.release_date and product_set.release_date >= timezone.localdate()),
             "date_source": date_source_label(product_set) if upcoming else "",
             "sets": ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct(),
             "meta_title": text(request, "meta.set.title", **values),

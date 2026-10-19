@@ -39,8 +39,9 @@ class GameAdmin(admin.ModelAdmin):
 
 @admin.register(ProductSet)
 class ProductSetAdmin(admin.ModelAdmin):
-    list_display = ("name", "game", "code", "release_date", "release_date_source")
-    list_filter = ("game",)
+    list_display = ("name", "game", "code", "release_date", "release_date_source", "not_in_shops")
+    list_editable = ("not_in_shops",)
+    list_filter = ("game", "not_in_shops")
     search_fields = ("name", "code")
     prepopulated_fields = {"slug": ("name",)}
     date_hierarchy = "release_date"

@@ -12,6 +12,9 @@ listed last as "Date not announced yet" (the rule the Coming soon rows on the ho
 so the page every "See all" leads to holds every pre-order those rows show. It takes no reminder: with no
 day and no month there is nothing to remind about and no point at which the reminder would end.
 
+A set the owner or Claude marked as not sold in UK shops (ProductSet.not_in_shops: only at events or direct
+from the publisher) is never a drop: no shop will list it, so it takes no reminder either.
+
 A product with its own later release date (a collection that follows the set by months) is not part of
 the set's drop: it is left off the card and out of the emails, the same date every list uses
 (Product.effective_release_date). A month-only drop that a shop already sells from stock is out, the rule
@@ -107,7 +110,7 @@ def drop_queryset(today):
     at all while a shop takes pre-orders, with their products and offers prefetched."""
     products = Product.objects.active().prefetch_related(shop_offers()).order_by("name")
     return (
-        with_month(ProductSet.objects.filter(game__is_active=True).select_related("game"))
+        with_month(ProductSet.objects.filter(game__is_active=True, not_in_shops=False).select_related("game"))
         .annotate(shop_preorder=shop_preorders())
         .filter(
             Q(release_date__gte=today - timedelta(days=RECENT_DAYS))

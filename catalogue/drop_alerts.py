@@ -16,7 +16,9 @@ after the last email. The stages, each sent at most once and only when its data 
 A month-only drop hears only about pre-orders until its date is published, and nothing once a shop sells
 it from stock. A product with its own later release date is not part of the drop (drops.in_drop). A stage whose window has
 passed is never sent late: a day-before email that missed its evening is skipped, not sent on the day.
-Reminders are deleted unconfirmed after a week, once their drop has passed and after a year in any case.
+Reminders are deleted unconfirmed after a week, once their drop has passed and after a year in any case. A
+reminder for a set since marked as not sold in UK shops (ProductSet.not_in_shops) is deleted unsent: no shop
+will list it, and the sign-up refuses new ones.
 
 The sign-up never says what it knows about an address: a stranger typing someone's address sees the same
 "check your inbox" whether that address already has the reminder, is at its limit or is new. An address
@@ -133,7 +135,7 @@ def ask(product_set, email, now=None):
     now = now or timezone.now()
     email = email.strip().lower()
     alert = DropAlert.objects.filter(product_set=product_set, email=email).first()
-    if alert is not None and alert.confirmed_at:
+    if product_set.not_in_shops or (alert is not None and alert.confirmed_at):
         return "sent"
     if alert is not None and alert.confirm_sent_at and alert.confirm_sent_at > now - timedelta(minutes=RESEND_MINUTES):
         # Asked again moments later: the confirmation already on its way stands, so a form pressed over and
@@ -196,13 +198,14 @@ def with_set_month(alerts):
 
 
 def tidy(now):
-    """Delete reminders never confirmed within a week, kept over a year, or whose drop has passed: a dated one
-    after its day, a month-only one after its month."""
+    """Delete reminders never confirmed within a week, kept over a year, whose drop has passed (a dated one
+    after its day, a month-only one after its month) or whose set is not sold in UK shops. None is emailed."""
     today = timezone.localdate(now)
     DropAlert.objects.filter(
         Q(confirmed_at__isnull=True, created_at__lt=now - timedelta(days=UNCONFIRMED_DAYS))
         | Q(created_at__lt=now - timedelta(days=KEEP_DAYS))
         | Q(product_set__release_date__lt=today)
+        | Q(product_set__not_in_shops=True)
     ).delete()
     ended = with_set_month(DropAlert.objects.filter(product_set__release_date__isnull=True)).filter(
         set_month__lt=month_start(today)

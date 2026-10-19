@@ -751,6 +751,11 @@ ENTRIES = [
         "Heading above the list of sets on each game page.",
     ),
     Entry(
+        "browse.set.not_in_shops", T, "Set not sold in UK shops",
+        "Sold at events or direct by the publisher, not in UK shops.",
+        "Under the heading of a set page, for a set marked as not sold in UK shops in Django Admin or by Claude.",
+    ),
+    Entry(
         "browse.set.released", T, "Set release date",
         "Released {date}",
         "Under the heading on each set page.",

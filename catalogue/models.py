@@ -74,6 +74,15 @@ class ProductSet(models.Model):
         help_text="Where the release date came from: a release source, or owner when it was set here. "
         "A date set here is never changed by a source.",
     )
+    not_in_shops = models.BooleanField(
+        "not sold in UK shops", default=False,
+        help_text="Only sold at events or direct by the publisher, so no UK shop will stock it. Kept off the drop "
+        "tracker and Coming soon, and takes no drop reminders.",
+    )
+    not_in_shops_note = models.CharField(
+        "why not in shops", max_length=300, blank=True,
+        help_text="Where that was found: a page address or a short note. Claude writes its source here.",
+    )
     # When a field its page and its products' pages show was last saved (the sitemap's lastmod). Empty for a
     # set last changed before this was recorded: stamped in save(), not auto_now, which would date every set
     # to the day the field was added.
@@ -89,7 +98,7 @@ class ProductSet(models.Model):
 
     # Fields the set's page and its products' pages show. Saving one with update_fields moves updated_at;
     # saving only where a date came from does not.
-    PAGE_FIELDS = {"game", "name", "slug", "code", "release_date"}
+    PAGE_FIELDS = {"game", "name", "slug", "code", "release_date", "not_in_shops"}
 
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")
@@ -1398,6 +1407,7 @@ class ClaudeAsk(models.Model):
         OFFER = "offer", "A shop's price"
         PAIR = "pair", "Possible duplicates"
         SET = "set", "Announced set"
+        RETAIL = "retail", "Set sold in shops"
 
     class Outcome(models.TextChoices):
         SENT = "sent", "Sent"
@@ -1477,6 +1487,8 @@ class ClaudeAsk(models.Model):
             return f"{(e.get('first') or {}).get('name', '')} and {(e.get('second') or {}).get('name', '')}"
         if self.kind == self.Kind.SET:
             return f"the announced set {e.get('announced_name', '')} for {e.get('game', '')}"
+        if self.kind == self.Kind.RETAIL:
+            return f"whether UK shops sell {e.get('set_name', '')} for {e.get('game', '')}"
         ours =(e.get("ours") or {}).get("name", "")
         if self.kind == self.Kind.FOUND:
             return f'"{e.get("shop_title", "")}" at {e.get("shop", "")} for {ours}'
@@ -1486,6 +1498,8 @@ class ClaudeAsk(models.Model):
     def result(self):
         """What came of it."""
         if self.outcome == self.Outcome.ANSWERED:
+            if self.kind == self.Kind.RETAIL and self.action == self.Action.ACTED:
+                return "acted, the set is marked as not sold in UK shops"
             return self.RESULT_WORDS.get(self.action, "answered")
         return self.RESULT_WORDS.get(self.outcome, self.get_outcome_display())
 
@@ -1500,7 +1514,8 @@ class ClaudeAsk(models.Model):
             return None
 
     VERDICT_WORDS = {"same": "same product", "different": "a different product", "unsure": "cannot tell",
-                     "new": "a new set", "existing": "a set the site has", "not_a_set": "not a set"}
+                     "new": "a new set", "existing": "a set the site has", "not_a_set": "not a set",
+                     "shops": "sold in shops", "not_shops": "sold only at events or direct"}
     CONFIDENCE_WORDS = {"high": "sure", "medium": "fairly sure", "low": "not sure"}
 
     @property

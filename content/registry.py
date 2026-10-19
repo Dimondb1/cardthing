@@ -750,6 +750,23 @@ ENTRIES = [
         "Heading on the page that lists every game and set.",
     ),
     Entry(
+        "browse.games.all_sets", B, "All sets link on the Games page",
+        "All {count} sets",
+        "Under a game's newest sets on the Games page, when it has more than are listed there. Opens the game's page.",
+        placeholders=("count",),
+    ),
+    Entry(
+        "browse.games.all_products.one", B, "Products link on the Games page (one)",
+        "See 1 product",
+        "Under each game on the Games page, when the game has one product. Opens the game's page.",
+    ),
+    Entry(
+        "browse.games.all_products.other", B, "Products link on the Games page",
+        "See all {count} products",
+        "Under each game on the Games page, with or without sets listed above it. Opens the game's page.",
+        placeholders=("count",),
+    ),
+    Entry(
         "browse.game.sets_title", H, "Sets heading on a game page",
         "Sets",
         "Heading above the list of sets on each game page.",

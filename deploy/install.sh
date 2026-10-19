@@ -128,7 +128,7 @@ sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/
 # One address for the site: www. sends visitors and Google to the same page without it, permanently.
 # Serving both made Google index the whole site twice and split each page's standing between them.
 cat > /etc/caddy/Caddyfile <<CADDY
-www.$DOMAIN {
+www.$DOMAIN, http://www.$DOMAIN {
     redir https://$DOMAIN{uri} permanent
 }
 $DOMAIN {

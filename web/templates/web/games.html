@@ -8,16 +8,23 @@
   <section class="game-index__game" aria-labelledby="game-{{ game.slug }}">
     <div class="game-index__head">
       <h2 id="game-{{ game.slug }}"><a href="{{ game.get_absolute_url }}">{{ game.name }}</a></h2>
-      <p class="muted">{% copy_count "browse.count" game.product_count %}</p>
     </div>
+    {% with sets=game.sets.all %}
+    {% if sets %}
     <ul class="game-index__sets">
-      {% for product_set in game.sets.all %}
+      {% for product_set in sets|slice:sets_shown %}
       <li>
         <a href="{{ product_set.get_absolute_url }}">{{ product_set.name }}</a>
         <span class="game-index__set-meta">{% if product_set.code %}{{ product_set.code }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% copy_count "browse.count" product_set.product_count %}</span>
       </li>
       {% endfor %}
     </ul>
+    {% endif %}
+    <p class="game-index__more">
+      {% if sets|length > sets_shown %}<a href="{{ game.get_absolute_url }}#sets">{% copy "browse.games.all_sets" count=sets|length %}</a>{% endif %}
+      <a href="{{ game.get_absolute_url }}">{% copy_count "browse.games.all_products" game.product_count %}</a>
+    </p>
+    {% endwith %}
   </section>
   {% endfor %}
 </div>

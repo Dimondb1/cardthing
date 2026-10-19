@@ -6,7 +6,8 @@ Run every cleanup in the right order after an import or a code update.
 tidy_listings (a shop item linked to the wrong product), merge_duplicates
 (one product under two names), tidy_catalogue (products that no longer pass
 the rules), then files products without a set under the set their name or
-code names (catalogue/releases.py attach_sets), sets each product's language from its name and set
+code names (catalogue/releases.py attach_sets) and puts the set codes in the names of products still without
+one, for games no release source lists, under Announced sets to check (raise_name_candidates), sets each product's language from its name and set
 (catalogue/languages.py), retypes products whose name plainly says another type (catalogue/types.py),
 forgets website shop pages
 no sitemap has listed for 30 days, clears old import records, removed product addresses after a year and the
@@ -120,18 +121,25 @@ class Command(BaseCommand):
             call_command(name, dry_run=dry_run, stdout=self.stdout)
         from django.db import transaction
 
-        from catalogue.releases import attach_sets
+        from catalogue.releases import attach_sets, raise_name_candidates
         from catalogue.models import Game
 
         self.stdout.write("== sets")
         filed = 0
+        codes = []
         for game in Game.objects.all():
             # One transaction per game, so a writer waiting behind this one waits only briefly.
             with transaction.atomic():
                 filed += attach_sets(game)
                 if dry_run:
                     transaction.set_rollback(True)
+            # Codes in the names of products still with no set, for games no release source lists, wait under
+            # Announced sets to check for Claude or the owner to name.
+            codes += raise_name_candidates(game, dry_run=dry_run)
         self.stdout.write(f"{filed} products {'would be filed' if dry_run else 'filed'} under their sets.")
+        if codes:
+            self.stdout.write(f"{len(codes)} set codes from product names {'would wait' if dry_run else 'wait'} "
+                              "under Announced sets to check.")
 
         from catalogue.languages import refresh_languages
 

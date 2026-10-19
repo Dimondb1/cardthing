@@ -45,7 +45,7 @@
 </div>
 
 {% if sets %}
-<nav class="set-nav" aria-label="{% copy 'browse.game.sets_title' %}">
+<nav class="set-nav" id="sets" aria-label="{% copy 'browse.game.sets_title' %}">
   <h2 class="visually-hidden">{% copy "browse.game.sets_title" %}</h2>
   <ul>
     <li><a href="{{ game.get_absolute_url }}"{% if not product_set %} aria-current="page"{% endif %}>{% copy "browse.game.all_sets" game=game.display_short %}</a></li>

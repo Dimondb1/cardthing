@@ -386,13 +386,18 @@ class AttachSetsTests(TestCase):
         etb.refresh_from_db()
         self.assertEqual(etb.product_set, sparks)
 
-    def test_one_word_never_files_a_product(self):
+    def test_one_word_files_only_a_name_that_starts_with_it(self):
         lorcana = make_game(name="Disney Lorcana", slug="lorcana")
-        make_set(lorcana, name="Fabled", slug="fabled", code="")
+        fabled = make_set(lorcana, name="Fabled", slug="fabled", code="")
         box = self.product(lorcana, "Fabled Booster Box")
+        prefixed = self.product(lorcana, "Disney Lorcana TCG Fabled Sleeved Booster Pack")
+        inside = self.product(lorcana, "Stitch Fabled Friends Gift Set")
         releases.attach_sets(lorcana)
-        box.refresh_from_db()
-        self.assertIsNone(box.product_set)
+        for product in (box, prefixed, inside):
+            product.refresh_from_db()
+        self.assertEqual(box.product_set, fabled)
+        self.assertEqual(prefixed.product_set, fabled)
+        self.assertIsNone(inside.product_set)
 
     def test_the_longest_matching_name_wins(self):
         magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering")

@@ -649,6 +649,10 @@ def search(request):
     )
 
 
+# Sets listed under each game on the Games page, newest first; the rest are a tap away on the game's own page.
+GAMES_PAGE_SETS = 8
+
+
 @require_GET
 def games(request):
     game_list = (
@@ -657,9 +661,10 @@ def games(request):
         .prefetch_related(
             Prefetch(
                 "sets",
+                # Newest first. Spelled out: a query with a count drops the model's own order.
                 queryset=ProductSet.objects.annotate(
                     product_count=Count("products", filter=Q(products__is_active=True))
-                ).filter(product_count__gt=0),
+                ).filter(product_count__gt=0).order_by(F("release_date").desc(nulls_last=True), "name"),
             )
         )
     )
@@ -667,7 +672,7 @@ def games(request):
     return render(
         request,
         "web/games.html",
-        {"games": game_list, "heading": heading, "meta_title": heading},
+        {"games": game_list, "heading": heading, "meta_title": heading, "sets_shown": GAMES_PAGE_SETS},
     )
 
 

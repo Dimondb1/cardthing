@@ -151,9 +151,18 @@ class OneAddressTests(TestCase):
     def test_caddy_sends_www_to_the_bare_domain(self):
         text = (DEPLOY / "install.sh").read_text()
         caddy = text[text.index("cat > /etc/caddy/Caddyfile <<CADDY"):text.index("\nCADDY\n")]
-        self.assertIn("www.$DOMAIN {\n    redir https://$DOMAIN{uri} permanent\n}", caddy)
+        self.assertIn("www.$DOMAIN, http://www.$DOMAIN {\n    redir https://$DOMAIN{uri} permanent\n}", caddy)
         self.assertIn("    reverse_proxy 127.0.0.1:8000", caddy[caddy.index("\n$DOMAIN {"):])
         self.assertNotIn("$DOMAIN, www.$DOMAIN", caddy)
+
+    def test_http_www_reaches_the_bare_domain_in_one_hop(self):
+        # The owner's speed test (Oct 2026): http://www. went to https://www. (Caddy's own redirect) and only then
+        # to https:// on the bare domain. Naming the http:// address sends it straight there; the sample matches.
+        install = (DEPLOY / "install.sh").read_text()
+        sample = (DEPLOY / "caddy.Caddyfile").read_text()
+        self.assertIn("http://www.$DOMAIN {", install)
+        self.assertIn("www.cardscout.example, http://www.cardscout.example {\n"
+                      "    redir https://cardscout.example{uri} permanent\n}", sample)
 
 
 class SpreadsheetDeployTests(TestCase):

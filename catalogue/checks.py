@@ -16,7 +16,7 @@ from copy import copy
 from datetime import timedelta
 
 from django.conf import settings
-from django.db.models import Count, Exists, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -317,7 +317,7 @@ def release_candidates(now=None, limit=RELEASE_ROWS):
     owner undoes it. With Claude off nobody would look again, so those rows are the owner's to see.
     """
     from .models import ClaudeJudge
-    from .releases import local_today, recent_cutoff
+    from .releases import NAMES_SOURCE, local_today, recent_cutoff
 
     cutoff = recent_cutoff(local_today(now or timezone.now()))
     undated_set = Q(product_set__release_date__isnull=True, precision=Release.Precision.DAY)
@@ -331,7 +331,11 @@ def release_candidates(now=None, limit=RELEASE_ROWS):
         rows
         .filter(Q(product_set__isnull=True) | undated_set)
         .filter(Q(release_date__isnull=True) | Q(release_date__gte=cutoff))
-        .select_related("game", "product_set").order_by("-first_seen_at", "-pk")[:limit]
+        .select_related("game", "product_set")
+        # Codes raised from product names (releases.NAMES_SOURCE) come after the sources' own rows: one tidy can
+        # raise dozens, and they must not push an announced set off the list.
+        .annotate(from_names=Case(When(source=NAMES_SOURCE, then=Value(1)), default=Value(0), output_field=IntegerField()))
+        .order_by("from_names", "-first_seen_at", "-pk")[:limit]
     )
 
 
@@ -380,7 +384,7 @@ def release_disagreements(now=None):
 def name_sources(rows):
     """Give each Release row a source_label the owner can read: the source's own name ("TCGdex"), or "a
     Total Cards product title" for a shop's title. One query for the shops, however many rows."""
-    from .releases import BY_NAME, SHOP_PREFIX
+    from .releases import BY_NAME, NAMES_SOURCE, SHOP_PREFIX
 
     rows = list(rows)
     slugs = {row.source[len(SHOP_PREFIX):] for row in rows if row.source.startswith(SHOP_PREFIX)}
@@ -388,6 +392,8 @@ def name_sources(rows):
     for row in rows:
         if row.source in BY_NAME:
             row.source_label = BY_NAME[row.source].label
+        elif row.source == NAMES_SOURCE:
+            row.source_label = "product names on the site"
         elif row.source.startswith(SHOP_PREFIX):
             slug = row.source[len(SHOP_PREFIX):]
             row.source_label = f"a {shops.get(slug, slug)} product title"

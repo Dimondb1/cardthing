@@ -31,8 +31,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
+from typing import NamedTuple
 
 from django.conf import settings
 from django.db import transaction
@@ -86,6 +87,7 @@ class Source:
     browser: bool = False   # the site refuses anything but a browser's User-Agent
     pages: tuple = ()   # further pages read after url, while the daily page allowance lasts
     terms: str = ""
+    shop_codes: bool = True   # its set codes are the ones shops write, so a set added from it carries one
 
     def headers(self):
         agent = BROWSER_USER_AGENT if self.browser else user_agent()
@@ -104,7 +106,7 @@ SOURCES = [
     Source("tcgdex_sets", "TCGdex", "pokemon",
            "https://api.tcgdex.net/v2/en/sets?sort:field=releaseDate&sort:order=DESC"
            "&pagination:page=1&pagination:itemsPerPage=40", JSON, False, 6, 0.1,
-           terms="No published limit; 100 ms between requests and at most 40 set pages a read."),
+           terms="No published limit; 100 ms between requests and at most 40 set pages a read.", shop_codes=False),
     Source("pokemon_uk_news", "pokemon.com UK news", "pokemon", "https://www.pokemon.com/uk/news/", HTML, True, 6, 1.0,
            accept=HTML_ACCEPT, terms="Ordinary website terms; the index and at most 3 articles a read."),
     Source("ygoprodeck_sets", "YGOPRODeck", "yu-gi-oh", "https://db.ygoprodeck.com/api/v7/cardsets.php", JSON, False,
@@ -588,8 +590,9 @@ class Reader:
     pages are spent), dry runs included: they fetch the same pages.
     """
 
-    def __init__(self, source, fetch, sleep, take_page=None, stop=None):
+    def __init__(self, source, fetch, sleep, take_page=None, stop=None, details=TCGDEX_DETAILS):
         self.source, self.fetch, self.sleep = source, fetch, sleep
+        self.details = details   # TCGdex set pages opened at most
         self.take_page = take_page or (lambda: None)
         self.stop = stop or (lambda: False)
         self.requests = 0
@@ -627,7 +630,7 @@ class Known:
 
 def read_tcgdex(source, reader, since, known):
     signals = []
-    ids = [i for i in parse_tcgdex_list(reader.get(source.url)) if i not in known.dated_codes][:TCGDEX_DETAILS]
+    ids = [i for i in parse_tcgdex_list(reader.get(source.url)) if i not in known.dated_codes][:reader.details]
     for set_id in ids:
         if reader.stop():
             break
@@ -781,7 +784,9 @@ def scan(name, fetch=None, now=None, sleep=None, dry_run=False, stop=None):
         state.save(update_fields=["next_at"])
     reader = Reader(source, fetch, sleep, take_page=lambda: take_page(name, now), stop=stop)
     try:
-        signals = READERS[name](source, reader, recent_cutoff(today), Known.load(name))
+        # Every set the answer lists, the back catalogue included: the release rules settle only recent ones, and
+        # an older one may only file products (attach_sets).
+        signals = READERS[name](source, reader, None, Known.load(name))
     except OutOfPages:
         signals = []
         result.skipped = f"the {HTML_PAGES_PER_DAY} web pages a day are used up"
@@ -790,7 +795,8 @@ def scan(name, fetch=None, now=None, sleep=None, dry_run=False, stop=None):
         result.error = (str(exc) or exc.__class__.__name__)[:200]
     result.requests = reader.requests
     if dry_run:
-        result.signals = signals or []
+        # What the radar would act on: sets inside its window, or with no date.
+        result.signals = [s for s in signals or [] if since_ok(s, recent_cutoff(today))]
         return result
     # Pages were counted as they were fetched (take_page), so they are not saved from here.
     fields = ["last_error"]
@@ -961,7 +967,7 @@ def accept(source, signals, now=None):
                 # No Game row: the owner has not added this game, and a source never adds one.
                 stats["skipped, game not added"] += 1
                 continue
-            name = " ".join((signal.name or "").split()).strip(QUOTES)[:120]
+            name = clean_name(signal.name)
             if not name:
                 continue
             values = {"code": (signal.code or "")[:20], "release_date": signal.release_date,
@@ -973,6 +979,8 @@ def accept(source, signals, now=None):
                                              last_seen_at=now, **values)
                 rows[(game.pk, name)] = row
                 stats["new"] += 1
+                # A newly listed set may name products already on the site (the back catalogue).
+                touched.add(game.pk)
             else:
                 changed = [key for key, value in values.items() if getattr(row, key) != value]
                 if changed:
@@ -988,8 +996,138 @@ def accept(source, signals, now=None):
         Release.objects.filter(pk__in=unchanged).update(last_seen_at=now)
     for game in games.values():
         if game.pk in touched:
-            attach_sets(game)
+            filed = attach_sets(game, now=now)
+            if filed:
+                stats["products filed"] += filed
     return stats
+
+
+# The back catalogue ------------------------------------------------------------------------------
+#
+# The radar's rules are about sets still to come, so every set a source lists is recorded as a Release row, and a
+# set released before the radar's window (RECENT_DAYS) waits there, off the Things to check page. It is a matter
+# of record, so the source listing it (a publisher, or one of the long-standing card databases above) is enough
+# to add it, but only when a product on the site names it, by code or whole name, with no other set or listed
+# set fitting as well (attach_sets): no set is added that would stand empty, and none from a product's name
+# alone. Its date is written as that source's, so a publisher's date replaces it later and the owner's is never
+# changed. A row the owner dismissed stays dismissed. The listed sets also stop a product being filed under a set
+# whose name is only part of the product's ('Black & White' in 'Black & White Dragons Exalted').
+
+# Read once by file_sets --backfill: the publisher's booster listings, linked from the pages the radar reads, and
+# every TCGdex set rather than the newest 40. News and coming-soon pages hold no back catalogue.
+BACKFILL = {
+    "tcgdex_sets": {"url": "https://api.tcgdex.net/v2/en/sets?sort:field=releaseDate&sort:order=DESC"},
+    "bandai_onepiece": {"url": "https://en.onepiece-cardgame.com/products/?subcategory=boosters",
+                        "pages": ("https://en.onepiece-cardgame.com/products/?subcategory=boosters&page=2",
+                                  "https://en.onepiece-cardgame.com/products/?subcategory=boosters&page=3")},
+    "dbs_fusion": {"url": "https://www.dbs-cardgame.com/fw/en/products/?tags=BoosterPack&page=1",
+                   "pages": ("https://www.dbs-cardgame.com/fw/en/products/?tags=BoosterPack&page=2",)},
+}
+BACKFILL_SKIP = {"pokemon_uk_news", "fabtcg_coming_soon"}
+TCGDEX_BACKFILL = 300
+
+
+def clean_name(name):
+    return " ".join((name or "").split()).strip(QUOTES)[:120]
+
+
+def listed_rows(game, today):
+    """The game's Release rows from release sources (never a shop's title) naming a set the site does not have,
+    out by ``today``, one per name, publishers' first. One query.
+
+    A row marked accepted with no set had one, and the owner deleted it in Admin: no row of that name is offered
+    again, so a deleted set stays deleted."""
+    rows = list(Release.objects.filter(game=game, product_set__isnull=True, release_date__lte=today)
+                .exclude(status=Release.Status.DISMISSED).exclude(source__startswith=SHOP_PREFIX)
+                .order_by("-official", "pk"))
+    removed = {name_key(row.name) for row in rows if row.status == Release.Status.ACCEPTED}
+    found, seen = [], set(removed)
+    for row in rows:
+        key = name_key(row.name)
+        if key in seen or not looks_like_set(row.name, "") or (row.precision == MONTH and row.release_date >= today.replace(day=1)):
+            continue
+        seen.add(key)
+        found.append(row)
+    return found
+
+
+def filing_code(row, shared=frozenset(), game_slug=""):
+    """The row's code, when its source's codes are the ones shops write (not TCGdex's ids) and no set of
+    another name has it too (``shared``, code_key spellings): YGOPRODeck gives 'Spell Ruler' and 'Spell Ruler
+    (25th Anniversary Edition)' the one code SRL."""
+    source = BY_NAME.get(row.source)
+    code = row.code if source is None or source.shop_codes else ""
+    return "" if code and code_key(code, game_slug) in shared else code
+
+
+def shared_codes(game, sets):
+    """The codes (code_key spellings) that sets of more than one name carry, among the game's sets (``sets``,
+    (pk, name, code) rows) and every set its release sources list. One query."""
+    names = defaultdict(set)
+    for _pk, name, code in sets:
+        if code:
+            names[code_key(code, game.slug)].add(name_key(name))
+    rows = (Release.objects.filter(game=game).exclude(code="").exclude(source__startswith=SHOP_PREFIX)
+            .exclude(status=Release.Status.DISMISSED).values_list("name", "code", "source"))
+    for name, code, source in rows:
+        if BY_NAME.get(source) is None or BY_NAME[source].shop_codes:
+            names[code_key(code, game.slug)].add(name_key(name))
+    return frozenset(code for code, keys in names.items() if len(keys) > 1)
+
+
+def add_listed_set(row, now, code=None):
+    """Add the set a back-catalogue Release row names, as its source gives it, with ``code`` (its filing_code
+    by default). Returns the set.
+
+    The row gives its date only to a set of its own name: a set found by code under another name keeps its
+    date."""
+    code = filing_code(row) if code is None else code
+    product_set = set_for(row.game, row.name, code)
+    if row.precision == DAY and name_key(product_set.name) == name_key(row.name):
+        write_date(product_set, row.release_date, row.source)
+    row.product_set, row.status = product_set, Release.Status.ACCEPTED
+    row.save(update_fields=["product_set", "status"])
+    link_rows(product_set, row.game, row.name)
+    logger.info("Back catalogue: added %s set %s from %s", row.game.slug, row.name, row.source)
+    return product_set
+
+
+def backfill(name, fetch=None, now=None, sleep=None, dry_run=False):
+    """Read one source's whole list once, for its back catalogue (file_sets --backfill), record it and file the
+    game's products. The source's own schedule is left alone; its web pages count against the day's allowance
+    like any others. A dry run records nothing."""
+    source = BY_NAME[name]
+    now = now or timezone.now()
+    result = ScanResult(name)
+    if name in BACKFILL_SKIP:
+        result.skipped = "it lists only sets still to come"
+        return result
+    game = Game.objects.filter(slug=source.game).first()
+    if game is None:
+        result.skipped = "the game is not added"
+        return result
+    wide = replace(source, **BACKFILL.get(name, {}))
+    if wide.kind == HTML and pages_left(now) < 1 + len(wide.pages):
+        result.skipped = f"not enough of the {HTML_PAGES_PER_DAY} web pages a day are left"
+        return result
+    reader = Reader(wide, fetch or fetch_url, sleep or time.sleep, take_page=lambda: take_page(name, now),
+                    details=TCGDEX_BACKFILL)
+    try:
+        signals = READERS[name](wide, reader, None, Known.load(name))
+    except OutOfPages:
+        result.skipped = f"the {HTML_PAGES_PER_DAY} web pages a day are used up"
+        return result
+    except Exception as exc:  # noqa: BLE001 - a broken page or parser writes nothing
+        result.error = (str(exc) or exc.__class__.__name__)[:200]
+        return result
+    result.requests = reader.requests
+    result.signals = signals
+    if not dry_run:
+        result.stats = accept(source, signals, now=now)
+        sets_before = ProductSet.objects.filter(game=game).count()
+        result.stats["products filed"] += attach_sets(game, now=now)
+        result.stats["back catalogue sets"] += ProductSet.objects.filter(game=game).count() - sets_before
+    return result
 
 
 # Shop titles ------------------------------------------------------------------------------------
@@ -1111,7 +1249,75 @@ class ShopSignals:
         Release.objects.filter(query, source=self.source).update(last_seen_at=now)
 
 
+# Set codes in product names, for the games no release source lists (Digimon, Riftbound, Dragon Ball Super
+# Masters). Each code no set has yet becomes one row under Announced sets to check: Claude settles it from the
+# publisher's own pages (set_judge.DOMAINS), or the owner taps Add set or Not a set. A name never adds a set.
+NAMES_SOURCE = f"{SHOP_PREFIX}names"
+NAME_CODES = {
+    "digimon": re.compile(r"(?<![a-z0-9])(bt|ex|st|lm)[ -]?(\d{1,2})(?![a-z0-9])"),
+    "riftbound": re.compile(r"(?<![a-z0-9])(?:(ogn|sfd)|(rb)[ -]?(\d{2}))(?![a-z0-9])"),
+    "dragon-ball": re.compile(r"(?<![a-z0-9])(b)[ -]?(\d{2})(?![a-z0-9])"),
+}
+NAME_EXAMPLES = 3
+
+
+def name_code(match):
+    """'BT27' from 'bt 27', 'ST09' from 'st9', 'OGN' from 'ogn'."""
+    parts = [part for part in match.groups() if part]
+    letters, number = parts[0], parts[1] if len(parts) > 1 else ""
+    return letters.upper() + (f"{int(number):02d}" if number else "")
+
+
+def raise_name_candidates(game, dry_run=False):
+    """Write one pending Release row (source shop:names) per set code that products of ``game`` with no set
+    carry and no set or announced set of the game has. Returns the codes. Three queries."""
+    pattern = NAME_CODES.get(game.slug)
+    if pattern is None:
+        return []
+    known = set()
+    for code in ProductSet.objects.filter(game=game).exclude(code="").values_list("code", flat=True):
+        known |= set_code_keys(code, game.slug) | {compact_code(code)}
+    known |= {code_key(code, game.slug) for code in Release.objects.filter(game=game).exclude(code="")
+              .values_list("code", flat=True)}
+    known |= {code_key(name, game.slug) for name in Release.objects.filter(game=game, source=NAMES_SOURCE)
+              .values_list("name", flat=True)}
+    found = defaultdict(list)
+    for name in Product.objects.filter(game=game, is_active=True, product_set__isnull=True).values_list("name", flat=True):
+        lowered = name.lower()
+        spans = [m.span() for m in CODE_SPAN.finditer(lowered)
+                 if int(m.group(1)) < int(m.group(2)) <= int(m.group(1)) + SPAN_WIDTH]
+        for match in pattern.finditer(lowered):
+            if any(start <= match.start() < end for start, end in spans):
+                continue
+            code = name_code(match)
+            if code_key(code, game.slug) not in known and name not in found[code]:
+                found[code].append(name)
+    if dry_run or not found:
+        return sorted(found)
+    now = timezone.now()
+    with transaction.atomic():
+        for code, names in sorted(found.items()):
+            Release.objects.get_or_create(
+                game=game, source=NAMES_SOURCE, name=code,
+                defaults={"code": code, "official": False, "note": " | ".join(sorted(names)[:NAME_EXAMPLES])[:300],
+                          "first_seen_at": now, "last_seen_at": now},
+            )
+    return sorted(found)
+
+
 # Filing products under sets ---------------------------------------------------------------------
+#
+# A product with no set is filed under one only when its name says which, and only one set fits:
+#
+# - by code first: a code in the name that is the code of exactly one set of its game and language. Codes
+#   compare in one spelling (code_key), so 'BT 15', 'BT-15' and 'BT15' are one code, and 'ST9' is 'ST09'.
+#   A name with a run of sets ('Special Booster Ver.2.0 (BT18 19)', 'BT01-03') is never filed by its codes;
+# - then by name: the set's whole name, as a phrase, with the game's filler words left out of both. A set whose
+#   name is one word ('Origins', 'Fabled') files a product only when the name starts with that word, once the
+#   game's name and a 'Set 3:' before it are taken off, and no other set of the game has that word for a name;
+# - two sets that fit, unless one's name holds the other's ('Star Trek Commander' over 'Star Trek'), file nothing.
+#
+# A product already under a set is never moved, and a set only takes products of its own language.
 
 def filler_words(game_slug):
     from .management.commands.merge_duplicates import FILLER, POKEMON_SERIES
@@ -1127,48 +1333,267 @@ def words_of(text):
 
 
 CODE_TOKEN = re.compile(r"[a-z0-9]+(?:[-.][a-z0-9]+)*")
+# A code written with a space: 'BT 15', 'LM 06', 'ST 1'.
+SPACED_CODE = re.compile(r"(?<![a-z0-9.])([a-z]{1,4}) (\d{1,3})(?![a-z0-9.])")
+# A run of sets: 'BT18 19', 'BT01-03', 'BT19/20'. The second number is a little above the first, so 'OP-15 24
+# Packs' is not one.
+CODE_SPAN = re.compile(r"(?<![a-z0-9])[a-z]{1,4}[ -]?(\d{1,3})(?:\s*[-/&,]\s*|\s+)(\d{1,3})(?![a-z0-9.])")
+SPAN_WIDTH = 6
+# Bandai's code for a booster that carries another set's cards ('OP15-EB04'): the first code is the set's.
+JOINED_CODE = re.compile(r"^\s*([a-z]+-?\d+)-[a-z]+-?\d+\s*$", re.I)
+# Pokémon codes keep their zeros: a source's 'SV08' is not always the shops' 'SV8', which is as often the
+# Japanese set of that number as the English one.
+ZEROS_MATTER = {"pokemon"}
+# Words that never make a one-word set name: kinds of product and the words around them.
+SET_NUMBER_WORDS = r"\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten"
+LEADING_SET_NUMBER = re.compile(rf"^\s*set\s+(?:{SET_NUMBER_WORDS})\s*[:\-–]?\s*", re.I)
+LEADING_GAME_WORDS = re.compile(r"^\s*(?:trading card game|card game|tcg)\s*[:\-–]?\s*", re.I)
+ONE_WORD_MIN = 4
+# Words that may follow a one-word set name in a product's: the kind of product ('Origins Booster Box', 'Fabled
+# Illumineer's Trove'), never more name ('Deoxys VMAX', 'Arceus VSTAR').
+KIND_FOLLOW = {"play", "draft", "collector", "collectors", "theme", "intro", "fat", "prerelease", "sealed", "booster",
+               "boosters", "display", "bundle", "blister", "pack", "packs", "box", "jumbo", "sleeved", "starter", "deck",
+               "decks", "set", "case", "tin", "etb", "elite", "trainer", "build", "first", "1st", "unlimited", "edition",
+               "champion", "showdown", "vault", "illumineers", "illumineer", "trove", "gift", "collection", "pin",
+               "checklane", "mini", "premium", "special"}
+# After a set's name that another set's name holds ('Final Fantasy' in 'Final Fantasy Commander', 'Team Rocket' in
+# 'Team Rocket Returns'), only the words of a booster of that set: 'Final Fantasy Play Booster' is the set,
+# 'Team Rocket Tin' and 'Legendary Duelists 9: Duels From the Deep' may be anything.
+FAMILY_FOLLOW = {"play", "draft", "collector", "collectors", "set", "booster", "boosters", "display", "bundle", "blister",
+                 "pack", "packs", "box", "jumbo", "sleeved", "prerelease", "elite", "trainer", "etb", "fat", "intro"}
+# Short joining words, which never tell a longer set's name from a shorter one's ('Battle for Baldur's Gate').
+JOINING_WORDS = {"for", "to", "in", "on", "at", "from", "with", "by", "vs", "its"}
+# Words for a kind of set that some of a game's sets carry in their names and others never do: a product with
+# the word is never filed under a set without it, while the game has a set with it. 'Ikoria Commander Deck' is
+# not Ikoria (Scryfall keeps its decks in a Commander set), and 'Invasion of Chaos Booster Pack (25th
+# Anniversary)' is not the 2004 Invasion of Chaos.
+KIND_OF_SET = {"commander", "anniversary"}
+# A product a shop calls a reprint, or a later print, is a later run of an older set, under its own date. It
+# goes under a set only when that set is itself a reprint edition ('Dark Crisis (25th Anniversary Edition)').
+REPRINT = re.compile(r"\breprint(?:s|ed)?\b|\b(?:19|20)\d\d\s+(?:[a-z]+\s+)?print\b", re.I)
+REPRINT_SETS = {"reprint", "anniversary"}
+# Not a sealed card product, whatever set it names: a manga box set, a pin badge. A set with the word in its
+# own name ('Manga Booster 02') still takes it.
+NOT_CARDS = re.compile(r"\bmanga\b|\bpin badges?\b", re.I)
+# A set name that is printed inside more than one set, so it never says which by itself: Pokémon's Radiant
+# Collection is a run of cards in both Legendary Treasures and Generations.
+NAME_NOT_ENOUGH = {"pokemon": {("radiant", "collection")}}
+
+
+def common_words():
+    from .matching import GENERIC_WORDS
+
+    return GENERIC_WORDS | {"set", "sets", "starter", "structure", "promo", "promos", "core", "card", "cards", "box",
+                            "edition", "series", "vault", "decks", "tins", "boxes", "bundles"}
+
+
+def code_key(code, game_slug=""):
+    """One spelling for a set code: 'BT 15', 'BT-15' and 'bt15' -> 'bt15', and 'ST09' -> 'st9' (except for a game
+    whose zeros matter)."""
+    compact = compact_code(code)
+    if game_slug in ZEROS_MATTER:
+        return compact
+    return re.sub(r"(?<=[a-z])0+(?=\d)", "", compact)
+
+
+def set_code_keys(code, game_slug=""):
+    """The code a set files products by, in code_key's spelling, or none: a code needs letters and digits."""
+    if not usable_code(code):
+        return frozenset()
+    joined = JOINED_CODE.match(code)
+    return frozenset({code_key(joined.group(1) if joined else code, game_slug)})
+
+
+def name_codes(name, game_slug=""):
+    """The codes a product name gives, in code_key's spelling, leaving out every code in a run of sets."""
+    lowered = (name or "").lower()
+    spans = [m.span() for m in CODE_SPAN.finditer(lowered)
+             if int(m.group(1)) < int(m.group(2)) <= int(m.group(1)) + SPAN_WIDTH]
+
+    def free(match):
+        return not any(start <= match.start() < end for start, end in spans)
+
+    found = {code_key(m.group(), game_slug) for m in CODE_TOKEN.finditer(lowered) if free(m)}
+    found |= {code_key(m.group(1) + m.group(2), game_slug) for m in SPACED_CODE.finditer(lowered) if free(m)}
+    return found
+
+
+def lead_words(name):
+    """The name's words from where a set name may start: the game's name, 'Set 3:' and a 'The' taken off."""
+    from .matching import GAME_PREFIX
+
+    text = name or ""
+    for _ in range(2):
+        text = GAME_PREFIX.sub("", text)
+        text = LEADING_GAME_WORDS.sub("", text)
+    text = LEADING_SET_NUMBER.sub("", text)
+    words = words_of(text)
+    return words[1:] if words[:1] == ["the"] else words
+
+
+class SetRule(NamedTuple):
+    pk: object
+    codes: frozenset     # code_key spellings
+    words: tuple         # the name's words in order, filler left out
+    length: int
+    language: str
+    one_word: bool       # a one-word name that may file a product whose name starts with it
+    family: bool = False  # its name is part of another set's ('Legendary Duelists', 'Team Rocket')
+    extras: frozenset = frozenset()   # the other words of the longer sets' names ('commander' for 'Star Trek')
+    by_name: bool = True  # whether its name alone may file a product (NAME_NOT_ENOUGH)
 
 
 def set_rules(game_slug, sets):
-    """[(set pk, code or '', name words, name length, language)] for the sets that can file a product."""
+    """[SetRule] for the sets that can file a product, from (pk, name, code) rows."""
     filler = filler_words(game_slug)
+    common = common_words()
     rules = []
     for pk, name, code in sets:
         # A set's language is what its name says, or what a code only another language has implies.
         language = languages.language_of(f"{name} {code or ''}", game_slug)
         said = languages.name(language).lower().split() if language else []
-        code = compact_code(code) if usable_code(code) else ""
-        name_words = {w for w in words_of(name) if w not in filler and w not in said}
-        rules.append((pk, code, name_words, len(name), language))
-    return rules
+        words = tuple(w for w in words_of(name) if w not in filler and w not in said)
+        rules.append(SetRule(pk, set_code_keys(code, game_slug), words, len(name or ""), language, False))
+    singles = Counter((rule.language, rule.words[0]) for rule in rules if len(rule.words) == 1)
+    holding = defaultdict(list)   # a word -> the rules whose name has it
+    for rule in rules:
+        for word in set(rule.words):
+            holding[word].append(rule)
+    not_enough = NAME_NOT_ENOUGH.get(game_slug, set())
+    shaped = []
+    for rule in rules:
+        longer = [other for other in holding[rule.words[0]] if other.language == rule.language
+                  and len(other.words) > len(rule.words) and holds(other.words, rule.words)] if rule.words else []
+        shaped.append(rule._replace(
+            one_word=len(rule.words) == 1 and singles[(rule.language, rule.words[0])] == 1
+            and rule.words[0] not in common and len(rule.words[0]) >= ONE_WORD_MIN and bool(re.search(r"[a-z]", rule.words[0])),
+            family=bool(longer),
+            extras=frozenset(word for other in longer for word in other.words
+                             if word not in rule.words and word not in common and word not in JOINING_WORDS),
+            by_name=rule.words not in not_enough,
+        ))
+    return shaped
+
+
+def holds(words, phrase):
+    """Whether ``phrase`` (a tuple of words) is in ``words`` as a whole, in order."""
+    size = len(phrase)
+    return any(tuple(words[i:i + size]) == phrase for i in range(len(words) - size + 1))
 
 
 def choose_set(product_name, rules, game=""):
-    """The set a product name belongs to, or None.
+    """The set a product name belongs to, or None (see the rules above this section).
 
-    Only a set of the product's own language can take it: a Japanese box shares the English set's code
-    and name but comes out months earlier, so it never takes the English set's date. A set whose code is
-    a whole token of the name wins. Otherwise the set with the most words, all of them in the name, wins;
-    a set needs two such words, so one word or series words alone never file anything ('Scarlet & Violet'
-    never takes 'Scarlet & Violet Surging Sparks ETB').
+    Only a set of the product's own language can take it: a Japanese box shares the English set's code and
+    name but comes out months earlier, so it never takes the English set's date. One series word alone never
+    files anything ('Scarlet & Violet' never takes 'Scarlet & Violet Surging Sparks ETB').
     """
+    return choose_set_why(product_name, rules, game)[0]
+
+
+def choose_set_why(product_name, rules, game=""):
+    """(the set's pk or None, why), as choose_set decides it."""
     language = languages.language_of(product_name or "", game)
-    rules = [rule for rule in rules if languages.same(rule[4], language)]
-    lowered = (product_name or "").lower()
-    tokens = {compact_code(t) for t in CODE_TOKEN.findall(lowered)}
-    by_code = [rule for rule in rules if rule[1] and rule[1] in tokens]
+    rules = [rule for rule in rules if languages.same(rule.language, language)]
+    if not rules:
+        return None, f"no set in {languages.name(language) if language else 'English'}"
+    filler = filler_words(game)
+    words = [w for w in words_of(product_name) if w not in filler]
+    codes = name_codes(product_name, game)
+    by_code = {rule.pk: rule for rule in rules if rule.codes & codes}
+    if len(by_code) == 1:
+        [rule] = by_code.values()
+        return kept(rule, "code", words, product_name, rules)
     if by_code:
-        return max(by_code, key=lambda r: (len(r[2]), r[3]))[0]
-    name_words = set(words_of(product_name))
-    fits = [rule for rule in rules if len(rule[2]) >= 2 and rule[2] <= name_words]
+        # Two sets' codes: a product of several sets, or a code two sets share.
+        return None, "codes of two sets"
+    lead = None
+    fits = []
+    for rule in rules:
+        if len(rule.words) >= 2:
+            if holds(words, rule.words):
+                fits.append(rule)
+        elif rule.one_word and rule.words[0] in words:
+            if lead is None:
+                lead = lead_words(product_name)[:1]
+            if lead == [rule.words[0]] and ends_name(words, rule.words, KIND_FOLLOW):
+                fits.append(rule)
     if not fits:
-        return None
-    return max(fits, key=lambda r: (len(r[2]), r[3]))[0]
+        spans = any(int(m.group(1)) < int(m.group(2)) <= int(m.group(1)) + SPAN_WIDTH
+                    for m in CODE_SPAN.finditer((product_name or "").lower()))
+        return None, "a run of sets" if spans else "names no set the site has"
+    best = max(fits, key=lambda r: (len(r.words), r.length))
+    inside = set(best.words)
+    if any(rule.pk != best.pk and not set(rule.words) < inside for rule in fits):
+        return None, "two sets fit"
+    if not best.by_name:
+        return None, "the name is in more than one set"
+    if best.family and (best.extras & set(words) or not ends_name(words, best.words, FAMILY_FOLLOW)):
+        # 'Legendary Duelists 9: Duels From the Deep' is not 'Legendary Duelists', nor 'Star Trek Collector
+        # Commander Deck' 'Star Trek': a set whose name starts another set's files only a name that goes on with
+        # the kind of product, or ends, and has none of the longer set's other words anywhere.
+        return None, "a longer set's name may fit"
+    if followed_by(words, best.words, "series"):
+        # 'Black & White Series Theme Deck' names the era, not the set.
+        return None, "names a series"
+    return kept(best, "one word" if len(best.words) == 1 else "name", words, product_name, rules)
 
 
-def attach_sets(game, product_ids=None):
-    """File the game's products that have no set under the set their name or code names. Returns how many."""
-    rules = set_rules(game.slug, ProductSet.objects.filter(game=game).values_list("pk", "name", "code"))
+def kept(rule, why, words, product_name, rules):
+    """(rule's pk, why), unless the product is a later run or another kind of set than ``rule`` (REPRINT,
+    KIND_OF_SET) or not a card product (NOT_CARDS): then (None, the reason)."""
+    not_cards = NOT_CARDS.search(product_name or "")
+    if not_cards and not set(words_of(not_cards.group())) <= set(rule.words):
+        return None, "not a card product"
+    if REPRINT.search(product_name or "") and not REPRINT_SETS & set(rule.words):
+        return None, "a reprint"
+    for word in KIND_OF_SET:
+        if word in words and word not in rule.words and any(word in other.words for other in rules):
+            return None, f"says {word}, and the set does not"
+    return rule.pk, why
+
+
+def followed_by(words, phrase, word):
+    """Whether ``phrase`` stands right before ``word`` anywhere in ``words``."""
+    size = len(phrase)
+    return any(tuple(words[i:i + size]) == phrase and words[i + size] == word for i in range(len(words) - size))
+
+
+def ends_name(words, phrase, follow):
+    """Whether ``phrase`` in ``words`` is followed only by the kind of product: every place it stands is at the
+    end, or before one of the ``follow`` words."""
+    size = len(phrase)
+    places = [i for i in range(len(words) - size + 1) if tuple(words[i:i + size]) == phrase]
+    return bool(places) and all(i + size == len(words) or words[i + size] in follow for i in places)
+
+
+def filing_rules(game, today):
+    """(set_rules for the game's sets and the sets its release sources list that it does not have yet, those
+    Release rows by their rule key). Each row carries ``filing_code``: its code, or '' when sets of other names
+    share it (shared_codes). Three queries."""
+    listed = {("listed", row.pk): row for row in listed_rows(game, today)}
+    sets = list(ProductSet.objects.filter(game=game).values_list("pk", "name", "code"))
+    shared = shared_codes(game, sets)
+    slugs = {name_key(name) for _pk, name, _code in sets}
+    candidates = []
+    for key, row in listed.items():
+        row.filing_code = filing_code(row, shared, game.slug)
+        if name_key(row.name) not in slugs:
+            candidates.append((key, row.name, row.filing_code))
+    return set_rules(game.slug, sets + candidates), listed
+
+
+def attach_sets(game, product_ids=None, now=None):
+    """File the game's products that have no set under the set their name or code names. Returns how many.
+
+    The sets the release sources list that the site does not have yet take part too (listed_rows): a product
+    that names one released before the radar's window adds it (add_listed_set, the back catalogue); a product
+    that names one still inside the window waits for the release rules; and either keeps a product from a set
+    whose name is only part of the product's.
+    """
+    now = now or timezone.now()
+    today = local_today(now)
+    rules, listed = filing_rules(game, today)
     if not rules:
         return 0
     products = Product.objects.filter(game=game, product_set__isnull=True)
@@ -1179,11 +1604,21 @@ def attach_sets(game, product_ids=None):
         chosen = choose_set(name, rules, game.slug)
         if chosen is not None:
             moves[chosen].append(pk)
+    cutoff = recent_cutoff(today)
     moved = 0
-    now = timezone.now()
     for set_pk, pks in moves.items():
+        if isinstance(set_pk, tuple):
+            row = listed[set_pk]
+            if row.release_date >= cutoff:
+                continue   # still inside the radar's window: the release rules decide whether it is a set
+            with transaction.atomic():
+                set_pk = add_listed_set(row, now, row.filing_code).pk
         # Filed under a set, the product's page gains the set and its date: the page changed.
-        moved += Product.objects.filter(pk__in=pks, product_set__isnull=True).update(product_set_id=set_pk, updated_at=now)
+        filed = Product.objects.filter(pk__in=pks, product_set__isnull=True).update(product_set_id=set_pk, updated_at=now)
+        if filed:
+            logger.info("Filed %s %s product%s under set %s: %s", filed, game.slug, "" if filed == 1 else "s", set_pk,
+                        ", ".join(str(pk) for pk in pks[:20]))
+        moved += filed
     if moved:
         from .signals import clear_list_caches
 

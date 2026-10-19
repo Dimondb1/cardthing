@@ -1981,6 +1981,8 @@ class RedesignTests(PageTestCase):
     def test_the_home_page_keeps_the_whole_logo_and_the_raptor_panels(self):
         home = self.client.get(reverse("web:home")).content.decode()
         self.assertIn('src="/static/img/logo.png"', home)
+        # WebP first (the same artwork, a half of the PNG's bytes), the PNG for browsers without it.
+        self.assertIn('<source srcset="/static/img/logo.webp" type="image/webp">', home)
         self.assertNotIn("hero__mark", home)
         # The owner's two panels: big capitals with the last sentence on its own line, the head cropped by the edge.
         deals = home[home.index('class="poster poster--deals"'):home.index("</a>", home.index('class="poster poster--deals"'))]
@@ -2561,3 +2563,62 @@ class SocialLinksTests(TestCase):
                 link = footer[footer.index(f'href="{href}"') - 60:footer.index(f"RipRaptor on {name}")]
                 self.assertIn('target="_blank" rel="noopener"', link)
                 self.assertIn('class="social__link"', link)
+
+
+class GamesPageTests(PageTestCase):
+    """Every game on the Games page ends with a link to all its products; its sets are listed newest first, up to
+    views.GAMES_PAGE_SETS, with a link to the rest; a game with no sets yet shows the link and no empty list."""
+
+    def games_page(self):
+        return self.client.get(reverse("web:games")).content.decode()
+
+    def section(self, html, slug):
+        start = html.index(f'aria-labelledby="game-{slug}"')
+        return html[start:html.index("</section>", start)]
+
+    def test_a_game_with_no_sets_shows_only_its_products_link(self):
+        rift = make_game(name="Riftbound", slug="riftbound")
+        for n in range(3):
+            Product.objects.create(game=rift, name=f"Origins Booster Box {n}", product_type=Product.Type.BOOSTER_BOX)
+        section = self.section(self.games_page(), "riftbound")
+        self.assertNotIn("<ul", section)
+        self.assertIn(f'<a href="{rift.get_absolute_url()}">See all 3 products</a>', section)
+
+    def test_sets_newest_first_capped_with_a_link_to_the_rest(self):
+        from datetime import date
+
+        from .views import GAMES_PAGE_SETS
+
+        magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering")
+        for n in range(GAMES_PAGE_SETS + 2):
+            made = make_set(magic, name=f"Set Number {n}", slug=f"set-{n}", code="", release_date=date(2020 + n, 1, 1))
+            make_product(made, name=f"Set Number {n} Booster Box")
+        section = self.section(self.games_page(), "magic-the-gathering")
+        self.assertEqual(section.count("<li>"), GAMES_PAGE_SETS)
+        self.assertLess(section.index(f"Set Number {GAMES_PAGE_SETS + 1}<"), section.index(f"Set Number {GAMES_PAGE_SETS}<"))
+        self.assertNotIn("Set Number 0<", section)
+        self.assertIn(f'<a href="{magic.get_absolute_url()}#sets">All {GAMES_PAGE_SETS + 2} sets</a>', section)
+        self.assertIn(f"See all {GAMES_PAGE_SETS + 2} products</a>", section)
+        # The link lands on the game page's row of sets.
+        self.assertIn('class="set-nav" id="sets"', self.client.get(magic.get_absolute_url()).content.decode())
+
+    def test_a_few_sets_need_no_link_to_the_rest(self):
+        section = self.section(self.games_page(), self.game.slug)
+        self.assertIn(self.pre.name, section)
+        self.assertNotIn("#sets", section)
+        self.assertIn("See all 3 products", section)
+
+    def test_the_page_costs_the_same_however_many_games_and_sets(self):
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        self.games_page()
+        with CaptureQueriesContext(connection) as few:
+            self.games_page()
+        for n in range(4):
+            game = make_game(name=f"Game {n}", slug=f"game-{n}")
+            for m in range(3):
+                make_product(make_set(game, name=f"Set {n} {m}", slug=f"set-{n}-{m}", code=""), name=f"Box {n} {m}")
+        with CaptureQueriesContext(connection) as many:
+            self.games_page()
+        self.assertEqual(len(many), len(few))

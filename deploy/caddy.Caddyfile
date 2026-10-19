@@ -1,6 +1,8 @@
 # Caddy gives HTTPS automatically. Replace the domain and reload Caddy. deploy/install.sh writes the same.
-# www. forwards permanently to the address without it, so search engines see one site, not two.
-www.cardscout.example {
+# www. forwards permanently to the address without it, so search engines see one site, not two. Its http://
+# address is named too, so http://www. goes to https:// on the bare domain in one hop instead of two (Caddy's
+# own http-to-https redirect, then this one). Caddy still answers its certificate checks on port 80 first.
+www.cardscout.example, http://www.cardscout.example {
     redir https://cardscout.example{uri} permanent
 }
 cardscout.example {

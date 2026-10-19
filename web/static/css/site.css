@@ -1112,11 +1112,13 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 
 .game-index { display: grid; gap: var(--rhythm-section); }
 @media (min-width: 48rem) { .game-index { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--rhythm-section) var(--split-gap); } }
-/* Name over count for every game, so the lists beside each other start on the same line. */
+/* One line of name for every game, so the lists beside each other start on the same line. */
 .game-index__head { display: grid; justify-items: start; gap: var(--space-1); padding-bottom: var(--space-3); border-bottom: 2px solid var(--color-brand); }
 .game-index__head h2 { font-size: var(--text-section); }
 .game-index__head h2 a { text-decoration: none; }
-.game-index__head p { font-size: var(--text-sm); }
+/* Every game ends with its way in: all its products, and all its sets when more are listed than shown. */
+.game-index__more { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); padding-top: var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.game-index__more a { display: inline-block; padding-block: var(--space-1); }
 .game-index__sets { list-style: none; }
 .game-index__sets a { display: inline-block; padding-block: var(--space-1); }
 .game-index__sets li { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line); }

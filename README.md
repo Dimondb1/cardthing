@@ -1393,8 +1393,10 @@ have their own. Under 60rem the search box has its own row under them.
 The typeface is Archivo, self-hosted from `web/static/fonts/` (SIL Open Font
 License), so there are no requests to Google Fonts.
 
-The wordmark is plain text in `web/templates/web/includes/wordmark.html`.
-Replace that file to change the logo everywhere. The favicon is
+The logo is `web/static/img/logo.png`, served as `logo.webp` (the same
+pixels, lossless, half the bytes) to browsers that take WebP, through
+`web/templates/web/includes/wordmark.html`. Replace both files to change the
+logo everywhere. The favicon is
 `web/static/img/favicon.png`. The home screen icons (`icon-192.png`,
 `icon-512.png`, `icon-maskable-512.png` and `apple-touch-icon.png`) are
 made from `web/static/img/mark.png` by `python manage.py make_icons`; run
@@ -1482,7 +1484,8 @@ curl -fsSL https://raw.githubusercontent.com/Dimondb1/cardthing/claude/compassio
 collects static files, sets up the shops, starts the app and the
 background reader as services, configures HTTPS for the domain (with
 `www.` forwarding permanently to the address without it, so Google sees one
-site rather than two copies, and request bodies over 25 MB refused before
+site rather than two copies; `http://www.` goes there in one hop, not two;
+and request bodies over 25 MB refused before
 they reach the site, which reads a whole upload before it can refuse one)
 and schedules the cron jobs. The reader reads every shop on its first start. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
@@ -1938,7 +1941,7 @@ a time when its turn comes; `scan_releases` does the same by hand.
 | Source | Game | Kind | Read every | Terms we keep to |
 |---|---|---|---|---|
 | Scryfall sets API | Magic | official data | 24 hours | an accurate User-Agent and Accept header, at most 10 requests a second, cached a day |
-| TCGdex | Pokémon | community | 6 hours | no published limit; the newest 40 sets, at most 40 set pages a read, 100 ms apart |
+| TCGdex | Pokémon | community | 6 hours | no published limit; the newest 40 sets, at most 40 set pages a read, 100 ms apart (`file_sets --backfill`: every set, once) |
 | pokemon.com UK news | Pokémon | official | 6 hours | the news index and at most 3 expansion articles a read |
 | YGOPRODeck card sets | Yu-Gi-Oh! | community | 6 hours | one request; filtered on our side; set images are never shown from their server |
 | Lorcast | Lorcana | community | 6 hours | 100 ms between requests |
@@ -1953,7 +1956,8 @@ Web pages are fetched a second apart and no more than 25 a day across all
 of them, dry runs included; each page is counted as it is fetched, so the
 background reader and `scan_releases` run at the same time cannot go over
 together. A source that would go over waits for the next day. Sets released
-more than 180 days ago are recorded but change nothing.
+more than 180 days ago are recorded, off Things to check, and become sets only
+through the back catalogue below.
 
 pokemon.com articles are read only when their heading names an expansion
 and nothing else: an article about one product of it (a Booster Bundle,
@@ -1994,15 +1998,73 @@ What is published, and when:
 - No product is ever created from an announced set, and a game you have
   not added is skipped.
 
-Products are filed under their set by the set's code (a whole word of the
-product name, with letters and digits, such as OP-18) or, failing that, by
-the longest set name whose words all appear in the product name. A name
-needs two words that are not filler: series names such as Scarlet &
-Violet or Mega Evolution never file anything alone. A product in another
-language (see Languages: a word, or a code such as sv11B) is filed only under
-a set of the same language: those editions share the English set's code but
-come out on other dates, and every release source is an English one. This runs when a set is added, when an import creates a
-product, and in `tidy_all`.
+### Filing products under sets
+
+A product with no set is filed under one only when its name says which, and
+only one set fits (`catalogue/releases.py`, Filing products under sets):
+
+- **By code first.** A code in the name that is the code of exactly one set of
+  the game. Codes compare in one spelling: "BT 15", "BT-15" and "BT15" are one
+  code, and "ST9" is "ST09" (Pokémon keeps its zeros, since a bare SV8 is as
+  often the Japanese set as the English one). A run of sets such as
+  "Special Booster Ver.2.0 (BT18 19)" or "BT01-03" is never filed by its codes,
+  and a name with two sets' codes, or a code two sets share, is left alone.
+- **Then by name.** The set's whole name as a phrase, filler words left out.
+  A one-word set name ("Origins", "Fabled", "Morningtide") files a product only
+  when the name starts with it (after the game's name and a "Set 3:") and goes
+  on with the kind of product: "Origins Booster Box", never "Deoxys VMAX Battle
+  Box" or "Mega Evolutions". A set whose name another set's holds ("Final
+  Fantasy" and "Final Fantasy Commander", "Team Rocket" and "Team Rocket
+  Returns") files a name only when a booster word follows it, and never when
+  any other word of the longer name is in the product's ("Star Trek Collector
+  Commander Deck", "D&D Battle for Baldurs Gate Commander Legends").
+- **Never** when two sets fit (unless one's name holds the other's), when the
+  product is in another language from the set, or when it already has a set: a
+  filed product is never moved.
+- **Never** a reprint ("Reprint", "2025 European Print") under a set that is
+  not itself a reprint edition, a "Commander" or "25th Anniversary" product
+  under a set without that word while the game has sets with it ("Ikoria
+  Commander Deck" is not Ikoria), a name that says "Series" after the set's
+  name, a manga or a pin badge, or a Pokémon "Radiant Collection" card (that
+  name is printed in both Legendary Treasures and Generations).
+
+**The back catalogue.** Every set a release source lists is recorded, the
+old ones too. A set released before the radar's 180 days becomes a set only
+when a product on the site names it by those rules, with its source's date
+(as that source's, so a publisher or your own date stands over it); nothing
+is added that would stand empty, and no set ever comes from product names
+alone. Sets the sources list but the site does not have also stop a product
+being filed under a set whose name is only part of the product's ("Black &
+White" in "Black & White Dragons Exalted"). TCGdex's set ids are not the
+codes shops write, so sets from it carry no code; nor does a set whose code a
+source gives to another set as well (YGOPRODeck's SRL is both "Spell Ruler"
+and "Spell Ruler (25th Anniversary Edition)"), so each keeps its own date. A
+back-catalogue set you delete in Admin stays deleted.
+
+**Games no source lists.** For Digimon, Riftbound and Dragon Ball Super
+Masters the hourly `tidy_all` puts each set code in the names of products
+still without a set (BT27, EX14, ST09, LM06, OGN, SFD, RB01, B24) under
+"Announced sets to check", from "product names on the site". Claude checks
+them on the publisher's site when it is on (digimoncard.com,
+riftbound.leagueoflegends.com, dbs-cardgame.com); otherwise tap Add set with
+the set's name, and its products file by the code. These rows are listed
+after the sources' own announced sets, so they never push one off the list.
+Football has no sets.
+
+Filing runs when a set is added, when an import creates a product, after each
+release source read, and in `tidy_all`. To file everything once and see what
+happened:
+
+```sh
+python manage.py file_sets --dry-run      # what would be filed per game, with examples and reasons
+python manage.py file_sets --backfill     # read each source's whole list once (the publishers' booster
+                                          # lists and every TCGdex set too), then file
+```
+
+`--backfill` reads the One Piece booster list (3 pages) and the Dragon Ball
+Fusion World booster list (2 pages), which count against the 25 web pages a
+day, and every TCGdex set (about 200 requests, 100 ms apart). Run it once
+after updating.
 
 `RIPRAPTOR_RELEASES=0` stops the background reader reading these sources.
 

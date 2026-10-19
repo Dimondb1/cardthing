@@ -219,6 +219,8 @@ class Builder:
     def source_label(self, row):
         if row.source in releases.BY_NAME:
             return releases.BY_NAME[row.source].label
+        if row.source == releases.NAMES_SOURCE:
+            return "product names on the site, from shops' titles"
         if row.source.startswith(releases.SHOP_PREFIX):
             slug = row.source[len(releases.SHOP_PREFIX):]
             return f"a product title at {self.shops.get(slug, slug)}"

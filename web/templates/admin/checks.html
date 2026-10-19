@@ -238,7 +238,7 @@
       <li class="item"><b>{{ row.name }}{% if row.code and row.code != row.name %} ({{ row.code }}){% endif %}</b>
         {{ row.game.name }}, from {% if row.source_url %}<a href="{{ row.source_url }}" target="_blank" rel="noopener noreferrer">{{ row.source_label }}</a>{% else %}{{ row.source_label }}{% endif %}.
         {% if row.precision == "day" %}Out {{ row.release_date|date:"j F Y" }}.{% elif row.precision == "month" %}Out in {{ row.release_date|date:"F Y" }}, day not given.{% else %}No date given.{% endif %}
-        {% if row.note %}Shop title: "{{ row.note }}".{% endif %}
+        {% if row.note %}{% if row.source == "shop:names" %}Product names: {{ row.note }}.{% else %}Shop title: "{{ row.note }}".{% endif %}{% endif %}
         {% if row.product_set %}The site has this set, as {{ row.product_set.name }}, with no date yet.{% endif %}
         {% include "admin/_claude_set.html" with ask=row.claude %}
         <div class="row">

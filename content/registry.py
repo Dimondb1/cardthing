@@ -1385,7 +1385,7 @@ ENTRIES = [
     Entry("listshop.form.email", T, "Email label", "Email address", "Label above the email box."),
     Entry(
         "listshop.form.email_note", T, "Email note",
-        "Used only to reply about your shop. We delete it a year after we reply.",
+        "Used only to reply about your shop. We delete it a year after we deal with it, or after two years at most.",
         "Under the email box, followed by a link to the data part of the terms page.",
     ),
     Entry("listshop.form.message", T, "Message label", "Anything we should know (optional)", "Label above the message box."),

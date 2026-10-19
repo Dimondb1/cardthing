@@ -76,6 +76,40 @@ class ListShopTests(TestCase):
         self.client.get(reverse("web:list_shop_thanks"))
         self.assertEqual((ShopEnquiry.objects.count(), len(self.outbox.sent)), (1, 1))
 
+    def test_control_and_format_characters_are_not_stored(self):
+        # A NUL or a bidi override would let what the owner reads in admin and the email differ from what
+        # was sent. They are stripped from the name and message; the website is refused.
+        response = self.send(name="Sa\x00m\u202e Lee", message="Line one\x00\r\nLine\u200b two\u202e")
+        self.assertRedirects(response, reverse("web:list_shop_thanks"), fetch_redirect_response=False)
+        enquiry = ShopEnquiry.objects.get()
+        self.assertEqual((enquiry.name, enquiry.message), ("Sam Lee", "Line one\nLine two"))
+        for bad in ("https://n.co.uk/\x00", "https://shop.co.uk/\u202egnp.exe", "shop.co.uk/\u200bx"):
+            with self.subTest(bad=bad):
+                response = self.send(ip="203.0.113.9", shop_url=bad)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "That website address does not look right")
+        self.assertEqual(ShopEnquiry.objects.count(), 1)
+
+    def test_a_name_of_only_hidden_characters_is_missing(self):
+        response = self.send(name="\x00\u202e")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(ShopEnquiry.objects.exists())
+
+    def test_emoji_joiners_survive_in_the_message(self):
+        self.send(message="Family packs \U0001f468\u200d\U0001f469\u200d\U0001f467")
+        self.assertIn("\u200d", ShopEnquiry.objects.get().message)
+
+    def test_email_note_matches_what_purge_does(self):
+        from content.registry import REGISTRY
+
+        self.assertEqual((shops.HANDLED_KEEP_DAYS, shops.OPEN_KEEP_DAYS), (365, 730))
+        for key in ("listshop.form.email_note", "terms.data.listshop"):
+            with self.subTest(key=key):
+                text = REGISTRY[key].default
+                self.assertIn("a year after we", text)
+                self.assertIn("two years", text)
+                self.assertNotIn("after we reply", text)
+
     def test_message_is_optional(self):
         self.send(message="")
         self.assertEqual(ShopEnquiry.objects.get().message, "")
@@ -273,6 +307,7 @@ class NormaliseUrlTests(TestCase):
                     "ftp://shop.co.uk", "mailto:a@shop.co.uk", "javascript:alert(1)", "file:///etc/passwd",
                     "https://user:pw@shop.co.uk", "https://shop.co.uk:8080", "https://shop .co.uk",
                     "https://-shop.co.uk", "https://shop.123", "https://shop", "data:text/html,hi",
+                    "https://n.co.uk/\x00", "https://shop.co.uk/\u202egnp.exe", "https://shop.co.uk/a\u2066b",
                     "https://" + "a" * 300 + ".co.uk"):
             with self.subTest(raw=raw), self.assertRaises(shops.Invalid):
                 shops.normalise_url(raw)

@@ -17,6 +17,7 @@ arrived if they never are (purge, run by tidy_all every hour).
 """
 
 import re
+import unicodedata
 from datetime import timedelta
 from urllib.parse import urlsplit
 
@@ -45,6 +46,20 @@ LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 TLD = re.compile(r"[a-z]{2,63}|xn--[a-z0-9-]{1,59}")
 
 
+KEEP_JOINERS = {"\u200c", "\u200d"}   # zero width (non) joiner: needed by emoji and some scripts
+
+
+def hidden(c):
+    """True for a control or format character (Unicode Cc or Cf): NUL, bidi overrides such as U+202E,
+    zero width spaces. They let text shown to the owner read differently from what was sent."""
+    return unicodedata.category(c) in ("Cc", "Cf")
+
+
+def strip_hidden(text, keep="\n"):
+    """Text without control and format characters, keeping the characters in ``keep`` and the joiners."""
+    return "".join(c for c in text if c in keep or c in KEEP_JOINERS or not hidden(c))
+
+
 class Invalid(Exception):
     """A field does not look right. ``args[0]`` is the field's name."""
 
@@ -60,7 +75,7 @@ def normalise_url(raw):
     labels and an alphabetic top level), no user name or password and no unusual port. The host is lower
     cased, a trailing dot, a default port and any #fragment are dropped. Raises Invalid("shop_url")."""
     raw = (raw or "").strip()
-    if not raw or len(raw) > MAX_URL or any(c.isspace() for c in raw):
+    if not raw or len(raw) > MAX_URL or any(c.isspace() or hidden(c) for c in raw):
         raise Invalid("shop_url")
     if "://" not in raw:
         if re.match(r"^[a-z][a-z0-9+.-]*:", raw, re.I) and not re.match(r"^[^:/]+:\d", raw):
@@ -97,7 +112,7 @@ def normalise_url(raw):
 
 def clean(name, shop_url, email, message):
     """The form's values tidied, or Invalid naming the first field that is wrong."""
-    name = " ".join((name or "").split())
+    name = " ".join(strip_hidden(name or "", keep="\t\n").split())
     if not name or len(name) > MAX_NAME:
         raise Invalid("name")
     url, domain = normalise_url(shop_url)
@@ -106,7 +121,7 @@ def clean(name, shop_url, email, message):
         validate_email(email)
     except ValidationError:
         raise Invalid("email") from None
-    message = (message or "").strip().replace("\r\n", "\n")
+    message = strip_hidden((message or "").replace("\r\n", "\n").replace("\r", "\n"), keep="\t\n").strip()
     if len(message) > MAX_MESSAGE:
         raise Invalid("message")
     return {"name": name, "shop_url": url, "domain": domain, "email": email, "message": message}

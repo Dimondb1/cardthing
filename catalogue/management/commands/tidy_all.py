@@ -90,6 +90,15 @@ class Command(BaseCommand):
                 self.stdout.write(f"{what}: {why}.")
             self.stdout.write(f"{len(done)} things to check {'would be answered' if dry_run else 'answered'}.")
 
+        if not dry_run:
+            # The tidying cleared the cached page lists; build them now rather than on a visitor's request.
+            from web.warming import warm_quietly
+
+            self.stdout.write("== page lists")
+            took = warm_quietly()
+            self.stdout.write("The page lists could not be built; visitors build them." if took is None
+                              else f"Page lists built in {took:.1f} s.")
+
     def spreadsheet_part_made(self):
         """True while an uploaded spreadsheet is part made or part undone (its runner was stopped part way).
         The products are then left as they are for this hour, since tidying them could remove or join what

@@ -50,7 +50,7 @@ def picks(seen, limit=PICKS_MAX):
     for game_id, kind in kinds:
         related |= Q(game_id=game_id, product_type=kind)
     candidates = list(
-        Product.objects.for_lists().filter(related, in_stock_count__gte=1)
+        Product.objects.for_lists().in_stock().filter(related)
         .exclude(pk__in=[p.pk for p in seen])
         .prefetch_related(offers.buyable_prefetch())
         .order_by("-in_stock_count", "pk")[:CANDIDATES]

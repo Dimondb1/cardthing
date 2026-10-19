@@ -63,13 +63,17 @@ class Command(BaseCommand):
             return
         if due:
             self.read_due(feed)
-            return
-        # Marketplaces first: they have a daily allowance and take minutes, while one big shop
-        # can take most of an hour. Then shops by name.
-        first = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
-        ordered = sorted(retailers, key=lambda r: (r.source_type not in first, r.name.lower()))
-        for item in ordered:
-            self.read(item, feed)
+        else:
+            # Marketplaces first: they have a daily allowance and take minutes, while one big shop
+            # can take most of an hour. Then shops by name.
+            first = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
+            ordered = sorted(retailers, key=lambda r: (r.source_type not in first, r.name.lower()))
+            for item in ordered:
+                self.read(item, feed)
+        # Each read cleared the cached page lists; build them now rather than on a visitor's request.
+        from web.warming import warm_quietly
+
+        warm_quietly()
 
     def read_due(self, feed):
         """Read each due shop once, asking again after every read so a shop that comes due meanwhile is read too."""

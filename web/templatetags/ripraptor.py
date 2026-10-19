@@ -8,6 +8,7 @@ from django.utils.formats import date_format
 from django.utils.html import conditional_escape, format_html
 from django.utils.safestring import mark_safe
 
+from catalogue import images
 from content import service
 
 register = template.Library()
@@ -175,8 +176,11 @@ def can_remind(day=None):
 
 @register.simple_tag
 def product_image(product, size="thumb"):
+    """The product's picture for the slot ``size``, asking the shop's CDN for a copy that size where it can
+    (catalogue/images.py), with larger copies for wider boxes and sharp screens."""
+    picture = images.responsive(product.image_src, size) if product.image_src else None
     return render_to_string(
-        "web/includes/product_image.html", {"product": product, "size": size}
+        "web/includes/product_image.html", {"product": product, "size": size, "picture": picture}
     )
 
 

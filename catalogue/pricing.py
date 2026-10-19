@@ -14,7 +14,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import OperationalError
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, FloatField, Min, OuterRef, Q, Subquery
+from django.db.models import Count, DecimalField, Exists, ExpressionWrapper, F, FloatField, Min, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from .models import (
@@ -354,7 +354,12 @@ def price_drops(limit=6, days=None, today=None, game=None):
         .values("price")[:1]
     )
     money = DecimalField(max_digits=9, decimal_places=2)
-    products = Product.objects.for_lists()
+    # Only products with a price now and one from back then can have dropped: the WHERE tests leave the rest
+    # out before the database works out every product's prices and looks up its old one several times over.
+    had_price = DailyLowestPrice.objects.filter(
+        product=OuterRef("pk"), date__lte=target, date__gt=target - timedelta(days=days),
+    )
+    products = Product.objects.for_lists().priced().filter(Exists(had_price))
     if game is not None:
         products = products.filter(game=game)
     doubtful = Q(

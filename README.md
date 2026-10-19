@@ -2093,6 +2093,32 @@ worker cannot refill the lists from the rows as they were. The tests keep a
 memory cache of their own, so they never read or clear your development
 site's cache.
 
+Because the background reader changes prices all day, those clears are
+frequent, so the background jobs build the lists again straight after rather
+than leaving it to the next visitor (`web/warming.py`):
+
+- the background reader fills any cleared list on the next turn of its loop
+  (every 5 seconds), and builds them all again a minute before they would
+  expire, so while it runs a visitor never finds them missing;
+- `tidy_all`, `import_prices` and `watch_stock` build them when they finish,
+  for when the reader is not running;
+- `install.sh` runs `python manage.py warm_pages` after emptying the cache.
+
+Run `python manage.py warm_pages` to build them all by hand, or
+`python manage.py warm_pages --missing` for only those not in the cache. A
+list is built by the same code a page would run and still expires after
+`RIPRAPTOR_HOME_CACHE_SECONDS`, so prices age out of it under the usual
+stale rules.
+
+The lists read only what they need: the products in stock are picked from
+their offers first, and the full rows (game, set, prices) are loaded for the
+few picked. Every list works out prices per product from the `listing_offer`
+index on listings (product, stock, check time, shop, verdict, price and
+delivery), so it never reads the listing rows themselves, which carry the
+shop's description. That is why the lists add price and delivery rather than
+reading `delivered_price`: SQLite cannot read a generated column from an
+index.
+
 ## Settings
 
 | Environment variable           | Default | Notes |

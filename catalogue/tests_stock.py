@@ -261,7 +261,9 @@ class WatchStockTests(TestCase):
         payload = json.dumps({"variants": [{"price": 4999, "available": True}]}).encode()
         with mock.patch("catalogue.importers.fetch", lambda url: payload):
             call_command("watch_stock", "--pause", "0", stdout=StringIO())
-        self.assertIsNone(cache.get(HOME_CACHE_KEY))
+        # Cleared, then built again from the restocked prices at the end of the run (web/warming.py).
+        featured, trending, spares = cache.get(HOME_CACHE_KEY)
+        self.assertEqual([p.pk for p in trending], [product.pk])
 
     def test_a_variant_without_a_price_is_not_reported_back_in_stock(self):
         product = make_product(make_set(make_game()))

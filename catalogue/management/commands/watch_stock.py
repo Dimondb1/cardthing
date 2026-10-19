@@ -112,3 +112,8 @@ class Command(BaseCommand):
 
             clear_list_caches(force=True)
         self.stdout.write(f"{checked} checked, {changed} changed, {restocked} back in stock.")
+        if changed:
+            # A changed listing cleared the cached lists; build them now rather than on a visitor's request.
+            from web.warming import warm_quietly
+
+            warm_quietly()

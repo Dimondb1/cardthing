@@ -126,6 +126,9 @@ GONE = (404, 410)
 PROBE_BATCH = 30
 # A listing checked this recently is not probed: a shop read or a probe has just seen it.
 RECENTLY_CHECKED = timedelta(minutes=8)
+# The cached page lists (web/warming.py) are built again this long before RIPRAPTOR_HOME_CACHE_SECONDS would
+# let them lapse, so while the reader runs a visitor never finds them expired.
+WARM_AHEAD = timedelta(seconds=60)
 IMPORT_LOCK_HOLD_LIMIT = timedelta(minutes=20)
 
 MARKETPLACES = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
@@ -370,7 +373,7 @@ def deadline_for(task):
 
 class Worker:
     def __init__(self, clock=None, fetch=None, sleep=None, threads=THREADS, executor=None, import_lock=None,
-                 page_pause=None, release_fetch=None):
+                 page_pause=None, release_fetch=None, warm=False):
         self.clock = clock or timezone.now
         self.sleep = sleep or time.sleep
         self.fetch = fetch
@@ -392,6 +395,10 @@ class Worker:
         self.last_finder = None  # when the last finder batch began
         self.last_plan = None
         self.last_beat = None
+        # Whether this reader keeps the cached page lists built (run_worker turns it on), and when it last
+        # built them all.
+        self.warm = warm
+        self.last_warm = None
 
     # Planning ---------------------------------------------------------------------------------
 
@@ -896,6 +903,26 @@ class Worker:
             return
         if planned:
             self.notify_safely(now)
+        self.keep_pages_warm(now)
+
+    def keep_pages_warm(self, now):
+        """Build the cached page lists a job's price changes cleared, on the next turn after the clear, and
+        build them all again before they would expire, so visitors find them ready. Runs on the main loop,
+        never in a reading thread, and a failure only waits for the next turn: visitors build the lists
+        themselves meanwhile, as they always could."""
+        if not self.warm:
+            return
+        from web import warming
+
+        refresh = max(timedelta(seconds=settings.RIPRAPTOR_HOME_CACHE_SECONDS) - WARM_AHEAD, WARM_AHEAD)
+        try:
+            if self.last_warm is None or now - self.last_warm >= refresh:
+                warming.warm_pages(fresh=True)
+                self.last_warm = now
+            elif warming.missing():
+                warming.warm_pages()
+        except Exception:  # noqa: BLE001 - tried again on the next turn
+            logger.exception("Could not build the cached page lists")
 
     def notify_safely(self, now):
         """A notice that cannot be sent or noted waits for the next planning pass; it never stops the reader."""

@@ -112,6 +112,17 @@ class ProductSet(models.Model):
         return reverse("web:set", args=[self.game.slug, self.slug])
 
 
+def listing_delivered_price(prefix=""):
+    """A listing's delivered price worked out as Listing.delivered_price is (price plus delivery), for use in
+    an aggregate over ``prefix`` (such as "listings__"). SQLite cannot read a generated column from an index,
+    so an aggregate over delivered_price reads every listing row; over price and delivery_cost it is
+    answered from the listing_offer index alone. The value is the same."""
+    return models.ExpressionWrapper(
+        F(f"{prefix}price") + F(f"{prefix}delivery_cost"),
+        output_field=models.DecimalField(max_digits=9, decimal_places=2),
+    )
+
+
 class ProductQuerySet(models.QuerySet):
     def active(self):
         return self.filter(is_active=True, game__is_active=True)
@@ -126,12 +137,13 @@ class ProductQuerySet(models.QuerySet):
             listings__sanity__in=Listing.COUNTED,
         )
         known = Q(listings__delivery_known=True)
+        delivered = listing_delivered_price("listings__")
         return self.annotate(
             # The cheapest confirmed delivered price; without one, the cheapest item price of a shop whose
             # delivery is unknown, which is shown as "plus delivery". Lists sort on what they show.
-            lowest_known=Min("listings__delivered_price", filter=buyable & known),
+            lowest_known=Min(delivered, filter=buyable & known),
             lowest_price=Coalesce(
-                Min("listings__delivered_price", filter=buyable & known),
+                Min(delivered, filter=buyable & known),
                 Min("listings__price", filter=buyable & Q(listings__delivery_known=False)),
             ),
             in_stock_count=Count(
@@ -147,11 +159,34 @@ class ProductQuerySet(models.QuerySet):
             listing_count=Count("listings", filter=live, distinct=True),
             # Cheapest delivered price any shop has listed, whether or not it is in stock now, leaving out a
             # price kept out of the comparison.
-            last_price=Min("listings__delivered_price", filter=live & Q(listings__sanity__in=Listing.COUNTED)),
+            last_price=Min(delivered, filter=live & Q(listings__sanity__in=Listing.COUNTED)),
         )
 
     def with_release(self):
         return self.annotate(release=Coalesce("release_date", "product_set__release_date"))
+
+    def _with_offer(self, *availability):
+        """Products with at least one current, counted offer in ``availability``, as a WHERE test.
+
+        The same listings with_prices counts, so ``in_stock()`` holds exactly where ``in_stock_count >= 1``
+        does and ``priced()`` where ``lowest_price`` is not null. A list that keeps only those products
+        filters with these first: the database then works out the prices of those products alone, not of
+        the whole catalogue before dropping the rest.
+        """
+        return self.filter(models.Exists(
+            Listing.objects.order_by().filter(
+                product=models.OuterRef("pk"), is_active=True, retailer__is_active=True,
+                last_checked__gte=stale_cutoff(), availability__in=availability, sanity__in=Listing.COUNTED,
+            )
+        ))
+
+    def in_stock(self):
+        """Products a shop has in stock now (in_stock_count >= 1)."""
+        return self._with_offer(Listing.Availability.IN_STOCK)
+
+    def priced(self):
+        """Products with a current price, in stock or on pre-order (lowest_price is not null)."""
+        return self._with_offer(*Listing.BUYABLE)
 
     def for_lists(self):
         """Everything a product row or tile needs, in one query."""
@@ -694,6 +729,18 @@ class Listing(models.Model):
     class Meta:
         ordering = ["delivered_price"]
         unique_together = [("product", "retailer")]
+        indexes = [
+            # Every list asks, per product, which of its listings are current offers and at what price
+            # (ProductQuerySet.with_prices, in_stock and priced). This index holds all those columns, so the
+            # answer comes from the index without reading the listing rows, which carry the shop's
+            # description and are many times larger. Price and delivery are here rather than
+            # delivered_price, which SQLite cannot read from an index because it is a generated column.
+            models.Index(
+                fields=["product", "availability", "last_checked", "is_active", "sanity", "delivery_known",
+                        "retailer", "price", "delivery_cost"],
+                name="listing_offer",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.product} at {self.retailer}"

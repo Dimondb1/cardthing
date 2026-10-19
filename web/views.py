@@ -21,7 +21,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_POST
 
-from catalogue import alerts, insights, mail, offers, pricing, traffic
+from catalogue import alerts, images, insights, mail, offers, pricing, traffic
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
@@ -146,7 +146,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     if product_type:
         products = products.filter(product_type=product_type)
     if form.value("in_stock") and not tabs:
-        products = products.filter(in_stock_count__gt=0)
+        products = products.in_stock()
     if form.value("compared") and not tabs:
         products = products.filter(in_stock_count__gte=2)
     band = form.value("price")
@@ -232,19 +232,21 @@ def stock_tab_links(request, counts):
     return links
 
 
-def home_lists():
+def home_lists(fresh=False, candidates=None):
     """Featured deals and their spares (home page) and trending (deals page), as (featured, trending, spares),
-    cached because they read every priced product."""
+    cached because they read every priced product. ``fresh`` builds them again whatever is cached (web.warming);
+    ``candidates`` is a shared_candidates() to pick from, when the Deals lists are being built too."""
     from django.core.cache import cache
 
     from catalogue.signals import HOME_CACHE_KEY as key
-    cached = cache.get(key)
+    cached = None if fresh else cache.get(key)
     if cached is not None:
         return cached
-    priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
-    featured, spares = featured_pick(priced)
-    popular = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
-    ids = [product.pk for product in popular]
+    featured, spares = with_list_fields(*featured_pick((candidates or deal_candidates)()))
+    ids = [product.pk for product in pricing.popular(limit=8)] or list(
+        Product.objects.active().in_stock().with_release()
+        .order_by(F("release").desc(nulls_last=True)).values_list("pk", flat=True)[:8]
+    )
     with_offers = {
         product.pk: product
         for product in Product.objects.for_lists().filter(pk__in=ids).prefetch_related(offers.buyable_prefetch())
@@ -263,6 +265,42 @@ def home_lists():
         trending.append(product)
     cache.set(key, (featured, trending, spares), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
     return featured, trending, spares
+
+
+def deal_candidates():
+    """Every product a shop has in stock, with its buyable offers (``product.offers``) and its name, for
+    picking deals from. Only what picking needs: the prices of the few picked are loaded afterwards by
+    with_list_fields, not worked out for every product in stock."""
+    return Product.objects.active().in_stock().only("pk", "name").prefetch_related(offers.buyable_prefetch())
+
+
+def shared_candidates():
+    """deal_candidates, read once however many callers ask: the home lists and the Deals lists both pick from
+    them, so building both reads the offers once."""
+    from functools import cache
+
+    return cache(lambda: list(deal_candidates()))
+
+
+def with_list_fields(*groups):
+    """Each list of (candidate, summary) from deal_candidates, with the candidate swapped for the product as
+    a list shows it (for_lists: game, set, prices, release), in one query for all of them. The offers and
+    summary stay the ones the pick was made from. A product gone from the site since is left out."""
+    wanted = {product.pk for rows in groups for product, _ in rows}
+    full = Product.objects.for_lists().in_bulk(wanted)
+    swapped = []
+    for rows in groups:
+        kept = []
+        for candidate, summary in rows:
+            product = full.get(candidate.pk)
+            if product is None:
+                continue
+            product.offers = candidate.offers
+            for offer in product.offers:
+                offer.product = product
+            kept.append((product, summary))
+        swapped.append(kept)
+    return swapped
 
 
 FEATURED_SLOTS = 8
@@ -359,7 +397,7 @@ def latest_drops_queryset():
     fresh = Q(created_at__gte=seen_since)
     return (
         Product.objects.for_lists()
-        .filter(lowest_price__isnull=False)
+        .priced()
         .annotate(on_preorder=on_preorder)
         .filter(upcoming | recent | fresh)
         .annotate(tier=Case(When(upcoming, then=Value(0)), When(recent, then=Value(1)), default=Value(2),
@@ -370,7 +408,7 @@ def latest_drops_queryset():
 DROPS_ORDER = ("tier", F("release").desc(nulls_last=True), "-created_at", "name")
 
 
-def home_drops_new():
+def home_drops_new(fresh=False):
     """The home page's Out now row, newest release first: the same products as Out now on the drops page (in
     stock; pre-orders are the Coming soon rows above it), so each one is behind its See all. Cached with the
     other lists."""
@@ -378,7 +416,7 @@ def home_drops_new():
 
     from catalogue.signals import NEW_CACHE_KEY as key
 
-    cached = cache.get(key)
+    cached = None if fresh else cache.get(key)
     if cached is not None:
         return cached
     rows = list(out_now_queryset().prefetch_related(offers.buyable_prefetch()).order_by(*DROPS_ORDER)[:10])
@@ -450,7 +488,7 @@ def coming_soon_queryset(game=None):
     )
 
 
-def coming_soon_sets(game=None, limit=8):
+def coming_soon_sets(game=None, limit=8, fresh=False):
     """Sets still to come, soonest first, for the New page (limit None), a game page or the home page.
 
     Cached with the other lists under 'web:coming-soon:v2', or ':<game>' for one game's, so every
@@ -461,7 +499,7 @@ def coming_soon_sets(game=None, limit=8):
     from catalogue.signals import COMING_SOON_CACHE_KEY
 
     key = COMING_SOON_CACHE_KEY if game is None else f"{COMING_SOON_CACHE_KEY}:{game.slug}"
-    rows = cache.get(key)
+    rows = None if fresh else cache.get(key)
     if rows is None:
         rows = list(coming_soon_queryset(game))
         cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
@@ -471,7 +509,7 @@ def coming_soon_sets(game=None, limit=8):
 COMING_SOON_RENDERED = 8   # rendered on the home page; the first COMING_SOON_ON_HOME show, the rest wait hidden
 
 
-def home_coming_soon():
+def home_coming_soon(fresh=False):
     """The home page's Coming soon rows: sets a visitor can pre-order now, most popular first
     (catalogue.popularity), COMING_SOON_RENDERED of them. Without script the first COMING_SOON_ON_HOME show;
     interest.js may bring the visitor's own games forward from the rest, in the browser only. Cached with the
@@ -481,7 +519,7 @@ def home_coming_soon():
     from catalogue.popularity import rank_sets
     from catalogue.signals import HOME_DROPS_CACHE_KEY as key
 
-    rows = cache.get(key)
+    rows = None if fresh else cache.get(key)
     if rows is None:
         rows = rank_sets([row for row in coming_soon_sets(limit=None) if row.preorder_count])[:COMING_SOON_RENDERED]
         cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
@@ -714,6 +752,14 @@ def breadcrumbs_json(request, crumbs):
     }
 
 
+# The site's own social accounts, as linked in the footer.
+SOCIAL_PROFILES = (
+    "https://www.instagram.com/ripraptor_uk/",
+    "https://www.facebook.com/ripraptor",
+    "https://www.tiktok.com/@ripraptoruk",
+)
+
+
 def site_json(request):
     """schema.org WebSite and Organization, with the site search for search engines."""
     home = request.build_absolute_uri("/")
@@ -735,6 +781,7 @@ def site_json(request):
             "name": settings.RIPRAPTOR_SITE_NAME,
             "url": home,
             "logo": request.build_absolute_uri(static("img/logo.png")),
+            "sameAs": list(SOCIAL_PROFILES),
         },
     ]
 
@@ -852,7 +899,7 @@ def product_detail(request, slug):
         "brand": {"@type": "Brand", "name": product.game.name},
     }
     if product.image_src:
-        structured["image"] = request.build_absolute_uri(product.image_src)
+        structured["image"] = request.build_absolute_uri(images.sized_image_url(product.image_src, images.SHARE_WIDTH))
     if product.ean:
         structured["gtin13"] = product.ean
     if current:
@@ -901,7 +948,8 @@ def product_detail(request, slug):
             # A product with no prices at all carries only its breadcrumbs: Product data without offers is invalid.
             "structured_json": ld_json(product_json + [breadcrumbs_json(request, crumbs)]),
             "meta_type": "product",
-            "meta_image": request.build_absolute_uri(product.image_src) if product.image_src else "",
+            "meta_image": (request.build_absolute_uri(images.sized_image_url(product.image_src, images.SHARE_WIDTH))
+                           if product.image_src else ""),
             "current": current,
             "unavailable": unavailable,
             "cheapest": cheapest,
@@ -1080,13 +1128,18 @@ def card_data(request, product, summary):
     from .templatetags.ripraptor import ago, gbp
 
     best = summary.best
+    picture = images.responsive(product.image_src, "swipe")
     data = {
         "id": product.pk,
         "name": product.name,
         "url": product.get_absolute_url(),
         "meta": f"{product.game.display_short} · {product.type_name}",
         "type": product.product_type,
-        "image": product.image_src,
+        # The deck card's picture at the size it is shown; ``image`` alone is also the saved list's thumbnail.
+        "image": picture["src"],
+        "srcset": picture["srcset"],
+        "sizes": picture["sizes"],
+        "full": picture["full"],
         "price": shown_text(request, best) if best else "",
         "retailer": best.retailer.name if best else "",
         "buy": best.get_outbound_url() if best else "",
@@ -1101,7 +1154,7 @@ def card_data(request, product, summary):
 
 def deck_products(request):
     """The deck's products under the page's game, language and sort choices."""
-    products = Product.objects.for_lists().filter(lowest_price__isnull=False)
+    products = Product.objects.for_lists().priced()
     game = request.GET.get("game")
     if game:
         products = products.filter(game__slug=game)
@@ -1138,7 +1191,7 @@ def deck(request):
     products = deck_products(request)
     chosen = request.GET.getlist("lang")[:1]   # the page offers one language at a time
     game = Game.objects.filter(slug=request.GET.get("game", ""), is_active=True).first()
-    scope = Product.objects.for_lists().filter(lowest_price__isnull=False)
+    scope = Product.objects.for_lists().priced()
     if game:
         scope = scope.filter(game=game)
     return render(
@@ -1163,18 +1216,19 @@ AI_CRAWLERS = ("GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-S
                "PerplexityBot", "Google-Extended", "Applebot-Extended", "Bingbot", "CCBot", "Amazonbot")
 
 
-def deals_lists():
-    """Biggest savings, price drops and the restock log for the deals page, cached like the home lists."""
+def deals_lists(fresh=False, candidates=None):
+    """Biggest savings, price drops and the restock log for the deals page, cached like the home lists.
+    ``fresh`` and ``candidates`` as for home_lists."""
     from django.core.cache import cache
 
     from catalogue.signals import DEALS_CACHE_KEY
 
-    cached = cache.get(DEALS_CACHE_KEY)
+    cached = None if fresh else cache.get(DEALS_CACHE_KEY)
     if cached is not None:
         return cached
-    priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
+    savings, = with_list_fields(offers.biggest_savings((candidates or deal_candidates)(), limit=30))
     lists = {
-        "savings": offers.biggest_savings(priced, limit=30),
+        "savings": savings,
         "drops": list(pricing.price_drops(limit=12)),
         "restock_log": pricing.restock_log(days=7),
     }
@@ -1184,7 +1238,8 @@ def deals_lists():
 
 @require_GET
 def deals(request):
-    lists = deals_lists()
+    candidates = shared_candidates()   # read only if a list has to be built, and then once for both
+    lists = deals_lists(candidates=candidates)
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
     return render(
         request,
@@ -1192,7 +1247,7 @@ def deals(request):
         {
             **lists,
             # Only what a shop has in stock: this page is for buying, and a click count alone is no deal.
-            "trending": [product for product in home_lists()[1] if product.best_offer],
+            "trending": [product for product in home_lists(candidates=candidates)[1] if product.best_offer],
             "last_checked": last_checked,
             "meta_title": text(request, "meta.deals.title"),
             "meta_description": text(request, "meta.deals.description"),
@@ -1395,7 +1450,7 @@ def drop_words(request, drop, today):
 def out_now_queryset():
     """Out now on the drops page: what the old Latest drops page listed (released in the last few weeks or
     just listed by shops) that a shop has in stock now. Pre-orders are under Coming soon."""
-    return latest_drops_queryset().filter(in_stock_count__gt=0)
+    return latest_drops_queryset().in_stock()
 
 
 def drops_url(show="soon", game=None):

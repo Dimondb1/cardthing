@@ -46,7 +46,7 @@
       filters.forEach((value, key) => { if (value) url.searchParams.append(key, value); });
       const data = await (await fetch(url, { headers: { Accept: "application/json" } })).json();
       data.cards.forEach((c) => { if (!seen.has(c.id)) queue.push(c); });
-      data.cards.forEach((c) => { if (c.image) { const img = new Image(); img.src = c.image; } });
+      data.cards.forEach((c) => { if (c.image) picture(c); });
       if (data.next === null) finished = true; else nextOffset = data.next;
     } catch (e) {
       finished = true;
@@ -66,12 +66,25 @@
     return node;
   }
 
+  // The card's picture with the same srcset and sizes when prefetched and when shown, so the copy the
+  // browser picks while prefetching is the one the card uses. srcset goes before src: one request, not two.
+  function picture(c) {
+    const img = new Image();
+    if (c.srcset) {
+      img.sizes = c.sizes; img.srcset = c.srcset;
+      // A resized copy the shop's CDN cannot make falls back to the address we hold.
+      img.addEventListener("error", () => { if (c.full && img.getAttribute("src") !== c.full) { img.removeAttribute("srcset"); img.src = c.full; } });
+    }
+    img.src = c.image;
+    return img;
+  }
+
   function buildCard(c) {
     const card = el("article", "swipe");
     card.dataset.id = c.id;
     const top = el("div", "swipe__top");
     const image = el("div", "swipe__image");
-    if (c.image) { const img = new Image(); img.src = c.image; img.alt = ""; img.draggable = false; img.decoding = "async"; img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true }); image.append(img); }
+    if (c.image) { const img = picture(c); img.alt = ""; img.draggable = false; img.decoding = "async"; img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true }); image.append(img); }
     else image.innerHTML = placeholders[c.type] || placeholders.other || "";
     const name = el("h2", "swipe__name", c.name);
     const meta = el("p", "swipe__meta", c.meta);

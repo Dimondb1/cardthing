@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import insights, mail
+from .images import EMAIL_WIDTH, sized_image_url
 from .models import DailyPageView, Listing, Retailer, StockAlert
 
 MARKETPLACES = (Retailer.Source.AMAZON, Retailer.Source.EBAY)
@@ -89,7 +90,7 @@ def render_mail(template, context):
         "site_name": settings.RIPRAPTOR_SITE_NAME,
         "site_url": settings.RIPRAPTOR_SITE_URL,
         "logo_url": absolute(static("img/logo.png")),
-        "image_url": absolute(product.image_src) if product is not None else "",
+        "image_url": absolute(sized_image_url(product.image_src, EMAIL_WIDTH)) if product is not None else "",
         "stop_url": settings.RIPRAPTOR_SITE_URL + "/",
         "preheader": "",
         **context,

@@ -125,7 +125,7 @@ def wrong_matches(doubtful_too=False):
     ``doubtful_too`` also lists every product whose cheapest or next price is doubtful, for the
     suspect_savings command, which lists every saving the site holds back.
     """
-    products = Product.objects.for_lists().filter(lowest_price__isnull=False).prefetch_related(offers.buyable_prefetch())
+    products = Product.objects.for_lists().priced().prefetch_related(offers.buyable_prefetch())
     rows = []
     for product in products.order_by("name"):
         summary = offers.summarise(product)

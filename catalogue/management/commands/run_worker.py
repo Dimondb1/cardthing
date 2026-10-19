@@ -33,7 +33,7 @@ class Command(BaseCommand):
         if held is None:
             raise CommandError("Another background reader is running.")
         try:
-            reader = worker.Worker(threads=max_threads)
+            reader = worker.Worker(threads=max_threads, warm=True)
             closed = reader.begin()
             if closed:
                 self.stdout.write(f"Closed {closed} earlier runs that stopped before they finished.")

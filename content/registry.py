@@ -1995,9 +1995,10 @@ ENTRIES = [
     ),
     Entry(
         "meta.default.description", T, "Default description",
-        "Compare delivered prices for booster boxes, Elite Trainer Boxes, bundles and "
-        "decks from UK retailers.",
-        "Search engine description for pages without their own.",
+        "Compare delivered UK prices for sealed Pokemon, Magic, One Piece and Yu-Gi-Oh booster boxes, "
+        "Elite Trainer Boxes, bundles and decks, with stock at each shop.",
+        "Search engine description for the home page and pages without their own. Search engines show "
+        "120 to 160 characters.",
     ),
     Entry(
         "meta.product.title", T, "Product page title",
@@ -2037,8 +2038,8 @@ ENTRIES = [
     ),
     Entry(
         "meta.drops.description", T, "Drops page description",
-        "Upcoming and just released sealed Pokemon, Magic, One Piece, Yu-Gi-Oh and Lorcana sets with their "
-        "dates, the cheapest UK pre-order or delivered price and an email reminder before each drop.",
+        "Release dates for upcoming sealed Pokemon, Magic, One Piece, Yu-Gi-Oh and Lorcana sets, with the "
+        "cheapest UK price and an email reminder before each drop.",
         "Search engine description for the drops page.",
     ),
     Entry(
@@ -2065,7 +2066,8 @@ ENTRIES = [
     ),
     Entry(
         "meta.game.description", T, "Game page description",
-        "Compare UK prices for {game} booster boxes, bundles and other sealed products.",
+        "Compare delivered UK prices for {game} booster boxes, bundles and other sealed products, with stock "
+        "and the time each price was checked.",
         "Search engine description for game pages.",
         placeholders=("game",),
     ),
@@ -2077,8 +2079,8 @@ ENTRIES = [
     ),
     Entry(
         "meta.set.description", T, "Set page description",
-        "Compare UK prices for {game} {set} booster boxes, bundles and other sealed "
-        "products.",
+        "Compare delivered UK prices for {game} {set} booster boxes, bundles and other sealed products, with "
+        "stock at each shop.",
         "Search engine description for set pages.",
         placeholders=("set", "game"),
     ),

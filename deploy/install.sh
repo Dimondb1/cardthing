@@ -121,6 +121,9 @@ systemctl restart ripraptor
 # to five minutes: a query per row for a field a migration added, or an error for one it now sets.
 # Empty it once the old workers have stopped; clearing before the restart would let them refill it.
 sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py shell -c 'from django.core.cache import cache; cache.clear()'"
+# Then build the lists the home, Deals and drops pages read, so the first visitors after a deploy do not wait
+# for them. A failure leaves them to be built by the first visitor, as before.
+sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py warm_pages" || true
 
 # One address for the site: www. sends visitors and Google to the same page without it, permanently.
 # Serving both made Google index the whole site twice and split each page's standing between them.

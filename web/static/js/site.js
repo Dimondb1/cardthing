@@ -231,10 +231,20 @@ if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: re
 
 // Product images settle in once loaded rather than popping, in the page and in lists added later
 // (the stock tabs send ripraptor:content with the new list).
+// A resized copy the shop's CDN cannot make (the shop replaced the file) falls back to the address we hold.
+function fullSize(img) {
+  const full = img.dataset.full;
+  if (!full || img.getAttribute("src") === full) return;
+  img.removeAttribute("srcset");
+  img.removeAttribute("sizes");
+  img.src = full;
+}
 function settleImages(root) {
   root.querySelectorAll(".product-image img").forEach((img) => {
-    if (img.complete) img.classList.add("is-loaded");
+    if (img.complete && img.naturalWidth === 0) fullSize(img);
+    else if (img.complete) img.classList.add("is-loaded");
     else img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true });
+    img.addEventListener("error", () => fullSize(img));
   });
 }
 settleImages(document);

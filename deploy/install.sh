@@ -155,6 +155,8 @@ systemctl reload caddy
 # at most once a day, when it has stopped or never starts), and backup_db keeps five nightly copies.
 # tidy_referrals runs hourly at 55 past on its own lock: it retries refer a friend address emails and deletes
 # details the offer no longer needs (see the Terms page).
+# warm_pages --due runs at 1 past the fives on its own lock: it builds the cached page lists again when an
+# import or an edit cleared them or they are nearly expired, so the floor holds when the reader is not running.
 # The alerts start at 3 past the tens and the judge at 2 past the fives, so no more than two of these
 # Django processes start in the same minute: on 14 Oct 2026 three at once beside the reader and the
 # site ran a 1 GB server out of memory.
@@ -176,7 +178,8 @@ echo "PYTHONUNBUFFERED=1
 20 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1
 40 0 * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1
-55 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 flock -n /tmp/ripraptor-refer.lock .venv/bin/python manage.py tidy_referrals >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
+55 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 flock -n /tmp/ripraptor-refer.lock .venv/bin/python manage.py tidy_referrals >> /var/log/ripraptor-import.log 2>&1
+1-59/5 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 240 flock -n /tmp/ripraptor-warm.lock .venv/bin/python manage.py warm_pages --due >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
 touch /var/log/ripraptor-import.log && chown ripraptor /var/log/ripraptor-import.log
 
 # The background reader. A shop never read before has no next read, so on its first start it reads

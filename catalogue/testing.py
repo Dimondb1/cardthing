@@ -64,6 +64,26 @@ def inside_the_cache_window(test):
     test.addCleanup(patcher.stop)
 
 
+def cache_lists(key=None, value="lists", cache=None):
+    """Put ``value`` in the shared cache as a list built just now (web.listcache), under the home lists' key
+    unless ``key`` says otherwise."""
+    from web import listcache
+
+    from .signals import HOME_CACHE_KEY
+
+    listcache.store(key or HOME_CACHE_KEY, lambda: value, cache=cache)
+
+
+def lists_due(key=None, cache=None):
+    """Whether the cached list under ``key`` (the home lists by default) is due a build: missing, or cleared
+    so that the background jobs (or, in the tests, the next request) build it again now."""
+    from web import listcache
+
+    from .signals import HOME_CACHE_KEY
+
+    return listcache.is_due(key or HOME_CACHE_KEY, cache=cache)
+
+
 class Pasted:
     """A value pasted into a cell rather than typed, kept as it is: a formula, a number or a date."""
 

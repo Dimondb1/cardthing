@@ -48,6 +48,7 @@ TIMEOUTS = {
     "judge_checks": 900,
     "check_set_retail": 1200,
     "tidy_referrals": 600,
+    "warm_pages": 240,
 }
 
 
@@ -77,6 +78,16 @@ def install_cron():
 
 def file_cron():
     return cron_lines((DEPLOY / "crontab").read_text())
+
+
+class WarmCronTests(TestCase):
+    def test_the_page_lists_are_built_every_five_minutes_on_their_own_lock_when_due(self):
+        lines = [(schedule, command) for schedule, command in install_cron() if "warm_pages" in command]
+        self.assertEqual(len(lines), 1)
+        schedule, command = lines[0]
+        self.assertEqual(schedule, "1-59/5 * * * *")
+        self.assertIn("flock -n /tmp/ripraptor-warm.lock ", command)
+        self.assertTrue(command.endswith("manage.py warm_pages --due"), command)
 
 
 class InstallStepTests(TestCase):
@@ -190,13 +201,13 @@ class UploadLimitTests(TestCase):
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()
-        self.assertEqual(len(installed), 13)
+        self.assertEqual(len(installed), 14)
         self.assertEqual(installed, file_cron())
 
     def test_both_files_load_the_settings_before_every_command(self):
         for name, block in (("install.sh", install_block()), ("crontab", (DEPLOY / "crontab").read_text())):
             commands = [SCHEDULE.match(raw.strip()).group(2) for raw in block.splitlines() if "manage.py" in raw]
-            self.assertEqual(len(commands), 13, name)
+            self.assertEqual(len(commands), 14, name)
             for command in commands:
                 self.assertRegex(command, PREFIX, name)
 
@@ -212,6 +223,9 @@ class CronTests(TestCase):
                 if schedule.split()[0].endswith("/10"):
                     # Killed outright before the next run ten minutes later starts.
                     self.assertLess(seconds + kill, 600, name)
+                if name == "warm_pages":
+                    # Killed outright before the next run five minutes later starts.
+                    self.assertLess(seconds + kill, 300, name)
                 seen.add(name)
         self.assertEqual(seen, set(TIMEOUTS))
 

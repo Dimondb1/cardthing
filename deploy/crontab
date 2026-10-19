@@ -6,7 +6,9 @@
 # The stock alerts run every 10 minutes and the drop reminders every 15 (9 past, on their own lock) whatever the reader does, the Claude judge looks every 5 minutes and
 # sends nothing until the owner switches it on (its daily check_set_retail at 6:51 waits for the judge's lock), check_worker hourly, price history and a
 # backup nightly, delivery charges weekly, and the refer a friend tidy
-# (address emails that failed, and deleting details no longer needed) hourly at 55 past on its own lock. The alerts (3 past) and the judge (2 past) start off the tens, so no
+# (address emails that failed, and deleting details no longer needed) hourly at 55 past on its own lock. The cached page lists are
+# built again every 5 minutes (1 past the fives, on their own lock) when cleared or nearly expired, the floor
+# under the reader, which does it within seconds while it runs; a visitor is served the old copy meanwhile. The alerts (3 past) and the judge (2 past) start off the tens, so no
 # more than two of these Django processes start in the same minute on a 1 GB server. Install with: crontab deploy/crontab
 # deploy/install.sh writes the same lines (it is the source of truth); catalogue/tests_ops.py fails when they differ.
 # Every command runs under timeout, set to its budget plus five minutes, so a hung command cannot hold a lock for ever.
@@ -25,3 +27,4 @@ PYTHONUNBUFFERED=1
 40 0 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1
 55 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 600 flock -n /tmp/ripraptor-refer.lock .venv/bin/python manage.py tidy_referrals >> /var/log/ripraptor-import.log 2>&1
+1-59/5 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 240 flock -n /tmp/ripraptor-warm.lock .venv/bin/python manage.py warm_pages --due >> /var/log/ripraptor-import.log 2>&1

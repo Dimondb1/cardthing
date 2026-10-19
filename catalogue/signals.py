@@ -22,21 +22,13 @@ HOME_DROPS_CACHE_KEY = "web:home-drops:v1"
 LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY, HOME_DROPS_CACHE_KEY)
 
 
-# When this process last cleared the list caches (time.monotonic), for the debounce.
+# When this process last cleared the feeds (time.monotonic), for the debounce.
 _last_clear = None
-
-
-def cached_list_keys():
-    """Every key clear_list_caches drops: the home, deals and new lists, each game's sets to come and each feed."""
-    from web.feeds import feed_cache_keys
-
-    slugs = list(Game.objects.filter(is_active=True).values_list("slug", flat=True))
-    return [*LIST_CACHE_KEYS, *(f"{COMING_SOON_CACHE_KEY}:{slug}" for slug in slugs), *feed_cache_keys(slugs)]
 
 
 def clear_list_caches(force=False):
     """
-    Drop the cached home, deals and new lists and every feed once the current transaction commits.
+    Mark the cached home, deals and new lists stale and drop every feed once the current transaction commits.
 
     Another process shares the cache, so a clear before the commit would let it refill the lists from
     the rows as they were. Outside a transaction the clear runs at once. The tests, which never
@@ -50,26 +42,31 @@ def clear_list_caches(force=False):
 
 def clear_list_caches_now(force=False):
     """
-    Drop the cached lists and feeds now, in the cache every process shares.
+    Mark the cached lists stale and drop the feeds now, in the cache every process shares.
 
-    A save fires this for each changed listing, so without force a clear within
-    RIPRAPTOR_CACHE_CLEAR_SECONDS of this process's last one is skipped. A skipped
-    clear makes whatever is cached expire when that window closes instead, so a
-    change is never hidden for longer than the window. The end of an import, a
-    restock found by the stock watcher and the owner's fixes pass force=True so
-    what they wrote shows at once. Returns whether it cleared.
+    The lists stay in the cache: visitors keep being served them while the background jobs build them
+    again (web.listcache), so a price change never leaves a visitor waiting for a build. Marking them is
+    one small cache write, so every clear does it; ``force`` (the end of an import, a restock found by the
+    stock watcher, the owner's fixes) asks for them to be built again on the jobs' next turn.
+
+    The feeds, which no job builds, are still dropped. A save fires this for each changed listing, so
+    without force a feed clear within RIPRAPTOR_CACHE_CLEAR_SECONDS of this process's last one is skipped
+    and the feeds expire when that window closes instead. Returns whether the feeds were cleared now.
     """
     global _last_clear
+    from web import listcache
+    from web.feeds import feed_cache_keys
 
+    listcache.mark_stale(force=force)
     now = time.monotonic()
     wait = settings.RIPRAPTOR_CACHE_CLEAR_SECONDS
     if not force and _last_clear is not None and now - _last_clear < wait:
         left = max(1, math.ceil(wait - (now - _last_clear)))
-        for key in cached_list_keys():
+        for key in feed_cache_keys():
             cache.touch(key, left)
         return False
     _last_clear = now
-    cache.delete_many(cached_list_keys())
+    cache.delete_many(feed_cache_keys())
     return True
 
 

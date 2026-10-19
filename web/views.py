@@ -33,6 +33,7 @@ from content import service as copy
 from inbox import service as inbox
 from inbox.models import Conversation
 
+from . import listcache
 from .charts import price_chart
 from .templatetags.ripraptor import gbp
 
@@ -234,14 +235,14 @@ def stock_tab_links(request, counts):
 
 def home_lists(fresh=False, candidates=None):
     """Featured deals and their spares (home page) and trending (deals page), as (featured, trending, spares),
-    cached because they read every priced product. ``fresh`` builds them again whatever is cached (web.warming);
-    ``candidates`` is a shared_candidates() to pick from, when the Deals lists are being built too."""
-    from django.core.cache import cache
+    cached because they read every priced product (web.listcache). ``fresh`` builds them again in place
+    (web.warming); ``candidates`` is a shared_candidates() to pick from, when the Deals lists are being built too."""
+    from catalogue.signals import HOME_CACHE_KEY
 
-    from catalogue.signals import HOME_CACHE_KEY as key
-    cached = None if fresh else cache.get(key)
-    if cached is not None:
-        return cached
+    return listcache.get_or_build(HOME_CACHE_KEY, lambda: build_home_lists(candidates), fresh=fresh)
+
+
+def build_home_lists(candidates=None):
     featured, spares = with_list_fields(*featured_pick((candidates or deal_candidates)()))
     ids = [product.pk for product in pricing.popular(limit=8)] or list(
         Product.objects.active().in_stock().with_release()
@@ -263,7 +264,6 @@ def home_lists(fresh=False, candidates=None):
         if before is not None and product.lowest_known is not None and before != product.lowest_known:
             product.movement = product.lowest_known - before
         trending.append(product)
-    cache.set(key, (featured, trending, spares), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
     return featured, trending, spares
 
 
@@ -411,19 +411,16 @@ DROPS_ORDER = ("tier", F("release").desc(nulls_last=True), "-created_at", "name"
 def home_drops_new(fresh=False):
     """The home page's Out now row, newest release first: the same products as Out now on the drops page (in
     stock; pre-orders are the Coming soon rows above it), so each one is behind its See all. Cached with the
-    other lists."""
-    from django.core.cache import cache
+    other lists (web.listcache)."""
+    from catalogue.signals import NEW_CACHE_KEY
 
-    from catalogue.signals import NEW_CACHE_KEY as key
+    def build():
+        rows = list(out_now_queryset().prefetch_related(offers.buyable_prefetch()).order_by(*DROPS_ORDER)[:10])
+        for product in rows:
+            product.best_offer = product.offers[0] if product.offers else None
+        return rows
 
-    cached = None if fresh else cache.get(key)
-    if cached is not None:
-        return cached
-    rows = list(out_now_queryset().prefetch_related(offers.buyable_prefetch()).order_by(*DROPS_ORDER)[:10])
-    for product in rows:
-        product.best_offer = product.offers[0] if product.offers else None
-    cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
-    return rows
+    return listcache.get_or_build(NEW_CACHE_KEY, build, fresh=fresh)
 
 
 COMING_SOON_ON_HOME = 3   # the home page is the money page: only sets a visitor can pre-order now, and few
@@ -491,18 +488,13 @@ def coming_soon_queryset(game=None):
 def coming_soon_sets(game=None, limit=8, fresh=False):
     """Sets still to come, soonest first, for the New page (limit None), a game page or the home page.
 
-    Cached with the other lists under 'web:coming-soon:v2', or ':<game>' for one game's, so every
-    clear_list_caches drops them.
+    Cached with the other lists under 'web:coming-soon:v2', or ':<game>' for one game's (web.listcache), so
+    every clear_list_caches marks them stale.
     """
-    from django.core.cache import cache
-
     from catalogue.signals import COMING_SOON_CACHE_KEY
 
     key = COMING_SOON_CACHE_KEY if game is None else f"{COMING_SOON_CACHE_KEY}:{game.slug}"
-    rows = None if fresh else cache.get(key)
-    if rows is None:
-        rows = list(coming_soon_queryset(game))
-        cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    rows = listcache.get_or_build(key, lambda: list(coming_soon_queryset(game)), fresh=fresh)
     return rows if limit is None else rows[:limit]
 
 
@@ -514,16 +506,13 @@ def home_coming_soon(fresh=False):
     (catalogue.popularity), COMING_SOON_RENDERED of them. Without script the first COMING_SOON_ON_HOME show;
     interest.js may bring the visitor's own games forward from the rest, in the browser only. Cached with the
     other lists, so the order is the same for everyone and costs one query a cache fill."""
-    from django.core.cache import cache
-
     from catalogue.popularity import rank_sets
-    from catalogue.signals import HOME_DROPS_CACHE_KEY as key
+    from catalogue.signals import HOME_DROPS_CACHE_KEY
 
-    rows = None if fresh else cache.get(key)
-    if rows is None:
-        rows = rank_sets([row for row in coming_soon_sets(limit=None) if row.preorder_count])[:COMING_SOON_RENDERED]
-        cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
-    return rows
+    def build():
+        return rank_sets([row for row in coming_soon_sets(limit=None) if row.preorder_count])[:COMING_SOON_RENDERED]
+
+    return listcache.get_or_build(HOME_DROPS_CACHE_KEY, build, fresh=fresh)
 
 
 def interest_lexicon(games):
@@ -1219,21 +1208,17 @@ AI_CRAWLERS = ("GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-S
 def deals_lists(fresh=False, candidates=None):
     """Biggest savings, price drops and the restock log for the deals page, cached like the home lists.
     ``fresh`` and ``candidates`` as for home_lists."""
-    from django.core.cache import cache
-
     from catalogue.signals import DEALS_CACHE_KEY
 
-    cached = None if fresh else cache.get(DEALS_CACHE_KEY)
-    if cached is not None:
-        return cached
-    savings, = with_list_fields(offers.biggest_savings((candidates or deal_candidates)(), limit=30))
-    lists = {
-        "savings": savings,
-        "drops": list(pricing.price_drops(limit=12)),
-        "restock_log": pricing.restock_log(days=7),
-    }
-    cache.set(DEALS_CACHE_KEY, lists, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
-    return lists
+    def build():
+        savings, = with_list_fields(offers.biggest_savings((candidates or deal_candidates)(), limit=30))
+        return {
+            "savings": savings,
+            "drops": list(pricing.price_drops(limit=12)),
+            "restock_log": pricing.restock_log(days=7),
+        }
+
+    return listcache.get_or_build(DEALS_CACHE_KEY, build, fresh=fresh)
 
 
 @require_GET

@@ -50,3 +50,30 @@ class Message(models.Model):
 
     def __str__(self):
         return ("Visitor" if self.from_visitor else "RipRaptor") + f": {self.body[:60]}"
+
+
+class ShopEnquiry(models.Model):
+    """A shop asking to be listed, from the List your shop page.
+
+    Kept to answer it and for nothing else: nothing is ever emailed to the address given, and the shop's
+    website is never fetched until the owner adds the shop themselves. Deleted a year after it is marked
+    handled, or after two years if it never is (inbox/shops.py purge, run by tidy_all).
+    """
+
+    name = models.CharField(max_length=80)
+    shop_url = models.CharField("shop website", max_length=300)
+    domain = models.CharField(max_length=253, db_index=True, editable=False,
+                              help_text="The website's domain without www, so one shop asks once a month.")
+    email = models.EmailField(max_length=254)
+    message = models.TextField(max_length=1000, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, editable=False, db_index=True)
+    handled_at = models.DateTimeField(null=True, blank=True, help_text="When you dealt with it. Blank while it waits.")
+    note = models.TextField(blank=True, help_text="Your own note. Never shown to the shop.")
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "shop enquiry"
+        verbose_name_plural = "shop enquiries"
+
+    def __str__(self):
+        return f"{self.name}: {self.domain}"

@@ -20,6 +20,7 @@ KINDS = {
     "games": DailyPageView.Kind.OTHER,
     "about": DailyPageView.Kind.OTHER,
     "terms": DailyPageView.Kind.OTHER,
+    "list_shop": DailyPageView.Kind.OTHER,
 }
 KEYS = {"product": "slug", "game": "game_slug", "set": "set_slug"}
 

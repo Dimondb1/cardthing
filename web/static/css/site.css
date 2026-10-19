@@ -1368,3 +1368,39 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .refer-share__list { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .refer-share__list li[hidden] { display: none; }
 .refer-share__done { font-weight: var(--weight-strong); color: var(--color-ink-muted); }
+
+/* The pack: the orange raptor head leading, a friend in ink just behind it. Built from the one .mark mask; the paper
+   rim comes from drop-shadows on a wrapper, because a filter on the masked element itself would be masked away. */
+.pack { --mark-size: var(--mark-sm); display: inline-flex; align-items: flex-end; flex: none; color: var(--color-ink); }
+.pack--md { --mark-size: var(--mark-md); }
+.pack .mark { --mark-size: inherit; }
+.pack__friend { transform: translateY(calc(var(--mark-size) * var(--pack-rise))); }
+.pack__lead {
+  display: inline-flex; margin-left: calc(var(--mark-size) * var(--pack-tuck) * -1); color: var(--color-brand);
+  filter: drop-shadow(calc(var(--pack-rim) * -1) 0 0 var(--color-paper)) drop-shadow(0 calc(var(--pack-rim) * -1) 0 var(--color-paper))
+          drop-shadow(0 var(--pack-rim) 0 var(--color-paper));
+}
+.pack-line { display: flex; align-items: center; gap: var(--space-3); }
+.pack-line__text { font-size: var(--text-lg); font-weight: var(--weight-heading); line-height: var(--leading-snug); color: var(--color-ink); }
+.pack-line--page { margin-top: var(--rhythm-page-top); }
+.pack-line--page + .page-title { margin-top: var(--space-3); }
+
+/* The keyring picture: the owner's render, cut out, on the soft orange tint so its white base reads on white pages. */
+.keyring { display: block; }
+.keyring img { display: block; width: 100%; height: auto; aspect-ratio: var(--keyring-ratio); }
+.keyring--page { max-width: var(--keyring-page); margin: 0 auto; }
+.keyring--card { width: var(--keyring-card); max-width: 100%; padding: var(--space-2) var(--space-3); border-radius: var(--radius); background: var(--color-brand-soft); }   /* the soft panel lets the white base read on the white card */
+@media (max-width: 22.5rem) { .keyring--card { display: none; } }   /* on the smallest phones the card keeps to its words and buttons */
+.refer-layout { display: grid; grid-template-areas: "head" "art" "body"; }
+.refer-layout__head { grid-area: head; }
+.refer-layout__art { grid-area: art; margin-bottom: var(--space-5); padding: var(--space-3) var(--space-4); border-radius: var(--radius-card); background: var(--color-brand-soft); }
+.refer-layout__body { grid-area: body; }
+@media (min-width: 48rem) {
+  .refer-layout { grid-template-columns: minmax(0, var(--split-major)) minmax(0, var(--split-minor)); grid-template-areas: "head art" "body art"; column-gap: var(--split-gap); align-items: start; }
+  .refer-layout__art { margin: var(--rhythm-page-top) 0 0; padding: var(--space-4); }
+}
+
+/* The refer a friend card: the home screen card's shape and entrance, pinned to the right corner on wide screens. */
+.refer-card { gap: var(--space-3); }
+@media (min-width: 48rem) { .refer-card { left: auto; max-width: var(--panel-width); } }
+

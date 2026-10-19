@@ -1,0 +1,10 @@
+{% load static sitecopy %}<aside class="install refer-card" role="complementary" aria-label="{% copy 'refer.nudge.label' %}" data-refer-card hidden>
+  <div class="pack-line">{% include "web/includes/pack.html" %}<p class="pack-line__text">{% copy "refer.kicker" %}</p></div>
+  {% include "web/includes/keyring.html" with variant="card" %}
+  <p class="install__text">{% copy "refer.nudge.text" %}</p>
+  <div class="install__actions">
+    <a class="button button--small" href="{% url 'web:refer' %}">{% copy "refer.nudge.go" %}</a>
+    <button type="button" class="button button--quiet button--small" data-refer-card-dismiss>{% copy "refer.nudge.dismiss" %}</button>
+  </div>
+</aside>
+<script src="{% static 'js/refer-card.js' %}" defer></script>

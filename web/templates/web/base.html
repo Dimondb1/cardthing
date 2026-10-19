@@ -43,6 +43,7 @@
   </main>
   {% include "web/includes/footer.html" %}
   {% include "web/includes/install.html" %}
+  {% block refer_card %}{% if refer_asked %}<script src="{% static 'js/refer-card.js' %}" data-refer-asked defer></script>{% elif refer_card %}{% include "web/includes/refer_card.html" %}{% endif %}{% endblock %}
   {% if ga_id and not private_link %}{% include "web/includes/consent.html" %}{% endif %}
   {% if awin_publisher_id and not private_link %}<script src="https://www.dwin2.com/pub.{{ awin_publisher_id }}.min.js"></script>{% endif %}
 </body>

@@ -2477,7 +2477,7 @@ class GoldenLayoutTests(PageTestCase):
                      ".saved { margin-top: var(--rhythm-section); }"):
             self.assertIn(rule, css)
         # Side by side columns use the golden split.
-        self.assertEqual(css.count("minmax(0, var(--split-major)) minmax(0, var(--split-minor))"), 2)
+        self.assertEqual(css.count("minmax(0, var(--split-major)) minmax(0, var(--split-minor))"), 3)
 
     def test_the_logo_sits_at_the_left_with_no_back_arrow(self):
         css = self.css("site.css")

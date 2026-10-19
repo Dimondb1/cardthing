@@ -2,11 +2,9 @@
 {% load sitecopy static %}
 {% block scripts %}<script src="{% static 'js/refer.js' %}" defer></script>{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1 class="page-title">{% copy "refer.link.title" %}</h1>
-  <p class="page-intro">{% copy "refer.link.intro" %}</p>
-</div>
-<div class="refer-share" data-refer-share data-share-title="{{ share_title }}" data-share-text="{{ share_words }}">
+<div class="refer-layout">
+{% include "web/includes/refer_head.html" with title="refer.link.title" intro="refer.link.intro" %}
+<div class="refer-layout__body refer-share" data-refer-share data-share-title="{{ share_title }}" data-share-text="{{ share_words }}">
   <label class="contact-form__label" for="refer-link">{% copy "refer.link.label" %}</label>
   <input id="refer-link" class="contact-form__input refer-share__link" type="text" value="{{ share_url }}" readonly data-refer-link>
   <ul class="refer-share__list">
@@ -18,5 +16,6 @@
   </ul>
   <p class="refer-share__done" role="status" data-refer-copied hidden>{% copy "refer.share.copied" %}</p>
   <p class="contact-form__note">{% copy "refer.link.note" %} <a href="{% url 'web:terms' %}#terms-refer">{% copy "refer.form.terms_link" %}</a></p>
+</div>
 </div>
 {% endblock %}

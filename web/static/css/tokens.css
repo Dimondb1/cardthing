@@ -163,6 +163,14 @@
   --mark-poster-sm: clamp(13rem, 7rem + 18vw, 24rem); /* the same on the shorter watchlist card */
   --mark-ratio: 417 / 400;       /* the image's own proportions, width to height */
 
+  /* Refer a friend: the pack (two raptor heads) and the keyring picture ------------------------------------ */
+  --pack-tuck: 0.45;             /* how far the leading orange head overlaps the ink friend behind it, as a share of a head */
+  --pack-rise: -0.18;            /* the friend sits a little higher, as a share of a head, so the two read as a pack */
+  --pack-rim: 2px;               /* the paper outline that parts the leading head from the friend */
+  --keyring-page: 22rem;         /* the keyring picture on the refer a friend pages */
+  --keyring-card: 11rem;         /* and on the refer a friend card */
+  --keyring-ratio: 900 / 258;    /* keyring.png's own proportions */
+
   /* Product page ---------------------------------------------------------- */
   /* On a phone the picture takes what the first screen leaves after the header, title, price and Buy now, so all four
      show together. svh is the screen with the browser's bars showing. The allowance fits a two-line name; names over

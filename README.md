@@ -2669,6 +2669,22 @@ still send their address. Under **Referrals**, **Approve** sends the address ema
 review and **Cancel** stops it (no email to anyone, keyrings back to stock, its links stop). The footer and
 the watchlist page show "Refer a friend, get a free keyring" only while new people can join.
 
+**The refer a friend card.** While the offer is advertised, a small card ("Raptors save in packs.", the keyring
+picture, Get my link and No thanks) now and then invites visitors to refer a friend
+(`web/static/js/refer-card.js`, `web/templates/web/includes/refer_card.html`). It never shows on a browser's
+first page, then on about one page in five, at most once a day, after 8 seconds or once the visitor has scrolled
+halfway. It waits while the analytics or home screen card is up, and the home screen card waits for it. No
+thanks hides it for good in that browser, and so does reaching the "Check your inbox" or share page; Escape
+hides it for that page only. It never shows on `/refer/`, `/r/` links, the private links, product pages (on a phone it
+would cover the buy box), the swipe page, the contact, list your shop and alert forms, admin or error pages (`NO_REFER_CARD` in
+`web/context_processors.py`), and never without JavaScript. It reads the cached offer flag only, so no page
+gains a query, and the script makes no network calls. Its browser keys are `ripraptor.refer` (done),
+`ripraptor.refer.pages` and `ripraptor.refer.shown`. The keyring picture (`web/static/img/keyring.webp`, with
+`keyring.png` as the fallback) is cut from the owner's render; the two heads (orange RipRaptor leading, a friend
+in ink behind) are the `.mark` mask twice, sized by the `--pack-*` tokens. In the card the keyring sits on a
+soft orange panel so its white base reads on the white card, and below 360px wide the card drops the picture to
+stay small.
+
 **Rules against abuse.**
 
 - One keyring per email address ever, and one per household (postcode with the house and flat numbers from

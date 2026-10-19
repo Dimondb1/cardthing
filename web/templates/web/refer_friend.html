@@ -1,9 +1,7 @@
 {% extends "web/base.html" %}
-{% load sitecopy %}
 {% block content %}
-<div class="page-head">
-  <h1 class="page-title">{% copy "refer.friend.title" %}</h1>
-  <p class="page-intro">{% copy "refer.friend.intro" %}</p>
+<div class="refer-layout">
+  {% include "web/includes/refer_head.html" with title="refer.friend.title" intro="refer.friend.intro" %}
+  <div class="refer-layout__body">{% include "web/includes/refer_form.html" with button="refer.friend.button" note="refer.friend.email_note" %}</div>
 </div>
-{% include "web/includes/refer_form.html" with button="refer.friend.button" note="refer.friend.email_note" %}
 {% endblock %}

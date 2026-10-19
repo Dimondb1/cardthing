@@ -17,6 +17,9 @@ from catalogue import mail, referrals
 from catalogue.models import KeyringClaim, Referral, ReferralSettings
 from content.service import for_request, get
 
+# Pages that mean this browser has asked for a link or a keyring: they tell the refer a friend card never to show again.
+ASKED = {"refer.sent.title", "refer.claimed.title", "refer.link.title"}
+
 ERRORS = {"invalid": "refer.form.invalid", "agree": "refer.form.agree_needed", "busy": "refer.form.busy",
           "failed": "refer.form.failed"}
 
@@ -35,7 +38,8 @@ def message(request, title, body, status=200, **extra):
     """A short page: a heading and one line."""
     heading = text(request, title)
     return private(render(request, "web/refer_message.html", {
-        "heading": heading, "message": text(request, body), "meta_title": heading, "noindex": True, **extra,
+        "heading": heading, "message": text(request, body), "meta_title": heading, "noindex": True,
+        "refer_asked": title in ASKED, **extra,
     }, status=status))
 
 
@@ -122,6 +126,7 @@ def refer_confirm(request, token):
         "sms_url": "sms:?&body=" + quote(words),
         "email_url": f"mailto:?subject={quote(text(request, 'refer.share.subject'))}&body={quote(words)}",
         "share_title": text(request, "refer.share.subject"), "share_words": words, "noindex": True,
+        "refer_asked": True,
     }))
 
 

@@ -26,9 +26,9 @@
   if (pages < ASK_AFTER || !matchMedia("(max-width: 47.99rem)").matches) return;
 
   const finish = (what) => { set(DONE, "done"); card.hidden = true; note(what); };
-  // The analytics card asks first; this one waits for a later page.
+  // The analytics card asks first, and the refer a friend card keeps its turn once up; this one waits for a later page.
   const show = () => {
-    if (document.querySelector("[data-consent]:not([hidden])")) return;
+    if (document.querySelector("[data-consent]:not([hidden]), [data-refer-card]:not([hidden])")) return;
     card.hidden = false;
     requestAnimationFrame(() => card.classList.add("is-shown"));
     note("shown");

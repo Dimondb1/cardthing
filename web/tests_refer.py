@@ -901,3 +901,154 @@ class FindingTests(ReferTestCase):
         stop = self.get(self.link_in(confirm, "/refer/stop/"))
         self.assertContains(stop, "name and postal address")
         self.assertContains(self.get(f"/r/{self.referrer('r2@example.com', ip='51.5.5.5').code}/"), "One per household")
+
+
+class ReferCardTests(ReferTestCase):
+    """The card that now and then invites a visitor to refer a friend, and the keyring art on the offer's pages."""
+
+    CARD = "data-refer-card"
+
+    def setUp(self):
+        super().setUp()
+        referrals.refresh_flag()
+
+    def static_text(self, path):
+        from django.contrib.staticfiles import finders
+
+        return open(finders.find(path), encoding="utf-8").read()
+
+    def test_the_card_shows_only_while_the_offer_is_advertised(self):
+        html = self.get(reverse("web:about")).content.decode()
+        self.assertIn(self.CARD, html)
+        self.assertIn("refer-card.js", html)
+        self.assertIn('href="/refer/"', html)
+        self.assertIn("Raptors save in packs.", html)
+        self.assertIn("Get my link", html)
+        self.assertIn("No thanks", html)
+        ReferralSettings.objects.filter(pk=1).update(is_on=False)
+        referrals.refresh_flag()
+        html = self.get(reverse("web:about")).content.decode()
+        self.assertNotIn(self.CARD, html)
+        self.assertNotIn("refer-card.js", html)
+
+    def test_the_card_is_hidden_until_the_script_shows_it_and_is_labelled(self):
+        html = self.get(reverse("web:home")).content.decode()
+        start = html.index("<aside class=\"install refer-card\"")
+        tag = html[start:html.index(">", start)]
+        self.assertIn(" hidden", tag)
+        self.assertIn('role="complementary"', tag)
+        self.assertIn('aria-label="Refer a friend"', tag)
+
+    def test_never_on_the_offers_own_pages_forms_the_swipe_page_or_errors(self):
+        referrer = self.referrer()
+        for url in (reverse("web:refer"), f"/r/{referrer.code}/", reverse("web:deck"), reverse("web:contact"),
+                    reverse("web:list_shop"), "/no-such-page/", "/r/nosuchcode/"):
+            with self.subTest(url=url):
+                self.assertNotIn(self.CARD, self.get(url, ip="51.4.4.4").content.decode())
+
+    def test_asking_for_a_link_turns_the_card_off_for_good(self):
+        response = self.client.get(reverse("web:refer") + "?sent=1")
+        self.assertContains(response, "data-refer-asked")
+        self.assertNotContains(response, self.CARD)
+        # The share page means the same.
+        self.referrer()
+        share = self.get(self.link_in(self.sent[0], "/refer/confirm/"))
+        self.assertContains(share, "data-refer-asked")
+
+    def test_never_over_the_buy_box_on_a_product_page(self):
+        from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        product = make_product(make_set(make_game()))
+        make_listing(product, make_retailer("Harbour Games"), price="52.00")
+        html = self.get(product.get_absolute_url()).content.decode()
+        self.assertIn("buybox", html)
+        self.assertNotIn(self.CARD, html)
+        self.assertNotIn("refer-card.js", html)
+
+    def test_the_cards_keyring_sits_on_a_soft_panel_and_steps_aside_on_the_smallest_phones(self):
+        css = self.static_text("css/site.css")
+        rule = css[css.index(".keyring--card {"):]
+        rule = rule[:rule.index("}")]
+        self.assertIn("background: var(--color-brand-soft)", rule)
+        self.assertIn("border-radius: var(--radius)", rule)
+        self.assertIn("@media (max-width: 22.5rem) { .keyring--card { display: none; } }", css)
+
+    def test_the_card_adds_no_query_on_the_home_or_product_page(self):
+        from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        product = make_product(make_set(make_game()))
+        make_listing(product, make_retailer("Harbour Games"), price="52.00")
+
+        def count(url):
+            self.get(url)
+            with CaptureQueriesContext(connection) as queries:
+                self.get(url)
+            return len(queries)
+
+        for url, card in ((reverse("web:home"), True), (product.get_absolute_url(), False)):
+            with self.subTest(url=url):
+                on = count(url)
+                self.assertEqual(self.CARD in self.get(url).content.decode(), card)
+                ReferralSettings.objects.filter(pk=1).update(is_on=False)
+                referrals.refresh_flag()
+                self.assertEqual(count(url), on)
+                ReferralSettings.objects.filter(pk=1).update(is_on=True)
+                referrals.refresh_flag()
+
+    def test_the_script_is_polite_and_offline(self):
+        script = self.static_text("js/refer-card.js")
+        self.assertNotIn("fetch(", script)
+        self.assertNotIn("XMLHttpRequest", script)
+        self.assertNotIn("sendBeacon", script)
+        # Every storage read and write is wrapped, so a browser that blocks storage never throws.
+        for line in script.splitlines():
+            if "localStorage." in line or "sessionStorage." in line or "[name].getItem" in line:
+                with self.subTest(line=line.strip()):
+                    self.assertIn("try {", line)
+        self.assertIn("const CHANCE = 0.2;", script)
+        self.assertIn("if (pages < 2 ||", script)          # never the first page
+        self.assertIn("get(SHOWN) === today()", script)    # at most once a day
+        self.assertIn('[data-consent]:not([hidden]), [data-install]:not([hidden])', script)
+        self.assertIn('e.key === "Escape"', script)
+        self.assertNotIn(".focus()", script.split("const show")[1].split("const onScroll")[0])   # focus never stolen
+        # The home screen card waits while this one is up.
+        self.assertIn("[data-refer-card]:not([hidden])", self.static_text("js/install.js"))
+
+    def test_the_card_moves_only_with_transform_and_honours_reduced_motion(self):
+        css = self.static_text("css/site.css")
+        self.assertIn(".refer-card", css)
+        self.assertIn("transition: transform var(--motion-slow) var(--ease-out);", css)
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .install { transition: none; transform: none; } }", css)
+        block = css[css.index("/* The pack:"):]
+        self.assertNotRegex(block, r"#[0-9a-fA-F]{3,6}\b")
+        rules = re.sub(r"@media \([^)]*\)", "", block)   # breakpoints cannot be tokens: custom properties do not work there
+        self.assertNotRegex(rules, r"(?<![\w-])\d+(\.\d+)?(px|rem|ms)\b")
+
+    def test_the_keyring_picture_is_small_sized_and_described(self):
+        from django.contrib.staticfiles import finders
+        from PIL import Image
+
+        for name, limit in (("img/keyring.webp", 60_000), ("img/keyring.png", 150_000)):
+            path = finders.find(name)
+            with self.subTest(name=name):
+                self.assertLess(open(path, "rb").read().__len__(), limit)
+                with Image.open(path) as image:
+                    self.assertEqual(image.size, (900, 258))
+                    self.assertIn("A", image.getbands())
+        referrer = self.referrer()
+        alt = 'alt="RipRaptor 3D keyring: the ripraptor logo in orange on a white base"'
+        for url in (reverse("web:refer"), f"/r/{referrer.code}/", reverse("web:about")):
+            html = self.get(url, ip="51.4.4.4").content.decode()
+            with self.subTest(url=url):
+                self.assertIn('width="900" height="258"', html)
+                self.assertIn(alt, html)
+                self.assertIn('<span class="pack', html)
+                self.assertIn('aria-hidden="true"><span class="mark pack__friend">', html)
+
+    def test_the_new_wording_is_in_the_registry(self):
+        from content.registry import ENTRIES
+
+        keys = {entry.key for entry in ENTRIES}
+        for key in ("refer.kicker", "refer.keyring.alt", "refer.nudge.label", "refer.nudge.text", "refer.nudge.go",
+                    "refer.nudge.dismiss"):
+            self.assertIn(key, keys)

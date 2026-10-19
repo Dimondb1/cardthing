@@ -62,6 +62,15 @@ TCGDEX_DETAILS = 40
 TCGDEX_SET_URL = "https://api.tcgdex.net/v2/en/sets/{id}"
 # pokemon.com news articles opened per read, after the index.
 POKEMON_ARTICLES = 3
+DIGIMON_URL = "https://world.digimoncard.com/products/"
+# Riot's Riftbound site (it answers from playriftbound.com, where riftbound.leagueoflegends.com sends it).
+RIFTBOUND_URL = "https://riftbound.leagueoflegends.com/en-us/card-gallery/"
+RIFTBOUND_NEWS = "https://riftbound.leagueoflegends.com/en-us/news/"
+# A news line's own link can leave the site (a video, the merch store); the date is still the site's, so the
+# row then points at the news page where the line was read.
+RIFTBOUND_HOSTS = ("riftbound.leagueoflegends.com", "playriftbound.com")
+# Riftbound set overview articles opened per read, after the gallery and the news page.
+RIFTBOUND_ARTICLES = 2
 # The radar is about what is coming: a set released longer ago than this is recorded but changes nothing.
 RECENT_DAYS = 180
 # A source with no good read for this long is shown on the Things to check page.
@@ -125,6 +134,11 @@ SOURCES = [
            HTML, True, 6, 1.0, accept=HTML_ACCEPT, terms="No API or published limit; page 1."),
     Source("bushiroad_ws", "Weiss Schwarz site", "weiss-schwarz", "https://en.ws-tcg.com/products/", HTML, True, 6, 1.0,
            accept=HTML_ACCEPT, terms="No API or published limit; page 1."),
+    Source("digimon_products", "Digimon Card Game site", "digimon", DIGIMON_URL, HTML, True, 24, 1.0, accept=HTML_ACCEPT,
+           terms="No API or published limit; one page lists every English product."),
+    Source("riftbound_sets", "Riftbound site", "riftbound", RIFTBOUND_URL, HTML, True, 24, 1.0, accept=HTML_ACCEPT,
+           pages=(RIFTBOUND_NEWS,),
+           terms="No API or published limit; the card gallery, the news page and at most 2 set overviews a read."),
     Source("fabtcg_coming_soon", "Flesh and Blood site", "flesh-and-blood", "https://fabtcg.com/coming-soon/", HTML,
            True, 6, 1.0, accept=HTML_ACCEPT, browser=True,
            terms="No API; answers only a browser User-Agent; name and date only."),
@@ -549,6 +563,211 @@ def parse_fabtcg(body, since=None):
     return [s for s in signals if since_ok(s, since)]
 
 
+# Digimon: every English product on one page, each '<article>' with its kind ('Booster Pack'), its title
+# ('DIGIMON CARD GAME EXTRA BOOSTER CHIVALROUS XIII [EX-13]') and its release date, or a month for Premium Bandai.
+# Boosters and starter decks are sets; of the Premium Bandai products only the Limited Card Packs (LM-) are, the
+# rest are binders, sleeves and gift sets.
+DIGIMON_KINDS = {"Booster Pack", "Starter Deck", "Advanced Deck"}
+DIGIMON_LIMITED = "LM-"
+DIGIMON_PREFIX = re.compile(r"^DIGIMON CARD GAME\s+", re.I)
+# Words of the product's kind that shops leave out of the set's name: 'EX14 Malevolent VII Booster Pack'.
+DIGIMON_KIND_WORDS = re.compile(r"^(?:EXTRA BOOSTER|THEME BOOSTER|ADVANCED BOOSTER|LIMITED CARD PACK)\s+(?=\S)", re.I)
+# Digimon whose published names carry capitals inside the word, which the site's capitals hide.
+DIGIMON_SPELLINGS = {"ulforceveedramon": "UlforceVeedramon", "ragnaloardmon": "RagnaLoardmon"}
+ROMAN = re.compile(r"^(?=[IVXLC])(?:C[D]|D?C{0,3})(?:X[CL]|L?X{0,3})(?:I[XV]|V?I{0,3})$")
+
+
+def digimon_name(text):
+    """'CHIVALROUS XIII' -> 'Chivalrous XIII', 'DIGIMON ALYSION Yukinamon' -> 'Digimon Alysion Yukinamon': words in
+    capitals are title cased, Roman numerals and words already in mixed case are left as they are, and the Digimon in
+    DIGIMON_SPELLINGS keep their published capitals ('ULFORCEVEEDRAMON' -> 'UlforceVeedramon')."""
+    words = []
+    for index, word in enumerate(text.split()):
+        if not shouted(word) or ROMAN.match(word):
+            words.append(word)
+            continue
+        lower = word.lower()
+        if lower in DIGIMON_SPELLINGS:
+            words.append(DIGIMON_SPELLINGS[lower])
+            continue
+        words.append(lower if index and lower in SMALL_WORDS else lower[:1].upper() + lower[1:])
+    return " ".join(words)
+
+
+def digimon_release(block):
+    """(date, precision) of the release in one product's block: its 'Release date', or 'Release date (For Other
+    regions)', never the 'Pre-Release date' a week before nor the US shipping date."""
+    for label, value in re.findall(r"<dl class=\"release\">\s*<dt>(.*?)</dt>\s*<dd>(.*?)</dd>", block, re.S):
+        if clean(label).lower().startswith("release date"):
+            return parse_date(clean(value))
+    return None, NONE
+
+
+def parse_digimon(body, since=None):
+    text = as_text(body)
+    items = re.findall(r"<article class=\"genrecol-[^\"]*\"([^>]*)>(.*?)</article>", text, re.S)
+    if not items:
+        raise NothingFound("The Digimon Card Game products page listed nothing.")
+    signals, seen = [], set()
+    for attributes, block in items:
+        kind = re.search(r"class=\"genre-[^\"]*genrename\">(.*?)</p>", block, re.S)
+        title = re.search(r"class=\"prodname\">(.*?)</h4>", block, re.S)
+        if kind is None or title is None:
+            continue
+        title = clean(title.group(1))
+        code = re.search(r"\[([A-Z]{1,3}-?\d[\dA-Z-]*)\]\s*$", title)
+        code = code.group(1) if code else ""
+        if clean(kind.group(1)) not in DIGIMON_KINDS and not code.startswith(DIGIMON_LIMITED):
+            continue
+        name = DIGIMON_PREFIX.sub("", re.sub(r"\s*\[[^\]]*\]\s*$", "", title)).strip()
+        name = digimon_name(DIGIMON_KIND_WORDS.sub("", name))
+        if not name or (name, code) in seen:
+            continue
+        seen.add((name, code))
+        released, precision = digimon_release(block)
+        link = re.search(r"data-url=\"([^\"]+)\"", attributes)
+        url = urllib.parse.urljoin(DIGIMON_URL, link.group(1)) if link else ""
+        signals.append(ReleaseSignal("digimon", name, code, released, precision, url))
+    return [s for s in signals if since_ok(s, since)]
+
+
+# Riftbound: Riot's site is a Next.js app whose pages carry their content as JSON in a __NEXT_DATA__ script. The
+# card gallery lists every set with its three-letter code (OGN Origins, SFD Spiritforged); the news page lists
+# every article with its date and a line about it; a set's overview article ('The Vendetta Overview') gives its
+# release date. Neither the site nor its articles use the 'RB 03' numbers some shops write, so those are not codes.
+NEXT_DATA = re.compile(r"<script id=\"__NEXT_DATA__\"[^>]*>(.*?)</script>", re.S)
+# Dates as the articles write them: 'October 23, 2026', 'July 31', 'Oct. 23', '5/8' (Riot's US pages put the
+# month first).
+RB_DATE = r"(?:[A-Z][a-z]{2,8}\.? \d{1,2}(?:st|nd|rd|th)?(?:, \d{4})?|\d{1,2}/\d{1,2}(?:/\d{2,4})?)"
+# The English release, in the words the articles use, most particular first: 'the English version will release on
+# 5/8', 'launches in English on October 31, 2025', 'Release: October 23, 2026', 'releases on 2/13'.
+RB_RELEASE = [re.compile(pattern, re.I) for pattern in (
+    rf"\bEnglish (?:version|language release|release) will (?:release|launch|be released|be out) on ({RB_DATE})",
+    rf"\b(?:release[sd]?|launch(?:es|ed)?|be released|be out) in English on ({RB_DATE})",
+    rf"\bRelease\s*:\s*({RB_DATE})",
+    rf"\b(?:release[sd]?|launch(?:es|ed)?|drops?|dropping)(?: worldwide)?(?: on)? ({RB_DATE})",
+)]
+# A release in another language or country is not the English one.
+RB_OTHER_LANGUAGE = re.compile(r"\b(?:Chinese|China|French|France|Korean|Korea|Japanese|Japan)\b")
+RB_ENGLISH = re.compile(r"\bEnglish\b")
+# A date with no year is the next one on or after the article, give or take this many days.
+RB_YEAR_SLACK = 60
+
+
+def next_data(body):
+    """The JSON a Next.js page carries, or SourceError."""
+    match = NEXT_DATA.search(as_text(body))
+    if match is None:
+        raise NothingFound("The page carried no __NEXT_DATA__.")
+    return load_json(match.group(1))
+
+
+def blades(body):
+    return ((next_data(body).get("props") or {}).get("pageProps") or {}).get("page") or {}
+
+
+def parse_riftbound_sets(body):
+    """[(code, name)] from the card gallery's set list, in its order."""
+    page = blades(body)
+    found = []
+    for blade in page.get("blades") or []:
+        for item in ((blade.get("sets") or {}).get("items") or []) if isinstance(blade, dict) else []:
+            code, name = (item.get("id") or "").strip(), clean(item.get("name") or "")
+            if code and name and (code, name) not in found:
+                found.append((code, name))
+    if not found:
+        raise NothingFound("The Riftbound card gallery listed no sets.")
+    return found
+
+
+class RiftboundArticle(NamedTuple):
+    title: str
+    text: str
+    url: str
+    published: date | None
+
+
+def published_on(value):
+    """The day of a timestamp such as '2026-07-07T01:00:00.000Z', or None."""
+    match = re.match(r"(\d{4})-(\d{2})-(\d{2})", value or "")
+    return safe_date(*match.groups()) if match else None
+
+
+def parse_riftbound_news(body):
+    """[RiftboundArticle] from the news page, newest first, each with its line rather than its whole text."""
+    articles = []
+    for blade in blades(body).get("blades") or []:
+        for item in (blade.get("items") or []) if isinstance(blade, dict) else []:
+            if not isinstance(item, dict) or not item.get("title"):
+                continue
+            url = (((item.get("action") or {}).get("payload") or {}).get("url")) or ""
+            articles.append(RiftboundArticle(clean(item["title"]), clean((item.get("description") or {}).get("body")),
+                                             urllib.parse.urljoin(RIFTBOUND_URL, url) if url else "",
+                                             published_on(item.get("publishedAt"))))
+    if not articles:
+        raise NothingFound("The Riftbound news page listed no articles.")
+    return sorted(articles, key=lambda a: a.published or date.min, reverse=True)
+
+
+def parse_riftbound_article(body, url=""):
+    """A RiftboundArticle with the article's whole text."""
+    page = blades(body)
+    parts = []
+    for blade in page.get("blades") or []:
+        rich = (blade.get("richText") or {}).get("body") if isinstance(blade, dict) else None
+        if rich:
+            parts.append(clean(rich))
+    if not parts:
+        raise NothingFound("The Riftbound article had no text.")
+    return RiftboundArticle(clean(page.get("title") or ""), " ".join(parts), url,
+                            published_on(page.get("displayedPublishDate")))
+
+
+def article_date(text, published):
+    """(date, precision) of the English release a text gives, or (None, none). A date with no year takes the
+    article's, or the next year's when that would put it more than RB_YEAR_SLACK days before the article; with no
+    article date, a date with no year is not used."""
+    for pattern in RB_RELEASE:
+        for match in pattern.finditer(text or ""):
+            around = text[max(0, match.start() - 60):match.end() + 30]
+            if RB_OTHER_LANGUAGE.search(around) and not RB_ENGLISH.search(around):
+                continue
+            found = article_day(match.group(1), published)
+            if found:
+                return found, DAY
+    return None, NONE
+
+
+def article_day(text, published):
+    slash = re.fullmatch(r"(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?", text)
+    if slash:
+        month, day, year = int(slash.group(1)), int(slash.group(2)), slash.group(3)
+        year = (int(year) + (2000 if len(year) == 2 else 0)) if year else None
+    else:
+        words = re.match(r"([A-Za-z]+)\.? (\d{1,2})(?:st|nd|rd|th)?(?:, (\d{4}))?", text)
+        month = month_number(words.group(1)) if words else None
+        if not month:
+            return None
+        day, year = int(words.group(2)), int(words.group(3)) if words.group(3) else None
+    if year is not None:
+        return safe_date(year, month, day)
+    if published is None:
+        return None
+    found = safe_date(published.year, month, day)
+    if found and found < published - timedelta(days=RB_YEAR_SLACK):
+        found = safe_date(published.year + 1, month, day)
+    return found
+
+
+def names_set(article, name, names):
+    """Whether an article's title and line name this set and no other."""
+    text = f"{article.title} {article.text}"
+
+    def named(other):
+        return re.search(rf"(?<![A-Za-z]){re.escape(other)}(?![A-Za-z])", text) is not None
+    return named(name) and not any(named(other) for other in names if other != name and name not in other)
+
+
 # Reading ----------------------------------------------------------------------------------------
 
 def fetch_url(url, headers=None, timeout=TIMEOUT):
@@ -664,6 +883,45 @@ def read_pokemon(source, reader, since, known):
     return signals
 
 
+def on_riftbound_site(url):
+    host = (urllib.parse.urlsplit(url or "").hostname or "").lower()
+    return any(host == name or host.endswith("." + name) for name in RIFTBOUND_HOSTS)
+
+
+def read_riftbound(source, reader, since, known):
+    """Every set in the card gallery, with the English release date the news page's lines give it, or else its
+    overview article ('The Unleashed Overview'), at most RIFTBOUND_ARTICLES a read. A set this source has already
+    dated, and no line dates now, is left out, so a date it gave is never taken away."""
+    sets = parse_riftbound_sets(reader.get(source.url))
+    news_url = source.pages[0] if source.pages else RIFTBOUND_NEWS
+    news = parse_riftbound_news(reader.get(news_url))
+    names = [name for _code, name in sets]
+    signals, opened = [], 0
+    for code, name in sets:
+        released, precision, url = None, NONE, ""
+        for article in news:
+            if names_set(article, name, names):
+                released, precision = article_date(f"{article.title}. {article.text}", article.published)
+                if released:
+                    url = article.url if on_riftbound_site(article.url) else news_url
+                    break
+        if released is None and code in known.dated_codes:
+            continue
+        overview = next((a for a in news if a.title.lower() == f"the {name} overview".lower() and a.url), None)
+        if released is None and overview is not None and opened < RIFTBOUND_ARTICLES and not reader.stop():
+            opened += 1
+            try:
+                article = parse_riftbound_article(reader.get(overview.url), overview.url)
+            except OutOfPages:
+                # The day's pages are spent: the set is still listed, and its date waits for the next read.
+                opened = RIFTBOUND_ARTICLES
+            else:
+                released, precision = article_date(article.text, article.published or overview.published)
+                url = overview.url if released and on_riftbound_site(overview.url) else (news_url if released else "")
+        signals.append(ReleaseSignal("riftbound", name, code, released, precision, url or source.url))
+    return [s for s in signals if since_ok(s, since)]
+
+
 def read_pages(parse):
     def read(source, reader, since, known):
         signals = parse(reader.get(source.url), since)
@@ -693,6 +951,8 @@ READERS = {
     "bushiroad_vanguard": read_pages(parse_vanguard),
     "bushiroad_ws": read_pages(parse_weiss),
     "fabtcg_coming_soon": read_pages(parse_fabtcg),
+    "digimon_products": read_pages(parse_digimon),
+    "riftbound_sets": read_riftbound,
 }
 
 
@@ -1249,8 +1509,9 @@ class ShopSignals:
         Release.objects.filter(query, source=self.source).update(last_seen_at=now)
 
 
-# Set codes in product names, for the games no release source lists (Digimon, Riftbound, Dragon Ball Super
-# Masters). Each code no set has yet becomes one row under Announced sets to check: Claude settles it from the
+# Set codes in product names that no set and no release source has yet: a Digimon set the English site does not
+# list (a Japanese EX14), or a Dragon Ball Super Masters set, which no source lists. Each becomes one row under
+# Announced sets to check: Claude settles it from the
 # publisher's own pages (set_judge.DOMAINS), or the owner taps Add set or Not a set. A name never adds a set.
 NAMES_SOURCE = f"{SHOP_PREFIX}names"
 NAME_CODES = {
@@ -1341,9 +1602,24 @@ CODE_SPAN = re.compile(r"(?<![a-z0-9])[a-z]{1,4}[ -]?(\d{1,3})(?:\s*[-/&,]\s*|\s
 SPAN_WIDTH = 6
 # Bandai's code for a booster that carries another set's cards ('OP15-EB04'): the first code is the set's.
 JOINED_CODE = re.compile(r"^\s*([a-z]+-?\d+)-[a-z]+-?\d+\s*$", re.I)
+# A code for a run of sets: 'BT18-19', 'BT01-03'.
+RUN_CODE = re.compile(r"^\s*[a-z]+-?(\d+)\s*-\s*(\d+)\s*$", re.I)
+# Games whose sets' codes are letters only, as the publisher prints them on every card ('OGN-001/298'), and so
+# file products by themselves: Riftbound's OGN, SFD, UNL. No other game's are, since 'BRO' or 'WAR' is also a word.
+LETTER_CODES = {"riftbound": re.compile(r"^[A-Z]{3}$")}
 # Pokémon codes keep their zeros: a source's 'SV08' is not always the shops' 'SV8', which is as often the
 # Japanese set of that number as the English one.
 ZEROS_MATTER = {"pokemon"}
+# Products the publisher lists apart from its sets, which are filed under none, by the codes it gives them or the
+# way their names end: Digimon's Premium Bandai sets (PB-25 'Digimon Story Time Stranger Set' is not the Time
+# Stranger booster, nor 'Digimon Liberator Debuggers Set' the Digimon Liberator one), gift boxes (GB), adventure
+# boxes (AB), double pack sets (DP) and premium deck sets (PD). A Digimon booster or deck never ends in 'Set'.
+NOT_SET_PRODUCTS = {"digimon": re.compile(r"(?<![a-z0-9])(?:pb|gb|ab|dp|pd)[ -]?\d{1,2}(?![0-9])|\bset\s*(?:\(.*\))?\s*$",
+                                          re.I)}
+# Numbers shops put on products that the publisher never uses for a set: Riftbound's 'RB 03' and 'RB 02PC01'. They
+# are taken out of the name before its words are matched, so 'Unleashed RB 03 English Booster Box' is filed by
+# 'Unleashed'; the number itself files nothing.
+PRODUCT_CODES = {"riftbound": re.compile(r"(?<![a-z0-9])rb ?\d{2}(?:[a-z]{2}\d{2})?(?![a-z0-9])", re.I)}
 # Words that never make a one-word set name: kinds of product and the words around them.
 SET_NUMBER_WORDS = r"\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten"
 LEADING_SET_NUMBER = re.compile(rf"^\s*set\s+(?:{SET_NUMBER_WORDS})\s*[:\-–]?\s*", re.I)
@@ -1355,7 +1631,7 @@ KIND_FOLLOW = {"play", "draft", "collector", "collectors", "theme", "intro", "fa
                "boosters", "display", "bundle", "blister", "pack", "packs", "box", "jumbo", "sleeved", "starter", "deck",
                "decks", "set", "case", "tin", "etb", "elite", "trainer", "build", "first", "1st", "unlimited", "edition",
                "champion", "showdown", "vault", "illumineers", "illumineer", "trove", "gift", "collection", "pin",
-               "checklane", "mini", "premium", "special"}
+               "checklane", "mini", "premium", "special", "advanced"}
 # After a set's name that another set's name holds ('Final Fantasy' in 'Final Fantasy Commander', 'Team Rocket' in
 # 'Team Rocket Returns'), only the words of a booster of that set: 'Final Fantasy Play Booster' is the set,
 # 'Team Rocket Tin' and 'Legendary Duelists 9: Duels From the Deep' may be anything.
@@ -1397,8 +1673,12 @@ def code_key(code, game_slug=""):
 
 
 def set_code_keys(code, game_slug=""):
-    """The code a set files products by, in code_key's spelling, or none: a code needs letters and digits."""
-    if not usable_code(code):
+    """The code a set files products by, in code_key's spelling, or none: a code needs letters and digits (a
+    Riftbound set's three letters are enough, LETTER_CODES), and a run of sets ('BT18-19', a Digimon special
+    booster's) is no one set's code."""
+    if RUN_CODE.match(code or ""):
+        return frozenset()
+    if not usable_code(code) and not (game_slug in LETTER_CODES and LETTER_CODES[game_slug].match(code or "")):
         return frozenset()
     joined = JOINED_CODE.match(code)
     return frozenset({code_key(joined.group(1) if joined else code, game_slug)})
@@ -1497,9 +1777,15 @@ def choose_set_why(product_name, rules, game=""):
     rules = [rule for rule in rules if languages.same(rule.language, language)]
     if not rules:
         return None, f"no set in {languages.name(language) if language else 'English'}"
+    other = NOT_SET_PRODUCTS.get(game)
+    if other is not None and other.search(product_name or ""):
+        return None, "a product the publisher lists apart from its sets"
+    codes = name_codes(product_name, game)
+    if game in PRODUCT_CODES:
+        # Matched by name with the shop's product number taken out, never by the number.
+        product_name = " ".join(PRODUCT_CODES[game].sub(" ", product_name or "").split())
     filler = filler_words(game)
     words = [w for w in words_of(product_name) if w not in filler]
-    codes = name_codes(product_name, game)
     by_code = {rule.pk: rule for rule in rules if rule.codes & codes}
     if len(by_code) == 1:
         [rule] = by_code.values()

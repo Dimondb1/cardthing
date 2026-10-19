@@ -91,7 +91,7 @@ DOMAINS = {
     "flesh-and-blood": (("fabtcg.com",), ()),
     "cardfight-vanguard": (("cf-vanguard.com",), ()),
     "weiss-schwarz": (("ws-tcg.com",), ()),
-    "riftbound": (("riftbound.leagueoflegends.com",), ()),
+    "riftbound": (("riftbound.leagueoflegends.com", "playriftbound.com"), ()),
 }
 # Models that take the newer web search tool; the rest take the basic one.
 NEWER_SEARCH = {"claude-opus-5-5", "claude-opus-5", "claude-opus-4-8", "claude-sonnet-5-5", "claude-sonnet-5"}

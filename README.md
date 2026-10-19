@@ -1951,6 +1951,35 @@ a time when its turn comes; `scan_releases` does the same by hand.
 | Cardfight!! Vanguard products | Vanguard | official | 6 hours | page 1 |
 | Weiss Schwarz products | Weiss Schwarz | official | 6 hours | page 1 |
 | Flesh and Blood coming soon | Flesh and Blood | official | 6 hours | page 1, asked with a browser User-Agent because the site refuses any other |
+| Digimon Card Game products (world.digimoncard.com) | Digimon | official | 24 hours | one page, which lists every English product |
+| Riftbound site (riftbound.leagueoflegends.com, now answering from playriftbound.com) | Riftbound | official | 24 hours | the card gallery, the news page and at most 2 set overview articles a read |
+
+The Digimon page gives each product's kind, title, code and dates. Boosters
+(BT, EX, RB, AD), starter and advanced decks (ST) and the Limited Card Packs
+(LM) are sets; the other Premium Bandai products, sleeves, gift and adventure
+boxes are not. The set takes the "Release date" (for regions outside the US),
+never the pre-release date a week earlier or the US shipping date. A month
+("March 2026") is kept on the release and never written to a set. Names drop
+"Extra Booster", "Theme Booster", "Advanced Booster" and "Limited Card Pack",
+as shops do ("EX14 Malevolent VII"); codes are kept as published ("BT-27",
+"BT15", "ST-9"). The site writes titles in capitals, so names are title
+cased, except two Digimon whose published names keep inner capitals
+("UlforceVeedramon", "RagnaLoardmon"). EX14 and other Japanese-only sets are not on the English
+site, so they wait under "Announced sets to check".
+
+Riot's Riftbound pages carry their content as JSON inside the page. The card
+gallery lists every set with its three-letter code (OGN Origins, OGS Proving
+Grounds, SFD Spiritforged, UNL Unleashed, VEN Vendetta, RAD Radiance) but no
+dates. A set's English release date comes from a line on the news page that
+names that set alone ("Spiritforged ... releases on 2/13") or else from its
+overview article ("The Vendetta Overview": "Release: July 31 for English and
+Chinese"). A date written without a year takes the year of the article it is
+in (the next year when that would put it more than 60 days before the
+article), and a release in another language or country is never taken. A
+set already dated is not looked up again. When a news line links off the site
+(a video or the merch store), the release row points at the news page the
+date was read from instead. Riot never numbers sets "RB 03";
+that is a shop's product number, so it files nothing.
 
 Web pages are fetched a second apart and no more than 25 a day across all
 of them, dry runs included; each page is counted as it is fetched, so the
@@ -2007,8 +2036,12 @@ only one set fits (`catalogue/releases.py`, Filing products under sets):
   the game. Codes compare in one spelling: "BT 15", "BT-15" and "BT15" are one
   code, and "ST9" is "ST09" (Pokémon keeps its zeros, since a bare SV8 is as
   often the Japanese set as the English one). A run of sets such as
-  "Special Booster Ver.2.0 (BT18 19)" or "BT01-03" is never filed by its codes,
-  and a name with two sets' codes, or a code two sets share, is left alone.
+  "Special Booster Ver.2.0 (BT18 19)" or "BT01-03" is never filed by its codes
+  (a set whose own code is a run, such as Digimon's "Special Booster Ver.2.0"
+  [BT18-19], takes only products with its whole name), and a name with two
+  sets' codes, or a code two sets share, is left alone. Riftbound's three-letter
+  codes (OGN, SFD) file products; no other game's letters-only codes do, since
+  "BRO" or "WAR" is also a word.
 - **Then by name.** The set's whole name as a phrase, filler words left out.
   A one-word set name ("Origins", "Fabled", "Morningtide") files a product only
   when the name starts with it (after the game's name and a "Set 3:") and goes
@@ -2027,6 +2060,13 @@ only one set fits (`catalogue/releases.py`, Filing products under sets):
   Commander Deck" is not Ikoria), a name that says "Series" after the set's
   name, a manga or a pin badge, or a Pokémon "Radiant Collection" card (that
   name is printed in both Legendary Treasures and Generations).
+- **Never** a Digimon product the publisher lists apart from its sets: one with
+  a Premium Bandai, gift box, adventure box, double pack or premium deck code
+  (PB-25 "Digimon Story Time Stranger Set" is not the Time Stranger booster) or
+  a name that ends in "Set" ("Digimon Liberator Debuggers Set").
+- A Riftbound shop number ("RB 03", "RB 02PC01") is taken out of the name before
+  its words are matched, so "Unleashed RB 03 English Booster Pack" files under
+  Unleashed by its name.
 
 **The back catalogue.** Every set a release source lists is recorded, the
 old ones too. A set released before the radar's 180 days becomes a set only
@@ -2041,10 +2081,11 @@ source gives to another set as well (YGOPRODeck's SRL is both "Spell Ruler"
 and "Spell Ruler (25th Anniversary Edition)"), so each keeps its own date. A
 back-catalogue set you delete in Admin stays deleted.
 
-**Games no source lists.** For Digimon, Riftbound and Dragon Ball Super
+**Set codes no source lists.** For Digimon, Riftbound and Dragon Ball Super
 Masters the hourly `tidy_all` puts each set code in the names of products
-still without a set (BT27, EX14, ST09, LM06, OGN, SFD, RB01, B24) under
-"Announced sets to check", from "product names on the site". Claude checks
+still without a set that no set or release source has (a Japanese-only
+Digimon EX14, a Masters B24) under "Announced sets to check", from "product
+names on the site". Claude checks
 them on the publisher's site when it is on (digimoncard.com,
 riftbound.leagueoflegends.com, dbs-cardgame.com); otherwise tap Add set with
 the set's name, and its products file by the code. These rows are listed
@@ -2061,10 +2102,12 @@ python manage.py file_sets --backfill     # read each source's whole list once (
                                           # lists and every TCGdex set too), then file
 ```
 
-`--backfill` reads the One Piece booster list (3 pages) and the Dragon Ball
-Fusion World booster list (2 pages), which count against the 25 web pages a
-day, and every TCGdex set (about 200 requests, 100 ms apart). Run it once
-after updating.
+`--backfill` reads the One Piece booster list (3 pages), the Dragon Ball
+Fusion World booster list (2 pages), the Digimon products page (1 page) and
+the Riftbound gallery, news page and up to 2 overviews (4 pages), which count
+against the 25 web pages a day, and every TCGdex set (about 200 requests,
+100 ms apart). Run it once after updating, or one source at a time with
+`--source digimon_products` or `--source riftbound_sets`.
 
 `RIPRAPTOR_RELEASES=0` stops the background reader reading these sources.
 

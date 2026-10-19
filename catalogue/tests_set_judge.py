@@ -33,7 +33,7 @@ def searched(searches=2):
 def set_reply(row, decision="new", confidence="high", name="Phantasmal Flames", code="ME02", released=None,
               same_as=0, sources=(NEWS,), cited=((NEWS, "Phantasmal Flames | Pokemon.com", SAYS),),
               results=((NEWS, "Pokemon TCG: Mega Evolution Phantasmal Flames"),), searches=2, stop_reason="tool_use",
-              reason="The publisher's page names the set and its date.", unpaired=False, model="claude-opus-5-5"):
+              reason="The publisher's page names the set and its date.", unpaired=False, model="claude-opus-5-5", sold="shops"):
     """A reply as Anthropic sends it with web search on: the searches, their results, Claude's text with
     citations into them, and its settle_set call."""
     content = []
@@ -50,7 +50,7 @@ def set_reply(row, decision="new", confidence="high", name="Phantasmal Flames", 
     content.append(SimpleNamespace(type="tool_use", id="toolu_1", name="settle_set", input={
         "row": row, "decision": decision, "confidence": confidence, "same_as": same_as, "name": name, "code": code,
         "release_date": (released or OUT).isoformat() if released is not False else "", "sources": list(sources),
-        "reason": reason}))
+        "sold": sold, "reason": reason}))
     return SimpleNamespace(stop_reason=stop_reason, stop_details=None, model=model, id="msg_set", content=content,
                            usage=searched(searches))
 

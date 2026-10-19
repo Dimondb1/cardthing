@@ -824,6 +824,10 @@ def record_reply(ask, message, batch=False):
     price). Returns (the answer, with whether it was the careful look, or None; its cost in micro-dollars)."""
     if ask.kind == Ask.Kind.SET:
         outcome, answer, category, sources, searches = set_judge.read(message, ask.row_key, ask.evidence)
+    elif ask.kind == Ask.Kind.RETAIL:
+        from . import set_retail
+
+        outcome, answer, category, sources, searches = set_retail.read(message, ask.row_key, ask.evidence)
     else:
         (outcome, answer, category), sources, searches = read_answer(message, ask.row_key), [], 0
     cost = cost_micros(message, ask.model_asked, batch=batch)
@@ -844,6 +848,8 @@ def record_reply(ask, message, batch=False):
                       differences=answer["differences"], reason=clean(answer["reason"]))
         if ask.kind == Ask.Kind.SET:
             fields["set_answer"] = {key: answer[key] for key in set_judge.ANSWER_FIELDS}
+        elif ask.kind == Ask.Kind.RETAIL:
+            fields["set_answer"] = {"sold": answer["verdict"], "sold_backed": answer["sold_backed"]}
     Ask.objects.filter(pk=ask.pk).update(**fields)
     return answer, cost
 

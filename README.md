@@ -1115,6 +1115,30 @@ is still Claude's), undoing a filing takes off only the date Claude wrote,
 and either way the row is back for you and never Claude's again. Your own
 Add set or Not a set always wins, even while Claude's question is out.
 
+**Sold in shops?** With every announced set Claude also says how the set
+is sold: in ordinary shops, only at events or direct from the publisher
+(a convention exclusive, a Secret Lair drop), or not sure. When it adds or
+files a set and is sure, and a cited quote on a trusted page that names
+the set says it is sold only at events or direct (the quote itself must
+use words such as "only at", "convention", "exclusive" or "direct from";
+a quote giving only a release date does not count), the set is marked
+**Not sold in UK shops** (see Drops below), with the page in "why not in
+shops". Never on a not sure answer, and never on a set a UK shop (eBay
+and Amazon aside) already lists. Undo clears the mark. (Prompt version 2: sets
+left unadded for now are asked again once with the new question.)
+
+**Sets the site already has** (`catalogue/set_retail.py`,
+`python manage.py check_set_retail`). The set judge never looks at a set
+again once it is added, so cron asks once a day, at 6:51 after waiting for
+the judge's lock, about each set whose day is from 14 days ahead to 14 days
+ago (while Drops shows it) that no UK shop lists at all: "is this sold in
+shops?". Each set is asked once for its release date; a date that moves
+asks once more. It uses the judge's switch, key, model, effort, monthly
+limit and Let Claude act, at most 10 sets and 30 searches a run within
+the $3 run limit, and the same rule for marking: sure, cited, naming the
+set. Its answers are listed with Claude's others on Things to check. `--dry-run`
+lists the sets and the most each could cost, and sends nothing.
+
 Search results are web pages, so they are treated as data: the prompt says
 so, and nothing a page says counts unless it passes the checks above
 (trusted domain, cited, naming the set). An answer given before a search it
@@ -2261,6 +2285,22 @@ otherwise; undated sets take no reminder. On a set out today the form says
 only one email can still go. A Remind me link from another page opens that
 form with the email box focused.
 
+### Sets not sold in UK shops
+
+Some real sets never reach a UK shop: they are sold only at events or
+direct from the publisher (Magic's Mystery Booster Commander Edition is a
+Festival in a Box and a Secret Lair presale). Such a set is marked **Not
+sold in UK shops** on the set in Django Admin (Catalogue, Sets: a tick box
+in the list, a filter, and "why not in shops" on the set's form for the page
+that says so). Tick it yourself, or Claude ticks it (see "Sold in shops?"
+under The Claude judge). A marked set is left off Drops (both tabs), the
+Coming soon rows on the home and game pages, and the reminder sign-up
+(it answers not found); reminders already waiting for it are deleted at
+the next reminder run without an email. Its own page still shows, with
+"Sold at events or direct by the publisher, not in UK shops." under the
+heading where the date line is (`browse.set.not_in_shops` in Site wording).
+Untick it to put the set back.
+
 `/new/` (the old Latest drops page) answers a permanent redirect to
 `/drops/`, or to `/drops/?show=out` with its filters when it had any, and
 is out of the sitemap. Out now has its own title and description
@@ -2286,7 +2326,8 @@ page (`/drops/?remind=<id>#drop-<id>`), or See the set when no reminder
 can be taken. "See all" goes to `/drops/`. A set page prints "Out <date>" and
 which release source gave it, or "Date not announced yet".
 
-A set counts when its date is today or later, or when it has no date but a
+A set marked Not sold in UK shops never counts. Otherwise a set counts when
+its date is today or later, or when it has no date but a
 shop (never eBay or Amazon) has one of its products on pre-order, checked
 within the stale window, and no shop already sells one from stock. The list
 is one query (`web/views.py` `coming_soon_sets`), cached under

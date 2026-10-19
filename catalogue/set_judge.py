@@ -18,6 +18,12 @@ Its answer is a call to the settle_set tool, and the site reads it with its own 
   one trusted page was cited. A date a cited page states is written only where the set has none
   (releases.may_write_date): never over the owner's date or a source's.
 - not_a_set: the row is dismissed, as the owner's Not a set does, only when Claude is sure.
+- sold: Claude also says whether ordinary shops will stock the set. When a set is added or filed and Claude
+  says, sure and quoting a cited page that names the set, that it is sold only at events or direct by the
+  publisher (a convention exclusive, a Secret Lair), the set is marked not_in_shops: off the drop tracker
+  and Coming soon (sold_flags). The quote itself must say so (NOT_SHOPS_CUE). Undo clears the mark. Never
+  on "unsure", never from a page that does not name the set, and never on a set a UK shop lists
+  (mark_not_in_shops).
 - unsure, or fairly sure on a first look: Claude takes a careful second look. Still unsure, or nothing on
   the trusted pages supports the answer, the safe choice: the set is left unadded for now (SET_HELD), off
   the list and not shown as needing the owner, and asked about again when what Claude was sent changes or
@@ -37,17 +43,20 @@ results for each, and a run (or a batch) sends at most SEARCHES_PER_RUN searches
 
 import json
 import math
+import re
 from datetime import date, timedelta
 from urllib.parse import urlsplit
 
-from django.db.models import Count
+from django.db.models import Count, Exists, OuterRef
 from django.utils import timezone
 
-from . import autopilot, checks, releases
-from .models import CheckAnswer, ClaudeAsk, ProductSet, Release
+from . import autopilot, checks, drops, releases
+from .models import CheckAnswer, ClaudeAsk, Listing, ProductSet, Release
 
 Kind = CheckAnswer.Kind
-SET_PROMPT_VERSION = 1
+SET_PROMPT_VERSION = 2
+# How a set is sold, as settle_set (and set_retail's settle_retail) answer it.
+SOLD = ("shops", "not_shops", "unsure")
 
 # At most this many web searches for one set (the tool's max_uses), and this many for the set rows of one run
 # or one batch together.
@@ -89,7 +98,7 @@ NEWER_SEARCH = {"claude-opus-5-5", "claude-opus-5", "claude-opus-4-8", "claude-s
 DECISIONS = ("new", "existing", "not_a_set", "unsure")
 # What a set answer keeps on its ClaudeAsk (set_answer), besides the verdict, confidence and reason.
 ANSWER_FIELDS = ("name", "code", "release_date", "same_as", "same_as_ok", "name_backed", "code_backed", "date_backed",
-                 "sourced")
+                 "sourced", "sold", "sold_backed")
 
 SETTLE_TOOL = {
     "name": "settle_set",
@@ -105,10 +114,12 @@ SETTLE_TOOL = {
             "name": {"type": "string"},
             "code": {"type": "string"},
             "release_date": {"type": "string"},
+            "sold": {"type": "string", "enum": list(SOLD)},
             "sources": {"type": "array", "items": {"type": "string"}},
             "reason": {"type": "string"},
         },
-        "required": ["row", "decision", "confidence", "same_as", "name", "code", "release_date", "sources", "reason"],
+        "required": ["row", "decision", "confidence", "same_as", "name", "code", "release_date", "sold", "sources",
+                     "reason"],
         "additionalProperties": False,
     },
 }
@@ -132,8 +143,9 @@ Rules:
 6. "sources" lists the addresses of the pages you relied on.
 7. "same_as" is the id of the site's set for "existing", else 0.
 8. Use confidence "high" only when a publisher's page, or two references, state it plainly. A wrong "new" adds a set nobody asked for; "unsure" costs nothing.
-9. "row" repeats the row key exactly. "reason" is one plain British English sentence of at most 25 words, with no dashes or exclamation marks.
-10. When you are done, call settle_set once, on its own."""
+9. "sold" says how the set is sold. "shops" when ordinary shops will stock it. "not_shops" only when a page you found states it is sold only at conventions or events, or only direct from the publisher (such as a convention exclusive or a Secret Lair drop), and you quote that page naming the set. "unsure" otherwise.
+10. "row" repeats the row key exactly. "reason" is one plain British English sentence of at most 25 words, with no dashes or exclamation marks.
+11. When you are done, call settle_set once, on its own."""
 
 
 # Domains -----------------------------------------------------------------------------------------
@@ -357,30 +369,27 @@ def states_code(text, code):
     return len(compact) >= 2 and compact in {releases.compact_code(t) for t in releases.CODE_TOKEN.findall((text or "").lower())}
 
 
-def read(message, row_key, evidence):
-    """(outcome, answer or None, refusal category, sources, searches) from a reply to a set question.
-
-    Only a whole reply that calls settle_set for this row, after every search it started has come back,
-    is an answer. Sources are the trusted pages it cited, and the pages it named that its searches found;
-    the answer's name, code and date count as stated (name_backed, code_backed, date_backed) only when a
-    cited page, or a trusted page's title, states them.
-    """
+def reply_parts(message, tool_name, game):
+    """(outcome or None, refusal category, the tool's input, found, cited, searches) from a reply that answers
+    with ``tool_name`` after searching ``game``'s trusted domains. The outcome is None while the reply may be
+    an answer: a whole reply that calls the tool once, after every search it started has come back. ``found``
+    is {url: title} of the trusted pages its searches returned, ``cited`` [(url, title, cited text)] of the
+    trusted pages its text cites."""
     Outcome = ClaudeAsk.Outcome
-    game = (evidence or {}).get("trusted_domains") or []
     searches = searches_in(getattr(message, "usage", None))
     reason = getattr(message, "stop_reason", None)
     if reason == "refusal":
         details = getattr(message, "stop_details", None)
-        return Outcome.REFUSED, None, (getattr(details, "category", None) or "")[:40], [], searches
+        return Outcome.REFUSED, (getattr(details, "category", None) or "")[:40], None, {}, [], searches
     if reason == "max_tokens":
-        return Outcome.CUT_OFF, None, "", [], searches
+        return Outcome.CUT_OFF, "", None, {}, [], searches
     blocks = list(getattr(message, "content", None) or [])
-    calls = [b for b in blocks if field(b, "type") == "tool_use" and field(b, "name") == SETTLE_TOOL["name"]]
+    calls = [b for b in blocks if field(b, "type") == "tool_use" and field(b, "name") == tool_name]
     started = {field(b, "id") for b in blocks if field(b, "type") == "server_tool_use"}
     came_back = {field(b, "tool_use_id") for b in blocks if field(b, "type") == "web_search_tool_result"}
     if reason != "tool_use" or len(calls) != 1 or started - came_back:
         # No answer, or one given before a search it started had come back.
-        return Outcome.INVALID, None, "", [], searches
+        return Outcome.INVALID, "", None, {}, [], searches
     found = {}
     for block in blocks:
         results = field(block, "content") if field(block, "type") == "web_search_tool_result" else None
@@ -403,19 +412,76 @@ def read(message, row_key, evidence):
             given = json.loads(given)
         except ValueError:
             given = None
-    strings = ("decision", "confidence", "name", "code", "release_date", "reason")
-    valid = (isinstance(given, dict) and given.get("row") == row_key and given.get("decision") in DECISIONS
-             and given.get("confidence") in ("high", "medium", "low")
-             and all(isinstance(given.get(key), str) for key in strings)
-             and isinstance(given.get("same_as"), int) and isinstance(given.get("sources"), list))
-    if not valid:
-        return Outcome.INVALID, None, "", [], searches
-    # The pages it rests on: those it cited, then those it named that its searches found.
+    return None, "", given, found, cited, searches
+
+
+def cited_pages(cited):
+    """{url: {"url", "title", "cited": [texts]}} from reply_parts' cited, in the order cited."""
     pages = {}
     for url, title, text in cited:
         page = pages.setdefault(url, {"url": url[:500], "title": title[:200], "cited": []})
         if text and text not in page["cited"]:
             page["cited"].append(text)
+    return pages
+
+
+def text_of(page):
+    return " ".join([page["title"], *page["cited"]])
+
+
+def kept_sources(pages, publisher):
+    return [{"url": page["url"], "title": page["title"], "cited_text": " ".join(page["cited"])[:CITED_KEPT],
+             "official": bool(on(page["url"], publisher))}
+            for page in list(pages.values())[:SOURCES_KEPT]]
+
+
+# Words a quote uses when it says a set is sold only at events or only direct by the publisher. A quote with
+# none of them (a release date, a card list) never backs "not_shops".
+NOT_SHOPS_CUE = re.compile(
+    r"\bonly (?:at|through|from|via|direct|available|sold|on)\b|\bexclusive|\bconventions?\b|\bmagiccon\b"
+    r"|\bfestival in a box\b|\bsecret lair\b|\bdirect(?:ly)? from\b|\bnot (?:sold|available) (?:in|at|through) "
+    r"(?:stores|shops|retail)|\bnever (?:in|at) (?:stores|shops|retail)|\bevents? only\b|\bevent[- ]exclusive",
+    re.IGNORECASE,
+)
+
+
+def says_not_shops(text):
+    return bool(NOT_SHOPS_CUE.search(text or ""))
+
+
+def sold_backed(sold, pages, name, code=""):
+    """Whether "sold only at events or direct" rests on a page: a cited quote that says so (NOT_SHOPS_CUE), on
+    a page whose title or quote names the set (by name, or by its code)."""
+    return sold == "not_shops" and any(
+        any(says_not_shops(quote) for quote in page["cited"])
+        and ((name and states_name(text_of(page), name)) or (code and states_code(text_of(page), code)))
+        for page in pages.values()
+    )
+
+
+def read(message, row_key, evidence):
+    """(outcome, answer or None, refusal category, sources, searches) from a reply to a set question.
+
+    Only a whole reply that calls settle_set for this row, after every search it started has come back,
+    is an answer. Sources are the trusted pages it cited, and the pages it named that its searches found;
+    the answer's name, code and date count as stated (name_backed, code_backed, date_backed) only when a
+    cited page, or a trusted page's title, states them, and "sold only at events or direct" (sold_backed)
+    only when a cited quote on a page naming the set says so.
+    """
+    Outcome = ClaudeAsk.Outcome
+    game = (evidence or {}).get("trusted_domains") or []
+    outcome, category, given, found, cited, searches = reply_parts(message, SETTLE_TOOL["name"], game)
+    if outcome is not None:
+        return outcome, None, category, [], searches
+    strings = ("decision", "confidence", "name", "code", "release_date", "reason")
+    valid = (isinstance(given, dict) and given.get("row") == row_key and given.get("decision") in DECISIONS
+             and given.get("confidence") in ("high", "medium", "low") and given.get("sold") in SOLD
+             and all(isinstance(given.get(key), str) for key in strings)
+             and isinstance(given.get("same_as"), int) and isinstance(given.get("sources"), list))
+    if not valid:
+        return Outcome.INVALID, None, "", [], searches
+    # The pages it rests on: those it cited, then those it named that its searches found.
+    pages = cited_pages(cited)
     for url in given["sources"]:
         if isinstance(url, str) and url in found and url not in pages:
             pages[url] = {"url": url[:500], "title": found[url][:200], "cited": []}
@@ -425,9 +491,6 @@ def read(message, row_key, evidence):
         released = date.fromisoformat(given["release_date"].strip()) if given["release_date"].strip() else None
     except ValueError:
         released = None
-
-    def text_of(page):
-        return " ".join([page["title"], *page["cited"]])
 
     # The name counts as stated on a cited page's words or a trusted page's title; the code and date only on a
     # page that also names the set, so a date from a page about another set never counts.
@@ -441,9 +504,7 @@ def read(message, row_key, evidence):
     if (evidence or {}).get("site_has_this_set"):
         candidates.add(evidence["site_has_this_set"]["id"])
     publisher = (evidence or {}).get("publisher_domains") or []
-    sources = [{"url": page["url"], "title": page["title"], "cited_text": " ".join(page["cited"])[:CITED_KEPT],
-                "official": bool(on(page["url"], publisher))}
-               for page in list(pages.values())[:SOURCES_KEPT]]
+    sources = kept_sources(pages, publisher)
     answer = {
         "verdict": given["decision"], "confidence": given["confidence"], "differences": [],
         "reason": given["reason"], "name": name, "code": code if code_backed else "",
@@ -452,6 +513,8 @@ def read(message, row_key, evidence):
         "same_as_ok": given["decision"] == "existing" and given["same_as"] in candidates,
         "name_backed": name_backed, "code_backed": code_backed, "date_backed": date_backed,
         "sourced": len(pages),
+        "sold": given["sold"],
+        "sold_backed": sold_backed(given["sold"], pages, name, code),
     }
     return Outcome.ANSWERED, answer, "", sources, searches
 
@@ -508,6 +571,42 @@ def sources_line(ask):
     return f" Sources: {', '.join(hosts[:3])}." if hosts else ""
 
 
+def sold_flags(ask):
+    """Whether this answer marks its set as not sold in UK shops: Claude is sure, and a cited quote on a page
+    naming the set says it is sold only at events or direct by the publisher. Never on an unsure answer."""
+    found = ask.set_answer or {}
+    return ask.confidence == "high" and found.get("sold") == "not_shops" and bool(found.get("sold_backed"))
+
+
+def source_note(ask):
+    """The page an answer rests on, for ProductSet.not_in_shops_note: its first cited source, else its reason."""
+    url = next((source.get("url") for source in ask.sources or [] if source.get("url")), "")
+    return (url or f"Claude: {ask.reason}")[:300]
+
+
+def shop_listings():
+    """Active listings of a set (OuterRef "pk") at an active UK shop, eBay and Amazon aside."""
+    return Listing.objects.filter(
+        product__product_set=OuterRef("pk"), product__is_active=True, is_active=True, retailer__is_active=True,
+    ).exclude(retailer__source_type__in=drops.MARKETPLACES)
+
+
+def uk_listed(product_set):
+    """Whether a UK shop lists the set now: then it is sold in shops, whatever a page says."""
+    return ProductSet.objects.filter(pk=product_set.pk).filter(Exists(shop_listings())).exists()
+
+
+def mark_not_in_shops(product_set, ask):
+    """Mark the set as not sold in UK shops, saved so the cached lists drop it. Returns whether it changed.
+    Never a set a UK shop lists: hiding it would hide a set shoppers can buy."""
+    if product_set.not_in_shops or uk_listed(product_set):
+        return False
+    product_set.not_in_shops = True
+    product_set.not_in_shops_note = source_note(ask)
+    product_set.save(update_fields=["not_in_shops", "not_in_shops_note"])
+    return True
+
+
 def act(row, ask, action, now):
     """Do what ruling allowed, as one CheckAnswer with Claude's reason, its sources and Undo, in one short
     transaction that first checks the row still waits, exactly as Claude saw it. Returns whether it acted."""
@@ -524,7 +623,18 @@ def act(row, ask, action, now):
             raise autopilot.Stale
         return fresh.release
 
-    out = f", out {released:%-d %B %Y}" if released else ""
+    dated = f", out {released:%-d %B %Y}" if released else ""
+    flag = sold_flags(ask)
+
+    def out_for(product_set=None):
+        # A set a UK shop lists is never marked (mark_not_in_shops), so the line does not claim it.
+        if flag and (product_set is None or not uk_listed(product_set)):
+            return dated + ", sold only at events or direct, so kept off Drops and Coming soon"
+        return dated
+
+    def marked(product_set):
+        return {"not_in_shops": True} if flag and mark_not_in_shops(product_set, ask) else {}
+
     if action == "add_set":
         name = found.get("name") or release.name
         there = release.product_set or releases.find_set(release.game, name, found.get("code", "")) \
@@ -533,13 +643,14 @@ def act(row, ask, action, now):
         def add():
             current = still()
             product_set, created, note = releases.claude_add_set(current, name, found.get("code", ""), released)
-            return {"product_set": product_set if created else None, "undo_note": {**note, "set": product_set.pk}}
+            return {"product_set": product_set if created else None,
+                    "undo_note": {**note, "set": product_set.pk, **marked(product_set)}}
 
         if there is None:
-            pilot.answer(Kind.ADD_SET, f"Added the set {name} to {release.game.name}{out}", why, act=add,
+            pilot.answer(Kind.ADD_SET, f"Added the set {name} to {release.game.name}{out_for()}", why, act=add,
                          release=release, ask=ask)
         else:
-            pilot.answer(Kind.SAME_SET, f"Filed {release.name} under the set {there.name}{out}",
+            pilot.answer(Kind.SAME_SET, f"Filed {release.name} under the set {there.name}{out_for(there)}",
                          f"{why} The site has this set already, so no second one was added", act=add,
                          release=release, ask=ask)
     elif action == "same_set":
@@ -550,9 +661,10 @@ def act(row, ask, action, now):
         def file():
             current = still()
             note = releases.claude_file(current, product_set, released)
-            return {"undo_note": {**note, "set": product_set.pk}}
+            return {"undo_note": {**note, "set": product_set.pk, **marked(product_set)}}
 
-        pilot.answer(Kind.SAME_SET, f"Filed {release.name} under the set {product_set.name}{out}", why, act=file,
+        pilot.answer(Kind.SAME_SET, f"Filed {release.name} under the set {product_set.name}{out_for(product_set)}",
+                     why, act=file,
                      release=release, ask=ask)
     elif action == "not_set":
         def dismiss():
@@ -603,6 +715,11 @@ def undo(answer):
         ProductSet.objects.filter(pk=product_set.pk).delete()
         return back
     releases.undo_claude_file(row, product_set, note)
+    if note.get("not_in_shops") and product_set.not_in_shops:
+        # Claude marked it as not sold in UK shops with this answer: that goes too.
+        product_set.not_in_shops = False
+        product_set.not_in_shops_note = ""
+        product_set.save(update_fields=["not_in_shops", "not_in_shops_note"])
     return back
 
 

@@ -11,6 +11,11 @@ hero-sized one. The picture itself never changes: only the width the CDN sends.
   /products/<product>/images/<image>/<name>__<n>.<n>.<w>.<h>.jpg?c=1, is not resized by the CDN, so it is
   rewritten to the stencil form, /images/stencil/400w/products/<product>/<image>/<name>__<n>.<n>.jpg?c=1:
   checked on a picture ripraptor.com showed, both addresses give the same picture. Other forms are left alone.
+- Unicorn Cards (nopCommerce) cannot resize to any width: it keeps a few fixed copies of each picture, named by
+  their longest side, /images/thumbs/<picture>_960.jpeg and /images/thumbs/<picture>_415.jpeg. We hold the 960
+  copy, so a slot that needs 415 pixels or fewer gets the 415 one (a quarter of the bytes). The shop makes a
+  copy only for the sizes its own pages use: in October 2026 the 415 copy was there for all 14 pictures tried,
+  the 550 copy for none and the 100 copy not for every one, so only 415 and 960 are offered.
 
 Every other address, including our own uploads, is returned unchanged.
 """
@@ -24,6 +29,10 @@ BIGCOMMERCE_STENCIL = re.compile(r"^(/s-[^/]+/images/stencil/)([^/]+)(/.+)$")
 # width and height before the extension.
 BIGCOMMERCE_PRODUCT = re.compile(
     r"^(/s-[^/]+)/products/(\d+)/images/(\d+)/([^/]+__\d+\.\d+)\.\d+\.\d+(\.(?:jpe?g|png|gif|webp))$", re.IGNORECASE)
+# Unicorn Cards' fixed copies: the host, then the picture's address with its size (the longest side) cut out.
+NOPCOMMERCE_HOSTS = ("unicorncards.co.uk", "www.unicorncards.co.uk")
+NOPCOMMERCE_THUMB = re.compile(r"^(/images/thumbs/[^/]+_)960(\.(?:jpe?g|png|gif|webp))$", re.IGNORECASE)
+NOPCOMMERCE_SIZES = (415, 960)
 
 # The widths a copy can be asked for: each about 1.25 to 1.3 times the one before, so whatever the box and the
 # screen, the copy a browser picks (the smallest at least as wide as it draws, in Chromium) is never more than
@@ -87,6 +96,14 @@ def _is_shopify(parts):
     return parts.netloc.lower() == "cdn.shopify.com" or parts.path.startswith("/cdn/shop/")
 
 
+def _fixed_sizes(parts):
+    """The widths a shop that keeps fixed copies has of this picture, or None when it can be resized freely
+    (or not at all)."""
+    if parts.netloc.lower() in NOPCOMMERCE_HOSTS and NOPCOMMERCE_THUMB.match(parts.path):
+        return NOPCOMMERCE_SIZES
+    return None
+
+
 def sized_image_url(url, width):
     """The address of ``url`` at ``width`` pixels wide where its CDN can resize it, else ``url`` unchanged."""
     if not url or not width:
@@ -113,6 +130,11 @@ def sized_image_url(url, width):
             store, product, image, name, extension = match.groups()
             path = f"{store}/images/stencil/{width}w/products/{product}/{image}/{name}{extension}"
             return urlunsplit(parts._replace(path=path))
+    if _fixed_sizes(parts):
+        # The smallest copy at least ``width`` wide; the 960 one (the address as we hold it) past that.
+        size = next((each for each in NOPCOMMERCE_SIZES if each >= width), NOPCOMMERCE_SIZES[-1])
+        match = NOPCOMMERCE_THUMB.match(parts.path)
+        return urlunsplit(parts._replace(path=f"{match.group(1)}{size}{match.group(2)}"))
     return url
 
 
@@ -132,5 +154,9 @@ def responsive(url, slot):
     url = url or ""
     if not can_resize(url):
         return {"src": url, "srcset": "", "sizes": "", "full": url}
+    fixed = _fixed_sizes(urlsplit(url))
+    if fixed:
+        # Only the copies the shop has: listing a width it lacks would name one copy at several sizes.
+        widths = fixed
     srcset = ", ".join(f"{sized_image_url(url, each)} {each}w" for each in widths)
     return {"src": sized_image_url(url, width), "srcset": srcset, "sizes": sizes, "full": url}

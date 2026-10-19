@@ -26,7 +26,12 @@ BIGCOMMERCE_PRODUCT = ("https://cdn11.bigcommerce.com/s-b4ioc4fed9/products/1511
 BIGCOMMERCE_PRODUCT_AT = ("https://cdn11.bigcommerce.com/s-b4ioc4fed9/images/stencil/{}w/products/151102/2687308/"
                           "8hMsW9QdgPnMg3W1DHKoWFpu1__64552.1762228120.jpg?c=1")
 BIGCOMMERCE_OTHER = "https://cdn11.bigcommerce.com/s-b4ioc4fed9/content/banner.jpg"
-OTHER = "https://unicorncards.co.uk/images/thumbs/0071632_yugioh-booster-box-_960.jpeg"
+# Unicorn Cards (nopCommerce) keeps fixed copies named by their longest side; only the 415 and 960 ones are
+# there for every picture (checked October 2026).
+UNICORN = "https://unicorncards.co.uk/images/thumbs/0071632_yugioh-booster-box-_960.jpeg"
+UNICORN_415 = "https://unicorncards.co.uk/images/thumbs/0071632_yugioh-booster-box-_415.jpeg"
+# An address no CDN resizes.
+OTHER = "https://unicorncards.co.uk/images/uploaded/yugioh-booster-box.jpeg"
 
 
 class SizedImageUrlTests(TestCase):
@@ -67,6 +72,32 @@ class SizedImageUrlTests(TestCase):
                     BIGCOMMERCE_PRODUCT.replace(".386.513.jpg", ".386.513.svg")):
             with self.subTest(url=url):
                 self.assertEqual(sized_image_url(url, 200), url)
+
+    def test_unicorn_cards_gets_its_415_copy_where_that_is_wide_enough(self):
+        for width in (50, 200, 400, 415):
+            with self.subTest(width=width):
+                self.assertEqual(sized_image_url(UNICORN, width), UNICORN_415)
+        for width in (416, 540, 1200):
+            with self.subTest(width=width):
+                self.assertEqual(sized_image_url(UNICORN, width), UNICORN)
+        self.assertTrue(can_resize(UNICORN))
+        # Its other copies (100, 550) are not always made, and other forms are not its thumbs: left alone.
+        for url in (UNICORN.replace("_960.", "_550."), UNICORN.replace("_960.", "."),
+                    UNICORN.replace("unicorncards.co.uk", "unicorncards.example")):
+            with self.subTest(url=url):
+                self.assertEqual(sized_image_url(url, 200), url)
+        # The emails' copy is the small one too.
+        self.assertEqual(sized_image_url(UNICORN, alerts.EMAIL_WIDTH), UNICORN_415)
+
+    def test_unicorn_cards_srcset_names_only_the_copies_it_has(self):
+        for slot in ("cover", "card", "large"):
+            with self.subTest(slot=slot):
+                picture = responsive(UNICORN, slot)
+                self.assertEqual(picture["srcset"], f"{UNICORN_415} 415w, {UNICORN} 960w")
+                self.assertEqual(picture["sizes"], SLOTS[slot][1])
+                self.assertEqual(picture["full"], UNICORN)
+        self.assertEqual(responsive(UNICORN, "cover")["src"], UNICORN_415)
+        self.assertEqual(responsive(UNICORN, "large")["src"], UNICORN)
 
     def test_other_addresses_are_left_alone(self):
         for url in (BIGCOMMERCE_OTHER, OTHER, "/media/products/box.jpg", "https://img.example/box.jpg",

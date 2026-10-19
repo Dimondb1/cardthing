@@ -70,6 +70,16 @@ def link(name, *args):
     return settings.RIPRAPTOR_SITE_URL + reverse(name, args=args)
 
 
+def can_send(day, now=None):
+    """False when a reminder asked for now could never be sent: the drop's day has passed, or it is the day
+    itself and its email window has closed. A drop with no day yet (month only) can still hear about
+    pre-orders. The page offers Remind me only while this is True, and the sign-up refuses it otherwise."""
+    if day is None:
+        return True
+    local = timezone.localtime(now or timezone.now())
+    return day > local.date() or (day == local.date() and local.hour < EMAIL_UNTIL_HOUR)
+
+
 def drop_url(product_set):
     return settings.RIPRAPTOR_SITE_URL + reverse("web:drops") + f"#drop-{product_set.pk}"
 

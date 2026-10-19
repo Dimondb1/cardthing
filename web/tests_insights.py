@@ -201,8 +201,10 @@ class VisitorTests(TestCase):
 
     def test_deals_and_latest_drops_pages_are_counted(self):
         self.client.get(reverse("web:deals"), **HUMAN)
-        self.client.get(reverse("web:new"), **HUMAN)
+        self.client.get(reverse("web:drops"), **HUMAN)
+        self.client.get(reverse("web:new"), **HUMAN)   # the old address redirects and is not counted
         self.assertEqual(set(DailyPageView.objects.values_list("kind", flat=True)), {"deals", "new"})
+        self.assertEqual(sum(DailyPageView.objects.filter(kind="new").values_list("hits", flat=True)), 1)
 
     def test_the_address_behind_the_proxy_is_the_one_used(self):
         from catalogue.models import DailyVisitor

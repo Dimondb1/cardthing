@@ -116,8 +116,9 @@ def stock_tab(tab, compared=False):
     return Q(in_stock_count__gte=2 if compared else 1)
 
 
-def _browse(request, template_context, *, base_queryset, fixed_game=None, default_ordering=None, tabs=False):
-    """Shared by search, game and set pages.
+def _browse(request, template_context, *, base_queryset, fixed_game=None, default_ordering=None, tabs=False,
+            template="web/browse.html"):
+    """Shared by search, game and set pages, and Out now on the drops page (``template``).
 
     With ``tabs`` (game and set pages) the products are split into STOCK_TABS: the page shows one tab's
     list, counted for every tab in one query, and ``?pane=1`` returns just that tab's list for the
@@ -211,7 +212,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         response = render(request, "web/includes/stock_pane.html", {**context, "pane": tab})
         response["X-Robots-Tag"] = "noindex"
         return response
-    return render(request, "web/browse.html", context)
+    return render(request, template, context)
 
 
 def stock_tab_links(request, counts):
@@ -354,7 +355,9 @@ DROPS_ORDER = ("tier", F("release").desc(nulls_last=True), "-created_at", "name"
 
 
 def home_drops_new():
-    """The home row of latest drops, newest release first, cached with the other lists."""
+    """The home page's Out now row, newest release first: the same products as Out now on the drops page (in
+    stock; pre-orders are the Coming soon rows above it), so each one is behind its See all. Cached with the
+    other lists."""
     from django.core.cache import cache
 
     from catalogue.signals import NEW_CACHE_KEY as key
@@ -362,7 +365,7 @@ def home_drops_new():
     cached = cache.get(key)
     if cached is not None:
         return cached
-    rows = list(latest_drops_queryset().prefetch_related(offers.buyable_prefetch()).order_by(*DROPS_ORDER)[:10])
+    rows = list(out_now_queryset().prefetch_related(offers.buyable_prefetch()).order_by(*DROPS_ORDER)[:10])
     for product in rows:
         product.best_offer = product.offers[0] if product.offers else None
     cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
@@ -375,25 +378,34 @@ COMING_SOON_ON_HOME = 3   # the home page is the money page: only sets a visitor
 def coming_soon_queryset(game=None):
     """Announced sets still to come, in one query: dated today or later, or undated with a shop taking
     pre-orders and none selling it from stock, since an undated set a shop already sells is out. Each
-    carries how many shops take pre-orders, the cheapest of them, and whether a shop already has it in
-    stock (a UK street date can come before the published one), so a row never says no pre-orders while a
-    shop is selling it.
+    carries how many shops take pre-orders and the offer its row leads with (``best_*``): the cheapest
+    pre-order, or when no shop takes pre-orders the cheapest shop already selling it from stock (a UK street
+    date can come before the published one), so a row never says no pre-orders while a shop is selling it.
+    The row's button goes to that listing through /go/.
 
-    Only a current pre-order at a shop counts: active, checked within the stale window, its price not
-    kept out, and never eBay or Amazon, whose pre-orders are resellers' guesses. The cheapest is a
-    confirmed delivered price when any shop has one, else an item price shown as plus delivery, the
-    order every list uses.
+    Only a current offer at a shop counts: active, checked within the stale window, its price not kept out,
+    and never eBay or Amazon, whose pre-orders are resellers' guesses. The cheapest is a confirmed delivered
+    price when any shop has one, else an item price shown as plus delivery, the order every list uses.
     """
     from catalogue.pricing import MARKETPLACES
 
+    # A product with its own later date is not part of the set's drop (catalogue.drops.in_drop), so its
+    # pre-order neither makes the set's price nor keeps a released set listed here, as on the drops page.
+    in_drop = (Q(product__release_date__isnull=True) | Q(product__product_set__release_date__isnull=True)
+               | Q(product__release_date__lte=F("product__product_set__release_date")))
     current = Listing.objects.filter(
-        product__product_set=OuterRef("pk"), product__is_active=True, is_active=True, retailer__is_active=True,
-        last_checked__gte=stale_cutoff(), sanity__in=Listing.COUNTED,
+        in_drop, product__product_set=OuterRef("pk"), product__is_active=True, is_active=True,
+        retailer__is_active=True, last_checked__gte=stale_cutoff(), sanity__in=Listing.COUNTED,
     ).exclude(retailer__source_type__in=MARKETPLACES)
     preorders = current.filter(availability=Listing.Availability.PREORDER)
-    cheapest = preorders.annotate(
-        shown=Case(When(delivery_known=True, then=F("delivered_price")), default=F("price"))
-    ).order_by("-delivery_known", "shown", "pk")
+    best = (
+        current.filter(availability__in=Listing.BUYABLE)
+        .annotate(
+            shown=Case(When(delivery_known=True, then=F("delivered_price")), default=F("price")),
+            later=Case(When(availability=Listing.Availability.PREORDER, then=Value(0)), default=Value(1)),
+        )
+        .order_by("later", "-delivery_known", "shown", "pk")
+    )
     shops = (
         preorders.order_by().values("product__product_set")
         .annotate(shops=Count("retailer", distinct=True)).values("shops")
@@ -408,9 +420,13 @@ def coming_soon_queryset(game=None):
             has_preorder=Exists(preorders),
             in_stock=Exists(current.filter(availability=Listing.Availability.IN_STOCK)),
             preorder_count=Coalesce(Subquery(shops[:1]), Value(0)),
-            preorder_price=Subquery(cheapest.values("shown")[:1]),
-            preorder_known=Subquery(cheapest.values("delivery_known")[:1]),
-            preorder_slug=Subquery(cheapest.values("product__slug")[:1]),
+            best_id=Subquery(best.values("pk")[:1]),
+            best_price=Subquery(best.values("shown")[:1]),
+            best_known=Subquery(best.values("delivery_known")[:1]),
+            best_slug=Subquery(best.values("product__slug")[:1]),
+            best_product=Subquery(best.values("product__name")[:1]),
+            best_shop=Subquery(best.values("retailer__name")[:1]),
+            best_checked=Subquery(best.values("last_checked")[:1]),
         )
         .filter(Q(release_date__gte=today) | Q(release_date__isnull=True, has_preorder=True, in_stock=False))
         .order_by(F("release_date").asc(nulls_last=True), "name")
@@ -420,7 +436,7 @@ def coming_soon_queryset(game=None):
 def coming_soon_sets(game=None, limit=8):
     """Sets still to come, soonest first, for the New page (limit None), a game page or the home page.
 
-    Cached with the other lists under 'web:coming-soon:v1', or ':<game>' for one game's, so every
+    Cached with the other lists under 'web:coming-soon:v2', or ':<game>' for one game's, so every
     clear_list_caches drops them.
     """
     from django.core.cache import cache
@@ -445,23 +461,24 @@ def date_source_label(product_set):
     return source.label.replace("!", "") if source else ""
 
 
+# The old Latest drops page's filters, carried over when /new/ sends a visitor to Out now.
+NEW_PAGE_PARAMS = ("game", "type", "price", "lang", "sort", "compared", "in_stock", "page")
+
+
 @require_GET
 def latest_drops(request):
-    heading = text(request, "browse.new.title")
-    return _browse(
-        request,
-        {
-            "heading": heading,
-            "intro": text(request, "browse.new.intro"),
-            "meta_title": text(request, "meta.new.title"),
-            "meta_description": text(request, "meta.new.description"),
-            "canonical_url": request.build_absolute_uri(reverse("web:new")),
-            "structured_json": ld_json(breadcrumbs_json(request, [(heading, reverse("web:new"))])),
-            "coming_soon": coming_soon_sets(limit=None),
-        },
-        base_queryset=latest_drops_queryset(),
-        default_ordering=DROPS_ORDER,
-    )
+    """/new/ was the Latest drops page. It is now Out now on the drops page: a permanent redirect, so search
+    engines move the old address's standing over. A bare /new/ goes to /drops/ itself; one with filters to Out
+    now with those filters kept."""
+    params = request.GET.copy()
+    for name in list(params):
+        if name not in NEW_PAGE_PARAMS:
+            del params[name]
+    target = reverse("web:drops")
+    if params:
+        params["show"] = "out"
+        target += "?" + params.urlencode()
+    return HttpResponsePermanentRedirect(target)
 
 
 def home_types(limit=6):
@@ -519,9 +536,7 @@ def home(request):
             "last_checked": last_checked,
             "featured": featured,
             "latest": home_drops_new(),
-            "coming_soon": [row for row in coming_soon_sets(limit=None) if row.preorder_price is not None][
-                :COMING_SOON_ON_HOME
-            ],
+            "coming_soon": [row for row in coming_soon_sets(limit=None) if row.preorder_count][:COMING_SOON_ON_HOME],
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
@@ -1291,14 +1306,20 @@ DROP_STATE_COPY = {
 }
 
 
+COUNTDOWN_DAYS = 6   # a live countdown only for drops this week; later ones just say how many days
+
+
 def drop_words(request, drop, today):
-    """Attach the words a drop card shows about its date: ``date_text`` ("Fri 23 Oct", or "November 2026" for
-    a month-only drop) and ``when_text`` ("Out in 5 days", "Out tomorrow", "Out today", "Day not announced
-    yet", "Came out 3 days ago"), and ``countdown`` (the drop's start, for a live countdown) when it is a
-    day or more away."""
+    """Attach the words a drop shows about its date: ``date_text`` ("Fri 23 Oct", "November 2026" for a
+    month-only drop, nothing for an undated one) and ``when_text`` ("Out in 5 days", "Out tomorrow", "Out
+    today", "Day not announced yet", "Came out 3 days ago"), and ``countdown`` (the drop's start, for a live
+    countdown) when it is one to six days away."""
     from django.utils.formats import date_format
 
     drop.countdown = None
+    if drop.undated:
+        drop.date_text, drop.when_text = "", text(request, "new.coming_soon.tbc")
+        return drop
     if drop.day is None:
         drop.date_text = date_format(drop.month, "F Y")
         drop.when_text = text(request, "drops.when.month")
@@ -1311,50 +1332,123 @@ def drop_words(request, drop, today):
         drop.when_text = text(request, "drops.when.today")
     else:
         drop.when_text = text(request, "drops.when.tomorrow" if days == 1 else "drops.when.days", days=days)
-        drop.countdown = drop.starts_at.isoformat()
+        if days <= COUNTDOWN_DAYS:
+            drop.countdown = drop.starts_at.isoformat()
     return drop
+
+
+def out_now_queryset():
+    """Out now on the drops page: what the old Latest drops page listed (released in the last few weeks or
+    just listed by shops) that a shop has in stock now. Pre-orders are under Coming soon."""
+    return latest_drops_queryset().filter(in_stock_count__gt=0)
+
+
+def drops_url(show="soon", game=None):
+    params = {}
+    if show == "out":
+        params["show"] = "out"
+    if game is not None:
+        params["game"] = game.slug
+    return reverse("web:drops") + (f"?{urlencode(params)}" if params else "")
 
 
 @require_GET
 def drops(request):
-    """The drop tracker: sets still to come, soonest first, with the cheapest shop offers, a countdown and a
-    reminder by email; then the last fortnight's drops. A game chip keeps one game's, as a plain link."""
+    """The drops page, one place for new sets: Coming soon (every set still to come, soonest first, each with
+    its cheapest UK pre-order and one button, Pre-order or Remind me) and Out now (products just out and in
+    stock, as product cards, with the sets just out that no shop has in stock yet). ?show=out picks Out now;
+    a game chip (?game=) keeps one game's in both. Both are plain links, so the page works without script."""
     from django.utils.formats import date_format
 
+    from catalogue import drop_alerts
     from catalogue import drops as tracker
 
+    show = "out" if request.GET.get("show") == "out" else "soon"
     today = timezone.localdate()
     upcoming, recent = tracker.tracker(today)
-    counts = {}
+    waiting = [drop for drop in recent if not drop.in_stock]   # just out, but no shop has it in stock
+    # Out now's count per game, with the game's own fields, so the chips need no query of their own.
+    game_fields = ("game", "game__name", "game__short_name", "game__slug", "game__sort_order")
+    out_rows = (Product.objects.filter(pk__in=out_now_queryset().values("pk"))
+                .order_by().values(*game_fields).annotate(n=Count("pk")))
+    known = {}
+    out_counts = {}
+    for row in out_rows:
+        known[row["game"]] = Game(pk=row["game"], name=row["game__name"], short_name=row["game__short_name"],
+                                  slug=row["game__slug"], sort_order=row["game__sort_order"], is_active=True)
+        out_counts[row["game"]] = row["n"]
+    soon_counts, waiting_counts = {}, {}
     for drop in upcoming:
-        counts[drop.product_set.game] = counts.get(drop.product_set.game, 0) + 1
-    chips = sorted(counts.items(), key=lambda row: (row[0].sort_order, row[0].name))
-    chosen = next((game for game, _ in chips if game.slug == request.GET.get("game")), None)
+        soon_counts[drop.product_set.game_id] = soon_counts.get(drop.product_set.game_id, 0) + 1
+        known[drop.product_set.game_id] = drop.product_set.game
+    for drop in waiting:
+        waiting_counts[drop.product_set.game_id] = waiting_counts.get(drop.product_set.game_id, 0) + 1
+        known[drop.product_set.game_id] = drop.product_set.game
+    games = sorted(known.values(), key=lambda game: (game.sort_order, game.name))
+    chosen = next((game for game in games if game.slug == request.GET.get("game")), None)
     if chosen is not None:
         upcoming = [d for d in upcoming if d.product_set.game_id == chosen.pk]
-        recent = [d for d in recent if d.product_set.game_id == chosen.pk]
-    for drop in (*upcoming, *recent):
+        waiting = [d for d in waiting if d.product_set.game_id == chosen.pk]
+
+    def total(counts):
+        return counts.get(chosen.pk, 0) if chosen else sum(counts.values())
+
+    soon_total = total(soon_counts)
+    out_total = total(out_counts) + len(waiting)
+    tab_counts = {"soon": soon_total, "out": out_total}
+    chips = [
+        {"game": game, "url": drops_url(show, game),
+         "count": soon_counts.get(game.pk, 0) if show == "soon" else out_counts.get(game.pk, 0) + waiting_counts.get(game.pk, 0)}
+        for game in games
+    ]
+    # A chip for a game with nothing in this section is a dead end; the chosen one stays so it can be cleared.
+    chips = [chip for chip in chips if chip["count"] or chip["game"] == chosen]
+    heading = text(request, "drops.title")
+    context = {
+        "heading": heading,
+        "show": show,
+        "tabs": [{"key": key, "label": text(request, f"drops.tab.{key}"), "count": tab_counts[key],
+                  "url": drops_url(key, chosen)} for key in ("soon", "out")],
+        "chips": chips,
+        "chosen": chosen,
+        "all_url": drops_url(show),
+        # Out now has its own address, so its own title and description, not Coming soon's.
+        "meta_title": text(request, "meta.drops.out.title" if show == "out" else "meta.drops.title"),
+        "meta_description": text(request, "meta.drops.out.description" if show == "out" else "meta.drops.description"),
+        "canonical_url": request.build_absolute_uri(drops_url(show, chosen)),
+        "structured_json": ld_json(breadcrumbs_json(request, [(heading, reverse("web:drops"))])),
+    }
+    if show == "out":
+        for drop in waiting:
+            drop_words(request, drop, today)
+        base = out_now_queryset()
+        if chosen is not None:
+            base = base.filter(game=chosen)
+        context.update({"waiting": waiting, "game": chosen})
+        return _browse(request, context, base_queryset=base, fixed_game=chosen, default_ordering=DROPS_ORDER,
+                       template="web/drops.html")
+
+    reminders_on = mail.enabled()
+    try:
+        open_remind = int(request.GET.get("remind", ""))
+    except ValueError:
+        open_remind = None
+    for drop in upcoming:
         drop_words(request, drop, today)
-    labels = {tracker.WEEK: text(request, "drops.group.week"), tracker.MONTH: text(request, "drops.group.month")}
-    groups = [
+        drop.out = drop.day is not None and drop.day <= today
+        drop.remind = reminders_on and not drop.undated and drop_alerts.can_send(drop.day)
+        drop.remind_open = drop.remind and drop.pk == open_remind
+    labels = {
+        tracker.WEEK: text(request, "drops.group.week"),
+        tracker.MONTH: text(request, "drops.group.month"),
+        tracker.UNDATED: text(request, "drops.group.undated"),
+    }
+    context["groups"] = [
         {"key": key, "label": labels.get(key) or date_format(month, "F Y"), "drops": rows}
         for key, month, rows in tracker.group(upcoming, today)
     ]
-    heading = text(request, "drops.title")
-    canonical = reverse("web:drops") + (f"?game={chosen.slug}" if chosen else "")
-    return render(request, "web/drops.html", {
-        "heading": heading,
-        "groups": groups,
-        "upcoming_count": len(upcoming),
-        "recent": recent,
-        "chips": chips,
-        "chosen": chosen,
-        "reminders_on": mail.enabled(),
-        "meta_title": text(request, "meta.drops.title"),
-        "meta_description": text(request, "meta.drops.description"),
-        "canonical_url": request.build_absolute_uri(canonical),
-        "structured_json": ld_json(breadcrumbs_json(request, [(heading, reverse("web:drops"))])),
-    })
+    context["reminders_on"] = reminders_on
+    return render(request, "web/drops.html", context)
 
 
 def ask_for_drop(request, product_set):
@@ -1381,6 +1475,7 @@ def drop_ask(request, set_id):
     """A reminder for one drop. POST takes the address and, without JavaScript, sends the visitor to this same
     address with ?state= (a page saying what happened, safe to reload); with JavaScript the drop card asks for
     JSON and shows the message in place. GET shows that page."""
+    from catalogue import drop_alerts
     from catalogue.drops import upcoming_drop
 
     product_set = get_object_or_404(ProductSet.objects.select_related("game"), pk=set_id, game__is_active=True)
@@ -1388,7 +1483,7 @@ def drop_ask(request, set_id):
     if request.method == "POST":
         if request.POST.get("website") or not mail.enabled():
             return HttpResponseRedirect(back)   # the hidden field is only ever filled by robots
-        if upcoming_drop(product_set) is None:
+        if upcoming_drop(product_set) is None or not drop_alerts.can_send(product_set.release_date):
             raise Http404("That drop has passed.")
         state = ask_for_drop(request, product_set)
         if "application/json" in request.headers.get("Accept", ""):

@@ -129,25 +129,48 @@ PRICE_MARK = "\x00price\x00"
 
 
 @register.simple_tag(takes_context=True)
+def price_sentence(context, key, price, known, href=None, **values):
+    """A sentence from the registry with its {price} drawn as a price: green, saying whether delivery is
+    included, as every price on the site does, and linked to ``href`` when one is given."""
+    store = context.get("site_content")
+    sentence = service.get(key, store=store, price=PRICE_MARK, **values)
+    basis = service.get("browse.price.label" if known else "browse.price.plus", store=store)
+    inner = format_html('<span class="price">{}</span> <span class="delivered">{}</span>', gbp(price), basis)
+    shown = format_html('<a class="coming__price" href="{}">{}</a>', href, inner) if href else inner
+    before, found, after = sentence.partition(PRICE_MARK)
+    return format_html("{}{}{}", before, shown if found else "", after)
+
+
+@register.simple_tag(takes_context=True)
+def price_count(context, key, count, price, known, href=None, **values):
+    """price_sentence for ``key.one`` or ``key.other`` by ``count``, with {count} filled in."""
+    suffix = "one" if count == 1 else "other"
+    return price_sentence(context, f"{key}.{suffix}", price, known, href, count=count, **values)
+
+
+@register.simple_tag(takes_context=True)
 def preorders_from(context, product_set):
     """'Pre-orders from £x at n shops' for a set still to come, the price linked to the product it is for.
-
-    The link goes to our product page, so a buy click still passes through /go/ and is counted, and the
-    price says whether delivery is included, as every price on the site does.
-    """
+    The row's own button goes to the shop through /go/."""
     from django.urls import reverse
 
-    store = context.get("site_content")
-    count = product_set.preorder_count
-    suffix = "one" if count == 1 else "other"
-    sentence = service.get(f"new.coming_soon.preorders_from.{suffix}", store=store, price=PRICE_MARK, count=count)
-    basis = service.get("browse.price.label" if product_set.preorder_known else "browse.price.plus", store=store)
-    link = format_html(
-        '<a class="coming__price" href="{}"><span class="price">{}</span> <span class="delivered">{}</span></a>',
-        reverse("web:product", args=[product_set.preorder_slug]), gbp(product_set.preorder_price), basis,
-    )
-    before, found, after = sentence.partition(PRICE_MARK)
-    return format_html("{}{}{}", before, link if found else "", after)
+    return price_count(context, "new.coming_soon.preorders_from", product_set.preorder_count, product_set.best_price,
+                       product_set.best_known, reverse("web:product", args=[product_set.best_slug]))
+
+
+@register.filter
+def has_come(day):
+    """True for a release date that is today or past, in UK time."""
+    return day is not None and day <= timezone.localdate()
+
+
+@register.simple_tag
+def can_remind(day=None):
+    """True when a drop reminder asked for now could be sent: reminder emails are set up and the drop's day
+    (None for a month-only drop) has not passed, or is today with its email window still open."""
+    from catalogue import drop_alerts, mail
+
+    return mail.enabled() and drop_alerts.can_send(day)
 
 
 @register.simple_tag

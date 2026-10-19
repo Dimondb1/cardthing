@@ -2,18 +2,27 @@
 {% load static sitecopy ripraptor %}
 {% block scripts %}<script src="{% static 'js/drops.js' %}" defer></script>{% endblock %}
 {% block content %}
-<div class="page-head">
+{# One page for new sets: Coming soon and Out now are plain links (?show=out), and a game chip keeps one game's in both, so it all works without script. #}
+<div class="page-head drops-head">
   <h1 class="page-title">{{ heading }}</h1>
   <p class="page-intro">{% copy "drops.intro" %}</p>
 </div>
-{% if chips|length > 1 %}
+<nav class="stock-tabs stock-tabs--two drops-tabs" aria-label="{% copy 'drops.tabs.label' %}">
+  <ul>
+    {% for item in tabs %}<li><a href="{{ item.url }}"{% if item.key == show %} aria-current="page"{% endif %}><span class="stock-tabs__label">{{ item.label }}</span> <span class="stock-tabs__count">{{ item.count }}</span></a></li>{% endfor %}
+  </ul>
+</nav>
+{% if chips|length > 1 or chosen %}
 <nav class="chips drops-chips" aria-label="{% copy 'drops.filter.label' %}">
   <ul class="chips__list">
-    <li><a class="chip" href="{% url 'web:drops' %}"{% if not chosen %} aria-current="page"{% endif %}>{% copy "drops.filter.all" %}</a></li>
-    {% for game, count in chips %}<li><a class="chip" href="{% url 'web:drops' %}?game={{ game.slug }}"{% if chosen == game %} aria-current="page"{% endif %}>{{ game.display_short }} <span class="chip__count">{{ count }}</span></a></li>{% endfor %}
+    <li><a class="chip" href="{{ all_url }}"{% if not chosen %} aria-current="page"{% endif %}>{% copy "drops.filter.all" %}</a></li>
+    {% for chip in chips %}<li><a class="chip" href="{{ chip.url }}"{% if chosen == chip.game %} aria-current="page"{% endif %}>{{ chip.game.display_short }} <span class="chip__count">{{ chip.count }}</span></a></li>{% endfor %}
   </ul>
 </nav>
 {% endif %}
+
+{% if show == "soon" %}
+<div class="drops-pane" id="coming-soon">
 {% for group in groups %}
 <section class="drop-group" aria-labelledby="drops-{{ group.key }}">
   <h2 class="drop-group__title" id="drops-{{ group.key }}">{{ group.label }}</h2>
@@ -27,23 +36,71 @@
   <p>{% copy "drops.empty.body" %}</p>
 </div>
 {% endfor %}
-{% if recent %}
-<section class="drop-recent" aria-labelledby="recent-title">
-  <div class="section-head">
-    <h2 id="recent-title" class="section-head__title">{% copy "drops.recent.title" %}</h2>
-  </div>
-  <ul class="coming__list">
-    {% for drop in recent %}
-    <li class="coming__row" id="drop-{{ drop.pk }}">
-      <span class="coming__set">
-        <a class="coming__name" href="{{ drop.product_set.get_absolute_url }}">{{ drop.product_set.name }}</a>
-        <span class="coming__meta">{{ drop.product_set.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ drop.date_text }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ drop.when_text }}</span>
-      </span>
-      <span class="coming__offer">{% with best=drop.offers.0 %}{% if best %}<a class="coming__price" href="{{ best.product.get_absolute_url }}">{% copy "drops.recent.from" %} <span class="price">{{ best.listing.shown_price|gbp }}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=best.listing %}</span></a> {% copy "drops.recent.at" retailer=best.listing.retailer.name time=best.listing.last_checked|ago %}{% else %}<span class="coming__none">{% copy "drops.recent.none" %}</span>{% endif %}{% endwith %}</span>
-    </li>
+</div>
+{% else %}
+<div class="drops-pane" id="out-now">
+  <p class="drops-pane__intro">{% copy "drops.out.intro" %}</p>
+  <details class="drops-filters"{% if filters_active %} open{% endif %}>
+    <summary class="drops-filters__toggle">{% copy "drops.filter.toggle" %}</summary>
+    <form class="filters" method="get" action="" data-autosubmit>
+      <input type="hidden" name="show" value="out">
+      {% if chosen %}<input type="hidden" name="game" value="{{ chosen.slug }}">{% endif %}
+      <div class="pill pill--sort">
+        <label class="visually-hidden" for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
+        {{ form.sort }}
+      </div>
+      <div class="pill">
+        <label class="visually-hidden" for="{{ form.type.id_for_label }}">{{ form.type.label }}</label>
+        {{ form.type }}
+      </div>
+      <div class="pill">
+        <label class="visually-hidden" for="{{ form.price.id_for_label }}">{{ form.price.label }}</label>
+        {{ form.price }}
+      </div>
+      <div class="pill">
+        <label class="visually-hidden" for="{{ form.lang.id_for_label }}">{{ form.lang.label }}</label>
+        {{ form.lang }}
+      </div>
+      <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>
+      <div class="filters__actions">
+        <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
+        {% if filters_active %}<a class="filters__clear" href="{{ tabs.1.url }}">{% copy "browse.filters.clear" %}</a>{% endif %}
+      </div>
+    </form>
+  </details>
+  {% if page.object_list %}
+  <ul class="cards">
+    {% for product, summary in cards %}
+      {% include "web/includes/product_card.html" %}
     {% endfor %}
   </ul>
-</section>
+  {% include "web/includes/pagination.html" %}
+  {% elif not waiting %}
+  <div class="empty">
+    <h2 class="empty__title">{% if filters_active %}{% copy "browse.no_filtered_results" %}{% else %}{% copy "drops.out.empty" %}{% endif %}</h2>
+    {% if filters_active %}<p><a href="{{ tabs.1.url }}">{% copy "browse.filters.clear" %}</a></p>{% endif %}
+  </div>
+  {% endif %}
+  {% if waiting and page.number == 1 %}
+  <section class="coming drop-waiting" aria-labelledby="waiting-title">
+    <div class="section-head">
+      <h2 id="waiting-title" class="section-head__title">{% copy "drops.recent.title" %}</h2>
+    </div>
+    <ul class="coming__list">
+      {% for drop in waiting %}
+      <li class="coming__row" id="drop-{{ drop.pk }}">
+        <span class="coming__set">
+          <a class="coming__name" href="{{ drop.product_set.get_absolute_url }}">{{ drop.product_set.name }}</a>
+          <span class="coming__meta">{{ drop.product_set.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ drop.when_text }}</span>
+          {% with best=drop.best %}<span class="coming__offer">{% if best %}{% price_count "new.coming_soon.preorders_from" drop.preorder_shops best.listing.shown_price best.listing.delivery_known best.product.get_absolute_url %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy "new.coming_soon.checked" time=best.listing.last_checked|ago %}{% else %}<span class="coming__none">{% copy "drops.none.out" %}</span>{% endif %}</span>{% endwith %}
+        </span>
+        {% with best=drop.best %}{% if best %}<span class="coming__action"><a class="button button--buy button--card" href="{{ best.listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/buy_mark.svg" %}{% copy "product.preorder.button" %}<span class="visually-hidden"> {{ best.product.name }} at {{ best.listing.retailer.name }} (opens in a new tab)</span></a></span>{% endif %}{% endwith %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</div>
 {% endif %}
 <div class="small-print">{% copy "drops.small_print" %}</div>
 {% endblock %}

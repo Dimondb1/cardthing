@@ -129,6 +129,9 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .button[aria-disabled="true"], .button:disabled { opacity: 0.55; pointer-events: none; }
 .button--quiet { background: transparent; color: var(--color-ink); border-color: var(--color-line); box-shadow: none; }
 @media (hover: hover) { .button--quiet:hover { background: var(--color-shelf); border-color: var(--color-ink-subtle); box-shadow: none; } }
+/* Remind me when it is the only thing to do: orange words on a soft orange edge, so it leads without looking like a buy button. */
+.button--remind { background: var(--color-paper); color: var(--color-brand-text); border-color: var(--color-brand-line); box-shadow: none; }
+@media (hover: hover) { .button--remind:hover { background: var(--color-brand-soft); border-color: var(--color-brand-line); color: var(--color-brand-text); box-shadow: none; } }
 .button--small { min-height: 2.25rem; padding: 0 var(--space-4); font-size: var(--text-sm); }
 .button--save { gap: var(--space-2); color: var(--color-ink-muted); }
 .button--save .icon-save { width: 1.1rem; height: 1.1rem; flex: none; }
@@ -587,13 +590,21 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .drop__prices { display: grid; justify-items: end; gap: 2px; }
 .drop__was { font-size: var(--text-xs); color: var(--color-ink-subtle); }
 
-/* Coming soon: announced sets as plain rows */
+/* Coming soon: announced sets as plain rows, each with one button on the right: Pre-order, or Remind me */
 .coming { margin-bottom: var(--space-5); }
 .coming .section-head { margin-bottom: var(--space-2); }
 .coming__list { list-style: none; }
-.coming__row { display: grid; gap: var(--space-1); padding: var(--space-3) 0; border-top: 1px solid var(--color-line); min-width: 0; }
+/* The home page's Drops section: Coming soon rows then the Out now row, each under a smaller heading that
+   opens that tab on the drops page */
+.sub-head { margin-bottom: var(--space-2); font-size: var(--text-base); font-weight: var(--weight-heading); }
+.sub-head__link { text-decoration: none; }
+.sub-head__link:hover { color: var(--color-brand-text); text-decoration: underline; }
+.coming--nested { margin-bottom: var(--space-5); }
+.coming__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--color-line); min-width: 0; }
 .coming__row:last-child { border-bottom: 1px solid var(--color-line); }
-.coming__set { display: grid; min-width: 0; }
+.coming__set { display: grid; gap: 2px; min-width: 0; }
+.coming__action { display: flex; justify-content: flex-end; }
+.coming__checked { color: var(--color-ink-subtle); white-space: nowrap; }
 .coming__name { font-weight: var(--weight-strong); line-height: var(--leading-snug); text-decoration: none; overflow-wrap: anywhere; }
 .coming__name:hover { color: var(--color-brand-text); text-decoration: underline; }
 .coming__meta { font-size: var(--text-sm); color: var(--color-ink-muted); }
@@ -605,10 +616,7 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .coming__stock { color: var(--color-brand-text); text-decoration: none; }
 .coming__stock:hover { text-decoration: underline; }
 .browse-head__date { font-weight: var(--weight-strong); color: var(--color-ink); }
-@media (min-width: 48rem) {
-  .coming__row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); }
-  .coming__offer { text-align: right; }
-}
+@media (min-width: 48rem) { .coming__row { gap: var(--space-4); } }
 
 /* Browse: search, game and set pages ---------------------------------------- */
 
@@ -1254,43 +1262,47 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .thread__who time { font-weight: var(--weight-body); color: var(--color-ink-subtle); }
 .thread__body { margin-top: var(--space-1); overflow-wrap: anywhere; }
 
-/* Drop tracker (/drops/) -------------------------------------------------- */
-/* Each drop is a card with the soft orange border: a calendar tile, the set, a countdown, the cheapest shop offer
-   per product with Buy now or Pre-order, and the reminder form, which sits at the foot so paired cards line up. */
-.drops-chips { margin-bottom: var(--space-2); }
+/* Drops (/drops/) ---------------------------------------------------------- */
+/* Coming soon and Out now are the stock tabs' two-column cousin; the game chips sit under them and apply to both. */
+.stock-tabs--two ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.drops-tabs { position: static; margin-top: 0; }   /* the page is short enough; a sticky bar would cover a card a Remind me link lands on */
+.drops-chips { margin-top: 0; margin-bottom: var(--space-2); }
 @media (min-width: 40rem) { .drops-chips .chips__list { justify-content: flex-start; flex-wrap: wrap; } }   /* under a left-aligned title, not centred like the home page's */
 .chip__count { margin-left: var(--space-1); color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
 .chip[aria-current="page"] .chip__count { color: inherit; }
+.drops-pane__intro { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
+.drops-filters { margin: var(--space-3) 0 var(--rhythm-control); }
+.drops-filters__toggle, .drop-all__toggle {
+  display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--tap);
+  font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-brand-text); cursor: pointer; list-style: none;
+}
+.drops-filters__toggle::-webkit-details-marker, .drop-all__toggle::-webkit-details-marker, .drop-remind__open::-webkit-details-marker { display: none; }
+.drops-filters__toggle::before, .drop-all__toggle::before {
+  content: ""; width: 0.5em; height: 0.5em; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg); transition: transform var(--motion-fast) var(--ease-standard);
+}
+.drops-filters[open] > .drops-filters__toggle::before, .drop-all[open] > .drop-all__toggle::before { transform: rotate(45deg); }
+.drops-filters .filters { padding-top: var(--space-2); }
+.drop-waiting { margin-top: var(--rhythm-section); }
 .drop-group { margin-top: var(--space-5); }
-.drop-group + .drop-group, .drop-recent { margin-top: var(--rhythm-section); }
+.drop-group + .drop-group { margin-top: var(--rhythm-section); }
 .drop-group__title { margin-bottom: var(--rhythm-title); font-size: var(--text-section); font-weight: var(--weight-heading); text-box: trim-start cap alphabetic; }
 @media (max-width: 40rem) { .drop-group__title { font-size: var(--text-section-sm); } }
-/* One card per row at every width, so date order reads straight down and a month with one drop leaves no gap. */
-.drop-list { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+/* One card per row on phones; two side by side from tablet width, in date order across then down. */
+.drop-list { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+@media (min-width: 48rem) { .drop-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .drop-card {
-  display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; padding: var(--card-pad);
+  display: grid; gap: var(--space-3); min-width: 0; padding: var(--card-pad);
   border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-paper);
   box-shadow: var(--shadow-card); scroll-margin-top: var(--space-5);
-  transition: box-shadow var(--motion-normal) var(--ease-out);
 }
-/* A link from a reminder email lands on its drop: the ring says which card it means. */
+/* A link from a reminder email or a Remind me row lands on its drop: the ring says which card it means. */
 .drop-card:target { box-shadow: 0 0 0 3px var(--color-brand-soft), var(--shadow-card); border-color: var(--color-brand); }
 @media (prefers-reduced-motion: no-preference) {
   .drop-card { animation: rise var(--motion-slow) var(--ease-out) both; }
 }
-.drop-card__shops { display: grid; gap: var(--space-3); min-width: 0; }
-/* Wide screens: the date, countdown and reminder on the left, the shops on the right. */
-@media (min-width: 64rem) {
-  .drop-card {
-    display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); column-gap: var(--space-6);
-    grid-template-areas: "head shops" "count shops" "remind shops"; grid-template-rows: auto auto 1fr;
-  }
-  .drop-card__head { grid-area: head; }
-  .drop-card .countdown { grid-area: count; }
-  .drop-card__shops { grid-area: shops; align-content: start; }
-  .drop-remind { grid-area: remind; align-self: end; }
-}
 .drop-card__head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: center; }
+.drop-card__head--undated { grid-template-columns: minmax(0, 1fr); }
 .drop-card__tile {
   display: grid; justify-items: center; align-content: center; width: var(--drop-tile); height: var(--drop-tile);
   border: 1.5px solid var(--color-brand-line); border-radius: var(--radius); background: var(--color-brand-soft);
@@ -1304,36 +1316,46 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .drop-card__name { font-size: var(--text-lg); line-height: var(--leading-snug); overflow-wrap: anywhere; }
 .drop-card__name a { text-decoration: none; }
 .drop-card__name a:hover { color: var(--color-brand-text); text-decoration: underline; }
-.drop-card__when { font-size: var(--text-sm); color: var(--color-ink-muted); line-height: var(--leading-snug); }
+.drop-card__when { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-1); row-gap: var(--space-1); font-size: var(--text-sm); color: var(--color-ink-muted); line-height: var(--leading-snug); }
 .drop-card__left { font-weight: var(--weight-strong); color: var(--color-ink); }
-/* The countdown: added by web/static/js/drops.js, so only text changes as it ticks. Tabular figures keep every
-   digit the same width, so nothing beside it moves. */
-.countdown { display: flex; flex-wrap: wrap; gap: var(--space-2); font-variant-numeric: tabular-nums lining-nums; }
-.countdown__part { display: inline-flex; align-items: baseline; gap: var(--space-1); padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); background: var(--color-shelf); }
-.countdown__n { font-size: var(--text-lg); font-weight: var(--weight-price); font-stretch: var(--stretch-price); color: var(--color-ink); line-height: var(--leading-snug); }
+/* The countdown, this week's drops only: added by web/static/js/drops.js, so only text changes as it ticks.
+   Tabular figures keep every digit the same width, so nothing beside it moves. */
+.countdown { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); margin-left: var(--space-1); font-variant-numeric: tabular-nums lining-nums; }
+.countdown[hidden] { display: none; }
+.countdown__part { display: inline-flex; align-items: baseline; gap: 1px; padding: 1px var(--space-2); border-radius: var(--radius-sm); background: var(--color-shelf); }
+.countdown__n { font-size: var(--text-sm); font-weight: var(--weight-price); font-stretch: var(--stretch-price); color: var(--color-ink); line-height: var(--leading-snug); }
 .countdown__u { font-size: var(--text-xs); font-weight: var(--weight-strong); color: var(--color-ink-subtle); }
-.drop-offers { list-style: none; border-top: 1px solid var(--color-line-soft); }
-.drop-offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line-soft); }
+.drop-card__offer { display: grid; gap: 2px; min-width: 0; }
+.drop-card__best { font-size: var(--text-base); color: var(--color-ink); line-height: var(--leading-snug); }
+.drop-card__best .price { font-weight: var(--weight-price); }
+.drop-card__checked { font-size: var(--text-sm); color: var(--color-ink-subtle); line-height: var(--leading-snug); overflow-wrap: anywhere; }
+.drop-card__none { font-size: var(--text-sm); color: var(--color-ink-muted); line-height: var(--leading-snug); }
+/* One main button, then Remind me beside it. Opened, the reminder takes the full width under them. */
+.drop-card__actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2); }
+.drop-card__buy { position: relative; }
+.drop-remind { flex: 0 1 auto; min-width: 0; }
+.drop-remind[open] { flex-basis: 100%; display: grid; gap: var(--space-2); justify-items: start; }
+.drop-remind__open { list-style: none; min-height: var(--tap); }
+.drop-remind[open] .drop-remind__open { background: var(--color-brand-soft); }
+.drop-remind__form { justify-self: stretch; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius); background: var(--color-shelf); }
+@media (prefers-reduced-motion: no-preference) {
+  .drop-remind[open] .drop-remind__form { animation: fade-in var(--motion-normal) var(--ease-out) both; }
+}
+.drop-remind__label { font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.drop-remind__row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.drop-remind__input { flex: 1 1 12rem; width: 100%; min-width: 0; }
+.drop-remind__button { flex: none; }
+.drop-remind__note { font-size: var(--text-xs); color: var(--color-ink-muted); }
+.drop-remind__status { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
+.drop-remind__form.is-done .drop-remind__label, .drop-remind__form.is-done .drop-remind__row,
+.drop-remind__form.is-done .drop-remind__note { display: none; }
+.drop-remind__form.is-busy .drop-remind__button { opacity: 0.55; pointer-events: none; }
+.drop-all { border-top: 1px solid var(--color-line-soft); }
+.drop-offers { list-style: none; }
+.drop-offer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--color-line-soft); }
 .drop-offer__body { display: grid; gap: var(--space-1); min-width: 0; }
 .drop-offer__name { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); text-decoration: none; overflow-wrap: anywhere; }
 .drop-offer__name:hover { color: var(--color-brand-text); text-decoration: underline; }
 .drop-offer__meta { font-size: var(--text-sm); color: var(--color-ink-muted); line-height: var(--leading-snug); }
 .drop-offer__price { font-size: var(--text-base); font-weight: var(--weight-price); font-stretch: var(--stretch-price); color: var(--color-price); font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
 .drop-offer__checked { color: var(--color-ink-subtle); white-space: nowrap; }
-.drop-offer__buy { position: relative; }
-.drop-card__status { font-size: var(--text-sm); color: var(--color-ink-muted); }
-.drop-card__more { color: var(--color-brand-text); font-weight: var(--weight-strong); text-decoration: none; white-space: nowrap; }
-.drop-card__more:hover { text-decoration: underline; }
-.drop-card__none { padding: var(--space-3); border-radius: var(--radius); background: var(--color-shelf); font-size: var(--text-sm); color: var(--color-ink-muted); }
-.drop-remind { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--color-line-soft); }
-.drop-remind__label { font-size: var(--text-sm); font-weight: var(--weight-strong); }
-.drop-remind__row { display: flex; gap: var(--space-2); }
-.drop-remind__input { flex: 1 1 0; width: 100%; }
-.drop-remind__button { flex: none; }
-.drop-remind__note { font-size: var(--text-xs); color: var(--color-ink-muted); }
-.drop-remind__status { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
-.drop-remind.is-done .drop-remind__label, .drop-remind.is-done .drop-remind__row { display: none; }
-.drop-remind.is-busy .drop-remind__button { opacity: 0.55; pointer-events: none; }
-.coming__tracker { margin-top: var(--space-3); font-size: var(--text-sm); }
-.coming__tracker a { color: var(--color-brand-text); font-weight: var(--weight-strong); text-decoration: none; }
-.coming__tracker a:hover { text-decoration: underline; }

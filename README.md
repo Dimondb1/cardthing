@@ -2217,59 +2217,82 @@ update runs it; `--dry-run` lists what would change), and every hour by
 `tidy_all`. A type you set in Django Admin is never changed, and a product
 is only given a type its game uses.
 
-## Latest drops
+## Drops
 
-`/new/` lists sealed products released in the last 45 days, on pre-order,
-or first listed by a shop in the last 14 days, newest release first, with
-the usual filters. The home page carries a Latest drops row of the same
-list, cached with the other home lists.
+`/drops/` is the one page for new sets (Drops in the header and every
+footer). It has two sections, plain links that work without script, and
+game chips (`?game=pokemon`) that apply to both:
 
-### Coming soon
+- **Coming soon** (the default): every set still to come that has a date
+  the site trusts, soonest first under This week, This month and one heading
+  per later month, then "Date not announced yet" for undated sets a UK shop
+  already takes pre-orders for. A set's own date is always a full day (the
+  release radar writes one only from the publisher or two sources that
+  agree, or you type it); an accepted month-only announcement shows its
+  month, never a day. Announcements still waiting on Things to check are
+  never read.
+- **Out now** (`?show=out`): what the old Latest drops page listed (released
+  in the last 45 days or first listed by a shop in the last 14) that a shop
+  has in stock, as product cards with Buy now, with sort and filters folded
+  under "Sort and filter". Below them, "Just out, not in stock yet" lists
+  sets out in the last 14 days that no shop has in stock, saying so, with
+  Pre-order when a shop still takes pre-orders and never a reminder.
 
-Announced sets still to come (from the release radar, a CSV import or
-admin) show as plain rows, soonest first, with no new address:
+Each Coming soon card is short: the date tile, the set, "Out in 5 days"
+(with a live countdown only within the week), one line with the best offer
+("Pre-orders from £x delivered at 3 shops", or "In stock from £x" when a
+shop sells it early) and which product and shop that is with when it was
+checked, and one main button: Pre-order or Buy now to that shop through
+`/go/`, or Remind me when no UK shop has it, or See the set (its own page)
+when neither can be offered (emails not set up, or out today after the 9pm
+cut-off). Remind me is a second, quiet button otherwise. The best offer is
+the cheapest UK pre-order across the set's products, counting a product's
+pre-order even when another shop sells it from stock for less, the same
+listing the Coming soon rows pick; the product list shows that pre-order
+beside the product's cheapest offer. A product with its own later release
+date is left out of both, as it is out of the reminder emails. Remind me and "See all N products" (each product's
+cheapest shop, its checked time and its own button) are `details`
+elements, so they open without script. Offers are UK shops only, never eBay
+or Amazon. A set whose day has come with no shop listing it says "It is
+out, but no UK shop we check lists it yet". Remind me is only offered while
+a reminder could still be sent (`drop_alerts.can_send`: not after the day,
+nor on the day after the 9pm email window), and the sign-up refuses it
+otherwise; undated sets take no reminder. On a set out today the form says
+only one email can still go. A Remind me link from another page opens that
+form with the email box focused.
 
-- `/new/` lists every one above the products, each with its date when one
-  is published and the cheapest pre-order and how many shops take them,
-  or "In stock at a shop already" when a shop sells it before its date
-  and none takes pre-orders, or else "No pre-orders yet".
-- The home page shows up to 3 under Latest drops, and only sets a shop
-  already takes pre-orders for.
-- A game page lists its own at the top of its Pre-orders tab; a set page prints "Out <date>" and which
-  release source gave the date (nothing for a date you set), or "Date not
-  announced yet" for an undated set shops already take pre-orders for.
+`/new/` (the old Latest drops page) answers a permanent redirect to
+`/drops/`, or to `/drops/?show=out` with its filters when it had any, and
+is out of the sitemap. Out now has its own title and description
+(`meta.drops.out.*`). Views of `/drops/` count under the Latest drops kind
+in Insights, so its history carries on.
+
+Queries: Coming soon is six with an empty cache (the three drop queries in
+`catalogue/drops.py`, Out now's count per game, the first product's date and
+the wording), and Out now about fourteen, however many drops there are.
+
+### Coming soon rows
+
+The home page has one Drops section, the drops page in small: up to 3
+Coming soon rows (only sets a shop takes pre-orders for) under a "Coming
+soon" heading that opens `/drops/`, then an "Out now" row of products just
+out and in stock (the same products as `/drops/?show=out`, which its heading
+opens), so everything it shows is behind its link. The home page and each
+game page's Pre-orders tab show sets
+still to come as compact rows: the set, game, date, best price with when it
+was checked, and one button, Pre-order (or Buy now) to the cheapest shop
+through `/go/`, or Remind me, which opens that set's reminder on the drops
+page (`/drops/?remind=<id>#drop-<id>`), or See the set when no reminder
+can be taken. "See all" goes to `/drops/`. A set page prints "Out <date>" and
+which release source gave it, or "Date not announced yet".
 
 A set counts when its date is today or later, or when it has no date but a
 shop (never eBay or Amazon) has one of its products on pre-order, checked
-within the stale window, and no shop already sells one from stock (an
-undated set a shop sells is out, not coming). The price links to the product page, so a buy
-click still goes through `/go/` and is counted. The list is one query
-(`web/views.py` `coming_soon_sets`), cached under `web:coming-soon:v1` and
-`web:coming-soon:v1:<game>`, and cleared with the other lists, including
-whenever a set is saved. The wording is under "Coming soon sets" in
-Site wording.
-
-## Drop tracker
-
-`/drops/` (linked as Drops in the header on wide screens, in every footer and
-under each Coming soon list) lists every set still to come that has a date
-the site trusts, soonest first: This week (the next seven days), This month,
-then one heading per later month, and Just dropped (the last 14 days) below.
-A set's own release date is always a full day (the release radar writes one
-only from the publisher or two sources that agree, or you type it), so it
-shows its day, "Out in 5 days" and, with script, a live countdown to
-midnight UK time. A set with no date whose accepted announcement gives a
-month only shows that month and "Day not announced yet", never a day and
-never a countdown. Announcements still waiting on Things to check are never
-read. Game buttons filter the list with plain links (`?game=pokemon`).
-
-Each drop card shows the cheapest current offer for each of the set's
-products (up to four, then a link to the set page) from UK shops, never eBay
-or Amazon, with the shop, when it was checked, and Buy now or Pre-order
-through `/go/`; how many shops take pre-orders; "No UK shop we check lists it
-yet" when none does; and a reminder form. The page is three queries however
-many drops there are (`catalogue/drops.py`). The wording is under "Drop
-tracker and drop reminders" in Site wording.
+within the stale window, and no shop already sells one from stock. The list
+is one query (`web/views.py` `coming_soon_sets`), cached under
+`web:coming-soon:v2` and `web:coming-soon:v2:<game>`, and cleared with the
+other lists, including whenever a set is saved. The wording is under "Coming
+soon sets" and "Drop tracker and drop reminders" in Site wording.
 
 Reminders (`catalogue/drop_alerts.py`, model `DropAlert`) work like back in
 stock emails and need the same ZeptoMail settings; without them the form
@@ -2314,7 +2337,7 @@ past, minutes no other command starts on, on its own lock
 `deploy/install.sh` again after updating, or add it by hand from
 `deploy/crontab`. Reminder events are recorded with the alert counts
 (`drop_asked`, `drop_confirmed`, `drop_sent_<stage>`, `drop_stopped`) but are
-not yet shown on Insights; drop tracker views count with Latest drops.
+not yet shown on Insights; drops page views count with Latest drops.
 
 `seed_demo` adds five fictional "(demo)" sets dated from today so the page
 has something to show locally.
@@ -2356,7 +2379,7 @@ newest booster box with a picture, or else an elite trainer box, bundle and
 so on (`game_covers` in `web/views.py`), so no game logo is borrowed; a
 game with no pictures yet shows the booster box outline. After that come
 Picked for you and Pick up where you left off (for a browser with history),
-Featured deals, Latest drops and Coming soon, a card leading to the
+Featured deals, Drops and Coming soon, a card leading to the
 watchlist, and "Browse by product": a tile per product type, drawn with
 the type's outline, linking to the search page filtered to it. That is all:
 savings, price drops, trending and restocks are on the Deals page and every

@@ -58,6 +58,7 @@ class PageTestCase(TestCase):
             reverse("web:watchlist") + f"?p={self.etb.slug},{self.sold_out.slug}",
             reverse("web:contact"),
             reverse("web:drops"),
+            reverse("web:drops") + "?show=out",
         ]
 
 
@@ -1169,53 +1170,72 @@ class LatestDropsTests(PageTestCase):
         self.soon = make_product(self.soon_set, name="Mega Evolution Elite Trainer Box", slug="me1-etb")
         make_listing(self.soon, self.harbour, price="49.99", availability=Listing.Availability.PREORDER)
 
+    def out_now(self, **params):
+        return self.client.get(reverse("web:drops"), {"show": "out", **params})
+
     def test_home_row_leads_with_the_newest_release_and_skips_old_stock(self):
         response = self.client.get(reverse("web:home"))
-        self.assertContains(response, "Latest drops")
         html = response.content.decode()
         self.assertLess(html.index('id="featured-title"'), html.index('id="latest-title"'))
         row = html[html.index('id="latest-title"'):html.index("</section>", html.index('id="latest-title"'))]
-        self.assertIn("Mega Evolution Elite Trainer Box", row)
+        self.assertIn("Drops</h2>", row)
+        self.assertIn('href="/drops/?show=out"', row)
         self.assertIn("Out ", row)
         self.assertNotIn("Base Set Booster Box", row)
-        self.assertLess(row.index("Mega Evolution"), row.index("Prismatic Evolutions Elite Trainer Box"))
+        # The set to come is a Coming soon row, ahead of the Out now row that holds what is in stock.
+        self.assertLess(row.index("Mega Evolution"), row.index('id="out-title"'))
+        self.assertLess(row.index('id="out-title"'), row.index("Prismatic Evolutions Elite Trainer Box"))
 
-    def test_latest_drops_page_lists_new_products_with_filters_and_is_in_the_sitemap(self):
-        response = self.client.get(reverse("web:new"))
-        self.assertContains(response, "Latest drops")
-        self.assertContains(response, "Mega Evolution Elite Trainer Box")
+    def test_out_now_lists_new_products_in_stock_with_filters(self):
+        response = self.out_now()
+        self.assertContains(response, "Prismatic Evolutions Elite Trainer Box")
         self.assertNotContains(response, "Base Set Booster Box")
+        # A pre-order is under Coming soon, with its own button, not here.
+        self.assertNotContains(response, "Mega Evolution Elite Trainer Box")
+        self.assertContains(self.client.get(reverse("web:drops")), "Mega Evolution")
         self.assertContains(response, 'name="price"')
-        self.assertContains(response, '<link rel="canonical" href="http://testserver/new/">')
-        self.assertContains(self.client.get("/sitemap.xml"), "http://testserver/new/")
-        self.assertContains(self.client.get(reverse("web:home")), 'href="/new/"')
+        self.assertContains(response, '<link rel="canonical" href="http://testserver/drops/?show=out">')
+        sitemap = self.client.get("/sitemap.xml").content.decode()
+        self.assertIn("http://testserver/drops/</loc>", sitemap)
+        self.assertNotIn("http://testserver/new/", sitemap)
 
     def test_a_product_shops_only_just_listed_counts_as_a_drop_even_without_a_release_date(self):
         fresh = make_product(self.old_set, name="Base Set Blister", slug="base-set-blister", product_type="bundle")
         make_listing(fresh, self.harbour, price="12.00")
-        self.assertContains(self.client.get(reverse("web:new")), "Base Set Blister")
+        self.assertContains(self.out_now(), "Base Set Blister")
 
-    def test_a_pre_order_counts_as_a_drop_without_any_release_date_and_leads_the_list(self):
+    def test_the_home_out_now_row_holds_only_what_out_now_lists(self):
+        """The home row is a preview of Out now: a pre-order is not on it (it is a Coming soon row instead), so
+        every product it shows is behind its link."""
         from django.core.cache import cache
 
-        Product.objects.update(created_at=timezone.now() - timedelta(days=100))
         loose = make_product(self.old_set, name="Phantasmal Flames Booster Bundle", slug="pfl-bundle", product_type="bundle")
         Product.objects.filter(pk=loose.pk).update(created_at=timezone.now() - timedelta(days=100))
         make_listing(loose, self.harbour, price="29.99", availability=Listing.Availability.PREORDER)
         cache.clear()
-        response = self.client.get(reverse("web:new"))
-        names = [c[0].name for c in response.context["cards"]]
-        self.assertEqual(names[:2], ["Mega Evolution Elite Trainer Box", "Phantasmal Flames Booster Bundle"])
-        self.assertIn("Phantasmal Flames Booster Bundle", self.client.get(reverse("web:home")).content.decode())
-
-    def test_pre_orders_are_marked_dropping_soon_and_muted(self):
         home = self.client.get(reverse("web:home")).content.decode()
-        row = home[home.index('id="latest-title"'):home.index("</section>", home.index('id="latest-title"'))]
-        self.assertIn("Dropping soon", row)
-        self.assertIn("is-upcoming", row)
-        page = self.client.get(reverse("web:new")).content.decode()
-        self.assertIn('class="card is-upcoming"', page)
-        self.assertIn("Dropping soon", page)
+        row = home[home.index('id="out-title"'):]
+        row = row[:row.index("</ul>")]
+        self.assertIn('href="/drops/?show=out"', row)
+        self.assertNotIn("Phantasmal Flames Booster Bundle", row)
+        self.assertNotIn("Mega Evolution Elite Trainer Box", row)
+        out_now = self.out_now().content.decode()
+        names = re.findall(r'class="trending__name">([^<]+)<', row)
+        self.assertIn("Prismatic Evolutions Elite Trainer Box", names)
+        for name in names:
+            self.assertIn(name, out_now)
+
+    def test_home_has_one_drops_section_with_coming_soon_then_out_now(self):
+        home = self.client.get(reverse("web:home")).content.decode()
+        self.assertEqual(home.count('class="home-section home-drops"'), 1)
+        section = home[home.index('id="latest-title"'):home.index("</section>", home.index('id="latest-title"'))]
+        self.assertIn('class="section-head__all" href="/drops/"', section)
+        self.assertLess(section.index('id="coming-title"'), section.index('id="out-title"'))
+        self.assertIn('href="/drops/">Coming soon', section)
+        self.assertIn('href="/drops/?show=out">Out now', section)
+        # The pre-order is a Coming soon row with its button, not a card in the Out now row.
+        self.assertIn("Mega Evolution", section[:section.index('id="out-title"')])
+        self.assertIn("Pre-order<span", section)
         # A product that is out is not marked.
         self.assertNotIn("is-upcoming", self.client.get(self.game.get_absolute_url(), {"q": ""}).content.decode().split("Mega Evolution")[0].split('class="card"')[-1])
 
@@ -1224,9 +1244,10 @@ class LatestDropsTests(PageTestCase):
 
         # Everything created at launch: only products with a recent release date count.
         Product.objects.update(created_at=timezone.now() - timedelta(hours=3))
+        Product.objects.filter(pk=self.etb.pk).update(release_date=timezone.localdate() - timedelta(days=3))
         cache.clear()
-        response = self.client.get(reverse("web:new"))
-        self.assertContains(response, "Mega Evolution Elite Trainer Box")
+        response = self.out_now()
+        self.assertContains(response, "Prismatic Evolutions Elite Trainer Box")
         self.assertNotContains(response, "Base Set Booster Box")
         self.assertNotContains(response, "Prismatic Evolutions Booster Bundle")
 
@@ -1437,7 +1458,8 @@ class SharedCacheTests(PageTestCase):
 
 
 class ComingSoonTests(PageTestCase):
-    """Announced sets still to come, on the New page, the home page, game pages and set pages."""
+    """Announced sets still to come, as rows on the home page and game pages (the Pre-orders tab), on the drops
+    page and on set pages."""
 
     def setUp(self):
         from django.core.cache import cache
@@ -1447,6 +1469,12 @@ class ComingSoonTests(PageTestCase):
         self.today = timezone.localdate()
         self.soon_set = make_set(self.game, name="Ascended Heroes", slug="ascended-heroes", code="ASC",
                                  release_date=self.today + timedelta(days=10))
+
+    def rows_url(self):
+        return self.game.get_absolute_url() + "?tab=pre-orders"
+
+    def rows(self):
+        return self.block(self.client.get(self.rows_url()).content.decode())
 
     def block(self, html):
         start = html.index('id="coming-title"')
@@ -1461,35 +1489,47 @@ class ComingSoonTests(PageTestCase):
         return product
 
     def test_a_set_dated_in_ten_days_with_no_products_shows_its_date_and_no_pre_orders(self):
-        html = self.client.get(reverse("web:new")).content.decode()
-        block = self.block(html)
+        block = self.rows()
         self.assertIn("Coming soon", block)
         self.assertIn("Ascended Heroes", block)
         self.assertIn(f'href="{self.soon_set.get_absolute_url()}"', block)
         self.assertIn(f"Out {(self.today + timedelta(days=10)):%-d %b %Y}", block)
         self.assertIn("No pre-orders yet", block)
-        # The block sits above the product list.
-        self.assertLess(html.index('id="coming-title"'), html.index('class="filters"'))
+        # Its one button: Remind me, opening that set's reminder on the drops page, once emails are set up.
+        # Until then it opens the set's page.
+        self.assertIn(f'data-primary href="{self.soon_set.get_absolute_url()}">See the set', block)
+        self.assertNotIn("#drop-", block)
+        with self.settings(RIPRAPTOR_ZEPTOMAIL_TOKEN="tok", RIPRAPTOR_MAIL_FROM="alerts@ripraptor.com"):
+            block = self.rows()
+        self.assertEqual(block.count("data-primary"), 1)
+        self.assertIn(f'data-primary href="/drops/?remind={self.soon_set.pk}#drop-{self.soon_set.pk}">Remind me', block)
+        self.assertIn('href="/drops/?game=pokemon"', block)   # See all
         # Without a pre-order price it stays off the home page, which is the money page.
         self.assertNotIn('id="coming-title"', self.client.get(reverse("web:home")).content.decode())
 
     def test_a_pre_order_shows_the_price_and_shop_count_and_reaches_the_home_page(self):
         product = self.add_preorder(self.soon_set, price="49.99")
         self.add_preorder(self.soon_set, retailer=self.north, price="52.00")
-        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        cheapest = Listing.objects.get(product=product, retailer=self.harbour)
+        block = self.rows()
         self.assertIn("Pre-orders from", block)
         self.assertIn("£49.99", block)
         self.assertIn("at 2 shops", block)
+        self.assertIn("checked 1 hour ago", block)
         self.assertNotIn("No pre-orders yet", block)
-        # The price links to our product page, so a buy click still goes through /go/ and is counted.
+        # The price links to our product page; the one button goes to the cheapest shop through /go/.
         self.assertIn(f'href="{product.get_absolute_url()}"', block)
-        self.assertNotIn("/go/", block)
+        self.assertEqual(block.count("data-primary"), 1)
+        self.assertIn(f'href="/go/{cheapest.pk}/" target="_blank" rel="sponsored nofollow noopener" data-primary>', block)
+        self.assertIn("Pre-order<span", block)
+        self.assertNotIn("Remind me", block)
         home = self.client.get(reverse("web:home")).content.decode()
         self.assertLess(home.index('id="latest-title"'), home.index('id="coming-title"'))
         home_block = self.block(home)
         self.assertIn("Ascended Heroes", home_block)
         self.assertIn("£49.99", home_block)
-        self.assertIn('href="/new/"', home_block)
+        self.assertIn('href="/drops/"', home_block)
+        self.assertIn("/go/", home_block)
 
     def test_the_home_page_shows_only_the_three_soonest_sets_with_a_pre_order(self):
         self.add_preorder(self.soon_set)
@@ -1503,25 +1543,32 @@ class ComingSoonTests(PageTestCase):
             self.assertIn(name, home)
         self.assertNotIn("Future 3", home)
         self.assertNotIn("Ascended Heroes", home)
-        # The New page still lists every one.
-        self.assertEqual(self.block(self.client.get(reverse("web:new")).content.decode()).count('class="coming__row"'), 5)
+        # The game page and the drops page still list every one.
+        self.assertEqual(self.rows().count('class="coming__row"'), 5)
+        drops = self.client.get(reverse("web:drops")).content.decode()
+        for name in ("Future 3", "Ascended Heroes"):
+            self.assertIn(name, drops)
 
     def test_a_future_set_a_shop_already_has_in_stock_never_reads_no_pre_orders(self):
         product = make_product(self.soon_set, name="Ascended Heroes Booster Box", slug="ascended-heroes-box")
-        make_listing(product, self.harbour, price="120.00", availability=Listing.Availability.IN_STOCK)
-        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        listing = make_listing(product, self.harbour, price="120.00", availability=Listing.Availability.IN_STOCK)
+        block = self.rows()
         self.assertIn("Ascended Heroes", block)
-        self.assertIn("In stock at a shop already", block)
-        self.assertIn(f'class="coming__stock" href="{self.soon_set.get_absolute_url()}"', block)
+        self.assertIn("In stock from", block)
+        self.assertIn("£120.00", block)
+        self.assertIn("at Harbour Games", block)
+        self.assertIn(f'href="/go/{listing.pk}/"', block)
+        self.assertIn("Buy now<span", block)
         self.assertNotIn("No pre-orders yet", block)
         # A pre-order price still leads when a shop takes pre-orders too.
         self.add_preorder(self.soon_set, retailer=self.north, price="49.99")
         from django.core.cache import cache
 
         cache.clear()
-        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        block = self.rows()
         self.assertIn("£49.99", block)
-        self.assertNotIn("In stock at a shop already", block)
+        self.assertNotIn("In stock from", block)
+        self.assertIn("Pre-order<span", block)
 
     def test_an_ebay_or_stale_in_stock_listing_does_not_count_as_a_shop_selling_it(self):
         from catalogue.models import Retailer
@@ -1530,25 +1577,25 @@ class ComingSoonTests(PageTestCase):
         make_listing(product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="150.00",
                      availability=Listing.Availability.IN_STOCK)
         make_listing(product, self.harbour, price="120.00", availability=Listing.Availability.IN_STOCK, hours_ago=100)
-        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        block = self.rows()
         self.assertIn("No pre-orders yet", block)
-        self.assertNotIn("In stock at a shop already", block)
+        self.assertNotIn("In stock from", block)
 
     def test_an_undated_set_a_shop_already_sells_from_stock_is_not_coming_soon(self):
         undated = make_set(self.game, name="Chaos Rising", slug="chaos-rising", code="CRI")
         self.add_preorder(undated, price="55.00")
-        self.assertIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.assertIn("Chaos Rising", self.rows())
         product = make_product(undated, name="Chaos Rising Booster Box", slug="chaos-rising-box")
         make_listing(product, self.north, price="110.00", availability=Listing.Availability.IN_STOCK)
         from django.core.cache import cache
 
         cache.clear()
-        self.assertNotIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.assertNotIn("Chaos Rising", self.rows())
         self.assertNotIn("Date not announced yet", self.client.get(undated.get_absolute_url()).content.decode())
 
     def test_one_shop_and_an_unknown_delivery_are_worded_as_such(self):
         self.add_preorder(self.soon_set, price="44.00", delivery_known=False)
-        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        block = self.rows()
         self.assertIn("at 1 shop", block)
         self.assertIn("£44.00", block)
         self.assertIn("+ delivery", block)
@@ -1556,13 +1603,13 @@ class ComingSoonTests(PageTestCase):
     def test_a_confirmed_delivered_price_leads_an_unknown_one(self):
         self.add_preorder(self.soon_set, price="40.00", delivery_known=False)
         self.add_preorder(self.soon_set, retailer=self.north, price="45.00", delivery="3.00")
-        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        block = self.rows()
         self.assertIn("£48.00", block)
         self.assertNotIn("£40.00", block)
 
     def test_an_undated_set_shows_only_while_a_shop_takes_pre_orders(self):
         undated = make_set(self.game, name="Chaos Rising", slug="chaos-rising", code="CRI")
-        self.assertNotIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.assertNotIn("Chaos Rising", self.rows())
         # An eBay pre-order is a reseller's guess and does not count.
         from catalogue.models import Retailer
 
@@ -1571,9 +1618,9 @@ class ComingSoonTests(PageTestCase):
         from django.core.cache import cache
 
         cache.clear()
-        self.assertNotIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.assertNotIn("Chaos Rising", self.rows())
         self.add_preorder(undated, price="55.00")
-        block = self.block(self.client.get(reverse("web:new")).content.decode())
+        block = self.rows()
         self.assertIn("Chaos Rising", block)
         self.assertIn("£55.00", block)
         self.assertIn("at 1 shop", block)
@@ -1586,13 +1633,13 @@ class ComingSoonTests(PageTestCase):
         undated = make_set(self.game, name="Chaos Rising", slug="chaos-rising", code="CRI")
         self.add_preorder(undated, price="55.00", hours_ago=100)
         self.add_preorder(undated, retailer=self.north, price="5.00", sanity=Listing.Sanity.EXCLUDED)
-        self.assertNotIn("Chaos Rising", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.assertNotIn("Chaos Rising", self.rows())
 
     def test_a_set_dated_yesterday_leaves_the_block(self):
         self.soon_set.release_date = self.today - timedelta(days=1)
         self.soon_set.save()
         self.add_preorder(self.soon_set)
-        for url in (reverse("web:new"), reverse("web:home"), self.game.get_absolute_url()):
+        for url in (self.rows_url(), reverse("web:home"), self.game.get_absolute_url()):
             with self.subTest(url=url):
                 self.assertNotIn("Ascended Heroes</a>\n", self.client.get(url).content.decode())
                 self.assertNotIn('id="coming-title"', self.client.get(url).content.decode())
@@ -1603,7 +1650,7 @@ class ComingSoonTests(PageTestCase):
     def test_a_set_dated_today_still_shows(self):
         self.soon_set.release_date = self.today
         self.soon_set.save()
-        self.assertIn("Ascended Heroes", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.assertIn("Ascended Heroes", self.rows())
 
     def test_game_pages_show_their_own_sets_in_the_pre_orders_tab(self):
         other = make_game(name="Magic: The Gathering", slug="magic-the-gathering")
@@ -1621,8 +1668,9 @@ class ComingSoonTests(PageTestCase):
         magic = self.block(self.client.get(other.get_absolute_url() + "?tab=pre-orders").content.decode())
         self.assertIn("Lorwyn Eclipsed", magic)
         self.assertNotIn("Ascended Heroes", magic)
-        new = self.block(self.client.get(reverse("web:new")).content.decode())
-        self.assertLess(new.index("Ascended Heroes"), new.index("Lorwyn Eclipsed"))
+        self.assertIn('href="/drops/?game=magic-the-gathering"', magic)
+        drops = self.client.get(reverse("web:drops")).content.decode()
+        self.assertLess(drops.index("Ascended Heroes"), drops.index("Lorwyn Eclipsed"))
         # A set page does not repeat the block.
         self.assertNotIn('id="coming-title"', self.client.get(self.pre.get_absolute_url()).content.decode())
 
@@ -1682,7 +1730,8 @@ class ComingSoonTests(PageTestCase):
 
     def test_every_page_keeps_its_query_count_however_many_sets_are_coming(self):
         self.add_preorder(self.soon_set)
-        urls = [reverse("web:new"), reverse("web:home"), self.game.get_absolute_url(), self.soon_set.get_absolute_url()]
+        urls = [reverse("web:drops"), reverse("web:drops") + "?show=out", reverse("web:home"), self.rows_url(),
+                self.soon_set.get_absolute_url()]
         before = {url: self.page_queries(url) for url in urls}
         for n in range(4):
             product_set = make_set(self.game, name=f"Future {n}", slug=f"future-{n}", code=f"F{n}",
@@ -1697,25 +1746,25 @@ class ComingSoonTests(PageTestCase):
         from catalogue.signals import clear_list_caches
         from catalogue.testing import inside_the_cache_window
 
-        self.client.get(reverse("web:new"))
+        self.client.get(reverse("web:home"))
         self.client.get(self.game.get_absolute_url())
-        self.assertIsNotNone(cache.get("web:coming-soon:v1"))
-        self.assertIsNotNone(cache.get("web:coming-soon:v1:pokemon"))
+        self.assertIsNotNone(cache.get("web:coming-soon:v2"))
+        self.assertIsNotNone(cache.get("web:coming-soon:v2:pokemon"))
         # Inside the clear window a new set waits for the cache, then a forced clear shows it.
         inside_the_cache_window(self)
         make_set(self.game, name="Phantom Tides", slug="phantom-tides", code="PHT",
                  release_date=self.today + timedelta(days=30))
-        self.assertNotIn("Phantom Tides", self.client.get(reverse("web:new")).content.decode())
+        self.assertNotIn("Phantom Tides", self.client.get(self.rows_url()).content.decode())
         clear_list_caches(force=True)
-        self.assertIsNone(cache.get("web:coming-soon:v1"))
-        self.assertIsNone(cache.get("web:coming-soon:v1:pokemon"))
-        self.assertIn("Phantom Tides", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.assertIsNone(cache.get("web:coming-soon:v2"))
+        self.assertIsNone(cache.get("web:coming-soon:v2:pokemon"))
+        self.assertIn("Phantom Tides", self.rows())
 
     def test_a_new_set_shows_at_once_outside_the_clear_window(self):
-        self.client.get(reverse("web:new"))
+        self.client.get(self.rows_url())
         make_set(self.game, name="Phantom Tides", slug="phantom-tides", code="PHT",
                  release_date=self.today + timedelta(days=30))
-        self.assertIn("Phantom Tides", self.block(self.client.get(reverse("web:new")).content.decode()))
+        self.assertIn("Phantom Tides", self.rows())
 
     def test_house_style_holds_with_the_block_on_every_page(self):
         self.add_preorder(self.soon_set)
@@ -1725,14 +1774,17 @@ class ComingSoonTests(PageTestCase):
                          release_date=self.today + timedelta(days=5))
         make_listing(make_product(early, name="Early Street Box", slug="early-street-box"), self.north,
                      price="99.00", availability=Listing.Availability.IN_STOCK)
-        blocks = [reverse("web:home"), reverse("web:new"), self.game.get_absolute_url() + "?tab=pre-orders"]
+        blocks = [reverse("web:home"), self.rows_url()]
         set_pages = [self.soon_set.get_absolute_url(), undated.get_absolute_url()]
-        for url in blocks + set_pages:
+        drops = [reverse("web:drops"), reverse("web:drops") + "?show=out"]
+        for url in blocks + set_pages + drops:
             html = self.client.get(url).content.decode()
             visible = re.sub(r"<[^>]*>", " ", html)
             with self.subTest(url=url):
                 if url in blocks:
                     self.assertIn('id="coming-title"', html)
+                elif url in drops:
+                    self.assertIn('class="stock-tabs stock-tabs--two drops-tabs"', html)
                 else:
                     self.assertTrue("Out " in visible or "Date not announced yet" in visible)
                 self.assertNotIn("!", visible)

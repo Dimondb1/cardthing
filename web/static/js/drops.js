@@ -5,8 +5,10 @@
   - Countdowns: each [data-countdown] holds the drop's start (midnight UK time on its day). Only the digits
     change as it ticks, in tabular figures, so nothing beside them moves. With reduced motion the seconds are
     left out and it changes once a minute. It pauses while the tab is hidden.
-  - Reminder forms: sent in place, asking for JSON, and the answer replaces the form. If the request fails
-    for any reason the form is sent the ordinary way instead.
+  - Reminder forms: Remind me opens the form (a plain details element, so it opens without script too) and
+    the email box takes the focus, as it does when another page's Remind me link opens it. The form is sent
+    in place, asking for JSON, and the answer replaces it. If the request fails for any reason the form is
+    sent the ordinary way instead.
 */
 (function () {
   "use strict";
@@ -61,6 +63,27 @@
   if (clocks.length) {
     schedule();
     document.addEventListener("visibilitychange", schedule);
+  }
+
+  function focusEmail(box) {
+    var input = box.querySelector("input[type=email]");
+    if (input) input.focus({ preventScroll: true });
+  }
+
+  document.addEventListener("toggle", function (event) {
+    var box = event.target;
+    if (!box.matches || !box.matches(".drop-remind") || !box.open) return;
+    focusEmail(box);
+  }, true);
+
+  // A Remind me link from the home or a game page arrives with that drop's form already open (?remind=),
+  // which fires no toggle, so its email box takes the focus here. The browser's jump to #drop- happens at
+  // load and clears the focus, so this waits until after it; preventScroll keeps the card where it landed.
+  var opened = document.querySelector(".drop-remind[open]");
+  if (opened) {
+    var focusOpened = function () { setTimeout(function () { focusEmail(opened); }, 0); };
+    if (document.readyState === "complete") focusOpened();
+    else window.addEventListener("load", focusOpened);
   }
 
   if (!window.fetch || !window.FormData) return;

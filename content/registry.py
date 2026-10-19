@@ -338,15 +338,9 @@ ENTRIES = [
         placeholders=("price", "retailer"),
     ),
     Entry(
-        "home.new.title", H, "Latest drops heading",
-        "Latest drops",
-        "Home page heading above the newest products.",
-    ),
-    Entry(
-        "home.new.intro", T, "Latest drops note",
-        "New sealed products as UK shops list them, newest release first.",
-        "One line under the latest drops heading. Leave empty to hide it.",
-        optional=True,
+        "home.new.title", H, "Drops heading",
+        "Drops",
+        "Home page heading above the Coming soon rows and the Out now row. Its See all link opens the drops page.",
     ),
     Entry(
         "home.new.out", T, "Pre-order release date",
@@ -478,21 +472,9 @@ ENTRIES = [
         "Shown when filters such as game or product type rule out every product.",
     ),
     Entry(
-        "browse.new.title", H, "Latest drops page heading",
-        "Latest drops",
-        "Heading of the latest drops page.",
-    ),
-    Entry(
-        "browse.new.intro", T, "Latest drops page introduction",
-        "Sealed products released in the last few weeks, on pre-order, or newly listed by UK shops, "
-        "with the cheapest delivered price for each.",
-        "Under the latest drops page heading.",
-    ),
-    Entry(
         "new.coming_soon.title", H, "Coming soon heading",
         "Coming soon",
-        "Heading of the list of announced sets still to come, on the latest drops page, the home page and "
-        "game pages.",
+        "Heading of the list of announced sets still to come, on the drops page, the home page and game pages.",
     ),
     Entry(
         "new.coming_soon.out", T, "Coming soon release date",
@@ -509,26 +491,27 @@ ENTRIES = [
     Entry(
         "new.coming_soon.no_preorders", T, "No pre-orders yet",
         "No pre-orders yet",
-        "Next to a set still to come that no shop takes pre-orders for.",
+        "Next to a set still to come that no shop takes pre-orders for. Its button is Remind me.",
     ),
     Entry(
         "new.coming_soon.in_stock", T, "Coming soon set already in stock",
-        "In stock at a shop already",
+        "In stock from {price} at {retailer}",
         "Next to a set still to come that a shop already sells from stock, before its published date, and no "
-        "shop takes pre-orders for. Links to the set page, where the prices are.",
+        "shop takes pre-orders for. {price} is the cheapest and its button is Buy now.",
+        placeholders=("price", "retailer"),
     ),
     Entry(
         "new.coming_soon.preorders_from.one", T, "Pre-order price (one shop)",
         "Pre-orders from {price} at 1 shop",
-        "Next to a set still to come that one shop takes pre-orders for. {price} is its cheapest pre-order "
-        "and links to that product.",
+        "Next to a set still to come that one shop takes pre-orders for, on the drops page too. {price} is "
+        "its cheapest pre-order and links to that product. The Pre-order button beside it goes to that shop.",
         placeholders=("price",),
     ),
     Entry(
         "new.coming_soon.preorders_from.other", T, "Pre-order price (more than one shop)",
         "Pre-orders from {price} at {count} shops",
-        "Next to a set still to come that several shops take pre-orders for. {price} is the cheapest "
-        "pre-order and links to that product.",
+        "Next to a set still to come that several shops take pre-orders for, on the drops page too. {price} "
+        "is the cheapest pre-order and links to that product. The Pre-order button beside it goes to that shop.",
         placeholders=("price", "count"),
     ),
     Entry(
@@ -539,51 +522,71 @@ ENTRIES = [
         placeholders=("source",),
     ),
     Entry(
-        "new.coming_soon.tracker", B, "Drop tracker link under Coming soon",
-        "Countdowns and email reminders on the drop tracker",
-        "Link under the Coming soon list on the home, latest drops, game and set pages.",
+        "new.coming_soon.checked", T, "Coming soon price checked",
+        "checked {time}",
+        "After the price on each Coming soon row. {time} is how long ago the shop's price was read.",
+        placeholders=("time",),
     ),
 
     # Drop tracker ---------------------------------------------------------
-    Entry("drops.title", H, "Drop tracker heading", "Drop tracker", "Heading of the drop tracker page."),
+    Entry("drops.title", H, "Drops heading", "Drops", "Heading of the drops page, /drops/."),
     Entry(
-        "drops.intro", T, "Drop tracker introduction",
-        "Every new sealed set with a published release date, soonest first, with the cheapest UK shop "
-        "price to buy or pre-order. Ask for an email and we will remind you before it drops.",
-        "Under the drop tracker heading.",
+        "drops.intro", T, "Drops introduction",
+        "New sealed sets with the cheapest UK shop price. Pre-order what is coming, or ask us to remind you.",
+        "Under the drops heading.",
     ),
+    Entry("drops.tabs.label", T, "Drops sections name", "Coming soon or out now", "Read out by screen readers for the two section buttons on the drops page."),
+    Entry("drops.tab.soon", B, "Coming soon button", "Coming soon", "First section button on the drops page: sets still to come. Shows its count."),
+    Entry("drops.tab.out", B, "Out now button", "Out now", "Second section button on the drops page: products just out and in stock. Shows its count."),
+    Entry(
+        "drops.out.intro", T, "Out now introduction",
+        "In stock now: products released in the last few weeks or just listed by UK shops.",
+        "Above the products under Out now.",
+    ),
+    Entry("drops.out.empty", H, "Nothing out now heading", "Nothing new in stock right now", "Under Out now when no new product is in stock."),
+    Entry("drops.filter.toggle", B, "Sort and filter button", "Sort and filter", "Opens the sort and filter choices under Out now."),
+    Entry("drops.group.undated", H, "No date yet heading", "Date not announced yet", "Last group under Coming soon: sets UK shops take pre-orders for before any date is published."),
+    Entry("drops.offer.stock", T, "In stock price on a drop", "In stock from {price}", "On a drop a UK shop already sells from stock and none takes pre-orders for. Its button is Buy now.", placeholders=("price",)),
+    Entry("drops.offer.checked", T, "Cheapest product, shop and checked time", "{product} at {retailer}, checked {time}", "Under the price on each drop: what the main button buys and where.", placeholders=("product", "retailer", "time")),
+    Entry("drops.remind.open", B, "Remind me button", "Remind me", "Opens the reminder email box on a drop, and links to it from the Coming soon rows."),
+    Entry("drops.see_set", B, "See the set button", "See the set", "On a set with no shop price when a reminder cannot be taken (reminder emails are not set up, or it is out and the day's email has gone). Opens the set's page."),
+    Entry("drops.none.out", T, "Out with no shop", "It is out, but no UK shop we check lists it yet.", "On a set whose day has come that no shop sells or takes pre-orders for."),
     Entry("drops.filter.label", T, "Game filter name", "Show drops for one game", "Read out by screen readers for the row of game buttons."),
     Entry("drops.filter.all", B, "All games button", "All games", "First of the game buttons on the drop tracker."),
     Entry("drops.group.week", H, "This week heading", "This week", "Drops in the next seven days."),
     Entry("drops.group.month", H, "This month heading", "This month", "The rest of this month's drops. Later months are headed by their name."),
     Entry("drops.when.today", T, "Out today", "Out today", "On a drop whose release date is today."),
     Entry("drops.when.tomorrow", T, "Out tomorrow", "Out tomorrow", "On a drop out tomorrow."),
-    Entry("drops.when.days", T, "Out in some days", "Out in {days} days", "On a drop two or more days away. A live countdown is added under it in browsers that run scripts.", placeholders=("days",)),
+    Entry("drops.when.days", T, "Out in some days", "Out in {days} days", "On a drop two or more days away. Within the week a live countdown is added beside it in browsers that run scripts.", placeholders=("days",)),
     Entry(
         "drops.when.month", T, "Month only",
         "Day not announced yet",
         "On a drop whose publisher has given only the month. No countdown is shown until the day is known.",
     ),
-    Entry("drops.when.out_yesterday", T, "Came out yesterday", "Came out yesterday", "Under Just dropped."),
-    Entry("drops.when.out", T, "Came out some days ago", "Came out {days} days ago", "Under Just dropped.", placeholders=("days",)),
-    Entry("drops.checked", T, "When a drop price was checked", "checked {time}", "After each price on a drop.", placeholders=("time",)),
-    Entry("drops.preorders.one", T, "Pre-orders at one shop", "Pre-orders open at 1 shop", "Under a drop's prices.", placeholders=("count",)),
-    Entry("drops.preorders.other", T, "Pre-orders at several shops", "Pre-orders open at {count} shops", "Under a drop's prices.", placeholders=("count",)),
-    Entry("drops.more.one", B, "See the product", "See the product", "Link to the set page when a drop has more products than the card shows.", placeholders=("count",)),
-    Entry("drops.more.other", B, "See every product", "See all {count} products", "Link to the set page when a drop has more products than the card shows.", placeholders=("count",)),
-    Entry("drops.none", T, "No shop yet", "No UK shop we check lists it yet.", "On a drop with no shop price, while reminder emails are not set up."),
+    Entry("drops.when.out_yesterday", T, "Came out yesterday", "Came out yesterday", "Under Not in stock yet on Out now."),
+    Entry("drops.when.out", T, "Came out some days ago", "Came out {days} days ago", "Under Not in stock yet on Out now.", placeholders=("days",)),
+    Entry("drops.checked", T, "When a drop price was checked", "checked {time}", "After each product's price in a drop's product list.", placeholders=("time",)),
+    Entry("drops.more.one", B, "See the product", "See the product", "Opens the list of a drop's products, with a price and button for each.", placeholders=("count",)),
+    Entry("drops.more.other", B, "See every product", "See all {count} products", "Opens the list of a drop's products, with a price and button for each.", placeholders=("count",)),
+    Entry("drops.none", T, "No shop yet", "No UK shop takes pre-orders yet.", "On a drop still to come with no shop price, while reminder emails are not set up."),
     Entry(
         "drops.none.remind", T, "No shop yet, with reminders",
-        "No UK shop we check lists it yet. Ask for a reminder and we will email you when pre-orders open.",
-        "On a drop with no shop price.",
+        "No UK shop takes pre-orders yet. We can email you when one does.",
+        "On a drop still to come with no shop price. Its button is Remind me.",
     ),
-    Entry("drops.form.title", T, "Reminder form heading", "Remind me before it drops", "Above the email box on each drop."),
-    Entry("drops.form.button", B, "Reminder button", "Remind me", "Button that asks for a drop reminder."),
+    Entry("drops.form.title", T, "Reminder form heading", "Your email address", "Above the email box once Remind me is opened."),
+    Entry("drops.form.button", B, "Reminder button", "Send reminder link", "Button that sends the email to confirm a drop reminder."),
     Entry(
         "drops.form.note", T, "Reminder privacy note",
         "Up to three emails: when a UK shop opens pre-orders, then the day before and on the day once the day is known. "
         "Then your address is deleted.",
         "Under the email box on each drop.",
+        legal=True,
+    ),
+    Entry(
+        "drops.form.note_out", T, "Reminder privacy note on the day",
+        "One email today, with where to buy it. Then your address is deleted.",
+        "Under the email box on a drop that is out today, when only the drop-day email can still go.",
         legal=True,
     ),
     Entry("drops.form.busy", T, "Too many requests", "Too many reminders were asked for from here just now. Try again in an hour.", "Shown when one internet connection asks for more than ten reminders in an hour."),
@@ -597,7 +600,7 @@ ENTRIES = [
         placeholders=("set",),
     ),
     Entry("drops.done.problem.title", H, "Reminder not set heading", "Reminder not set", "When a reminder could not be taken."),
-    Entry("drops.done.back", B, "Back to the drops button", "Back to the drop tracker", "On the reminder pages."),
+    Entry("drops.done.back", B, "Back to the drops button", "Back to drops", "On the reminder pages."),
     Entry("drops.confirmed.title", H, "Reminder confirmed heading", "Reminder confirmed", "Page after the confirm link in a reminder email."),
     Entry(
         "drops.confirmed.body", T, "Reminder confirmed text",
@@ -609,26 +612,23 @@ ENTRIES = [
     Entry("drops.stopped.title", H, "Reminder stopped heading", "Reminder stopped", "Page after the unsubscribe link in a reminder email."),
     Entry(
         "drops.gone.body", T, "Reminder link expired text",
-        "The reminder was sent, stopped or expired. Ask again on the drop tracker if you still want one.",
+        "The reminder was sent, stopped or expired. Ask again on the drops page if you still want one.",
         "Page for a reminder confirm link that no longer works.",
     ),
-    Entry("drops.empty.title", H, "No drops heading", "No release dates announced yet", "When no set has a release date still to come."),
+    Entry("drops.empty.title", H, "No drops heading", "No release dates announced yet", "Under Coming soon when no set has a release date still to come."),
     Entry("drops.empty.game", H, "No drops for a game heading", "No {game} release dates announced yet", "When the chosen game has no drop still to come.", placeholders=("game",)),
     Entry(
         "drops.empty.body", T, "No drops text",
         "A new set shows here once its publisher, or two sources that agree, give its release date.",
         "Under the no drops heading.",
     ),
-    Entry("drops.recent.title", H, "Just dropped heading", "Just dropped", "Sets released in the last 14 days, under the drops still to come."),
-    Entry("drops.recent.from", T, "Just dropped price lead", "From", "Before the cheapest price of a set that just came out."),
-    Entry("drops.recent.at", T, "Just dropped shop", "at {retailer}, checked {time}", "After the cheapest price of a set that just came out.", placeholders=("retailer", "time")),
-    Entry("drops.recent.none", T, "Just dropped with no price", "No UK shop we check has it right now", "On a set that just came out that no shop sells now."),
+    Entry("drops.recent.title", H, "Not in stock yet heading", "Just out, not in stock yet", "Under Out now: sets released in the last 14 days that no UK shop has in stock."),
     Entry(
         "drops.small_print", P, "Drop tracker small print",
         "Release dates come from the publisher, from two sources that agree, or from us, and a date given as a "
         "month shows as that month. Prices are UK shops' own, checked through the day, and each says when. "
         "eBay and Amazon are left out here because their pre-orders are sellers' guesses.",
-        "At the foot of the drop tracker.",
+        "At the foot of the drops page.",
     ),
     Entry("drops.email.confirm.subject", T, "Reminder confirmation subject", "Confirm your reminder for {set}", "Subject of the email that confirms a reminder.", placeholders=("set",)),
     Entry("drops.email.confirm.preheader", T, "Reminder confirmation preview", "One click and we will email you before {set} drops.", "Preview line of the confirmation email.", placeholders=("set",)),
@@ -663,8 +663,8 @@ ENTRIES = [
     Entry("drops.email.day.body", T, "Out today text", "{set} is out today. Here is where to buy it now, cheapest first.", "In the drop-day email.", placeholders=("set",)),
     Entry("drops.email.offers", T, "Email price list heading", "Cheapest now", "Above the prices in a reminder email."),
     Entry("drops.email.checked", T, "Email price checked", "Checked {when}", "After each price in a reminder email.", placeholders=("when",)),
-    Entry("drops.email.none", T, "Email with no prices", "No UK shop we check lists it yet. The drop tracker shows the moment one does.", "In a reminder email when no shop has a price."),
-    Entry("drops.email.button", B, "Email drop tracker button", "See the drop", "Button in a reminder email, to the drop tracker."),
+    Entry("drops.email.none", T, "Email with no prices", "No UK shop we check lists it yet. The drops page shows the moment one does.", "In a reminder email when no shop has a price."),
+    Entry("drops.email.button", B, "Email drops page button", "See the drop", "Button in a reminder email, to the drop on the drops page."),
     Entry("drops.email.more", T, "Email more to come", "We only email you about this drop: when pre-orders open, the day before and on the day. Each email has a link that deletes your address.", "Footer of the pre-orders and day-before emails.", legal=True),
     Entry("drops.email.last", T, "Email last one", "This was your last reminder for {set}, so your email address has already been deleted.", "Footer of the drop-day email.", placeholders=("set",), legal=True),
     Entry(
@@ -1747,26 +1747,26 @@ ENTRIES = [
         "Browser tab title for the watchlist page. The site name is added after it.",
     ),
     Entry(
-        "meta.new.title", T, "Latest drops page title",
-        "Latest TCG drops and new releases: UK prices",
-        "Browser tab title for the latest drops page. The site name is added after it.",
+        "meta.drops.title", T, "Drops page title",
+        "TCG drops: release dates, pre-orders and new releases in the UK",
+        "Browser tab title for the drops page. The site name is added after it.",
     ),
     Entry(
-        "meta.new.description", T, "Latest drops page description",
-        "New and upcoming sealed Pokemon, Magic, One Piece, Yu-Gi-Oh and Lorcana products with the "
-        "cheapest UK delivered price, updated every hour.",
-        "Search engine description for the latest drops page.",
+        "meta.drops.description", T, "Drops page description",
+        "Upcoming and just released sealed Pokemon, Magic, One Piece, Yu-Gi-Oh and Lorcana sets with their "
+        "dates, the cheapest UK pre-order or delivered price and an email reminder before each drop.",
+        "Search engine description for the drops page.",
     ),
     Entry(
-        "meta.drops.title", T, "Drop tracker page title",
-        "TCG release dates and pre-orders: UK drop tracker",
-        "Browser tab title for the drop tracker. The site name is added after it.",
+        "meta.drops.out.title", T, "Out now page title",
+        "New TCG releases in stock in the UK",
+        "Browser tab title for Out now on the drops page. The site name is added after it.",
     ),
     Entry(
-        "meta.drops.description", T, "Drop tracker page description",
-        "Upcoming sealed trading card game releases with their dates, a countdown, the cheapest UK pre-order "
-        "price and an email reminder before each drop.",
-        "Search engine description for the drop tracker.",
+        "meta.drops.out.description", T, "Out now page description",
+        "Sealed Pokemon, Magic, One Piece, Yu-Gi-Oh and Lorcana products just released or just listed by UK "
+        "shops and in stock now, with the cheapest delivered price.",
+        "Search engine description for Out now on the drops page.",
     ),
     Entry(
         "meta.game.title", T, "Game page title",

@@ -1,19 +1,25 @@
-{% load sitecopy ripraptor %}{# Announced sets still to come, as plain rows: the set, its date when one is published, and the cheapest pre-order, that a shop already has it in stock, or that there are no pre-orders yet. Takes coming_soon, show_game and see_all. #}
-<section class="coming" aria-labelledby="coming-title">
+{% load sitecopy ripraptor %}{# Sets still to come as compact rows, each with one button: Pre-order (or Buy now when a shop sells it early) to the cheapest shop through /go/, or Remind me, which opens that set's reminder on the drops page, or, when neither can be offered, See the set. Takes coming_soon and show_game; nested puts it inside the home page's Drops section under a smaller heading that links to Coming soon on the drops page. #}
+{% if nested %}<div class="coming coming--nested" aria-labelledby="coming-title">
+  <h3 id="coming-title" class="sub-head"><a class="sub-head__link" href="{% url 'web:drops' %}">{% copy "drops.tab.soon" %} <span aria-hidden="true">›</span></a></h3>
+{% else %}<section class="coming" aria-labelledby="coming-title">
   <div class="section-head">
     <h2 id="coming-title" class="section-head__title"><svg class="section-head__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h16v14H4zM4 10h16M8 3v5M16 3v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "new.coming_soon.title" %}</h2>
-    {% if see_all %}<a class="section-head__all" href="{% url 'web:new' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>{% endif %}
-  </div>
+    <a class="section-head__all" href="{% url 'web:drops' %}{% if game %}?game={{ game.slug }}{% endif %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  </div>{% endif %}
   <ul class="coming__list">
     {% for item in coming_soon %}
     <li class="coming__row">
       <span class="coming__set">
         <a class="coming__name" href="{{ item.get_absolute_url }}">{{ item.name }}</a>
         {% if show_game or item.release_date %}<span class="coming__meta">{% if show_game %}{{ item.game.display_short }}{% endif %}{% if show_game and item.release_date %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% if item.release_date %}{% copy "new.coming_soon.out" date=item.release_date|short_date %}{% endif %}</span>{% endif %}
+        <span class="coming__offer">{% if item.best_id %}{% if item.preorder_count %}{% preorders_from item %}{% else %}{% price_sentence "new.coming_soon.in_stock" item.best_price item.best_known retailer=item.best_shop %}{% endif %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span><span class="coming__checked">{% copy "new.coming_soon.checked" time=item.best_checked|ago %}</span>{% elif item.release_date|has_come %}<span class="coming__none">{% copy "drops.none.out" %}</span>{% else %}<span class="coming__none">{% copy "new.coming_soon.no_preorders" %}</span>{% endif %}</span>
       </span>
-      <span class="coming__offer">{% if item.preorder_price is not None %}{% preorders_from item %}{% elif item.in_stock %}<a class="coming__stock" href="{{ item.get_absolute_url }}">{% copy "new.coming_soon.in_stock" %}</a>{% else %}<span class="coming__none">{% copy "new.coming_soon.no_preorders" %}</span>{% endif %}</span>
+      <span class="coming__action">
+        {% if item.best_id %}<a class="button button--buy button--card" href="{% url 'web:go' item.best_id %}" target="_blank" rel="sponsored nofollow noopener" data-primary>{% include "web/includes/buy_mark.svg" %}{% if item.preorder_count %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ item.best_product }} at {{ item.best_shop }} (opens in a new tab)</span></a>
+        {% else %}{% can_remind item.release_date as remindable %}{% if remindable %}<a class="button button--remind coming__remind" data-primary href="{% url 'web:drops' %}?remind={{ item.pk }}#drop-{{ item.pk }}">{% copy "drops.remind.open" %}<span class="visually-hidden"> {{ item.name }}</span></a>
+        {% else %}<a class="button button--quiet coming__remind" data-primary href="{{ item.get_absolute_url }}">{% copy "drops.see_set" %}<span class="visually-hidden"> {{ item.name }}</span></a>{% endif %}{% endif %}
+      </span>
     </li>
     {% endfor %}
   </ul>
-  <p class="coming__tracker"><a href="{% url 'web:drops' %}">{% copy "new.coming_soon.tracker" %}<span aria-hidden="true"> ›</span></a></p>
-</section>
+{% if nested %}</div>{% else %}</section>{% endif %}

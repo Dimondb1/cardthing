@@ -15,8 +15,7 @@ KINDS = {
     "search": DailyPageView.Kind.SEARCH,
     "deck": DailyPageView.Kind.SWIPE,
     "deals": DailyPageView.Kind.DEALS,
-    "new": DailyPageView.Kind.NEW,
-    "drops": DailyPageView.Kind.NEW,
+    "drops": DailyPageView.Kind.NEW,   # /new/ is now a redirect here; the kind keeps its name for history
     "watchlist": DailyPageView.Kind.WATCHLIST,
     "games": DailyPageView.Kind.OTHER,
     "about": DailyPageView.Kind.OTHER,

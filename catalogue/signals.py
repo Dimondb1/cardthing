@@ -14,9 +14,9 @@ from .search import build_search_text
 
 HOME_CACHE_KEY = "web:home-lists:v5"
 DEALS_CACHE_KEY = "web:deals:v2"
-NEW_CACHE_KEY = "web:home-new:v2"
+NEW_CACHE_KEY = "web:home-new:v3"
 # Sets still to come; each game's own list is cached under this key plus ':<game>'.
-COMING_SOON_CACHE_KEY = "web:coming-soon:v1"
+COMING_SOON_CACHE_KEY = "web:coming-soon:v2"
 LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY)
 
 

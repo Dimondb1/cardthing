@@ -114,7 +114,9 @@ class DropPageTests(DropData):
         self.assertIn("Harbour Games", card)
         self.assertIn("checked 1 hour ago", card)
         self.assertNotIn("£20.00", card)   # eBay is left out
-        self.assertIn("Pre-orders open at 2 shops", card)
+        self.assertIn("Pre-orders from", card)
+        self.assertIn("at 2 shops", card)
+        self.assertIn("Ascended Heroes Elite Trainer Box at Harbour Games, checked 1 hour ago", card)
         self.assertIn(f'href="/go/{self.cheap.pk}/"', card)
         for tag in re.findall(r'<a[^>]+href="/go/[^>]+>', html):
             self.assertIn('rel="sponsored nofollow noopener"', tag)
@@ -157,7 +159,15 @@ class DropPageTests(DropData):
         with self.settings(**MAIL_ON):
             html = self.page()
         card = html[html.index('id="drop-%d"' % self.later.pk):]
-        self.assertIn("No UK shop we check lists it yet. Ask for a reminder", card[:card.index("</form>")])
+        self.assertIn("No UK shop takes pre-orders yet. We can email you when one does.", card[:card.index("</form>")])
+        html = self.page()
+        card = html[html.index('id="drop-%d"' % self.later.pk):]
+        self.assertIn("No UK shop takes pre-orders yet.", card[:card.index("</li>")])
+        card = card[:card.index("</li>")]
+        # No reminders without email set up, so its one button opens the set's page, never a dead end.
+        self.assertNotIn("data-drop-remind", card)
+        self.assertEqual(card.count("data-primary"), 1)
+        self.assertIn(f'href="{self.later.get_absolute_url()}" data-primary>See the set', card)
 
     def test_game_filter_is_a_link(self):
         html = self.page(game="magic-the-gathering")
@@ -166,12 +176,17 @@ class DropPageTests(DropData):
         self.assertIn('href="/drops/?game=magic-the-gathering" aria-current="page"', html)
         self.assertIn("Ascended Heroes", self.page(game="nonsense"))
 
-    def test_just_dropped(self):
-        html = self.page()
-        recent = html[html.index("Just dropped"):]
-        self.assertIn("Journey Together", recent)
-        self.assertIn("Came out 5 days ago", recent)
-        self.assertIn("£120.00", recent)
+    def test_out_now_shows_product_cards_with_buttons(self):
+        html = self.page(show="out")
+        self.assertIn('class="card', html)
+        self.assertIn("Journey Together Booster Box", html)
+        self.assertIn("Buy now", html)
+        self.assertRegex(html, r'href="/go/\d+/" target="_blank" rel="sponsored nofollow noopener"')
+        # Pre-orders are under Coming soon, not here.
+        self.assertNotIn("Ascended Heroes Elite Trainer Box", html)
+        self.assertIn('<link rel="canonical" href="http://testserver/drops/?show=out">', html)
+        self.assertIn('href="/drops/?show=out" aria-current="page"', html)
+        self.assertNotIn("drop-card", html)
 
     def test_form_only_when_email_is_set_up(self):
         with self.settings(RIPRAPTOR_ZEPTOMAIL_TOKEN=""):
@@ -197,7 +212,9 @@ class DropPageTests(DropData):
 
     def test_house_style(self):
         with self.settings(**MAIL_ON):
-            for url in (reverse("web:drops"), reverse("web:drop_ask", args=[self.soon.pk]) + "?state=sent"):
+            for url in (reverse("web:drops"), reverse("web:drops") + "?show=out",
+                        reverse("web:drops") + f"?remind={self.later.pk}",
+                        reverse("web:drop_ask", args=[self.soon.pk]) + "?state=sent"):
                 html = self.client.get(url).content.decode()
                 self.assertNotIn("!", re.sub(r"<[^>]*>", " ", re.sub(r"(?s)<(script|style)\b.*?</\1>", " ", html)))
                 for phrase in CopyStyleTests.BANNED:
@@ -206,8 +223,11 @@ class DropPageTests(DropData):
     def test_linked_from_header_footer_coming_soon_and_sitemap(self):
         home = self.client.get(reverse("web:games")).content.decode()
         self.assertGreaterEqual(home.count('href="/drops/"'), 2)
-        self.assertIn('class="coming__tracker"><a href="/drops/"', self.client.get(reverse("web:new")).content.decode())
-        self.assertIn("/drops/</loc>", self.client.get("/sitemap.xml").content.decode())
+        game_page = self.client.get(self.game.get_absolute_url() + "?tab=pre-orders").content.decode()
+        self.assertIn('class="section-head__all" href="/drops/?game=pokemon"', game_page)
+        sitemap = self.client.get("/sitemap.xml").content.decode()
+        self.assertIn("/drops/</loc>", sitemap)
+        self.assertNotIn("/new/</loc>", sitemap)
 
     def test_header_menu_keeps_room_for_drops(self):
         # Adding Drops pushed the tablet header wider than the screen; How it works now lives in the footer only.
@@ -217,6 +237,253 @@ class DropPageTests(DropData):
         self.assertIn('href="/drops/"', nav)
         self.assertNotIn('href="/about/"', nav)
         self.assertIn('href="/about/"', html[html.index('class="site-footer__nav"'):])
+
+
+def cards(html):
+    """{set pk: the card's HTML} for every drop card on a page."""
+    found = {}
+    for match in re.finditer(r'<li class="drop-card[^"]*" id="drop-(\d+)">', html):
+        end = html.index("\n</li>", match.start())
+        found[int(match.group(1))] = html[match.start():end]
+    return found
+
+
+class OnePageTests(DropData):
+    """/drops/ is the one place for new sets: Coming soon and Out now, one game filter, /new/ sent here."""
+
+    def page(self, **params):
+        return self.client.get(reverse("web:drops"), params).content.decode()
+
+    def test_new_moved_here_for_good(self):
+        response = self.client.get("/new/")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/drops/")
+        response = self.client.get("/new/", {"game": "pokemon", "type": "bundle", "page": "2", "utm_source": "x"})
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/drops/?game=pokemon&type=bundle&page=2&show=out")
+        self.assertEqual(reverse("web:new"), "/new/")   # old reverse() calls still resolve, to the redirect
+
+    def test_the_redirect_is_not_counted_as_a_page_view(self):
+        from catalogue.models import DailyPageView
+
+        self.client.get("/new/", HTTP_USER_AGENT="Mozilla/5.0 Safari")
+        self.assertFalse(DailyPageView.objects.exists())
+
+    @override_settings(**MAIL_ON)
+    def test_every_card_has_exactly_one_main_button(self):
+        found = cards(self.page())
+        self.assertEqual(set(found), {self.soon.pk, self.month_only.pk, self.later.pk})
+        for pk, card in found.items():
+            with self.subTest(pk=pk):
+                self.assertEqual(card.count("data-primary"), 1)
+        # Pre-order to the cheapest shop when a shop takes pre-orders, with Remind me as a quiet second.
+        soon = found[self.soon.pk]
+        primary = re.search(r"<a [^>]*data-primary[^>]*>", soon).group(0)
+        self.assertIn(f'href="/go/{self.cheap.pk}/"', primary)
+        self.assertIn('rel="sponsored nofollow noopener"', primary)
+        self.assertIn('<summary class="button button--quiet drop-remind__open">Remind me</summary>', soon)
+        # Remind me leads when no shop has it.
+        for pk in (self.later.pk, self.month_only.pk):
+            self.assertRegex(found[pk], r"<summary [^>]*button--remind[^>]*data-primary>Remind me</summary>")
+            self.assertNotIn("/go/", found[pk])
+
+    @override_settings(**MAIL_ON)
+    def test_the_disclosures_are_in_the_page_without_script(self):
+        booster = make_product(self.soon, name="Ascended Heroes Booster Bundle", slug="asc-bundle")
+        bundle_listing = make_listing(booster, self.north, price="30.00", availability=Listing.Availability.PREORDER)
+        card = cards(self.page())[self.soon.pk]
+        self.assertIn("See all 2 products", card)
+        listed = card[card.index('<details class="drop-all">'):]
+        self.assertIn("Ascended Heroes Elite Trainer Box", listed)
+        self.assertIn("Ascended Heroes Booster Bundle", listed)
+        self.assertIn(f'href="/go/{bundle_listing.pk}/"', listed)
+        self.assertIn(f'href="/go/{self.cheap.pk}/"', listed)
+        self.assertIn('<details class="drop-remind">', card)
+        self.assertIn(f'action="/drops/remind/{self.soon.pk}/"', card)
+        # A Remind me row elsewhere opens that card's form, with no script.
+        opened = cards(self.page(remind=self.later.pk))
+        self.assertIn('<details class="drop-remind" open>', opened[self.later.pk])
+        self.assertNotIn("drop-remind\" open", opened[self.soon.pk])
+        # A one-product drop has nothing to unfold.
+        card = cards(self.page())[self.later.pk]
+        self.assertNotIn("drop-all", card)
+
+    @override_settings(**MAIL_ON)
+    def test_a_set_out_today_with_no_shop_reads_as_out(self):
+        self.later.release_date = self.today
+        self.later.save()
+        card = cards(self.page())[self.later.pk]
+        self.assertIn("Out today", card)
+        self.assertIn("It is out, but no UK shop we check lists it yet.", card)
+        self.assertNotIn("No UK shop takes pre-orders yet", card)
+        self.assertNotIn("No pre-orders yet", card)
+        # The drop-day email can still go this evening, so Remind me stays until the window closes.
+        self.assertIn("data-drop-remind", card)
+        rows = self.client.get(self.magic.get_absolute_url() + "?tab=pre-orders").content.decode()
+        row = rows[rows.index('class="coming__name"'):]
+        row = row[:row.index("</li>")]
+        self.assertIn("It is out, but no UK shop we check lists it yet.", row)
+        self.assertIn(f'href="/drops/?remind={self.later.pk}#drop-{self.later.pk}"', row)
+        late = timezone.localtime().replace(hour=drop_alerts.EMAIL_UNTIL_HOUR, minute=30)
+        with mock.patch("catalogue.drop_alerts.timezone.now", return_value=late):
+            card = cards(self.page())[self.later.pk]
+            self.assertNotIn("data-drop-remind", card)
+            # After the cut-off its one button opens the set's page, and the row on the game page goes there
+            # too, not to this card.
+            self.assertEqual(card.count("data-primary"), 1)
+            self.assertIn(f'href="{self.later.get_absolute_url()}" data-primary>See the set', card)
+            with mock.patch("catalogue.mail.send") as send:
+                response = self.client.post(reverse("web:drop_ask", args=[self.later.pk]), {"email": "ben@example.com"})
+            self.assertEqual(response.status_code, 404)
+            send.assert_not_called()
+            rows = self.client.get(self.magic.get_absolute_url() + "?tab=pre-orders").content.decode()
+            row = rows[rows.index('class="coming__name"'):]
+            row = row[:row.index("</li>")]
+            self.assertIn(f'href="{self.later.get_absolute_url()}">See the set', row)
+            self.assertNotIn("#drop-", row)
+
+    @override_settings(**MAIL_ON)
+    def test_a_set_out_days_ago_with_no_shop_reads_as_out_with_no_reminder(self):
+        gone = make_set(self.game, name="Black Bolt", slug="black-bolt", code="BLK",
+                        release_date=self.today - timedelta(days=3))
+        make_product(gone, name="Black Bolt Booster Box", slug="blk-box")
+        self.assertNotIn("Black Bolt", self.page())
+        html = self.page(show="out")
+        waiting = html[html.index('id="waiting-title"'):]
+        waiting = waiting[:waiting.index("</section>")]
+        self.assertIn("Black Bolt", waiting)
+        self.assertIn("Came out 3 days ago", waiting)
+        self.assertIn("It is out, but no UK shop we check lists it yet.", waiting)
+        self.assertNotIn("Remind me", waiting)
+        self.assertNotIn("No pre-orders yet", waiting)
+        # Journey Together is in stock, so it is a product card, not a waiting row.
+        self.assertNotIn("Journey Together", waiting)
+
+    def test_an_undated_set_shops_take_pre_orders_for_is_listed_last_with_no_reminder(self):
+        product = make_product(self.undated, name="Old Undated Booster Box", slug="old-undated-box")
+        listing = make_listing(product, self.harbour, price="99.00", availability=Listing.Availability.PREORDER)
+        with self.settings(**MAIL_ON):
+            html = self.page()
+        self.assertLess(html.index("Lorwyn Eclipsed"), html.index("Date not announced yet"))
+        card = cards(html)[self.undated.pk]
+        self.assertIn(f'href="/go/{listing.pk}/"', card)
+        self.assertNotIn("data-drop-remind", card)
+        self.assertNotIn("drop-card__tile", card)
+        self.assertIsNone(drops.upcoming_drop(self.undated, self.today))
+        # An eBay pre-order alone does not make it a drop.
+        Listing.objects.filter(pk=listing.pk).update(retailer=self.ebay)
+        self.assertNotIn("Old Undated", self.page())
+
+    def test_the_game_filter_applies_to_both(self):
+        soon = self.page(game="magic-the-gathering")
+        self.assertIn("Lorwyn Eclipsed", soon)
+        self.assertNotIn("Ascended Heroes", soon)
+        self.assertIn('href="/drops/?show=out&amp;game=magic-the-gathering"', soon)   # the Out now tab keeps it
+        out = self.page(show="out", game="pokemon")
+        self.assertIn("Journey Together Booster Box", out)
+        self.assertIn('href="/drops/?game=pokemon"', out)   # and Coming soon does too
+        self.assertIn('href="/drops/?show=out&amp;game=pokemon" aria-current="page"', out)
+        self.assertNotIn("Journey Together Booster Box", self.page(show="out", game="magic-the-gathering"))
+
+    def test_the_tabs_count_what_they_hold(self):
+        html = self.page()
+        self.assertIn('Coming soon</span> <span class="stock-tabs__count">3</span>', html)
+        self.assertIn('Out now</span> <span class="stock-tabs__count">1</span>', html)
+        self.assertIn('href="/drops/?game=magic-the-gathering"', html)
+        # Out now has nothing for Magic, so no Magic chip leads to an empty list there.
+        self.assertNotIn('href="/drops/?show=out&amp;game=magic-the-gathering"', self.page(show="out"))
+        html = self.page(game="magic-the-gathering")
+        self.assertIn('Coming soon</span> <span class="stock-tabs__count">1</span>', html)
+        self.assertIn('Out now</span> <span class="stock-tabs__count">0</span>', html)
+
+    def queries(self, **params):
+        cache.clear()
+        with CaptureQueriesContext(connection) as captured:
+            self.assertEqual(self.client.get(reverse("web:drops"), params).status_code, 200)
+        return len(captured)
+
+    def test_query_counts_stay_flat_and_under_the_two_old_pages(self):
+        before = {show: self.queries(show=show) for show in ("soon", "out")}
+        for n in range(4):
+            extra = make_set(self.game, name=f"Extra {n}", slug=f"extra-{n}", release_date=self.today + timedelta(days=n + 8))
+            product = make_product(extra, name=f"Extra {n} Booster Box", slug=f"extra-{n}-box")
+            make_listing(product, self.harbour, availability=Listing.Availability.PREORDER)
+            fresh = make_product(self.past, name=f"Fresh {n} Tin", slug=f"fresh-{n}-tin", product_type="tin")
+            make_listing(fresh, self.north, price="12.00")
+        after = {show: self.queries(show=show) for show in ("soon", "out")}
+        self.assertEqual(before, after)
+        # The old drop tracker took 4 and the old Latest drops page 10 with an empty cache.
+        self.assertLessEqual(after["soon"], 6)
+        self.assertLessEqual(after["out"], 14)
+
+
+class OneSourceTests(DropData):
+    """The drop card on /drops/ and the Coming soon row on a game page read the same offer for a set, so a
+    "Pre-orders from" price and its button agree wherever a visitor meets it."""
+
+    def page(self, **params):
+        return self.client.get(reverse("web:drops"), params).content.decode()
+
+    def game_row(self, product_set, game):
+        html = self.client.get(game.get_absolute_url() + "?tab=pre-orders").content.decode()
+        start = html.index(f'class="coming__name" href="{product_set.get_absolute_url()}"')
+        return html[start:html.index("</li>", start)]
+
+    def test_a_cheaper_pre_order_behind_an_in_stock_listing_leads_the_card_and_the_row(self):
+        third = make_retailer("Third Shop")
+        both = make_set(self.game, name="Mixed Set", slug="mixed-set", code="MIX",
+                        release_date=self.today + timedelta(days=10))
+        a = make_product(both, name="Mixed Product A", slug="mix-a")
+        b = make_product(both, name="Mixed Product B", slug="mix-b")
+        stock = make_listing(a, self.harbour, price="5.00")
+        cheap = make_listing(a, self.north, price="8.00", availability=Listing.Availability.PREORDER)
+        dear = make_listing(b, third, price="20.00", availability=Listing.Availability.PREORDER)
+        card = cards(self.page())[both.pk]
+        primary = re.search(r"<a [^>]*data-primary[^>]*>", card).group(0)
+        self.assertIn(f'href="/go/{cheap.pk}/"', primary)
+        self.assertIn("£8.00", card[:card.index('class="drop-card__actions"')])
+        self.assertNotIn("£20.00", card[:card.index('class="drop-card__actions"')])
+        # The product list shows each product's cheapest offer and, where it differs, its cheapest pre-order.
+        listed = card[card.index('<details class="drop-all">'):]
+        for listing in (stock, cheap, dear):
+            self.assertIn(f'href="/go/{listing.pk}/"', listed)
+        row = self.game_row(both, self.game)
+        self.assertIn("£8.00", row)
+        self.assertIn(f'href="/go/{cheap.pk}/"', row)
+        # The hidden words on the row's button name what it buys, not the set.
+        self.assertIn("Pre-order<span class=\"visually-hidden\"> Mixed Product A at Northgate Cards", row)
+
+    def test_a_product_with_its_own_later_date_is_not_the_sets_pre_order_anywhere(self):
+        later = make_set(self.game, name="Later Product Set", slug="later-product-set", code="LPS",
+                         release_date=self.today + timedelta(days=5))
+        product = make_product(later, name="Later Collection", slug="later-collection",
+                               release_date=self.today + timedelta(days=120))
+        listing = make_listing(product, self.harbour, price="30.00", availability=Listing.Availability.PREORDER)
+        card = cards(self.page())[later.pk]
+        self.assertNotIn(f"/go/{listing.pk}/", card)
+        row = self.game_row(later, self.game)
+        self.assertNotIn(f"/go/{listing.pk}/", row)
+        self.assertIn("No pre-orders yet", row)
+
+    @override_settings(**MAIL_ON)
+    def test_a_set_out_today_takes_a_one_email_note(self):
+        self.later.release_date = self.today
+        self.later.save()
+        before = timezone.localtime().replace(hour=10, minute=0)
+        with mock.patch("catalogue.drop_alerts.timezone.now", return_value=before):
+            card = cards(self.page())[self.later.pk]
+        self.assertIn("One email today", card)
+        self.assertNotIn("Up to three emails", card)
+        self.assertIn("Up to three emails", cards(self.page())[self.soon.pk])
+
+    def test_out_now_has_its_own_title_and_description(self):
+        soon = self.client.get(reverse("web:drops")).content.decode()
+        out = self.client.get(reverse("web:drops"), {"show": "out"}).content.decode()
+        title = re.compile(r"<title>([^<]+)</title>")
+        description = re.compile(r'<meta name="description" content="([^"]+)">')
+        self.assertNotEqual(title.search(soon).group(1), title.search(out).group(1))
+        self.assertIn("in stock", title.search(out).group(1))
+        self.assertNotEqual(description.search(soon).group(1), description.search(out).group(1))
 
 
 @override_settings(**MAIL_ON)

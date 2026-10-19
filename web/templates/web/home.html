@@ -91,14 +91,17 @@
   </a>
 </section>
 
-{% if latest %}
-<section class="home-section" aria-labelledby="latest-title">
+{% if coming_soon or latest %}
+{# One Drops section, the drops page in small: its Coming soon rows (sets a visitor can pre-order now), then its Out now row (just out and in stock). Each sub-heading opens that tab, so every item shown is behind its link. #}
+<section class="home-section home-drops" aria-labelledby="latest-title">
   <div class="section-head">
     <h2 id="latest-title" class="section-head__title"><svg class="section-head__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" fill="currentColor"/></svg>{% copy "home.new.title" %}</h2>
-    <a class="section-head__all" href="{% url 'web:new' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+    <a class="section-head__all" href="{% url 'web:drops' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
   </div>
-  {% copy "home.new.intro" as new_intro %}{% if new_intro %}<p class="section-head__note">{{ new_intro }}</p>{% endif %}
-  <ul class="trending" data-scroll>
+  {% if coming_soon %}{% include "web/includes/coming_soon.html" with show_game=True nested=True %}{% endif %}
+  {% if latest %}
+  <h3 id="out-title" class="sub-head"><a class="sub-head__link" href="{% url 'web:drops' %}?show=out">{% copy "drops.tab.out" %} <span aria-hidden="true">›</span></a></h3>
+  <ul class="trending" data-scroll aria-labelledby="out-title">
     {% for product in latest %}
     <li class="trending__item{% if product.best_offer.availability == "preorder" %} is-upcoming{% endif %}">
       <a class="trending__link" href="{{ product.get_absolute_url }}">
@@ -115,13 +118,8 @@
     </li>
     {% endfor %}
   </ul>
+  {% endif %}
 </section>
-{% endif %}
-
-{% if coming_soon %}
-<div class="home-section">
-  {% include "web/includes/coming_soon.html" with show_game=True see_all=True %}
-</div>
 {% endif %}
 
 <section class="home-section" aria-labelledby="watch-title">

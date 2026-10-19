@@ -1,0 +1,24 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "listshop.title" %}</h1>
+  <p class="page-intro">{% copy "listshop.intro" %}</p>
+</div>
+<form class="contact-form" method="post" action="{% url 'web:list_shop' %}">
+  {% csrf_token %}
+  {% if error %}<p class="contact-form__error" role="alert">{% copy error %}</p>{% endif %}
+  <label class="contact-form__label" for="list-shop-name">{% copy "listshop.form.name" %}</label>
+  <input id="list-shop-name" class="contact-form__input" type="text" name="name" maxlength="{{ limits.name }}" autocomplete="name" value="{{ values.name }}" required>
+  <label class="contact-form__label" for="list-shop-url">{% copy "listshop.form.shop_url" %}</label>
+  <input id="list-shop-url" class="contact-form__input" type="text" name="shop_url" maxlength="{{ limits.url }}" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" value="{{ values.shop_url }}" aria-describedby="list-shop-url-note" required>
+  <p class="contact-form__note" id="list-shop-url-note">{% copy "listshop.form.shop_url_note" %}</p>
+  <label class="contact-form__label" for="list-shop-email">{% copy "listshop.form.email" %}</label>
+  <input id="list-shop-email" class="contact-form__input" type="email" name="email" maxlength="254" autocomplete="email" inputmode="email" value="{{ values.email }}" aria-describedby="list-shop-email-note" required>
+  <p class="contact-form__note" id="list-shop-email-note">{% copy "listshop.form.email_note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
+  <label class="contact-form__label" for="list-shop-message">{% copy "listshop.form.message" %}</label>
+  <textarea id="list-shop-message" class="contact-form__input contact-form__text" name="message" rows="5" maxlength="{{ limits.message }}">{{ values.message }}</textarea>
+  <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+  <p><button class="button" type="submit">{% copy "listshop.form.button" %}</button></p>
+</form>
+{% endblock %}

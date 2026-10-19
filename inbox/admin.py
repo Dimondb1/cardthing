@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from catalogue import mail
 
 from . import service
-from .models import Conversation
+from .models import Conversation, ShopEnquiry
 
 
 class ConversationForm(forms.ModelForm):
@@ -86,3 +86,47 @@ class ConversationAdmin(admin.ModelAdmin):
 
             return HttpResponseRedirect(request.path)
         return super().response_change(request, obj)
+
+
+class HandledFilter(admin.SimpleListFilter):
+    title = "handled"
+    parameter_name = "handled"
+
+    def lookups(self, request, model_admin):
+        return (("no", "Waiting"), ("yes", "Handled"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "no":
+            return queryset.filter(handled_at__isnull=True)
+        if self.value() == "yes":
+            return queryset.filter(handled_at__isnull=False)
+        return queryset
+
+
+@admin.register(ShopEnquiry)
+class ShopEnquiryAdmin(admin.ModelAdmin):
+    """Shops asking to be listed. Answer from your own email; nothing is sent from here. The website is shown
+    as text: it is what they typed, and the site never reads it until you add the shop."""
+
+    list_display = ("name", "domain", "email", "created_at", "handled")
+    list_filter = (HandledFilter,)
+    search_fields = ("name", "domain", "shop_url", "email", "message", "note")
+    date_hierarchy = "created_at"
+    readonly_fields = ("name", "shop_url", "domain", "email", "message", "created_at")
+    fields = ("name", "shop_url", "domain", "email", "message", "created_at", "handled_at", "note")
+    actions = ("mark_handled",)
+
+    @admin.display(boolean=True, description="Handled", ordering="handled_at")
+    def handled(self, obj):
+        return obj.handled_at is not None
+
+    @admin.action(description="Mark handled")
+    def mark_handled(self, request, queryset):
+        from django.utils import timezone
+
+        done = queryset.filter(handled_at__isnull=True).update(handled_at=timezone.now())
+        self.message_user(request, f"{done} shop enquir{'y' if done == 1 else 'ies'} marked handled. "
+                                   "Each is deleted a year from now.")
+
+    def has_add_permission(self, request):
+        return False

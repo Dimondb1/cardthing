@@ -10,7 +10,8 @@ code names (catalogue/releases.py attach_sets), sets each product's language fro
 (catalogue/languages.py), retypes products whose name plainly says another type (catalogue/types.py),
 forgets website shop pages
 no sitemap has listed for 30 days, clears old import records, removed product addresses after a year and the
-owner's old spreadsheets (catalogue/housekeeping.py) so the database stays small, and lets the autopilot answer the Things to
+owner's old spreadsheets (catalogue/housekeeping.py) so the database stays small, deletes List your shop
+enquiries past their keeping time (inbox/shops.py), and lets the autopilot answer the Things to
 check rows the evidence settles (catalogue/autopilot.py). Run by start.bat, update_prices and the server's hourly import,
 so a rule added in code is applied to data already in the database.
 
@@ -65,6 +66,14 @@ class Command(BaseCommand):
             workbooks, exports, uploads, imports = prune_data_files()
             self.stdout.write(f"{workbooks + uploads} old spreadsheet files cleared, {exports} downloads and "
                               f"{imports} uploads deleted.")
+
+        self.stdout.write("== shop enquiries")
+        if dry_run:
+            self.stdout.write("Shop enquiries past their keeping time would be deleted.")
+        else:
+            from inbox.shops import purge
+
+            self.stdout.write(f"{purge()} old shop enquiries deleted.")
 
         # Counted here, never while the Insights page waits: a big shop's list runs to thousands of lines.
         from catalogue.insights import count_left_out

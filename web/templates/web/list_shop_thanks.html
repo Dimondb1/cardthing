@@ -1,0 +1,9 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{{ heading }}</h1>
+  <p class="page-intro">{% copy "listshop.thanks.body" %}</p>
+</div>
+<p><a class="button" href="{% url 'web:home' %}">{% copy "listshop.thanks.back" %}</a></p>
+{% endblock %}

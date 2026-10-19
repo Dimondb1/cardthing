@@ -1665,6 +1665,57 @@ def contact_thread(request, token):
     return remember_thread(response, request, conversation)
 
 
+LIST_SHOP_FIELDS = ("name", "shop_url", "email", "message")
+
+
+@sensitive_post_parameters("email")
+def list_shop(request):
+    """A shop asks to be listed (inbox/shops.py). Works without JavaScript; a sent form goes on to the thanks
+    page by redirect, so reloading it sends nothing twice. A robot's form, a shop that already asked and a
+    new enquiry all reach the same thanks."""
+    from inbox import shops
+
+    values = dict.fromkeys(LIST_SHOP_FIELDS, "")
+    error = ""
+    if request.method == "POST":
+        try:
+            length = int(request.META.get("CONTENT_LENGTH") or 0)
+        except ValueError:
+            length = shops.MAX_BODY + 1
+        if length > shops.MAX_BODY:
+            # Refused before the fields are looked at. Django's own DATA_UPLOAD_MAX_MEMORY_SIZE caps what the
+            # CSRF check reads first.
+            return HttpResponse(status=413)
+        thanks = HttpResponseRedirect(reverse("web:list_shop_thanks"))
+        if request.POST.get("website"):
+            return thanks   # the hidden field is only ever filled by robots
+        values = {name: request.POST.get(name, "")[:shops.MAX_MESSAGE * 2].strip() for name in LIST_SHOP_FIELDS}
+        try:
+            cleaned = shops.clean(**values)
+            shops.ask(cleaned, insights.client_ip(request))
+        except shops.Invalid as exc:
+            error = f"listshop.form.{exc.args[0]}_invalid"
+        except shops.Refused:
+            error = "listshop.form.busy"
+        else:
+            return thanks
+    elif request.method != "GET":
+        return HttpResponse(status=405)
+    return render(request, "web/list_shop.html", {
+        "values": values, "error": error, "limits": {"name": shops.MAX_NAME, "url": shops.MAX_URL,
+                                                     "message": shops.MAX_MESSAGE},
+        "meta_title": text(request, "listshop.title"),
+        "meta_description": text(request, "meta.listshop.description"),
+        "canonical_url": request.build_absolute_uri(reverse("web:list_shop")),
+    })
+
+
+@require_GET
+def list_shop_thanks(request):
+    heading = text(request, "listshop.thanks.title")
+    return render(request, "web/list_shop_thanks.html", {"heading": heading, "meta_title": heading, "noindex": True})
+
+
 @require_GET
 def manifest(request):
     """The web app manifest, so a phone can pin RipRaptor to its home screen. No service worker, no push."""

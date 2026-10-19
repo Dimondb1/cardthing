@@ -51,6 +51,7 @@ SECTIONS = [
     ("about", "How it works page"),
     ("contact", "Message us page"),
     ("refer", "Refer a friend keyring offer"),
+    ("listshop", "List your shop page"),
     ("footer", "Footer"),
     ("terms", "Terms page"),
     ("errors", "Error pages"),
@@ -185,6 +186,7 @@ ENTRIES = [
         "Link at the end of each home page section.",
     ),
     Entry("site.nav.contact", B, "Message us link", "Message us", "Footer link to the Message us page."),
+    Entry("site.nav.listshop", B, "List your shop link", "List your shop", "Footer link to the List your shop page, and its button on the how it works page."),
     Entry(
         "site.nav.terms", B, "Terms link",
         "Terms",
@@ -1542,6 +1544,50 @@ ENTRIES = [
     Entry("refer.email.address.body", T, "Address email text",
           "Your referral is complete. Tell us where to send your free keyring. The link works for 30 days.",
           "In the email asking for a postal address."),
+    # List your shop -------------------------------------------------------
+    Entry("listshop.title", H, "Page heading", "List your shop", "Top of the List your shop page."),
+    Entry(
+        "listshop.intro", T, "Introduction",
+        "RipRaptor compares UK prices for sealed trading card game products. If your UK shop sells them, ask "
+        "to be listed here and we will reply by email.",
+        "Under the heading on the List your shop page.",
+    ),
+    Entry("listshop.form.name", T, "Name label", "Your name", "Label above the name box."),
+    Entry("listshop.form.shop_url", T, "Website label", "Shop website", "Label above the website box."),
+    Entry("listshop.form.shop_url_note", T, "Website note", "For example yourshop.co.uk", "Under the website box."),
+    Entry("listshop.form.email", T, "Email label", "Email address", "Label above the email box."),
+    Entry(
+        "listshop.form.email_note", T, "Email note",
+        "Used only to reply about your shop. We delete it a year after we deal with it, or after two years at most.",
+        "Under the email box, followed by a link to the data part of the terms page.",
+    ),
+    Entry("listshop.form.message", T, "Message label", "Anything we should know (optional)", "Label above the message box."),
+    Entry("listshop.form.button", B, "Send button", "Ask to be listed", "Button that sends the form."),
+    Entry("listshop.form.name_invalid", T, "Missing name", "Add your name.", "Shown when the name box is empty."),
+    Entry(
+        "listshop.form.shop_url_invalid", T, "Bad website",
+        "That website address does not look right. Use one like yourshop.co.uk.",
+        "Shown when the website is missing, is not a web address or has no real domain.",
+    ),
+    Entry("listshop.form.email_invalid", T, "Bad email", "That email address does not look right.", "Shown when the email address is not valid."),
+    Entry("listshop.form.message_invalid", T, "Long message", "Keep the message under 1,000 characters.", "Shown when the message is too long."),
+    Entry(
+        "listshop.form.busy", T, "Too many requests",
+        "We have had a lot of requests just now. Try again in an hour.",
+        "Shown when this connection or the whole site has sent too many.",
+    ),
+    Entry("listshop.thanks.title", H, "Thanks heading", "Thanks for asking", "Top of the page after the form is sent."),
+    Entry(
+        "listshop.thanks.body", T, "Thanks text",
+        "We read every request and will reply to the email address you gave.",
+        "Under the heading after the form is sent. The same words show however many times a shop asks.",
+    ),
+    Entry("listshop.thanks.back", B, "Back button", "Go to the home page", "Button on the page after the form is sent."),
+    Entry(
+        "about.listshop", T, "List your shop line",
+        "Run a UK shop that sells sealed products? Ask to be listed.",
+        "On the how it works page, above the List your shop button.",
+    ),
 
     # Footer ---------------------------------------------------------------
     Entry("footer.follow", T, "Footer follow heading", "Follow us", "Above the social media icons in the footer."),
@@ -1855,6 +1901,14 @@ ENTRIES = [
         legal=True,
     ),
     Entry(
+        "terms.data.listshop", P, "Shop enquiries",
+        "If you ask us to list your shop, we keep your name, your shop's website, your email address and "
+        "your message to reply to you and for nothing else. We do not add you to a mailing list. Your "
+        "enquiry is deleted a year after we have dealt with it, or two years after you sent it if we never do.",
+        "Data section of the terms page, after the main explanation: what the List your shop form keeps.",
+        legal=True,
+    ),
+    Entry(
         "terms.data.shops", P, "Shop and affiliate cookies",
         "When you follow a link to a shop, the shop or the affiliate network it uses (Amazon Associates, "
         "eBay Partner Network, Awin or Rakuten Advertising) may set its own cookies to record that you came "
@@ -1972,6 +2026,11 @@ ENTRIES = [
         "Upcoming and just released sealed Pokemon, Magic, One Piece, Yu-Gi-Oh and Lorcana sets with their "
         "dates, the cheapest UK pre-order or delivered price and an email reminder before each drop.",
         "Search engine description for the drops page.",
+    ),
+    Entry(
+        "meta.listshop.description", T, "List your shop page description",
+        "Run a UK shop selling sealed trading card game products? Ask RipRaptor to list your prices.",
+        "Search engine description for the List your shop page.",
     ),
     Entry(
         "meta.drops.out.title", T, "Out now page title",

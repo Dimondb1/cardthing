@@ -57,6 +57,8 @@ class PageTestCase(TestCase):
             reverse("web:watchlist"),
             reverse("web:watchlist") + f"?p={self.etb.slug},{self.sold_out.slug}",
             reverse("web:contact"),
+            reverse("web:list_shop"),
+            reverse("web:list_shop_thanks"),
             reverse("web:drops"),
             reverse("web:drops") + "?show=out",
         ]

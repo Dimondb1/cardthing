@@ -2102,7 +2102,7 @@ site's cache.
 | `DJANGO_ALLOWED_HOSTS`         | `localhost,127.0.0.1` | Comma separated. |
 | `DJANGO_CSRF_TRUSTED_ORIGINS`  |         | Comma separated, with scheme. |
 | `DJANGO_SQLITE_PATH`           | `db.sqlite3` | |
-| `RIPRAPTOR_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page, and is emailed when a refer a friend referral completes (see "Refer a friend"). |
+| `RIPRAPTOR_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page, and is emailed when a refer a friend referral completes (see "Refer a friend"). When set, List your shop enquiries are emailed here instead of to `RIPRAPTOR_INBOX_NOTIFY_EMAIL`. |
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
@@ -2738,6 +2738,34 @@ can read it. A failed notification never loses the message. Limits: 3,000
 characters a message, six follow-ups an hour per thread, 40 new threads an
 hour site-wide. Threads are deleted six months after their last message.
 Thread pages are noindex and kept out of robots.txt.
+
+## List your shop
+
+`/list-your-shop/` (footer, How it works page and the sitemap) lets a UK
+shop ask to be listed: their name, the shop's website, an email address
+and an optional message of up to 1,000 characters. It works without
+JavaScript; a sent form redirects to `/list-your-shop/thanks/` (noindex),
+so a reload sends nothing twice. The website is tidied (https assumed when
+no scheme is typed, only http and https, a real domain name, no password
+or odd port, lower-cased host) and stored as text. It is never fetched:
+a shop is read only once you add it.
+
+Enquiries are in admin under Messages -> Shop enquiries, with a
+Waiting/Handled filter, search and a "Mark handled" action; the admin home
+shows how many wait. Each new one is emailed to you as plain text (to
+`RIPRAPTOR_CONTACT_EMAIL` when set, else `RIPRAPTOR_INBOX_NOTIFY_EMAIL`)
+with a link to admin, and the ntfy push says only that a shop asked.
+Nothing is ever emailed to the address typed into the form, so the form
+cannot be used to mail a stranger; answer from your own email.
+
+Limits (`inbox/shops.py`): 5 enquiries an hour and 20 a day from one
+connection (counted in the shared cache under a one-way hash, never the
+address itself), 30 an hour site-wide, 8 KB a request, and a hidden
+honeypot field. A shop domain (without www) with an open enquiry from the
+last 30 days gets the same thanks and nothing is stored or sent, so the
+page never says what it knows. `tidy_all` (hourly) deletes enquiries a
+year after they are marked handled, or two years after they arrived if
+they never are. The Terms page's data section says so.
 
 ## Watchlist
 

@@ -38,5 +38,11 @@
     <p>{{ contact_text|link_email:contact_email }}</p>{% endif %}
     <p><a class="button button--quiet" href="{% url 'web:contact' %}">{% copy "site.nav.contact" %}</a></p>
   </section>
+
+  <section aria-labelledby="listshop-title">
+    <h2 id="listshop-title">{% copy "listshop.title" %}</h2>
+    <p>{% copy "about.listshop" %}</p>
+    <p><a class="button button--quiet" href="{% url 'web:list_shop' %}">{% copy "site.nav.listshop" %}</a></p>
+  </section>
 </div>
 {% endblock %}

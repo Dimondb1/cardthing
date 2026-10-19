@@ -53,8 +53,8 @@ def can_push():
     return bool(settings.RIPRAPTOR_NTFY_TOPIC)
 
 
-def can_email():
-    return bool(settings.RIPRAPTOR_INBOX_NOTIFY_EMAIL) and mail.enabled()
+def can_email(to=""):
+    return bool(to or settings.RIPRAPTOR_INBOX_NOTIFY_EMAIL) and mail.enabled()
 
 
 def push(title, link, tags="", opener=None):
@@ -77,15 +77,16 @@ def push(title, link, tags="", opener=None):
     return True
 
 
-def email(subject, detail, link, link_label="Open admin"):
-    """Email the owner. Returns whether it was sent."""
-    if not can_email():
+def email(subject, detail, link, link_label="Open admin", to=""):
+    """Email the owner, at ``to`` when given and RIPRAPTOR_INBOX_NOTIFY_EMAIL otherwise. Returns whether it
+    was sent. ``detail`` goes in as plain text: escaped in the HTML part and never made a link there."""
+    if not can_email(to):
         return False
     text = f"{detail}\n\n{link_label}: {link}\n" if detail else f"{link_label}: {link}\n"
     paragraph = f"<p style=\"white-space:pre-wrap\">{escape(detail)}</p>" if detail else ""
     html = f"{paragraph}<p><a href=\"{escape(link)}\">{escape(link_label)}</a></p>"
     try:
-        mail.send(settings.RIPRAPTOR_INBOX_NOTIFY_EMAIL, subject, text, html)
+        mail.send(to or settings.RIPRAPTOR_INBOX_NOTIFY_EMAIL, subject, text, html)
     except mail.MailError as exc:
         logger.warning("The email %r was not sent: %s", subject, exc)
         return False
@@ -111,18 +112,19 @@ def claim(subject, now):
 
 
 def owner(subject, title, click_path, detail="", now=None, once_a_day=True, link_label="Open admin", tags="",
-          opener=None):
+          opener=None, to=""):
     """Tell the owner: a push titled ``title`` and an email headed ``subject`` carrying ``detail``.
 
-    With ``once_a_day`` a subject sent in the last 24 hours is not sent again. Returns whether it was sent.
+    With ``once_a_day`` a subject sent in the last 24 hours is not sent again. ``to`` sends the email to
+    another of the owner's addresses. Returns whether it was sent.
     """
-    if not (can_push() or can_email()):
+    if not (can_push() or can_email(to)):
         return False
     if once_a_day and not claim(subject, now or timezone.now()):
         return False
     link = link_for(click_path)
     push(title, link, tags=tags, opener=opener)
-    email(subject, detail, link, link_label)
+    email(subject, detail, link, link_label, to=to)
     return True
 
 

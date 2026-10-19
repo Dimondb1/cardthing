@@ -64,3 +64,31 @@ class SmallFormMiddleware:
             if length > SMALL_FORM_BYTES or request.META.get("HTTP_TRANSFER_ENCODING"):
                 return HttpResponse(status=413)
         return self.get_response(request)
+
+
+class OwnerEditsMiddleware:
+    """The owner's changes leave the cached lists straight away.
+
+    Visitors are served a cached list while the background jobs build it again (web.listcache), which can
+    take from a few seconds to a few minutes. That suits price imports, not the owner hiding a product or
+    fixing a price. A change the owner makes (any POST by a staff user, in Django Admin or on the site's
+    owner pages) clears the lists hard: no visitor is served a copy built before it. The reader builds them
+    on its next turn (a few seconds); a visitor who comes first builds them, or waits for the build already
+    running, as for a missing list. The owner's own request does not build them, so a run of taps on Things
+    to check stays quick.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.method in ("GET", "HEAD", "OPTIONS") or not getattr(request, "user", None) \
+                or not request.user.is_staff:
+            return self.get_response(request)
+        from web import listcache
+
+        editing = listcache.owner_editing.set(True)
+        try:
+            return self.get_response(request)
+        finally:
+            listcache.owner_editing.reset(editing)

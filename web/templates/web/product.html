@@ -179,7 +179,7 @@
   <h2 id="related-title" class="section-title">{% copy "product.related.title" set=product.product_set.name %}</h2>
   <ul class="results results--compact">
     {% for product in related %}
-      {% include "web/includes/product_row.html" with heading_tag="h3" %}
+      {% include "web/includes/product_row.html" with heading_tag="h3" image_size="compact" %}
     {% endfor %}
   </ul>
 </section>

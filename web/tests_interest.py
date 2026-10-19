@@ -138,15 +138,16 @@ class HomeDropsOrderTests(TestCase):
 
     def test_the_order_is_cached_under_its_own_key_and_cleared_with_the_lists(self):
         from catalogue import signals
+        from catalogue.testing import lists_due
 
         self.assertIn(signals.HOME_DROPS_CACHE_KEY, signals.LIST_CACHE_KEYS)
         self.assertEqual(signals.HOME_DROPS_CACHE_KEY, "web:home-drops:v1")
         self.assertEqual(signals.HOME_CACHE_KEY, "web:home-lists:v6")   # now holds the featured spares too
         self.upcoming("Sooner Set", days=5)
         self.client.get(reverse("web:home"))
-        self.assertIsNotNone(cache.get(signals.HOME_DROPS_CACHE_KEY))
+        self.assertFalse(lists_due(signals.HOME_DROPS_CACHE_KEY))
         signals.clear_list_caches_now(force=True)
-        self.assertIsNone(cache.get(signals.HOME_DROPS_CACHE_KEY))
+        self.assertTrue(lists_due(signals.HOME_DROPS_CACHE_KEY))
 
     def test_home_queries_do_not_grow_with_the_number_of_sets(self):
         for n in range(2):

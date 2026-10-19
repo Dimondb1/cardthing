@@ -295,14 +295,14 @@ class ChecksPageTests(TestCase):
 
     def test_hide_and_merge_clear_the_lists_inside_the_window(self):
         from .signals import HOME_CACHE_KEY
-        from .testing import inside_the_cache_window
+        from .testing import cache_lists, inside_the_cache_window, lists_due
 
         inside_the_cache_window(self)
         for action in ({"action": "hide", "listing": self.dear.pk},
                        {"action": "merge", "keep": self.a.pk, "other": [self.b.pk]}):
-            cache.set(HOME_CACHE_KEY, "lists", 300)
+            cache_lists(HOME_CACHE_KEY)
             self.client.post(self.url, action)
-            self.assertIsNone(cache.get(HOME_CACHE_KEY), action["action"])
+            self.assertTrue(lists_due(HOME_CACHE_KEY), action["action"])
         self.assertFalse(Product.objects.get(pk=self.b.pk).is_active)
 
 class UnpricedTests(TestCase):

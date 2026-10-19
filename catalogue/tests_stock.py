@@ -248,21 +248,21 @@ class WatchStockTests(TestCase):
         self.assertIn("1 back in stock", out.getvalue())
 
     def test_a_restock_clears_the_lists_inside_the_window(self):
-        from django.core.cache import cache
+        from web.listcache import peek
 
         from .signals import HOME_CACHE_KEY
-        from .testing import inside_the_cache_window
+        from .testing import cache_lists, inside_the_cache_window
 
         product = make_product(make_set(make_game()))
         shop = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
         make_listing(product, shop, availability="out_of_stock", url="https://shop.example/products/etb", hours_ago=5)
         inside_the_cache_window(self)
-        cache.set(HOME_CACHE_KEY, "lists", 300)
+        cache_lists()
         payload = json.dumps({"variants": [{"price": 4999, "available": True}]}).encode()
         with mock.patch("catalogue.importers.fetch", lambda url: payload):
             call_command("watch_stock", "--pause", "0", stdout=StringIO())
-        # Cleared, then built again from the restocked prices at the end of the run (web/warming.py).
-        featured, trending, spares = cache.get(HOME_CACHE_KEY)
+        # Marked stale, then built again in place from the restocked prices at the end of the run (web/warming.py).
+        featured, trending, spares = peek(HOME_CACHE_KEY)
         self.assertEqual([p.pk for p in trending], [product.pk])
 
     def test_a_variant_without_a_price_is_not_reported_back_in_stock(self):

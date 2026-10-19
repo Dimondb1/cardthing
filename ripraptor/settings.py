@@ -77,6 +77,7 @@ MIDDLEWARE = [
     "web.middleware.SmallFormMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "web.middleware.OwnerEditsMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "web.middleware.PageViewMiddleware",
@@ -154,6 +155,11 @@ RIPRAPTOR_CACHE_CLEAR_SECONDS = 0 if TESTING else 30
 # test cases never commit, so the tests clear at once unless a test turns this on.
 RIPRAPTOR_CLEAR_AFTER_COMMIT = not TESTING
 
+# A cleared list is served until a background job builds it again (web/listcache.py). The tests run no
+# background jobs, so there a cleared list is built by the next request, as a missing one is, unless a
+# test turns this on.
+RIPRAPTOR_SERVE_STALE = not TESTING
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -223,6 +229,10 @@ RIPRAPTOR_PAGE_SIZE = 24
 # Trending and biggest savings are worked out from every priced product, so
 # the result is kept for this many seconds.
 RIPRAPTOR_HOME_CACHE_SECONDS = int(os.environ.get("RIPRAPTOR_HOME_CACHE_SECONDS", "300"))
+
+# A cached list (web/listcache.py) is served while the background jobs build it again, stale or not, but
+# never once its build started longer ago than this: the visitor who finds it that old builds it first.
+RIPRAPTOR_LIST_MAX_STALE_SECONDS = int(os.environ.get("RIPRAPTOR_LIST_MAX_STALE_SECONDS", "600"))
 
 # A product counts as "back in stock" for this long after a shop restocks it.
 

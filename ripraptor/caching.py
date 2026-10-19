@@ -16,6 +16,10 @@ from pathlib import Path
 logger = logging.getLogger("ripraptor")
 
 SERVER_CACHE_DIR = "/var/lib/ripraptor/cache"
+# Django's file cache deletes a random third of its files whenever it holds more than MAX_ENTRIES (300 by
+# default). The Claude judge keeps an entry per shop page it read, so 300 can be passed, and the cull can take
+# the page lists, leaving a visitor to build them. Counting the files costs a folder listing either way.
+FILE_CACHE_MAX_ENTRIES = 20000
 
 MEMORY_CACHE = {
     "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
@@ -43,4 +47,5 @@ def shared_caches(directory):
             "so imports cannot clear what the site has cached.", directory, exc,
         )
         return {"default": dict(MEMORY_CACHE)}
-    return {"default": {"BACKEND": "django.core.cache.backends.filebased.FileBasedCache", "LOCATION": str(directory)}}
+    return {"default": {"BACKEND": "django.core.cache.backends.filebased.FileBasedCache", "LOCATION": str(directory),
+                        "OPTIONS": {"MAX_ENTRIES": FILE_CACHE_MAX_ENTRIES}}}

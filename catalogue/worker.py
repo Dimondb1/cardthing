@@ -126,9 +126,9 @@ GONE = (404, 410)
 PROBE_BATCH = 30
 # A listing checked this recently is not probed: a shop read or a probe has just seen it.
 RECENTLY_CHECKED = timedelta(minutes=8)
-# The cached page lists (web/warming.py) are built again this long before RIPRAPTOR_HOME_CACHE_SECONDS would
-# let them lapse, so while the reader runs a visitor never finds them expired.
-WARM_AHEAD = timedelta(seconds=60)
+# The reader looks for cached page lists that are due a build (web/warming.py) at least this often, and at
+# once after a forced clear or when one is missing. Looking reads every list, so not on every five-second turn.
+WARM_CHECK = timedelta(seconds=30)
 IMPORT_LOCK_HOLD_LIMIT = timedelta(minutes=20)
 
 MARKETPLACES = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
@@ -399,6 +399,7 @@ class Worker:
         # built them all.
         self.warm = warm
         self.last_warm = None
+        self.warm_forced = None
 
     # Planning ---------------------------------------------------------------------------------
 
@@ -906,21 +907,22 @@ class Worker:
         self.keep_pages_warm(now)
 
     def keep_pages_warm(self, now):
-        """Build the cached page lists a job's price changes cleared, on the next turn after the clear, and
-        build them all again before they would expire, so visitors find them ready. Runs on the main loop,
-        never in a reading thread, and a failure only waits for the next turn: visitors build the lists
-        themselves meanwhile, as they always could."""
+        """Build the cached page lists that are due (cleared by a job's price changes, missing, or nearly
+        RIPRAPTOR_HOME_CACHE_SECONDS old) and replace them in place, so visitors are served a copy while
+        the new one is built and find it fresh soon after. Runs on the main loop, never in a reading thread,
+        and a failure only waits for the next turn: visitors are served the copy they have meanwhile, and
+        build one themselves only when there is none or it passed RIPRAPTOR_LIST_MAX_STALE_SECONDS."""
         if not self.warm:
             return
-        from web import warming
+        from web import listcache, warming
 
-        refresh = max(timedelta(seconds=settings.RIPRAPTOR_HOME_CACHE_SECONDS) - WARM_AHEAD, WARM_AHEAD)
         try:
-            if self.last_warm is None or now - self.last_warm >= refresh:
-                warming.warm_pages(fresh=True)
-                self.last_warm = now
-            elif warming.missing():
-                warming.warm_pages()
+            forced = listcache.cleared().get("forced_at")   # a hard clear raises it too
+            looked_lately = self.last_warm is not None and now - self.last_warm < WARM_CHECK
+            if looked_lately and forced == self.warm_forced and not warming.missing():
+                return
+            warming.warm_pages()
+            self.last_warm, self.warm_forced = now, forced
         except Exception:  # noqa: BLE001 - tried again on the next turn
             logger.exception("Could not build the cached page lists")
 

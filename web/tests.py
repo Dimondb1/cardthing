@@ -388,17 +388,20 @@ class SeoAndEdgeCaseTests(PageTestCase):
     def test_home_lists_are_cached_and_cleared_by_imports(self):
         from django.core.cache import cache
 
-        cache.clear()
-        self.client.get(reverse("web:home"))
-        self.assertIsNotNone(cache.get("web:home-lists:v6"))
         from catalogue.importers import run_import
         from catalogue.models import Retailer
+        from catalogue.testing import lists_due
 
+        cache.clear()
+        self.client.get(reverse("web:home"))
+        self.assertFalse(lists_due("web:home-lists:v6"))
         self.harbour.source_type = Retailer.Source.SHOPIFY
         self.harbour.source_url = "https://h.example/"
         self.harbour.save()
+        # The import marks the lists stale for the jobs to build again in place: the copy stays meanwhile.
         run_import(self.harbour, fetch=lambda url: b'{"products": []}')
-        self.assertIsNone(cache.get("web:home-lists:v6"))
+        self.assertIsNotNone(cache.get("web:home-lists:v6"))
+        self.assertTrue(lists_due("web:home-lists:v6"))
 
     def test_long_names_unicode_search_and_bad_pages(self):
         long_name = "Pokémon TCG: Scarlet & Violet " + "Ultra Premium Collection " * 5
@@ -1275,63 +1278,81 @@ class SharedCacheTests(PageTestCase):
 
         inside_the_cache_window(self)
 
+    def wall_clock(self):
+        """Patch the clock web.listcache dates its lists by, and the cache's own expiry clock, to ``wall[0]``,
+        which starts a little after the real time (the saves that set up the test marked the lists then), on an
+        empty cache."""
+        import time
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from django.core.cache import cache
+
+        cache.clear()
+        wall = [float(int(time.time()) + 1000)]
+        clock = SimpleNamespace(time=lambda: wall[0], monotonic=time.monotonic, sleep=time.sleep)
+        for target in ("web.listcache.time", "django.core.cache.backends.base.time",
+                       "django.core.cache.backends.locmem.time"):
+            patcher = mock.patch(target, clock)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return wall
+
     def test_two_cache_instances_on_one_directory_share_a_clear(self):
         from django.core.cache.backends.filebased import FileBasedCache
 
         from catalogue.importers import run_import
         from catalogue.models import Retailer
         from catalogue.signals import HOME_CACHE_KEY, clear_list_caches
+        from catalogue.testing import lists_due
         from web.feeds import feed_cache_key
 
         folder = self.file_cache()
         web_worker = FileBasedCache(folder, {})  # another process's view of the same folder
         self.client.get(reverse("web:home"))
-        self.assertIsNotNone(web_worker.get(HOME_CACHE_KEY))
+        self.assertFalse(lists_due(cache=web_worker))
         web_worker.set(feed_cache_key("deals"), "cached feed", 300)
         clear_list_caches(force=True)
-        self.assertIsNone(web_worker.get(HOME_CACHE_KEY))
+        # The lists stay for visitors while the jobs build them again; the feeds go.
+        self.assertIsNotNone(web_worker.get(HOME_CACHE_KEY))
+        self.assertTrue(lists_due(cache=web_worker))
         self.assertIsNone(web_worker.get(feed_cache_key("deals")))
 
-        # The end of an import in a cron process clears what the web worker cached, even inside the window.
+        # The end of an import in a cron process marks what the web worker cached, even inside the window.
         self.client.get(reverse("web:home"))
-        self.assertIsNotNone(web_worker.get(HOME_CACHE_KEY))
+        self.assertFalse(lists_due(cache=web_worker))
         self.inside_the_window()
         self.harbour.source_type = Retailer.Source.SHOPIFY
         self.harbour.source_url = "https://h.example/"
         self.harbour.save()
-        self.assertIsNotNone(web_worker.get(HOME_CACHE_KEY))
+        self.assertFalse(lists_due(cache=web_worker))
         run_import(self.harbour, fetch=lambda url: b'{"products": []}')
-        self.assertIsNone(web_worker.get(HOME_CACHE_KEY))
+        self.assertTrue(lists_due(cache=web_worker))
 
-    def test_clear_is_debounced_to_once_per_thirty_seconds_unless_forced(self):
-        from unittest import mock
-
-        from django.core.cache import cache
+    def test_an_ordinary_clear_waits_for_the_window_and_a_forced_one_does_not(self):
         from django.test import override_settings
 
         from catalogue import signals
+        from catalogue.testing import cache_lists, lists_due
+        from web import listcache
 
-        clock = mock.Mock(return_value=1000.0)
-        with override_settings(RIPRAPTOR_CACHE_CLEAR_SECONDS=30), \
-                mock.patch.object(signals, "_last_clear", None), mock.patch("catalogue.signals.time.monotonic", clock):
-            self.assertTrue(signals.clear_list_caches())
-            cache.set(signals.HOME_CACHE_KEY, "lists", 300)
-            clock.return_value = 1010.0
-            self.assertFalse(signals.clear_list_caches())
-            self.cheap.save()  # a save inside the window is skipped too
-            self.assertEqual(cache.get(signals.HOME_CACHE_KEY), "lists")
-            self.assertTrue(signals.clear_list_caches(force=True))
-            self.assertIsNone(cache.get(signals.HOME_CACHE_KEY))
-            cache.set(signals.HOME_CACHE_KEY, "lists", 300)
-            clock.return_value = 1039.9  # the forced clear started a new window
-            self.assertFalse(signals.clear_list_caches())
-            self.assertEqual(cache.get(signals.HOME_CACHE_KEY), "lists")
-            clock.return_value = 1040.0
+        wall = self.wall_clock()
+        start = wall[0]
+        with override_settings(RIPRAPTOR_CACHE_CLEAR_SECONDS=30):
+            cache_lists()
+            wall[0] = start + 10
             self.cheap.save()
-            self.assertIsNone(cache.get(signals.HOME_CACHE_KEY))
+            self.assertTrue(listcache.is_stale(signals.HOME_CACHE_KEY))
+            self.assertFalse(lists_due())   # ten seconds old: a run of saves does not rebuild it each time
+            wall[0] = start + 30
+            self.assertTrue(lists_due())    # thirty seconds old: the jobs build it again
+            cache_lists()
+            wall[0] = start + 31
+            self.assertFalse(lists_due())
+            self.assertTrue(signals.clear_list_caches(force=True))
+            self.assertTrue(lists_due())    # forced: at once, however young
 
-    def test_a_skipped_clear_makes_the_lists_expire_when_the_window_closes(self):
-        from types import SimpleNamespace
+    def test_feed_clears_are_debounced_to_once_per_thirty_seconds_unless_forced(self):
         from unittest import mock
 
         from django.core.cache import cache
@@ -1340,44 +1361,64 @@ class SharedCacheTests(PageTestCase):
         from catalogue import signals
         from web.feeds import feed_cache_key
 
-        clock = mock.Mock(return_value=1000.0)  # time.monotonic, for the debounce
-        wall = [5000.0]  # time.time, for the cache's own expiry
-        wall_clock = SimpleNamespace(time=lambda: wall[0])
+        feed = feed_cache_key("deals")
+        clock = mock.Mock(return_value=1000.0)
         with override_settings(RIPRAPTOR_CACHE_CLEAR_SECONDS=30), \
-                mock.patch.object(signals, "_last_clear", None), mock.patch("catalogue.signals.time.monotonic", clock), \
-                mock.patch("django.core.cache.backends.base.time", wall_clock), \
-                mock.patch("django.core.cache.backends.locmem.time", wall_clock):
+                mock.patch.object(signals, "_last_clear", None), mock.patch("catalogue.signals.time.monotonic", clock):
+            self.assertTrue(signals.clear_list_caches())
+            cache.set(feed, "feed", 300)
+            clock.return_value = 1010.0
+            self.assertFalse(signals.clear_list_caches())
+            self.cheap.save()  # a save inside the window is skipped too
+            self.assertEqual(cache.get(feed), "feed")
+            self.assertTrue(signals.clear_list_caches(force=True))
+            self.assertIsNone(cache.get(feed))
+            cache.set(feed, "feed", 300)
+            clock.return_value = 1039.9  # the forced clear started a new window
+            self.assertFalse(signals.clear_list_caches())
+            self.assertEqual(cache.get(feed), "feed")
+            clock.return_value = 1040.0
+            self.cheap.save()
+            self.assertIsNone(cache.get(feed))
+
+    def test_a_save_inside_the_window_shows_when_the_window_closes(self):
+        from unittest import mock
+
+        from django.core.cache import cache
+        from django.test import override_settings
+
+        from catalogue import signals
+        from web.feeds import feed_cache_key
+
+        clock = mock.Mock(return_value=1000.0)  # time.monotonic, for the feeds' debounce
+        wall = self.wall_clock()                # time.time, for the lists' age and the cache's own expiry
+        start = wall[0]
+        with override_settings(RIPRAPTOR_CACHE_CLEAR_SECONDS=30), \
+                mock.patch.object(signals, "_last_clear", None), mock.patch("catalogue.signals.time.monotonic", clock):
             self.cheap.save()  # clears and opens the window at 1000
             self.client.get(reverse("web:home"))  # a visitor refills the lists
             self.assertContains(self.client.get(reverse("web:home")), "Harbour Games")
             cache.set(feed_cache_key("deals"), "feed", 300)
 
-            clock.return_value, wall[0] = 1010.0, 5010.0
+            clock.return_value, wall[0] = 1010.0, start + 10
             self.cheap.is_active = False
-            self.cheap.save()  # skipped: the lists still show the hidden price for now
+            self.cheap.save()  # inside the window: the lists still show the hidden price for now
+            self.assertContains(self.client.get(reverse("web:home")), "Harbour Games")
+
+            # The window closes 30 seconds after the lists were built: they are built again, and the feed is gone.
+            clock.return_value, wall[0] = 1030.0, start + 30
+            self.assertIsNone(cache.get(feed_cache_key("deals")))
+            self.assertNotContains(self.client.get(reverse("web:home")), "Harbour Games")
             self.assertIsNotNone(cache.get(signals.HOME_CACHE_KEY))
 
-            # Another visitor refills inside the window, then a second skipped save lands.
-            cache.set(signals.DEALS_CACHE_KEY, "deals", 300)
-            clock.return_value, wall[0] = 1020.0, 5020.0
-            self.cheap.save()
-            self.assertEqual(cache.get(signals.DEALS_CACHE_KEY), "deals")
-
-            # The window closes at 1030: nothing cached before it outlives it.
-            clock.return_value, wall[0] = 1030.0, 5030.0
-            for key in (signals.HOME_CACHE_KEY, signals.DEALS_CACHE_KEY, feed_cache_key("deals")):
-                self.assertIsNone(cache.get(key), key)
-            self.assertNotContains(self.client.get(reverse("web:home")), "Harbour Games")
-
     def test_a_clear_waits_for_the_commit_and_a_rollback_never_clears(self):
-        from django.core.cache import cache
         from django.db import transaction
         from django.test import override_settings
 
         from catalogue import pricing
-        from catalogue.signals import HOME_CACHE_KEY
+        from catalogue.testing import cache_lists, lists_due
 
-        cache.set(HOME_CACHE_KEY, "lists", 300)
+        cache_lists()
         with override_settings(RIPRAPTOR_CLEAR_AFTER_COMMIT=True):
             # Django Admin saves a retailer inside a transaction: another worker must not refill the
             # lists from the old delivery costs between the clear and the commit.
@@ -1385,13 +1426,13 @@ class SharedCacheTests(PageTestCase):
                 with transaction.atomic():
                     pricing.apply_delivery_rules(self.harbour)
                     self.cheap.save()
-                self.assertEqual(cache.get(HOME_CACHE_KEY), "lists")
+                self.assertFalse(lists_due())
             self.assertEqual(len(callbacks), 2)
             for callback in callbacks:
                 callback()  # the commit
-            self.assertIsNone(cache.get(HOME_CACHE_KEY))
+            self.assertTrue(lists_due())
 
-            cache.set(HOME_CACHE_KEY, "lists", 300)
+            cache_lists()
             with self.captureOnCommitCallbacks() as callbacks:
                 try:
                     with transaction.atomic():
@@ -1400,26 +1441,25 @@ class SharedCacheTests(PageTestCase):
                 except ValueError:
                     pass
             self.assertEqual(callbacks, [])
-            self.assertEqual(cache.get(HOME_CACHE_KEY), "lists")
+            self.assertFalse(lists_due())
 
     def test_owner_fixes_and_delivery_rules_clear_inside_the_window(self):
         from django.contrib.auth import get_user_model
-        from django.core.cache import cache
 
         from catalogue import pricing
-        from catalogue.signals import HOME_CACHE_KEY
+        from catalogue.testing import cache_lists, lists_due
 
         self.inside_the_window()
-        cache.set(HOME_CACHE_KEY, "lists", 300)
+        cache_lists()
         self.cheap.save()
-        self.assertEqual(cache.get(HOME_CACHE_KEY), "lists")
+        self.assertFalse(lists_due())
         pricing.apply_delivery_rules(self.harbour)
-        self.assertIsNone(cache.get(HOME_CACHE_KEY))
+        self.assertTrue(lists_due())
 
-        cache.set(HOME_CACHE_KEY, "lists", 300)
+        cache_lists()
         self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.com", "pw"))
         self.client.post(reverse("checks"), {"action": "hide", "listing": self.cheap.pk})
-        self.assertIsNone(cache.get(HOME_CACHE_KEY))
+        self.assertTrue(lists_due())
 
     def test_unwritable_cache_dir_falls_back_to_locmem_with_a_warning(self):
         import os
@@ -1433,6 +1473,7 @@ class SharedCacheTests(PageTestCase):
         caches = shared_caches(folder / "cache")
         self.assertEqual(caches["default"]["BACKEND"], "django.core.cache.backends.filebased.FileBasedCache")
         self.assertEqual(caches["default"]["LOCATION"], str(folder / "cache"))
+        self.assertGreaterEqual(caches["default"]["OPTIONS"]["MAX_ENTRIES"], 10000)   # the lists are not culled
         self.assertEqual(os.listdir(folder / "cache"), [])  # the write check leaves nothing behind
 
         blocker = folder / "a-file"
@@ -1747,23 +1788,21 @@ class ComingSoonTests(PageTestCase):
         self.assertEqual(after, before)
 
     def test_the_block_is_cached_and_cleared_by_clear_list_caches(self):
-        from django.core.cache import cache
-
         from catalogue.signals import clear_list_caches
-        from catalogue.testing import inside_the_cache_window
+        from catalogue.testing import inside_the_cache_window, lists_due
 
         self.client.get(reverse("web:home"))
         self.client.get(self.game.get_absolute_url())
-        self.assertIsNotNone(cache.get("web:coming-soon:v2"))
-        self.assertIsNotNone(cache.get("web:coming-soon:v2:pokemon"))
+        self.assertFalse(lists_due("web:coming-soon:v2"))
+        self.assertFalse(lists_due("web:coming-soon:v2:pokemon"))
         # Inside the clear window a new set waits for the cache, then a forced clear shows it.
         inside_the_cache_window(self)
         make_set(self.game, name="Phantom Tides", slug="phantom-tides", code="PHT",
                  release_date=self.today + timedelta(days=30))
         self.assertNotIn("Phantom Tides", self.client.get(self.rows_url()).content.decode())
         clear_list_caches(force=True)
-        self.assertIsNone(cache.get("web:coming-soon:v2"))
-        self.assertIsNone(cache.get("web:coming-soon:v2:pokemon"))
+        self.assertTrue(lists_due("web:coming-soon:v2"))
+        self.assertTrue(lists_due("web:coming-soon:v2:pokemon"))
         self.assertIn("Phantom Tides", self.rows())
 
     def test_a_new_set_shows_at_once_outside_the_clear_window(self):

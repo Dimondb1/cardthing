@@ -19,9 +19,19 @@ SHOPIFY = "https://cdn.shopify.com/s/files/1/0548/7253/9391/files/etb-730071.png
 SHOP_DOMAIN = "https://www.harbourgames.example/cdn/shop/files/etb.jpg?v=1712345678"
 BIGCOMMERCE = ("https://cdn11.bigcommerce.com/s-b4ioc4fed9/images/stencil/500x659/products/419833/3422290/"
                "jBUuhjOif77IkEQINuhCXmphn__26810.1773215857.png?c=1")
-BIGCOMMERCE_OTHER = ("https://cdn11.bigcommerce.com/s-b4ioc4fed9/products/151102/images/2687308/"
-                     "8hMsW9QdgPnMg3W1DHKoWFpu1__64552.1762228120.386.513.jpg?c=1")
-OTHER = "https://unicorncards.co.uk/images/thumbs/0071632_yugioh-booster-box-_960.jpeg"
+# BigCommerce's older address for a product picture, and the stencil address of the same file (checked: the
+# CDN sends the same picture for both, and only the stencil one at a width asked for).
+BIGCOMMERCE_PRODUCT = ("https://cdn11.bigcommerce.com/s-b4ioc4fed9/products/151102/images/2687308/"
+                       "8hMsW9QdgPnMg3W1DHKoWFpu1__64552.1762228120.386.513.jpg?c=1")
+BIGCOMMERCE_PRODUCT_AT = ("https://cdn11.bigcommerce.com/s-b4ioc4fed9/images/stencil/{}w/products/151102/2687308/"
+                          "8hMsW9QdgPnMg3W1DHKoWFpu1__64552.1762228120.jpg?c=1")
+BIGCOMMERCE_OTHER = "https://cdn11.bigcommerce.com/s-b4ioc4fed9/content/banner.jpg"
+# Unicorn Cards (nopCommerce) keeps fixed copies named by their longest side; only the 415 and 960 ones are
+# there for every picture (checked October 2026).
+UNICORN = "https://unicorncards.co.uk/images/thumbs/0071632_yugioh-booster-box-_960.jpeg"
+UNICORN_415 = "https://unicorncards.co.uk/images/thumbs/0071632_yugioh-booster-box-_415.jpeg"
+# An address no CDN resizes.
+OTHER = "https://unicorncards.co.uk/images/uploaded/yugioh-booster-box.jpeg"
 
 
 class SizedImageUrlTests(TestCase):
@@ -51,6 +61,44 @@ class SizedImageUrlTests(TestCase):
         resized = sized_image_url(BIGCOMMERCE, 400)
         self.assertEqual(sized_image_url(resized, 800), BIGCOMMERCE.replace("/stencil/500x659/", "/stencil/800w/"))
 
+    def test_bigcommerce_older_product_address_becomes_the_stencil_one(self):
+        self.assertEqual(sized_image_url(BIGCOMMERCE_PRODUCT, 200), BIGCOMMERCE_PRODUCT_AT.format(200))
+        self.assertTrue(can_resize(BIGCOMMERCE_PRODUCT))
+        # Its stencil form is resized as any other from then on.
+        self.assertEqual(sized_image_url(sized_image_url(BIGCOMMERCE_PRODUCT, 200), 420),
+                         BIGCOMMERCE_PRODUCT_AT.format(420))
+        # Without the original's width and height in the name, or another extension, it is left alone.
+        for url in (BIGCOMMERCE_PRODUCT.replace(".386.513.jpg", ".jpg"),
+                    BIGCOMMERCE_PRODUCT.replace(".386.513.jpg", ".386.513.svg")):
+            with self.subTest(url=url):
+                self.assertEqual(sized_image_url(url, 200), url)
+
+    def test_unicorn_cards_gets_its_415_copy_where_that_is_wide_enough(self):
+        for width in (50, 200, 400, 415):
+            with self.subTest(width=width):
+                self.assertEqual(sized_image_url(UNICORN, width), UNICORN_415)
+        for width in (416, 540, 1200):
+            with self.subTest(width=width):
+                self.assertEqual(sized_image_url(UNICORN, width), UNICORN)
+        self.assertTrue(can_resize(UNICORN))
+        # Its other copies (100, 550) are not always made, and other forms are not its thumbs: left alone.
+        for url in (UNICORN.replace("_960.", "_550."), UNICORN.replace("_960.", "."),
+                    UNICORN.replace("unicorncards.co.uk", "unicorncards.example")):
+            with self.subTest(url=url):
+                self.assertEqual(sized_image_url(url, 200), url)
+        # The emails' copy is the small one too.
+        self.assertEqual(sized_image_url(UNICORN, alerts.EMAIL_WIDTH), UNICORN_415)
+
+    def test_unicorn_cards_srcset_names_only_the_copies_it_has(self):
+        for slot in ("cover", "card", "large"):
+            with self.subTest(slot=slot):
+                picture = responsive(UNICORN, slot)
+                self.assertEqual(picture["srcset"], f"{UNICORN_415} 415w, {UNICORN} 960w")
+                self.assertEqual(picture["sizes"], SLOTS[slot][1])
+                self.assertEqual(picture["full"], UNICORN)
+        self.assertEqual(responsive(UNICORN, "cover")["src"], UNICORN_415)
+        self.assertEqual(responsive(UNICORN, "large")["src"], UNICORN)
+
     def test_other_addresses_are_left_alone(self):
         for url in (BIGCOMMERCE_OTHER, OTHER, "/media/products/box.jpg", "https://img.example/box.jpg",
                     "https://cdn.example.com/s/files/box.jpg", ""):
@@ -66,8 +114,8 @@ class SizedImageUrlTests(TestCase):
     def test_responsive_offers_every_width_of_the_slot(self):
         picture = responsive(SHOPIFY, "card")
         self.assertEqual(picture["src"], SHOPIFY + "&width=200")
-        self.assertEqual(picture["srcset"],
-                         f"{SHOPIFY}&width=200 200w, {SHOPIFY}&width=400 400w, {SHOPIFY}&width=600 600w")
+        self.assertEqual(picture["srcset"], ", ".join(f"{SHOPIFY}&width={each} {each}w" for each in SLOTS["card"][2]))
+        self.assertEqual(SLOTS["card"][2], (80, 100, 130, 160, 200, 260, 330, 420, 540, 700, 900))
         self.assertEqual(picture["sizes"], SLOTS["card"][1])
         self.assertEqual(picture["full"], SHOPIFY)
         self.assertEqual(responsive(OTHER, "card"), {"src": OTHER, "srcset": "", "sizes": "", "full": OTHER})
@@ -81,14 +129,18 @@ ROOT_FONT = 16
 # "large" from 60rem depends on how tall the name and price box beside it is: 392 to 415 on a real product with
 # one shop, 464 to 515 on one with several.
 MEASURED = {
-    "card": {320: 65, 375: 84, 414: 97, 480: 119, 600: 159, 700: 193, 767: 215,
-             768: 84, 800: 89, 959: 116, 1024: 127, 1280: 154, 1920: 154},
-    "cover": {320: 34, 375: 44, 414: 52, 540: 75, 700: 104, 767: 117,
-              768: 70, 900: 87, 959: 94, 960: 53, 1024: 58, 1280: 71, 1920: 71},
-    "trend": {375: 133, 414: 152, 480: 184, 600: 243, 700: 292, 767: 325,
-              768: 123, 960: 123, 1024: 132, 1280: 160, 1920: 160},
-    "large": {320: 272, 375: 272, 767: 272, 959: 272, 960: (392, 464), 1280: (405, 508), 1920: (415, 515)},
-    "swipe": {375: 295, 414: 331, 480: 392, 600: 421, 767: 421, 768: 305, 1280: 305},
+    "card": {320: 74, 375: 95, 412: 109, 480: 135, 600: 181, 700: 219, 767: 245,
+             768: 96, 900: 121, 959: 132, 960: 132, 1024: 144, 1180: 174, 1280: 175, 1920: 175},
+    "cover": {320: 44, 375: 57, 412: 65, 480: 81, 600: 109, 700: 133, 767: 148,
+              768: 89, 900: 110, 959: 120, 960: 67, 1024: 74, 1180: 90, 1280: 90, 1920: 90},
+    "trend": {375: 151, 412: 172, 480: 209, 600: 276, 700: 332, 767: 369,
+              768: 141, 960: 141, 1024: 150, 1180: 181, 1280: 182, 1920: 182},
+    "large": {320: 272, 375: 272, 767: 272, 959: 272, 960: (352, 528), 1280: (352, 549), 1920: (354, 557)},
+    "swipe": {375: (295, 321), 412: (329, 358), 480: (392, 426), 600: (418, 454), 767: (418, 454),
+              768: (314, 341), 1280: (314, 341)},
+    "thumb": {320: 48, 1280: 48},
+    "row": {320: 64, 767: 64, 768: 88, 1920: 88},
+    "compact": {320: 56, 1280: 56},
 }
 
 
@@ -143,35 +195,53 @@ class SizesFollowTheLayoutTests(SimpleTestCase):
                 low, high = need if isinstance(need, tuple) else (need, need)
                 with self.subTest(slot=slot, viewport=viewport):
                     said = sizes_at(sizes, viewport)
-                    self.assertGreaterEqual(said, low * 0.8)
-                    self.assertLessEqual(said, high * 1.35)
+                    self.assertGreaterEqual(said, high * 0.9)
+                    self.assertLessEqual(said, max(high * 1.1, low * 1.4))
 
     def test_every_screen_gets_a_sharp_copy_and_not_a_needlessly_large_one(self):
         for slot, measured in MEASURED.items():
             _width, sizes, widths = SLOTS[slot]
             for viewport, need in measured.items():
                 largest_need = max(need) if isinstance(need, tuple) else need
-                for density in (1, 2):
+                # 3x screens are phones no wider than 430px; the largest copy (1200) caps anything bigger.
+                for density in (1, 1.75, 2) + ((3,) if viewport <= 430 else ()):
                     with self.subTest(slot=slot, viewport=viewport, density=density):
-                        copy = chosen(widths, sizes_at(sizes, viewport), density)
+                        said = sizes_at(sizes, viewport)
+                        copy = chosen(widths, said, density)
                         # Sharp: within 5% of the pixels the screen draws.
                         self.assertGreaterEqual(copy, largest_need * density * 0.95)
-                        # Not oversized: never more than about twice the width the screen draws, unless it is
-                        # the smallest copy offered.
+                        # Not oversized: never more than 1.3 times what ``sizes`` says, so no more than
+                        # Lighthouse allows, unless it is the smallest copy offered.
                         if copy > min(widths):
-                            self.assertLessEqual(copy, largest_need * density * 2.2)
+                            self.assertLessEqual(copy, said * density * 1.3)
+                        # Never a copy far larger than the picture drawn, whatever sizes says.
+                        if copy > min(widths):
+                            self.assertLessEqual(copy, largest_need * density * 1.75)
 
     def test_the_regressions_the_review_found(self):
-        card, cover, trend, large = (SLOTS[name] for name in ("card", "cover", "trend", "large"))
-        # A 2x screen 700px wide: the card picture is 193px, so it needs a 400 copy, not 200.
-        self.assertEqual(chosen(card[2], sizes_at(card[1], 700), 2), 400)
-        self.assertEqual(chosen(cover[2], sizes_at(cover[1], 767), 2), 400)
-        self.assertEqual(chosen(trend[2], sizes_at(trend[1], 700), 2), 600)
-        # A 1x desktop: the 400 to 515px hero takes the 600 copy, not the 1200 one.
+        card, cover, trend, large, row = (SLOTS[name] for name in ("card", "cover", "trend", "large", "row"))
+        # A 2x screen 700px wide: the card picture is 219px, so it needs a 540 copy, not 200.
+        self.assertEqual(chosen(card[2], sizes_at(card[1], 700), 2), 540)
+        self.assertEqual(chosen(cover[2], sizes_at(cover[1], 767), 2), 330)
+        self.assertEqual(chosen(trend[2], sizes_at(trend[1], 700), 2), 700)
+        # A 1x desktop: the 352 to 557px hero takes the 540 copy, not the 1200 one.
         for viewport in (960, 1280, 1920):
-            self.assertEqual(chosen(large[2], sizes_at(large[1], viewport), 1), 600)
-        # A 2x tablet: the 84px card takes the 200 copy, not the 400 one.
+            self.assertEqual(chosen(large[2], sizes_at(large[1], viewport), 1), 540)
+        # A 2x tablet: the 96px card takes the 200 copy, not the 400 one.
         self.assertEqual(chosen(card[2], sizes_at(card[1], 768), 2), 200)
+
+    def test_the_copies_lighthouse_flagged_on_a_412px_phone(self):
+        # Lighthouse's phone: 412px wide at 1.75. The home page's featured and Out now pictures (trend) are
+        # 172px, so 300 pixels: the 400 copy it was sent is now a 330 one. Rows are 64px, 112 pixels: 130, not 200.
+        trend, row = SLOTS["trend"], SLOTS["row"]
+        self.assertEqual(chosen(trend[2], sizes_at(trend[1], 412), 1.75), 330)
+        self.assertEqual(chosen(row[2], sizes_at(row[1], 412), 1.75), 130)
+
+    def test_every_step_is_at_most_thirty_three_percent_wider_than_the_one_before(self):
+        from catalogue.images import STEPS
+
+        for smaller, larger in zip(STEPS, STEPS[1:]):
+            self.assertLessEqual(larger / smaller, 1.34, (smaller, larger))
 
 
 def img_tags(body, size):
@@ -197,8 +267,10 @@ class PicturesOnPagesTests(TestCase):
         tags = img_tags(body, "large")
         self.assertEqual(len(tags), 1)
         tag = html.unescape(tags[0])
-        self.assertIn(f'src="{SHOPIFY}&width=600"', tag)
-        self.assertIn(f'srcset="{SHOPIFY}&width=600 600w, {SHOPIFY}&width=1200 1200w"', tag)
+        self.assertIn(f'src="{SHOPIFY}&width=540"', tag)
+        self.assertIn(f'srcset="{SHOPIFY}&width=330 330w, {SHOPIFY}&width=420 420w, {SHOPIFY}&width=540 540w, '
+                      f'{SHOPIFY}&width=700 700w, {SHOPIFY}&width=900 900w, {SHOPIFY}&width=1050 1050w, '
+                      f'{SHOPIFY}&width=1200 1200w"', tag)
         self.assertIn(f'sizes="{SLOTS["large"][1]}"', tag)
         self.assertIn('loading="eager"', tag)
         self.assertIn('fetchpriority="high"', tag)

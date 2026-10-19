@@ -2168,52 +2168,92 @@ longest real read (Amazon, about 37 minutes).
 
 ## Shared cache
 
-The home lists, the deals page, the newest drops and the feeds are kept in
-a cache for `RIPRAPTOR_HOME_CACHE_SECONDS` (five minutes) because they read
-every priced product. The cache is a folder of files, `RIPRAPTOR_CACHE_DIR`,
+The home lists, the deals page, the newest drops, the sets coming soon and
+the feeds are kept in a cache because they read every priced product. The cache is a folder of files, `RIPRAPTOR_CACHE_DIR`,
 shared by the web app's workers and every command, so when an import or the
 stock watcher finds a restock or a new pre-order, the site shows it on the
-next page load rather than up to five minutes later. On a server the folder
+next page load once the background jobs rebuild the lists, seconds later while the reader runs. On a server the folder
 is `/var/lib/ripraptor/cache` (`install.sh` creates it, owned by
 `ripraptor`); on your own computer it is `.cache` beside the code. Deleting
 the cache files (`*.djcache`) is always safe. The folder also holds
+`listcache/`, the times of the last clears and the build locks for the page
+lists (safe to delete too), and
 `crawl-paused` while Pause all is on: deleting it resumes reading. The folder outlives a restart, so `install.sh`
 empties it once the site has restarted on the new code: lists saved by the
 old code can lack a field a migration added.
 
 If the folder cannot be created or written, the site still runs: it logs
 "Cache folder ... cannot be used" and each process keeps its own cache, as
-before, so changes from imports take up to five minutes to show. Fix the
+before, so changes from imports take up to ten minutes to show. Fix the
 folder's owner and restart the site.
 
-Every saved listing or product clears the cached lists, but a process that
-cleared them less than 30 seconds ago skips the next clear, so a shop read
-that changes a few dozen prices clears a handful of times rather than once
-per price. A skipped clear makes the cached lists expire when those 30
-seconds are up instead, so no change stays hidden for longer. The end of
-every import, a restock found by the stock watcher, `tidy_listings` hiding
-eBay prices, a delivery rule change and the fixes on Things to check always
-clear at once. A clear waits until the change is committed, so the other
-worker cannot refill the lists from the rows as they were. The tests keep a
-memory cache of their own, so they never read or clear your development
-site's cache.
+Every saved listing or product clears the cached lists. A clear no longer
+deletes them: it notes the time in a small file (`listcache/cleared.json`),
+and every list built before it is stale (`web/listcache.py`). Each kind of
+clear keeps its own time, written under a file lock and only ever raised, so
+two processes clearing at once never undo each other's. Visitors keep being served the
+stale copy, with the time each of its prices was checked, while the
+background jobs build it again and replace it in place, so after the first
+fill the cache is never empty and a visitor never waits for a list because
+prices changed:
 
-Because the background reader changes prices all day, those clears are
-frequent, so the background jobs build the lists again straight after rather
-than leaving it to the next visitor (`web/warming.py`):
+- a list is built by a visitor only when there is none (an emptied cache) or
+  its build started more than `RIPRAPTOR_LIST_MAX_STALE_SECONDS` (ten
+  minutes) ago. That build holds a lock file (`flock`, which the system
+  lets go of if the process dies): other visitors and workers who need the
+  same list wait for it (up to 20 seconds, then build their own) instead of
+  all building it at once. Django's own cache cannot be the lock: its file
+  cache checks and writes in two steps, so two workers could both take it;
+- the end of every import, a restock found by the stock watcher,
+  `tidy_listings` hiding eBay prices, a delivery rule change and the fixes on
+  Things to check force a clear: the jobs build the lists again on their next
+  turn. An ordinary save lets a list stay until it is 30 seconds old
+  (`RIPRAPTOR_CACHE_CLEAR_SECONDS`), so a shop read that changes a few dozen
+  prices causes one build rather than one per price;
+- the owner's own changes clear hard: any form the owner sends while
+  signed in (a save in Django Admin, a hide or a merge on Things to check)
+  stops the copies built before it being served at all
+  (`web.middleware.OwnerEditsMiddleware`). The reader builds them on its
+  next turn, and a visitor who comes first builds them, so a hidden product
+  or a corrected price is gone at once rather than after up to a minute;
+- a clear waits until the change is committed, so another process cannot
+  rebuild the lists from the rows as they were. The home and Deals lists
+  read the same offers once; each is dated from when those offers were read,
+  so a change saved between the two builds leaves the second one stale;
+- the cache keeps up to 20,000 files. Past Django's default of 300, which
+  the Claude judge's entries (one per shop page it read) can pass, Django
+  deletes a random third of the files, the page lists among them.
 
-- the background reader fills any cleared list on the next turn of its loop
-  (every 5 seconds), and builds them all again a minute before they would
-  expire, so while it runs a visitor never finds them missing;
-- `tidy_all`, `import_prices` and `watch_stock` build them when they finish,
-  for when the reader is not running;
+The feeds, which no job builds, are still deleted by a clear, at most once
+every 30 seconds per process unless forced. The tests keep a cache of their
+own, so they never read or clear your development site's cache, and as they
+run no background jobs they build a cleared list on the next request
+(`RIPRAPTOR_SERVE_STALE` is off in the tests only).
+
+The background jobs that build the lists again (`web/warming.py`):
+
+- the background reader looks at the start of its loop (every 5 seconds)
+  for a forced clear or a missing list, and every 30 seconds for ordinary
+  clears and lists nearly `RIPRAPTOR_HOME_CACHE_SECONDS` old, and builds
+  only those;
+- `tidy_all`, `import_prices` and `watch_stock` build what is due when they
+  finish;
+- cron runs `python manage.py warm_pages --due` every five minutes on its
+  own lock, the floor for when the reader is not running;
 - `install.sh` runs `python manage.py warm_pages` after emptying the cache.
 
-Run `python manage.py warm_pages` to build them all by hand, or
-`python manage.py warm_pages --missing` for only those not in the cache. A
-list is built by the same code a page would run and still expires after
-`RIPRAPTOR_HOME_CACHE_SECONDS`, so prices age out of it under the usual
-stale rules.
+Visitors' requests never build a list in the background. The site runs two
+gunicorn sync workers on a small server: a build is seconds of Python, and a
+thread in a web worker would slow every page that worker serves meanwhile
+and die whenever the worker restarts. The reader is already a separate
+process, so it does the building.
+
+Run `python manage.py warm_pages` to build them all by hand,
+`python manage.py warm_pages --due` for only those cleared, missing or
+nearly expired, or `python manage.py warm_pages --missing` for only those
+not in the cache. A list is built by the same code a page would run, so
+prices age out of it under the usual stale rules at its next build, and no
+list is served more than ten minutes after its build started.
 
 The lists read only what they need: the products in stock are picked from
 their offers first, and the full rows (game, set, prices) are loaded for the
@@ -2236,7 +2276,8 @@ index.
 | `RIPRAPTOR_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page, and is emailed when a refer a friend referral completes (see "Refer a friend"). When set, List your shop enquiries are emailed here instead of to `RIPRAPTOR_INBOX_NOTIFY_EMAIL`. |
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
-| `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
+| `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How old the cached page lists may grow before the background jobs build them again. Imports and edits mark them stale sooner. |
+| `RIPRAPTOR_LIST_MAX_STALE_SECONDS` | 600 | A cached page list is never served once its build started longer ago than this: the visitor who finds it builds it first. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
 | `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1.5 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing. Restart `ripraptor-worker` after changing it. |
 | `RIPRAPTOR_AMAZON_ACCESS_KEY`  |         | Product Advertising API key from Amazon Associates. |

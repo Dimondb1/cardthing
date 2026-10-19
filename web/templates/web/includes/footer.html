@@ -19,6 +19,7 @@
       <a href="{% url 'web:watchlist' %}" data-watch-link="{% url 'web:watchlist' %}">{% copy "site.nav.watchlist" %}</a>
       <a href="{% url 'web:games' %}">{% copy "site.nav.games" %}</a>
       <a href="{% url 'web:contact' %}">{% copy "site.nav.contact" %}</a>
+      {% if refer_advertised %}<a href="{% url 'web:refer' %}">{% copy "refer.nav" %}</a>{% endif %}
       <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a>
       <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a>
       {% if ga_id and not private_link %}<button type="button" class="site-footer__choice" data-consent-open hidden>{% copy "site.nav.consent" %}</button>{% endif %}

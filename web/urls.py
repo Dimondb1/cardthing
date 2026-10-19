@@ -1,7 +1,7 @@
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path
 
-from . import views
+from . import refer_views, views
 from .feeds import DealsFeed
 from .sitemaps import SITEMAPS
 
@@ -28,6 +28,13 @@ urlpatterns = [
     path("alerts/<slug:slug>/", views.alert_ask, name="alert_ask"),
     path("alerts/confirm/<str:token>/", views.alert_confirm, name="alert_confirm"),
     path("alerts/stop/<str:token>/", views.alert_stop, name="alert_stop"),
+    path("refer/", refer_views.refer, name="refer"),
+    # Private links from the refer a friend emails, like the alerts' (no third-party script, not indexed).
+    path("refer/confirm/<str:token>/", refer_views.refer_confirm, name="refer_confirm"),
+    path("refer/claim/<str:token>/", refer_views.refer_claim, name="refer_claim"),
+    path("refer/address/<str:token>/", refer_views.refer_address, name="refer_address"),
+    path("refer/stop/<str:token>/", refer_views.refer_stop, name="refer_stop"),
+    path("r/<str:code>/", refer_views.refer_friend, name="refer_friend"),
     path("contact/", views.contact, name="contact"),
     path("contact/c/<str:token>/", views.contact_thread, name="contact_thread"),
     path("games/", views.games, name="games"),

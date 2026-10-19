@@ -24,7 +24,8 @@ from django.views.decorators.http import require_GET, require_POST
 from catalogue import alerts, insights, mail, offers, pricing, traffic
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
-    DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, RemovedProduct, Retailer, stale_cutoff,
+    DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
+    Retailer, stale_cutoff,
 )
 from catalogue.search import apply_search
 from catalogue.types import type_choices, type_label
@@ -232,7 +233,8 @@ def stock_tab_links(request, counts):
 
 
 def home_lists():
-    """Featured deals (home page) and trending (deals page), cached because they read every priced product."""
+    """Featured deals and their spares (home page) and trending (deals page), as (featured, trending, spares),
+    cached because they read every priced product."""
     from django.core.cache import cache
 
     from catalogue.signals import HOME_CACHE_KEY as key
@@ -240,7 +242,7 @@ def home_lists():
     if cached is not None:
         return cached
     priced = Product.objects.for_lists().filter(in_stock_count__gte=1).prefetch_related(offers.buyable_prefetch())
-    featured = featured_deals(priced)
+    featured, spares = featured_pick(priced)
     popular = pricing.popular(limit=8) or list(priced.order_by(F("release").desc(nulls_last=True))[:8])
     ids = [product.pk for product in popular]
     with_offers = {
@@ -259,12 +261,13 @@ def home_lists():
         if before is not None and product.lowest_known is not None and before != product.lowest_known:
             product.movement = product.lowest_known - before
         trending.append(product)
-    cache.set(key, (featured, trending), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
-    return featured, trending
+    cache.set(key, (featured, trending, spares), settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    return featured, trending, spares
 
 
 FEATURED_SLOTS = 8
 FEATURED_EARNING = 6   # three in four featured deals go to shops that pay a commission
+FEATURED_SPARES = 2    # per side: qualifying deals rendered hidden, for the visitor's own games (interest.js)
 
 
 def earns(listing):
@@ -274,6 +277,14 @@ def earns(listing):
 
 def featured_deals(products):
     """Good deals for the top of the home page, as (product, summary), three in four from shops that earn.
+    The rows of featured_pick, without its spares."""
+    return featured_pick(products)[0]
+
+
+def featured_pick(products):
+    """(rows, spares): the featured deals, and the next qualifying deals on each side, for the home page.
+
+    The rows are the featured deals:
 
     Only genuine deals qualify: the cheapest price is a saving on the next
     shop or the lowest in the trending window. Among those, deals whose
@@ -306,7 +317,12 @@ def featured_deals(products):
         rows += [pay.pop(0) for _ in range(min(3, len(pay)))]
         if rest:
             rows.append(rest.pop(0))
-    return rows[:FEATURED_SLOTS]
+    rows = rows[:FEATURED_SLOTS]
+    # Spares pass the same tests and come next on their side. The page renders them hidden; in the browser,
+    # interest.js lets a spare from the visitor's own game take the place of a shown deal from the same side
+    # (earning for earning, other for other), so the three in four never changes and nothing is sent anywhere.
+    spares = paying[len(picked_paying):][:FEATURED_SPARES] + other[len(picked_other):][:FEATURED_SPARES]
+    return rows, spares
 
 
 # Games shown first on the home page, in this order; the rest follow by size.
@@ -452,6 +468,36 @@ def coming_soon_sets(game=None, limit=8):
     return rows if limit is None else rows[:limit]
 
 
+COMING_SOON_RENDERED = 8   # rendered on the home page; the first COMING_SOON_ON_HOME show, the rest wait hidden
+
+
+def home_coming_soon():
+    """The home page's Coming soon rows: sets a visitor can pre-order now, most popular first
+    (catalogue.popularity), COMING_SOON_RENDERED of them. Without script the first COMING_SOON_ON_HOME show;
+    interest.js may bring the visitor's own games forward from the rest, in the browser only. Cached with the
+    other lists, so the order is the same for everyone and costs one query a cache fill."""
+    from django.core.cache import cache
+
+    from catalogue.popularity import rank_sets
+    from catalogue.signals import HOME_DROPS_CACHE_KEY as key
+
+    rows = cache.get(key)
+    if rows is None:
+        rows = rank_sets([row for row in coming_soon_sets(limit=None) if row.preorder_count])[:COMING_SOON_RENDERED]
+        cache.set(key, rows, settings.RIPRAPTOR_HOME_CACHE_SECONDS)
+    return rows
+
+
+def interest_lexicon(games):
+    """[[slug, words...], ...] for interest.js: each game's name, short name and search aliases, so a recent
+    search or a viewed product's name can be matched to its game in the browser."""
+    lexicon = []
+    for game in games:
+        words = [game.name, game.short_name, *game.search_aliases.split(",")]
+        lexicon.append([game.slug, *dict.fromkeys(w.strip().lower() for w in words if w.strip())])
+    return lexicon
+
+
 def date_source_label(product_set):
     """Where a set's date came from, for 'Date from ...': a release source's name, or nothing when the
     owner set it, it predates the sources, or the source is a shop's title. Exclamation marks in a
@@ -527,7 +573,7 @@ def home(request):
     games.sort(key=lambda g: (rank.get(g.slug, len(PINNED_GAMES)), -g.product_count, g.name))
     game_covers(games)
     last_checked = Listing.objects.live().aggregate(latest=Max("last_checked"))["latest"]
-    featured = home_lists()[0]
+    featured, _, featured_spares = home_lists()
     return render(
         request,
         "web/home.html",
@@ -536,8 +582,11 @@ def home(request):
             "product_types": home_types(),
             "last_checked": last_checked,
             "featured": featured,
+            "featured_spares": featured_spares,
             "latest": home_drops_new(),
-            "coming_soon": [row for row in coming_soon_sets(limit=None) if row.preorder_count][:COMING_SOON_ON_HOME],
+            "coming_soon": home_coming_soon(),
+            "coming_soon_shown": COMING_SOON_ON_HOME,
+            "interest_games": interest_lexicon(games),
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
@@ -920,6 +969,9 @@ def terms(request):
             "canonical_url": request.build_absolute_uri(request.path),
             "amazon": bool(settings.RIPRAPTOR_AMAZON_PARTNER_TAG)
             or Retailer.objects.filter(is_active=True, source_type=Retailer.Source.AMAZON).exists(),
+            # The keyring offer's rules and data use, while it runs or anyone's details are still held.
+            # A friend's referral and address can outlive the referrer's details, so either counts.
+            "refer_terms": ReferralSettings.current().is_on or Referrer.objects.exists() or Referral.objects.exists(),
         },
     )
 
@@ -1674,7 +1726,7 @@ def admin_manifest(request):
 @require_GET
 def robots_txt(request):
     private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/", "Disallow: /watchlist/",
-               "Disallow: /alerts/", "Disallow: /contact/c/"]
+               "Disallow: /alerts/", "Disallow: /contact/c/", "Disallow: /refer/", "Disallow: /r/"]
     lines = ["User-agent: *", *private, ""]
     # Named so a crawler that only honours its own section still gets the same answer.
     for agent in AI_CRAWLERS:

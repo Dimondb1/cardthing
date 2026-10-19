@@ -1,0 +1,6 @@
+{% load sitecopy %}{% autoescape off %}{% copy "refer.email.address.body" %}
+
+{% copy "refer.address.button" %}:
+{{ address_url }}
+
+{% copy "refer.stop.button" %}: {{ stop_url }}{% endautoescape %}

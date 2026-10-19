@@ -1,0 +1,8 @@
+{% extends "web/email/refer_base.html" %}{% load sitecopy %}
+{% block title %}{% copy "refer.claim.title" %}{% endblock %}
+{% block text %}{% copy "refer.email.friend.body" %}{% endblock %}
+{% block button_url %}{{ confirm_url }}{% endblock %}
+{% block button %}{% copy "refer.claim.button" %}{% endblock %}
+{# Sent before the address is confirmed: the confirm action only, nothing promotional. #}
+{% block about %}{% endblock %}
+{% block after %}<p style="margin:0;color:#545b68;">{% copy "refer.email.confirm.note" %}</p>{% endblock %}

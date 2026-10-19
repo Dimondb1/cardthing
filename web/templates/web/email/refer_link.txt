@@ -1,0 +1,9 @@
+{% load sitecopy %}{% autoescape off %}{% copy "refer.email.link.body" %}
+
+{% copy "refer.link.label" %}:
+{{ share_url }}
+
+{% copy "refer.email.link.button" %}:
+{{ page_url }}
+
+{% copy "refer.stop.button" %}: {{ stop_url }}{% endautoescape %}

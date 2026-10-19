@@ -61,19 +61,10 @@
     <h2 id="featured-title" class="section-head__title">{% copy "home.featured.title" %}</h2>
     <a class="section-head__all" href="{% url 'web:deals' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
   </div>
-  <ul class="trending" data-scroll>
-    {% for product, summary in featured %}
-    <li class="trending__item">
-      <a class="trending__link" href="{{ product.get_absolute_url }}">
-        {% product_image product "trend" %}
-        <span class="trending__name">{{ product.name }}</span>
-        <span class="trending__price">{% price summary.best.shown_price %}</span>
-        <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=summary.best %}</span> · {{ summary.best.retailer.name }}</span>
-        {% if summary.saving %}<span class="trending__move trending__move--down">{% copy "home.savings.save_vs" amount=summary.saving|gbp retailer=summary.second.retailer.name %}</span>{% elif summary.badge == "best_week" %}<span class="trending__move trending__move--down">{% copy "product.badge.best_week" %}</span>{% elif summary.badge %}<span class="trending__move trending__move--down">{% copy "product.badge.lowest_today" %}</span>{% endif %}
-        <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
-      </a>
-    </li>
-    {% endfor %}
+  {# Every featured deal shows without script; the spares after them pass the same tests and wait hidden, so interest.js can put the visitor's own games first, a spare only ever taking the place of a deal from the same side. #}
+  <ul class="trending" data-scroll data-interest data-interest-show="{{ featured|length }}">
+    {% for product, summary in featured %}{% include "web/includes/featured_card.html" %}{% endfor %}
+    {% for product, summary in featured_spares %}{% include "web/includes/featured_card.html" with spare=True %}{% endfor %}
   </ul>
 </section>
 {% endif %}
@@ -98,7 +89,7 @@
     <h2 id="latest-title" class="section-head__title"><svg class="section-head__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" fill="currentColor"/></svg>{% copy "home.new.title" %}</h2>
     <a class="section-head__all" href="{% url 'web:drops' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
   </div>
-  {% if coming_soon %}{% include "web/includes/coming_soon.html" with show_game=True nested=True %}{% endif %}
+  {% if coming_soon %}{% include "web/includes/coming_soon.html" with show_game=True nested=True shown=coming_soon_shown %}{% endif %}
   {% if latest %}
   <h3 id="out-title" class="sub-head"><a class="sub-head__link" href="{% url 'web:drops' %}?show=out">{% copy "drops.tab.out" %} <span aria-hidden="true">›</span></a></h3>
   <ul class="trending" data-scroll aria-labelledby="out-title">
@@ -121,6 +112,8 @@
   {% endif %}
 </section>
 {% endif %}
+{# Runs as soon as the rows above are read, before they are painted: the visitor's own games first, from this browser's history only. #}
+{% if featured or coming_soon %}{{ interest_games|json_script:"interest-games" }}<script>{% inline_static "js/interest.js" %}</script>{% endif %}
 
 <section class="home-section" aria-labelledby="watch-title">
   <a class="poster poster--watch" href="{% url 'web:watchlist' %}">

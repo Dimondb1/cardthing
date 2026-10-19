@@ -1,0 +1,11 @@
+{% load sitecopy %}<form class="contact-form refer-form" method="post" action="{{ action }}">
+  {% csrf_token %}
+  {% if error %}<p class="contact-form__error" role="alert">{% copy error %}</p>{% endif %}
+  <label class="contact-form__label" for="refer-email">{% copy "refer.form.email" %}</label>
+  <input id="refer-email" class="contact-form__input" type="email" name="email" maxlength="254" required autocomplete="email" inputmode="email" value="{{ email }}" aria-describedby="refer-email-note">
+  <p class="contact-form__note" id="refer-email-note">{% copy note %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
+  <label class="refer-form__agree"><input type="checkbox" name="agree" value="1" required> <span>{% copy "refer.form.agree" %}</span></label>
+  <p class="contact-form__note"><a href="{% url 'web:terms' %}#terms-refer">{% copy "refer.form.terms_link" %}</a></p>
+  <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+  <p><button class="button" type="submit">{% copy button %}</button></p>
+</form>

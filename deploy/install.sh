@@ -150,6 +150,8 @@ systemctl reload caddy
 # (every 10 minutes) and the drop reminders (every 15, at 9 past, on their own lock) never depend on the reader, the Claude judge looks every 5 minutes on its own lock and does nothing
 # until the owner saves a key and switches it on in Things to check, check_worker logs whether the reader is alive (and tells the owner,
 # at most once a day, when it has stopped or never starts), and backup_db keeps five nightly copies.
+# tidy_referrals runs hourly at 55 past on its own lock: it retries refer a friend address emails and deletes
+# details the offer no longer needs (see the Terms page).
 # The alerts start at 3 past the tens and the judge at 2 past the fives, so no more than two of these
 # Django processes start in the same minute: on 14 Oct 2026 three at once beside the reader and the
 # site ran a 1 GB server out of memory.
@@ -170,7 +172,8 @@ echo "PYTHONUNBUFFERED=1
 51 6 * * * cd $DIR && set -a && . ./.env && set +a && flock -w 1200 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py check_set_retail >> /var/log/ripraptor-import.log 2>&1
 20 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1
 40 0 * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
-45 4 5 * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
+45 4 5 * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1
+55 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 flock -n /tmp/ripraptor-refer.lock .venv/bin/python manage.py tidy_referrals >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
 touch /var/log/ripraptor-import.log && chown ripraptor /var/log/ripraptor-import.log
 
 # The background reader. A shop never read before has no next read, so on its first start it reads

@@ -22,11 +22,11 @@
       {% block footer_note %}{% endblock %}
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 12px;"><tr>
         <td style="border:1px solid #cfd4dc;border-radius:999px;background:#ffffff;">
-          <a href="{{ stop_url }}" style="display:inline-block;padding:9px 18px;font-size:14px;font-weight:bold;color:#1f2430;text-decoration:none;">Unsubscribe</a>
+          <a href="{{ stop_url }}" style="display:inline-block;padding:9px 18px;font-size:14px;font-weight:bold;color:#1f2430;text-decoration:none;">{% block stop_label %}Unsubscribe{% endblock %}</a>
         </td>
       </tr></table>
-      <p style="margin:0;">Unsubscribing deletes your email address from {{ site_name }} at once. <a href="{{ site_url }}/terms/#terms-data" style="color:#cc4410;">How we use it</a></p>
-      <p style="margin:8px 0 0;">{{ site_name }} compares UK prices for sealed trading card products and may earn a commission when you buy through its links.</p>
+      <p style="margin:0;">{% block stop_note %}Unsubscribing deletes your email address from {{ site_name }} at once.{% endblock %} <a href="{{ site_url }}/terms/#terms-data" style="color:#cc4410;">How we use it</a></p>
+      {% block about %}<p style="margin:8px 0 0;">{{ site_name }} compares UK prices for sealed trading card products and may earn a commission when you buy through its links.</p>{% endblock %}
     </td></tr>
   </table>
 </td></tr>

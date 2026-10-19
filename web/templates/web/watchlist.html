@@ -47,4 +47,5 @@
 </div>
 {% endif %}
 </div>
+{% if refer_advertised %}<p class="small-print"><a href="{% url 'web:refer' %}">{% copy "refer.nav" %}</a></p>{% endif %}
 {% endblock %}

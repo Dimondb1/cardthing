@@ -28,7 +28,14 @@
     <h2 id="terms-data">{% copy "terms.data.title" %}</h2>
     <div class="prose">{% copy "terms.data.body" %}</div>
     <div class="prose">{% copy "terms.data.shops" %}</div>
+    {% if refer_terms %}<div class="prose">{% copy "terms.data.refer" %}</div>{% endif %}
     {% if ga_id %}<div class="prose">{% copy "terms.analytics" %}</div>{% endif %}
   </section>
+  {% if refer_terms %}
+  <section aria-labelledby="terms-refer">
+    <h2 id="terms-refer">{% copy "terms.refer.title" %}</h2>
+    <div class="prose">{% copy "terms.refer.body" %}</div>
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

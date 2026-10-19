@@ -4,26 +4,40 @@
 (() => {
   const VIEWED = "ripraptor.viewed";
   const SEARCHES = "ripraptor.searches";
+  const GAMES = "ripraptor.games";   // game and set pages visited, for interest.js on the home page
   const KEEP_VIEWED = 12;
   const KEEP_SEARCHES = 8;
-  const load = (key) => { try { return JSON.parse(localStorage.getItem(key)) || []; } catch (e) { return []; } };
+  const KEEP_GAMES = 8;
+  // Only lists are trusted from storage, so odd values never stop the page.
+  const load = (key) => {
+    try { const value = JSON.parse(localStorage.getItem(key)); return Array.isArray(value) ? value : []; } catch (e) { return []; }
+  };
   const store = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* private mode */ } };
+  const items = (key) => load(key).filter((v) => v !== null && typeof v === "object");
+  const words = (key) => load(key).filter((v) => typeof v === "string");
   const forget = (key) => { try { localStorage.removeItem(key); } catch (e) { /* private mode */ } };
 
   // Remember this product page.
   const head = document.querySelector("[data-viewed-slug]");
   if (head) {
     const slug = head.dataset.viewedSlug;
-    const viewed = load(VIEWED).filter((v) => v.slug !== slug);
-    viewed.unshift({ slug, name: head.dataset.viewedName });
+    const viewed = items(VIEWED).filter((v) => v.slug !== slug);
+    viewed.unshift({ slug, name: head.dataset.viewedName, game: head.dataset.viewedGame || "" });
     store(VIEWED, viewed.slice(0, KEEP_VIEWED));
+  }
+
+  // Remember this game (a game page, or one of its sets).
+  const visited = document.querySelector("[data-visited-game]");
+  if (visited) {
+    const game = visited.dataset.visitedGame;
+    store(GAMES, [game, ...words(GAMES).filter((g) => g !== game)].slice(0, KEEP_GAMES));
   }
 
   // Remember this search.
   const query = document.querySelector("[data-search-query]");
   if (query && query.dataset.searchQuery.trim()) {
     const term = query.dataset.searchQuery.trim();
-    const searches = load(SEARCHES).filter((s) => s.toLowerCase() !== term.toLowerCase());
+    const searches = words(SEARCHES).filter((s) => s.toLowerCase() !== term.toLowerCase());
     searches.unshift(term);
     store(SEARCHES, searches.slice(0, KEEP_SEARCHES));
   }
@@ -33,8 +47,8 @@
   const picks = document.querySelector("[data-picks]");
   if (picks) {
     const slugOf = (item) => item.slug || (item.url || "").split("/").filter(Boolean).pop() || "";
-    const slugs = [...load(VIEWED), ...load("ripraptor.saved")].map(slugOf).filter(Boolean);
-    const terms = load(SEARCHES).slice(0, 3);
+    const slugs = [...items(VIEWED), ...items("ripraptor.saved")].map(slugOf).filter(Boolean);
+    const terms = words(SEARCHES).slice(0, 3);
     if (slugs.length || terms.length) {
       const query = `p=${encodeURIComponent([...new Set(slugs)].join(","))}&s=${encodeURIComponent(terms.join("|"))}`;
       fetch(`${picks.dataset.endpoint}?${query}`)
@@ -51,9 +65,10 @@
   // The home page section.
   const section = document.querySelector("[data-resume]");
   if (!section) return;
-  const searches = load(SEARCHES);
-  const viewed = load(VIEWED);
-  if (!searches.length && !viewed.length) return;
+  const searches = words(SEARCHES);
+  const viewed = items(VIEWED);
+  // Game pages visited count too: they reorder the home page, so Clear history must be offered for them.
+  if (!searches.length && !viewed.length && !load(GAMES).length) return;
 
   const searchBlock = section.querySelector("[data-resume-searches]");
   const searchList = section.querySelector("[data-resume-search-list]");
@@ -88,6 +103,7 @@
   section.querySelector("[data-resume-clear]").addEventListener("click", () => {
     forget(VIEWED);
     forget(SEARCHES);
+    forget(GAMES);
     section.hidden = true;
   });
 })();

@@ -2,9 +2,11 @@ import re
 
 from django.conf import settings
 
-# Addresses that are private links: a message thread and the links in stock alert emails. analytics.js
+from catalogue import referrals
+
+# Addresses that are private links: a message thread and the links in stock alert and refer a friend emails. analytics.js
 # holds the same pattern.
-PRIVATE_LINK = re.compile(r"^/(?:contact/c|alerts/(?:confirm|stop))/")
+PRIVATE_LINK = re.compile(r"^/(?:contact/c|alerts/(?:confirm|stop)|refer/(?:confirm|claim|address|stop)|r)/")
 
 
 def site(request):
@@ -18,4 +20,6 @@ def site(request):
         # No third-party script runs on these, even on a 404 for a mistyped one, and they pass on no address.
         "private_link": bool(PRIVATE_LINK.match(request.path)),
         "trending_days": settings.RIPRAPTOR_TRENDING_DAYS,
+        # The Refer a friend link, read from the cache alone so no page gains a query.
+        "refer_advertised": referrals.advertised(),
     }

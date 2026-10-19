@@ -1700,3 +1700,164 @@ class DataChange(models.Model):
 
     def __str__(self):
         return self.what
+
+
+# Refer a friend --------------------------------------------------------------------------------------
+# The keyring promotion (catalogue/referrals.py). Email and postal addresses are kept only while they are
+# needed and deleted by tidy_referrals; what stops one person claiming twice after that is PromoMark, a
+# one-way fingerprint that cannot be turned back into an address.
+
+
+def referral_code():
+    import secrets
+
+    return secrets.token_urlsafe(8)
+
+
+class ReferralSettings(models.Model):
+    """The one row of owner controls for the promotion."""
+
+    is_on = models.BooleanField(
+        "promotion on", default=False,
+        help_text="Off ends the promotion at once: the pages say it has ended and every link in old emails stops "
+                  "working, address forms included.",
+    )
+    keyrings_left = models.PositiveIntegerField(
+        "keyrings left", default=0,
+        help_text="Keyrings you still have to give. Each completed referral takes two (one each), and a cancelled one "
+                  "gives them back. Under two left, nobody new can take part, but people already promised one can "
+                  "still send their address.",
+    )
+    ends_on = models.DateField(
+        "last day", null=True, blank=True,
+        help_text="Optional. No new sign-ups or referrals after this day. People already promised a keyring can "
+                  "still send their address.",
+    )
+    max_per_referrer = models.PositiveSmallIntegerField(
+        "keyrings per person", default=1,
+        help_text="Completed referrals one person can earn a keyring for.",
+    )
+
+    class Meta:
+        verbose_name = "refer a friend setting"
+        verbose_name_plural = "refer a friend settings"
+
+    def __str__(self):
+        return "Refer a friend"
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    @classmethod
+    def current(cls):
+        """The row, or the defaults unsaved: a page that only reads it never writes."""
+        return cls.objects.filter(pk=1).first() or cls(pk=1)
+
+
+class Referrer(models.Model):
+    """Someone who asked for a link to share. Their own email address, given by them and confirmed."""
+
+    email = models.EmailField(max_length=254)
+    email_key = models.CharField(max_length=64, unique=True, help_text="One-way fingerprint of the address.")
+    code = models.CharField(max_length=16, unique=True, default=referral_code)
+    token = models.CharField(max_length=40, unique=True, default=alert_token)
+    connection = models.CharField(max_length=32, blank=True, help_text="One-way fingerprint of the connection.")
+    network = models.CharField(max_length=32, blank=True, help_text="One-way fingerprint of the internet address.")
+    created_at = models.DateTimeField(default=timezone.now)
+    confirm_sent_at = models.DateTimeField("confirmation sent", null=True, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "referrer"
+
+    def __str__(self):
+        return self.email or "Deleted address"
+
+
+class Referral(models.Model):
+    """A friend who followed a referrer's link and gave their own email address. Complete once confirmed."""
+
+    class Status(models.TextChoices):
+        WAITING = "waiting", "Waiting for the friend to confirm"
+        REVIEW = "review", "For review"
+        COMPLETE = "complete", "Complete"
+        CANCELLED = "cancelled", "Cancelled"
+
+    referrer = models.ForeignKey(Referrer, on_delete=models.SET_NULL, null=True, blank=True, related_name="referrals")
+    friend_email = models.EmailField(max_length=254, blank=True)
+    friend_key = models.CharField(max_length=64, unique=True, help_text="One-way fingerprint of the address.")
+    token = models.CharField(max_length=40, unique=True, default=alert_token)
+    connection = models.CharField(max_length=32, blank=True)
+    network = models.CharField(max_length=32, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.WAITING, db_index=True)
+    review_reason = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    confirm_sent_at = models.DateTimeField("confirmation sent", null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    emails_sent_at = models.DateTimeField("address emails sent", null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "referral"
+
+    def __str__(self):
+        return f"Referral {self.pk}"
+
+
+class KeyringClaim(models.Model):
+    """One keyring promised to one person, and the address they gave for it."""
+
+    class Role(models.TextChoices):
+        REFERRER = "referrer", "Referrer"
+        FRIEND = "friend", "Friend"
+
+    referral = models.ForeignKey(Referral, on_delete=models.CASCADE, related_name="claims")
+    role = models.CharField(max_length=10, choices=Role.choices)
+    token = models.CharField(max_length=40, unique=True, default=alert_token)
+    created_at = models.DateTimeField(default=timezone.now)
+    name = models.CharField(max_length=80, blank=True)
+    line1 = models.CharField("address line 1", max_length=100, blank=True)
+    line2 = models.CharField("address line 2", max_length=100, blank=True)
+    town = models.CharField(max_length=60, blank=True)
+    postcode = models.CharField(max_length=10, blank=True)
+    address_key = models.CharField(max_length=64, blank=True)
+    same_postcode = models.BooleanField(
+        "check first", default=False,
+        help_text="Another address at this postcode has had a keyring. Check it is a different household before "
+                  "posting; cancel the referral if not.",
+    )
+    submitted_at = models.DateTimeField("address sent", null=True, blank=True, db_index=True)
+    posted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ["submitted_at"]
+        unique_together = [("referral", "role")]
+        verbose_name = "keyring to post"
+        verbose_name_plural = "keyrings to post"
+
+    def __str__(self):
+        return f"Keyring for the {self.get_role_display().lower()} of referral {self.referral_id}"
+
+
+class PromoMark(models.Model):
+    """A one-way fingerprint of an email or postal address that has had a keyring. Kept after the address itself
+    is deleted, so the same person cannot take part again. It cannot be turned back into the address."""
+
+    class Kind(models.TextChoices):
+        EMAIL = "email", "Email address"
+        ADDRESS = "address", "Postal address"
+        POSTCODE = "postcode", "Postcode"
+
+    kind = models.CharField(max_length=8, choices=Kind.choices)
+    digest = models.CharField(max_length=64)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        indexes = [models.Index(fields=["kind", "digest"])]
+        verbose_name = "used address fingerprint"
+
+    def __str__(self):
+        return f"{self.get_kind_display()} {self.digest[:8]}"

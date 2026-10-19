@@ -1,11 +1,12 @@
 from django.contrib import admin, messages
+from django.db import models
 from django.db.models import Count
 from django.utils import timezone
 from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    ClaudeAsk, DropAlert, ProductAlias, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    ClaudeAsk, DropAlert, KeyringClaim, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -445,3 +446,172 @@ class ClaudeAskAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+# Refer a friend ----------------------------------------------------------------------------------
+
+@admin.register(ReferralSettings)
+class ReferralSettingsAdmin(admin.ModelAdmin):
+    """The one row of owner controls. The list goes straight to it."""
+
+    fields = ("is_on", "keyrings_left", "ends_on", "max_per_referrer", "summary")
+    readonly_fields = ("summary",)
+
+    def has_add_permission(self, request):
+        return False   # the list opens the one row, made on first use; checking here would cost every admin page a query
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        row = ReferralSettings.load()
+        return HttpResponseRedirect(reverse("admin:catalogue_referralsettings_change", args=[row.pk]))
+
+    @admin.display(description="Now")
+    def summary(self, obj):
+        from . import referrals
+
+        counts = Referral.objects.aggregate(
+            review=Count("pk", filter=models.Q(status=Referral.Status.REVIEW)),
+            complete=Count("pk", filter=models.Q(status=Referral.Status.COMPLETE)),
+        )
+        to_post = referrals.to_post(KeyringClaim.objects.all()).count()
+        state = "open to new people" if referrals.taking_part(obj) else "closed to new people"
+        return (f"The offer is {state}. Referrals for review: {counts['review']}. Complete: {counts['complete']}. "
+                f"Keyrings to post: {to_post}.")
+
+    def save_model(self, request, obj, form, change):
+        from . import referrals
+
+        super().save_model(request, obj, form, change)
+        referrals.refresh_flag(obj)
+
+
+@admin.register(Referrer)
+class ReferrerAdmin(admin.ModelAdmin):
+    list_display = ("email", "created_at", "confirmed_at")
+    list_filter = ("confirmed_at",)
+    search_fields = ("email",)
+    readonly_fields = ("email", "email_key", "code", "token", "connection", "network", "created_at",
+                       "confirm_sent_at", "confirmed_at")
+
+    def has_add_permission(self, request):
+        return False
+
+
+class ClaimInline(admin.TabularInline):
+    model = KeyringClaim
+    fields = ("role", "submitted_at", "posted_at")
+    readonly_fields = fields
+    extra = 0
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Referral)
+class ReferralAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "status", "review_reason", "created_at", "completed_at", "emails_sent_at")
+    list_filter = ("status",)
+    list_select_related = ("referrer",)
+    readonly_fields = ("referrer", "friend_email", "friend_key", "token", "connection", "network", "status",
+                       "review_reason", "created_at", "confirm_sent_at", "completed_at", "emails_sent_at", "cancelled_at")
+    inlines = [ClaimInline]
+    actions = ["approve", "cancel"]
+
+    def has_add_permission(self, request):
+        return False
+
+    # Deleting puts any keyring still promised back in stock, as Cancel does.
+    def delete_model(self, request, obj):
+        from . import referrals
+
+        referrals.delete_referrals(Referral.objects.filter(pk=obj.pk))
+
+    def delete_queryset(self, request, queryset):
+        from . import referrals
+
+        referrals.delete_referrals(queryset)
+
+    @admin.action(description="Approve: email both people for their address")
+    def approve(self, request, queryset):
+        from . import referrals
+
+        done = sum(referrals.approve(referral) for referral in queryset.filter(status=Referral.Status.REVIEW))
+        self.message_user(request, f"Approved {done}. Referrals not held for review were left alone.")
+
+    @admin.action(description="Cancel: no more emails, keyrings back to stock")
+    def cancel(self, request, queryset):
+        from . import referrals
+
+        done = sum(referrals.cancel(referral) for referral in queryset)
+        self.message_user(request, f"Cancelled {done}. Nobody was emailed.", messages.WARNING)
+
+
+class ToPostFilter(admin.SimpleListFilter):
+    title = "state"
+    parameter_name = "state"
+
+    def lookups(self, request, model_admin):
+        return [("to_post", "To post"), ("waiting", "Address not sent yet"), ("posted", "Posted")]
+
+    def queryset(self, request, queryset):
+        from . import referrals
+
+        if self.value() == "to_post":
+            return referrals.to_post(queryset)
+        if self.value() == "waiting":
+            return queryset.filter(submitted_at__isnull=True)
+        if self.value() == "posted":
+            return queryset.filter(posted_at__isnull=False)
+        return queryset
+
+
+@admin.register(KeyringClaim)
+class KeyringClaimAdmin(admin.ModelAdmin):
+    list_display = ("name", "address", "check_first", "role", "status", "submitted_at", "posted_at")
+    list_filter = (ToPostFilter, "same_postcode")
+    search_fields = ("name", "postcode")
+    list_select_related = ("referral",)
+    readonly_fields = ("referral", "role", "token", "created_at", "name", "line1", "line2", "town", "postcode",
+                       "address_key", "same_postcode", "submitted_at", "posted_at")
+    actions = ["mark_posted"]
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description="Address")
+    def address(self, obj):
+        """Every line, ready to copy onto an envelope."""
+        return ", ".join(part for part in (obj.line1, obj.line2, obj.town, obj.postcode) if part)
+
+    @admin.display(description="Check first", boolean=True, ordering="same_postcode")
+    def check_first(self, obj):
+        return obj.same_postcode
+
+    @admin.display(description="Referral", ordering="referral__status")
+    def status(self, obj):
+        return obj.referral.get_status_display()
+
+    # Deleting puts a keyring still promised back in stock, so Keyrings left matches the drawer.
+    def delete_model(self, request, obj):
+        from . import referrals
+
+        referrals.delete_claims(KeyringClaim.objects.filter(pk=obj.pk))
+
+    def delete_queryset(self, request, queryset):
+        from . import referrals
+
+        referrals.delete_claims(queryset)
+
+    @admin.action(description="Mark as posted")
+    def mark_posted(self, request, queryset):
+        from . import referrals
+
+        done = referrals.mark_posted(queryset)
+        self.message_user(request, f"Marked {done} as posted. Their addresses are deleted 60 days from now. "
+                                   f"Addresses not sent yet, already posted or of a cancelled referral were left alone.")

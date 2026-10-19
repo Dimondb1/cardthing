@@ -11,7 +11,7 @@
   </ol>
 </nav>
 
-<div class="product-head{% if product.name|length > 60 %} product-head--long{% endif %}{% if cheapest and not cheapest.delivery_known %} product-head--note{% endif %}" data-viewed-slug="{{ product.slug }}" data-viewed-name="{{ product.name }}">
+<div class="product-head{% if product.name|length > 60 %} product-head--long{% endif %}{% if cheapest and not cheapest.delivery_known %} product-head--note{% endif %}" data-viewed-slug="{{ product.slug }}" data-viewed-name="{{ product.name }}" data-viewed-game="{{ product.game.slug }}">
   <div class="product-intro">
     <h1 class="product-title">{{ product.name }}</h1>
     <p class="product-facts">{{ product.type_name }} · {{ product.language_name|default:"English" }}</p>

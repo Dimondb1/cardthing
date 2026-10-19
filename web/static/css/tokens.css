@@ -28,7 +28,10 @@
   --page-width: 70rem;           /* 1120px: wide enough for six cards, narrow enough to feel dense */
   --gutter: 1rem;
   --gutter-wide: 2rem;
-  --panel-width: 30rem;          /* a card pinned to the screen corner on wide screens, such as the analytics question */
+  --panel-width: 30rem;
+  --form-width: 40rem;           /* a column of form fields, such as the refer a friend forms */
+  --field-short: 12rem;          /* a box for a short value, such as a postcode */
+  --footer-line-min: 18rem;      /* the footer's commission line never gets narrower than this beside the links */          /* a card pinned to the screen corner on wide screens, such as the analytics question */
   --density: 1;
 
   /* Golden ratio ---------------------------------------------------------

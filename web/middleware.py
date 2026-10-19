@@ -4,6 +4,8 @@ One cookie is set, holding only "1", so a browser that comes back on another
 day counts as a returning visitor. It carries no identifier.
 """
 
+from django.http import HttpResponse
+
 from catalogue.insights import RETURN_COOKIE, RETURN_COOKIE_DAYS, is_bot, record_view
 from catalogue.models import DailyPageView
 
@@ -40,3 +42,24 @@ class PageViewMiddleware:
                     httponly=True, samesite="Lax", secure=request.is_secure(),
                 )
         return response
+
+
+# The refer a friend forms take an email address or a postal address: a body over this is refused before
+# Django reads it, and before the CSRF check reads it either.
+SMALL_FORM_PATHS = ("/refer/", "/r/")
+SMALL_FORM_BYTES = 4096
+
+
+class SmallFormMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.method == "POST" and request.path.startswith(SMALL_FORM_PATHS):
+            try:
+                length = int(request.META.get("CONTENT_LENGTH") or 0)
+            except ValueError:
+                length = SMALL_FORM_BYTES + 1
+            if length > SMALL_FORM_BYTES or request.META.get("HTTP_TRANSFER_ENCODING"):
+                return HttpResponse(status=413)
+        return self.get_response(request)

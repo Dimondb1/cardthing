@@ -3,6 +3,7 @@
 {% block content %}
 {% inbox_unread as unread %}
 {% worker_stopped as stopped %}
+{% refer_waiting as refer %}
 <div class="module" style="margin-bottom: 20px;">
   <table>
     <caption><a href="{% url 'admin:inbox_conversation_changelist' %}" class="section">Messages</a></caption>
@@ -22,6 +23,15 @@
     <tr><th scope="row"><a href="{% url 'crawl' %}">Whether each shop is being read, with buttons to read one now or pause reading</a></th><td></td></tr>
   </table>
 </div>
+{% if refer %}
+<div class="module" style="margin-bottom: 20px;">
+  <table>
+    <caption><a href="{% url 'admin:catalogue_referralsettings_changelist' %}" class="section">Refer a friend</a></caption>
+    <tr><th scope="row"><a href="{% url 'admin:catalogue_keyringclaim_changelist' %}?state=to_post">{% if refer.to_post %}<strong>{{ refer.to_post }} keyring{{ refer.to_post|pluralize }} to post</strong>{% if refer.check %}, {{ refer.check }} to check first{% endif %}{% else %}No keyrings to post{% endif %}</a></th><td></td></tr>
+    <tr><th scope="row"><a href="{% url 'admin:catalogue_referral_changelist' %}?status__exact=review">{% if refer.review %}<strong>{{ refer.review }} referral{{ refer.review|pluralize }} for review</strong>{% else %}No referrals for review{% endif %}</a></th><td></td></tr>
+  </table>
+</div>
+{% endif %}
 {% if request.user.is_superuser %}
 <div class="module" style="margin-bottom: 20px;">
   <table>

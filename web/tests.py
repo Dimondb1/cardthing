@@ -388,7 +388,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
 
         cache.clear()
         self.client.get(reverse("web:home"))
-        self.assertIsNotNone(cache.get("web:home-lists:v5"))
+        self.assertIsNotNone(cache.get("web:home-lists:v6"))
         from catalogue.importers import run_import
         from catalogue.models import Retailer
 
@@ -396,7 +396,7 @@ class SeoAndEdgeCaseTests(PageTestCase):
         self.harbour.source_url = "https://h.example/"
         self.harbour.save()
         run_import(self.harbour, fetch=lambda url: b'{"products": []}')
-        self.assertIsNone(cache.get("web:home-lists:v5"))
+        self.assertIsNone(cache.get("web:home-lists:v6"))
 
     def test_long_names_unicode_search_and_bad_pages(self):
         long_name = "Pokémon TCG: Scarlet & Violet " + "Ultra Premium Collection " * 5
@@ -1538,11 +1538,15 @@ class ComingSoonTests(PageTestCase):
                                    release_date=self.today + timedelta(days=n + 1))
             self.add_preorder(product_set)
         home = self.block(self.client.get(reverse("web:home")).content.decode())
-        self.assertEqual(home.count('class="coming__row"'), 3)
+        # With no views, clicks or reminders and one shop each, popularity is soonness: the three soonest show.
+        # The rest are rendered hidden, for the visitor's own games (interest.js), and show without script.
+        rows = home.split('<li class="coming__row"')[1:]
+        shown = "".join(row for row in rows if not row.split(">", 1)[0].endswith(" hidden"))
+        self.assertEqual(len(rows) - shown.count("data-game="), 2)
         for name in ("Future 0", "Future 1", "Future 2"):
-            self.assertIn(name, home)
-        self.assertNotIn("Future 3", home)
-        self.assertNotIn("Ascended Heroes", home)
+            self.assertIn(name, shown)
+        self.assertNotIn("Future 3", shown)
+        self.assertNotIn("Ascended Heroes", shown)
         # The game page and the drops page still list every one.
         self.assertEqual(self.rows().count('class="coming__row"'), 5)
         drops = self.client.get(reverse("web:drops")).content.decode()

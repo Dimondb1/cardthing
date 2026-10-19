@@ -2102,7 +2102,7 @@ site's cache.
 | `DJANGO_ALLOWED_HOSTS`         | `localhost,127.0.0.1` | Comma separated. |
 | `DJANGO_CSRF_TRUSTED_ORIGINS`  |         | Comma separated, with scheme. |
 | `DJANGO_SQLITE_PATH`           | `db.sqlite3` | |
-| `RIPRAPTOR_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page. |
+| `RIPRAPTOR_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page, and is emailed when a refer a friend referral completes (see "Refer a friend"). |
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How long trending and savings are kept. Cleared by imports and edits. |
@@ -2314,7 +2314,8 @@ the wording), and Out now about fourteen, however many drops there are.
 ### Coming soon rows
 
 The home page has one Drops section, the drops page in small: up to 3
-Coming soon rows (only sets a shop takes pre-orders for) under a "Coming
+Coming soon rows (only sets a shop takes pre-orders for, most popular
+first, see "Your games first" below) under a "Coming
 soon" heading that opens `/drops/`, then an "Out now" row of products just
 out and in stock (the same products as `/drops/?show=out`, which its heading
 opens), so everything it shows is behind its link. The home page and each
@@ -2426,6 +2427,47 @@ the type's outline, linking to the search page filtered to it. That is all:
 savings, price drops, trending and restocks are on the Deals page and every
 set is on the Games page. Every product card in a row ends with the same
 "Compare prices" button.
+
+### Your games first (Drops and Featured deals)
+
+The home page's Coming soon rows and Featured deals are put in one order
+for everyone on the server, cached like the other lists, and then each
+browser puts its own games first. Nothing about the visitor is sent or kept.
+
+On the server, Coming soon is ordered by popularity
+(`catalogue/popularity.py`), from counts the site already keeps for the last
+seven days, none of them about a person:
+
+    interest = views + 4 x clicks + 8 x reminders + 3 x shops
+    soonness = 0.5 ^ (days until the drop / 21)   (undated counts as 28 days)
+    score    = (1 + interest) x soonness
+
+Views are product page views of the set's products (robots are never
+counted), clicks are clicks through to a shop for them, reminders are the
+confirmed drop reminders waiting for the set, and shops are the UK shops
+taking pre-orders. Soonness halves every three weeks, so a set six weeks
+away needs about four times the interest of one out this week to rank above
+it. Ties go to the sooner date. The home page renders the top 8
+(`COMING_SOON_RENDERED`) and shows 3; the rest are `hidden`, so without
+script the page shows the three most popular. The order is cached under
+`web:home-drops:v1` and costs one query a cache fill. Game pages and the
+drops page keep their soonest-first order.
+
+Featured deals keep their rules exactly (`featured_pick` in
+`web/views.py`): the same eight deals in the same order without script.
+Up to two spares on each side (shops that pay a commission and shops that
+do not) are the next qualifying deals, rendered hidden.
+
+In the browser, `web/static/js/interest.js` (included inline straight after
+those rows, so it runs before they are painted and nothing visibly moves)
+reads this browser's own history: game and set pages visited, saved
+products, recently viewed products and recent searches, matched to games
+by name, short name and search aliases. It puts the visitor's games first,
+keeping the server's order within each, shows the top 3 drops, and lets a
+spare deal from the visitor's game take the place of the last shown deal
+from the same side that is not, so three in four featured deals still go to
+shops that pay a commission. It makes no network calls. Clear history on
+the home page forgets the games too.
 
 ### The raptor
 
@@ -2580,6 +2622,96 @@ Amazon) has the product in stock or on pre-order, since the email would go
 at once. `deploy/install.sh` writes the moment it first runs this code into
 `.env`, so nothing needs doing by hand; without the setting no pre-order
 email is sent and the form and emails read as before.
+
+## Refer a friend
+
+A keyring promotion: when someone shares their link and a friend joins through it, both get a free RipRaptor
+3D keyring by post. UK only, whilst stocks last, and you can stop it at any time. All its wording is in admin
+under Site wording, "Refer a friend keyring offer", with its rules and data use on the Terms page.
+
+**Why the referrer never types in a friend's email address.** Under PECR, an email we send to an address
+someone else gave us is our marketing to a person who never agreed to it. So each person gives us only their
+own address, and the referrer shares their link themselves: WhatsApp, a text, their own email app (the
+"Send by email" button opens it with the message filled in; we send nothing), Copy link, or the phone's share
+sheet. Every one works as a plain link without JavaScript, except Copy link and the share sheet, which appear
+only when the browser offers them.
+
+This lowers the PECR risk but does not remove it. The ICO treats a business that rewards people for sending
+its marketing to friends as the instigator of those messages, and the WhatsApp, text and email buttons fill in
+a message we wrote (`refer.share.message`). If you want the lowest risk, shorten that wording to just the link,
+or keep only Copy link and the share sheet so people write their own words. That is your call; it is not done
+for you.
+
+**The flow.**
+
+1. `/refer/`: the referrer gives their email address and ticks the terms. We email a confirm link.
+2. The confirm link (`/refer/confirm/<token>/`) shows their link, `/r/<code>/`, with the share buttons, and
+   emails it to them. The same link shows the page again later.
+3. The friend opens `/r/<code>/`, reads one line about RipRaptor and the offer, and gives their own address.
+   We email them a link to `/refer/claim/<token>/`, a page with a Claim my keyring button (a button, so a
+   mail scanner opening the link cannot claim).
+4. Pressing it completes the referral: two keyrings are taken from stock and you are told by push (ntfy) and
+   by email to `RIPRAPTOR_CONTACT_EMAIL`. Neither names a person or an email address. Unless it is held for
+   review, both people are emailed a private link to an address form (`/refer/address/<token>/`, 30 days).
+5. The form takes name, address lines, town and a UK postcode, and nothing else. You see sent addresses in
+   admin under **Keyrings to post** (filter "To post", which leaves out cancelled referrals); tick them and
+   choose **Mark as posted**. The admin home page has a **Refer a friend** card with the number to post and
+   the number held for review, each linking to its list. A row marked **Check first** is a second address at
+   a postcode that has already had a keyring (a flat number is easy to add): make sure it is another
+   household before posting, and cancel the referral if not.
+
+**Your controls** (admin, **Refer a friend settings**): the on/off switch, **Keyrings left** (each completed
+referral takes two, a cancelled one gives them back), an optional **Last day** and **Keyrings per person**
+(default 1; the Terms wording says one, so change it too if you raise this). Off ends the offer at once:
+`/refer/` and every `/r/` link say "This offer has ended.", confirm and claim links stop, and so do address
+links. Out of keyrings or past the last day stops new people only; anyone already promised a keyring can
+still send their address. Under **Referrals**, **Approve** sends the address emails for a referral held for
+review and **Cancel** stops it (no email to anyone, keyrings back to stock, its links stop). The footer and
+the watchlist page show "Refer a friend, get a free keyring" only while new people can join.
+
+**Rules against abuse.**
+
+- One keyring per email address ever, and one per household (postcode with the house and flat numbers from
+  both address lines; a second address at the same postcode is marked Check first rather than refused). Email
+  addresses are compared as people: anything after a `+` is ignored, and for Gmail the dots too. These are
+  kept as one-way fingerprints (`PromoMark`) after the addresses themselves are deleted.
+- The friend must not be the referrer and must be new to the offer (not a confirmed referrer, not someone
+  who has had a keyring). A friend's referral stays with the first referrer whose link they used: typing their
+  address into a second link sends nothing, so nobody can take another person's credit.
+- Held for review instead of sent: the friend on the same internet address as the referrer (with or
+  without the same browser), another completed claim from the friend's internet address in 30 days, or three
+  or more confirmed referrers on one internet address, or more than 3 referrals completed across the site in an
+  hour (so a script using fresh addresses cannot empty the stock unseen). IPv6 addresses count by their /64 block. Connections
+  are stored only as one-way hashes, deleted with the referral.
+- No form says whether an address is known: every address gets the same "Check your inbox", and an address
+  that cannot take part is simply sent nothing.
+- Limits, counted in the shared cache under one-way hashes: 10 form posts an hour and 30 a day per internet
+  address, 3 confirmation emails a day per person, one per 10 minutes, and 300 confirmation emails an hour
+  for the whole site. When that site cap trips, real sign-ups get no email either, so you are told by push and
+  email, once an hour. 20 wrong codes or tokens an hour from one internet address and the next answer is a
+  429 without touching the database.
+- Every form has the CSRF token and the hidden robot field. Posts to `/refer/` and `/r/` over 4 KB are
+  refused before Django reads them (`web.middleware.SmallFormMiddleware`). Codes are 11 random characters
+  and tokens 32 (`secrets.token_urlsafe`), looked up by unique index. Emails hold no text anyone typed.
+  `/refer/` and `/r/` are noindex and in robots.txt; the private links carry no analytics, Awin or AdSense
+  script, and `/r/` pages count as private too so a code is never sent to Google.
+
+**Floods.** The checks above make a flood cheap: a robot post costs a cache count and no database write or
+email. Posts are checked against the per-address limit before the database is read. Real network-level protection needs a front proxy. Stock Caddy has no rate limit directive (it needs
+the caddy-ratelimit plugin), so none is added to `deploy/`. Cloudflare's free plan in front of the site
+(proxied DNS, with a rate limiting rule on POSTs to `/refer/*` and `/r/*`) is the simplest step if the offer
+is attacked.
+
+**Deleting details.** `tidy_referrals` runs hourly (cron at 55 past, its own lock). It sends address emails
+that failed to go, cancels a held referral not approved in 30 days, and deletes unconfirmed sign-ups after 14
+days, links that brought no completed referral 90 days after confirming, unused address links 14 days after
+they expire, names and addresses 60 days after posting (or 90 days after they were sent if never marked
+posted), and cancelled referrals after 14 days; a cancelled referral's postal address is cleared at once.
+Every keyring promised but never posted goes back to **Keyrings left** when its claim is deleted, by tidy,
+by Cancel, by a person deleting their details or by deleting in admin, so the count matches the drawer. Once
+a day, while any address has waited over 14 days to be posted, you are reminded by push and email. It also
+restores the footer link after the cache is emptied (a deploy, or the weekly delivery check). Every email carries a "Delete my details" link to
+a page with a button that deletes that person's details at once.
 
 ## Message us
 

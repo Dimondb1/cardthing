@@ -336,7 +336,7 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 }
 /* Side by side only when the links fit beside a readable line; a tablet stacks them. */
 @media (min-width: 60rem) {
-  .site-footer__inner { grid-template-columns: 1fr auto; align-items: start; }
+  .site-footer__inner { grid-template-columns: minmax(var(--footer-line-min), 1fr) auto; align-items: start; }
 }
 
 .breadcrumbs { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
@@ -593,7 +593,7 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 /* Coming soon: announced sets as plain rows, each with one button on the right: Pre-order, or Remind me */
 .coming { margin-bottom: var(--space-5); }
 .coming .section-head { margin-bottom: var(--space-2); }
-.coming__list { list-style: none; }
+.coming__list { list-style: none; border-bottom: 1px solid var(--color-line); }
 /* The home page's Drops section: Coming soon rows then the Out now row, each under a smaller heading that
    opens that tab on the drops page */
 .sub-head { margin-bottom: var(--space-2); font-size: var(--text-base); font-weight: var(--weight-heading); }
@@ -601,7 +601,6 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .sub-head__link:hover { color: var(--color-brand-text); text-decoration: underline; }
 .coming--nested { margin-bottom: var(--space-5); }
 .coming__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--color-line); min-width: 0; }
-.coming__row:last-child { border-bottom: 1px solid var(--color-line); }
 .coming__set { display: grid; gap: 2px; min-width: 0; }
 .coming__action { display: flex; justify-content: flex-end; }
 .coming__checked { color: var(--color-ink-subtle); white-space: nowrap; }
@@ -1359,3 +1358,13 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .drop-offer__meta { font-size: var(--text-sm); color: var(--color-ink-muted); line-height: var(--leading-snug); }
 .drop-offer__price { font-size: var(--text-base); font-weight: var(--weight-price); font-stretch: var(--stretch-price); color: var(--color-price); font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
 .drop-offer__checked { color: var(--color-ink-subtle); white-space: nowrap; }
+
+/* Refer a friend (/refer/, /r/<code>/ and the private links) ------------------------------------------- */
+.refer-form__agree { display: flex; align-items: flex-start; gap: var(--space-2); margin-top: var(--space-2); min-height: var(--tap); cursor: pointer; }
+.refer-form__agree input { flex: none; width: var(--space-5); height: var(--space-5); margin: 0; accent-color: var(--color-brand-action); }
+.refer-form__postcode { max-width: var(--field-short); text-transform: uppercase; }
+.refer-share { display: grid; gap: var(--space-2); max-width: var(--form-width); }
+.refer-share__link { font-weight: var(--weight-strong); overflow-wrap: anywhere; }
+.refer-share__list { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.refer-share__list li[hidden] { display: none; }
+.refer-share__done { font-weight: var(--weight-strong); color: var(--color-ink-muted); }

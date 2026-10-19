@@ -1,0 +1,5 @@
+{% extends "web/email/refer_base.html" %}{% load sitecopy %}
+{% block title %}{% copy "refer.email.address.title" %}{% endblock %}
+{% block text %}{% copy "refer.email.address.body" %}{% endblock %}
+{% block button_url %}{{ address_url }}{% endblock %}
+{% block button %}{% copy "refer.address.button" %}{% endblock %}

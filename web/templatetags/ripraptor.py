@@ -207,6 +207,26 @@ def query_string(context, **changes):
 
 
 @register.simple_tag
+def refer_waiting():
+    """For the admin home page only: keyrings to post and referrals held for review, in one query, or None when
+    the keyring offer has never had anyone in it."""
+    from django.db.models import Count, Q
+
+    from catalogue.models import Referral
+
+    counts = Referral.objects.aggregate(
+        review=Count("pk", filter=Q(status=Referral.Status.REVIEW), distinct=True),
+        to_post=Count("claims", filter=Q(claims__submitted_at__isnull=False, claims__posted_at__isnull=True)
+                      & ~Q(status=Referral.Status.CANCELLED), distinct=True),
+        check=Count("claims", filter=Q(claims__submitted_at__isnull=False, claims__posted_at__isnull=True,
+                                       claims__same_postcode=True) & ~Q(status=Referral.Status.CANCELLED),
+                    distinct=True),
+        any=Count("pk", distinct=True),
+    )
+    return counts if counts["any"] else None
+
+
+@register.simple_tag
 def worker_stopped():
     """The time of the background reader's last heartbeat when it is older than ten minutes, else an empty string.
 
@@ -220,3 +240,32 @@ def worker_stopped():
     if state is None or state.heartbeat_at is None or state.alive(now):
         return ""
     return clock(state.heartbeat_at, now)
+
+
+@register.filter
+def earns(listing):
+    """Whether this listing's shop pays a commission, as featured deals count it (web.views.earns)."""
+    from web.views import earns as shop_earns
+
+    return bool(listing) and shop_earns(listing)
+
+
+_INLINE = {}
+
+
+@register.simple_tag
+def inline_static(path):
+    """A small static script's text, for a <script> that must run where it stands, before the rows above it
+    are painted. Read once per process (every time with DEBUG on, so edits show)."""
+    from django.conf import settings
+    from django.contrib.staticfiles import finders
+
+    text = None if settings.DEBUG else _INLINE.get(path)
+    if text is None:
+        found = finders.find(path)
+        with open(found, encoding="utf-8") as handle:
+            text = handle.read()
+        if "</" in text:
+            raise ValueError(f"{path} cannot be inlined: it contains '</'")
+        _INLINE[path] = text
+    return mark_safe(text)

@@ -1,0 +1,8 @@
+{% load sitecopy %}{% autoescape off %}{% copy "refer.email.confirm.body" %}
+
+{% copy "refer.email.confirm.button" %}:
+{{ confirm_url }}
+
+{% copy "refer.email.confirm.note" %}
+
+{% copy "refer.stop.button" %}: {{ stop_url }}{% endautoescape %}

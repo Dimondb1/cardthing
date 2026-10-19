@@ -12,12 +12,14 @@ from .languages import product_language
 from .models import Game, Listing, Product, ProductSet
 from .search import build_search_text
 
-HOME_CACHE_KEY = "web:home-lists:v5"
+HOME_CACHE_KEY = "web:home-lists:v6"
 DEALS_CACHE_KEY = "web:deals:v2"
 NEW_CACHE_KEY = "web:home-new:v3"
 # Sets still to come; each game's own list is cached under this key plus ':<game>'.
 COMING_SOON_CACHE_KEY = "web:coming-soon:v2"
-LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY)
+# The home page's Coming soon rows in popularity order (catalogue.popularity).
+HOME_DROPS_CACHE_KEY = "web:home-drops:v1"
+LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY, HOME_DROPS_CACHE_KEY)
 
 
 # When this process last cleared the list caches (time.monotonic), for the debounce.

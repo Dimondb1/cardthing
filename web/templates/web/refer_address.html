@@ -1,0 +1,24 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "refer.address.title" %}</h1>
+  <p class="page-intro">{% copy "refer.address.intro" %}</p>
+</div>
+<form class="contact-form" method="post" action="{{ request.path }}">
+  {% csrf_token %}
+  {% if error %}<p class="contact-form__error" role="alert">{% copy error %}</p>{% endif %}
+  <label class="contact-form__label" for="address-name">{% copy "refer.address.name" %}</label>
+  <input id="address-name" class="contact-form__input" type="text" name="name" maxlength="80" required autocomplete="name" value="{{ values.name }}">
+  <label class="contact-form__label" for="address-line1">{% copy "refer.address.line1" %}</label>
+  <input id="address-line1" class="contact-form__input" type="text" name="line1" maxlength="100" required autocomplete="address-line1" value="{{ values.line1 }}">
+  <label class="contact-form__label" for="address-line2">{% copy "refer.address.line2" %}</label>
+  <input id="address-line2" class="contact-form__input" type="text" name="line2" maxlength="100" autocomplete="address-line2" value="{{ values.line2 }}">
+  <label class="contact-form__label" for="address-town">{% copy "refer.address.town" %}</label>
+  <input id="address-town" class="contact-form__input" type="text" name="town" maxlength="60" required autocomplete="address-level2" value="{{ values.town }}">
+  <label class="contact-form__label" for="address-postcode">{% copy "refer.address.postcode" %}</label>
+  <input id="address-postcode" class="contact-form__input refer-form__postcode" type="text" name="postcode" maxlength="10" required autocomplete="postal-code" autocapitalize="characters" value="{{ values.postcode }}">
+  <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+  <p><button class="button" type="submit">{% copy "refer.address.button" %}</button></p>
+</form>
+{% endblock %}

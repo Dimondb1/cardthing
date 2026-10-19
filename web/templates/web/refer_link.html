@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% load sitecopy static %}
+{% block scripts %}<script src="{% static 'js/refer.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "refer.link.title" %}</h1>
+  <p class="page-intro">{% copy "refer.link.intro" %}</p>
+</div>
+<div class="refer-share" data-refer-share data-share-title="{{ share_title }}" data-share-text="{{ share_words }}">
+  <label class="contact-form__label" for="refer-link">{% copy "refer.link.label" %}</label>
+  <input id="refer-link" class="contact-form__input refer-share__link" type="text" value="{{ share_url }}" readonly data-refer-link>
+  <ul class="refer-share__list">
+    <li hidden data-refer-native><button class="button" type="button">{% copy "refer.share.native" %}</button></li>
+    <li><a class="button button--quiet" href="{{ whatsapp_url }}" target="_blank" rel="noopener">{% copy "refer.share.whatsapp" %}</a></li>
+    <li><a class="button button--quiet" href="{{ sms_url }}">{% copy "refer.share.sms" %}</a></li>
+    <li><a class="button button--quiet" href="{{ email_url }}">{% copy "refer.share.email" %}</a></li>
+    <li hidden data-refer-copy><button class="button button--quiet" type="button">{% copy "refer.share.copy" %}</button></li>
+  </ul>
+  <p class="refer-share__done" role="status" data-refer-copied hidden>{% copy "refer.share.copied" %}</p>
+  <p class="contact-form__note">{% copy "refer.link.note" %} <a href="{% url 'web:terms' %}#terms-refer">{% copy "refer.form.terms_link" %}</a></p>
+</div>
+{% endblock %}

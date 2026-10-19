@@ -1,0 +1,12 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "refer.claim.title" %}</h1>
+  <p class="page-intro">{% copy "refer.claim.body" %}</p>
+</div>
+<form method="post" action="{{ request.path }}">
+  {% csrf_token %}
+  <button class="button" type="submit">{% copy "refer.claim.button" %}</button>
+</form>
+{% endblock %}

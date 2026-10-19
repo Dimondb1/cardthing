@@ -50,6 +50,7 @@ SECTIONS = [
     ("product", "Product page"),
     ("about", "How it works page"),
     ("contact", "Message us page"),
+    ("refer", "Refer a friend keyring offer"),
     ("footer", "Footer"),
     ("terms", "Terms page"),
     ("errors", "Error pages"),
@@ -105,6 +106,7 @@ PLACEHOLDER_HELP = {
     "first": "the first whole day with arrival times",
     "day": "a day, for example Sat 17 Oct",
     "when": "a time and day, for example 14:05, 18 Oct",
+    "link": "the referrer's link to share",
 }
 
 
@@ -399,7 +401,7 @@ ENTRIES = [
     ),
     Entry("home.resume.searches", T, "Recent searches label", "Recent searches", "Label in the pick up section."),
     Entry("home.resume.viewed", T, "Recently viewed label", "Recently viewed", "Label in the pick up section."),
-    Entry("home.resume.clear", B, "Clear history button", "Clear history", "Forgets the recent searches and viewed products in this browser."),
+    Entry("home.resume.clear", B, "Clear history button", "Clear history", "Forgets the recent searches, viewed products and games browsed in this browser."),
     Entry(
         "home.resume.note", T, "Pick up note",
         "Kept in this browser only.",
@@ -421,7 +423,7 @@ ENTRIES = [
     Entry("home.featured.title", H, "Featured deals heading", "Featured deals", "Home page row near the top."),
     Entry(
         "home.featured.note", T, "Featured deals note",
-        "Every featured deal is a real saving on the next shop or this week's lowest price. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price.",
+        "Every featured deal is a real saving on the next shop or this week's lowest price. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
         "On the terms page, under Independence. Says how the home page's featured deals row is chosen.",
         legal=True,
     ),
@@ -1369,6 +1371,178 @@ ENTRIES = [
     Entry("contact.thread.forget.button", B, "Delete email button", "Delete my email address", "Button under the question above."),
     Entry("contact.thread.forgot", T, "Email deleted note", "Your email address has been deleted. Replies still show on this page.", "After the email address is deleted."),
 
+    # Refer a friend -------------------------------------------------------
+    Entry("refer.nav", B, "Refer a friend link", "Refer a friend, get a free keyring",
+          "In the footer and on the watchlist page, only while the keyring offer is open."),
+    Entry("refer.title", H, "Refer a friend heading", "Refer a friend, get a free keyring",
+          "Heading and page title of the refer a friend page."),
+    Entry(
+        "refer.intro", T, "Refer a friend introduction",
+        "Ask for your own link and share it. When a friend joins through it and confirms their email address, "
+        "you both get a free RipRaptor 3D keyring by post. UK only, whilst stocks last.",
+        "Under the heading on the refer a friend page.",
+        legal=True,
+    ),
+    Entry("refer.ended", T, "Offer ended", "This offer has ended.",
+          "On the refer a friend pages and links when the offer is off, out of keyrings or past its last day."),
+    Entry("refer.form.email", T, "Your email label", "Your email address", "Label of the email box on the refer a friend page."),
+    Entry(
+        "refer.form.email_note", T, "Your email note",
+        "We email you a link to confirm, then your link to share. We only use your address for this offer.",
+        "Under the email box on the refer a friend page.",
+        legal=True,
+    ),
+    Entry("refer.form.agree", T, "Agree to the terms", "I live in the UK and agree to the promotion terms.",
+          "Next to the tick box on the refer a friend forms.", legal=True),
+    Entry("refer.form.terms_link", B, "Promotion terms link", "Read the promotion terms",
+          "Link to the offer's terms, beside the tick box."),
+    Entry("refer.form.button", B, "Ask for a link button", "Email me my link", "Button on the refer a friend page."),
+    Entry("refer.form.invalid", T, "Email not valid", "Enter a full email address, like name@example.com.",
+          "When the refer a friend forms get an address that is not valid."),
+    Entry("refer.form.agree_needed", T, "Terms not ticked", "Tick the box to agree to the promotion terms.",
+          "When the refer a friend forms are sent without the tick."),
+    Entry("refer.form.busy", T, "Too many requests", "Too many requests from your connection. Try again in an hour.",
+          "When one connection asks too often on the refer a friend pages."),
+    Entry("refer.form.failed", T, "Email failed", "We could not send the email just now. Try again in a few minutes.",
+          "When the email service is down."),
+    Entry("refer.sent.title", H, "Check your inbox heading", "Check your inbox", "After asking for a link or a friend's keyring."),
+    Entry(
+        "refer.sent.body", T, "Check your inbox text",
+        "If that address can take part, we have emailed it a link to confirm. It can take a few minutes, so check "
+        "your spam folder too.",
+        "After the refer a friend forms. The same for every address, so the page never says whether one is known.",
+    ),
+    Entry("refer.link.title", H, "Your link heading", "Your link to share", "Page after the referrer confirms their email address."),
+    Entry(
+        "refer.link.intro", T, "Your link text",
+        "Send it to a friend. When they follow it and confirm their own email address, you both get a free keyring.",
+        "Under the heading on the page with the referrer's link.",
+    ),
+    Entry("refer.link.label", T, "Your link label", "Your link", "Label of the box holding the referrer's link."),
+    Entry("refer.link.note", T, "Who can join note",
+          "Your friend must live in the UK, in a different household, and be new to RipRaptor offers.",
+          "Under the share buttons on the referrer's link page.", legal=True),
+    Entry("refer.link.used", T, "Already had a keyring",
+          "This email address has already had a keyring from this offer. Thank you for sharing RipRaptor.",
+          "On the referrer's link page once they have earned all the keyrings they can."),
+    Entry("refer.share.whatsapp", B, "WhatsApp button", "Share on WhatsApp", "Share button on the referrer's link page."),
+    Entry("refer.share.sms", B, "Text message button", "Send by text", "Share button on the referrer's link page."),
+    Entry("refer.share.email", B, "Email button", "Send by email",
+          "Share button on the referrer's link page. Opens the visitor's own email app; we send nothing to the friend."),
+    Entry("refer.share.copy", B, "Copy button", "Copy link", "Share button on the referrer's link page, shown with JavaScript."),
+    Entry("refer.share.copied", T, "Copied note", "Link copied", "After the Copy link button is pressed."),
+    Entry("refer.share.native", B, "Share button", "Share link",
+          "Share button on the referrer's link page, shown on phones that offer their own share sheet."),
+    Entry("refer.share.subject", T, "Share subject", "A free RipRaptor keyring for us both",
+          "Subject line filled in when the referrer sends their link by email."),
+    Entry(
+        "refer.share.message", T, "Share message",
+        "I use RipRaptor to compare UK prices on sealed card products. Join through my link and we both get a "
+        "free RipRaptor 3D keyring: {link}",
+        "The message filled in when the referrer shares their link.",
+        placeholders=("link",),
+    ),
+    Entry("refer.friend.title", H, "Friend's heading", "A free RipRaptor keyring for you", "Heading on a referrer's link."),
+    Entry(
+        "refer.friend.intro", T, "Friend's text",
+        "A friend has invited you to RipRaptor, which compares UK prices for sealed trading card products. Confirm "
+        "your email address and you both get a free 3D keyring by post. One per household, UK only, whilst "
+        "stocks last.",
+        "Under the heading on a referrer's link.",
+        legal=True,
+    ),
+    Entry(
+        "refer.friend.email_note", T, "Friend's email note",
+        "We email you a link to confirm, then ask where to post your keyring. We only use your address for this offer.",
+        "Under the email box on a referrer's link.",
+        legal=True,
+    ),
+    Entry("refer.friend.button", B, "Friend's button", "Email me a link to confirm", "Button on a referrer's link."),
+    Entry("refer.friend.used", T, "Link used", "This link has already been used.",
+          "On a referrer's link once it has earned all the keyrings it can."),
+    Entry("refer.friend.own", B, "Get your own link", "Get your own link", "Under the link used message."),
+    Entry("refer.claim.title", H, "Claim heading", "Claim your keyring", "Page from the friend's confirmation email."),
+    Entry("refer.claim.body", T, "Claim text",
+          "Press the button to confirm your email address and finish the referral.",
+          "Page from the friend's confirmation email."),
+    Entry("refer.claim.button", B, "Claim button", "Claim my keyring", "Button on the friend's claim page."),
+    Entry("refer.claimed.title", H, "Claimed heading", "Thank you", "After the friend claims their keyring."),
+    Entry("refer.claimed.body", T, "Claimed text",
+          "We will email you both when your keyrings are ready, to ask where to post them.",
+          "After the friend claims their keyring."),
+    Entry("refer.claim.not_new", T, "Not new",
+          "This email address has already taken part in a RipRaptor offer, so it cannot claim another keyring.",
+          "When a friend's address has taken part before."),
+    Entry("refer.gone.title", H, "Link not working heading", "This link no longer works",
+          "For a refer a friend link that is unknown, used, expired or cancelled."),
+    Entry("refer.gone.body", T, "Link not working text", "It may have expired, been used or been cancelled.",
+          "For a refer a friend link that is unknown, used, expired or cancelled."),
+    Entry("refer.busy", T, "Too many tries", "Too many tries from your connection. Try again later.",
+          "When one connection tries too many wrong refer a friend links."),
+    Entry("refer.address.title", H, "Address heading", "Where should we send your keyring?", "Heading on the address form."),
+    Entry(
+        "refer.address.intro", T, "Address text",
+        "UK addresses only. We use this address only to post your keyring, and delete it 60 days after posting.",
+        "Under the heading on the address form.",
+        legal=True,
+    ),
+    Entry("refer.address.name", T, "Name label", "Full name", "On the address form."),
+    Entry("refer.address.line1", T, "Address line 1 label", "Address line 1", "On the address form."),
+    Entry("refer.address.line2", T, "Address line 2 label", "Address line 2 (optional)", "On the address form."),
+    Entry("refer.address.town", T, "Town label", "Town or city", "On the address form."),
+    Entry("refer.address.postcode", T, "Postcode label", "Postcode", "On the address form."),
+    Entry("refer.address.button", B, "Address button", "Send my address", "Button on the address form."),
+    Entry("refer.address.missing", T, "Address incomplete", "Fill in your name, first address line, town and postcode.",
+          "When the address form is incomplete."),
+    Entry("refer.address.bad_postcode", T, "Postcode not valid",
+          "Enter a UK postcode, like SW1A 1AA. We can only post to UK addresses.",
+          "When the postcode is not a UK one."),
+    Entry("refer.address.used", T, "Address used", "This address has already had a keyring from this offer.",
+          "When the postal address has had a keyring before."),
+    Entry("refer.address.done.title", H, "Address sent heading", "Thank you", "After the address form is sent."),
+    Entry("refer.address.done.body", T, "Address sent text", "We have your address and will post your keyring.",
+          "After the address form is sent, and on the link afterwards."),
+    Entry("refer.address.expired", T, "Address link expired", "This link has expired. Address links last 30 days.",
+          "When an address link is over 30 days old."),
+    Entry("refer.stop.title", H, "Delete details heading", "Delete your details", "Page from the delete link in a refer a friend email."),
+    Entry("refer.stop.body", T, "Delete details text",
+          "This deletes your email address, name and postal address from the keyring offer. If your keyring has not been posted yet, you will not get one.",
+          "Page from the delete link in a refer a friend email.", legal=True),
+    Entry("refer.stop.button", B, "Delete details button", "Delete my details", "On the delete page and in refer a friend emails."),
+    Entry("refer.stopped.title", H, "Details deleted heading", "Your details are deleted", "After deleting refer a friend details."),
+    Entry("refer.stopped.body", T, "Details deleted text",
+          "We have deleted your email address, name and postal address from the keyring offer.",
+          "After deleting refer a friend details."),
+    Entry("refer.email.stop_note", T, "Delete link note",
+          "The button above opens a page where you can delete your details from this offer.",
+          "At the foot of every refer a friend email.", legal=True),
+    Entry("refer.email.confirm.subject", T, "Link confirmation subject", "Confirm your email to get your RipRaptor link",
+          "Subject of the email that confirms a referrer's address."),
+    Entry("refer.email.confirm.title", H, "Link confirmation heading", "Confirm your email address", "In the referrer's confirmation email."),
+    Entry("refer.email.confirm.body", T, "Link confirmation text",
+          "Press the button to confirm your email address and get your link to share.",
+          "In the referrer's confirmation email."),
+    Entry("refer.email.confirm.button", B, "Link confirmation button", "Confirm and get my link", "In the referrer's confirmation email."),
+    Entry("refer.email.confirm.note", T, "Confirmation note",
+          "If this was not you, ignore this email. Unconfirmed addresses are deleted after 14 days.",
+          "In both refer a friend confirmation emails.", legal=True),
+    Entry("refer.email.link.subject", T, "Your link subject", "Your RipRaptor link to share", "Subject of the email with the referrer's link."),
+    Entry("refer.email.link.body", T, "Your link email text",
+          "Here is your link. Send it to a friend, and when they confirm their email address you both get a free keyring.",
+          "In the email with the referrer's link."),
+    Entry("refer.email.link.button", B, "Your link email button", "Open my share page", "In the email with the referrer's link."),
+    Entry("refer.email.friend.subject", T, "Friend confirmation subject", "Confirm your email to claim your RipRaptor keyring",
+          "Subject of the friend's confirmation email."),
+    Entry("refer.email.friend.body", T, "Friend confirmation text",
+          "Press the button to confirm your email address. You and the friend who invited you then each get a free RipRaptor 3D keyring.",
+          "In the friend's confirmation email."),
+    Entry("refer.email.address.subject", T, "Address email subject", "Where should we send your RipRaptor keyring?",
+          "Subject of the email asking for a postal address."),
+    Entry("refer.email.address.title", H, "Address email heading", "Your keyring is ready to post", "In the email asking for a postal address."),
+    Entry("refer.email.address.body", T, "Address email text",
+          "Your referral is complete. Tell us where to send your free keyring. The link works for 30 days.",
+          "In the email asking for a postal address."),
+
     # Footer ---------------------------------------------------------------
     Entry("footer.follow", T, "Footer follow heading", "Follow us", "Above the social media icons in the footer."),
     Entry(
@@ -1618,8 +1792,9 @@ ENTRIES = [
     Entry(
         "terms.data.body", P, "Data explanation",
         "RipRaptor does not ask you to create an account. Products you save, "
-        "products you view and searches you make are kept in your browser, not "
-        "by us, and you can clear them from the home page. Our own count of clicks to retailers "
+        "products you view, games you browse and searches you make are kept in your browser, not "
+        "by us, and you can clear them from the home page. Your browser uses them to put your games "
+        "first on the home page, without telling us. Our own count of clicks to retailers "
         "does not record who clicked. One small cookie of ours remembers only that your browser "
         "has visited before, so we can count returning visitors. It holds nothing "
         "about you.\n\n"
@@ -1641,6 +1816,42 @@ ENTRIES = [
         "months after its last message. A cookie in your browser remembers the private "
         "link to your conversation.",
         "Data section of the terms page.",
+        legal=True,
+    ),
+    Entry("terms.refer.title", H, "Keyring offer heading", "Refer a friend keyring offer",
+          "Heading on the terms page, shown while the keyring offer runs or has people in it."),
+    Entry(
+        "terms.refer.body", P, "Keyring offer terms",
+        "The offer is run by RipRaptor and is open to UK residents only. Under 18s need a parent or guardian's "
+        "permission to take part.\n\n"
+        "Ask for your link on the refer a friend page and confirm your email address. When a friend follows your "
+        "link and confirms their own email address, the referral is complete and you each get one RipRaptor 3D "
+        "keyring. Your friend must be new to RipRaptor offers. Each person can earn one keyring, and each email "
+        "address and each household can have one keyring. We check a second address at the same postcode "
+        "before posting.\n\n"
+        "Keyrings are free and given whilst stocks last. We post them to UK addresses only and cannot promise a "
+        "delivery time. There is no cash alternative. We check referrals and may hold or cancel any that look "
+        "automated, repeated or made up. We may change or cancel the offer at any time.",
+        "Terms page: the keyring offer's rules.",
+        legal=True,
+    ),
+    Entry(
+        "terms.data.refer", P, "Keyring offer data",
+        "If you take part in the refer a friend offer, we keep your email address to send your link, confirm the "
+        "referral and ask where to post your keyring, and your name and postal address only to post it. We never "
+        "email a friend on your behalf: each person gives us their own address, and an address typed into the "
+        "offer is sent only emails asking its owner to confirm it, at most three a day, and nothing else until "
+        "they do. We keep a "
+        "one-way fingerprint of the connection each form was sent from, to tell people from automated sign-ups, "
+        "and delete it with the rest.\n\n"
+        "Unconfirmed sign-ups are deleted after 14 days. A link that brings no completed referral is deleted 90 "
+        "days after it was confirmed. Address links last 30 days and an unused one is deleted 14 days after that. "
+        "Your email address, name and postal address are deleted 60 days after your keyring is posted, 90 days "
+        "after you sent your address if it has not been posted by then, or 14 days after a referral is "
+        "cancelled; a cancelled referral's postal address is deleted at once. So nobody takes part twice, we keep a one-way fingerprint of each email "
+        "address, postal address and postcode that has had a keyring; it cannot be turned back into the address. Every email has a "
+        "link to delete your details.",
+        "Data section of the terms page, shown while the keyring offer runs or has people in it.",
         legal=True,
     ),
     Entry(

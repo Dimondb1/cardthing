@@ -1,0 +1,6 @@
+{% extends "web/email/refer_base.html" %}{% load sitecopy %}
+{% block title %}{% copy "refer.link.title" %}{% endblock %}
+{% block text %}{% copy "refer.email.link.body" %}{% endblock %}
+{% block button_url %}{{ page_url }}{% endblock %}
+{% block button %}{% copy "refer.email.link.button" %}{% endblock %}
+{% block after %}<p style="margin:0;font-size:18px;font-weight:bold;word-break:break-all;"><a href="{{ share_url }}" style="color:#cc4410;">{{ share_url }}</a></p>{% endblock %}

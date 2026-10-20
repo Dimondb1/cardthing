@@ -1500,7 +1500,8 @@ memory while there is room); has the kernel stop the reader before the
 site when memory runs out (`OOMScoreAdjust` in both unit files; the reader
 may use 100 MB of swap past its 300 MB, then it is restarted); runs the
 reader with two jobs at once on a server under 1.5 GB; and starts the
-stock alerts at 3 past the tens and the Claude judge at 2 past the fives,
+stock alerts at 3 past the tens, the search alerts at 4 past the
+quarters and the Claude judge at 2 past the fives,
 so no more than two cron commands start in the same minute. A 2 GB server
 removes the squeeze altogether.
 
@@ -2140,7 +2141,8 @@ in the log and tries again the next night.
 
 Every cron line runs its command under `timeout`, set to the command's
 budget plus five minutes: the hourly import 55 minutes, `tidy_all` 25,
-the stock watcher and the stock alerts 9, `check_worker` 10, the nightly
+the stock watcher, the stock alerts, the drop reminders and the search
+alerts 9, `check_worker` 10, the nightly
 snapshot and backup 30 each, the weekly delivery check 50 and the monthly
 GeoIP download 30. Without it a
 command that hangs while holding a lock would make every later run behind
@@ -2973,6 +2975,79 @@ robots.txt. Buy clicks from it carry `?from=watchlist`, stored in
 `OutboundClick.source`, and each product on a loaded list is counted as a
 "watchlist row" page view by slug, so Insights shows clicks from
 watchlists and the stock watcher can put watched products first.
+
+### Alert me (search alerts)
+
+Below the list, while email is set up, the watchlist page has an Alert me
+form: a game (required), and optionally a product type, a language
+(English is suggested) and the most the visitor will pay delivered
+(£0.50 to £5,000, "£4.50" and "4.5" both read), plus an email address. It
+reads the alert back in plain English, for example "English Pokémon
+booster packs up to £5.00 delivered, in stock". It posts to
+`/watchlist/alert/` (`web:search_alert_ask`). Without JavaScript a good
+request goes back to the watchlist page (the saved list kept), which says
+"Check your inbox" with the alert read back; a mistake shows the page
+again at `/watchlist/alert/#alert` with the field marked and in view
+(`watch.js` only rewrites the list's address on `/watchlist/` itself,
+never on that POST-only address). With JavaScript (`web/static/js/search-alert.js`)
+the form is sent in place and the answer replaces it. Search, game and set
+pages with a game chosen link to it ("Email me when products like these
+are in stock"), filled in with their game, type, language and price band
+(the band's top as the price). The alert can be wider than the list (it
+has no set or search words), so the link does not promise these exact
+products; with no language filter it passes `lang=` so the form keeps Any
+language.
+
+It works like the drop reminders (`catalogue/search_alerts.py`, models
+`SearchAlert` and `SearchAlertSent`): nothing is sent until the confirm
+link (`/alerts/confirm/search/<token>/`) is pressed, every email has a
+stop link ("Stop this alert", `/alerts/stop/search/<token>/`, also the
+List-Unsubscribe header) that deletes that alert at once (the address goes
+with it unless another alert uses it, and the emails and stop page say
+so), unconfirmed alerts go after a
+week and confirmed ones six months after they were confirmed. The answer
+is the same "Check your inbox" whether the address is new, already has
+the alert or is at its limit; an address can have 10 confirmed alerts
+(checked again when a confirm link is pressed, so requests made over
+several days cannot pass it) and
+is sent at most 3 confirmations a day, and one connection can ask 10
+times an hour, counted under one-way hashes in the cache. The honeypot
+field and CSRF token are as on the other forms.
+
+`send_search_alerts` runs from cron every 15 minutes (4 past, its own
+lock). A product matches when it is active, of the alert's game, type and
+language (the browse filter's language rules), and a shop on the site, not
+eBay or Amazon, has it in stock now at a current, counted price (the same
+listings as the site's main price, as the back-in-stock alerts count
+them). With a price, the cheapest known delivered price at such a shop
+must be at or under it: a shop whose delivery charge is unknown cannot
+prove that. Alerts with the same game, type and language share one
+query. Each alert gets one email per run with its new matches, up to six,
+cheapest first, and "And N more" linking to the in-stock list on the site
+cheapest first. A product is emailed again only once it stopped matching
+(sold out or over the price) and came back, and not within 7 days of the
+last time. Stopped matching needs a current shop listing that says so: a
+product whose listings only went unchecked (a shop's reader failing) is
+not sent again when they are read again. Each email is claimed before it is sent and handed back if the
+send fails, so two runs at once never send it twice.
+
+The emails never name a shop: no shop name, no shop or `/go/` link, in
+the subject, preview line, text or HTML. Each product links to its page
+on RipRaptor ("See prices") with its delivered price and when it was
+checked. Its picture is shown only when it is stored on RipRaptor
+(`Product.image`, uploaded in admin) and its file name names no shop. A
+shop's picture is never used, even on a shared CDN: Shopify folders and
+BigCommerce store ids belong to one shop each, so the address gives the
+shop away. Feed pictures are not stored here yet, so for now emails carry
+no product pictures. Search alerts are listed read only in admin with what
+each was sent. On the 20 Oct 2026 snapshot (after `set_languages`, prices
+moved forward to be current) English Pokémon booster packs up to £5
+matched 1 product of 87 English packs in stock at a shop (87 with no
+price), Magic booster boxes up to £120 matched 7 and One Piece booster
+boxes up to £80 matched 4; 204 alerts in 110 groups sent 133 emails in
+about a second, and a run with nothing new took 0.6s. Alerts send whatever
+type a product has, so a wrong type in the catalogue (a binder page
+display filed as a booster box) reaches inboxes: fix it in admin.
 
 ## Recent searches and recently viewed
 

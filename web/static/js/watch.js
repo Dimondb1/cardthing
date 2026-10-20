@@ -31,10 +31,19 @@
     });
   }
 
+  // The watchlist's own address. The page is also shown at the Alert me form's address after a mistake,
+  // which only takes a POST, so the list is never rewritten onto that one.
+  const home = page ? page.dataset.watchlistUrl || "/watchlist/" : "";
+
   function paintList() {
     if (!page) return;
     const params = new URLSearchParams(location.search);
-    if (!params.get("p") && saved.length) { location.replace(listUrl(location.pathname)); return; }
+    if (location.pathname === home && !params.get("p") && saved.length) {
+      // Keep the rest of the address (the Alert me form's choices from a browse page) and its #alert.
+      params.set("p", slugs().join(","));
+      location.replace(`${location.pathname}?${params.toString().replace(/%2C/g, ",")}${location.hash}`);
+      return;
+    }
     document.querySelectorAll("[data-watch-row]").forEach((row) => {
       const item = saved.find((s) => slugOf(s) === row.dataset.watchRow);
       const line = row.querySelector("[data-saved-for]");
@@ -59,8 +68,9 @@
       const row = a.closest("[data-watch-row]");
       if (row) {
         row.hidden = true;
-        if (saved.length) history.replaceState(null, "", listUrl(location.pathname));
-        else location.replace(location.pathname);
+        if (location.pathname !== home) { /* the form's mistake page: leave its address alone */ }
+        else if (saved.length) history.replaceState(null, "", listUrl(home));
+        else location.replace(home);
       }
     } else {
       saved.push({

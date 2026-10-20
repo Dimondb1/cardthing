@@ -1205,6 +1205,60 @@ class DropAlert(models.Model):
         return f"{self.product_set} for {self.email}"
 
 
+class SearchAlert(models.Model):
+    """One email address waiting to hear when products it described come into stock (catalogue/search_alerts.py).
+
+    The description is a game, and optionally a product type, a language and the most the visitor will pay
+    delivered. Kept like a StockAlert: for this and nothing else, confirmed by a link before anything else is
+    sent, and every email carries a link that deletes it at once. Deleted unconfirmed after a week and six
+    months after it was confirmed. Its emails name products and RipRaptor's pages for them, never a shop.
+    """
+
+    email = models.EmailField(max_length=254)
+    token = models.CharField(max_length=40, unique=True, default=alert_token)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="search_alerts")
+    product_type = models.CharField("product type", max_length=30, choices=Product.Type.choices, blank=True,
+                                    help_text="Empty for any type.")
+    language = models.CharField(max_length=8, blank=True, help_text="A language filter code (catalogue/languages.py "
+                                "FILTER), or empty for any language.")
+    max_price = models.DecimalField("most it will pay, delivered", max_digits=7, decimal_places=2, null=True,
+                                    blank=True, help_text="Empty for any price.")
+    created_at = models.DateTimeField(default=timezone.now)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    confirm_sent_at = models.DateTimeField("confirmation sent", null=True, blank=True)
+    sent_at = models.DateTimeField(
+        "last match email", null=True, blank=True,
+        help_text="Also the claim: a run sets it before sending, so a second run at the same moment sends nothing.",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "search alert"
+        indexes = [models.Index(fields=["email"])]
+
+    def __str__(self):
+        return f"{self.game} {self.product_type or 'any type'} for {self.email}"
+
+
+class SearchAlertSent(models.Model):
+    """One product a search alert has emailed about, so it is not emailed again while it keeps matching.
+
+    ``gone_at`` is set when it stops matching (sold out, or over the price). It is emailed again only after
+    that and at least SEND_AGAIN_DAYS after the last time. Deleted with its alert."""
+
+    alert = models.ForeignKey(SearchAlert, on_delete=models.CASCADE, related_name="sent")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="+")
+    sent_at = models.DateTimeField()
+    gone_at = models.DateTimeField("stopped matching", null=True, blank=True)
+
+    class Meta:
+        unique_together = [("alert", "product")]
+        verbose_name = "search alert product sent"
+
+    def __str__(self):
+        return f"{self.product_id} for alert {self.alert_id}"
+
+
 class DailyPageView(models.Model):
     """How many times a kind of page was opened on one day. No personal data."""
 

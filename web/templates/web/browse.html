@@ -101,6 +101,7 @@
     {% if filters_active %}<a class="filters__clear" href="?{% if query %}q={{ query|urlencode }}{% if tab and tab != 'in-stock' %}&amp;{% endif %}{% endif %}{% if tab and tab != 'in-stock' %}tab={{ tab }}{% endif %}"{% if tab %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
   </div>
 </form>
+{% if alert_url %}<p class="browse-alert"><a href="{{ alert_url }}">{% copy "browse.alert_link" %}</a></p>{% endif %}
 
 {% if stock_tabs %}
 <div class="stock-panes">

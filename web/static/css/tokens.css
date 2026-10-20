@@ -69,6 +69,7 @@
   --icon-nav: 1.5rem;            /* the Swipe and Watchlist icons in the phone header */
 
   /* Corners -------------------------------------------------------------- */
+  --border-width: 1px;       /* the soft orange line round cards and panels */
   --radius-sm: 8px;          /* thumbnails, small controls */
   --radius: 12px;            /* buttons, inputs, images */
   --radius-card: 16px;       /* product cards and panels */

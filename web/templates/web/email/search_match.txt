@@ -1,0 +1,16 @@
+{% load sitecopy ripraptor %}{% autoescape off %}{{ subject }}
+
+{% copy "watchlist.email.match.body" summary=values.summary site_name=values.site_name %}
+{% for item in items %}
+{{ item.name }}
+{{ item.price }}. {{ item.checked }}.
+{% copy "watchlist.email.match.button" %}: {{ item.url }}
+{% endfor %}{% if more %}
+{% copy_count "watchlist.email.match.more" more %}: {{ more_url }}
+{% endif %}
+{% copy "watchlist.email.match.footer" %}
+
+{% copy "watchlist.email.stop.button" %}: {{ stop_url }}
+{% copy "watchlist.email.stop_note" %}
+
+{{ site_name }} may earn a commission when you buy through its links.{% endautoescape %}

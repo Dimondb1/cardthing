@@ -21,10 +21,13 @@ urlpatterns = [
     path("drops/", views.drops, name="drops"),
     path("drops/remind/<int:set_id>/", views.drop_ask, name="drop_ask"),
     path("watchlist/", views.watchlist, name="watchlist"),
+    path("watchlist/alert/", views.search_alert_ask, name="search_alert_ask"),
     # Under /alerts/confirm/ and /alerts/stop/, so they are private links like the stock alerts' (no
     # third-party script, kept out of search engines by robots.txt).
     path("alerts/confirm/drop/<str:token>/", views.drop_confirm, name="drop_confirm"),
     path("alerts/stop/drop/<str:token>/", views.drop_stop, name="drop_stop"),
+    path("alerts/confirm/search/<str:token>/", views.search_alert_confirm, name="search_alert_confirm"),
+    path("alerts/stop/search/<str:token>/", views.search_alert_stop, name="search_alert_stop"),
     path("alerts/<slug:slug>/", views.alert_ask, name="alert_ask"),
     path("alerts/confirm/<str:token>/", views.alert_confirm, name="alert_confirm"),
     path("alerts/stop/<str:token>/", views.alert_stop, name="alert_stop"),

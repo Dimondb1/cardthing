@@ -195,7 +195,19 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         game or product_type or (form.value("in_stock") and not tabs) or form.value("compared") or band or languages
         or sort not in (form.default_sort, "soonest")
     )
+    # The Alert me form on the watchlist page, filled in with this list's game, type, language and price band.
+    alert_url = ""
+    if (fixed_game or game) is not None and mail.enabled():
+        params = {"game": (fixed_game or game).slug}
+        if product_type:
+            params["type"] = product_type
+        # No language filter is any language: lang= keeps the form from suggesting English.
+        params["lang"] = languages[0] if languages else ""
+        if band in BAND_TOPS:
+            params["max"] = BAND_TOPS[band]
+        alert_url = reverse("web:watchlist") + "?" + urlencode(params) + "#alert"
     context = {
+        "alert_url": alert_url,
         "form": form,
         "query": query,
         "page": page,
@@ -1293,31 +1305,199 @@ def slugs_in(request, limit):
     return [slug for slug in request.GET.get("p", "").split(",") if slug][:limit]
 
 
-@require_GET
-def watchlist(request):
-    """The products a visitor saved, named in the address, with live prices.
+class SearchAlertForm(forms.Form):
+    """The watchlist page's Alert me form: what to be emailed about, and where. Labels come from the registry."""
 
-    The list lives in the browser and in this page's address, never on the
-    server, so the page works bookmarked, pasted into a chat, or with
-    JavaScript off. The script fills in what each was saved at.
-    """
-    wanted = slugs_in(request, WATCHLIST_MAX)
+    game = forms.ModelChoiceField(queryset=Game.objects.filter(is_active=True), to_field_name="slug", empty_label=None)
+    type = forms.ChoiceField(required=False)
+    lang = forms.ChoiceField(required=False)
+    max = forms.CharField(required=False, max_length=12)
+    email = forms.EmailField(max_length=254)
+
+    def __init__(self, *args, request=None, **kwargs):
+        from catalogue.types import DEFAULT
+
+        kwargs.setdefault("auto_id", "alert-%s")
+        super().__init__(*args, **kwargs)
+        self.request = request
+        words = {name: text(request, f"watchlist.alert.{name}") for name in ("game", "type", "lang", "max", "email")}
+        for name, label in words.items():
+            self.fields[name].label = label
+        self.fields["type"].choices = [("", text(request, "watchlist.alert.any_type"))] + [
+            (code, label) for code, label in DEFAULT if code != "other"
+        ]
+        self.fields["lang"].choices = [("", text(request, "watchlist.alert.any_lang"))] + LANGUAGES
+        self.fields["game"].label_from_instance = lambda game: game.display_short
+
+    def clean_max(self):
+        from catalogue.search_alerts import MAX_PRICE, MIN_PRICE
+
+        raw = self.cleaned_data.get("max", "").replace("£", "").replace(",", "").strip()
+        if not raw:
+            return None
+        try:
+            value = Decimal(raw).quantize(Decimal("0.01"))
+        except InvalidOperation:
+            value = None
+        if value is None or not value.is_finite() or not MIN_PRICE <= value <= MAX_PRICE:
+            raise forms.ValidationError(text(self.request, "watchlist.alert.price_range", low=f"£{MIN_PRICE}",
+                                             high=f"£{MAX_PRICE:,.0f}"))
+        return value
+
+
+SEARCH_ALERT_STATES = ("sent", "busy", "failed")
+# Prefill from a browse page's filters: its price band becomes the band's top as the most to pay.
+BAND_TOPS = {"0-10": "10", "10-25": "25", "25-50": "50", "50-100": "100"}
+
+
+def search_alert_prefill(request):
+    """Initial values for the Alert me form from the address (a browse page's link, or after asking)."""
+    initial = {"lang": "en"}
+    for name in ("game", "type", "lang", "max"):
+        if name in request.GET:
+            initial[name] = request.GET.get(name, "")[:20]
+    return initial
+
+
+def search_alert_described(values, request):
+    """The plain-English summary for cleaned or prefilled values, or "" when they do not make one."""
+    from catalogue import search_alerts
+
+    game = values.get("game")
+    if isinstance(game, str):
+        game = Game.objects.filter(is_active=True, slug=game).first()
+    if game is None:
+        return ""
+    product_type = values.get("type") or ""
+    language = values.get("lang") or ""
+    if product_type not in [""] + list(Product.Type.values) or language not in [""] + [code for code, _ in LANGUAGES]:
+        return ""
+    max_price = values.get("max")
+    if isinstance(max_price, str):
+        try:
+            max_price = Decimal(max_price) if max_price else None
+        except InvalidOperation:
+            return ""
+        if max_price is not None and not (search_alerts.MIN_PRICE <= max_price <= search_alerts.MAX_PRICE):
+            return ""
+    return search_alerts.summary(game, product_type, language, max_price, store=copy.for_request(request))
+
+
+def watchlist_page(request, alert_form=None, status=200):
+    wanted = slugs_in(request, WATCHLIST_MAX) or [
+        slug for slug in request.POST.get("p", "").split(",") if slug
+    ][:WATCHLIST_MAX]
     rows = []
     if wanted:
         products = products_for_slugs(wanted)
         week_lows = offers.week_low_map([p.pk for p in products])
         rows = [(product, offers.summarise(product, week_lows)) for product in products]
-        if not insights.is_bot(request):
+        if not insights.is_bot(request) and request.method == "GET":
             insights.bump_many(DailyPageView, DailyPageView.Kind.WATCHED, [p.slug for p in products])
-    return render(
-        request,
-        "web/watchlist.html",
-        {
-            "rows": rows,
-            "meta_title": text(request, "meta.watchlist.title"),
-            "noindex": True,
-        },
-    )
+    context = {
+        "rows": rows,
+        "meta_title": text(request, "meta.watchlist.title"),
+        "noindex": True,
+        "alerts_on": mail.enabled(),
+        "list_slugs": ",".join(wanted),
+    }
+    if context["alerts_on"]:
+        state = request.GET.get("alert", "")
+        state = state if state in SEARCH_ALERT_STATES else ""
+        prefill = search_alert_prefill(request)
+        if alert_form is None:
+            alert_form = SearchAlertForm(initial=prefill, request=request)
+        described = search_alert_described(alert_form.cleaned_data if alert_form.is_bound and alert_form.is_valid()
+                                           else prefill, request)
+        context.update({
+            "alert_form": alert_form,
+            "alert_state": state,
+            "alert_summary": described,
+            "alert_again_url": reverse("web:watchlist") + (f"?p={','.join(wanted)}" if wanted else "") + "#alert",
+        })
+    return render(request, "web/watchlist.html", context, status=status)
+
+
+@require_GET
+def watchlist(request):
+    """The products a visitor saved, named in the address, with live prices, and the Alert me form.
+
+    The list lives in the browser and in this page's address, never on the
+    server, so the page works bookmarked, pasted into a chat, or with
+    JavaScript off. The script fills in what each was saved at.
+    """
+    return watchlist_page(request)
+
+
+@require_POST
+def search_alert_ask(request):
+    """Take the Alert me form. Without JavaScript a good request goes back to the watchlist page, which says
+    "Check your inbox" with the alert read back; one with a mistake shows the page again with it marked. With
+    JavaScript the form asks for JSON and shows the answer in place. The answer is the same for every address."""
+    from catalogue import search_alerts
+
+    wants_json = "application/json" in request.headers.get("Accept", "")
+    if request.POST.get("website") or not mail.enabled():
+        return HttpResponseRedirect(reverse("web:watchlist"))   # the hidden field is only ever filled by robots
+    form = SearchAlertForm(request.POST, request=request)
+    if not form.is_valid():
+        if wants_json:
+            return JsonResponse({"state": "invalid"}, status=400)
+        return watchlist_page(request, alert_form=form, status=400)
+    data = form.cleaned_data
+    if not search_alerts.address_allowed(insights.client_ip(request)):
+        state = "busy"
+    else:
+        try:
+            state = search_alerts.ask(data["email"], data["game"], data["type"], data["lang"], data["max"])
+        except mail.MailError:
+            state = "failed"
+    summary = search_alert_described(data, request)
+    if wants_json:
+        if state == "sent":
+            title, message = text(request, "watchlist.alert.done.title"), text(request, "watchlist.alert.done.body", summary=summary)
+        else:
+            title = text(request, "watchlist.alert.problem")
+            message = text(request, "watchlist.alert.busy" if state == "busy" else "alerts.form.failed")
+        return JsonResponse({"state": state, "title": title, "message": message, "summary": summary})
+    # lang goes in even when empty: without it the page would suggest English again and read it back wrongly.
+    params = {"alert": state, "game": data["game"].slug, "lang": data["lang"] or ""}
+    if data["type"]:
+        params["type"] = data["type"]
+    if data["max"] is not None:
+        params["max"] = str(data["max"])
+    slugs = [slug for slug in request.POST.get("p", "").split(",") if slug][:WATCHLIST_MAX]
+    if slugs:
+        params = {"p": ",".join(slugs), **params}
+    return HttpResponseRedirect(reverse("web:watchlist") + "?" + urlencode(params, safe=",") + "#alert")
+
+
+@require_GET
+def search_alert_confirm(request, token):
+    from catalogue import search_alerts
+
+    alert = search_alerts.confirm(token)
+    if alert is None:
+        heading, message = text(request, "alerts.gone.title"), text(request, "watchlist.alert.gone.body")
+    elif alert.confirmed_at is None:   # the address already has the most confirmed alerts we keep
+        heading = text(request, "watchlist.alert.problem")
+        message = text(request, "watchlist.alert.full.body", count=search_alerts.MAX_PER_EMAIL)
+    else:
+        heading = text(request, "watchlist.alert.confirmed.title")
+        message = text(request, "watchlist.alert.confirmed.body",
+                       summary=search_alerts.alert_summary(alert, store=copy.for_request(request)))
+    return render(request, "web/search_alert_done.html", {"heading": heading, "message": message,
+                                                          "meta_title": heading, "noindex": True})
+
+
+@require_GET
+def search_alert_stop(request, token):
+    from catalogue import search_alerts
+
+    search_alerts.stop(token)
+    heading = text(request, "alerts.stopped.title")
+    return render(request, "web/search_alert_done.html", {"heading": heading, "message": text(request, "watchlist.alert.stopped.body"),
+                                                          "meta_title": heading, "noindex": True})
 
 
 @require_GET

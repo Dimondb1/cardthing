@@ -150,7 +150,8 @@ systemctl reload caddy
 # stock watcher (which fires at the same minute and skips while the lock is held) can never crowd it
 # out. tidy_all runs at five past on its own lock and then waits up to 30 minutes for the import
 # lock, so it never merges or moves products while a shop read is saving offers. The stock alerts
-# (every 10 minutes) and the drop reminders (every 15, at 9 past, on their own lock) never depend on the reader, the Claude judge looks every 5 minutes on its own lock and does nothing
+# (every 10 minutes), the drop reminders (every 15, at 9 past, on their own lock) and the search alerts (every 15,
+# at 4 past, on their own lock) never depend on the reader, the Claude judge looks every 5 minutes on its own lock and does nothing
 # until the owner saves a key and switches it on in Things to check, check_worker logs whether the reader is alive (and tells the owner,
 # at most once a day, when it has stopped or never starts), and backup_db keeps five nightly copies.
 # tidy_referrals runs hourly at 55 past on its own lock: it retries refer a friend address emails and deletes
@@ -173,6 +174,7 @@ echo "PYTHONUNBUFFERED=1
 */10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
 3-59/10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-alerts.lock .venv/bin/python manage.py send_stock_alerts >> /var/log/ripraptor-import.log 2>&1
 9-59/15 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-drops.lock .venv/bin/python manage.py send_drop_alerts >> /var/log/ripraptor-import.log 2>&1
+4-59/15 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-search-alerts.lock .venv/bin/python manage.py send_search_alerts >> /var/log/ripraptor-import.log 2>&1
 2-59/5 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 900 flock -n /tmp/ripraptor-judge.lock .venv/bin/python manage.py judge_checks >> /var/log/ripraptor-import.log 2>&1
 51 6 * * * cd $DIR && set -a && . ./.env && set +a && flock -w 1200 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py check_set_retail >> /var/log/ripraptor-import.log 2>&1
 20 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1

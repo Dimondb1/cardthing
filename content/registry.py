@@ -682,6 +682,14 @@ ENTRIES = [
         "Link that removes all filters.",
     ),
     Entry(
+        "browse.alert_link", B, "Email me about these link",
+        "Email me when products like these are in stock",
+        "Under the filters on search and game pages once a game is chosen. Opens the alert form on the watchlist "
+        "page with the same game, type, language and price filled in. The alert can be wider than the list (it "
+        "has no set or search words), so this must not promise these exact products. Shown only while emails "
+        "are set up.",
+    ),
+    Entry(
         "browse.price.label", T, "Price label in results",
         "delivered",
         "Small word under the price in search results and product lists.",
@@ -1708,6 +1716,171 @@ ENTRIES = [
         "Text when the watchlist is empty.",
     ),
     Entry("watchlist.empty.button", B, "Empty watchlist button", "See today's deals", "Button when the watchlist is empty."),
+    Entry("watchlist.alert.title", H, "Alert me heading", "Alert me", "Heading of the search alert form on the watchlist page."),
+    Entry(
+        "watchlist.alert.intro", T, "Alert me introduction",
+        "Describe what you are after and we will email you when a UK shop has it in stock at your price or less.",
+        "Under the Alert me heading.",
+    ),
+    Entry("watchlist.alert.game", T, "Alert game label", "Game", "Label for the game choice in the alert form."),
+    Entry("watchlist.alert.type", T, "Alert type label", "Product type", "Label for the product type choice in the alert form."),
+    Entry("watchlist.alert.any_type", T, "Any type choice", "Any type", "First choice in the product type list."),
+    Entry("watchlist.alert.lang", T, "Alert language label", "Language", "Label for the language choice in the alert form."),
+    Entry("watchlist.alert.any_lang", T, "Any language choice", "Any language", "First choice in the language list."),
+    Entry("watchlist.alert.max", T, "Alert price label", "Most you will pay, delivered (£)", "Label for the price box in the alert form."),
+    Entry("watchlist.alert.max_hint", T, "Alert price hint", "Leave empty for any price.", "Under the price box in the alert form."),
+    Entry("watchlist.alert.email", T, "Alert email label", "Your email address", "Label for the email box in the alert form."),
+    Entry("watchlist.alert.button", B, "Set up alert button", "Set up alert", "Button that sends the alert form."),
+    Entry(
+        "watchlist.alert.note", T, "Alert me privacy note",
+        "We use your address for this alert alone. Each email has a link that deletes it at once, and we delete it "
+        "six months after you confirm.",
+        "Under the alert form.",
+        legal=True,
+    ),
+    Entry(
+        "watchlist.alert.what_price", T, "Alert with a price",
+        "{things} up to {price} delivered",
+        "How an alert with a price reads, in its summary and emails. {things} is built from the choices, for example "
+        "English Pokémon booster packs.",
+        placeholders=("things", "price"),
+    ),
+    Entry(
+        "watchlist.alert.summary", T, "Alert summary",
+        "{what}, in stock",
+        "The alert read back in plain English: after asking, on the confirmed page and in the emails.",
+        placeholders=("what",),
+    ),
+    Entry("watchlist.alert.done.title", H, "Alert check your inbox heading", "Check your inbox", "After asking for a search alert."),
+    Entry(
+        "watchlist.alert.done.body", T, "Alert check your inbox text",
+        "We have emailed a link to confirm your alert for {summary}. Nothing else is sent until you press it. "
+        "If that address already has this alert, there is nothing more to do.",
+        "After asking for a search alert, in place of the form. The same for every address, so the page never says "
+        "whether an address already has an alert.",
+        placeholders=("summary",),
+    ),
+    Entry("watchlist.alert.again", B, "Another alert link", "Set up another alert", "After asking for a search alert."),
+    Entry("watchlist.alert.problem", H, "Alert not set heading", "Alert not set", "When a search alert could not be taken."),
+    Entry(
+        "watchlist.alert.invalid", T, "Alert form problem",
+        "Check the choices marked below.",
+        "When a choice in the alert form is missing or out of range.",
+    ),
+    Entry(
+        "watchlist.alert.price_range", T, "Alert price out of range",
+        "Enter a price from {low} to {high}, or leave it empty.",
+        "Under the price box when the price is out of range.",
+        placeholders=("low", "high"),
+    ),
+    Entry(
+        "watchlist.alert.busy", T, "Too many alert requests",
+        "Too many alerts were asked for from here just now. Try again in an hour.",
+        "Shown when one internet connection asks for more than ten alerts in an hour.",
+    ),
+    Entry("watchlist.alert.confirmed.title", H, "Search alert confirmed heading", "Alert confirmed", "Page after the confirm link in a search alert email."),
+    Entry(
+        "watchlist.alert.confirmed.body", T, "Search alert confirmed text",
+        "We will email you when there is something new for {summary}. Your alert is deleted six months from now.",
+        "Page after the confirm link in a search alert email.",
+        placeholders=("summary",),
+        legal=True,
+    ),
+    Entry(
+        "watchlist.alert.gone.body", T, "Search alert link expired text",
+        "The alert was stopped or expired. Set it up again on the watchlist page if you still want it.",
+        "Page for a search alert confirm link that no longer works.",
+    ),
+    Entry(
+        "watchlist.alert.full.body", T, "Search alert limit reached text",
+        "This address already has {count} alerts, the most we keep. Stop one with the link in its email, then "
+        "press this confirm link again within a week.",
+        "Page for a search alert confirm link when the address already has the most confirmed alerts.",
+        placeholders=("count",),
+    ),
+    Entry(
+        "watchlist.alert.stopped.body", T, "Search alert stopped text",
+        "This alert has been deleted. Your email address is deleted with it unless another of your alerts "
+        "still uses it.",
+        "Page after the stop link in a search alert email.",
+        legal=True,
+    ),
+    Entry("watchlist.email.stop.button", B, "Search alert stop button", "Stop this alert",
+          "At the foot of every search alert email. Deletes that one alert."),
+    Entry(
+        "watchlist.email.stop_note", T, "Search alert stop note",
+        "Stopping deletes this alert at once. Your address goes with it unless another alert uses it.",
+        "At the foot of every search alert email.",
+        legal=True,
+    ),
+    Entry("watchlist.alert.back", B, "Back to the watchlist button", "Back to the watchlist", "On the search alert confirm and stop pages."),
+    Entry(
+        "watchlist.email.confirm.subject", T, "Search alert confirmation subject",
+        "Confirm your alert: {summary}",
+        "Subject of the email that confirms a search alert.",
+        placeholders=("summary",),
+    ),
+    Entry(
+        "watchlist.email.confirm.preheader", T, "Search alert confirmation preview",
+        "One click and we will email you when they are in stock.",
+        "Preview line of the confirmation email.",
+    ),
+    Entry("watchlist.email.confirm.title", H, "Search alert confirmation heading", "Confirm your alert", "In the confirmation email."),
+    Entry(
+        "watchlist.email.confirm.body", T, "Search alert confirmation text",
+        "You asked {site_name} to email you about {summary}.",
+        "In the confirmation email.",
+        placeholders=("summary", "site_name"),
+    ),
+    Entry("watchlist.email.confirm.button", B, "Search alert confirmation button", "Confirm my alert", "In the confirmation email."),
+    Entry(
+        "watchlist.email.confirm.note", T, "Search alert confirmation note",
+        "Nothing is sent until you confirm. If this was not you, ignore this email and the request is deleted within "
+        "a week. Once confirmed, the alert is deleted after six months.",
+        "In the confirmation email.",
+        legal=True,
+    ),
+    Entry(
+        "watchlist.email.match.subject", T, "Search alert email subject",
+        "In stock: {what}",
+        "Subject of the email sent when products match a search alert.",
+        placeholders=("what",),
+    ),
+    Entry(
+        "watchlist.email.match.preheader", T, "Search alert email preview",
+        "{product}, {price}.",
+        "Preview line of the search alert email: the cheapest product. Never names a shop.",
+        placeholders=("product", "price"),
+    ),
+    Entry(
+        "watchlist.email.match.body", T, "Search alert email text",
+        "These match your alert for {summary}, cheapest first. See every price on {site_name}.",
+        "In the search alert email.",
+        placeholders=("summary", "site_name"),
+    ),
+    Entry("watchlist.email.match.delivered", T, "Search alert email price", "from {price} delivered", "Each product's price in a search alert email.", placeholders=("price",)),
+    Entry("watchlist.email.match.plus", T, "Search alert email price, delivery unknown", "from {price} plus delivery", "A product's price when its delivery charge is not known.", placeholders=("price",)),
+    Entry("watchlist.email.match.checked", T, "Search alert email checked", "Checked {when}", "After each price in a search alert email.", placeholders=("when",)),
+    Entry("watchlist.email.match.button", B, "Search alert email button", "See prices", "Button under each product in a search alert email. Opens its page on RipRaptor."),
+    Entry(
+        "watchlist.email.match.more.one", T, "Search alert email one more",
+        "And 1 more",
+        "Link to the full list when one more product matches than the email shows.",
+        placeholders=("count",),
+    ),
+    Entry(
+        "watchlist.email.match.more.other", T, "Search alert email more",
+        "And {count} more",
+        "Link to the full list when more products match than the email shows.",
+        placeholders=("count",),
+    ),
+    Entry(
+        "watchlist.email.match.footer", T, "Search alert email footer",
+        "We email you when something new matches. A product is sent again only if it sold out or went over your "
+        "price and came back, and not within a week. Your alert is deleted six months after you confirmed it.",
+        "Footer of the search alert email.",
+        legal=True,
+    ),
     Entry("alerts.form.title", T, "Alert form heading", "Email me when it is back in stock", "Above the email box on a product no shop has in stock."),
     Entry(
         "alerts.form.preorder", T, "Alert form heading (pre-orders too)",
@@ -1929,6 +2102,19 @@ ENTRIES = [
         "address, postal address and postcode that has had a keyring; it cannot be turned back into the address. Every email has a "
         "link to delete your details.",
         "Data section of the terms page, shown while the keyring offer runs or has people in it.",
+        legal=True,
+    ),
+    Entry(
+        "terms.data.search_alerts", P, "Search alerts data",
+        "If you set up an alert on the watchlist page, we keep your email address with what you described (the "
+        "game, and the type, language and price if you chose them) for that alone. Nothing is sent until you "
+        "confirm by the link we email you. We then email you when products that match are in stock at a UK shop, "
+        "and keep a list of the products we have emailed you about so we do not send them again. Unconfirmed "
+        "requests are deleted after a week, and alerts are deleted six months after you confirmed them, with that "
+        "list. Every email has a link that deletes your alert at once. To stop too many requests we count them "
+        "under a one-way fingerprint of your connection and of your address, kept for a day at most. These "
+        "emails go through Zoho ZeptoMail too.",
+        "Data section of the terms page, after the main explanation: what a search alert keeps.",
         legal=True,
     ),
     Entry(

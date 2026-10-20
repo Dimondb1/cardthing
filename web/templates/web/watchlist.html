@@ -1,12 +1,13 @@
 {% extends "web/base.html" %}
-{% load sitecopy ripraptor %}
+{% load sitecopy ripraptor static %}
+{% block scripts %}{% if alerts_on %}<script src="{% static 'js/search-alert.js' %}" defer></script>{% endif %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1 class="page-title">{% copy "watchlist.title" %}</h1>
   <p class="page-intro">{% copy "watchlist.intro" %}</p>
 </div>
 
-<div data-watchlist data-saved-at="{% copy 'watchlist.saved_at' price='{price}' %}">
+<div data-watchlist data-watchlist-url="{% url 'web:watchlist' %}" data-saved-at="{% copy 'watchlist.saved_at' price='{price}' %}">
 {% if rows %}
 <ul class="watch">
   {% for product, summary in rows %}
@@ -47,5 +48,44 @@
 </div>
 {% endif %}
 </div>
+{% if alerts_on %}
+<section class="search-alert" id="alert" aria-labelledby="alert-title" data-search-alert-box>
+  <h2 class="section-title" id="alert-title">{% copy "watchlist.alert.title" %}</h2>
+  {% if alert_state == "sent" %}
+  <div class="search-alert__done" role="status">
+    <p class="search-alert__done-title">{% copy "watchlist.alert.done.title" %}</p>
+    <p>{% if alert_summary %}{% copy "watchlist.alert.done.body" summary=alert_summary %}{% else %}{% copy "alerts.form.sent" %}{% endif %}</p>
+    <p><a href="{{ alert_again_url }}">{% copy "watchlist.alert.again" %}</a></p>
+  </div>
+  {% else %}
+  <p class="search-alert__intro">{% copy "watchlist.alert.intro" %}</p>
+  <form class="search-alert__form" method="post" action="{% url 'web:search_alert_ask' %}#alert" data-search-alert>
+    {% csrf_token %}
+    {% if list_slugs %}<input type="hidden" name="p" value="{{ list_slugs }}">{% endif %}
+    <p class="alert-box__error" data-search-alert-status role="alert"{% if not alert_form.errors and alert_state != "busy" and alert_state != "failed" %} hidden{% endif %}>{% if alert_form.errors %}{% copy "watchlist.alert.invalid" %}{% elif alert_state == "busy" %}{% copy "watchlist.alert.busy" %}{% elif alert_state == "failed" %}{% copy "alerts.form.failed" %}{% endif %}</p>
+    <div class="search-alert__fields">
+      {% for field in alert_form %}{% if field.name != "email" %}
+      <div class="search-alert__field{% if field.errors %} is-wrong{% endif %}">
+        <label class="search-alert__label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {% if field.name == "max" %}<input class="alert-box__input search-alert__input" type="text" name="max" id="{{ field.id_for_label }}" value="{{ field.value|default_if_none:'' }}" inputmode="decimal" autocomplete="off" maxlength="12" placeholder="5.00" aria-describedby="alert-max-hint">
+        <span class="search-alert__hint" id="alert-max-hint">{% copy "watchlist.alert.max_hint" %}</span>
+        {% for error in field.errors %}<span class="search-alert__error">{{ error }}</span>{% endfor %}{% else %}<span class="pill search-alert__pill">{{ field }}</span>{% endif %}
+      </div>
+      {% endif %}{% endfor %}
+    </div>
+    <div class="search-alert__field{% if alert_form.email.errors %} is-wrong{% endif %}">
+      <label class="search-alert__label" for="alert-email">{{ alert_form.email.label }}</label>
+      <div class="drop-remind__row">
+        <input id="alert-email" class="alert-box__input search-alert__input drop-remind__input" type="email" name="email" value="{{ alert_form.email.value|default_if_none:'' }}" required autocomplete="email" inputmode="email" maxlength="254" placeholder="{% copy 'alerts.form.placeholder' %}">
+        <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+        <button class="button button--small drop-remind__button" type="submit">{% copy "watchlist.alert.button" %}</button>
+      </div>
+      {% if alert_form.email.errors %}<span class="search-alert__error">{% copy "alerts.form.invalid" %}</span>{% endif %}
+    </div>
+    <p class="drop-remind__note">{% copy "watchlist.alert.note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
 {% if refer_advertised %}<p class="small-print"><a href="{% url 'web:refer' %}">{% copy "refer.nav" %}</a></p>{% endif %}
 {% endblock %}

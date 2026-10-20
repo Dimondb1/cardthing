@@ -1,0 +1,9 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{{ heading }}</h1>
+  <p class="page-intro">{{ message }}</p>
+</div>
+<p><a class="button" href="{% url 'web:watchlist' %}">{% copy "watchlist.alert.back" %}</a></p>
+{% endblock %}

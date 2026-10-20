@@ -6,7 +6,7 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    ClaudeAsk, DropAlert, KeyringClaim, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    ClaudeAsk, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -396,6 +396,37 @@ class DropAlertAdmin(admin.ModelAdmin):
                        "preorder_sent_at", "eve_sent_at", "eve_for", "day_sent_at")
 
     def has_add_permission(self, request):
+        return False
+
+
+class SearchAlertSentInline(admin.TabularInline):
+    model = SearchAlertSent
+    fields = ("product", "sent_at", "gone_at")
+    readonly_fields = fields
+    extra = 0
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SearchAlert)
+class SearchAlertAdmin(admin.ModelAdmin):
+    """The watchlist page's search alerts. Read only: each belongs to the visitor who asked for it, and its
+    email's stop link deletes it. Deleting one here deletes it at once too."""
+
+    list_display = ("game", "product_type", "language", "max_price", "email", "created_at", "confirmed_at", "sent_at")
+    list_filter = ("confirmed_at", "game")
+    search_fields = ("email",)
+    list_select_related = ("game",)
+    readonly_fields = ("email", "token", "game", "product_type", "language", "max_price", "created_at",
+                       "confirmed_at", "confirm_sent_at", "sent_at")
+    inlines = [SearchAlertSentInline]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
 
 

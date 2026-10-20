@@ -3,7 +3,8 @@
 # (--if-worker-dead 30), so the site keeps updating if it never starts. The hourly import waits up to 30 minutes
 # for the import lock, which the reader holds only while a shop read is running. tidy_all runs hourly on its own
 # lock and then waits up to 30 minutes for the import lock, so it never merges products while a read saves offers.
-# The stock alerts run every 10 minutes and the drop reminders every 15 (9 past, on their own lock) whatever the reader does, the Claude judge looks every 5 minutes and
+# The stock alerts run every 10 minutes, the drop reminders every 15 (9 past, on their own lock) and the watchlist's search
+# alerts every 15 (4 past, on their own lock) whatever the reader does, the Claude judge looks every 5 minutes and
 # sends nothing until the owner switches it on (its daily check_set_retail at 6:51 waits for the judge's lock), check_worker hourly, price history and a
 # backup nightly, delivery charges weekly, and the refer a friend tidy
 # (address emails that failed, and deleting details no longer needed) hourly at 55 past on its own lock. The cached page lists are
@@ -21,6 +22,7 @@ PYTHONUNBUFFERED=1
 */10 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
 3-59/10 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-alerts.lock .venv/bin/python manage.py send_stock_alerts >> /var/log/ripraptor-import.log 2>&1
 9-59/15 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-drops.lock .venv/bin/python manage.py send_drop_alerts >> /var/log/ripraptor-import.log 2>&1
+4-59/15 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-search-alerts.lock .venv/bin/python manage.py send_search_alerts >> /var/log/ripraptor-import.log 2>&1
 2-59/5 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 900 flock -n /tmp/ripraptor-judge.lock .venv/bin/python manage.py judge_checks >> /var/log/ripraptor-import.log 2>&1
 51 6 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && flock -w 1200 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py check_set_retail >> /var/log/ripraptor-import.log 2>&1
 20 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1

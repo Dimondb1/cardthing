@@ -40,6 +40,7 @@ TIMEOUTS = {
     "watch_stock": 540,
     "send_stock_alerts": 540,
     "send_drop_alerts": 540,
+    "send_search_alerts": 540,
     "snapshot_daily_prices": 1800,
     "check_delivery": 3000,
     "fetch_geoip": 1800,
@@ -210,13 +211,13 @@ class UploadLimitTests(TestCase):
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()
-        self.assertEqual(len(installed), 14)
+        self.assertEqual(len(installed), 15)
         self.assertEqual(installed, file_cron())
 
     def test_both_files_load_the_settings_before_every_command(self):
         for name, block in (("install.sh", install_block()), ("crontab", (DEPLOY / "crontab").read_text())):
             commands = [SCHEDULE.match(raw.strip()).group(2) for raw in block.splitlines() if "manage.py" in raw]
-            self.assertEqual(len(commands), 14, name)
+            self.assertEqual(len(commands), 15, name)
             for command in commands:
                 self.assertRegex(command, PREFIX, name)
 
@@ -334,6 +335,11 @@ class CronTests(TestCase):
         self.assertEqual(lines["send_drop_alerts"][0], "9-59/15 * * * *")
         self.assertIn("flock -n /tmp/ripraptor-drops.lock .venv/bin/python manage.py send_drop_alerts", lines["send_drop_alerts"][1])
         self.assertNotIn("--if-worker-dead", lines["send_drop_alerts"][1])
+        # The watchlist's search alerts likewise, every 15 minutes at 4 past, on their own lock.
+        self.assertEqual(lines["send_search_alerts"][0], "4-59/15 * * * *")
+        self.assertIn("flock -n /tmp/ripraptor-search-alerts.lock .venv/bin/python manage.py send_search_alerts",
+                      lines["send_search_alerts"][1])
+        self.assertNotIn("--if-worker-dead", lines["send_search_alerts"][1])
 
     def test_the_worker_unit_restarts_it_under_a_watchdog_and_install_starts_it(self):
         unit = (DEPLOY / "ripraptor-worker.service").read_text()

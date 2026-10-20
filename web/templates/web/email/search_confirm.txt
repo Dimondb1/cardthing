@@ -1,0 +1,9 @@
+{% load sitecopy %}{% autoescape off %}{% copy "watchlist.email.confirm.body" summary=values.summary site_name=values.site_name %}
+
+{% copy "watchlist.email.confirm.button" %}:
+{{ confirm_url }}
+
+{% copy "watchlist.email.confirm.note" %}
+
+{% copy "watchlist.email.stop.button" %}: {{ stop_url }}
+{% copy "watchlist.email.stop_note" %}{% endautoescape %}

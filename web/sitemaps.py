@@ -103,11 +103,16 @@ class SetSitemap(Sitemap):
 
 
 class PageSitemap(Sitemap):
+    """The fixed pages. Out now on the drops page (?show=out) has its own title, description and canonical
+    address, and lists different products, so it is a page of its own here too."""
+
     def items(self):
-        return ["web:home", "web:deals", "web:drops", "web:games", "web:about", "web:list_shop", "web:terms"]
+        return ["web:home", "web:deals", "web:drops", "web:drops?show=out", "web:games", "web:about",
+                "web:list_shop", "web:terms"]
 
     def location(self, name):
-        return reverse(name)
+        name, _, query = name.partition("?")
+        return reverse(name) + (f"?{query}" if query else "")
 
 
 SITEMAPS = {

@@ -3279,9 +3279,40 @@ under Sorted for you on Things to check with an Undo that brings it back.
 
 Every page carries a canonical link, Open Graph and Twitter sharing tags,
 and structured data: WebSite with site search and Organization on the
-home page, Product with its offers plus a BreadcrumbList on product
-pages, and BreadcrumbList on game and set pages. Product titles and
-descriptions lead with the cheapest delivered price. `/robots.txt`
+home page; on product pages Product with its offers (AggregateOffer:
+lowest and highest price, number of offers, stock), a BreadcrumbList and
+an ItemPage whose `mainEntity` is that Product (linked by `@id`, the
+page's address plus `#product`, `#breadcrumb` and `#webpage`); on game
+and set pages a BreadcrumbList and, on the canonical view only (first
+page of the In stock tab, no filters), a CollectionPage whose
+`mainEntity` is an ItemList of the products that view shows. Other tabs,
+pages and filters share the canonical address, so they carry only the
+breadcrumbs. Product titles lead with the lowest delivered price.
+Descriptions say "cheapest today" only when that price is in stock; when
+the cheapest is a pre-order they say so and name the cheapest shop with
+it in stock, if any. Descriptions are cut to 160 characters at a whole
+sentence or word (`web/hubs.py`).
+
+Game and set pages are hubs. Their titles, descriptions and the line
+under the heading are worked out from the catalogue on each visit
+(`web/hubs.py`, three queries however big the game): how many products,
+how many a UK shop has in stock now, how many shops have a current price
+(a shop whose only price is stale is not counted) and the cheapest
+delivered price in stock, with that product linked. Titles name the
+product types in stock in the game's own words (`PLURALS` in
+`catalogue/types.py`), as many as fit in about 60 characters; when even
+one does not fit, a short form ("Cheapest {game} {types} in stock UK",
+"{set} {types}: UK prices") is used. Nothing says "cheapest" or "in
+stock" unless a shop has it in stock now: a hub with nothing in stock, a
+set still to come (its release date, and pre-orders only when a shop
+takes them) and a game no shop lists yet each get plainer wording. All of it is in Site
+wording under "Page titles and search engine descriptions" and "Search
+results and browsing" (`browse.hub.*`). Set pages link back to their
+game under the heading as well as in the breadcrumb.
+
+`/deals/`, `/drops/` and Out now (`/drops/?show=out`) are plain server
+rendered pages with their own addresses, titles and descriptions, and all
+three are in the sitemap. `/robots.txt`
 names the AI crawlers and allows them the same pages as everyone else,
 and `/llms.txt` describes the site in plain Markdown with links to the
 games, the how it works page and the sitemap. Search, swipe and the

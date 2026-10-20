@@ -135,6 +135,66 @@ GAME_TYPES = {
 }
 
 
+# What people type into a search engine for each label, plural: page titles and descriptions name the types a
+# game or set has in stock with these ("Cheapest Pokémon booster boxes and ETBs ..."). A label not listed is
+# lower-cased with an s added. "Other" is never named.
+PLURALS = {
+    "Battle deck": "battle decks",
+    "Blister": "blisters",
+    "Blitz or Armory deck": "Blitz and Armory decks",
+    "Booster box": "booster boxes",
+    "Booster bundle": "booster bundles",
+    "Booster pack": "booster packs",
+    "Box set": "box sets",
+    "Bundle": "bundles",
+    "Champion deck": "champion decks",
+    "Collection": "collections",
+    "Collection box": "collection boxes",
+    "Collector booster box": "collector booster boxes",
+    "Collector booster pack": "collector booster packs",
+    "Collector's set": "collector's sets",
+    "Commander deck": "Commander decks",
+    "Deck": "decks",
+    "Double pack set": "double pack sets",
+    "Elite Trainer Box": "ETBs",
+    "Gift bundle": "gift bundles",
+    "Gift set": "gift sets",
+    "Hobby or retail box": "hobby and retail boxes",
+    "Illumineer's Trove": "Illumineer's Troves",
+    "Multipack": "multipacks",
+    "Pack": "packs",
+    "Play booster box": "play booster boxes",
+    "Play booster pack": "play booster packs",
+    "Premium collection": "premium collections",
+    "Premium pack set": "premium pack sets",
+    "Premium set": "premium sets",
+    "Prerelease box": "prerelease boxes",
+    "Proving grounds": "Proving Grounds boxes",
+    "Special set": "special sets",
+    "Start deck": "start decks",
+    "Starter deck": "starter decks",
+    "Starter pack or multipack": "starter packs and multipacks",
+    "Structure deck": "structure decks",
+    "Tin": "tins",
+    "Trial deck": "trial decks",
+}
+
+
+def plural_words(game_slug, codes):
+    """The plural search words for ``codes`` (any order), in the game's own order of types, "other" left out."""
+    wanted = set(codes)
+    words = []
+    for code, label in GAME_TYPES.get(game_slug, DEFAULT):
+        if code in wanted and code != "other":
+            words.append(PLURALS.get(label, label.lower() + "s"))
+            wanted.discard(code)
+    # A type the game does not list (filed before its list was trimmed) still counts, after the game's own.
+    for code, label in DEFAULT:
+        if code in wanted and code != "other":
+            words.append(PLURALS.get(label, label.lower() + "s"))
+    return words
+
+
 def type_choices(game_slug=None, present=None):
     """(code, label) pairs for the filter, in the game's order.
 

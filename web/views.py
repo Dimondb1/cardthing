@@ -34,9 +34,9 @@ from content import service as copy
 from inbox import service as inbox
 from inbox.models import Conversation
 
-from . import listcache
+from . import hubs, listcache
 from .charts import price_chart
-from .templatetags.ripraptor import gbp
+from .templatetags.ripraptor import gbp, short_date
 
 
 
@@ -119,8 +119,11 @@ def stock_tab(tab, compared=False):
 
 
 def _browse(request, template_context, *, base_queryset, fixed_game=None, default_ordering=None, tabs=False,
-            template="web/browse.html"):
+            template="web/browse.html", structured=None):
     """Shared by search, game and set pages, and Out now on the drops page (``template``).
+
+    ``structured``, when given, is called with the page of products shown and returns the page's structured
+    data (a list of schema.org blocks), so a hub's ItemList names exactly the products on the page.
 
     With ``tabs`` (game and set pages) the products are split into STOCK_TABS: the page shows one tab's
     list, counted for every tab in one query, and ``?pane=1`` returns just that tab's list for the
@@ -226,6 +229,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         response = render(request, "web/includes/stock_pane.html", {**context, "pane": tab})
         response["X-Robots-Tag"] = "noindex"
         return response
+    if structured is not None:
+        context["structured_json"] = ld_json(structured(page))
     return render(request, template, context)
 
 
@@ -700,21 +705,30 @@ def games(request):
 def game_detail(request, game_slug):
     game = get_object_or_404(Game, slug=game_slug, is_active=True)
     sets = ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct()
+    words = hubs.Words(text, request)
+    # Only the page as people land on it needs the numbers: a tab's list fetched by script shows none of them.
+    stats = hubs.HubStats() if request.GET.get("pane") else hubs.hub_stats(game=game)
+    meta_title, meta_description = hubs.game_meta(words, game, stats)
+    page_url = request.build_absolute_uri(game.get_absolute_url())
+    crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url())], page_url=page_url)
     return _browse(
         request,
         {
             "heading": game.name,
             "game": game,
             "sets": sets,
-            "meta_title": text(request, "meta.game.title", game=game.name),
-            "meta_description": text(request, "meta.game.description", game=game.name),
-            "canonical_url": request.build_absolute_uri(game.get_absolute_url()),
-            "structured_json": ld_json(breadcrumbs_json(request, [(game.name, game.get_absolute_url())])),
+            "intro": hubs.intro(words, stats),
+            "meta_title": meta_title,
+            "meta_description": meta_description,
+            "canonical_url": page_url,
             "coming_soon": coming_soon_sets(game),
         },
         base_queryset=Product.objects.for_lists().filter(game=game),
         fixed_game=game,
         tabs=True,
+        structured=lambda page: [crumbs] + ([hubs.item_list_json(
+            request, page_url, meta_title, meta_description, crumbs["@id"], page.object_list,
+        )] if hub_is_canonical(request, page) else []),
     )
 
 
@@ -727,10 +741,20 @@ def set_detail(request, game_slug, set_slug):
         slug=set_slug,
     )
     game = product_set.game
-    values = {"set": product_set.name, "game": game.name}
     # A set still to come says when it is out and who said so; an undated one says so only while shops take
     # pre-orders, since an old set entered without a date is not still to come.
     upcoming = any(row.pk == product_set.pk for row in coming_soon_sets(game, limit=None))
+    words = hubs.Words(text, request)
+    stats = hubs.HubStats() if request.GET.get("pane") else hubs.hub_stats(product_set=product_set)
+    out_later = bool(product_set.release_date and product_set.release_date >= timezone.localdate())
+    meta_title, meta_description = hubs.set_meta(
+        words, product_set, stats, upcoming, date=short_date(product_set.release_date) if out_later else "",
+    )
+    page_url = request.build_absolute_uri(product_set.get_absolute_url())
+    crumbs = breadcrumbs_json(
+        request, [(game.name, game.get_absolute_url()), (product_set.name, product_set.get_absolute_url())],
+        page_url=page_url,
+    )
     return _browse(
         request,
         {
@@ -739,19 +763,20 @@ def set_detail(request, game_slug, set_slug):
             "product_set": product_set,
             "set_upcoming": upcoming,
             # A set sold only at events or direct by the publisher says so where its release would be.
-            "set_out_later": bool(product_set.release_date and product_set.release_date >= timezone.localdate()),
+            "set_out_later": out_later,
             "date_source": date_source_label(product_set) if upcoming else "",
             "sets": ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct(),
-            "meta_title": text(request, "meta.set.title", **values),
-            "meta_description": text(request, "meta.set.description", **values),
-            "canonical_url": request.build_absolute_uri(product_set.get_absolute_url()),
-            "structured_json": ld_json(breadcrumbs_json(
-                request, [(game.name, game.get_absolute_url()), (product_set.name, product_set.get_absolute_url())]
-            )),
+            "intro": hubs.intro(words, stats),
+            "meta_title": meta_title,
+            "meta_description": meta_description,
+            "canonical_url": page_url,
         },
         base_queryset=Product.objects.for_lists().filter(product_set=product_set),
         fixed_game=game,
         tabs=True,
+        structured=lambda page: [crumbs] + ([hubs.item_list_json(
+            request, page_url, meta_title, meta_description, crumbs["@id"], page.object_list,
+        )] if hub_is_canonical(request, page) else []),
     )
 
 
@@ -760,14 +785,24 @@ def set_detail(request, game_slug, set_slug):
 SCRIPT_ESCAPES = {ord("<"): "\\u003c", ord(">"): "\\u003e", ord("&"): "\\u0026"}
 
 
+def hub_is_canonical(request, page):
+    """Whether a game or set page is shown as its canonical address names it: the first page of the In stock
+    tab with no filters. Only that view describes the page in structured data, since every other view shares
+    its canonical address and @id but lists other products. Tracking parameters do not count."""
+    params = {key: value for key, value in request.GET.items()
+              if value and key not in ("page", "tab") and not key.startswith("utm_") and key not in ("gclid", "fbclid")}
+    return page.number == 1 and not params and request.GET.get("tab", STOCK_TABS[0][0]) in ("", STOCK_TABS[0][0])
+
+
 def ld_json(data):
     """``data`` as JSON safe to put inside a <script type="application/ld+json"> block."""
     return json.dumps(data).translate(SCRIPT_ESCAPES)
 
 
-def breadcrumbs_json(request, crumbs):
-    """schema.org BreadcrumbList for [(name, path), ...]."""
-    return {
+def breadcrumbs_json(request, crumbs, page_url=None):
+    """schema.org BreadcrumbList for [(name, path), ...]. With ``page_url`` it carries an @id (the page's address
+    and #breadcrumb), so the page's own WebPage block can point at it."""
+    data = {
         "@context": "https://schema.org",
         "@type": "BreadcrumbList",
         "itemListElement": [
@@ -775,6 +810,10 @@ def breadcrumbs_json(request, crumbs):
             for i, (name, path) in enumerate(crumbs)
         ],
     }
+    if page_url:
+        data = {"@context": data["@context"], "@type": data["@type"], "@id": page_url + "#breadcrumb",
+                "itemListElement": data["itemListElement"]}
+    return data
 
 
 # The site's own social accounts, as linked in the footer.
@@ -923,11 +962,13 @@ def product_detail(request, slug):
             .order_by("name")[:6]
         )
 
+    page_url = request.build_absolute_uri(product.get_absolute_url())
     structured = {
         "@context": "https://schema.org",
         "@type": "Product",
+        "@id": page_url + "#product",
         "name": product.name,
-        "url": request.build_absolute_uri(product.get_absolute_url()),
+        "url": page_url,
         "category": product.type_name,
         "brand": {"@type": "Brand", "name": product.game.name},
     }
@@ -962,24 +1003,50 @@ def product_detail(request, slug):
         crumbs.append((product.product_set.name, product.product_set.get_absolute_url()))
     crumbs.append((product.name, product.get_absolute_url()))
     if cheapest and cheapest.delivery_known:
+        words = hubs.Words(text, request)
         meta_values = {
             "product": product.name,
             "price": gbp(cheapest.delivered_price),
             "retailer": cheapest.retailer.name,
-            "count": len(current),
+            "count": shop_count,
+            "shops": words.count("meta.shops", shop_count),
         }
         meta_title = text(request, "meta.product.title_priced", **meta_values)
-        meta_description = text(request, "meta.product.description_priced", **meta_values)
+        # "Cheapest today" only when the price quoted is in stock. When the cheapest is a pre-order, the
+        # description says so, and names the cheapest shop with it in stock if there is one.
+        stock_offer = next((listing for listing in current if listing.availability == Listing.Availability.IN_STOCK
+                            and listing.delivery_known), None)
+        if cheapest.availability == Listing.Availability.IN_STOCK:
+            key = "meta.product.description_priced"
+        elif stock_offer is not None:
+            key = "meta.product.description_preorder_stock"
+            meta_values.update(stock_price=gbp(stock_offer.delivered_price), stock_retailer=stock_offer.retailer.name)
+        else:
+            key = "meta.product.description_preorder"
+        meta_description = hubs.fit_description(hubs.tidy_stops(text(request, key, **meta_values)))
     else:
         meta_title = text(request, "meta.product.title", product=product.name)
-        meta_description = text(request, "meta.product.description", product=product.name)
+        meta_description = hubs.fit_description(text(request, "meta.product.description", product=product.name))
+    breadcrumbs = breadcrumbs_json(request, crumbs, page_url=page_url)
+    # The page itself: a page about one item, whose main entity is the Product above (when there is one).
+    item_page = {
+        "@context": "https://schema.org",
+        "@type": "ItemPage",
+        "@id": page_url + "#webpage",
+        "url": page_url,
+        "name": meta_title,
+        "description": meta_description,
+        "breadcrumb": {"@id": breadcrumbs["@id"]},
+    }
+    if product_json:
+        item_page["mainEntity"] = {"@id": structured["@id"]}
     return render(
         request,
         "web/product.html",
         {
             "product": product,
-            # A product with no prices at all carries only its breadcrumbs: Product data without offers is invalid.
-            "structured_json": ld_json(product_json + [breadcrumbs_json(request, crumbs)]),
+            # A product with no prices at all carries no Product block: Product data without offers is invalid.
+            "structured_json": ld_json(product_json + [breadcrumbs, item_page]),
             "meta_type": "product",
             "meta_image": (request.build_absolute_uri(images.sized_image_url(product.image_src, images.SHARE_WIDTH))
                            if product.image_src else ""),

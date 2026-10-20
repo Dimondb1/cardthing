@@ -380,8 +380,9 @@ class SeoAndEdgeCaseTests(PageTestCase):
 
         html = self.client.get(self.etb.get_absolute_url()).content.decode()
         start = html.index('<script type="application/ld+json">') + len('<script type="application/ld+json">')
-        data, crumbs = json.loads(html[start:html.index("</script>", start)])
+        data, crumbs, page = json.loads(html[start:html.index("</script>", start)])
         self.assertEqual(data["@type"], "Product")
+        self.assertEqual(page["@type"], "ItemPage")
         self.assertEqual(crumbs["@type"], "BreadcrumbList")
         self.assertEqual([c["name"] for c in crumbs["itemListElement"]], ["Pokémon", "Prismatic Evolutions", self.etb.name])
         self.assertEqual(data["offers"]["lowPrice"], "54.99")
@@ -623,7 +624,7 @@ class DiscoverabilityTests(PageTestCase):
         self.assertEqual(sold_out["Product"]["offers"]["availability"], "https://schema.org/OutOfStock")
         self.assertEqual(sold_out["Product"]["offers"]["lowPrice"], "140.00")
         unlisted = [b["@type"] for b in blocks(self.unpriced.get_absolute_url())]
-        self.assertEqual(unlisted, ["BreadcrumbList"])
+        self.assertEqual(unlisted, ["BreadcrumbList", "ItemPage"])
         for url in (self.etb.get_absolute_url(), self.sold_out.get_absolute_url()):
             for block in blocks(url):
                 if block["@type"] == "Product":

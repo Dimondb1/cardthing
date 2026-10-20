@@ -108,6 +108,9 @@ PLACEHOLDER_HELP = {
     "day": "a day, for example Sat 17 Oct",
     "when": "a time and day, for example 14:05, 18 Oct",
     "link": "the referrer's link to share",
+    "types": "the product types in stock, for example booster boxes and ETBs",
+    "products": "a number of products, for example 412 sealed products",
+    "shops": "a number of shops, for example 18 UK shops",
 }
 
 
@@ -779,6 +782,54 @@ ENTRIES = [
         "browse.game.sets_title", H, "Sets heading on a game page",
         "Sets",
         "Heading above the list of sets on each game page.",
+    ),
+    Entry("browse.hub.products.one", T, "Hub product count (one)", "1 sealed product",
+          "Starts the line under the heading of a game or set page with one product."),
+    Entry("browse.hub.products.other", T, "Hub product count (more than one)", "{count} sealed products",
+          "Starts the line under the heading of a game or set page.", placeholders=("count",)),
+    Entry("browse.hub.shops.one", T, "Hub shop count (one)", "1 UK shop",
+          "In the line under the heading of a game or set page: shops listing any of its products."),
+    Entry("browse.hub.shops.other", T, "Hub shop count (more than one)", "{count} UK shops",
+          "In the line under the heading of a game or set page: shops listing any of its products.",
+          placeholders=("count",)),
+    Entry(
+        "browse.hub.intro", T, "Hub line",
+        "{products} compared across {shops}, {count} in stock now.",
+        "Under the heading of a game or set page while a shop has something in stock. {count} is how many are "
+        "in stock.",
+        placeholders=("products", "shops", "count"),
+    ),
+    Entry(
+        "browse.hub.lowest", T, "Hub cheapest in stock",
+        "Cheapest in stock: {product}, {price} delivered at {retailer}.",
+        "After the hub line: the cheapest delivered price in stock now. The product name links to its page.",
+        placeholders=("product", "price", "retailer"),
+    ),
+    Entry(
+        "browse.hub.none_in_stock", T, "Hub line with nothing in stock",
+        "{products} compared across {shops}. None is in stock right now; pre-orders and sold out products are "
+        "in the tabs below.",
+        "Under the heading of a game or set page when no shop has anything in stock.",
+        placeholders=("products", "shops"),
+    ),
+    Entry(
+        "browse.hub.unlisted", T, "Hub line with no shop",
+        "{products}, not yet listed by a UK shop we check.",
+        "Under the heading of a game or set page when no shop lists any of its products.",
+        placeholders=("products",),
+    ),
+    Entry(
+        "browse.hub.no_current", T, "Hub line with no current price",
+        "{products}, with no current price from a UK shop we check.",
+        "Under the heading of a game or set page when shops list its products but none has a price checked "
+        "recently enough to show.",
+        placeholders=("products",),
+    ),
+    Entry(
+        "browse.set.game_link", B, "Set page link to its game",
+        "All {game} products",
+        "Under the heading of a set page: opens the game's page.",
+        placeholders=("game",),
     ),
     Entry(
         "browse.set.not_in_shops", T, "Set not sold in UK shops",
@@ -2225,10 +2276,27 @@ ENTRIES = [
     ),
     Entry(
         "meta.product.description_priced", T, "Product page description with a price",
-        "Cheapest {product} today is {price} delivered at {retailer}. Compare {count} UK shops with "
-        "stock, delivery and the time each price was checked.",
-        "Search engine description for product pages that have a current price.",
-        placeholders=("product", "price", "retailer", "count"),
+        "Cheapest {product} today is {price} delivered at {retailer}. Compare {shops} with stock, delivery "
+        "and when each price was checked.",
+        "Search engine description for product pages whose cheapest price is in stock. Cut to 160 characters "
+        "at a whole sentence or word.",
+        placeholders=("product", "price", "retailer", "count", "shops"),
+    ),
+    Entry(
+        "meta.product.description_preorder", T, "Product page description with a pre-order price",
+        "{product} is on pre-order from {price} delivered at {retailer}. Compare {shops} with delivery and "
+        "when each price was checked.",
+        "Search engine description for product pages that shops only take pre-orders for, so it never says "
+        "in stock. Cut to 160 characters at a whole sentence or word.",
+        placeholders=("product", "price", "retailer", "count", "shops"),
+    ),
+    Entry(
+        "meta.product.description_preorder_stock", T, "Product page description with a cheaper pre-order",
+        "{product} is on pre-order from {price} delivered at {retailer}, or in stock from {stock_price} at "
+        "{stock_retailer}. Compare {shops} with stock, delivery and when each price was checked.",
+        "Search engine description for product pages whose cheapest price is a pre-order while another shop "
+        "has it in stock. Cut to 160 characters at a whole sentence or word.",
+        placeholders=("product", "price", "retailer", "count", "shops", "stock_price", "stock_retailer"),
     ),
     Entry(
         "meta.watchlist.title", T, "Watchlist page title",
@@ -2263,29 +2331,116 @@ ENTRIES = [
         "Search engine description for Out now on the drops page.",
     ),
     Entry(
+        "meta.and", T, "And between product types",
+        "and",
+        "Joins the last two product types named in a title, as in booster boxes, ETBs and packs.",
+    ),
+    Entry("meta.shops.one", T, "Shop count in descriptions (one)", "1 UK shop",
+          "In search engine descriptions when one shop is counted."),
+    Entry("meta.shops.other", T, "Shop count in descriptions (more than one)", "{count} UK shops",
+          "In search engine descriptions when more than one shop is counted.", placeholders=("count",)),
+    Entry("meta.products.one", T, "Product count in descriptions (one)", "1 sealed {game} product",
+          "In search engine descriptions when one product is in stock.", placeholders=("count", "game")),
+    Entry("meta.products.other", T, "Product count in descriptions (more than one)", "{count} sealed {game} products",
+          "In search engine descriptions when more than one product is in stock.", placeholders=("count", "game")),
+    Entry(
         "meta.game.title", T, "Game page title",
-        "{game} sealed product prices",
-        "Browser tab title for game pages. The site name is added after it.",
+        "Cheapest {game} {types} in stock: UK price comparison",
+        "Browser tab title for game pages while a shop has something in stock. {types} names the product types "
+        "in stock now, as many as fit in about 60 characters. The site name is added after it.",
+        placeholders=("game", "types"),
+    ),
+    Entry(
+        "meta.game.title_short", T, "Game page title, short form",
+        "Cheapest {game} {types} in stock UK",
+        "Used instead of the game page title when that would run past about 60 characters with even one "
+        "product type named. The site name is added after it.",
+        placeholders=("game", "types"),
+    ),
+    Entry(
+        "meta.game.title_plain", T, "Game page title with nothing in stock",
+        "{game} sealed products: UK price comparison",
+        "Browser tab title for game pages when no shop has anything in stock. The site name is added after it.",
         placeholders=("game",),
     ),
     Entry(
-        "meta.game.description", T, "Game page description",
-        "Compare delivered UK prices for {game} booster boxes, bundles and other sealed products, with stock "
-        "and the time each price was checked.",
-        "Search engine description for game pages.",
+        "meta.game.description_stock", T, "Game page description",
+        "{products} in stock at {shops}, from {price} delivered. Best price first, with most shops checked "
+        "every hour.",
+        "Search engine description for game pages while a shop has something in stock. {price} is the cheapest "
+        "delivered price in stock now. Cut to 160 characters at a whole sentence or word.",
+        placeholders=("game", "products", "shops", "price", "count"),
+    ),
+    Entry(
+        "meta.game.description", T, "Game page description with nothing in stock",
+        "Compare delivered UK prices and pre-orders for sealed {game} products, with stock at each shop and the "
+        "time each price was checked.",
+        "Search engine description for game pages when no shop has anything in stock.",
         placeholders=("game",),
     ),
     Entry(
         "meta.set.title", T, "Set page title",
-        "{set} sealed product prices",
-        "Browser tab title for set pages. The site name is added after it.",
+        "{set} {types}: cheapest UK prices",
+        "Browser tab title for set pages while a shop has something in stock. {types} names the product types "
+        "in stock now, as many as fit in about 60 characters. The site name is added after it.",
+        placeholders=("set", "game", "types"),
+    ),
+    Entry(
+        "meta.set.title_short", T, "Set page title, short form",
+        "{set} {types}: UK prices",
+        "Used instead of the set page title when that would run past about 60 characters with even one "
+        "product type named. The site name is added after it.",
+        placeholders=("set", "game", "types"),
+    ),
+    Entry(
+        "meta.set.title_upcoming", T, "Set page title before release",
+        "{set} release date and UK pre-orders",
+        "Browser tab title for a set still to come, with a release date, that a shop takes pre-orders for and "
+        "none has in stock yet.",
         placeholders=("set", "game"),
     ),
     Entry(
-        "meta.set.description", T, "Set page description",
-        "Compare delivered UK prices for {game} {set} booster boxes, bundles and other sealed products, with "
-        "stock at each shop.",
-        "Search engine description for set pages.",
+        "meta.set.title_plain", T, "Set page title with nothing in stock",
+        "{set} sealed products: UK price comparison",
+        "Browser tab title for set pages when no shop has anything in stock. The site name is added after it.",
+        placeholders=("set", "game"),
+    ),
+    Entry(
+        "meta.set.description_stock", T, "Set page description",
+        "{set}: {products} in stock at {shops}, from {price} delivered. Best price first, with most shops "
+        "checked every hour.",
+        "Search engine description for set pages while a shop has something in stock. {price} is the cheapest "
+        "delivered price in stock now. Cut to 160 characters at a whole sentence or word.",
+        placeholders=("set", "game", "products", "shops", "price", "count"),
+    ),
+    Entry(
+        "meta.set.description_upcoming", T, "Set page description before release",
+        "{game} {set} is due out on {date}. Compare UK pre-order prices and delivery for its sealed products, "
+        "with most shops checked every hour.",
+        "Search engine description for a set still to come, with a release date, that a shop takes pre-orders "
+        "for and none has in stock yet.",
+        placeholders=("set", "game", "date"),
+    ),
+    Entry(
+        "meta.set.title_dated", T, "Set page title before release, no pre-orders",
+        "{set} release date",
+        "Browser tab title for a set still to come, with a release date, that no shop takes pre-orders for yet. "
+        "The site name is added after it.",
+        placeholders=("set", "game"),
+    ),
+    Entry(
+        "meta.set.description_dated", T, "Set page description before release, no pre-orders",
+        "{game} {set} is due out on {date}. UK shop prices for its sealed products appear here once shops "
+        "list them.",
+        "Search engine description for a set still to come, with a release date, that no shop takes "
+        "pre-orders for yet.",
+        placeholders=("set", "game", "date"),
+    ),
+    Entry(
+        "meta.set.description", T, "Set page description with nothing in stock",
+        "Compare delivered UK prices and pre-orders for sealed {game} {set} products, with stock at each shop "
+        "and the time each price was checked.",
+        "Search engine description for set pages when no shop has anything in stock.",
         placeholders=("set", "game"),
     ),
     # Insights page in admin: Why traffic changed ---------------------------

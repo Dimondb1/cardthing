@@ -32,6 +32,7 @@ DESCRIPTION_LEAST = 110
 class HubStats:
     products: int = 0           # active products in the hub
     in_stock: int = 0           # of those, how many a UK shop has in stock now
+    preorder: int = 0           # how many no shop has in stock but one takes pre-orders for now
     shops: int = 0              # shops with a current price for any of them (in stock, on pre-order or sold out)
     stock_shops: int = 0        # shops with one of them in stock now
     preorder_shops: int = 0     # shops taking pre-orders for one of them now
@@ -46,12 +47,19 @@ def in_stock_listings():
     return Listing.objects.buyable().filter(availability=Listing.Availability.IN_STOCK)
 
 
+def preorder_listings():
+    """Pre-orders a visitor can place now: current and not kept out of the comparison."""
+    return Listing.objects.buyable().filter(availability=Listing.Availability.PREORDER)
+
+
 def hub_stats(**scope):
     """HubStats for the active products matching ``scope`` (game=... or product_set=...)."""
     stats = HubStats()
     products = Product.objects.active().filter(**scope)
     stocked = Exists(in_stock_listings().order_by().filter(product=OuterRef("pk")))
-    rows = products.order_by().annotate(stocked=stocked).values("product_type", "stocked").annotate(n=Count("pk"))
+    preordered = Exists(preorder_listings().order_by().filter(product=OuterRef("pk")))
+    rows = (products.order_by().annotate(stocked=stocked, preordered=preordered)
+            .values("product_type", "stocked", "preordered").annotate(n=Count("pk")))
     types, stocked_types = set(), set()
     for row in rows:
         stats.products += row["n"]
@@ -59,6 +67,9 @@ def hub_stats(**scope):
         if row["stocked"]:
             stats.in_stock += row["n"]
             stocked_types.add(row["product_type"])
+        elif row["preordered"]:
+            # The Pre-orders tab's products: nobody has them in stock, a shop takes pre-orders.
+            stats.preorder += row["n"]
     stats.all_types, stats.stocked_types = sorted(types), sorted(stocked_types)
     if not stats.products:
         return stats
@@ -342,10 +353,16 @@ def set_meta(words, product_set, stats, upcoming, date=""):
     return title, fit_description(tidy_stops(description))
 
 
-def intro(words, stats, date=""):
-    """The paragraph under a hub's heading, as safe HTML, or "" for a hub with no products. The cheapest
+def intro_gives_date(stats, date="", undated=False):
+    """Whether intro() gives the set's release date, or says it is not announced, so the page need not."""
+    return bool(stats.products and not stats.in_stock and (date or undated))
+
+
+def intro(words, stats, date="", undated=False):
+    """The line under a hub's heading, as safe HTML, or "" for a hub with no products. The cheapest
     product in stock is a link to its page. ``date`` is the release date as shown, for a set still to come:
-    while nothing is in stock its line gives the date and how many shops take pre-orders."""
+    while nothing is in stock its line gives the date and how many shops take pre-orders. ``undated`` is a
+    set still to come with no date announced: while nothing is in stock its line ends saying so."""
     if not stats.products:
         return ""
     products = words.count("browse.hub.products", stats.products)
@@ -357,13 +374,10 @@ def intro(words, stats, date=""):
             return escape(words("browse.hub.upcoming_listed", products=products, date=date,
                                 shops=words.count("browse.hub.shops", stats.listed)))
         return escape(words("browse.hub.upcoming_none", products=products, date=date))
-    if not stats.listed:
-        return escape(words("browse.hub.unlisted", products=products))
-    if not stats.shops:
-        return escape(words("browse.hub.no_current", products=products))
-    shops = words.count("browse.hub.shops", stats.shops)
     if not stats.in_stock:
-        return escape(words("browse.hub.none_in_stock", products=products, shops=shops))
+        line = waiting_line(words, stats, products)
+        return escape(f"{line} {words('browse.hub.no_date')}" if undated else line)
+    shops = words.count("browse.hub.shops", stats.shops)
     first = words("browse.hub.intro", products=products, shops=shops, count=f"{stats.in_stock:,}")
     if stats.cheapest is None:
         return escape(first)
@@ -375,6 +389,21 @@ def intro(words, stats, date=""):
     )))
     link = format_html('<a href="{}">{}</a>', stats.cheapest.product.get_absolute_url(), stats.cheapest.product.name)
     return mark_safe(f"{escape(first)} {second.replace(escape(marker), link)}")
+
+
+def waiting_line(words, stats, products):
+    """The line for a hub with nothing in stock: on pre-order at how many shops (all of its products, or how
+    many of them), else how many shops compare it, else that no shop lists it or has a current price."""
+    if not stats.listed:
+        return words("browse.hub.unlisted", products=products)
+    if not stats.shops:
+        return words("browse.hub.no_current", products=products)
+    if stats.preorder and stats.preorder_shops:
+        shops = words.count("browse.hub.shops", stats.preorder_shops)
+        if stats.preorder == stats.products:
+            return words("browse.hub.preorder", products=products, shops=shops)
+        return words("browse.hub.preorder_some", products=products, count=f"{stats.preorder:,}", shops=shops)
+    return words("browse.hub.none_in_stock", products=products, shops=words.count("browse.hub.shops", stats.shops))
 
 
 def item_list_json(request, page_url, title, description, crumbs_id, products):

@@ -40,8 +40,8 @@
 {% else %}
 <div class="drops-pane" id="out-now">
   <p class="drops-pane__intro">{% copy "drops.out.intro" %}</p>
-  <details class="drops-filters"{% if filters_active %} open{% endif %}>
-    <summary class="drops-filters__toggle">{% copy "drops.filter.toggle" %}</summary>
+  <details class="filter-panel"{% if filters_active %} open{% endif %}>
+    <summary class="filter-panel__toggle">{% copy "drops.filter.toggle" %}</summary>
     <form class="filters" method="get" action="" data-autosubmit>
       <input type="hidden" name="show" value="out">
       {% if chosen %}<input type="hidden" name="game" value="{{ chosen.slug }}">{% endif %}

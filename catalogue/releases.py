@@ -1090,10 +1090,14 @@ def usable_code(code):
 
 
 def find_set(game, name, code=""):
-    """The game's set with this code, or with this name's address, or None.
+    """The game's set with this code, or with this name's address, or with this name as it is now, or None.
 
     Every source is an English one, so a set whose name carries another language ('... (Japanese)'),
     which shares the English set's code but not its date, is never the one a source speaks about.
+
+    A set keeps its address when it is renamed (Admin, the Sets sheet, or Add set correcting a name), so its
+    address alone does not find it by its new name: without the name it would be added a second time, under
+    the same name, by the next source or tap that names it.
     """
     sets = ProductSet.objects.filter(game=game)
     compact = compact_code(code)
@@ -1101,7 +1105,12 @@ def find_set(game, name, code=""):
         for product_set in sets.exclude(code=""):
             if compact_code(product_set.code) == compact and not language_of(f"{product_set.name} {product_set.code}", game.slug):
                 return product_set
-    return sets.filter(slug=name_key(name)).first()
+    key = name_key(name)
+    found = sets.filter(slug=key).first()
+    if found is not None or not key:
+        return found
+    named = next((pk for pk, set_name in sets.values_list("pk", "name") if name_key(set_name) == key), None)
+    return sets.filter(pk=named).first() if named is not None else None
 
 
 def set_for(game, name, code=""):

@@ -2529,8 +2529,10 @@ still to come as compact rows: the set, game, date, best price with when it
 was checked, and one button, Pre-order (or Buy now) to the cheapest shop
 through `/go/`, or Remind me, which opens that set's reminder on the drops
 page (`/drops/?remind=<id>#drop-<id>`), or See the set when no reminder
-can be taken. "See all" goes to `/drops/`. A set page prints "Out <date>" and
-which release source gave it, or "Date not announced yet".
+can be taken. "See all" goes to `/drops/`. A set page says when it is out
+in the line under its heading ("due out on <date>", or "Release date not
+announced yet."), and the small print under that names the release source
+that gave the date.
 
 A set marked Not sold in UK shops never counts. Otherwise a set counts when
 its date is today or later, or when it has no date but a
@@ -2761,11 +2763,29 @@ badge and a bookmark to save it; the cheapest delivered price with the shop
 and Buy now; the two cheapest shops as rows, the cheapest flagged; then
 "Compare N shops" and "Check prices", both opening the product's price list.
 The filters above are one select each for sort, game, type, price and
-language, and two switches, In stock and 2+ shops; the sets are chips with
-"All sets" first, scrolled to the current set on a phone.
+language, and two switches, In stock and 2+ shops. A game page lists its 8
+newest sets as chips under "Sets" (one row that scrolls sideways on a phone),
+ending in "All sets" when it has more, which opens the game's whole list on
+the Games page (`/games/#game-<slug>`: the Games page shows a game's 8 newest
+sets and keeps the rest in the page, shown by CSS once the address names that
+game, so it needs no script). A set page lists no other sets; under its
+heading it gives its code and dates in small print and one link, "All
+<game> products".
+
+Game and set pages are kept short. The line under the heading says what
+the page holds (see the hubs below), so there is no second product count
+unless a filter narrows the list. Sort and filters show only for a list of
+12 or more products (`FILTERS_FROM`), folded under one "Sort and filter"
+button (a `<details>`, open while any filter or sort is chosen); a shorter
+list has none. "Email me when products like these are in stock" sits under
+the list, only while the list has products or the set is still to come.
 
 Game and set pages split their products into three tabs instead of the In
-stock switch: **In stock** (opens first), **Pre-orders** (soonest out
+stock switch. The page opens on the first tab with products (a tab named in
+the address still wins), only tabs with products show (and the one in view),
+and when that leaves one list there is no tab row at all: just the list,
+under "On pre-order" or "Out of stock" when it is not the In stock one. The
+tabs are **In stock**, **Pre-orders** (soonest out
 first unless another sort is chosen, with the game's Coming soon sets at
 the top) and **Out of stock** (everything nobody has in stock or takes
 pre-orders for, including products no shop lists yet). Each product is in
@@ -3284,7 +3304,7 @@ lowest and highest price, number of offers, stock), a BreadcrumbList and
 an ItemPage whose `mainEntity` is that Product (linked by `@id`, the
 page's address plus `#product`, `#breadcrumb` and `#webpage`); on game
 and set pages a BreadcrumbList and, on the canonical view only (first
-page of the In stock tab, no filters), a CollectionPage whose
+page of the tab the page opens on, no filters), a CollectionPage whose
 `mainEntity` is an ItemList of the products that view shows. Other tabs,
 pages and filters share the canonical address, so they carry only the
 breadcrumbs. Product titles lead with the lowest delivered price.
@@ -3305,7 +3325,10 @@ one does not fit, a short form ("Cheapest {game} {types} in stock UK",
 "{set} {types}: UK prices") is used. Nothing says "cheapest" or "in
 stock" unless a shop has it in stock now: a hub with nothing in stock, a
 set still to come (its release date, and pre-orders only when a shop
-takes them) and a game no shop lists yet each get plainer wording. All of it is in Site
+takes them) and a game no shop lists yet each get plainer wording. With
+nothing in stock the line says how many are on pre-order and at how many
+shops ("1 sealed product, on pre-order at 2 UK shops."), and for a set still
+to come with no date it ends "Release date not announced yet.". All of it is in Site
 wording under "Page titles and search engine descriptions" and "Search
 results and browsing" (`browse.hub.*`). Set pages link back to their
 game under the heading as well as in the breadcrumb.

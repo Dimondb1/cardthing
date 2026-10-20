@@ -32,12 +32,6 @@ const fitPills = () => {
 fitPills();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitPills);
 
-// The row of sets scrolls sideways on a phone: bring the current set into view, moving the row only.
-document.querySelectorAll(".set-nav ul").forEach((row) => {
-  const current = row.querySelector("[aria-current]");
-  if (current && current.offsetLeft + current.offsetWidth > row.clientWidth) row.scrollLeft = current.offsetLeft - row.clientWidth / 2 + current.offsetWidth / 2;
-});
-
 // Results as you type. The form still submits normally to the full results
 // page, so nothing here is required.
 document.querySelectorAll("form[data-live-search]").forEach((form) => {

@@ -2143,7 +2143,8 @@ def admin_manifest(request):
 @require_GET
 def robots_txt(request):
     private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/", "Disallow: /watchlist/",
-               "Disallow: /alerts/", "Disallow: /contact/c/", "Disallow: /refer/", "Disallow: /r/"]
+               "Disallow: /alerts/", "Disallow: /contact/c/", "Disallow: /refer/", "Disallow: /r/",
+               "Disallow: /dashboard/"]
     lines = ["User-agent: *", *private, ""]
     # Named so a crawler that only honours its own section still gets the same answer.
     for agent in AI_CRAWLERS:
@@ -2461,6 +2462,8 @@ def checks_page(request):
     answers = checks.recent_answers(now)
     tally = Counter(answer.kind for answer in answers if answer.undone_at is None)
     doubtful, wrong, duplicates = checks.doubtful_prices(now), checks.wrong_matches(), checks.duplicates()
+    # The dashboard reads these counts rather than reading the whole catalogue again.
+    checks.note_duplicate_counts(duplicates, now)
     found = checks.found_stockists(now)
     # Claude's latest answer for each row on the page, while the row is still as Claude saw it.
     claude = judge.page_status(now)

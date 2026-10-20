@@ -1,7 +1,7 @@
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path
 
-from . import refer_views, views
+from . import dashboard, refer_views, views
 from .feeds import DealsFeed
 from .sitemaps import SITEMAPS
 
@@ -49,6 +49,8 @@ urlpatterns = [
     path("go/<int:listing_id>/", views.go, name="go"),
     path("go/search/<slug:slug>/<str:market>/", views.go_search, name="go_search"),
     path("about/", views.about, name="about"),
+    # The owner's dashboard: staff only, a private page like the alert links (no third-party script, not indexed).
+    path("dashboard/", dashboard.dashboard, name="dashboard"),
     path("terms/", views.terms, name="terms"),
     path("api/products/<slug:slug>/prices/", views.product_prices_api, name="product_prices_api"),
     path("robots.txt", views.robots_txt, name="robots"),

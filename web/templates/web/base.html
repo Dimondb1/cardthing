@@ -6,7 +6,7 @@
   <title>{% block title %}{% if meta_full_title %}{{ meta_full_title }}{% elif meta_title %}{{ meta_title }} | {{ site_name }}{% else %}{{ site_name }}{% endif %}{% endblock %}</title>
   <meta name="description" content="{% if meta_description %}{{ meta_description }}{% else %}{% copy "meta.default.description" %}{% endif %}">
   {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
-  {% if noindex %}<meta name="robots" content="noindex, follow">{% endif %}
+  {% if robots %}<meta name="robots" content="{{ robots }}">{% elif noindex %}<meta name="robots" content="noindex, follow">{% endif %}
   {% if private_link %}<meta name="referrer" content="strict-origin">{% endif %}
   <meta property="og:site_name" content="{{ site_name }}">
   <meta property="og:type" content="{% if meta_type %}{{ meta_type }}{% else %}website{% endif %}">

@@ -155,7 +155,10 @@ def start_of(day):
 
 
 def explain(now=None, store=None):
-    """Why traffic is doing what it is doing, as data and plain sentences for the Insights page."""
+    """Why traffic is doing what it is doing, as data and plain sentences for the Insights page.
+
+    ``days`` is each day's counts, {date: row}, with the people (``people``, ``returning``), page views,
+    clicks from people and whether the day is a burst, for the dashboard's week (web/dashboard.py)."""
     now = now or timezone.now()
     local_now = timezone.localtime(now)
     today = local_now.date()
@@ -180,6 +183,7 @@ def explain(now=None, store=None):
             people_pages=Sum("views", filter=Q(views__lt=cap)),
             heavy=Count("id", filter=heavy_q), heavy_pages=Sum("views", filter=heavy_q),
             timed=Count("first_seen"), landed=Count("id", filter=~Q(landing="")),
+            returning=Count("id", filter=Q(returning=True, views__lt=cap)),
         ).order_by("date")
     ):
         row["heavy_views"] = row.pop("heavy_pages") or 0
@@ -196,7 +200,7 @@ def explain(now=None, store=None):
         .values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n")
     )
     empty = {"visitors": 0, "scripts": 0, "own_pages": 0, "people_pages": 0, "heavy": 0, "heavy_views": 0,
-             "timed": 0, "landed": 0}
+             "timed": 0, "landed": 0, "returning": 0}
     for offset in range(WINDOW_DAYS + 1):
         day = since + timedelta(days=offset)
         row = days.setdefault(day, {"date": day, **empty})
@@ -205,13 +209,14 @@ def explain(now=None, store=None):
         row["people"] = row["visitors"] - row["scripts"]
         row["timed_fully"] = row["visitors"] > 0 and row["timed"] == row["visitors"]
         row["clicks_doubtful"] = row["people"] >= MIN_DAY_VISITORS and row["clicks"] > CLICKS_PER_PERSON_MAX * row["people"]
+        row["burst"] = False
 
     counting_since = next((d for d in sorted(days) if days[d]["visitors"] >= MIN_DAY_VISITORS), None)
     timed_since = next((d for d in sorted(days) if days[d]["timed"]), None)
     if counting_since is None:
         return {"enough": False, "headline": say("insights.why.too_little"), "findings": [], "health": [],
                 "bursts": [], "burst_dates": set(), "comparisons": [], "today": today, "now": local_now,
-                "history": {"counting_since": None, "timed_since": timed_since}}
+                "history": {"counting_since": None, "timed_since": timed_since}, "days": days}
 
     # 2. Bursts, judged against the median and spread of the whole days counted so far.
     whole = [days[d] for d in sorted(days) if counting_since <= d < today and days[d]["visitors"] >= MIN_DAY_VISITORS]
@@ -418,6 +423,7 @@ def explain(now=None, store=None):
             "first_full_day": first_full, "same_time_from": same_time_from,
         },
         "deploy_marker": None,   # the site keeps no record of when it was updated
+        "days": days,
     }
 
 

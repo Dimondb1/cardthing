@@ -1304,7 +1304,7 @@ admin.
 |-------------|---------------|
 | `catalogue` | Games, sets, products, retailers, listings (one retailer's offer for one product), daily lowest prices and click counts. Price queries live in `catalogue/pricing.py`, search in `catalogue/search.py`. |
 | `content`   | Editable site wording (`SiteContent`), its defaults in `content/registry.py`, and the `{% copy %}` template tag. |
-| `web`       | Public views, templates, CSS, the font and the favicon, and the admin pages Things to check, Crawl health, Insights and Your data in Excel. |
+| `web`       | Public views, templates, CSS, the font and the favicon, the owner's dashboard, and the admin pages Things to check, Crawl health, Insights and Your data in Excel. |
 
 ## Editing site wording
 
@@ -3416,6 +3416,62 @@ of a merged product still redirects. `tidy_all` forgets these addresses
 after a year, when they go back to a plain 404. Changing a product's
 address in Django Admin keeps the old one as an old address, so it
 redirects.
+
+## Dashboard
+
+`/dashboard/` is the owner's page for a phone: how the site is doing, in the
+site's own look (header, cards with the soft orange border, green for good,
+red for bad). The admin home and Insights link to it. It is for staff only:
+anyone else is sent to the admin sign-in. Top to bottom:
+
+- **Today at a glance:** people today so far against the same time last
+  week (or yesterday), clicks to shops from people today, rows waiting on
+  Things to check, and Claude's spend this month against its limit.
+- **Visitors, last 7 days:** people a day as a bar chart (today marked "so
+  far", burst days grey and left out of the totals), returning share, page
+  views, where people came from, and the traffic explainer's top finding.
+- **Clicks to shops, last 7 days:** clicks from people beside direct hits a
+  day, clicks per person, clicks by how the shop pays (eBay Partner Network,
+  Amazon Associates, Awin, CJ, Rakuten, another affiliate link, or none,
+  worked out from each shop's price source and affiliate link format), and
+  the five most clicked products.
+- **Things to correct:** the count in each Things to check list, possible
+  duplicate pairs by how sure the rules are, and how many rows Claude
+  settled in the last day.
+- **Shops health:** shops read in the last hour, up to date, paused, and
+  late or failing (the first five named, each linking to its admin page),
+  the background reader and the last read to finish.
+- **Customers:** confirmed drop reminders, search alerts and back in stock
+  alerts, alert emails sent this week, unread messages, shops asking to be
+  listed, and the refer a friend offer.
+- **Searches that found little:** this week's searches that found two
+  products or fewer, most made first.
+- **Claude:** what it is doing, spend against the monthly limit, rows
+  settled this month and its last run.
+
+Every figure is read from the database by the functions the admin pages
+use (`catalogue/traffic.py` `explain()` for people, bursts and the same-time
+comparison, `OutboundClick.objects.people()` and `.suspects()`,
+`catalogue/checks.py`, `catalogue/crawl.py`, `catalogue/judge.py`), so the
+dashboard and the admin pages always agree. A part with nothing recorded
+says "No data yet". Each chart is inline SVG drawn on the server, with a
+caption and a Show the numbers table; `web/static/js/dashboard.js` only adds
+a tooltip for the day under the pointer.
+
+Each part is kept in the shared cache for 60 seconds (`web/dashboard.py`
+`SECTION_SECONDS`), so a reload costs a few cache reads; "Read them again
+now" reads every part afresh. Possible duplicates read the whole catalogue
+(over two seconds on a copy of the live database), so their counts are kept
+whenever something counts them anyway: each opening of Things to check and
+the hourly `tidy_all`. The dashboard shows the time they were counted, and
+counts them itself only when no count is kept (after the cache is emptied).
+
+The page is private like the links in alert emails: `noindex, nofollow`,
+`Cache-Control: private, no-store`, `Disallow: /dashboard/` in robots.txt, no
+analytics, Awin or AdSense script, and it is not counted as a page view. Its
+wording is in Site wording under "Dashboard page (owner only)"; its styles
+are `web/static/css/dashboard.css`, from the dashboard tokens in
+`tokens.css`.
 
 ## Insights
 

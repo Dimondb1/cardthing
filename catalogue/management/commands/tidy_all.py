@@ -13,7 +13,8 @@ forgets website shop pages
 no sitemap has listed for 30 days, clears old import records, removed product addresses after a year and the
 owner's old spreadsheets (catalogue/housekeeping.py) so the database stays small, deletes List your shop
 enquiries past their keeping time (inbox/shops.py), and lets the autopilot answer the Things to
-check rows the evidence settles (catalogue/autopilot.py). Run by start.bat, update_prices and the server's hourly import,
+check rows the evidence settles (catalogue/autopilot.py), then counts the possible duplicates left for the
+dashboard (catalogue/checks.py note_duplicate_counts). Run by start.bat, update_prices and the server's hourly import,
 so a rule added in code is applied to data already in the database.
 
 While an uploaded spreadsheet is part made (its runner was stopped part way, by a deploy say), the products
@@ -92,6 +93,12 @@ class Command(BaseCommand):
             self.stdout.write(f"{len(done)} things to check {'would be answered' if dry_run else 'answered'}.")
 
         if not dry_run:
+            # Counted here, never while the dashboard waits: duplicates() reads the whole catalogue.
+            from catalogue import checks
+
+            self.stdout.write("== possible duplicates")
+            counted = checks.note_duplicate_counts(checks.duplicates())
+            self.stdout.write(f"{counted['pairs']} possible duplicate pairs wait on Things to check.")
             # The tidying cleared the cached page lists; build them now rather than on a visitor's request.
             from web.warming import warm_quietly
 

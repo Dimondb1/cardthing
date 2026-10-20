@@ -39,6 +39,7 @@
     </select>
     <noscript><button type="submit">Show</button></noscript>
     <span>{{ since }} to {{ today }}. A visitor is one person for one day; nobody is identified and only their country is kept.</span>
+    <a href="{% url 'web:dashboard' %}">Open the dashboard</a>
   </form>
 
   <div class="module ins__why" id="why">
@@ -105,7 +106,7 @@
     </table>
   </div>
 
-  <div class="module">
+  <div class="module" id="clicks">
     <h2>{% copy "insights.clicks.heading" %}</h2>
     <p class="quiet">{% copy "insights.clicks.intro" cap=click_cap %}</p>
     <table>
@@ -256,7 +257,7 @@
     </table>
   </div>
 
-  <div class="ins__grid">
+  <div class="ins__grid" id="searches">
     <div class="module">
       <h2>Top searches</h2>
       <table><thead><tr><th>Search</th><th>Times</th></tr></thead>

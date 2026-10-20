@@ -440,3 +440,56 @@ def recent_answers(now=None):
         .select_related("listing", "shop_product", "product", "release", "ask")
         .order_by("-created_at", "-pk")
     )
+
+
+# The dashboard (web/dashboard.py) shows how many rows wait in each section. Every section is counted at once,
+# except Possible duplicates: duplicates() reads the whole catalogue (2.3 s on a copy of the live database), so
+# its counts are kept in the shared cache whenever something counts them anyway (Things to check, the hourly
+# tidy_all) and read from there, with the time they were counted.
+DUPLICATE_COUNTS_KEY = "checks:duplicate-counts:v1"
+DUPLICATE_COUNTS_SECONDS = 3 * 3600
+
+
+def note_duplicate_counts(groups, now=None):
+    """Keep how many possible duplicate pairs ``groups`` (from duplicates()) holds at each certainty, and when,
+    in the shared cache. Returns {"levels": [(level, label, pairs)], "pairs": total, "counted_at": time}."""
+    from django.core.cache import cache
+
+    from .management.commands.merge_duplicates import CERTAINTY_LABELS
+
+    found = {}
+    for _keep, others in groups:
+        for other in others:
+            found[other.certainty] = found.get(other.certainty, 0) + 1
+    counts = {
+        "levels": [(level, label, found.get(level, 0)) for level, label in CERTAINTY_LABELS.items()],
+        "pairs": sum(found.values()),
+        "counted_at": now or timezone.now(),
+    }
+    cache.set(DUPLICATE_COUNTS_KEY, counts, DUPLICATE_COUNTS_SECONDS)
+    return counts
+
+
+def duplicate_counts(now=None):
+    """The counts note_duplicate_counts kept, or counted now when there are none (an emptied cache)."""
+    from django.core.cache import cache
+
+    return cache.get(DUPLICATE_COUNTS_KEY) or note_duplicate_counts(duplicates(), now)
+
+
+def waiting_counts(now=None):
+    """How many rows wait in each Things to check section, counted as the page counts them, one query each.
+    Possible duplicates are counted by duplicate_counts. ``excluded`` prices wait for nobody: the site set them
+    aside itself, and the page lists them for a look."""
+    now = now or timezone.now()
+    sanity = sanity_counts()
+    return {
+        "doubtful": doubtful_count(),
+        "wrong": len(wrong_matches()),
+        "found": found_waiting().count(),
+        "releases": len(release_candidates(now, limit=None)),
+        "disagreements": len(release_disagreements(now)),
+        "stale_sources": len(stale_release_sources(now)),
+        "unknown_delivery": len(unknown_delivery_shops()),
+        "excluded": sanity["excluded"],
+    }

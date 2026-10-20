@@ -7,6 +7,12 @@
 {% refer_waiting as refer %}
 <div class="module" style="margin-bottom: 20px;">
   <table>
+    <caption><a href="{% url 'web:dashboard' %}" class="section">Dashboard</a></caption>
+    <tr><th scope="row"><a href="{% url 'web:dashboard' %}">Visitors, clicks to shops, things to correct and shop health on one page for your phone</a></th><td></td></tr>
+  </table>
+</div>
+<div class="module" style="margin-bottom: 20px;">
+  <table>
     <caption><a href="{% url 'admin:inbox_conversation_changelist' %}" class="section">Messages</a></caption>
     <tr><th scope="row"><a href="{% url 'admin:inbox_conversation_changelist' %}?unread__exact=1">{% if unread %}<strong>{{ unread }} new message{{ unread|pluralize }}</strong>{% else %}No new messages{% endif %}</a></th><td></td></tr>
     <tr><th scope="row"><a href="{% url 'admin:inbox_shopenquiry_changelist' %}?handled=no">{% if shops %}<strong>{{ shops }} shop{{ shops|pluralize }} asking to be listed</strong>{% else %}No shops waiting to be listed{% endif %}</a></th><td></td></tr>

@@ -2026,10 +2026,36 @@ def left_because(row, ask, partner_ask=None, answered=False):
     return left_reason(row, ask, partner_ask, answered)[0]
 
 
-def page_status(now=None):
-    """What the Claude box on Things to check shows. A few queries, whatever the number of asks. Never writes."""
+def is_stopped(state, now):
+    """Whether a problem that stops Claude (a refused key, no credit) came up within STOPPED_FOR."""
+    return bool(state.problem in STOPPING and state.problem_at and now - state.problem_at < STOPPED_FOR)
+
+
+def status_kind(state, now, has_key, spent, limit):
+    """What Claude is doing, as one word for the page to put in its own words: "server_off", "no_key",
+    "stopped", "off", "paused" (Pause all), "limit" (this month's is reached), "sort_all", "acting" or
+    "trial". ``spent`` and ``limit`` are micro-dollars (spent_this_month, monthly_limit_micros)."""
     from . import crawl
 
+    if not settings.RIPRAPTOR_CLAUDE:
+        return "server_off"
+    if not has_key:
+        return "no_key"
+    if is_stopped(state, now):
+        return "stopped"
+    if not state.enabled:
+        return "off"
+    if crawl.all_paused():
+        return "paused"
+    if spent + typical_worst(state.model) > limit:
+        return "limit"
+    if state.may_act and state.sort_all:
+        return "sort_all"
+    return "acting" if state.may_act else "trial"
+
+
+def page_status(now=None):
+    """What the Claude box on Things to check shows. A few queries, whatever the number of asks. Never writes."""
     now = now or timezone.now()
     state = ClaudeJudge.current()
     spent = spent_this_month(now)
@@ -2041,26 +2067,23 @@ def page_status(now=None):
     )
     has_key = bool(key())
     limit = monthly_limit_micros(state)
-    stopped = state.problem in STOPPING and state.problem_at and now - state.problem_at < STOPPED_FOR
-    if not settings.RIPRAPTOR_CLAUDE:
-        status = "Claude is switched off in the server settings."
-    elif not has_key:
-        status = "Claude needs a key. Paste it below and tap Save key."
-    elif stopped:
+    stopped = is_stopped(state, now)
+    kind = status_kind(state, now, has_key, spent, limit)
+    if kind == "stopped":
         status = f"Claude has stopped. {problem_text(state.problem)}"
-    elif not state.enabled:
-        status = "Claude is off."
-    elif crawl.all_paused():
-        status = "Pause all is on, so Claude waits."
-    elif spent + typical_worst(state.model) > limit:
+    elif kind == "limit":
         next_month = (month_start(now) + timedelta(days=32)).replace(day=1)
         status = f"Claude reached this month's limit. It starts again on {next_month:%-d %B}, or raise the limit below."
-    elif state.may_act and state.sort_all:
-        status = "Claude is on and sorting everything."
-    elif state.may_act:
-        status = f"Claude is on and settles every row itself, {ROWS_PER_RUN} an hour."
     else:
-        status = "Claude is on, in trial: it only suggests."
+        status = {
+            "server_off": "Claude is switched off in the server settings.",
+            "no_key": "Claude needs a key. Paste it below and tap Save key.",
+            "off": "Claude is off.",
+            "paused": "Pause all is on, so Claude waits.",
+            "sort_all": "Claude is on and sorting everything.",
+            "acting": f"Claude is on and settles every row itself, {ROWS_PER_RUN} an hour.",
+            "trial": "Claude is on, in trial: it only suggests.",
+        }[kind]
     asked = state.asked_at is not None and (state.last_run_at is None or state.asked_at > state.last_run_at)
     runs = []
     for entry in (state.runs or [])[:5]:

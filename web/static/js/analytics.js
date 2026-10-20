@@ -1,6 +1,6 @@
 // Google Analytics, only once the visitor allows it. Until then no Google script loads and nothing is
 // stored but the answer. The answer is kept in this browser and asked again after six months. Pages
-// whose address is a private link (a message thread, a stock alert link) never load this file, and a
+// whose address is a private link (a message thread, a stock alert link, the owner's dashboard) never load this file, and a
 // private link the visitor came from is not passed on as the referrer.
 (() => {
   const id = (document.querySelector("script[data-ga-id]") || {}).dataset?.gaId;
@@ -8,7 +8,7 @@
   if (!id || !card) return;
   const KEY = "ripraptor.analytics";
   const ASK_AGAIN = 182 * 24 * 60 * 60 * 1000;
-  const PRIVATE = /^\/(?:contact\/c|alerts\/(?:confirm|stop)|refer\/(?:confirm|claim|address|stop)|r)\//;
+  const PRIVATE = /^\/(?:contact\/c|alerts\/(?:confirm|stop)|refer\/(?:confirm|claim|address|stop)|r|dashboard)\//;
   if (PRIVATE.test(location.pathname)) return;   // the server leaves this file off these pages; a 404 for one is caught here
   const read = () => {
     try {

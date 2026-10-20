@@ -284,7 +284,7 @@ class AmazonPolicyTests(TestCase):
                 with self.subTest(url=url):
                     self.assertContains(self.client.get(url), line, count=1)
             page = self.client.get(product.get_absolute_url())
-            self.assertContains(page, "amazon.co.uk/s?")
+            self.assertContains(page, f"/go/search/{product.slug}/amazon/")
             # The footer, and beside the Amazon button in the price box.
             self.assertContains(page, line, count=2)
         with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG=""):

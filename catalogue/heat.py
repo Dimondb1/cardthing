@@ -58,7 +58,7 @@ def heat_scores(now=None):
             by_slug_views[key] = by_slug_views.get(key, 0) + hits
     # 2. Clicks to a shop.
     clicks = dict(
-        OutboundClick.objects.filter(created_at__gte=now - timedelta(days=CLICK_DAYS))
+        OutboundClick.objects.people().filter(created_at__gte=now - timedelta(days=CLICK_DAYS))
         .values_list("product").annotate(n=Count("id")).values_list("product", "n")
     )
     # 3. Confirmed alerts still waiting.

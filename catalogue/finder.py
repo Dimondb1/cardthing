@@ -147,7 +147,7 @@ def interest_scores(now=None, visitors_only=False):
         into = watched if kind == DailyPageView.Kind.WATCHED else views
         into[key] = into.get(key, 0) + hits
     clicks = dict(
-        OutboundClick.objects.filter(created_at__gte=now - timedelta(days=CLICK_DAYS))
+        OutboundClick.objects.people().filter(created_at__gte=now - timedelta(days=CLICK_DAYS))
         .values_list("product").annotate(n=Count("id")).values_list("product", "n")
     )
     alerts = dict(

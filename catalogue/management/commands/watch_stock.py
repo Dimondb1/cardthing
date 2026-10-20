@@ -69,7 +69,7 @@ class Command(BaseCommand):
             return
         now = timezone.now()
         popular = set(
-            OutboundClick.objects.filter(created_at__gte=now - timedelta(days=7))
+            OutboundClick.objects.people().filter(created_at__gte=now - timedelta(days=7))
             .values("product").annotate(n=Count("id")).order_by("-n").values_list("product", flat=True)[:200]
         )
         # A shop the owner paused is not asked about single products either.

@@ -163,7 +163,8 @@ class OutboundTests(PageTestCase):
     def test_redirects_and_counts_the_click(self):
         before = OutboundClick.objects.filter(product=self.etb).count()
         response = self.client.get(
-            self.cheap.get_outbound_url(), HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0"
+            self.cheap.get_outbound_url(), HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0",
+            HTTP_REFERER="http://testserver/",
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], self.cheap.url)
@@ -172,7 +173,8 @@ class OutboundTests(PageTestCase):
     def test_uses_the_affiliate_link(self):
         self.harbour.affiliate_url_template = "https://network.example/c?u={url}"
         self.harbour.save()
-        response = self.client.get(self.cheap.get_outbound_url())
+        response = self.client.get(self.cheap.get_outbound_url(), HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0",
+                                   HTTP_REFERER="http://testserver/")
         self.assertTrue(response["Location"].startswith("https://network.example/c?u=https%3A"))
 
     def test_bots_are_not_counted(self):
@@ -474,7 +476,8 @@ class AmazonLinkTests(PageTestCase):
         with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
             response = self.client.get(self.etb.get_absolute_url())
         self.assertContains(response, "Compare on Amazon")
-        self.assertContains(response, 'href="https://www.amazon.co.uk/s?k=Pok%C3%A9mon+Prismatic+Evolutions+Elite+Trainer+Box&amp;tag=ripraptor-21"')
+        self.assertContains(response, f'href="/go/search/{self.etb.slug}/amazon/"')
+        self.assertNotContains(response, "tag=ripraptor-21")
         self.assertContains(response, 'rel="sponsored nofollow noopener"')
 
     def test_amazon_is_the_last_row_of_every_price_list(self):
@@ -490,7 +493,7 @@ class AmazonLinkTests(PageTestCase):
             self.assertIn('<li class="offer offer--amazon">', rows)
             self.assertIn(self.ROW, rows)
             self.assertIn('Check on Amazon<span class="visually-hidden"> (opens in a new tab)</span></a>', rows)
-            self.assertIn('href="https://www.amazon.co.uk/s?k=Pok%C3%A9mon+Prismatic+Evolutions+Elite+Trainer+Box&amp;tag=ripraptor-21" target="_blank" rel="sponsored nofollow noopener">Check on Amazon', rows)
+            self.assertIn(f'href="/go/search/{self.etb.slug}/amazon/" target="_blank" rel="sponsored nofollow noopener">Check on Amazon', rows)
             self.assertEqual(html.count(self.ROW), 1)
             # Sold out everywhere: the row follows the out-of-stock shop.
             sold = self.client.get(self.sold_out.get_absolute_url()).content.decode()
@@ -734,8 +737,9 @@ class WatchlistTests(PageTestCase):
         self.assertIn('<span data-watch-count></span>', page)
 
     def test_clicks_from_a_watchlist_are_marked_and_other_sources_are_not(self):
-        self.client.get(self.cheap.get_outbound_url() + "?from=watchlist", HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0")
-        self.client.get(self.cheap.get_outbound_url() + "?from=elsewhere", HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0")
+        page = {"HTTP_USER_AGENT": "Mozilla/5.0 Firefox/130.0", "HTTP_REFERER": "http://testserver/watchlist/"}
+        self.client.get(self.cheap.get_outbound_url() + "?from=watchlist", **page)
+        self.client.get(self.cheap.get_outbound_url() + "?from=elsewhere", **page)
         self.assertEqual(list(OutboundClick.objects.order_by("-pk").values_list("source", flat=True)[:2]), ["", "watchlist"])
 
     def test_each_product_on_a_loaded_list_is_counted_and_the_page_is_too(self):
@@ -849,13 +853,20 @@ class FeaturedAndMarketplaceTests(TestCase):
         with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21", RIPRAPTOR_EBAY_CAMPAIGN_ID="5339216899"):
             body = self.client.get(product.get_absolute_url()).content.decode()
         self.assertIn("Search eBay", body)
-        self.assertIn("https://www.ebay.co.uk/sch/i.html?_nkw=Pok%C3%A9mon+30th+Celebration+Booster+Bundle", body)
-        self.assertIn("campid=5339216899", body)
-        self.assertIn("mkrid=710-53481-19255-0", body)
-        self.assertIn("k=Pok%C3%A9mon+30th+Celebration+Booster+Bundle", body)
+        # The buttons go through /go/search/, so the page itself never carries the campaign or the tag.
+        self.assertNotIn("campid=", body)
+        self.assertNotIn("tag=ripraptor-21", body)
         self.assertIn("Amazon and eBay sellers often still have it", body)
-        for tag in re.findall(r'<a[^>]+href="https://www\.(?:ebay|amazon)\.co\.uk[^>]+>', body):
+        found = re.findall(r'<a[^>]+href="/go/search/30th-bundle/(?:ebay|amazon)/"[^>]+>', body)
+        self.assertEqual(len(found), 3)   # Amazon and eBay in the price box, Amazon again as the last price row
+        for tag in found:
             self.assertIn('rel="sponsored nofollow noopener"', tag)
+        with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21", RIPRAPTOR_EBAY_CAMPAIGN_ID="5339216899"):
+            ebay = self.client.get("/go/search/30th-bundle/ebay/", HTTP_REFERER="http://testserver/products/30th-bundle/",
+                                   HTTP_USER_AGENT="Mozilla/5.0 Safari/604.1")["Location"]
+        self.assertTrue(ebay.startswith("https://www.ebay.co.uk/sch/i.html?_nkw=Pok%C3%A9mon+30th+Celebration+Booster+Bundle"))
+        self.assertIn("campid=5339216899", ebay)
+        self.assertIn("mkrid=710-53481-19255-0", ebay)
         # With an eBay price already in the comparison, no eBay search.
         make_listing(product, make_retailer("eBay", source_type="ebay"), price="40.00")
         with self.settings(RIPRAPTOR_EBAY_CAMPAIGN_ID="5339216899"):

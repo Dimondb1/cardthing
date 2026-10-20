@@ -668,6 +668,7 @@ ENTRIES = [
     Entry("drops.email.offers", T, "Email price list heading", "Cheapest now", "Above the prices in a reminder email."),
     Entry("drops.email.checked", T, "Email price checked", "Checked {when}", "After each price in a reminder email.", placeholders=("when",)),
     Entry("drops.email.none", T, "Email with no prices", "No UK shop we check lists it yet. The drops page shows the moment one does.", "In a reminder email when no shop has a price."),
+    Entry("drops.email.offer_button", B, "Email price link", "See prices", "Link after each price in a reminder email, to the product's page."),
     Entry("drops.email.button", B, "Email drops page button", "See the drop", "Button in a reminder email, to the drop on the drops page."),
     Entry("drops.email.more", T, "Email more to come", "We only email you about this drop: when pre-orders open, the day before and on the day. Each email has a link that deletes your address.", "Footer of the pre-orders and day-before emails.", legal=True),
     Entry("drops.email.last", T, "Email last one", "This was your last reminder for {set}, so your email address has already been deleted.", "Footer of the drop-day email.", placeholders=("set",), legal=True),
@@ -2435,6 +2436,18 @@ ENTRIES = [
     Entry("insights.why.too_little", T, "Too little data",
           "Not enough visitors yet to compare. Come back after a few full days.",
           "Shown before there is enough history."),
+    # Insights page in admin: clicks to shops ------------------------------
+    Entry("insights.clicks.heading", H, "Clicks to shops heading", "Clicks to shops, last 7 days",
+          "Heading of the table of clicks from people and direct hits on the Insights page."),
+    Entry("insights.clicks.intro", T, "Clicks to shops intro",
+          "A click from people came from a Buy button on our pages and carries our tracking. A direct hit came "
+          "with no link from our pages, from a robot or a prefetch, or from a connection past {cap} clicks in an "
+          "hour. It still reaches the shop, at the plain address with no tracking, and no other figure counts it.",
+          "Under the heading of the clicks table on the Insights page.", placeholders=("cap",)),
+    Entry("insights.clicks.people", T, "Clicks from people", "Clicks from people",
+          "Column heading: clicks counted and sent with our tracking."),
+    Entry("insights.clicks.direct", T, "Direct hits", "Direct hits sent on without tracking",
+          "Column heading: clicks sent to the plain shop address and not counted."),
 ]
 
 REGISTRY = {entry.key: entry for entry in ENTRIES}

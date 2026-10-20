@@ -631,7 +631,8 @@ class ReminderEmailTests(TestCase):
         self.assertFalse(DropAlert.objects.exists())   # deleted after the last one
         text = self.send.call_args_list[1].args[2]
         self.assertIn("£49.99 delivered at Harbour Games", text)
-        self.assertIn(f"/go/{self.listing.pk}/", text)
+        self.assertIn(self.product.get_absolute_url(), text)
+        self.assertNotIn("/go/", text)
         self.assertIn("Checked ", text)
         self.assertIn(f"/alerts/stop/drop/{self.alert.token}/", text)
         self.assertIn("This was your last reminder", self.send.call_args_list[2].args[2])
@@ -666,8 +667,8 @@ class ReminderEmailTests(TestCase):
         self.assertEqual(self.run_at(2030, 3, 6, 11, 15), (1, 0))
         text = self.send.call_args.args[2]
         self.assertIn("Northgate Cards started taking pre-orders for Ascended Heroes", text)
-        self.assertIn(f"/go/{dearer.pk}/", text)
-        self.assertIn(f"/go/{self.listing.pk}/", text)
+        self.assertEqual(text.count(self.product.get_absolute_url()), 2)
+        self.assertNotIn("/go/", text)
         self.assertNotIn("Harbour Games started", text)
 
     def test_an_opening_at_a_hidden_shop_or_closed_listing_is_not_news(self):

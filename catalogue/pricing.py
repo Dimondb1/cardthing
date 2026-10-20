@@ -413,7 +413,7 @@ def popular(limit=8, days=None):
     days = days or settings.RIPRAPTOR_TRENDING_DAYS
     since = timezone.now() - timedelta(days=days)
     top = (
-        OutboundClick.objects.filter(created_at__gte=since)
+        OutboundClick.objects.people().filter(created_at__gte=since)
         .values("product")
         .annotate(clicks=Count("id"))
         .order_by("-clicks", "product")[: limit * 2]

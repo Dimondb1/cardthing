@@ -96,9 +96,9 @@ class InsightsPageTests(TestCase):
         self.assertContains(self.client.get("/admin/"), reverse("insights"))
 
     def test_report_runs_in_a_fixed_number_of_queries(self):
-        # 37 since the earning share (2) and the shops read from part of their site (1) joined the report. The
-        # items left out are counted by the hourly tidy-up and read from the cache.
-        with self.assertNumQueries(37):
+        # 38 since the earning share (2), the shops read from part of their site (1) and the week's direct hits
+        # (1) joined the report. The items left out are counted by the hourly tidy-up and read from the cache.
+        with self.assertNumQueries(38):
             insights.report(30)
         # Shops read from part of their site add two queries however many there are.
         from catalogue.models import Retailer
@@ -107,7 +107,7 @@ class InsightsPageTests(TestCase):
             Retailer.objects.create(name=f"Part {n}", slug=f"part-{n}", website=f"https://part{n}.example/",
                                     source_type=Retailer.Source.SHOPIFY, source_url=f"https://part{n}.example/",
                                     collection="cards football")
-            with self.assertNumQueries(39):
+            with self.assertNumQueries(40):
                 insights.report(30)
 
 

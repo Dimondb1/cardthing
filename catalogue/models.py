@@ -993,6 +993,16 @@ class TypeBand(models.Model):
         return f"{self.get_product_type_display()} in {where}: £{self.p10} to £{self.p90}"
 
 
+class OutboundClickQuerySet(models.QuerySet):
+    def people(self):
+        """Clicks from a person on our pages: the ones that carried our tracking and that every count uses."""
+        return self.filter(suspect=False)
+
+    def suspects(self):
+        """Direct hits sent on to the shop without tracking (catalogue/clicks.py)."""
+        return self.filter(suspect=True)
+
+
 class OutboundClick(models.Model):
     """A visit to a retailer from RipRaptor. No personal data is stored."""
 
@@ -1001,6 +1011,13 @@ class OutboundClick(models.Model):
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="outbound_clicks")
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
     source = models.CharField(max_length=12, blank=True)   # "watchlist" when the click came from a saved list
+    suspect = models.BooleanField(
+        default=False,
+        help_text="A direct hit (no link from our pages, a robot, a prefetch or too many in an hour), sent to the "
+        "shop without tracking and left out of every click count.",
+    )
+
+    objects = OutboundClickQuerySet.as_manager()
 
     class Meta:
         ordering = ["-created_at"]

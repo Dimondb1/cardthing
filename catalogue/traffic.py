@@ -192,7 +192,7 @@ def explain(now=None, store=None):
         .values_list("date").annotate(n=Sum("hits")).values_list("date", "n")
     )
     clicks_by_day = dict(
-        OutboundClick.objects.filter(created_at__gte=start_of(since), created_at__lte=now).order_by()
+        OutboundClick.objects.people().filter(created_at__gte=start_of(since), created_at__lte=now).order_by()
         .values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n")
     )
     empty = {"visitors": 0, "scripts": 0, "own_pages": 0, "people_pages": 0, "heavy": 0, "heavy_views": 0,
@@ -285,7 +285,7 @@ def explain(now=None, store=None):
         week=Count("id", filter=Q(date=last_week, first_seen__lte=cut_week)),
         yesterday=Count("id", filter=Q(date=yesterday, first_seen__lte=cut_yesterday)),
     )
-    clicks_so_far = OutboundClick.objects.filter(created_at__gte=start_of(last_week), created_at__lte=now).order_by().aggregate(
+    clicks_so_far = OutboundClick.objects.people().filter(created_at__gte=start_of(last_week), created_at__lte=now).order_by().aggregate(
         today=Count("id", filter=Q(created_at__gte=start_of(today), created_at__lte=now)),
         week=Count("id", filter=Q(created_at__gte=start_of(last_week), created_at__lte=cut_week)),
         yesterday=Count("id", filter=Q(created_at__gte=start_of(yesterday), created_at__lte=cut_yesterday)),
@@ -612,7 +612,7 @@ def health_checks(now, local_now, today, days, tday, today_timed, baseline_days,
         conversion = conversion_of(usual_days)
     click_hours = [0] * 24
     for hour, n in (
-        OutboundClick.objects.filter(created_at__gte=start_of(today), created_at__lte=now)
+        OutboundClick.objects.people().filter(created_at__gte=start_of(today), created_at__lte=now)
         .order_by().values_list("created_at__hour").annotate(n=Count("id"))
     ):
         click_hours[hour] = n

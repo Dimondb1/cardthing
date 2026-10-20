@@ -1469,6 +1469,37 @@ it again after changing the mark and commit the files.
   in admin is kept. Zatu pays through Rakuten: its format is the deep link
   Rakuten's publisher dashboard makes (Links, Deep Linking) with the product
   address replaced by `{url}`, the same way for any other Rakuten shop.
+- Clicks from people and direct hits (`catalogue/clicks.py`). A click through
+  `/go/` is counted and carries our tracking (the affiliate format, eBay's
+  campaign id, the Amazon tag) only when it is a GET with a Referer from our
+  own site (ripraptor.com, www, the host in `RIPRAPTOR_SITE_URL`, the request's
+  own host, and localhost when `DJANGO_DEBUG` is on), the browser does not say
+  it is a robot or is prefetching (`Purpose`, `Sec-Purpose`, `X-Moz`), and the
+  connection has made no more than 30 such clicks this hour (a one-way hash of
+  the address, held in the cache for an hour, never stored). Anything else
+  still gets a 302 to the shop, but at the plain address: eBay's `mkevt`,
+  `mkcid`, `mkrid`, `campid`, `customid`, `toolid` and similar are removed
+  (the item id is kept), Amazon's `tag` likewise, and no affiliate format is
+  applied. These are saved with **suspect** ticked, left out of every click
+  count (Insights, popularity, heat, Trending now, the traffic explainer,
+  `shop_report`), and shown on Insights as "Direct hits sent on without
+  tracking" beside "Clicks from people" for the last 7 days. Robots that say
+  so and HEAD requests are not saved at all. The trade-off: a person whose
+  browser sends no Referer (strict privacy settings, some extensions) still
+  reaches the shop, but without our tracking, so such a sale earns nothing.
+  That is the price of sending eBay only clicks that could become sales.
+  Emails therefore never link to `/go/`: the drop reminders link each price
+  to the product page, where the reader presses Buy.
+- A feed link that is itself an affiliate network's click (Awin's
+  `aw_deep_link`, a CJ or Rakuten deep link) is followed only for a person's
+  click. A direct hit goes to the shop address inside it (Awin's `ued`, CJ's
+  `url`, Rakuten's `murl`) or, for Awin's `pclick.php` which has none, to the
+  shop's front page.
+- The Amazon and eBay search buttons on a product page go through
+  `/go/search/<product slug>/amazon/` and `/go/search/<product slug>/ebay/`
+  with the same check: a person gets the search with our tag or campaign,
+  anything else the same search without it. These are not saved as clicks.
+  No public page carries the tag or the campaign id itself.
 
 ## Putting it on a server
 
@@ -2516,7 +2547,9 @@ does not appear. The form works without JavaScript (it posts, then shows a
 "Check your inbox" page); with it the answer replaces the form. A confirm
 email goes first and nothing else is sent until it is pressed. Then up to
 three emails, each once and each listing the cheapest offers with their
-prices, shops, checked times and `/go/` links:
+prices, shops, checked times and a "See prices" link to the product page
+(never `/go/`: an email sends no Referer, so a click from it would reach the
+shop untracked):
 
 1. Pre-orders open: a UK shop opens pre-orders on one of the drop's products
    after the reminder was confirmed and before the day before the drop, and
@@ -2762,7 +2795,8 @@ pages and their price order are unchanged.
 
 When no shop has a product in stock, the price box leads with "Compare on
 Amazon" and "Search eBay": a tagged Amazon search and an eBay UK search
-for new, buy it now listings carrying the eBay Partner Network campaign.
+for new, buy it now listings carrying the eBay Partner Network campaign,
+both through `/go/search/` so only a person's click carries the tracking.
 The eBay search is left out when an eBay price is already in the list.
 
 ## Back in stock emails

@@ -287,7 +287,9 @@ def offer_rows(listings, store):
             "preorder": listing.availability == Listing.Availability.PREORDER,
             "checked": copy.get("drops.email.checked", store=store,
                                 when=date_format(timezone.localtime(listing.last_checked), "H:i, j M")),
-            "url": link("web:go", listing.pk),
+            # The product page, not /go/: an email sends no Referer and mail scanners follow every link, so the
+            # reader presses Buy on the site, where the click carries our tracking (catalogue/clicks.py).
+            "url": settings.RIPRAPTOR_SITE_URL + listing.product.get_absolute_url(),
         })
     return rows
 

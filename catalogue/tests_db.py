@@ -235,7 +235,8 @@ class RetryLockedTests(TestCase):
                 holder.execute("BEGIN IMMEDIATE")
                 started = time.monotonic()
                 with quick, self.assertLogs("catalogue", "WARNING") as logs:
-                    response = self.client.get(f"/go/{listing.pk}/", HTTP_USER_AGENT="Mozilla/5.0 (iPhone) Safari/605.1")
+                    response = self.client.get(f"/go/{listing.pk}/", HTTP_USER_AGENT="Mozilla/5.0 (iPhone) Safari/605.1",
+                                       HTTP_REFERER="http://testserver/")
                     insights.bump(DailyPageView, kind=DailyPageView.Kind.PRODUCT, key="busy")
                 elapsed = time.monotonic() - started
             finally:
@@ -260,7 +261,8 @@ class RetryLockedTests(TestCase):
             return real_create(**kwargs)
 
         with mock.patch("catalogue.pricing.time.sleep"), mock.patch.object(OutboundClick.objects, "create", flaky):
-            response = self.client.get(f"/go/{listing.pk}/", HTTP_USER_AGENT="Mozilla/5.0 (iPhone) Safari/605.1")
+            response = self.client.get(f"/go/{listing.pk}/", HTTP_USER_AGENT="Mozilla/5.0 (iPhone) Safari/605.1",
+                                       HTTP_REFERER="http://testserver/")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(OutboundClick.objects.count(), 1)
 

@@ -197,13 +197,20 @@ def report(days=30):
     today = timezone.localdate()
     since = today - timedelta(days=days - 1)
     views = DailyPageView.objects.filter(date__gte=since)
-    clicks = OutboundClick.objects.filter(created_at__date__gte=since)
+    all_clicks = OutboundClick.objects.filter(created_at__date__gte=since)
+    clicks = all_clicks.people()
     searches = DailySearch.objects.filter(date__gte=since)
 
     visitors = DailyVisitor.objects.filter(date__gte=since)
     # Watchlist rows and home screen events are counts of their own, not pages anyone opened.
     pages = views.exclude(kind__in=[DailyPageView.Kind.WATCHED, DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS])
     by_day = {row["date"]: row for row in pages.values("date").annotate(hits=Sum("hits")).order_by("date")}
+    # Direct hits: sent on to the shop without tracking and left out of every other click count.
+    week_since = today - timedelta(days=6)
+    direct_by_day = dict(
+        all_clicks.suspects().filter(created_at__date__gte=week_since).order_by()
+        .values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n")
+    )
     clicks_by_day = dict(clicks.values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n"))
     visitors_by_day = dict(visitors.values_list("date").annotate(n=Count("id")).values_list("date", "n"))
     returning_by_day = dict(
@@ -374,9 +381,14 @@ def report(days=30):
     )
     alert_counts = {event: alert_rows.get(event, 0) for event in ("asked", "confirmed", "sent", "stopped")}
     alert_counts["waiting"] = StockAlert.objects.filter(confirmed_at__isnull=False).count()
+    click_week = [
+        {"date": d["date"], "people": d["clicks"], "direct": direct_by_day.get(d["date"], 0)}
+        for d in days_out if d["date"] >= week_since
+    ]
     data = {
         "days": days,
         "since": since,
+        "click_week": click_week,
         "today": today,
         "by_day": days_out,
         "total_views": total_views,

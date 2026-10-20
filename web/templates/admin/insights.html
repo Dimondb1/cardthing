@@ -105,6 +105,15 @@
     </table>
   </div>
 
+  <div class="module">
+    <h2>{% copy "insights.clicks.heading" %}</h2>
+    <p class="quiet">{% copy "insights.clicks.intro" cap=click_cap %}</p>
+    <table>
+      <thead><tr><th>Day</th><th>{% copy "insights.clicks.people" %}</th><th>{% copy "insights.clicks.direct" %}</th></tr></thead>
+      <tbody>{% for d in click_week reversed %}<tr><td>{{ d.date|date:"D j M" }}</td><td class="n">{{ d.people }}</td><td class="n">{{ d.direct }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+
   <div class="ins__grid">
     <div class="module">
       <h2>Back in stock emails</h2>

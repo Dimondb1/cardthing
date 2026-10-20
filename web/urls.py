@@ -47,6 +47,7 @@ urlpatterns = [
     path("games/<slug:game_slug>/<slug:set_slug>/", views.set_detail, name="set"),
     path("products/<slug:slug>/", views.product_detail, name="product"),
     path("go/<int:listing_id>/", views.go, name="go"),
+    path("go/search/<slug:slug>/<str:market>/", views.go_search, name="go_search"),
     path("about/", views.about, name="about"),
     path("terms/", views.terms, name="terms"),
     path("api/products/<slug:slug>/prices/", views.product_prices_api, name="product_prices_api"),

@@ -20,9 +20,9 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_safe
 
-from catalogue import alerts, images, insights, mail, offers, pricing, traffic
+from catalogue import alerts, clicks, images, insights, mail, offers, pricing, traffic
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
@@ -38,7 +38,6 @@ from . import listcache
 from .charts import price_chart
 from .templatetags.ripraptor import gbp
 
-BOT_MARKERS = ("bot", "crawl", "spider", "slurp", "preview", "monitor")
 
 
 def text(request, key, **values):
@@ -850,6 +849,14 @@ def ebay_search_url(product, listings):
     return f"https://www.ebay.co.uk/sch/i.html?{query}"
 
 
+MARKET_SEARCHES = {"amazon": amazon_search_url, "ebay": ebay_search_url}
+
+
+def search_link(product, market, tracked):
+    """Our address for a marketplace search button, or None when the button is not shown."""
+    return reverse("web:go_search", args=[product.slug, market]) if tracked else None
+
+
 def product_gone(request, gone):
     """410 Gone for a product page tidy_catalogue took down: search engines drop it quickly, and a visitor
     gets its set and game, while they are on the site, and the search box."""
@@ -997,8 +1004,9 @@ def product_detail(request, slug):
             ),
             "alerts_preorder": alerts_preorder,
             "alert_state": request.GET.get("alert") if request.GET.get("alert") in ALERT_STATES else "",
-            "amazon_search": amazon_search_url(product, listings),
-            "ebay_search": ebay_search_url(product, listings),
+            # Through /go/search/ so only a person's click carries our tag or campaign (go_search).
+            "amazon_search": search_link(product, "amazon", amazon_search_url(product, listings)),
+            "ebay_search": search_link(product, "ebay", ebay_search_url(product, listings)),
             "related": related,
             "meta_title": meta_title,
             "meta_description": meta_description,
@@ -1010,25 +1018,51 @@ def product_detail(request, slug):
 CLICK_SOURCES = ("watchlist",)
 
 
-@require_GET
+@require_safe
 def go(request, listing_id):
-    """Send the visitor to the retailer and count the click, noting a click from a watchlist."""
+    """Send the visitor to the retailer. A click from a person on our pages is counted and carries our
+    tracking; anything else (no link from our pages, a robot, a prefetch, too many from one connection)
+    still reaches the shop, at its plain address, and is saved as suspect (catalogue/clicks.py)."""
     listing = get_object_or_404(
         Listing.objects.live().select_related("retailer", "product"),
         pk=listing_id,
         product__is_active=True,
     )
-    agent = request.headers.get("User-Agent", "").lower()
-    if agent and not any(marker in agent for marker in BOT_MARKERS):
+    reason = clicks.suspect_reason(request)
+    # A robot that says so is not worth a row; every other direct hit is kept so Insights can show them.
+    if reason not in ("robot", "method"):
         source = request.GET.get("from", "")
-        # The click is counted on a best effort basis: a database too busy to save it never stops
+        # The click is saved on a best effort basis: a database too busy to save it never stops
         # the visitor's trip to the shop.
         with pricing.drop_if_locked("Click"):
             pricing.retry_locked(lambda: OutboundClick.objects.create(
                 listing=listing, product=listing.product, retailer=listing.retailer,
-                source=source if source in CLICK_SOURCES else "",
+                source=source if source in CLICK_SOURCES else "", suspect=bool(reason),
             ))
-    response = HttpResponseRedirect(listing.retailer.outbound_url(listing.url))
+    if reason:
+        # An affiliate click address with no shop address inside goes to the shop's front page instead.
+        target = clicks.plain_url(listing.url) or listing.retailer.website or listing.product.get_absolute_url()
+    else:
+        target = listing.retailer.outbound_url(listing.url)
+    response = HttpResponseRedirect(target)
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
+
+@require_safe
+def go_search(request, slug, market):
+    """Send the visitor to an Amazon or eBay search for the product. Like go(): a person on our pages gets our
+    tag or campaign, anything else the same search without it. Not saved: no listing was clicked."""
+    builder = MARKET_SEARCHES.get(market)
+    if builder is None:
+        raise Http404("No such marketplace.")
+    product = get_object_or_404(Product.objects.active().select_related("game"), slug=slug)
+    # No listings: the page decided whether to show the button; a link from an older page still works.
+    tracked = builder(product, ())
+    if tracked is None:
+        raise Http404("No marketplace search.")
+    target = clicks.plain_url(tracked) if clicks.suspect_reason(request) else tracked
+    response = HttpResponseRedirect(target)
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
 
@@ -2083,7 +2117,8 @@ def insights_page(request):
     why = traffic.explain(store=copy.for_request(request))
     for day in data["by_day"]:
         day["burst"] = day["date"] in why["burst_dates"]
-    context = {**admin.site.each_context(request), "title": "Insights", **data, "why": why}
+    context = {**admin.site.each_context(request), "title": "Insights", **data, "why": why,
+               "click_cap": clicks.CLICKS_PER_HOUR}
     return render(request, "admin/insights.html", context)
 
 

@@ -10,7 +10,7 @@
   <tr><td style="padding:12px 16px;{% if not forloop.first %}border-top:1px solid #eef0f3;{% endif %}">
     <p style="margin:0;font-weight:bold;">{{ offer.product }}</p>
     <p style="margin:2px 0 0;"><span style="font-size:20px;font-weight:800;color:#107a32;">{{ offer.price }}</span> at {{ offer.retailer }}{% if offer.preorder %}, pre-order{% endif %}</p>
-    <p style="margin:2px 0 0;font-size:13px;color:#667085;">{{ offer.checked }}. <a href="{{ offer.url }}" style="color:#cc4410;font-weight:bold;">{% if offer.preorder %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}</a></p>
+    <p style="margin:2px 0 0;font-size:13px;color:#667085;">{{ offer.checked }}. <a href="{{ offer.url }}" style="color:#cc4410;font-weight:bold;">{% copy "drops.email.offer_button" %}</a></p>
   </td></tr>
   {% endfor %}
 </table>

@@ -346,8 +346,8 @@ class TypeBandAdmin(admin.ModelAdmin):
 
 @admin.register(OutboundClick)
 class OutboundClickAdmin(admin.ModelAdmin):
-    list_display = ("created_at", "product", "retailer")
-    list_filter = ("retailer",)
+    list_display = ("created_at", "product", "retailer", "suspect")
+    list_filter = ("suspect", "retailer")
     search_fields = ("product__name",)
     list_select_related = ("product", "retailer")
     date_hierarchy = "created_at"

@@ -53,7 +53,7 @@ def shop_figures(retailer, days=CLICK_DAYS):
         "in_stock": listings.buyable().count(),
         "cheapest": cheapest,
         "beaten": sorted(beaten.items(), key=lambda item: -item[1]),
-        "clicks": OutboundClick.objects.filter(retailer=retailer, created_at__gte=since).count(),
+        "clicks": OutboundClick.objects.people().filter(retailer=retailer, created_at__gte=since).count(),
     }
 
 
@@ -73,7 +73,7 @@ class Command(BaseCommand):
             return
         since = timezone.now() - timedelta(days=CLICK_DAYS)
         clicks = dict(
-            OutboundClick.objects.filter(created_at__gte=since)
+            OutboundClick.objects.people().filter(created_at__gte=since)
             .values_list("retailer_id")
             .annotate(n=Count("id"))
             .values_list("retailer_id", "n")

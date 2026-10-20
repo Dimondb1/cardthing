@@ -42,7 +42,7 @@ def interest_counts(set_ids, today=None):
         .order_by().values("kind").annotate(n=Sum("hits")).values("n")
     )
     clicks = (
-        OutboundClick.objects.filter(product__product_set=OuterRef("pk"), created_at__gte=since)
+        OutboundClick.objects.people().filter(product__product_set=OuterRef("pk"), created_at__gte=since)
         .order_by().values("product__product_set").annotate(n=Count("id")).values("n")
     )
     reminders = (

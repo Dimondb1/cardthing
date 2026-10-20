@@ -97,7 +97,7 @@ def doubtful_prices(now=None, limit=SANITY_ROWS):
     ``limit`` (the page's SANITY_ROWS; the Claude judge looks further)."""
     since = (now or timezone.now()) - timedelta(days=CLICK_DAYS)
     clicks = (
-        OutboundClick.objects.filter(product=OuterRef("product_id"), created_at__gte=since)
+        OutboundClick.objects.people().filter(product=OuterRef("product_id"), created_at__gte=since)
         .order_by().values("product").annotate(n=Count("id")).values("n")
     )
     return list(

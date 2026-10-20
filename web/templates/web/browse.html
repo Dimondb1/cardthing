@@ -31,45 +31,41 @@
   </nav>
   {% endif %}
   <h1 class="browse-head__title">{{ heading }}</h1>
-  {% if intro %}<p class="browse-head__meta">{{ intro }}</p>{% endif %}
-  {% if product_set %}
-    {% if product_set.not_in_shops %}
-    <p class="browse-head__meta">{% if product_set.code %}{{ product_set.code }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% if product_set.release_date %}{% if set_out_later %}{% copy "new.coming_soon.out" date=product_set.release_date|short_date %}{% else %}{% copy "browse.set.released" date=product_set.release_date|short_date %}{% endif %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% copy "browse.set.not_in_shops" %}</p>
-    {% elif set_upcoming %}
-    <p class="browse-head__meta">{% if product_set.code %}{{ product_set.code }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% if product_set.release_date %}<strong class="browse-head__date">{% copy "new.coming_soon.out" date=product_set.release_date|short_date %}</strong>{% if date_source %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy "new.coming_soon.source" source=date_source %}{% endif %}{% else %}{% copy "new.coming_soon.tbc" %}{% endif %}</p>
-    {% else %}
-    <p class="browse-head__meta">{% if product_set.code %}{{ product_set.code }}{% if product_set.release_date %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% endif %}{% if product_set.release_date %}{% copy "browse.set.released" date=product_set.release_date|short_date %}{% endif %}</p>
-    {% endif %}
-    <p class="browse-head__meta"><a href="{{ game.get_absolute_url }}">{% copy "browse.set.game_link" game=game.display_short %}</a></p>
-  {% endif %}
-  <p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>
+  {% if intro %}<p class="browse-head__intro">{{ intro }}</p>{% endif %}
+  {% if product_set %}<p class="browse-head__meta">{% for fact in set_facts %}{{ fact }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endfor %}<a href="{{ game.get_absolute_url }}">{% copy "browse.set.game_link" game=game.display_short %}</a></p>{% endif %}
+  {# The line under the heading already counts the products, unless a filter has narrowed the list. #}
+  {% if not intro or filters_active %}<p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>{% endif %}
 </div>
 
 {% if sets %}
-<nav class="set-nav" id="sets" aria-label="{% copy 'browse.game.sets_title' %}">
-  <h2 class="visually-hidden">{% copy "browse.game.sets_title" %}</h2>
+<nav class="set-nav" id="sets" aria-labelledby="sets-title">
+  <h2 class="set-nav__title" id="sets-title">{% copy "browse.game.sets_title" %}</h2>
   <ul>
-    <li><a href="{{ game.get_absolute_url }}"{% if not product_set %} aria-current="page"{% endif %}>{% copy "browse.game.all_sets" game=game.display_short %}</a></li>
-    {% for item in sets %}
-    <li><a href="{{ item.get_absolute_url }}"{% if item.pk == product_set.pk %} aria-current="page"{% endif %}>{{ item.name }}</a></li>
-    {% endfor %}
+    {% for item in sets %}<li><a href="{{ item.get_absolute_url }}">{{ item.name }}</a></li>{% endfor %}
+    {% if more_sets %}<li><a class="set-nav__all" href="{% url 'web:games' %}#game-{{ game.slug }}">{% copy "browse.game.all_sets" %}</a></li>{% endif %}
   </ul>
 </nav>
 {% endif %}
 
 {% if stock_tabs %}
-<div class="stock-view" data-stock>
-<nav class="stock-tabs" aria-label="{% copy 'browse.tabs.label' %}">
+<div class="stock-view" data-stock data-opening="{{ tab_opening }}">
+{% if tab_row %}
+<nav class="stock-tabs{% if tab_row|length == 2 %} stock-tabs--two{% endif %}" aria-label="{% copy 'browse.tabs.label' %}">
   <ul>
-    {% for item in stock_tabs %}
+    {% for item in tab_row %}
     <li><a href="{{ item.url }}" data-tab="{{ item.key }}"{% if item.key == tab %} aria-current="page"{% endif %}><span class="stock-tabs__label">{{ item.label }}</span> <span class="stock-tabs__count">{{ item.count }}</span></a></li>
     {% endfor %}
   </ul>
 </nav>
+{% endif %}
 {% elif coming_soon and page.number == 1 %}
   {% if game %}{% include "web/includes/coming_soon.html" %}{% else %}{% include "web/includes/coming_soon.html" with show_game=True %}{% endif %}
 {% endif %}
 
+{% if show_filters %}
+{% if fold_filters %}<details class="filter-panel"{% if filters_active %} open{% endif %}>
+  <summary class="filter-panel__toggle">{% copy "browse.filters.toggle" %}</summary>
+{% endif %}
 <form class="filters" method="get" action="" data-autosubmit>
   {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
   {% if tab %}<input type="hidden" name="tab" value="{{ tab }}" data-tab-input>{% endif %}
@@ -99,20 +95,23 @@
   <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>
   <div class="filters__actions">
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
-    {% if filters_active %}<a class="filters__clear" href="?{% if query %}q={{ query|urlencode }}{% if tab and tab != 'in-stock' %}&amp;{% endif %}{% endif %}{% if tab and tab != 'in-stock' %}tab={{ tab }}{% endif %}"{% if tab %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
+    {% if filters_active %}<a class="filters__clear" href="{{ clear_url }}"{% if stock_tabs %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
   </div>
 </form>
-{% if alert_url %}<p class="browse-alert"><a href="{{ alert_url }}">{% copy "browse.alert_link" %}</a></p>{% endif %}
+{% if fold_filters %}</details>{% endif %}
+{% endif %}
 
 {% if stock_tabs %}
 <div class="stock-panes">
-  {% for item in stock_tabs %}
+  {% if tab_row %}
+  {% for item in tab_row %}
   {% if item.key == tab %}{% include "web/includes/stock_pane.html" %}
   {% else %}<section class="stock-pane" data-tab="{{ item.key }}" data-src="{{ item.pane_url }}" aria-labelledby="pane-{{ item.key }}" hidden>
     <h2 class="visually-hidden" id="pane-{{ item.key }}">{{ item.label }}</h2>
     <p class="stock-pane__loading">{% copy "browse.tabs.loading" %}</p>
   </section>{% endif %}
   {% endfor %}
+  {% else %}{% include "web/includes/stock_pane.html" %}{% endif %}
 </div>
 </div>
 {% elif page.object_list %}
@@ -125,10 +124,11 @@
 {% else %}
   <div class="empty">
     <h2 class="empty__title">{% copy "browse.no_filtered_results" %}</h2>
-    <p><a href="?{% if query %}q={{ query|urlencode }}{% endif %}">{% copy "browse.filters.clear" %}</a></p>
+    <p><a href="{{ clear_url }}">{% copy "browse.filters.clear" %}</a></p>
   </div>
 {% endif %}
+{% if alert_url %}<p class="browse-alert"><a href="{{ alert_url }}">{% copy "browse.alert_link" %}</a></p>{% endif %}
 {% endif %}
 {% endblock %}
 
-{% block scripts %}{% if stock_tabs %}<script src="{% static 'js/tabs.js' %}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if tab_row %}<script src="{% static 'js/tabs.js' %}" defer></script>{% endif %}{% endblock %}

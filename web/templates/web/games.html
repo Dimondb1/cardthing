@@ -11,9 +11,10 @@
     </div>
     {% with sets=game.sets.all %}
     {% if sets %}
+    {# Every set is here; past the newest few they wait hidden until All sets (or a game page's All sets) opens this game's list, with no script: the link names this game, which then matches :target. #}
     <ul class="game-index__sets">
-      {% for product_set in sets|slice:sets_shown %}
-      <li>
+      {% for product_set in sets %}
+      <li{% if forloop.counter > sets_shown %} class="game-index__later"{% endif %}>
         <a href="{{ product_set.get_absolute_url }}">{{ product_set.name }}</a>
         <span class="game-index__set-meta">{% if product_set.code %}{{ product_set.code }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% copy_count "browse.count" product_set.product_count %}</span>
       </li>
@@ -21,7 +22,7 @@
     </ul>
     {% endif %}
     <p class="game-index__more">
-      {% if sets|length > sets_shown %}<a href="{{ game.get_absolute_url }}#sets">{% copy "browse.games.all_sets" count=sets|length %}</a>{% endif %}
+      {% if sets|length > sets_shown %}<a class="game-index__all" href="#game-{{ game.slug }}">{% copy "browse.games.all_sets" count=sets|length %}</a>{% endif %}
       <a href="{{ game.get_absolute_url }}">{% copy_count "browse.games.all_products" game.product_count %}</a>
     </p>
     {% endwith %}

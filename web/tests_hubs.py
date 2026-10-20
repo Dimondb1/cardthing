@@ -100,7 +100,7 @@ class GameHubTests(PageTestCase):
         description = description_of(html)
         self.assertNotIn("in stock at", description)
         self.assertNotIn("Cheapest", description)
-        self.assertIn("3 sealed products compared across 2 UK shops. None is in stock right now", html)
+        self.assertIn("3 sealed products compared across 2 UK shops, none in stock right now.", html)
         self.assertNotIn("Cheapest in stock", html)
 
     def test_a_game_no_shop_lists(self):
@@ -214,7 +214,8 @@ class SetHubTests(PageTestCase):
 
     def test_links_back_to_the_game_besides_the_breadcrumb(self):
         html = self.client.get(self.pre.get_absolute_url()).content.decode()
-        head = html[html.index('<div class="browse-head">'):html.index('class="browse-head__count"')]
+        start = html.index('<div class="browse-head">')
+        head = html[start:html.index("</div>", start)]
         breadcrumb_end = head.index("</nav>")
         self.assertIn(f'<a href="{self.game.get_absolute_url()}">All Pokémon products</a>', head[breadcrumb_end:])
 

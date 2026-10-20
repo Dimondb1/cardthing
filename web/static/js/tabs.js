@@ -1,4 +1,5 @@
-// Stock tabs on game and set pages: swipe or tap between In stock, Pre-orders and Out of stock.
+// Stock tabs on game and set pages: swipe or tap between In stock, Pre-orders and Out of stock (only
+// the tabs with products are there; a page with one list has no tabs and does not load this file).
 // Without this file each tab is a link to its own page, which holds only that tab's list. With it,
 // the other lists are fetched one after the other once the page is idle and slotted in beside the
 // first, so a swipe moves between them at once. During a swipe only the browser's own scrolling
@@ -6,8 +7,10 @@
 (() => {
   const root = document.querySelector("[data-stock]");
   const track = root && root.querySelector(".stock-panes");
-  if (!track || !("fetch" in window)) return;
-  const nav = root.querySelector(".stock-tabs");
+  const nav = root && root.querySelector(".stock-tabs");
+  if (!track || !nav || !("fetch" in window)) return;
+  // The tab the page opens on needs no tab in its address.
+  const opening = root.dataset.opening;
   const tabs = Array.from(nav.querySelectorAll("a[data-tab]"));
   const keys = tabs.map((a) => a.dataset.tab);
   const tabInput = root.querySelector("[data-tab-input]");
@@ -43,7 +46,7 @@
     if (tabInput) tabInput.value = key;
     if (clearLink) {
       const url = new URL(clearLink.href, location.href);
-      if (index === 0) url.searchParams.delete("tab");
+      if (key === opening) url.searchParams.delete("tab");
       else url.searchParams.set("tab", key);
       clearLink.href = url.pathname + url.search;
     }

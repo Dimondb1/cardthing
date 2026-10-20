@@ -107,6 +107,16 @@ def types_for(game, queryset):
 # The stock tabs on game and set pages, in the order they sit side by side: what can be bought now
 # first, then pre-orders, then everything nobody has in stock. Each product is in exactly one.
 STOCK_TABS = [("in-stock", "In stock"), ("pre-orders", "Pre-orders"), ("out-of-stock", "Out of stock")]
+# Below this many products in the list in view, a game or set page shows no sort or filter choices: a short
+# list is read at a glance. From it up, they fold under one Sort and filter button.
+FILTERS_FROM = 12
+# Sets in the row on a game page, newest first; All sets opens the game's whole list on the Games page.
+GAME_PAGE_SETS = 8
+
+
+def default_tab(counts):
+    """The tab a game or set page opens on: the first with products, else In stock."""
+    return next((key for key, _ in STOCK_TABS if counts.get(key)), STOCK_TABS[0][0])
 
 
 def stock_tab(tab, compared=False):
@@ -122,12 +132,16 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
             template="web/browse.html", structured=None):
     """Shared by search, game and set pages, and Out now on the drops page (``template``).
 
-    ``structured``, when given, is called with the page of products shown and returns the page's structured
-    data (a list of schema.org blocks), so a hub's ItemList names exactly the products on the page.
+    ``structured``, when given, is called with the page of products shown and whether this is the canonical
+    view (hub_is_canonical), and returns the page's structured data (a list of schema.org blocks), so a hub's
+    ItemList names exactly the products on the page.
 
     With ``tabs`` (game and set pages) the products are split into STOCK_TABS: the page shows one tab's
     list, counted for every tab in one query, and ``?pane=1`` returns just that tab's list for the
-    page's script to swipe to. The In stock toggle gives way to the tabs.
+    page's script to swipe to. The In stock toggle gives way to the tabs. The page opens on the first tab
+    with products (a tab named in the address still wins), shows only the tabs with products (and the one
+    in view), and no tab row at all when that leaves one list. Sort and filters show only for a list of
+    FILTERS_FROM products or more, folded under one button, or while one is chosen.
     """
     has_query = bool(request.GET.get("q", "").strip())
     chosen_game = fixed_game or Game.objects.filter(slug=request.GET.get("game", "")).first()
@@ -162,15 +176,18 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     languages = [form.value("lang")] if form.value("lang") else []
     products = apply_languages(products, languages)
 
-    tab, tab_counts = "", {}
+    tab, tab_counts, opening, asked = "", {}, "", ""
     if tabs:
-        tab = request.GET.get("tab", "")
-        tab = tab if tab in dict(STOCK_TABS) else STOCK_TABS[0][0]
         compared = bool(form.value("compared"))
         counted = products.aggregate(**{
             key.replace("-", "_"): Count("pk", filter=stock_tab(key, compared)) for key, _ in STOCK_TABS
         })
         tab_counts = {key: counted[key.replace("-", "_")] for key, _ in STOCK_TABS}
+        # Never an empty list while another tab has products, unless the address names that tab.
+        opening = default_tab(tab_counts)
+        asked = request.GET.get("tab", "")
+        asked = asked if asked in dict(STOCK_TABS) else ""
+        tab = asked or opening
         products = products.filter(stock_tab(tab, compared))
 
     sort = form.value("sort", form.default_sort)
@@ -208,6 +225,11 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         if band in BAND_TOPS:
             params["max"] = BAND_TOPS[band]
         alert_url = reverse("web:watchlist") + "?" + urlencode(params) + "#alert"
+    # Clear filters keeps the search words, and the tab only when the address named it.
+    clear = {key: value for key, value in (("q", query), ("tab", asked)) if value}
+    stock_tabs = stock_tab_links(request, tab_counts, opening) if tabs else []
+    # Only the tabs with something in them, and the one in view; one list left needs no tab row.
+    shown_tabs = [item for item in stock_tabs if item["count"] or item["key"] == tab]
     context = {
         "alert_url": alert_url,
         "form": form,
@@ -216,34 +238,47 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "cards": cards,
         "total": sum(tab_counts.values()) if tabs else paginator.count,
         "filters_active": filters_active,
+        "clear_url": "?" + urlencode(clear),
+        # A short list on a game or set page needs no sort or filters; a longer one folds them away.
+        "show_filters": not tabs or filters_active or paginator.count >= FILTERS_FROM,
+        "fold_filters": tabs,
         "no_matches": bool(query) and not filters_active and paginator.count == 0,
         "games": Game.objects.filter(is_active=True),
         "tab": tab,
+        "tab_opening": opening,
         "tab_label": dict(STOCK_TABS).get(tab, ""),
-        "stock_tabs": stock_tab_links(request, tab_counts) if tabs else [],
+        "stock_tabs": stock_tabs,
+        "tab_row": shown_tabs if len(shown_tabs) > 1 else [],
+        # One list and no tab row: a list other than In stock says what it is in a heading.
+        "single_list": tabs and len(shown_tabs) == 1,
         "soonest": sort == "soonest",
     }
     context.update(template_context)
+    if not (page.object_list or context.get("set_upcoming")):
+        # Nothing listed: an alert for products like these would read as a promise about an empty list.
+        context["alert_url"] = ""
     if tabs and request.GET.get("pane"):
         # One tab's list for the page's script, which slots it in beside the others. Never indexed.
         response = render(request, "web/includes/stock_pane.html", {**context, "pane": tab})
         response["X-Robots-Tag"] = "noindex"
         return response
     if structured is not None:
-        context["structured_json"] = ld_json(structured(page))
+        context["structured_json"] = ld_json(structured(page, canonical=hub_is_canonical(request, page, opening)))
     return render(request, template, context)
 
 
-def stock_tab_links(request, counts):
-    """[{key, label, count, url}] for the stock tabs: each keeps the filters and drops the page number."""
+def stock_tab_links(request, counts, opening=STOCK_TABS[0][0]):
+    """[{key, label, count, url, pane_url}] for the stock tabs: each keeps the filters and drops the page
+    number. The tab the page opens on (``opening``) needs no tab in its address; its list on its own does."""
     links = []
     for key, label in STOCK_TABS:
         params = request.GET.copy()
         for name in ("page", "pane", "tab", "in_stock"):
             params.pop(name, None)
-        if key != STOCK_TABS[0][0]:
+        if key != opening:
             params["tab"] = key
         encoded = params.urlencode()
+        params["tab"] = key
         params["pane"] = "1"
         links.append({"key": key, "label": label, "count": counts.get(key, 0), "url": f"?{encoded}" if encoded else "?",
                       "pane_url": f"?{params.urlencode()}"})
@@ -704,10 +739,17 @@ def games(request):
 @require_GET
 def game_detail(request, game_slug):
     game = get_object_or_404(Game, slug=game_slug, is_active=True)
-    sets = ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct()
+    # Only the page as people land on it needs the numbers and the sets: a tab's list fetched by script shows
+    # none of them.
+    pane = bool(request.GET.get("pane"))
+    # The newest sets, and one more to know whether All sets is needed. Newest first, spelled out: a distinct
+    # query keeps the model's order only by chance.
+    sets = [] if pane else list(
+        ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct()
+        .order_by(F("release_date").desc(nulls_last=True), "name")[:GAME_PAGE_SETS + 1]
+    )
     words = hubs.Words(text, request)
-    # Only the page as people land on it needs the numbers: a tab's list fetched by script shows none of them.
-    stats = hubs.HubStats() if request.GET.get("pane") else hubs.hub_stats(game=game)
+    stats = hubs.HubStats() if pane else hubs.hub_stats(game=game)
     meta_title, meta_description = hubs.game_meta(words, game, stats)
     page_url = request.build_absolute_uri(game.get_absolute_url())
     crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url())], page_url=page_url)
@@ -716,7 +758,8 @@ def game_detail(request, game_slug):
         {
             "heading": game.name,
             "game": game,
-            "sets": sets,
+            "sets": sets[:GAME_PAGE_SETS],
+            "more_sets": len(sets) > GAME_PAGE_SETS,
             "intro": hubs.intro(words, stats),
             "meta_title": meta_title,
             "meta_description": meta_description,
@@ -726,9 +769,9 @@ def game_detail(request, game_slug):
         base_queryset=Product.objects.for_lists().filter(game=game),
         fixed_game=game,
         tabs=True,
-        structured=lambda page: [crumbs] + ([hubs.item_list_json(
+        structured=lambda page, canonical: [crumbs] + ([hubs.item_list_json(
             request, page_url, meta_title, meta_description, crumbs["@id"], page.object_list,
-        )] if hub_is_canonical(request, page) else []),
+        )] if canonical else []),
     )
 
 
@@ -749,6 +792,12 @@ def set_detail(request, game_slug, set_slug):
     out_later = bool(product_set.release_date and product_set.release_date >= timezone.localdate())
     release_shown = short_date(product_set.release_date) if out_later else ""
     meta_title, meta_description = hubs.set_meta(words, product_set, stats, upcoming, date=release_shown)
+    # The line under the heading gives the release date, or says there is none yet, for a set still to come.
+    intro_date = release_shown if upcoming else ""
+    undated = upcoming and product_set.release_date is None
+    date_source = date_source_label(product_set) if upcoming else ""
+    facts = set_facts(request, product_set, upcoming, out_later, date_source,
+                      dated_above=hubs.intro_gives_date(stats, date=intro_date, undated=undated))
     page_url = request.build_absolute_uri(product_set.get_absolute_url())
     crumbs = breadcrumbs_json(
         request, [(game.name, game.get_absolute_url()), (product_set.name, product_set.get_absolute_url())],
@@ -761,11 +810,8 @@ def set_detail(request, game_slug, set_slug):
             "game": game,
             "product_set": product_set,
             "set_upcoming": upcoming,
-            # A set sold only at events or direct by the publisher says so where its release would be.
-            "set_out_later": out_later,
-            "date_source": date_source_label(product_set) if upcoming else "",
-            "sets": ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct(),
-            "intro": hubs.intro(words, stats, date=release_shown if upcoming else ""),
+            "set_facts": facts,
+            "intro": hubs.intro(words, stats, date=intro_date, undated=undated),
             "meta_title": meta_title,
             "meta_description": meta_description,
             "canonical_url": page_url,
@@ -773,10 +819,31 @@ def set_detail(request, game_slug, set_slug):
         base_queryset=Product.objects.for_lists().filter(product_set=product_set),
         fixed_game=game,
         tabs=True,
-        structured=lambda page: [crumbs] + ([hubs.item_list_json(
+        structured=lambda page, canonical: [crumbs] + ([hubs.item_list_json(
             request, page_url, meta_title, meta_description, crumbs["@id"], page.object_list,
-        )] if hub_is_canonical(request, page) else []),
+        )] if canonical else []),
     )
+
+
+def set_facts(request, product_set, upcoming, out_later, date_source, dated_above=False):
+    """The small print under a set page's heading, in order: its code; for a set sold only at events or by
+    the publisher its date and that it is not in UK shops; for a set still to come its date (or that none is
+    announced) unless the line above gives it (``dated_above``), and where the date came from; otherwise
+    when it was released."""
+    facts = [product_set.code] if product_set.code else []
+    day = short_date(product_set.release_date) if product_set.release_date else ""
+    if product_set.not_in_shops:
+        if day:
+            facts.append(text(request, "new.coming_soon.out" if out_later else "browse.set.released", date=day))
+        facts.append(text(request, "browse.set.not_in_shops"))
+    elif upcoming:
+        if not dated_above:
+            facts.append(text(request, "new.coming_soon.out", date=day) if day else text(request, "new.coming_soon.tbc"))
+        if day and date_source:
+            facts.append(text(request, "new.coming_soon.source", source=date_source))
+    elif day:
+        facts.append(text(request, "browse.set.released", date=day))
+    return facts
 
 
 # JSON inside <script>: "<", ">" and "&" as \u escapes, so a name holding "</script>" (from a shop's title or
@@ -784,13 +851,14 @@ def set_detail(request, game_slug, set_slug):
 SCRIPT_ESCAPES = {ord("<"): "\\u003c", ord(">"): "\\u003e", ord("&"): "\\u0026"}
 
 
-def hub_is_canonical(request, page):
-    """Whether a game or set page is shown as its canonical address names it: the first page of the In stock
-    tab with no filters. Only that view describes the page in structured data, since every other view shares
-    its canonical address and @id but lists other products. Tracking parameters do not count."""
+def hub_is_canonical(request, page, opening=STOCK_TABS[0][0]):
+    """Whether a game or set page is shown as its canonical address names it: the first page of the tab it
+    opens on (``opening``, the first with products) with no filters. Only that view describes the page in
+    structured data, since every other view shares its canonical address and @id but lists other products.
+    Tracking parameters do not count."""
     params = {key: value for key, value in request.GET.items()
               if value and key not in ("page", "tab") and not key.startswith("utm_") and key not in ("gclid", "fbclid")}
-    return page.number == 1 and not params and request.GET.get("tab", STOCK_TABS[0][0]) in ("", STOCK_TABS[0][0])
+    return page.number == 1 and not params and request.GET.get("tab", "") in ("", opening)
 
 
 def ld_json(data):

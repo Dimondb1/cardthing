@@ -689,7 +689,8 @@ ENTRIES = [
     Entry(
         "browse.alert_link", B, "Email me about these link",
         "Email me when products like these are in stock",
-        "Under the filters on search and game pages once a game is chosen. Opens the alert form on the watchlist "
+        "Under the list on search, game and set pages once a game is chosen, while the list has products or the "
+        "set is still to come. Opens the alert form on the watchlist "
         "page with the same game, type, language and price filled in. The alert can be wider than the list (it "
         "has no set or search words), so this must not promise these exact products. Shown only while emails "
         "are set up.",
@@ -765,7 +766,8 @@ ENTRIES = [
     Entry(
         "browse.games.all_sets", B, "All sets link on the Games page",
         "All {count} sets",
-        "Under a game's newest sets on the Games page, when it has more than are listed there. Opens the game's page.",
+        "Under a game's newest sets on the Games page, when it has more than are listed there. Shows the rest of "
+        "the game's sets in place.",
         placeholders=("count",),
     ),
     Entry(
@@ -782,7 +784,7 @@ ENTRIES = [
     Entry(
         "browse.game.sets_title", H, "Sets heading on a game page",
         "Sets",
-        "Heading above the list of sets on each game page.",
+        "Small heading above the row of the game's newest sets on each game page.",
     ),
     Entry("browse.hub.products.one", T, "Hub product count (one)", "1 sealed product",
           "Starts the line under the heading of a game or set page with one product."),
@@ -808,10 +810,29 @@ ENTRIES = [
     ),
     Entry(
         "browse.hub.none_in_stock", T, "Hub line with nothing in stock",
-        "{products} compared across {shops}. None is in stock right now; pre-orders and sold out products are "
-        "in the tabs below.",
-        "Under the heading of a game or set page when no shop has anything in stock.",
+        "{products} compared across {shops}, none in stock right now.",
+        "Under the heading of a game or set page when no shop has anything in stock or takes pre-orders.",
         placeholders=("products", "shops"),
+    ),
+    Entry(
+        "browse.hub.preorder", T, "Hub line with everything on pre-order",
+        "{products}, on pre-order at {shops}.",
+        "Under the heading of a game or set page when nothing is in stock and every product is on pre-order. "
+        "{shops} counts the shops taking pre-orders.",
+        placeholders=("products", "shops"),
+    ),
+    Entry(
+        "browse.hub.preorder_some", T, "Hub line with some on pre-order",
+        "{products}, {count} on pre-order at {shops}.",
+        "Under the heading of a game or set page when nothing is in stock and some products are on pre-order. "
+        "{count} is how many are on pre-order and {shops} counts the shops taking them.",
+        placeholders=("products", "count", "shops"),
+    ),
+    Entry(
+        "browse.hub.no_date", T, "Hub line, no release date yet",
+        "Release date not announced yet.",
+        "After the line under the heading of a set page still to come that has no release date, while nothing "
+        "is in stock.",
     ),
     Entry(
         "browse.hub.upcoming", T, "Hub line before release",
@@ -866,7 +887,8 @@ ENTRIES = [
     Entry(
         "browse.game.all_sets", B, "All sets link",
         "All sets",
-        "First chip in the row of sets on game and set pages: every product for the game.",
+        "Last chip in the row of newest sets on a game page, when the game has more sets than the row shows. "
+        "Opens the game's whole list of sets on the Games page.",
     ),
     Entry(
         "browse.tabs.label", T, "Stock tabs label",
@@ -882,6 +904,22 @@ ENTRIES = [
         "browse.tabs.soonest", T, "Pre-orders order note",
         "Soonest out first.",
         "Above the Pre-orders tab's list when no other sort is chosen.",
+    ),
+    Entry(
+        "browse.list.pre_orders", H, "Pre-orders list heading",
+        "On pre-order",
+        "Above the list on a game or set page whose products are all on pre-order, so it has no tabs.",
+    ),
+    Entry(
+        "browse.list.out_of_stock", H, "Out of stock list heading",
+        "Out of stock",
+        "Above the list on a game or set page where nothing is in stock or on pre-order, so it has no tabs.",
+    ),
+    Entry(
+        "browse.filters.toggle", B, "Sort and filter button",
+        "Sort and filter",
+        "Opens the sort and filter choices on a game or set page with 12 or more products in the list. Open "
+        "already while a filter is chosen.",
     ),
     Entry(
         "browse.tabs.empty.in_stock", T, "Nothing in stock",

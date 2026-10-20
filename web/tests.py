@@ -260,7 +260,8 @@ class ServerErrorPageTests(TestCase):
 
 class SortTests(PageTestCase):
     def test_best_match_only_offered_with_a_query(self):
-        browse = self.client.get(self.game.get_absolute_url()).content.decode()
+        # A sort chosen keeps the game page's sort and filters in view, however short the list.
+        browse = self.client.get(self.game.get_absolute_url() + "?sort=price").content.decode()
         search = self.client.get(reverse("web:search"), {"q": "etb"}).content.decode()
         self.assertNotIn("Best match", browse)
         self.assertIn("Newest first", browse)
@@ -1099,12 +1100,13 @@ class GameTypesAndFilterTests(PageTestCase):
         make_listing(self.collector_box, self.harbour, price="230.00")
 
     def test_type_filter_speaks_the_games_language_and_lists_only_types_it_has(self):
-        response = self.client.get(self.magic.get_absolute_url())
+        # A sort chosen keeps the filters in view on a game page with only a few products.
+        response = self.client.get(self.magic.get_absolute_url() + "?sort=price")
         self.assertContains(response, '<option value="booster_box">Play booster box</option>')
         self.assertContains(response, '<option value="collector_booster_box">Collector booster box</option>')
         self.assertNotContains(response, "Elite Trainer Box</option>")
         self.assertNotContains(response, '<option value="deck">')
-        response = self.client.get(self.game.get_absolute_url())
+        response = self.client.get(self.game.get_absolute_url() + "?sort=price")
         self.assertContains(response, '<option value="elite_trainer_box">Elite Trainer Box</option>')
         self.assertNotContains(response, "Play booster box")
 
@@ -1687,7 +1689,9 @@ class ComingSoonTests(PageTestCase):
         # Undated sets follow the dated ones.
         self.assertLess(block.index("Ascended Heroes"), block.index("Chaos Rising"))
         set_page = self.client.get(undated.get_absolute_url()).content.decode()
-        self.assertIn("Date not announced yet", set_page)
+        # Said once, in the line under the heading.
+        self.assertRegex(set_page, r"1 sealed product, on pre-order at \d UK shops?\. Release date not announced yet\.")
+        self.assertEqual(set_page.count("not announced yet"), 1)
 
     def test_a_stale_or_kept_out_pre_order_does_not_count(self):
         undated = make_set(self.game, name="Chaos Rising", slug="chaos-rising", code="CRI")
@@ -1844,7 +1848,8 @@ class ComingSoonTests(PageTestCase):
                 elif url in drops:
                     self.assertIn('class="stock-tabs stock-tabs--two drops-tabs"', html)
                 else:
-                    self.assertTrue("Out " in visible or "Date not announced yet" in visible)
+                    # The line under the heading gives the date, or says none is announced.
+                    self.assertTrue("due out on " in visible or "Release date not announced yet." in visible)
                 self.assertNotIn("!", visible)
                 for phrase in CopyStyleTests.BANNED:
                     self.assertNotIn(phrase, html.lower())
@@ -2119,14 +2124,51 @@ class RedesignTests(PageTestCase):
         self.assertNotIn('class="shops"', card)
         self.assertNotIn("Buy now", card)
 
-    def test_the_set_row_marks_the_current_set_and_starts_with_all_sets(self):
+    def test_only_game_pages_have_the_row_of_sets(self):
         later = make_set(self.game, name="Surging Sparks", slug="surging-sparks", code="SSP")
         make_listing(make_product(later, name="Surging Sparks Booster Box", slug="ssp-box", product_type="booster_box"), self.harbour, price="120.00")
-        html = self.client.get(self.pre.get_absolute_url()).content.decode()
+        # A set page links back to its game once, quietly, and lists no other sets.
+        set_page = self.client.get(self.pre.get_absolute_url()).content.decode()
+        self.assertNotIn("set-nav", set_page)
+        self.assertNotIn(f'href="{later.get_absolute_url()}"', set_page)
+        self.assertIn('<a href="/games/pokemon/">All Pokémon products</a>', set_page)
+        # The game page's row names its sets under a heading, none marked as chosen, and needs no All sets with
+        # so few.
+        html = self.client.get(self.game.get_absolute_url()).content.decode()
         row = html[html.index('<nav class="set-nav"'):html.index("</nav>", html.index('<nav class="set-nav"'))]
-        self.assertIn('<a href="/games/pokemon/">All sets</a>', row)
-        self.assertIn(f'<a href="{self.pre.get_absolute_url()}" aria-current="page">Prismatic Evolutions</a>', row)
-        self.assertNotIn('aria-current="page">Surging Sparks', row)
+        self.assertIn('<h2 class="set-nav__title" id="sets-title">Sets</h2>', row)
+        self.assertIn(f'<a href="{self.pre.get_absolute_url()}">Prismatic Evolutions</a>', row)
+        self.assertIn(f'<a href="{later.get_absolute_url()}">Surging Sparks</a>', row)
+        self.assertNotIn("aria-current", row)
+        self.assertNotIn("All sets", row)
+
+    def test_a_game_page_shows_its_newest_sets_and_all_sets(self):
+        from datetime import date
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from .views import GAME_PAGE_SETS
+
+        def queries():
+            with CaptureQueriesContext(connection) as captured:
+                html = self.client.get(self.game.get_absolute_url()).content.decode()
+            return html, len(captured)
+
+        queries()   # the cached lists are built once
+        _, few = queries()
+        for n in range(GAME_PAGE_SETS + 3):
+            made = make_set(self.game, name=f"Era {n}", slug=f"era-{n}", code="", release_date=date(2030 + n, 1, 1))
+            make_product(made, name=f"Era {n} Booster Box", slug=f"era-{n}-box")
+        queries()   # the saves cleared the cached lists
+        html, many = queries()
+        row = html[html.index('<nav class="set-nav"'):html.index("</nav>", html.index('<nav class="set-nav"'))]
+        names = re.findall(r'<li><a href="[^"]+">([^<]+)</a></li>', row)
+        self.assertEqual(names, [f"Era {n}" for n in range(GAME_PAGE_SETS + 2, 2, -1)])
+        self.assertIn(f'<a class="set-nav__all" href="{reverse("web:games")}#game-pokemon">All sets</a>', row)
+        self.assertNotIn("Prismatic Evolutions", row)
+        # However many sets, the same queries.
+        self.assertEqual(many, few)
 
     def test_the_headline_puts_its_last_sentence_in_orange_whatever_it_says(self):
         from content.models import SiteContent
@@ -2295,10 +2337,12 @@ class StockTabsTests(TestCase):
         self.assertEqual(self.names(page), ["Old Set Booster Box"])
         for label, count in (("In stock", 1), ("Pre-orders", 2), ("Out of stock", 1)):
             self.assertRegex(html, rf'{label}</span> <span class="stock-tabs__count">{count}</span>')
-        self.assertContains(page, "4 products")
+        # The line under the heading counts them, so no second count.
+        self.assertContains(page, "4 sealed products compared across 2 UK shops")
+        self.assertNotContains(page, "browse-head__count")
         self.assertContains(page, 'data-tab="in-stock" aria-current="page"')
         self.assertEqual(self.names(self.client.get(self.url + "?tab=out-of-stock")), ["Old Set Bundle"])
-        # Anything else asked for is the In stock tab.
+        # Anything else asked for is the tab the page opens on.
         self.assertEqual(self.names(self.client.get(self.url + "?tab=nonsense")), ["Old Set Booster Box"])
 
     def test_pre_orders_are_soonest_out_first_unless_sorted(self):
@@ -2312,8 +2356,11 @@ class StockTabsTests(TestCase):
 
     def test_two_shops_means_two_shops_for_the_tab_in_view(self):
         html = self.client.get(self.url + "?compared=on").content.decode()
-        for label, count in (("In stock", 1), ("Pre-orders", 1), ("Out of stock", 0)):
+        for label, count in (("In stock", 1), ("Pre-orders", 1)):
             self.assertRegex(html, rf'{label}</span> <span class="stock-tabs__count">{count}</span>')
+        # An empty tab is left out.
+        self.assertNotIn('data-tab="out-of-stock"', html)
+        self.assertIn('class="stock-tabs stock-tabs--two"', html)
         self.assertEqual(self.names(self.client.get(self.url + "?tab=pre-orders&compared=on")),
                          ["Sooner Set Elite Trainer Box"])
 
@@ -2352,7 +2399,9 @@ class StockTabsTests(TestCase):
         Listing.objects.filter(product__in=[self.far, self.near]).delete()
         self.assertContains(self.client.get(self.url + "?tab=pre-orders"), "No pre-orders here right now.")
         Listing.objects.filter(product=self.stocked).delete()
-        self.assertContains(self.client.get(self.url), "Nothing here is in stock right now.")
+        # Asked for by name; the page itself opens on a tab with products.
+        self.assertContains(self.client.get(self.url + "?tab=in-stock"), "Nothing here is in stock right now.")
+        self.assertNotContains(self.client.get(self.url), "Nothing here is in stock right now.")
         Product.objects.exclude(pk=self.stocked.pk).update(is_active=False)
         make_listing(self.stocked, self.a)
         self.assertContains(self.client.get(self.url + "?tab=out-of-stock"), "Everything here is in stock or on pre-order.")
@@ -2567,7 +2616,7 @@ class GoldenLayoutTests(PageTestCase):
         css = self.css("site.css")
         # Section headings start at their capitals; text that closes a section or a control ends at its descenders.
         self.assertIn(".section-head__title, .section-title, .prose-page h2 { text-box: trim-start cap alphabetic; }", css)
-        self.assertIn(".hero__meta, .section-head__note, .page-intro, .browse-head__count, .small-print:last-child,", css)
+        self.assertIn(".hero__meta, .section-head__note, .page-intro, .browse-head > p:last-child, .small-print:last-child,", css)
         # Trimming needs a block, not a flex box, around the text.
         self.assertNotIn(".section-head__title { display: flex", css)
         self.assertNotIn(".hero__meta { display: flex", css)
@@ -2619,7 +2668,8 @@ class SocialLinksTests(TestCase):
 
 class GamesPageTests(PageTestCase):
     """Every game on the Games page ends with a link to all its products; its sets are listed newest first, up to
-    views.GAMES_PAGE_SETS, with a link to the rest; a game with no sets yet shows the link and no empty list."""
+    views.GAMES_PAGE_SETS, with a link that shows the rest in place; a game with no sets yet shows the link and
+    no empty list."""
 
     def games_page(self):
         return self.client.get(reverse("web:games")).content.decode()
@@ -2646,18 +2696,29 @@ class GamesPageTests(PageTestCase):
             made = make_set(magic, name=f"Set Number {n}", slug=f"set-{n}", code="", release_date=date(2020 + n, 1, 1))
             make_product(made, name=f"Set Number {n} Booster Box")
         section = self.section(self.games_page(), "magic-the-gathering")
+        # The newest show; the rest wait hidden in the page until the game is named in the address (:target).
         self.assertEqual(section.count("<li>"), GAMES_PAGE_SETS)
+        self.assertEqual(section.count('<li class="game-index__later">'), 2)
         self.assertLess(section.index(f"Set Number {GAMES_PAGE_SETS + 1}<"), section.index(f"Set Number {GAMES_PAGE_SETS}<"))
-        self.assertNotIn("Set Number 0<", section)
-        self.assertIn(f'<a href="{magic.get_absolute_url()}#sets">All {GAMES_PAGE_SETS + 2} sets</a>', section)
+        self.assertLess(section.rindex("<li>"), section.index("Set Number 0<"))
+        self.assertIn(f'<a class="game-index__all" href="#game-magic-the-gathering">All {GAMES_PAGE_SETS + 2} sets</a>',
+                      section)
         self.assertIn(f"See all {GAMES_PAGE_SETS + 2} products</a>", section)
-        # The link lands on the game page's row of sets.
-        self.assertIn('class="set-nav" id="sets"', self.client.get(magic.get_absolute_url()).content.decode())
+        self.assertIn('id="game-magic-the-gathering"', section)
+        from django.contrib.staticfiles import finders
+
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn(".game-index__game:not(:has(:target)) .game-index__later, .game-index__game:has(:target) "
+                      ".game-index__all { display: none; }", css)
+        # The game page's All sets opens that list.
+        game_page = self.client.get(magic.get_absolute_url()).content.decode()
+        self.assertIn(f'href="{reverse("web:games")}#game-magic-the-gathering"', game_page)
 
     def test_a_few_sets_need_no_link_to_the_rest(self):
         section = self.section(self.games_page(), self.game.slug)
         self.assertIn(self.pre.name, section)
-        self.assertNotIn("#sets", section)
+        self.assertNotIn("game-index__all", section)
+        self.assertNotIn("game-index__later", section)
         self.assertIn("See all 3 products", section)
 
     def test_the_page_costs_the_same_however_many_games_and_sets(self):

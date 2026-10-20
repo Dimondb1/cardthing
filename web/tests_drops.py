@@ -312,14 +312,17 @@ class OnePageTests(DropData):
     def test_a_set_out_today_with_no_shop_reads_as_out(self):
         self.later.release_date = self.today
         self.later.save()
-        card = cards(self.page())[self.later.pk]
+        # Midday, so the drop-day email window is open whatever time the tests run.
+        midday = timezone.localtime().replace(hour=12, minute=0)
+        with mock.patch("catalogue.drop_alerts.timezone.now", return_value=midday):
+            card = cards(self.page())[self.later.pk]
+            rows = self.client.get(self.magic.get_absolute_url() + "?tab=pre-orders").content.decode()
         self.assertIn("Out today", card)
         self.assertIn("It is out, but no UK shop we check lists it yet.", card)
         self.assertNotIn("No UK shop takes pre-orders yet", card)
         self.assertNotIn("No pre-orders yet", card)
         # The drop-day email can still go this evening, so Remind me stays until the window closes.
         self.assertIn("data-drop-remind", card)
-        rows = self.client.get(self.magic.get_absolute_url() + "?tab=pre-orders").content.decode()
         row = rows[rows.index('class="coming__name"'):]
         row = row[:row.index("</li>")]
         self.assertIn("It is out, but no UK shop we check lists it yet.", row)

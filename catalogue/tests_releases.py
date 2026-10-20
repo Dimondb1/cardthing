@@ -870,6 +870,26 @@ class DateRuleTests(TestCase):
                          (when, "ygoprodeck_sets", "magnificent-maestros"))
         self.assertEqual(releases_checks().release_candidates(), [])
 
+    def test_a_renamed_set_is_found_by_its_name_so_it_is_never_added_twice(self):
+        # Added under a shop's wording, then renamed in Admin: its address keeps the old name.
+        maestros = make_set(self.ygo, name="Magnificent Maestros Booster", slug="magnificent-maestros-booster", code="")
+        maestros.name = "Magnificent Maestros"
+        maestros.save()
+        when = timezone.localdate() + timedelta(days=34)
+        releases.accept(source("ygoprodeck_sets"), [signal("yu-gi-oh", "Magnificent Maestros", when, code="MAMS")])
+        row = Release.objects.get(source="ygoprodeck_sets")
+        self.assertEqual(row.product_set, maestros)
+        # The owner's Add set on the row dates that set rather than adding a second Magnificent Maestros.
+        self.client.post(reverse("checks"), {"action": "add_set", "release": row.pk, "name": "Magnificent Maestros",
+                                             "date": when.isoformat()})
+        self.assertEqual(list(ProductSet.objects.filter(game=self.ygo)), [maestros])
+        maestros.refresh_from_db()
+        self.assertEqual((maestros.release_date, maestros.release_date_source), (when, "ygoprodeck_sets"))
+        # Any other way in finds it too, by its name in any spelling the address would have.
+        self.assertEqual(releases.set_for(self.ygo, "Magnificent  Maestros!"), maestros)
+        self.assertIsNone(releases.find_set(self.ygo, "Magnificent Mavens"))
+        self.assertEqual(ProductSet.objects.filter(game=self.ygo).count(), 1)
+
     def test_a_row_for_a_set_with_a_date_is_not_a_candidate(self):
         make_set(self.ygo, name="Magnificent Maestros", slug="magnificent-maestros", code="",
                  release_date=timezone.localdate() + timedelta(days=34))

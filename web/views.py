@@ -747,9 +747,8 @@ def set_detail(request, game_slug, set_slug):
     words = hubs.Words(text, request)
     stats = hubs.HubStats() if request.GET.get("pane") else hubs.hub_stats(product_set=product_set)
     out_later = bool(product_set.release_date and product_set.release_date >= timezone.localdate())
-    meta_title, meta_description = hubs.set_meta(
-        words, product_set, stats, upcoming, date=short_date(product_set.release_date) if out_later else "",
-    )
+    release_shown = short_date(product_set.release_date) if out_later else ""
+    meta_title, meta_description = hubs.set_meta(words, product_set, stats, upcoming, date=release_shown)
     page_url = request.build_absolute_uri(product_set.get_absolute_url())
     crumbs = breadcrumbs_json(
         request, [(game.name, game.get_absolute_url()), (product_set.name, product_set.get_absolute_url())],
@@ -766,7 +765,7 @@ def set_detail(request, game_slug, set_slug):
             "set_out_later": out_later,
             "date_source": date_source_label(product_set) if upcoming else "",
             "sets": ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct(),
-            "intro": hubs.intro(words, stats),
+            "intro": hubs.intro(words, stats, date=release_shown if upcoming else ""),
             "meta_title": meta_title,
             "meta_description": meta_description,
             "canonical_url": page_url,
@@ -1002,16 +1001,26 @@ def product_detail(request, slug):
     if product.product_set:
         crumbs.append((product.product_set.name, product.product_set.get_absolute_url()))
     crumbs.append((product.name, product.get_absolute_url()))
+    words = hubs.Words(text, request)
+    # Titles and descriptions name the set's code when the product's name does not, since searchers type it.
+    search_name = hubs.name_with_code(product)
+    release = product.effective_release_date
+    release_shown = short_date(release) if release and release > today else ""
     if cheapest and cheapest.delivery_known:
-        words = hubs.Words(text, request)
         meta_values = {
-            "product": product.name,
+            "product": search_name,
             "price": gbp(cheapest.delivered_price),
             "retailer": cheapest.retailer.name,
             "count": shop_count,
             "shops": words.count("meta.shops", shop_count),
         }
-        meta_title = text(request, "meta.product.title_priced", **meta_values)
+        # "Pre-order" in the title only while the product is not out: the quoted price is a pre-order, no shop
+        # has it in stock and the release date is unknown or still to come. A shop's stale pre-order flag on a
+        # product already out would otherwise tell searchers it is not out yet.
+        preorder = (cheapest.availability == Listing.Availability.PREORDER and not in_stock_count
+                    and (release is None or release > today))
+        meta_title = hubs.product_title(words, search_name, meta_values["price"], preorder,
+                                        retailer=meta_values["retailer"], count=shop_count)
         # "Cheapest today" only when the price quoted is in stock. When the cheapest is a pre-order, the
         # description says so, and names the cheapest shop with it in stock if there is one.
         stock_offer = next((listing for listing in current if listing.availability == Listing.Availability.IN_STOCK
@@ -1021,12 +1030,23 @@ def product_detail(request, slug):
         elif stock_offer is not None:
             key = "meta.product.description_preorder_stock"
             meta_values.update(stock_price=gbp(stock_offer.delivered_price), stock_retailer=stock_offer.retailer.name)
+        elif release_shown:
+            key = "meta.product.description_preorder_dated"
+            meta_values["date"] = release_shown
         else:
             key = "meta.product.description_preorder"
         meta_description = hubs.fit_description(hubs.tidy_stops(text(request, key, **meta_values)))
     else:
-        meta_title = text(request, "meta.product.title", product=product.name)
-        meta_description = hubs.fit_description(text(request, "meta.product.description", product=product.name))
+        meta_title = hubs.fitted(text(request, key, product=search_name)
+                                 for key in ("meta.product.title", "meta.product.title_short"))
+        meta_title = meta_title or text(request, "meta.product.title_short", product=search_name)
+        if release_shown:
+            # "Prices appear once shops list it" only when no shop lists it at all. A product listed but sold
+            # out, or whose cheapest price has no known delivery cost, gets a dated line that does not deny it.
+            key = "meta.product.description_dated_listed" if listings else "meta.product.description_dated"
+            meta_description = hubs.fit_description(text(request, key, product=search_name, date=release_shown))
+        else:
+            meta_description = hubs.fit_description(text(request, "meta.product.description", product=search_name))
     breadcrumbs = breadcrumbs_json(request, crumbs, page_url=page_url)
     # The page itself: a page about one item, whose main entity is the Product above (when there is one).
     item_page = {

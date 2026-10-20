@@ -3310,6 +3310,41 @@ wording under "Page titles and search engine descriptions" and "Search
 results and browsing" (`browse.hub.*`). Set pages link back to their
 game under the heading as well as in the breadcrumb.
 
+Set codes are what searchers type ("eb05 booster box uk", "op18 booster
+box uk"), so titles carry them. A set whose code has letters and digits
+(OP-18, EB05, FB11, BT28, SV8.5; not FIN or PRE, which are not searched
+and can be ordinary words) is named "{set} ({code})" in its page's title
+and description (`meta.set.name_code`): "{set} ({code}) booster boxes UK:
+cheapest prices" while something is in stock, "{set} ({code}) pre-orders
+UK: release date and prices" while shops take pre-orders before the
+release date, "{set} ({code}) release date" when no shop does. A title
+keeps the code ahead of a longer wording or more product types, and drops
+the code before the set's name; when even the shortest wording runs past
+60 characters without the code, the code stays. The line under the
+heading of a set still to come gives its release date and how many shops
+take pre-orders, or how many list it when none takes pre-orders yet
+(`browse.hub.upcoming_listed`); "prices appear once shops list it" is
+said only when no shop lists anything. Product titles and descriptions use the product's name
+with its set's code put in when the name does not give it in any spelling
+(`OP18`, `op 18`, `OP-18`, `EB-5` for `EB05`): after the set's name, else
+before the product type, else in front. A name giving some other set's
+code is left alone. A range code such as BT19-20 matches "BT19 20" and
+"BT19-20". An em dash in a product's name becomes a space in titles and
+descriptions (`hubs.search_name`). The heading and breadcrumbs keep the
+name as it is.
+Product titles take the longest wording that fits in about 60
+characters, from "{product} from {price} delivered: UK price comparison"
+through "{product} UK from {price} delivered" and "{product} UK from
+{price}" to "{product} from {price}"; the name is never cut. They say
+"pre-order from" only when the price quoted is a pre-order, no shop has
+it in stock and its release date is unknown or still to come, so a shop's
+stale pre-order flag on a product already out does not tell searchers it
+is not out yet. A pre-order's description gives the release date while it
+is still to come, and a product still to come that shops list but cannot
+price (sold out, or delivery unknown) gets
+`meta.product.description_dated_listed` rather than the "once shops list
+it" line (`hubs.name_with_code`, `hubs.product_title`).
+
 `/deals/`, `/drops/` and Out now (`/drops/?show=out`) are plain server
 rendered pages with their own addresses, titles and descriptions, and all
 three are in the sitemap. `/robots.txt`

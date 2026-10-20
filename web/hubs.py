@@ -181,39 +181,182 @@ def game_meta(words, game, stats):
     return title, fit_description(tidy_stops(description))
 
 
+# Set codes ----------------------------------------------------------------------------------------
+#
+# Searchers type a set's code with buying words ("eb05 booster box uk", "op18 booster box uk"), so set and product
+# titles carry it. Only a code with letters and digits is shown: three-letter codes such as FIN, PRE or SSP are
+# not what people search and some are ordinary words.
+
+CODE_PART = re.compile(r"[a-z]+|\d+|\.")
+
+
+def shown_code(product_set):
+    """The set's code as titles show it ("OP-18", "EB05", "SV8.5"), or "" when it has none worth showing. A code
+    stored all in lower case is shown in upper case; otherwise it is shown as the publisher writes it."""
+    code = " ".join((getattr(product_set, "code", "") or "").split())
+    if not (re.search(r"[A-Za-z]", code) and re.search(r"\d", code)):
+        return ""
+    return code.upper() if code == code.lower() else code
+
+
+def code_pattern(code):
+    """A pattern finding ``code`` in a name loosely: any case, with or without a space or hyphen where letters
+    meet digits, and with or without zeros before a number ("OP-18" finds "OP18" and "op 18", "EB05" finds
+    "EB-5")."""
+    # Parts are found before separators go, so a range code keeps its numbers apart ("BT19-20": 19 then 20).
+    parts = CODE_PART.findall(code.lower())
+    if not parts:
+        return None
+    pattern = ""
+    for index, part in enumerate(parts):
+        if index and part != "." and parts[index - 1] != ".":
+            pattern += r"[\s-]?"
+        if part.isdigit():
+            pattern += "0*" + (part.lstrip("0") or "0")
+        else:
+            pattern += re.escape(part)
+    return re.compile(rf"(?<![a-z0-9]){pattern}(?![a-z0-9])", re.I)
+
+
+def has_code(name, code):
+    """Whether ``name`` already gives ``code``, compared loosely (code_pattern)."""
+    pattern = code_pattern(code) if code else None
+    return bool(pattern and pattern.search(name or ""))
+
+
+def search_name(name):
+    """``name`` as search titles and descriptions give it: an em dash from a shop's or publisher's name becomes a
+    space, since the site's copy uses none and titles already end in a colon ("Ditto Premium Collection, em dash,
+    30th Celebration" -> "Ditto Premium Collection 30th Celebration"). Page headings keep the name as stored."""
+    name = name or ""
+    if "\u2014" not in name:
+        return name
+    return " ".join(re.sub("\u2014", " ", name).split())
+
+
+def name_with_code(product):
+    """The product's name (search_name) with its set's code put in when the name does not give it: after the
+    set's name when the product's name contains it, else before the product type ("Heroines Edition Vol.2 Booster
+    Box" -> "Heroines Edition Vol.2 EB05 Booster Box"), else in front."""
+    from catalogue.matching import set_codes
+
+    name = search_name(product.name)
+    code = shown_code(product.product_set) if product.product_set_id else ""
+    if not code or has_code(name, code):
+        return name
+    # A name giving some other set's code is left alone rather than given two: the product may be filed wrongly.
+    game = getattr(getattr(product, "game", None), "slug", "")
+    if set_codes(name, game):
+        return name
+    lowered = name.lower()
+    set_name = (product.product_set.name or "").strip().lower()
+    at = re.search(rf"(?<![a-z0-9]){re.escape(set_name)}(?![a-z0-9])", lowered) if set_name else None
+    if at:
+        return f"{name[:at.end()]} {code}{name[at.end():]}"
+    type_name = (product.type_name or "").lower()
+    at = re.search(rf"(?<![a-z0-9]){re.escape(type_name)}", lowered) if type_name else None
+    if at:
+        return f"{name[:at.start()].rstrip()} {code} {name[at.start():]}".lstrip()
+    return f"{code} {name}"
+
+
+def fitted(candidates, limit=TITLE_LIMIT):
+    """The first of ``candidates`` (titles, best first) within ``limit`` characters, or None."""
+    return next((title for title in candidates if len(title) <= limit), None)
+
+
+PRODUCT_TITLES = {
+    False: ("meta.product.title_priced", "meta.product.title_priced_uk", "meta.product.title_priced_short",
+            "meta.product.title_priced_shortest"),
+    True: ("meta.product.title_preorder", "meta.product.title_preorder_uk", "meta.product.title_preorder_short",
+           "meta.product.title_preorder_shortest"),
+}
+
+
+def product_title(words, name, price, preorder, **values):
+    """A product page's title quoting ``price``: the longest wording that fits, keeping "UK" (what searchers type)
+    and then "delivered" as long as they fit, and "pre-order" when the price quoted is a pre-order. ``name`` keeps its set code even
+    when the title then runs long: the code is what searchers type, and the name is never cut."""
+    titles = [words(key, product=name, price=price, **values) for key in PRODUCT_TITLES[bool(preorder)]]
+    return fitted(titles) or titles[-1]
+
+
+def set_labels(words, product_set):
+    """The set's name as titles may give it, best first: with its code, then without."""
+    code = shown_code(product_set)
+    if code and not has_code(product_set.name, code):
+        return [words("meta.set.name_code", set=product_set.name, code=code), product_set.name]
+    return [product_set.name]
+
+
+def set_title(words, labels, keys, types=(), **values):
+    """The first title within the limit, trying each label (with the code first) in each wording ``keys`` (best
+    first) with as many ``types`` as fit. The code goes before the wording and the types, so a title keeps the
+    code ahead of a longer wording; the set's name is never dropped. When nothing fits, the shortest wording
+    with the code is used, since dropping the code would not make it fit either."""
+    def built(label, key, count):
+        extra = {"types": words.join(list(types)[:count])} if types else {}
+        return words(key, set=label, **extra, **values)
+
+    counts = range(len(types), 0, -1) if types else (0,)
+    for label in labels:
+        title = fitted(built(label, key, count) for key in keys for count in counts)
+        if title:
+            return title
+    return min((built(labels[0], key, counts[-1]) for key in keys), key=len)
+
+
 def set_meta(words, product_set, stats, upcoming, date=""):
     """(title, description) for a set page. ``date`` is the release date as shown, for a set still to come."""
-    game, name = product_set.game, product_set.name
-    values = {"set": name, "game": game.display_short}
+    game = product_set.game
+    labels = set_labels(words, product_set)
+    values = {"game": game.display_short}
+    # Descriptions give the code too: they are not cut for it, so there is room.
+    described = {"set": labels[0], **values}
     if stats.in_stock and stats.cheapest is not None:
         types = words.types(game.slug, stats.stocked_types)
-        title = fit_title(
-            lambda chosen: words("meta.set.title", types=words.join(chosen), **values), types,
-            short=lambda chosen: words("meta.set.title_short", types=words.join(chosen), **values),
-        ) if types else words("meta.set.title_plain", **values)
+        if types:
+            title = set_title(words, labels, ("meta.set.title", "meta.set.title_short"), types, **values)
+        else:
+            title = set_title(words, labels, ("meta.set.title_plain", "meta.set.title_plain_short"), **values)
         description = words(
             "meta.set.description_stock", count=f"{stats.in_stock:,}",
-            products=words.count("meta.products", stats.in_stock, game=game.display_short), shops=words.count("meta.shops", stats.stock_shops), price=money(stats.cheapest.delivered_price), **values,
+            products=words.count("meta.products", stats.in_stock, game=game.display_short),
+            shops=words.count("meta.shops", stats.stock_shops), price=money(stats.cheapest.delivered_price),
+            **described,
         )
     elif upcoming and date and stats.preorder_shops:
-        title = words("meta.set.title_upcoming", **values)
-        description = words("meta.set.description_upcoming", date=date, **values)
+        keys = ("meta.set.title_upcoming", "meta.set.title_upcoming_short", "meta.set.title_upcoming_shortest")
+        title = set_title(words, labels, keys, **values)
+        description = words("meta.set.description_upcoming", date=date,
+                            shops=words.count("meta.shops", stats.preorder_shops), **described)
     elif upcoming and date:
         # Still to come and no shop takes pre-orders yet: the date is all the page can promise.
-        title = words("meta.set.title_dated", **values)
-        description = words("meta.set.description_dated", date=date, **values)
+        title = set_title(words, labels, ("meta.set.title_dated",), **values)
+        # "Prices appear once shops list them" only when no shop lists any of them.
+        key = "meta.set.description_dated_listed" if stats.listed else "meta.set.description_dated"
+        description = words(key, date=date, **described)
     else:
-        title = words("meta.set.title_plain", **values)
-        description = words("meta.set.description", **values)
+        title = set_title(words, labels, ("meta.set.title_plain", "meta.set.title_plain_short"), **values)
+        description = words("meta.set.description", **described)
     return title, fit_description(tidy_stops(description))
 
 
-def intro(words, stats):
+def intro(words, stats, date=""):
     """The paragraph under a hub's heading, as safe HTML, or "" for a hub with no products. The cheapest
-    product in stock is a link to its page."""
+    product in stock is a link to its page. ``date`` is the release date as shown, for a set still to come:
+    while nothing is in stock its line gives the date and how many shops take pre-orders."""
     if not stats.products:
         return ""
     products = words.count("browse.hub.products", stats.products)
+    if date and not stats.in_stock:
+        if stats.preorder_shops:
+            return escape(words("browse.hub.upcoming", products=products, date=date,
+                                shops=words.count("browse.hub.shops", stats.preorder_shops)))
+        if stats.listed:
+            return escape(words("browse.hub.upcoming_listed", products=products, date=date,
+                                shops=words.count("browse.hub.shops", stats.listed)))
+        return escape(words("browse.hub.upcoming_none", products=products, date=date))
     if not stats.listed:
         return escape(words("browse.hub.unlisted", products=products))
     if not stats.shops:

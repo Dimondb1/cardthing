@@ -15,6 +15,7 @@ from catalogue.models import Listing, Product
 from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
 
 from . import hubs
+from .templatetags.ripraptor import short_date
 from .tests import CopyStyleTests, PageTestCase
 
 LD_START = '<script type="application/ld+json">'
@@ -203,7 +204,7 @@ class GameHubTests(PageTestCase):
 class SetHubTests(PageTestCase):
     def test_title_description_and_intro(self):
         html = self.client.get(self.pre.get_absolute_url()).content.decode()
-        self.assertEqual(title_of(html), "Prismatic Evolutions ETBs: cheapest UK prices | RipRaptor")
+        self.assertEqual(title_of(html), "Prismatic Evolutions ETBs UK: cheapest prices | RipRaptor")
         description = description_of(html)
         self.assertTrue(description.startswith(
             "Prismatic Evolutions: 1 sealed Pokémon product in stock at 2 UK shops, from £54.99 delivered."
@@ -223,11 +224,12 @@ class SetHubTests(PageTestCase):
         product = make_product(upcoming, name="Ascended Heroes Elite Trainer Box")
         make_listing(product, self.harbour, price="49.99", availability=Listing.Availability.PREORDER)
         html = self.client.get(upcoming.get_absolute_url()).content.decode()
-        self.assertEqual(title_of(html), "Ascended Heroes release date and UK pre-orders | RipRaptor")
+        self.assertEqual(title_of(html), "Ascended Heroes pre-orders UK: release date and prices | RipRaptor")
         description = description_of(html)
         self.assertTrue(description.startswith(f"Pokémon Ascended Heroes is due out on {out.day} "))
+        self.assertIn("on pre-order at 1 UK shop.", description)
         self.assertNotIn("in stock", description)
-        self.assertIn("1 sealed product compared across 1 UK shop. None is in stock right now", html)
+        self.assertIn(f"1 sealed product due out on {short_date(out)}, with 1 UK shop taking pre-orders now.", html)
 
     def test_a_set_still_to_come_that_no_shop_lists_promises_no_prices(self):
         out = timezone.localdate() + timedelta(days=40)
@@ -238,7 +240,8 @@ class SetHubTests(PageTestCase):
         description = description_of(html)
         self.assertTrue(description.startswith(f"Pokémon Ascended Heroes is due out on {out.day} "))
         self.assertNotIn("pre-order", description.lower())
-        self.assertIn("1 sealed product, not yet listed by a UK shop we check.", html)
+        self.assertIn(f"1 sealed product due out on {short_date(out)}, not yet on pre-order at a UK shop we check.",
+                      html)
 
     def test_a_long_set_name_falls_back_to_the_short_title(self):
         long_set = make_set(self.game, name="Scarlet and Violet Paldean Fates Special", slug="paldean-fates",
@@ -295,8 +298,10 @@ class ProductMetaTests(PageTestCase):
         self.assertNotIn("Cheapest", description)
         self.assertNotIn("today", description)
         self.assertLessEqual(len(description), 160)
-        # The title still quotes the lowest price, which is true of any offer.
-        self.assertTrue(title_of(html).startswith(f"{self.etb.name} from £40.00 delivered"))
+        # The title quotes the lowest price, which is true of any offer. It does not say pre-order: another shop
+        # has it in stock, so the product is out.
+        self.assertTrue(title_of(html).startswith(f"{self.etb.name} UK from £40.00"), title_of(html))
+        self.assertNotIn("pre-order", title_of(html))
 
 
 class FitDescriptionTests(TestCase):

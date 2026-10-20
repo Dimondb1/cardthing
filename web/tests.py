@@ -579,7 +579,8 @@ class LanguageAndSortTests(PageTestCase):
 class DiscoverabilityTests(PageTestCase):
     def test_product_page_has_price_led_title_description_and_sharing_tags(self):
         response = self.client.get(self.etb.get_absolute_url())
-        self.assertContains(response, "<title>Prismatic Evolutions Elite Trainer Box from £54.99 delivered: UK price comparison | RipRaptor</title>")
+        # The longest wording that fits in about 60 characters before the site name (web/hubs.py).
+        self.assertContains(response, "<title>Prismatic Evolutions Elite Trainer Box UK from £54.99 | RipRaptor</title>")
         self.assertContains(response, 'content="Cheapest Prismatic Evolutions Elite Trainer Box today is £54.99 delivered at Harbour Games. Compare 2 UK shops')
         self.assertContains(response, '<meta property="og:type" content="product">')
         self.assertContains(response, '<meta property="og:url" content="http://testserver' + self.etb.get_absolute_url() + '">')

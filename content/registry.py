@@ -111,6 +111,7 @@ PLACEHOLDER_HELP = {
     "types": "the product types in stock, for example booster boxes and ETBs",
     "products": "a number of products, for example 412 sealed products",
     "shops": "a number of shops, for example 18 UK shops",
+    "code": "the set's code, for example OP-18 or EB05",
 }
 
 
@@ -811,6 +812,26 @@ ENTRIES = [
         "in the tabs below.",
         "Under the heading of a game or set page when no shop has anything in stock.",
         placeholders=("products", "shops"),
+    ),
+    Entry(
+        "browse.hub.upcoming", T, "Hub line before release",
+        "{products} due out on {date}, with {shops} taking pre-orders now.",
+        "Under the heading of a set page still to come while nothing is in stock. {shops} counts the shops "
+        "taking pre-orders.",
+        placeholders=("products", "date", "shops"),
+    ),
+    Entry(
+        "browse.hub.upcoming_none", T, "Hub line before release, no pre-orders",
+        "{products} due out on {date}, not yet on pre-order at a UK shop we check.",
+        "Under the heading of a set page still to come when no shop lists any of its products yet.",
+        placeholders=("products", "date"),
+    ),
+    Entry(
+        "browse.hub.upcoming_listed", T, "Hub line before release, listed, no pre-orders",
+        "{products} due out on {date}, listed at {shops} but not on pre-order yet.",
+        "Under the heading of a set page still to come when shops list its products but none takes "
+        "pre-orders now. {shops} counts the shops listing them.",
+        placeholders=("products", "date", "shops"),
     ),
     Entry(
         "browse.hub.unlisted", T, "Hub line with no shop",
@@ -2258,7 +2279,15 @@ ENTRIES = [
     Entry(
         "meta.product.title", T, "Product page title",
         "{product}: UK prices",
-        "Browser tab title for product pages. The site name is added after it.",
+        "Browser tab title for product pages with no current price. {product} carries the set's code when the "
+        "name does not. The site name is added after it.",
+        placeholders=("product",),
+    ),
+    Entry(
+        "meta.product.title_short", T, "Product page title, short form",
+        "{product} UK",
+        "Used instead of the product page title with no current price when that would run past about 60 "
+        "characters.",
         placeholders=("product",),
     ),
     Entry(
@@ -2271,8 +2300,55 @@ ENTRIES = [
     Entry(
         "meta.product.title_priced", T, "Product page title with a price",
         "{product} from {price} delivered: UK price comparison",
-        "Browser tab title for product pages that have a current price. The site name is added after it.",
+        "Browser tab title for product pages whose cheapest price is in stock. {product} carries the set's code "
+        "when the name does not. When it runs past about 60 characters the next shorter form is used. The site "
+        "name is added after it.",
         placeholders=("product", "price", "retailer", "count"),
+    ),
+    Entry(
+        "meta.product.title_priced_uk", T, "Product page title with a price, shorter",
+        "{product} UK from {price} delivered",
+        "Used instead of the product page title with a price when that would run past about 60 characters.",
+        placeholders=("product", "price"),
+    ),
+    Entry(
+        "meta.product.title_priced_short", T, "Product page title with a price, shorter still",
+        "{product} UK from {price}",
+        "Used when the shorter product page title with a price would still run past about 60 characters.",
+        placeholders=("product", "price"),
+    ),
+    Entry(
+        "meta.product.title_priced_shortest", T, "Product page title with a price, shortest",
+        "{product} from {price}",
+        "Used for long product names, when every other form would run past about 60 characters.",
+        placeholders=("product", "price"),
+    ),
+    Entry(
+        "meta.product.title_preorder", T, "Product page title with a pre-order price",
+        "{product} pre-order from {price} delivered: UK price comparison",
+        "Browser tab title for product pages whose cheapest price is a pre-order. When it runs past about 60 "
+        "characters the next shorter form is used. The site name is added after it.",
+        placeholders=("product", "price"),
+    ),
+    Entry(
+        "meta.product.title_preorder_uk", T, "Product page title with a pre-order price, shorter",
+        "{product} UK pre-order from {price} delivered",
+        "Used instead of the product page title with a pre-order price when that would run past about 60 "
+        "characters.",
+        placeholders=("product", "price"),
+    ),
+    Entry(
+        "meta.product.title_preorder_short", T, "Product page title with a pre-order price, shorter still",
+        "{product} UK pre-order from {price}",
+        "Used when the shorter product page title with a pre-order price would still run past about 60 "
+        "characters.",
+        placeholders=("product", "price"),
+    ),
+    Entry(
+        "meta.product.title_preorder_shortest", T, "Product page title with a pre-order price, shortest",
+        "{product} pre-order from {price}",
+        "Used for long product names, when every other pre-order form would run past about 60 characters.",
+        placeholders=("product", "price"),
     ),
     Entry(
         "meta.product.description_priced", T, "Product page description with a price",
@@ -2289,6 +2365,28 @@ ENTRIES = [
         "Search engine description for product pages that shops only take pre-orders for, so it never says "
         "in stock. Cut to 160 characters at a whole sentence or word.",
         placeholders=("product", "price", "retailer", "count", "shops"),
+    ),
+    Entry(
+        "meta.product.description_preorder_dated", T, "Product page description with a pre-order price and date",
+        "{product} is due out on {date}, on pre-order from {price} delivered at {retailer}. Compare {shops} "
+        "with delivery and when each price was checked.",
+        "Search engine description for product pages that shops only take pre-orders for, when its release "
+        "date is still to come. Cut to 160 characters at a whole sentence or word.",
+        placeholders=("product", "price", "retailer", "count", "shops", "date"),
+    ),
+    Entry(
+        "meta.product.description_dated", T, "Product page description before release, no price",
+        "{product} is due out on {date}. UK shop prices appear here once shops list it, with delivery and when "
+        "each price was checked.",
+        "Search engine description for a product with no current price whose release date is still to come.",
+        placeholders=("product", "date"),
+    ),
+    Entry(
+        "meta.product.description_dated_listed", T, "Product page description before release, listed, no price",
+        "{product} is due out on {date}. Compare UK shop prices, delivery and when each price was checked.",
+        "Search engine description for a product whose release date is still to come when shops list it but "
+        "none has a price to quote (sold out, or delivery unknown).",
+        placeholders=("product", "date"),
     ),
     Entry(
         "meta.product.description_preorder_stock", T, "Product page description with a cheaper pre-order",
@@ -2379,8 +2477,15 @@ ENTRIES = [
         placeholders=("game",),
     ),
     Entry(
+        "meta.set.name_code", T, "Set name with its code",
+        "{set} ({code})",
+        "How set page titles and descriptions give a set with a code, such as OP-18 or EB05. When a title "
+        "would run past about 60 characters with the code, it is given without.",
+        placeholders=("set", "code"),
+    ),
+    Entry(
         "meta.set.title", T, "Set page title",
-        "{set} {types}: cheapest UK prices",
+        "{set} {types} UK: cheapest prices",
         "Browser tab title for set pages while a shop has something in stock. {types} names the product types "
         "in stock now, as many as fit in about 60 characters. The site name is added after it.",
         placeholders=("set", "game", "types"),
@@ -2394,15 +2499,33 @@ ENTRIES = [
     ),
     Entry(
         "meta.set.title_upcoming", T, "Set page title before release",
-        "{set} release date and UK pre-orders",
+        "{set} pre-orders UK: release date and prices",
         "Browser tab title for a set still to come, with a release date, that a shop takes pre-orders for and "
         "none has in stock yet.",
+        placeholders=("set", "game"),
+    ),
+    Entry(
+        "meta.set.title_upcoming_short", T, "Set page title before release, short form",
+        "{set} pre-orders UK and release date",
+        "Used instead of the set page title before release when that would run past about 60 characters.",
+        placeholders=("set", "game"),
+    ),
+    Entry(
+        "meta.set.title_upcoming_shortest", T, "Set page title before release, shortest form",
+        "{set} pre-orders UK",
+        "Used when the short set page title before release would still run past about 60 characters.",
         placeholders=("set", "game"),
     ),
     Entry(
         "meta.set.title_plain", T, "Set page title with nothing in stock",
         "{set} sealed products: UK price comparison",
         "Browser tab title for set pages when no shop has anything in stock. The site name is added after it.",
+        placeholders=("set", "game"),
+    ),
+    Entry(
+        "meta.set.title_plain_short", T, "Set page title with nothing in stock, short form",
+        "{set} sealed products UK",
+        "Used instead of the set page title with nothing in stock when that would run past about 60 characters.",
         placeholders=("set", "game"),
     ),
     Entry(
@@ -2415,11 +2538,11 @@ ENTRIES = [
     ),
     Entry(
         "meta.set.description_upcoming", T, "Set page description before release",
-        "{game} {set} is due out on {date}. Compare UK pre-order prices and delivery for its sealed products, "
-        "with most shops checked every hour.",
+        "{game} {set} is due out on {date}, on pre-order at {shops}. Compare pre-order prices and delivery for "
+        "its sealed products, with most shops checked every hour.",
         "Search engine description for a set still to come, with a release date, that a shop takes pre-orders "
-        "for and none has in stock yet.",
-        placeholders=("set", "game", "date"),
+        "for and none has in stock yet. {shops} counts the shops taking pre-orders.",
+        placeholders=("set", "game", "date", "shops"),
     ),
     Entry(
         "meta.set.title_dated", T, "Set page title before release, no pre-orders",
@@ -2433,7 +2556,15 @@ ENTRIES = [
         "{game} {set} is due out on {date}. UK shop prices for its sealed products appear here once shops "
         "list them.",
         "Search engine description for a set still to come, with a release date, that no shop takes "
-        "pre-orders for yet.",
+        "pre-orders for yet and no shop lists.",
+        placeholders=("set", "game", "date"),
+    ),
+    Entry(
+        "meta.set.description_dated_listed", T, "Set page description before release, listed, no pre-orders",
+        "{game} {set} is due out on {date}. Compare UK shop prices for its sealed products, with delivery and "
+        "when each price was checked.",
+        "Search engine description for a set still to come, with a release date, whose products shops list "
+        "but none takes pre-orders for yet.",
         placeholders=("set", "game", "date"),
     ),
     Entry(

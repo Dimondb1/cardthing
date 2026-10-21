@@ -2785,7 +2785,8 @@ and Buy now; the two cheapest shops as rows, the cheapest flagged; then
 "Compare N shops" and "Check prices", both opening the product's price list.
 The filters above are one select each for sort, game, type, price and
 language, and two switches, In stock and 2+ shops. A game page lists its 8
-newest sets as chips under "Sets" (one row that scrolls sideways on a phone),
+newest sets as chips with no heading on screen (screen readers hear "Sets";
+one row that scrolls sideways on a phone),
 ending in "All sets" when it has more, which opens the game's whole list on
 the Games page (`/games/#game-<slug>`: the Games page shows a game's 8 newest
 sets and keeps the rest in the page, shown by CSS once the address names that
@@ -2795,7 +2796,10 @@ heading it gives its code and dates in small print and one link, "All
 
 Game and set pages are kept short. The line under the heading says what
 the page holds (see the hubs below), so there is no second product count
-unless a filter narrows the list. Sort and filters show only for a list of
+unless a filter narrows the list. On a game page, while anything is in
+stock, it is one short line ("4,179 sealed products compared across 53 UK
+shops.", `browse.hub.brief`): the In stock tab gives that count, and the
+cheapest product's link is left to the set pages. Sort and filters show only for a list of
 12 or more products (`FILTERS_FROM`), folded under one "Sort and filter"
 button (a `<details>`, open while any filter or sort is chosen); a shorter
 list has none. "Email me when products like these are in stock" sits under

@@ -642,7 +642,6 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 /* A game page's newest sets: a quiet labelled row that scrolls sideways on phones and tablets and wraps on wide screens,
    ending in All sets. Links to other pages, so none is marked as chosen. */
 .set-nav { margin-bottom: var(--rhythm-control); }
-.set-nav__title { font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-ink-subtle); margin-bottom: var(--space-2); }
 .set-nav ul { list-style: none; display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-1); scrollbar-width: none; margin-inline: calc(-1 * var(--page-gutter)); padding-inline: var(--page-gutter); }
 .set-nav ul::-webkit-scrollbar { display: none; }
 @media (min-width: 60rem) { .set-nav ul { flex-wrap: wrap; overflow: visible; margin-inline: 0; padding-inline: 0; } }

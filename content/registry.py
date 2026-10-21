@@ -788,7 +788,7 @@ ENTRIES = [
     Entry(
         "browse.game.sets_title", H, "Sets heading on a game page",
         "Sets",
-        "Small heading above the row of the game's newest sets on each game page.",
+        "Read out by screen readers for the row of the game's newest sets on each game page.",
     ),
     Entry("browse.hub.products.one", T, "Hub product count (one)", "1 sealed product",
           "Starts the line under the heading of a game or set page with one product."),
@@ -799,6 +799,12 @@ ENTRIES = [
     Entry("browse.hub.shops.other", T, "Hub shop count (more than one)", "{count} UK shops",
           "In the line under the heading of a game or set page: shops listing any of its products.",
           placeholders=("count",)),
+    Entry(
+        "browse.hub.brief", T, "Game page line",
+        "{products} compared across {shops}.",
+        "Under the heading of a game page while a shop has something in stock. The In stock tab gives that count.",
+        placeholders=("products", "shops"),
+    ),
     Entry(
         "browse.hub.intro", T, "Hub line",
         "{products} compared across {shops}, {count} in stock now.",

@@ -358,11 +358,13 @@ def intro_gives_date(stats, date="", undated=False):
     return bool(stats.products and not stats.in_stock and (date or undated))
 
 
-def intro(words, stats, date="", undated=False):
+def intro(words, stats, date="", undated=False, brief=False):
     """The line under a hub's heading, as safe HTML, or "" for a hub with no products. The cheapest
     product in stock is a link to its page. ``date`` is the release date as shown, for a set still to come:
     while nothing is in stock its line gives the date and how many shops take pre-orders. ``undated`` is a
-    set still to come with no date announced: while nothing is in stock its line ends saying so."""
+    set still to come with no date announced: while nothing is in stock its line ends saying so. ``brief``
+    (a game page, thousands of products) says only how many products and shops while something is in stock:
+    the In stock tab counts the rest."""
     if not stats.products:
         return ""
     products = words.count("browse.hub.products", stats.products)
@@ -378,6 +380,8 @@ def intro(words, stats, date="", undated=False):
         line = waiting_line(words, stats, products)
         return escape(f"{line} {words('browse.hub.no_date')}" if undated else line)
     shops = words.count("browse.hub.shops", stats.shops)
+    if brief:
+        return escape(words("browse.hub.brief", products=products, shops=shops))
     first = words("browse.hub.intro", products=products, shops=shops, count=f"{stats.in_stock:,}")
     if stats.cheapest is None:
         return escape(first)

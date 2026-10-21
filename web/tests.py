@@ -2132,11 +2132,12 @@ class RedesignTests(PageTestCase):
         self.assertNotIn("set-nav", set_page)
         self.assertNotIn(f'href="{later.get_absolute_url()}"', set_page)
         self.assertIn('<a href="/games/pokemon/">All Pokémon products</a>', set_page)
-        # The game page's row names its sets under a heading, none marked as chosen, and needs no All sets with
-        # so few.
+        # The game page's row of sets is named for screen readers (no heading on screen), none marked as chosen,
+        # and needs no All sets with so few.
         html = self.client.get(self.game.get_absolute_url()).content.decode()
         row = html[html.index('<nav class="set-nav"'):html.index("</nav>", html.index('<nav class="set-nav"'))]
-        self.assertIn('<h2 class="set-nav__title" id="sets-title">Sets</h2>', row)
+        self.assertIn('<nav class="set-nav" id="sets" aria-label="Sets">', html)
+        self.assertNotIn("set-nav__title", row)
         self.assertIn(f'<a href="{self.pre.get_absolute_url()}">Prismatic Evolutions</a>', row)
         self.assertIn(f'<a href="{later.get_absolute_url()}">Surging Sparks</a>', row)
         self.assertNotIn("aria-current", row)

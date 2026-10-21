@@ -760,7 +760,7 @@ def game_detail(request, game_slug):
             "game": game,
             "sets": sets[:GAME_PAGE_SETS],
             "more_sets": len(sets) > GAME_PAGE_SETS,
-            "intro": hubs.intro(words, stats),
+            "intro": hubs.intro(words, stats, brief=True),
             "meta_title": meta_title,
             "meta_description": meta_description,
             "canonical_url": page_url,

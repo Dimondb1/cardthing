@@ -38,8 +38,7 @@
 </div>
 
 {% if sets %}
-<nav class="set-nav" id="sets" aria-labelledby="sets-title">
-  <h2 class="set-nav__title" id="sets-title">{% copy "browse.game.sets_title" %}</h2>
+<nav class="set-nav" id="sets" aria-label="{% copy 'browse.game.sets_title' %}">
   <ul>
     {% for item in sets %}<li><a href="{{ item.get_absolute_url }}">{{ item.name }}</a></li>{% endfor %}
     {% if more_sets %}<li><a class="set-nav__all" href="{% url 'web:games' %}#game-{{ game.slug }}">{% copy "browse.game.all_sets" %}</a></li>{% endif %}

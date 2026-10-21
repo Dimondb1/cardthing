@@ -67,12 +67,15 @@ class GameHubTests(PageTestCase):
         description = description_of(self.client.get(self.game.get_absolute_url()).content.decode())
         self.assertTrue(description.startswith("2 sealed Pokémon products in stock at 3 UK shops, from £54.99"))
 
-    def test_intro_says_how_many_and_links_the_cheapest(self):
+    def test_intro_says_how_many_and_the_set_page_links_the_cheapest(self):
+        # A game page keeps to one short line: its In stock tab counts the rest.
         html = self.client.get(self.game.get_absolute_url()).content.decode()
+        self.assertIn('<p class="browse-head__intro">3 sealed products compared across 2 UK shops.</p>', html)
+        set_html = self.client.get(self.pre.get_absolute_url()).content.decode()
         self.assertIn(
             '3 sealed products compared across 2 UK shops, 1 in stock now. Cheapest in stock: '
             f'<a href="{self.etb.get_absolute_url()}">{self.etb.name}</a>, £54.99 delivered at Harbour Games.',
-            html,
+            set_html,
         )
 
     def test_the_cheapest_is_in_stock_not_a_pre_order(self):
@@ -80,8 +83,9 @@ class GameHubTests(PageTestCase):
         make_listing(cheap_preorder, self.harbour, price="10.00", availability=Listing.Availability.PREORDER)
         html = self.client.get(self.game.get_absolute_url()).content.decode()
         self.assertIn("from £54.99 delivered", description_of(html))
-        self.assertIn("£54.99 delivered at Harbour Games.", html)
-        self.assertNotIn("£10.00 delivered at", html)
+        set_html = self.client.get(self.pre.get_absolute_url()).content.decode()
+        self.assertIn("£54.99 delivered at Harbour Games.", set_html)
+        self.assertNotIn("£10.00 delivered at", set_html)
 
     def test_stale_and_kept_out_prices_do_not_count(self):
         stale = make_product(self.pre, name="Prismatic Evolutions Booster Box", product_type=Product.Type.BOOSTER_BOX)
@@ -89,7 +93,7 @@ class GameHubTests(PageTestCase):
         excluded = make_product(self.pre, name="Prismatic Evolutions Mini Tin", product_type=Product.Type.TIN)
         make_listing(excluded, self.harbour, price="1.00", sanity=Listing.Sanity.EXCLUDED)
         html = self.client.get(self.game.get_absolute_url()).content.decode()
-        self.assertIn("1 in stock now", html)
+        self.assertIn("1 in stock now", self.client.get(self.pre.get_absolute_url()).content.decode())
         self.assertIn("from £54.99 delivered", description_of(html))
         self.assertTrue(title_of(html).startswith("Cheapest Pokémon ETBs in stock"))
 
@@ -155,7 +159,7 @@ class GameHubTests(PageTestCase):
     def test_a_shop_name_ending_in_a_full_stop_gets_one_full_stop(self):
         marlow = make_retailer("Marlow Card Co.")
         make_listing(self.etb, marlow, price="40.00")
-        html = self.client.get(self.game.get_absolute_url()).content.decode()
+        html = self.client.get(self.pre.get_absolute_url()).content.decode()
         self.assertIn("£40.00 delivered at Marlow Card Co. ", visible(html) + " ")
         self.assertNotIn("Co..", html)
         product_html = self.client.get(self.etb.get_absolute_url()).content.decode()

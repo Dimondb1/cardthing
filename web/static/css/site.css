@@ -9,7 +9,9 @@
 /* Base ------------------------------------------------------------------ */
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* The page is never wider than the screen: anything too wide is cut off rather than letting a phone shrink the
+   whole page to fit it (with minimum-scale=1 in the viewport tag). Pinching in to zoom still works. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: clip; }
 
 body {
   margin: 0;
@@ -816,7 +818,8 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
   .result { grid-template-columns: auto minmax(0, 1fr) minmax(11rem, auto); grid-template-areas: "image body offer"; align-items: center; }
   .result__offer { flex-direction: column; align-items: flex-end; text-align: right; }
 }
-.results--compact .product-image--row { width: 3.5rem; }
+/* The product page's More from this set rows: a small picture, so the name keeps the row's width. */
+.product-image--compact, .results--compact .product-image--row { width: 3.5rem; }
 
 .pagination { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--space-3); margin-top: var(--space-6); }
 .pagination a[rel="next"] { justify-self: end; }

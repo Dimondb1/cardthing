@@ -237,6 +237,24 @@ class SizesFollowTheLayoutTests(SimpleTestCase):
         self.assertEqual(chosen(trend[2], sizes_at(trend[1], 412), 1.75), 330)
         self.assertEqual(chosen(row[2], sizes_at(row[1], 412), 1.75), 130)
 
+    def test_fixed_slots_are_drawn_at_the_width_sizes_says(self):
+        # Without its own width a picture spreads to its 400px and pushes the row's name off a phone's
+        # screen, which lets the whole page be zoomed out (the related rows on the product page, Oct 2026).
+        css = (CSS_DIR / "site.css").read_text()
+        for slot in ("thumb", "compact"):
+            with self.subTest(slot=slot):
+                self.assertRegex(css, rf"\.product-image--{slot}\b[^{{]*\{{[^}}]*width: {re.escape(SLOTS[slot][1])}")
+
+    def test_a_phone_can_zoom_in_but_never_shrink_the_page_below_its_screen(self):
+        # Something too wide once let phones zoom the whole page out (Oct 2026). The page never gets narrower
+        # than the screen; pinching in stays allowed, for anyone who needs larger text.
+        base = (Path(__file__).resolve().parent / "templates" / "web" / "base.html").read_text()
+        viewport = re.search(r'<meta name="viewport" content="([^"]+)">', base).group(1)
+        self.assertIn("minimum-scale=1", viewport)
+        self.assertNotIn("user-scalable", viewport)
+        self.assertNotIn("maximum-scale", viewport)
+        self.assertRegex((CSS_DIR / "site.css").read_text(), r"\nhtml \{[^}]*overflow-x: clip;")
+
     def test_every_step_is_at_most_thirty_three_percent_wider_than_the_one_before(self):
         from catalogue.images import STEPS
 

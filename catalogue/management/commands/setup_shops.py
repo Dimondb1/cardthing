@@ -2,7 +2,8 @@
 Create the UK shops RipRaptor reads prices from, with their delivery rules.
 Run check_delivery --apply afterwards to refresh the delivery figures.
 
-Safe to run again: existing shops keep any changes made in admin. Delivery
+Safe to run again: existing shops keep any changes made in admin, and a shop
+deleted in admin is not added back (Admin > Removed shops). Delivery
 figures come from each shop's own delivery page and the date they were read
 is in the note, so they can be checked.
 """
@@ -13,7 +14,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from catalogue import pricing
-from catalogue.models import Retailer
+from catalogue.models import RemovedShop, Retailer
 
 S = Retailer.Source
 SHOPS = [
@@ -44,8 +45,6 @@ SHOPS = [
      "Delivery charge not yet confirmed"),
     ("double-sleeved", "Double Sleeved", "https://www.doublesleeved.co.uk/", S.SHOPIFY, "3.99", None,
      "Standard £3.99 (basket check), read 30 Sep 2026"),
-    ("packrat", "Packrat", "https://packratt.co.uk/", S.WEBSITE, "4.15", "50",
-     "Royal Mail Tracked 48 small parcel £4.15, free over £50 (delivery page), read 30 Sep 2026"),
     ("the-gamers-lodge", "The Gamers Lodge", "https://thegamerslodge.com/", S.SHOPIFY, "4.49", "150",
      "Standard £4.49 (basket check), free over £150 (delivery page), read 30 Sep 2026"),
     ("kongs-cards", "Kongs Cards", "https://kongscards.co.uk/", S.SHOPIFY, None, "20",
@@ -187,6 +186,10 @@ CADENCE = {S.SHOPIFY: 45, S.FEED: 60, S.WEBSITE: 60, S.EBAY: 60, S.AMAZON: 60}
 # or not a stockist the owner wants compared (Asmodee UK is the distributor's own store).
 HIDDEN = ["poke-collect", "asmodee-uk"]
 
+# Shops the owner removed before deleting a shop was remembered (RemovedShop): an earlier update put them
+# back, so this deletes them, with their prices and reading, and remembers them. Packrat, 21 Oct 2026.
+REMOVED = ["packrat"]
+
 
 class Command(BaseCommand):
     help = "Add the shops RipRaptor reads prices from. Run import_prices afterwards."
@@ -233,6 +236,9 @@ class Command(BaseCommand):
                     self.stdout.write(f"{name}: {pricing.apply_delivery_rules(existing)} prices now show the delivery as unknown")
                 self.stdout.write(f"{name}: already set up")
                 continue
+            if RemovedShop.covers(slug, website):
+                self.stdout.write(f"{name}: removed by the owner, not added")
+                continue
             Retailer.objects.create(
                 slug=slug, name=name, website=website, source_type=source, source_url=website, session_url=session_url,
                 collection=collection, affiliate_url_template=AFFILIATE.get(slug, ""),
@@ -249,6 +255,12 @@ class Command(BaseCommand):
                 hidden.is_active = False
                 hidden.save(update_fields=["is_active"])
                 self.stdout.write(f"{hidden.name}: hidden")
+        for slug in REMOVED:
+            removed = Retailer.objects.filter(slug=slug).first()
+            if removed:
+                RemovedShop.record(removed)
+                removed.delete()
+                self.stdout.write(f"{removed.name}: removed")
 
     def set_cadence(self):
         """Give each kind of shop its reading interval, once.

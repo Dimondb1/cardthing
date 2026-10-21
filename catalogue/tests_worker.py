@@ -314,6 +314,14 @@ class ShopReadTests(WorkerTestCase):
         shop.refresh_from_db()
         return reader
 
+    def test_a_shop_deleted_after_its_read_was_planned_is_skipped_quietly(self):
+        shop = self.shop("Gone Shop", due=True)
+        reader = self.make_worker(fetch=lambda url, *args, **kwargs: self.fail(f"fetched {url}"))
+        task = worker.Task(worker.SHOP_READ, shop.pk, "shopify", 1, "Read Gone Shop")
+        shop.delete()
+        self.assertTrue(reader.read_shop(worker.Job(task, self.clock(), self.clock())))
+        self.assertFalse(ImportRun.objects.exists())
+
     def test_failed_reads_back_off_5_10_20_minutes_and_a_429_waits_30(self):
         shop = self.shop("Flaky Shop", due=True)
 

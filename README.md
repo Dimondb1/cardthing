@@ -523,10 +523,10 @@ last state.
 
 ## Real prices from UK shops
 
-`start.bat` / `start.command` run `setup_shops`, which adds 29 UK shops
-(Total Cards, Gathering Games, Magic Madhouse, The Card Vault, Lvl Up
+`start.bat` / `start.command` run `setup_shops`, which adds the UK shops
+in its list (among them Total Cards, Gathering Games, Magic Madhouse, The Card Vault, Lvl Up
 Gaming, Zatu Games, Goblin Gaming, Travelling Man, JET Cards, Titan Cards,
-Buy Any Cards, The TCG Shop, Double Sleeved, Packrat, The Gamers Lodge,
+Buy Any Cards, The TCG Shop, Double Sleeved, The Gamers Lodge,
 Kongs Cards, MaxOnCards, Japan2UK, Iconic Trading Cards, Card Empire,
 Griffins Gaming, Tayler TCG, Shiny Vault, Monarch Cards, Castle Comics, 120HP,
 Ancient Warrior, Unicorn Cards and Sports Cards Direct) with the delivery rules read from their delivery pages and baskets,
@@ -536,6 +536,13 @@ read" below. A Shopify shop that prices in another currency is refused
 (Poke-Collect turned out to be a US shop pricing in dollars, so it is
 hidden). Then `update_prices` (double-click) or
 `python manage.py import_prices` pulls every product from each shop.
+
+To remove a shop, delete it in Admin > Retailers. Its prices, listings and
+reading go with it, and Admin > Removed shops remembers it, so the
+`setup_shops` that every update runs never adds it back. Adding the shop
+again under Retailers (or with `discover_shops`), or deleting its row under
+Removed shops, lets it back in. Packrat was put back by updates before
+this existed, so `setup_shops` deletes it once (`REMOVED`).
 
 Shops publish tens of thousands of items, almost all single cards. The
 importer classifies each one (`catalogue/classify.py`): sealed products

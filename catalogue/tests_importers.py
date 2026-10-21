@@ -2,6 +2,7 @@ import json
 from decimal import Decimal
 
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .classify import classify
@@ -889,6 +890,68 @@ class SetupShopsTests(TestCase):
         dollars.refresh_from_db()
         self.assertFalse(dollars.is_active)
         self.assertEqual(dollars.listings.count(), 0)
+
+    def setup(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("setup_shops", stdout=out)
+        return out.getvalue()
+
+    def owner(self):
+        from django.contrib.auth import get_user_model
+
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+
+    def test_a_shop_deleted_in_admin_stays_deleted_through_every_update(self):
+        from .models import RemovedShop
+
+        self.setup()
+        shop = Retailer.objects.get(slug="total-cards")
+        make_listing(make_product(make_set(make_game())), shop)
+        self.owner()
+        self.client.post(reverse("admin:catalogue_retailer_delete", args=[shop.pk]), {"post": "yes"})
+        self.assertFalse(Retailer.objects.filter(slug="total-cards").exists())
+        self.assertFalse(Listing.objects.exists())
+        self.assertIn("Total Cards: removed by the owner, not added", self.setup())
+        self.assertFalse(Retailer.objects.filter(website="https://totalcards.net/").exists())
+        self.assertEqual(list(RemovedShop.objects.values_list("slug", "host")), [("total-cards", "totalcards.net")])
+        # Added again by hand, it is the owner's shop again and the next update keeps it.
+        Retailer.objects.create(slug="total-cards", name="Total Cards", website="https://totalcards.net/")
+        self.assertFalse(RemovedShop.objects.exists())
+        self.assertIn("Total Cards: already set up", self.setup())
+
+    def test_shops_deleted_together_are_matched_by_address_whatever_their_slug(self):
+        from .models import RemovedShop
+
+        self.setup()
+        # A shop renamed in admin, at its www. address: the list's own entry is the same shop.
+        Retailer.objects.filter(slug="total-cards").update(slug="totalcards-uk", website="https://www.totalcards.net/")
+        gathering = Retailer.objects.get(slug="gathering-games")
+        total = Retailer.objects.get(slug="totalcards-uk")
+        self.owner()
+        self.client.post(reverse("admin:catalogue_retailer_changelist"), {
+            "action": "delete_selected", "post": "yes", "_selected_action": [total.pk, gathering.pk]})
+        self.assertEqual(set(RemovedShop.objects.values_list("slug", flat=True)), {"totalcards-uk", "gathering-games"})
+        self.setup()
+        self.assertFalse(Retailer.objects.filter(website__contains="totalcards.net").exists())
+        self.assertFalse(Retailer.objects.filter(slug="gathering-games").exists())
+        self.assertTrue(Retailer.objects.filter(slug="magic-madhouse").exists())
+
+    def test_packrat_put_back_by_an_earlier_update_is_deleted_and_stays_deleted(self):
+        from .models import RemovedShop
+
+        packrat = Retailer.objects.create(slug="packrat", name="Packrat", website="https://packratt.co.uk/",
+                                          source_type=Retailer.Source.WEBSITE, source_url="https://packratt.co.uk/")
+        make_listing(make_product(make_set(make_game())), packrat)
+        self.assertIn("Packrat: removed", self.setup())
+        self.assertFalse(Retailer.objects.filter(slug="packrat").exists())
+        self.assertFalse(Listing.objects.exists())
+        self.assertTrue(RemovedShop.objects.filter(slug="packrat", host="packratt.co.uk").exists())
+        self.setup()
+        self.assertFalse(Retailer.objects.filter(website__contains="packratt").exists())
 
 
 class WebsiteCrawlIsNotCompleteTests(TestCase):

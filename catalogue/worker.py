@@ -667,7 +667,10 @@ class Worker:
         return self.politeness.wrap(retailer, base)
 
     def read_shop(self, job):
-        shop = Retailer.objects.get(pk=job.task.retailer_id)
+        shop = Retailer.objects.filter(pk=job.task.retailer_id).first()
+        if shop is None:
+            # Deleted in Admin since the read was planned: nothing to read.
+            return True
         # The run's own start is stamped by the database's clock, so it is compared with that clock: an
         # earlier run handed back means a marketplace already read today.
         began = job.read_began = timezone.now()

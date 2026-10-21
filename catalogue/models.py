@@ -1071,6 +1071,46 @@ class RetailerCollection(models.Model):
         return f"{self.retailer} {self.handle}"
 
 
+class RemovedShop(models.Model):
+    """A shop the owner deleted in Admin, so the shop list in setup_shops (run by every update) does not add it
+    back. Adding a shop with the same slug or address again, in Admin or with discover_shops, forgets it."""
+
+    slug = models.SlugField(max_length=120, unique=True)
+    name = models.CharField(max_length=120)
+    host = models.CharField(max_length=200, blank=True, db_index=True)
+    removed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @staticmethod
+    def host_of(website):
+        """The address's host without www., so https://www.shop.co.uk/ and http://shop.co.uk match."""
+        return (urlparse(website or "").hostname or "").removeprefix("www.")
+
+    @classmethod
+    def matching(cls, slug, website):
+        host = cls.host_of(website)
+        return cls.objects.filter(Q(slug=slug) | Q(host=host) if host else Q(slug=slug))
+
+    @classmethod
+    def record(cls, retailer):
+        cls.objects.update_or_create(slug=retailer.slug, defaults={
+            "name": retailer.name, "host": cls.host_of(retailer.website), "removed_at": timezone.now(),
+        })
+
+    @classmethod
+    def covers(cls, slug, website):
+        return cls.matching(slug, website).exists()
+
+    @classmethod
+    def forget(cls, retailer):
+        cls.matching(retailer.slug, retailer.website).delete()
+
+
 class PreorderOpen(models.Model):
     """One time a shop opened pre-orders on a product it already listed as out of stock.
 

@@ -7,7 +7,7 @@ from django.utils.html import format_html
 from . import pricing, sanity
 from .models import (
     ClaudeAsk, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
-    RemovedProduct, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
+    RemovedProduct, RemovedShop, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
 # A listing field the product page shows. Changing one here stamps the listing's changed_at, the sitemap's
@@ -215,6 +215,29 @@ class RetailerAdmin(admin.ModelAdmin):
         if change and "is_active" in form.changed_data:
             # The shop leaves or joins every page it is listed on: those pages changed (the sitemap's lastmod).
             Listing.objects.filter(retailer=obj, is_active=True).update(changed_at=timezone.now())
+
+    def delete_model(self, request, obj):
+        # Deleting a shop takes its prices and its reading with it, and every update leaves it deleted.
+        RemovedShop.record(obj)
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        for shop in queryset:
+            RemovedShop.record(shop)
+        super().delete_queryset(request, queryset)
+
+
+@admin.register(RemovedShop)
+class RemovedShopAdmin(admin.ModelAdmin):
+    """Shops deleted under Retailers, which updates never add back. Delete one to let the next update add it again
+    if it is in the shop list; adding the shop under Retailers does the same."""
+
+    list_display = ("name", "slug", "host", "removed_at")
+    search_fields = ("name", "slug", "host")
+    readonly_fields = ("name", "slug", "host", "removed_at")
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(Listing)

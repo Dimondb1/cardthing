@@ -9,7 +9,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from .languages import product_language
-from .models import Game, Listing, Product, ProductSet
+from .models import Game, Listing, Product, ProductSet, RemovedShop, Retailer
 from .search import build_search_text
 
 HOME_CACHE_KEY = "web:home-lists:v6"
@@ -106,3 +106,10 @@ def game_saved(sender, instance, raw=False, **kwargs):
 def set_saved(sender, instance, raw=False, **kwargs):
     if not raw:
         _refresh(Product.objects.filter(product_set=instance))
+
+
+@receiver(post_save, sender=Retailer)
+def shop_added(sender, instance, created=False, raw=False, **kwargs):
+    # A shop added again (Admin, discover_shops) is no longer one the owner removed.
+    if created and not raw:
+        RemovedShop.forget(instance)

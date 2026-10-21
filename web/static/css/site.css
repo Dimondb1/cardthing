@@ -884,6 +884,8 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .buybox__deal { font-size: var(--text-sm); color: var(--color-ink); }
 .buybox__summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__save { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-2); }
+/* Save, Track price and Share share the row evenly; on a narrow phone the last one takes a row of its own. */
+.buybox__save > .button { flex: 1 1 auto; padding-inline: var(--space-3); }
 
 /* Buy now: the raptor holding a bag, the words, and an arrow. One wide button to the cheapest shop. */
 .buy-now {
@@ -973,18 +975,45 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .alert-box__error { font-size: var(--text-sm); color: var(--color-more); font-weight: var(--weight-strong); }
 .alert-box__done { font-weight: var(--weight-strong); color: var(--color-price); }
 .alert-box__trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-/* Track price: the price alert under Save, shown once Track price opens it (product.js), or by the address
-   (#track) without script, or while it answers a send. */
-.button--track { color: var(--color-ink-muted); }
-.button--track[aria-expanded="true"] { color: var(--color-brand-text); border-color: var(--color-brand-line); background: var(--color-brand-soft); }
-.track-box { gap: var(--space-3); }
-.track-box:not(:target):not(.is-open) { display: none; }
-.track-box.is-closed { display: none; }
+/* Track price and Share: panels under Save, each shown once its button opens it (product.js), or by the address
+   (#track, #share) without script, or (Track price) while it answers a send. */
+.button--panel { color: var(--color-ink-muted); }
+.button--panel[aria-expanded="true"] { color: var(--color-brand-text); border-color: var(--color-brand-line); background: var(--color-brand-soft); }
+.buybox-panel { gap: var(--space-3); }
+.buybox-panel:not(:target):not(.is-open) { display: none; }
+.buybox-panel.is-closed { display: none; }
 .track-box__form { display: grid; gap: var(--space-3); }
 .track-box__money { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-strong); }
 @media (prefers-reduced-motion: no-preference) {
-  .track-box.is-open, .track-box:target { animation: fade-in var(--motion-normal) var(--ease-out) both; }
+  .buybox-panel.is-open, .buybox-panel:target { animation: fade-in var(--motion-normal) var(--ease-out) both; }
 }
+/* Share: a row of round logos with their names under them, as a phone's share sheet has them. Reddit, Instagram
+   and TikTok in their own colours; Copy link and More in ours. */
+.share-box { background: var(--color-paper); border-color: var(--color-line); }
+.share-box__list { display: flex; flex-wrap: wrap; justify-content: space-around; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.share-box__list li[hidden], .share-box__done:empty, .share-box__fallback[hidden] { display: none; }
+.share-box__item {
+  display: grid; justify-items: center; gap: var(--space-1); min-width: var(--share-logo); padding: 0; border: 0; background: none;
+  font: inherit; font-size: var(--text-xs); color: var(--color-ink-muted); text-decoration: none; cursor: pointer;
+}
+.share-box__item:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+.share-box__logo {
+  display: grid; place-items: center; width: var(--share-logo); height: var(--share-logo); border-radius: 50%;
+  background: var(--color-shelf); color: var(--color-ink);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+@media (hover: hover) { .share-box__item:hover .share-box__logo { transform: scale(1.06); } }
+.share-box__item:active .share-box__logo { transform: scale(0.94); }
+.share-box__mark { width: var(--share-mark); height: var(--share-mark); }
+.share-box__mark--line { width: var(--icon-button); height: var(--icon-button); }
+/* Reddit's mark is the whole round logo: its alien is cut out of the orange. */
+.share-box__logo--reddit { background: none; color: var(--color-reddit); }
+.share-box__logo--reddit .share-box__mark { width: 100%; height: 100%; }
+.share-box__logo--instagram { background: var(--color-instagram); color: var(--color-logo-ink); }
+.share-box__logo--tiktok { background: var(--color-tiktok); color: var(--color-logo-ink); }
+.share-box__done { font-size: var(--text-sm); color: var(--color-ink-muted); text-align: center; }
+.share-box__link { width: 100%; font-size: var(--text-sm); }
+.icon-share { width: var(--icon-button); height: var(--icon-button); flex: none; }
 .buybox__amazon { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-line); }
 .buybox__amazon-button { flex: none; }
 .buybox__amazon--lead { border-top: 0; padding-top: 0; }

@@ -1,5 +1,5 @@
 {% load sitecopy ripraptor %}{# Track price: a price alert (catalogue/alerts.py). Hidden until Track price opens it, or while it answers a send (track_state). #}
-<div class="alert-box track-box{% if track_state %} is-open{% endif %}" id="track">
+<div class="alert-box buybox-panel track-box{% if track_state %} is-open{% endif %}" id="track">
   {% if track_state == "sent" %}
     <p class="alert-box__done" role="status">{% copy "alerts.track.sent" %}</p>
   {% elif track_state == "already" %}
@@ -13,7 +13,7 @@
       <div class="search-alert__fields">
         <div class="search-alert__field{% if track_state == 'price' or track_state == 'under' %} is-wrong{% endif %}">
           <label class="search-alert__label" for="track-price">{% copy "alerts.track.price_label" %}</label>
-          <span class="track-box__money"><span aria-hidden="true">£</span><input id="track-price" class="alert-box__input search-alert__input" type="text" name="price" required inputmode="decimal" autocomplete="off" maxlength="9"{% if track_now %} aria-describedby="track-now"{% endif %}></span>
+          <span class="track-box__money"><span aria-hidden="true">£</span><input id="track-price" class="alert-box__input search-alert__input" type="text" name="price" data-panel-focus required inputmode="decimal" autocomplete="off" maxlength="9"{% if track_now %} aria-describedby="track-now"{% endif %}></span>
           {% if track_now %}<span class="search-alert__hint" id="track-now">{% copy "alerts.track.now" price=track_now|gbp %}</span>{% endif %}
         </div>
         <div class="search-alert__field">

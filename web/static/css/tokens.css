@@ -67,6 +67,9 @@
   --tap: 2.75rem;                /* the smallest a finger target gets */
   --icon-social: 1.25rem;        /* the Instagram, Facebook and TikTok icons in the footer */
   --icon-nav: 1.5rem;            /* the Swipe and Watchlist icons in the phone header */
+  --icon-button: 1.1rem;         /* an icon beside a button's words: Save's bookmark, Share's nodes */
+  --share-logo: 3rem;            /* the round logos in a product page's Share panel */
+  --share-mark: 1.5rem;          /* the mark inside a round logo */
 
   /* Corners -------------------------------------------------------------- */
   --border-width: 1px;       /* the soft orange line round cards and panels */
@@ -138,6 +141,12 @@
   --color-out: #7a8190;
 
   --color-focus: #1f2430;
+
+  /* Other brands' own colours, only inside their logos in the Share panel. */
+  --color-reddit: #ff4500;
+  --color-tiktok: #000000;
+  --color-instagram: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%);
+  --color-logo-ink: #ffffff;
 
   /* Shadows -------------------------------------------------------------- */
   --shadow-card: 0 1px 2px rgb(31 36 48 / 0.04), 0 2px 8px rgb(31 36 48 / 0.04);

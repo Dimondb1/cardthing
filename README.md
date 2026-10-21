@@ -2889,6 +2889,61 @@ time is up (counted from the confirmation). Insights counts those as
 "expired". While no shop has the product, the back-in-stock form shows
 instead and Track price does not.
 
+## Share on product pages
+
+Next to Save and Track price, "Share" opens a panel (in place with
+JavaScript, by the link's `#share` without it; opening one panel closes
+the other). It holds:
+
+- "Post to Reddit": Reddit's own post form (`reddit.com/submit`) with the
+  product's link and a title ("<product>: UK prices compared",
+  `product.share.reddit_title`) filled in. A plain link, so it works
+  without JavaScript.
+- "Copy for Instagram" and "Copy for TikTok": neither app takes a link
+  from a web page, so these copy the link and say where to paste it (a
+  story's link sticker, a message or a bio). They need JavaScript and a
+  secure page.
+- "More ways to share": the phone's own share sheet, where the browser has
+  one.
+- The page's plain address in a box to copy by hand.
+
+Every link a button shares carries `utm_source` (reddit, instagram, tiktok
+or share_sheet), `utm_medium=social` and `utm_campaign=product_share`, so
+Google Analytics shows which network sends visitors. The page's canonical
+address stays the plain one, so search engines see one page. The previews
+Reddit and messaging apps draw come from the page's Open Graph tags
+(name, cheapest price in the description, and the product picture).
+
+## Share on product pages
+
+Next to Save and Track price, "Share" (with the usual share icon) opens a
+row of round logos, as a phone's share sheet lays them out (in place with
+JavaScript, by the link's `#share` without it; opening one panel closes
+the other):
+
+- Reddit: Reddit's own post form (`reddit.com/submit`) with the product's
+  link and a title ("<product>: UK prices compared",
+  `product.share.reddit_title`) filled in. A plain link, so it works
+  without JavaScript.
+- Instagram and TikTok: neither app takes a link from a web page, so their
+  logos copy the link and say where to paste it (a story's link sticker, a
+  message or a bio).
+- Copy link, and More (the phone's own share sheet, where the browser has
+  one).
+
+The logos are the official marks from Simple Icons (CC0), in
+`web/templates/web/includes/share/`, in each brand's own colour (tokens
+`--color-reddit`, `--color-instagram`, `--color-tiktok`), used only here.
+Without JavaScript or a clipboard, the page's plain address sits in a box
+to copy by hand instead of the copy buttons.
+
+Every link a logo shares carries `utm_source` (reddit, instagram, tiktok,
+copy_link or share_sheet), `utm_medium=social` and
+`utm_campaign=product_share`, so Google Analytics shows which network
+sends visitors. The page's canonical address stays the plain one, so
+search engines see one page. The previews Reddit and messaging apps draw
+come from the page's Open Graph tags (name, price and picture).
+
 ## Refer a friend
 
 A keyring promotion: when someone shares their link and a friend joins through it, both get a free RipRaptor

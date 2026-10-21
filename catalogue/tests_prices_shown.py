@@ -149,7 +149,10 @@ class SavingTests(TestCase):
         make_listing(pack, self.ebay, price="999.95")
         for url in (reverse("web:home"), reverse("web:search"), pack.get_absolute_url()):
             with self.subTest(url=url):
-                self.assertNotContains(self.client.get(url), "961")
+                # As a price (the bare digits also turn up in the logos' drawing data).
+                page = self.client.get(url)
+                self.assertNotContains(page, "£961")
+                self.assertNotContains(page, "961.00")
 
 
 class ShownPriceTests(TestCase):

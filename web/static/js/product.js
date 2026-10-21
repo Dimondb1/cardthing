@@ -93,22 +93,58 @@
   });
 })();
 
-// Track price: a link to the price alert form under it, which shows the form by the address without this
-// file. Here it opens and closes the form in place, without moving the page, and puts the cursor in the price.
+// Track price and Share: links to the panels under them, which show by the address (#track, #share) without this
+// file. Here each opens and closes in place without moving the page, and opening one closes the other. An address
+// ending #track keeps that panel shown by :target, so closing is a class of its own.
 (() => {
-  const open = document.querySelector("[data-track-open]");
-  const box = document.getElementById("track");
-  if (!open || !box) return;
-  // An address ending #track keeps the form shown by :target, so closing it is a class of its own.
-  const shown = () => !box.classList.contains("is-closed") && (box.classList.contains("is-open") || location.hash === "#track");
-  open.setAttribute("aria-expanded", String(shown()));
-  open.addEventListener("click", (event) => {
+  const pairs = Array.from(document.querySelectorAll("[data-panel-open]"))
+    .map((open) => [open, document.getElementById(open.getAttribute("aria-controls"))])
+    .filter(([, box]) => box);
+  if (!pairs.length) return;
+  const shown = (box) => !box.classList.contains("is-closed") && (box.classList.contains("is-open") || location.hash === `#${box.id}`);
+  const set = (open, box, on) => {
+    box.classList.toggle("is-open", on);
+    box.classList.toggle("is-closed", !on);
+    open.setAttribute("aria-expanded", String(on));
+  };
+  pairs.forEach(([open, box]) => open.setAttribute("aria-expanded", String(shown(box))));
+  pairs.forEach(([open, box]) => open.addEventListener("click", (event) => {
     event.preventDefault();
-    const opening = !shown();
-    box.classList.toggle("is-open", opening);
-    box.classList.toggle("is-closed", !opening);
-    open.setAttribute("aria-expanded", String(opening));
-    const price = box.querySelector("#track-price");
-    if (opening && price) price.focus();
-  });
+    const opening = !shown(box);
+    pairs.forEach(([other, otherBox]) => { if (otherBox !== box && shown(otherBox)) set(other, otherBox, false); });
+    set(open, box, opening);
+    const field = box.querySelector("[data-panel-focus]");
+    if (opening && field) field.focus();
+  }));
+})();
+
+// Share: the Instagram, TikTok and Copy link icons put the product's link, marked with where it was shared, on
+// the clipboard and say where to paste it; More opens the phone's share sheet. Without a clipboard the address
+// stays in its box to copy by hand.
+(() => {
+  const box = document.querySelector("[data-share]");
+  if (!box) return;
+  const link = box.querySelector("[data-share-link]");
+  const status = box.querySelector("[data-share-status]");
+  link.addEventListener("focus", () => link.select());
+  if (navigator.clipboard && window.isSecureContext) {
+    const fallback = box.querySelector("[data-share-fallback]");
+    if (fallback) fallback.hidden = true;
+    box.querySelectorAll("[data-share-copy]").forEach((item) => {
+      item.hidden = false;
+      item.querySelector("button").addEventListener("click", () => {
+        navigator.clipboard.writeText(item.dataset.shareCopy).then(
+          () => { status.textContent = item.dataset.shareDone; },
+          () => { link.value = item.dataset.shareCopy; link.focus(); },
+        );
+      });
+    });
+  }
+  const native = box.querySelector("[data-share-native]");
+  if (native && navigator.share) {
+    native.hidden = false;
+    native.querySelector("button").addEventListener("click", () => {
+      navigator.share({ title: box.dataset.shareTitle, url: native.dataset.shareUrl }).catch(() => {});
+    });
+  }
 })();

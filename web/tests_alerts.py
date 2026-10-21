@@ -416,7 +416,7 @@ class TrackPriceTests(TestCase):
 
     def test_track_price_sits_next_to_save_and_its_form_works_without_script(self):
         page = self.client.get(self.product.get_absolute_url())
-        self.assertContains(page, 'href="#track" aria-controls="track" data-track-open>Track price')
+        self.assertContains(page, 'href="#track" aria-controls="track" data-panel-open>Track price')
         self.assertContains(page, 'id="track"')
         self.assertContains(page, "It is £7.98 delivered now.")
         self.assertContains(page, '<option value="30" selected>1 month</option>', html=False)
@@ -424,11 +424,11 @@ class TrackPriceTests(TestCase):
         # Sold out at every shop: the back-in-stock form instead, and no Track price.
         Listing.objects.filter(pk=self.listing.pk).update(availability="out_of_stock")
         page = self.client.get(self.product.get_absolute_url())
-        self.assertNotContains(page, "data-track-open")
+        self.assertNotContains(page, 'href="#track"')
         self.assertContains(page, "Email me when it is back in stock")
         with self.settings(RIPRAPTOR_ZEPTOMAIL_TOKEN=""):
             Listing.objects.filter(pk=self.listing.pk).update(availability="in_stock")
-            self.assertNotContains(self.client.get(self.product.get_absolute_url()), "data-track-open")
+            self.assertNotContains(self.client.get(self.product.get_absolute_url()), 'href="#track"')
 
     def test_asking_keeps_the_price_and_time_and_the_confirmation_says_both(self):
         response = self.track(price="£6.50")
@@ -439,7 +439,7 @@ class TrackPriceTests(TestCase):
         self.assertIn("is in stock for £6.50 or less delivered at a UK shop we check. We will look for 1 month", message["text"])
         page = self.client.get(self.product.get_absolute_url() + "?track=sent")
         self.assertContains(page, "Check your inbox and confirm, then we will start looking.")
-        self.assertContains(page, 'class="alert-box track-box is-open"')
+        self.assertContains(page, 'class="alert-box buybox-panel track-box is-open"')
         # Asked again before confirming: the newest price and time count.
         self.track(price="5.00", **{"for": "7"})
         alert.refresh_from_db()

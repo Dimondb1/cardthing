@@ -445,7 +445,8 @@ class TrackPriceTests(TestCase):
         alert.refresh_from_db()
         self.assertEqual((str(alert.max_price), alert.watch_days), ("5.00", 7))
         confirm = self.client.get(reverse("web:alert_confirm", args=[alert.token]))
-        ends = timezone.localdate() + timedelta(days=7)
+        # Seven days on from now in UK time, so right across the clocks changing too.
+        ends = timezone.localtime(timezone.now() + timedelta(days=7)).date()
         self.assertContains(confirm, f"We will look until {ends.day} {ends:%b}")
         self.assertContains(confirm, "for £5.00 or less, delivered")
 

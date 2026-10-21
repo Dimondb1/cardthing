@@ -959,12 +959,16 @@ class FeedTests(PageTestCase):
         self.assertIn(f"fell from £57.00 to £54.99 on {today.strftime('%-d %b')}", items[1].findtext("description"))
 
     def test_feeds_announce_preorder_openings_beside_restocks_and_drops(self):
+        from datetime import datetime, time
+
         from catalogue.models import PreorderOpen, Restock
 
         magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic")
         box = make_product(make_set(magic, name="Foundations", slug="foundations"), name="Foundations Play Booster Box", product_type="booster_box")
         ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
-        now = timezone.now()
+        # A price drop is dated at local midnight, so the events here come after it whatever time the test runs.
+        midnight = timezone.make_aware(datetime.combine(timezone.localdate(), time.min))
+        now = max(timezone.now(), midnight + timedelta(minutes=15))
         restock = Restock.objects.create(product=self.sold_out, retailer=self.harbour, at=now - timedelta(minutes=5), price="140.00")
         opening = PreorderOpen.objects.create(product=self.unpriced, retailer=self.north, at=now, price="44.50")
         unknown = PreorderOpen.objects.create(product=box, retailer=self.harbour, at=now - timedelta(minutes=10), price="99.00",

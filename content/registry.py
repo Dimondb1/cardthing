@@ -1136,7 +1136,8 @@ ENTRIES = [
     Entry("product.compare.col.checked", T, "Column: last checked", "Checked",
           "Column heading in the price list (large screens)."),
     Entry("product.share.button", B, "Share button", "Share",
-          "Next to Save on a product page, with the share icon: opens the Share panel."),
+          "Next to Save on a product page, with the share icon: opens the Share panel. Also read out for the share "
+          "icon on each product card, and the small heading of the Share sheet it opens."),
     Entry("product.share.title", T, "Share panel name", "Share this product",
           "Read out by screen readers for the row of logos in the Share panel."),
     Entry("product.share.reddit", B, "Reddit logo label", "Post to Reddit",
@@ -1157,6 +1158,8 @@ ENTRIES = [
           "Shown after the Instagram logo is tapped."),
     Entry("product.share.copied_tiktok", T, "Copied for TikTok", "Link copied. Paste it into a message or your bio.",
           "Shown after the TikTok logo is tapped."),
+    Entry("product.share.close", B, "Close share sheet", "Close",
+          "Closes the Share sheet a product card's share icon opens."),
     Entry("product.share.link_label", T, "Share link label", "Link to this product",
           "Above the box holding the product page's address in the Share panel, shown only without JavaScript."),
     Entry("product.compare.lottery", B, "Enter lottery button", "Enter lottery",

@@ -1,0 +1,13 @@
+{% load sitecopy %}{# The Share logos: Reddit, Instagram, TikTok, Copy link and More, as a phone's share sheet lays them out. ``share`` (views.share_links) fills them on a product page; the cards' dialog (share_dialog.html) has none, and share.js fills them for the card tapped. #}
+<ul class="share-box__list" aria-label="{% copy 'product.share.title' %}">
+  <li><a class="share-box__item" href="{{ share.reddit|default:'https://www.reddit.com/submit' }}" target="_blank" rel="noopener" aria-label="{% copy 'product.share.reddit' %} (opens in a new tab)" data-share-reddit><span class="share-box__logo share-box__logo--reddit">{% include "web/includes/share/reddit.svg" %}</span><span class="share-box__name" aria-hidden="true">Reddit</span></a></li>
+  <li hidden data-share-network="instagram" data-share-copy="{{ share.instagram }}" data-share-done="{% copy 'product.share.copied_instagram' %}"><button class="share-box__item" type="button" aria-label="{% copy 'product.share.instagram' %}"><span class="share-box__logo share-box__logo--instagram">{% include "web/includes/share/instagram.svg" %}</span><span class="share-box__name" aria-hidden="true">Instagram</span></button></li>
+  <li hidden data-share-network="tiktok" data-share-copy="{{ share.tiktok }}" data-share-done="{% copy 'product.share.copied_tiktok' %}"><button class="share-box__item" type="button" aria-label="{% copy 'product.share.tiktok' %}"><span class="share-box__logo share-box__logo--tiktok">{% include "web/includes/share/tiktok.svg" %}</span><span class="share-box__name" aria-hidden="true">TikTok</span></button></li>
+  <li hidden data-share-network="copy_link" data-share-copy="{{ share.copy }}" data-share-done="{% copy 'product.share.copied' %}"><button class="share-box__item" type="button"><span class="share-box__logo">{% include "web/includes/share/link.svg" %}</span><span class="share-box__name">{% copy "product.share.copy" %}</span></button></li>
+  <li hidden data-share-native data-share-url="{{ share.native }}"><button class="share-box__item" type="button" aria-label="{% copy 'product.share.more' %}"><span class="share-box__logo">{% include "web/includes/share/icon.svg" with class="share-box__mark share-box__mark--line" %}</span><span class="share-box__name" aria-hidden="true">{% copy "product.share.more_short" %}</span></button></li>
+</ul>
+<p class="share-box__done" role="status" data-share-status></p>
+<div class="share-box__fallback" data-share-fallback>
+  <label class="search-alert__label" for="{{ link_id|default:'share-link' }}">{% copy "product.share.link_label" %}</label>
+  <input id="{{ link_id|default:'share-link' }}" class="alert-box__input share-box__link" type="text" value="{{ share.link }}" readonly data-share-link>
+</div>

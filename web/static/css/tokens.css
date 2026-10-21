@@ -141,6 +141,9 @@
   --color-out: #7a8190;
 
   --color-focus: #1f2430;
+  --color-backdrop: rgb(31 36 48 / 0.45);   /* the page behind a sheet or dialog */
+  --shadow-sheet: 0 -4px 24px rgb(31 36 48 / 0.16);
+  --sheet-width: 26rem;          /* a dialog's width from tablets up */
 
   /* Other brands' own colours, only inside their logos in the Share panel. */
   --color-reddit: #ff4500;

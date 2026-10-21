@@ -128,6 +128,7 @@
 {% endif %}
 {% if alert_url %}<p class="browse-alert"><a href="{{ alert_url }}">{% copy "browse.alert_link" %}</a></p>{% endif %}
 {% endif %}
+{% include "web/includes/share_dialog.html" %}
 {% endblock %}
 
-{% block scripts %}{% if tab_row %}<script src="{% static 'js/tabs.js' %}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if tab_row %}<script src="{% static 'js/tabs.js' %}" defer></script>{% endif %}<script src="{% static 'js/share.js' %}" defer></script>{% endblock %}

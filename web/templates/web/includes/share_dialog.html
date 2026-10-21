@@ -1,0 +1,13 @@
+{% load sitecopy %}{# One Share sheet for a page of product cards: share.js fills it with the links of the card whose share icon was tapped and opens it. Without script (or <dialog>) a card's icon goes to its product page's Share panel instead. #}
+<dialog class="share-dialog" data-share-dialog aria-labelledby="share-dialog-name" data-reddit-title="{% copy 'product.share.reddit_title' product='{product}' %}">
+  <div class="share-dialog__head">
+    <div>
+      <p class="share-dialog__title">{% copy "product.share.button" %}</p>
+      <p class="share-dialog__name" id="share-dialog-name" data-share-name></p>
+    </div>
+    <button class="button button--quiet button--small" type="button" data-share-close>{% copy "product.share.close" %}</button>
+  </div>
+  <div class="share-box share-box--dialog" data-share>
+    {% include "web/includes/share_logos.html" with share=None link_id="share-dialog-link" %}
+  </div>
+</dialog>

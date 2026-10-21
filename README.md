@@ -2941,6 +2941,14 @@ The logos are the official marks from Simple Icons (CC0), in
 Without JavaScript or a clipboard, the page's plain address sits in a box
 to copy by hand instead of the copy buttons.
 
+Product cards (game, set and search pages, and Out now on the drops page)
+have a share icon under their bookmark. It opens one Share sheet for the
+page (`share_dialog.html`, a `<dialog>`: up from the bottom on a phone, a
+small box from tablets up) with the same logos, filled by `share.js` with
+that card's product. Close, Escape or a tap on the page around it closes
+it. Without JavaScript the icon is a link to the product page's Share
+panel (`/products/<slug>/#share`).
+
 Every link a logo shares carries `utm_source` (reddit, instagram, tiktok,
 copy_link or share_sheet), `utm_medium=social` and
 `utm_campaign=product_share`, so Google Analytics shows which network

@@ -117,34 +117,3 @@
     if (opening && field) field.focus();
   }));
 })();
-
-// Share: the Instagram, TikTok and Copy link icons put the product's link, marked with where it was shared, on
-// the clipboard and say where to paste it; More opens the phone's share sheet. Without a clipboard the address
-// stays in its box to copy by hand.
-(() => {
-  const box = document.querySelector("[data-share]");
-  if (!box) return;
-  const link = box.querySelector("[data-share-link]");
-  const status = box.querySelector("[data-share-status]");
-  link.addEventListener("focus", () => link.select());
-  if (navigator.clipboard && window.isSecureContext) {
-    const fallback = box.querySelector("[data-share-fallback]");
-    if (fallback) fallback.hidden = true;
-    box.querySelectorAll("[data-share-copy]").forEach((item) => {
-      item.hidden = false;
-      item.querySelector("button").addEventListener("click", () => {
-        navigator.clipboard.writeText(item.dataset.shareCopy).then(
-          () => { status.textContent = item.dataset.shareDone; },
-          () => { link.value = item.dataset.shareCopy; link.focus(); },
-        );
-      });
-    });
-  }
-  const native = box.querySelector("[data-share-native]");
-  if (native && navigator.share) {
-    native.hidden = false;
-    native.querySelector("button").addEventListener("click", () => {
-      navigator.share({ title: box.dataset.shareTitle, url: native.dataset.shareUrl }).catch(() => {});
-    });
-  }
-})();

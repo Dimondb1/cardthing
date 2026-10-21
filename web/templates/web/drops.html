@@ -1,6 +1,6 @@
 {% extends "web/base.html" %}
 {% load static sitecopy ripraptor %}
-{% block scripts %}<script src="{% static 'js/drops.js' %}" defer></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/drops.js' %}" defer></script><script src="{% static 'js/share.js' %}" defer></script>{% endblock %}
 {% block content %}
 {# One page for new sets: Coming soon and Out now are plain links (?show=out), and a game chip keeps one game's in both, so it all works without script. #}
 <div class="page-head drops-head">
@@ -103,4 +103,5 @@
 </div>
 {% endif %}
 <div class="small-print">{% copy "drops.small_print" %}</div>
+{% include "web/includes/share_dialog.html" %}
 {% endblock %}

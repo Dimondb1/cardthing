@@ -1,5 +1,6 @@
 """Share on the product page: Reddit's post form, links to copy for Instagram and TikTok, and the share sheet."""
 
+import re
 from urllib.parse import parse_qs, urlsplit
 
 from django.test import TestCase
@@ -43,9 +44,36 @@ class ShareTests(TestCase):
         for label, logo in (("Post to Reddit (opens in a new tab)", "reddit"), ("Copy link for Instagram", "instagram"),
                             ("Copy link for TikTok", "tiktok")):
             with self.subTest(logo=logo):
-                self.assertContains(page, f'aria-label="{label}"><span class="share-box__logo share-box__logo--{logo}">'
-                                          '<svg class="share-box__mark"')
+                self.assertRegex(page.content.decode(), rf'aria-label="{re.escape(label)}"[^>]*><span class="share-box__logo '
+                                                        rf'share-box__logo--{logo}"><svg class="share-box__mark"')
         self.assertContains(page, "Paste it into a story&#x27;s link sticker")
         # A shared link is the same page: it keeps its plain canonical address.
         tagged = self.client.get(share["instagram"].replace("http://testserver", ""))
         self.assertContains(tagged, '<link rel="canonical" href="http://testserver/products/30th-pack/">')
+
+
+class CardShareTests(TestCase):
+    """Each product card has a share icon that opens the page's one Share sheet, or without script the product
+    page's own Share panel."""
+
+    def setUp(self):
+        self.set = make_set(make_game())
+        self.product = make_product(self.set, name="30th Celebration Booster Pack", slug="30th-pack",
+                                    product_type="booster_pack")
+        make_listing(self.product, make_retailer("Harbour Games"), price="4.99", delivery="2.99")
+
+    def test_a_card_shares_its_product_through_the_page_sheet(self):
+        for url in (self.set.get_absolute_url(), self.set.game.get_absolute_url(), "/search/?q=celebration"):
+            with self.subTest(url=url):
+                page = self.client.get(url)
+                self.assertContains(page, 'class="button button--quiet button--icon card__share" href="/products/30th-pack/#share" '
+                                          'data-card-share="30th Celebration Booster Pack"')
+                self.assertContains(page, '<span class="visually-hidden">Share 30th Celebration Booster Pack</span>')
+                # One sheet for the page, filled by share.js for the card tapped.
+                self.assertContains(page, "data-share-dialog", count=1)
+                self.assertContains(page, 'data-reddit-title="{product}: UK prices compared"')
+                self.assertContains(page, "js/share.js")
+
+    def test_without_script_the_icon_opens_the_product_page_share_panel(self):
+        page = self.client.get("/products/30th-pack/")
+        self.assertContains(page, '<div class="buybox-panel share-box" id="share" data-share')

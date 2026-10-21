@@ -399,11 +399,11 @@ class RestockAdmin(admin.ModelAdmin):
 
 @admin.register(StockAlert)
 class StockAlertAdmin(admin.ModelAdmin):
-    list_display = ("product", "email", "created_at", "confirmed_at")
+    list_display = ("product", "email", "max_price", "watch_days", "created_at", "confirmed_at")
     list_filter = ("confirmed_at",)
     search_fields = ("product__name", "email")
     list_select_related = ("product",)
-    readonly_fields = ("product", "email", "token", "created_at", "confirmed_at")
+    readonly_fields = ("product", "email", "token", "created_at", "confirmed_at", "max_price", "watch_days")
 
     def has_add_permission(self, request):
         return False

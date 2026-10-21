@@ -1,0 +1,35 @@
+{% load sitecopy ripraptor %}{# Track price: a price alert (catalogue/alerts.py). Hidden until Track price opens it, or while it answers a send (track_state). #}
+<div class="alert-box track-box{% if track_state %} is-open{% endif %}" id="track">
+  {% if track_state == "sent" %}
+    <p class="alert-box__done" role="status">{% copy "alerts.track.sent" %}</p>
+  {% elif track_state == "already" %}
+    <p class="alert-box__done" role="status">{% copy "alerts.form.already" %}</p>
+  {% else %}
+    <p class="alert-box__title">{% copy "alerts.track.title" %}</p>
+    {% if track_state == "under" %}<p class="alert-box__error" role="alert">{% copy "alerts.track.under" %}</p>{% elif track_state == "price" %}<p class="alert-box__error" role="alert">{% copy "alerts.track.price_invalid" %}</p>{% elif track_state == "limit" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.limit" %}</p>{% elif track_state == "invalid" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.invalid" %}</p>{% elif track_state == "failed" %}<p class="alert-box__error" role="alert">{% copy "alerts.form.failed" %}</p>{% endif %}
+    <form class="track-box__form" method="post" action="{% url 'web:alert_ask' product.slug %}">
+      {% csrf_token %}
+      <input type="hidden" name="track" value="1">
+      <div class="search-alert__fields">
+        <div class="search-alert__field{% if track_state == 'price' or track_state == 'under' %} is-wrong{% endif %}">
+          <label class="search-alert__label" for="track-price">{% copy "alerts.track.price_label" %}</label>
+          <span class="track-box__money"><span aria-hidden="true">£</span><input id="track-price" class="alert-box__input search-alert__input" type="text" name="price" required inputmode="decimal" autocomplete="off" maxlength="9"{% if track_now %} aria-describedby="track-now"{% endif %}></span>
+          {% if track_now %}<span class="search-alert__hint" id="track-now">{% copy "alerts.track.now" price=track_now|gbp %}</span>{% endif %}
+        </div>
+        <div class="search-alert__field">
+          <label class="search-alert__label" for="track-for">{% copy "alerts.track.for_label" %}</label>
+          <span class="pill search-alert__pill"><select id="track-for" name="for">{% for days, label in track_days %}<option value="{{ days }}"{% if days == track_default %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></span>
+        </div>
+      </div>
+      <div class="search-alert__field">
+        <label class="search-alert__label" for="track-email">{% copy "alerts.track.email_label" %}</label>
+        <div class="drop-remind__row">
+          <input id="track-email" class="alert-box__input search-alert__input drop-remind__input" type="email" name="email" required autocomplete="email" inputmode="email" maxlength="254" placeholder="{% copy 'alerts.form.placeholder' %}">
+          <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+          <button class="button button--small drop-remind__button" type="submit">{% copy "alerts.track.button" %}</button>
+        </div>
+      </div>
+    </form>
+    <p class="alert-box__note">{% copy "alerts.track.note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.terms" %}</a></p>
+  {% endif %}
+</div>

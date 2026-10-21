@@ -879,7 +879,7 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .buybox__delivered { font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__deal { font-size: var(--text-sm); color: var(--color-ink); }
 .buybox__summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
-.buybox__save { display: flex; justify-content: flex-start; }
+.buybox__save { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-2); }
 
 /* Buy now: the raptor holding a bag, the words, and an arrow. One wide button to the cheapest shop. */
 .buy-now {
@@ -969,6 +969,18 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .alert-box__error { font-size: var(--text-sm); color: var(--color-more); font-weight: var(--weight-strong); }
 .alert-box__done { font-weight: var(--weight-strong); color: var(--color-price); }
 .alert-box__trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+/* Track price: the price alert under Save, shown once Track price opens it (product.js), or by the address
+   (#track) without script, or while it answers a send. */
+.button--track { color: var(--color-ink-muted); }
+.button--track[aria-expanded="true"] { color: var(--color-brand-text); border-color: var(--color-brand-line); background: var(--color-brand-soft); }
+.track-box { gap: var(--space-3); }
+.track-box:not(:target):not(.is-open) { display: none; }
+.track-box.is-closed { display: none; }
+.track-box__form { display: grid; gap: var(--space-3); }
+.track-box__money { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-strong); }
+@media (prefers-reduced-motion: no-preference) {
+  .track-box.is-open, .track-box:target { animation: fade-in var(--motion-normal) var(--ease-out) both; }
+}
 .buybox__amazon { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-line); }
 .buybox__amazon-button { flex: none; }
 .buybox__amazon--lead { border-top: 0; padding-top: 0; }

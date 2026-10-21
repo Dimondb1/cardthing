@@ -1,0 +1,9 @@
+Under your price: {{ product.name }}
+
+In stock now for £{{ listing.delivered_price }} delivered, at or under your £{{ max_price }}. Checked just now. Stock and prices at small shops can change within minutes.
+
+See where to buy it: {{ product_url }}
+
+This was your one alert for this product, so your email address has already been deleted. Ask again on the product page if you want another.
+
+{{ site_name }} may earn a commission when you buy through its links.

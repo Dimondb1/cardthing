@@ -78,7 +78,10 @@
       </p>
     {% endif %}
     {% if alerts_on %}{% include "web/includes/alert_form.html" %}{% endif %}
-    <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.shown_price %}</div>
+    <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.shown_price %}{% if track_on %}
+      {# A link to the form below, so it opens without script (:target); product.js opens it in place. #}
+      <a class="button button--quiet button--track" href="#track" aria-controls="track" data-track-open>{% copy "alerts.track.button" %}<span class="visually-hidden"> {{ product.name }}</span></a>{% endif %}</div>
+    {% if track_on %}{% include "web/includes/track_form.html" %}{% endif %}
     {% if amazon_search and cheapest %}
       <div class="buybox__amazon">
         <a class="button button--small buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>

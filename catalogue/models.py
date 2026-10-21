@@ -1206,12 +1206,14 @@ def alert_token():
 
 
 class StockAlert(models.Model):
-    """One email address waiting to hear when one product is back in stock.
+    """One email address waiting to hear when one product is back in stock, or, with a price (Track price on
+    the product page), in stock at a shop for that price or less delivered.
 
     The address is kept for this and nothing else. It is confirmed by a link
-    before anything else is sent, deleted as soon as the one back-in-stock
-    email has gone, and deleted unconfirmed after a week or confirmed after
-    six months. Every email carries a link that deletes it at once.
+    before anything else is sent, deleted as soon as its one email has gone,
+    and deleted unconfirmed after a week, confirmed after six months, or once
+    the time the visitor chose to keep looking has passed. Every email carries
+    a link that deletes it at once.
     """
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="stock_alerts")
@@ -1219,11 +1221,19 @@ class StockAlert(models.Model):
     token = models.CharField(max_length=40, unique=True, default=alert_token)
     created_at = models.DateTimeField(default=timezone.now)
     confirmed_at = models.DateTimeField(null=True, blank=True)
+    max_price = models.DecimalField(
+        "most it will pay, delivered", max_digits=7, decimal_places=2, null=True, blank=True,
+        help_text="A price alert: sent when a shop has it in stock for this or less, delivered. Empty for back in stock.",
+    )
+    watch_days = models.PositiveSmallIntegerField(
+        "keep looking for (days)", null=True, blank=True,
+        help_text="Counted from the confirmation. Empty: up to six months.",
+    )
 
     class Meta:
         unique_together = [("product", "email")]
         ordering = ["-created_at"]
-        verbose_name = "back in stock alert"
+        verbose_name = "stock or price alert"
 
     def __str__(self):
         return f"{self.product} for {self.email}"

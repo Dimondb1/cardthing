@@ -1012,6 +1012,16 @@ def product_detail(request, slug):
     last_checked = max((l.last_checked for l in listings), default=None)
     alerts_preorder = alerts.preorder_alerts_on()
     alert_hides = Listing.BUYABLE if alerts_preorder else [Listing.Availability.IN_STOCK]
+    # Once pre-order emails are on, a shop pre-order hides the form too: the alert would be sent at once.
+    alerts_on = mail.enabled() and not any(
+        l.availability in alert_hides and l.retailer.source_type not in alerts.MARKETPLACES for l in current
+    )
+    # What a price alert compares with (alerts.price_listing), from the listings already in hand.
+    track_listing = min(
+        (l for l in current if l.availability == Listing.Availability.IN_STOCK and l.delivery_known
+         and l.retailer.source_type not in alerts.MARKETPLACES),
+        key=lambda l: l.delivered_price, default=None,
+    )
 
     today = timezone.localdate()
     days = settings.RIPRAPTOR_HISTORY_DAYS
@@ -1152,13 +1162,15 @@ def product_detail(request, slug):
             "month_ago": month_ago,
             "last_known": last_known,
             "restocks": restocks,
-            # Once pre-order emails are on, a shop pre-order hides the form too: the alert would be sent at once.
-            "alerts_on": mail.enabled() and not any(
-                l.availability in alert_hides and l.retailer.source_type not in alerts.MARKETPLACES
-                for l in current
-            ),
+            "alerts_on": alerts_on,
             "alerts_preorder": alerts_preorder,
             "alert_state": request.GET.get("alert") if request.GET.get("alert") in ALERT_STATES else "",
+            # Track price: a price alert, next to Save wherever the back-in-stock form is not shown.
+            "track_on": mail.enabled() and bool(current) and not alerts_on,
+            "track_now": track_listing.delivered_price if track_listing else None,
+            "track_days": alerts.TRACK_DAYS,
+            "track_default": alerts.TRACK_DEFAULT_DAYS,
+            "track_state": request.GET.get("track") if request.GET.get("track") in TRACK_STATES else "",
             # Through /go/search/ so only a person's click carries our tag or campaign (go_search).
             "amazon_search": search_link(product, "amazon", amazon_search_url(product, listings)),
             "ebay_search": search_link(product, "ebay", ebay_search_url(product, listings)),
@@ -1736,11 +1748,25 @@ def note_api(request):
 
 
 ALERT_STATES = ("sent", "already", "limit", "invalid", "failed")
+# A price alert can also have a price that is not one ("price") or is not below the cheapest now ("under").
+TRACK_STATES = ALERT_STATES + ("price", "under")
+
+
+def track_price(raw):
+    """The price typed in the Track price form, in pounds, or None when it is not one the form takes."""
+    from catalogue.search_alerts import MAX_PRICE, MIN_PRICE
+
+    try:
+        value = Decimal(raw.replace("£", "").replace(",", "").strip()).quantize(Decimal("0.01"))
+    except InvalidOperation:
+        return None
+    return value if value.is_finite() and MIN_PRICE <= value <= MAX_PRICE else None
 
 
 @require_POST
 def alert_ask(request, slug):
-    """Take an email address for a back-in-stock alert and send the confirmation. Works without JavaScript."""
+    """Take an email address for a back-in-stock alert, or with ``track`` a price alert (a price and how long
+    to keep looking), and send the confirmation. Works without JavaScript."""
     from django.core.exceptions import ValidationError
     from django.core.validators import validate_email
 
@@ -1748,15 +1774,27 @@ def alert_ask(request, slug):
     back = product.get_absolute_url()
     if request.POST.get("website") or not mail.enabled():
         return HttpResponseRedirect(back)   # the hidden field is only ever filled by robots
+    form = "track" if request.POST.get("track") else "alert"
+    max_price = days = None
+    if form == "track":
+        max_price = track_price(request.POST.get("price", ""))
+        if max_price is None:
+            return HttpResponseRedirect(f"{back}?track=price#track")
+        listing = alerts.price_listing(product)
+        if listing is not None and listing.delivered_price <= max_price:
+            # It is already there: the alert would be sent at once.
+            return HttpResponseRedirect(f"{back}?track=under#track")
+        offered = {str(n): n for n, _ in alerts.TRACK_DAYS}
+        days = offered.get(request.POST.get("for", ""), alerts.TRACK_DEFAULT_DAYS)
     email = request.POST.get("email", "").strip()
     try:
         validate_email(email)
-        state = alerts.ask(product, email)
+        state = alerts.ask(product, email, max_price=max_price, days=days)
     except ValidationError:
         state = "invalid"
     except mail.MailError:
         state = "failed"
-    return HttpResponseRedirect(f"{back}?alert={state}#alert")
+    return HttpResponseRedirect(f"{back}?{form}={state}#{form}")
 
 
 @require_GET
@@ -1766,8 +1804,13 @@ def alert_confirm(request, token):
         heading, message, product = text(request, "alerts.gone.title"), text(request, "alerts.gone.body"), None
     else:
         heading = text(request, "alerts.confirmed.title")
-        message = text(request, "alerts.confirmed.preorder" if alerts.wants_preorder(alert) else "alerts.confirmed.body",
-                       product=alert.product.name)
+        if alert.max_price is not None:
+            ends = alerts.watch_ends(alert) or alert.confirmed_at + timedelta(days=alerts.CONFIRMED_DAYS)
+            message = text(request, "alerts.confirmed.price", product=alert.product.name, price=f"£{alert.max_price}",
+                           date=short_date(timezone.localtime(ends).date()))
+        else:
+            message = text(request, "alerts.confirmed.preorder" if alerts.wants_preorder(alert) else "alerts.confirmed.body",
+                           product=alert.product.name)
         product = alert.product
     return render(request, "web/alert_done.html", {"heading": heading, "message": message, "product": product,
                                                     "meta_title": heading, "noindex": True})

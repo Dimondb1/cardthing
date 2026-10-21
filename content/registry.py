@@ -2016,6 +2016,38 @@ ENTRIES = [
     Entry("alerts.form.limit", T, "Alert limit", "That address is waiting on 30 products already.", "Shown when one address asks for too many."),
     Entry("alerts.form.invalid", T, "Alert bad address", "That email address does not look right.", "Shown when the address is not valid."),
     Entry("alerts.form.failed", T, "Alert send failed", "We could not send the confirmation just now. Try again in a minute.", "Shown when the email service fails."),
+    Entry("alerts.track.button", B, "Track price button", "Track price",
+          "Next to Save on a product page a shop has in stock or on pre-order: opens the price alert form, and sends it."),
+    Entry("alerts.track.title", T, "Price alert heading", "Email me when it is in stock at or under my price",
+          "Above the Track price form on a product page."),
+    Entry("alerts.track.price_label", T, "Price alert price label", "My price, delivered",
+          "Label for the price box in the Track price form."),
+    Entry("alerts.track.now", T, "Price alert current price", "It is {price} delivered now.",
+          "Under the price box, when a shop has it in stock with its delivery known.", placeholders=("price",)),
+    Entry("alerts.track.for_label", T, "Price alert time label", "Keep looking for",
+          "Label for the choice of how long the price alert looks (1 week, 1 month, 3 months, 6 months)."),
+    Entry("alerts.track.email_label", T, "Price alert email label", "Email", "Label for the email box in the Track price form."),
+    Entry(
+        "alerts.track.note", T, "Price alert privacy note",
+        "One email when it is at or under your price, then your address is deleted. It is also deleted when the "
+        "time you chose is up. We use it for nothing else.",
+        "Under the Track price form.",
+        legal=True,
+    ),
+    Entry("alerts.track.sent", T, "Price alert asked", "Check your inbox and confirm, then we will start looking.",
+          "Shown after the Track price form is sent."),
+    Entry("alerts.track.under", T, "Price alert already under",
+          "It is already at or under that price. Buy now above, or pick a lower price.",
+          "Shown when the price asked for is not below the cheapest in stock now: the alert would be sent at once."),
+    Entry("alerts.track.price_invalid", T, "Price alert bad price", "Enter a price in pounds, like 6.50.",
+          "Shown when the price box does not hold a price from £0.50 to £5,000."),
+    Entry(
+        "alerts.confirmed.price", T, "Price alert confirmed text",
+        "We will look until {date} and email you once if {product} is in stock at a UK shop we check for {price} "
+        "or less, delivered. Then we delete your address.",
+        "Page after the confirm link of a price alert.",
+        placeholders=("date", "product", "price"),
+    ),
     Entry("alerts.confirmed.title", H, "Alert confirmed heading", "Alert confirmed", "Page after the confirm link."),
     Entry(
         "alerts.confirmed.body", T, "Alert confirmed text",
@@ -2163,10 +2195,12 @@ ENTRIES = [
         "does not record who clicked. One small cookie of ours remembers only that your browser "
         "has visited before, so we can count returning visitors. It holds nothing "
         "about you.\n\n"
-        "If you ask to be emailed when a product is back in stock, we keep your email "
-        "address for that alone. Nothing is sent until you confirm by the link we email "
-        "you. You get one email when a shop has the product, and your address is then "
-        "deleted. Unconfirmed requests are deleted after a week and any still waiting "
+        "If you ask to be emailed when a product is back in stock, or with Track price when it is "
+        "in stock at or under a price you choose, we keep your email address (and that price and "
+        "how long to look) for that alone. Nothing is sent until you confirm by the link we email "
+        "you. You get one email when a shop has the product (at or under your price, for Track "
+        "price), and your address is then deleted. A Track price request is also deleted when the "
+        "time you chose is up. Unconfirmed requests are deleted after a week and any still waiting "
         "after six months are deleted too. Every email has a link that deletes your "
         "request at once. The emails are sent through Zoho ZeptoMail.\n\n"
         "If you ask for a reminder about a drop on the drop tracker, we keep your email "

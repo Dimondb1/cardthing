@@ -92,3 +92,23 @@
     busy = false;
   });
 })();
+
+// Track price: a link to the price alert form under it, which shows the form by the address without this
+// file. Here it opens and closes the form in place, without moving the page, and puts the cursor in the price.
+(() => {
+  const open = document.querySelector("[data-track-open]");
+  const box = document.getElementById("track");
+  if (!open || !box) return;
+  // An address ending #track keeps the form shown by :target, so closing it is a class of its own.
+  const shown = () => !box.classList.contains("is-closed") && (box.classList.contains("is-open") || location.hash === "#track");
+  open.setAttribute("aria-expanded", String(shown()));
+  open.addEventListener("click", (event) => {
+    event.preventDefault();
+    const opening = !shown();
+    box.classList.toggle("is-open", opening);
+    box.classList.toggle("is-closed", !opening);
+    open.setAttribute("aria-expanded", String(opening));
+    const price = box.querySelector("#track-price");
+    if (opening && price) price.focus();
+  });
+})();

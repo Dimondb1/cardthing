@@ -1,4 +1,4 @@
-You asked {{ site_name }} to email you when {{ product.name }} {% if preorder %}is in stock or open for pre-order{% else %}is back in stock{% endif %} at a UK shop we check.
+You asked {{ site_name }} to email you when {{ product.name }} {% if max_price %}is in stock for £{{ max_price }} or less delivered{% elif preorder %}is in stock or open for pre-order{% else %}is back in stock{% endif %} at a UK shop we check.{% if watch_label %} We will look for {{ watch_label }} from when you confirm, then delete your address.{% endif %}
 
 Confirm with this link:
 {{ confirm_url }}

@@ -2858,6 +2858,23 @@ at once. `deploy/install.sh` writes the moment it first runs this code into
 `.env`, so nothing needs doing by hand; without the setting no pre-order
 email is sent and the form and emails read as before.
 
+Track price: on a product a shop has in stock or on pre-order, a "Track
+price" button sits next to Save. It opens a form (in place with
+JavaScript, by the link's `#track` without it) for a price, delivered, and
+how long to keep looking: 1 week, 1 month (the default), 3 months or 6
+months. It is the same alert (`StockAlert` with `max_price` and
+`watch_days`), confirmed by email the same way, and one address can wait
+on 30 products across both kinds. A price that is not below the cheapest
+in stock now (at a shop, delivery known) is turned back, since the email
+would go at once. `send_stock_alerts` sends it once when a shop (not eBay
+or Amazon) has the product in stock for that price or less with its
+delivery known ("Under your price: <product>, £x delivered"). Like the
+search alerts, the email names the price and links to the product page,
+never the shop. The alert is deleted after that email, or unsent when its
+time is up (counted from the confirmation). Insights counts those as
+"expired". While no shop has the product, the back-in-stock form shows
+instead and Track price does not.
+
 ## Refer a friend
 
 A keyring promotion: when someone shares their link and a friend joins through it, both get a free RipRaptor

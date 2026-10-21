@@ -301,8 +301,9 @@ class PreorderAlertTests(TestCase):
 
     def test_the_terms_still_describe_the_store(self):
         terms = self.client.get(reverse("web:terms"))
-        for sentence in ("Nothing is sent until you confirm", "You get one email when a shop has the product, and your address is then",
-                         "Unconfirmed requests are deleted after a week", "Every email has a link that deletes your"):
+        for sentence in ("Nothing is sent until you confirm", "You get one email when a shop has the product (at or under your",
+                         "A Track price request is also deleted when the", "Unconfirmed requests are deleted after a week",
+                         "Every email has a link that deletes your"):
             self.assertContains(terms, sentence)
         self.assertContains(self.client.get("/robots.txt"), "Disallow: /alerts/")
 
@@ -386,3 +387,112 @@ class ZeptoMailTests(TestCase):
         self.assertEqual(outbox.sent[0]["to"], "ben@example.com")
         self.assertIn(">Unsubscribe</a>", outbox.sent[0]["html"])
         self.assertTrue(outbox.sent[0]["unsubscribe"])
+
+
+@override_settings(**MAIL)
+class TrackPriceTests(TestCase):
+    """Track price: a price alert from a product page a shop has in stock, for a time the visitor picks."""
+
+    def setUp(self):
+        self.product = make_product(make_set(make_game()), name="30th Celebration Booster Pack", slug="30th-pack", product_type="booster_pack")
+        self.shop = make_retailer("Harbour Games")
+        self.listing = make_listing(self.product, self.shop, price="4.99", delivery="2.99", availability="in_stock")
+        self.outbox = Outbox()
+        patcher = mock.patch.object(mail, "send", self.outbox)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def track(self, price="6.50", email="Ben@Example.com", **extra):
+        return self.client.post(reverse("web:alert_ask", args=[self.product.slug]),
+                                {"track": "1", "price": price, "for": "30", "email": email, **extra})
+
+    def confirmed(self, **extra):
+        self.track(**extra)
+        alert = StockAlert.objects.get()
+        self.client.get(reverse("web:alert_confirm", args=[alert.token]))
+        self.outbox.sent.clear()
+        alert.refresh_from_db()
+        return alert
+
+    def test_track_price_sits_next_to_save_and_its_form_works_without_script(self):
+        page = self.client.get(self.product.get_absolute_url())
+        self.assertContains(page, 'href="#track" aria-controls="track" data-track-open>Track price')
+        self.assertContains(page, 'id="track"')
+        self.assertContains(page, "It is £7.98 delivered now.")
+        self.assertContains(page, '<option value="30" selected>1 month</option>', html=False)
+        self.assertNotContains(page, "Email me when it is back in stock")
+        # Sold out at every shop: the back-in-stock form instead, and no Track price.
+        Listing.objects.filter(pk=self.listing.pk).update(availability="out_of_stock")
+        page = self.client.get(self.product.get_absolute_url())
+        self.assertNotContains(page, "data-track-open")
+        self.assertContains(page, "Email me when it is back in stock")
+        with self.settings(RIPRAPTOR_ZEPTOMAIL_TOKEN=""):
+            Listing.objects.filter(pk=self.listing.pk).update(availability="in_stock")
+            self.assertNotContains(self.client.get(self.product.get_absolute_url()), "data-track-open")
+
+    def test_asking_keeps_the_price_and_time_and_the_confirmation_says_both(self):
+        response = self.track(price="£6.50")
+        self.assertRedirects(response, f"{self.product.get_absolute_url()}?track=sent#track", fetch_redirect_response=False)
+        alert = StockAlert.objects.get()
+        self.assertEqual((alert.email, str(alert.max_price), alert.watch_days), ("ben@example.com", "6.50", 30))
+        message = self.outbox.sent[0]
+        self.assertIn("is in stock for £6.50 or less delivered at a UK shop we check. We will look for 1 month", message["text"])
+        page = self.client.get(self.product.get_absolute_url() + "?track=sent")
+        self.assertContains(page, "Check your inbox and confirm, then we will start looking.")
+        self.assertContains(page, 'class="alert-box track-box is-open"')
+        # Asked again before confirming: the newest price and time count.
+        self.track(price="5.00", **{"for": "7"})
+        alert.refresh_from_db()
+        self.assertEqual((str(alert.max_price), alert.watch_days), ("5.00", 7))
+        confirm = self.client.get(reverse("web:alert_confirm", args=[alert.token]))
+        ends = timezone.localdate() + timedelta(days=7)
+        self.assertContains(confirm, f"We will look until {ends.day} {ends:%b}")
+        self.assertContains(confirm, "for £5.00 or less, delivered")
+
+    def test_a_price_not_below_the_cheapest_now_or_not_a_price_is_turned_back(self):
+        self.assertRedirects(self.track(price="7.98"), f"{self.product.get_absolute_url()}?track=under#track",
+                             fetch_redirect_response=False)
+        self.assertRedirects(self.track(price="cheap"), f"{self.product.get_absolute_url()}?track=price#track",
+                             fetch_redirect_response=False)
+        self.assertRedirects(self.track(price="0.10"), f"{self.product.get_absolute_url()}?track=price#track",
+                             fetch_redirect_response=False)
+        self.assertRedirects(self.track(email="nope"), f"{self.product.get_absolute_url()}?track=invalid#track",
+                             fetch_redirect_response=False)
+        self.assertEqual((StockAlert.objects.count(), self.outbox.sent), (0, []))
+        self.assertContains(self.client.get(self.product.get_absolute_url() + "?track=under"),
+                            "It is already at or under that price.")
+        # A time the form does not offer is the usual month.
+        self.track(**{"for": "9999"})
+        self.assertEqual(StockAlert.objects.get().watch_days, 30)
+
+    def test_one_email_when_a_shop_has_it_at_or_under_the_price_without_naming_the_shop(self):
+        alert = self.confirmed()
+        self.assertEqual(alerts.send_due(), (0, 0))   # £7.98, over £6.50
+        # Under the price but delivery not known, or only on eBay: not yet.
+        dear = make_retailer("Mystery Shop")
+        unknown = make_listing(self.product, dear, price="3.00", availability="in_stock")
+        Listing.objects.filter(pk=unknown.pk).update(delivery_known=False, delivered_price="3.00")
+        make_listing(self.product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="2.00", delivery="0.00")
+        self.assertEqual(alerts.send_due(), (0, 0))
+        Listing.objects.filter(pk=self.listing.pk).update(price="3.50", delivered_price="6.49", last_checked=timezone.now())
+        self.assertEqual(alerts.send_due(), (1, 0))
+        message = self.outbox.sent[0]
+        self.assertEqual(message["subject"], "Under your price: 30th Celebration Booster Pack, £6.49 delivered")
+        self.assertIn("at or under your £6.50", message["text"])
+        self.assertIn("https://ripraptor.com/products/30th-pack/", message["text"])
+        for part in ("text", "html", "subject"):
+            self.assertNotIn("Harbour Games", message[part])
+        self.assertFalse(StockAlert.objects.filter(pk=alert.pk).exists())
+
+    def test_the_alert_is_deleted_unsent_when_its_time_is_up(self):
+        alert = self.confirmed(**{"for": "7"})
+        StockAlert.objects.filter(pk=alert.pk).update(confirmed_at=timezone.now() - timedelta(days=7, minutes=1))
+        Listing.objects.filter(pk=self.listing.pk).update(delivered_price="5.00")
+        self.assertEqual(alerts.send_due(), (0, 0))
+        self.assertFalse(StockAlert.objects.exists())
+        self.assertEqual(self.outbox.sent, [])
+
+    def test_a_back_in_stock_alert_keeps_working_as_before(self):
+        StockAlert.objects.create(product=self.product, email="old@example.com", confirmed_at=timezone.now() - timedelta(days=40))
+        self.assertEqual(alerts.send_due(), (1, 0))
+        self.assertEqual(self.outbox.sent[0]["subject"], "Back in stock: 30th Celebration Booster Pack")

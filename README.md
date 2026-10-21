@@ -1170,7 +1170,21 @@ a pre-order after a single-product check until the product's release date
 (or its set's) is known and has come; the next whole-shop read decides
 otherwise. A Shopify product whose own title or tags say pre-order is a
 pre-order after a single-product check too, as in a shop read, so a shop
-opening pre-orders is never shown as a restock. A listing for one variant of a Shopify product (an address
+opening pre-orders is never shown as a restock.
+
+Lotteries: some shops sell a scarce product by a draw (Obsidia TCG tags
+these "Lottery"). Entering is not buying, so an available product whose
+title or tags say lottery, raffle or ballot is stored as `lottery`, never
+in stock or on pre-order, in every read, single-product check and source
+(`importers.says_lottery`, applied when an `Offer` is made). It is never
+the cheapest, never counted as stock, and never a deal, restock, alert or
+search engine price. The product page lists it in All prices under the
+label "Lottery", with the price, a short note and an "Enter lottery" button
+through `/go/` like any other shop link. When the shop drops the tag and
+sells it normally, it is stock again (and counts as a restock). A draw that
+is not open (sold out) is out of stock as usual.
+
+A listing for one variant of a Shopify product (an address
 ending `?variant=...`, for example a case rather than a box) takes that
 variant's price and stock, never the cheapest on the page, and is left as
 it is when the shop no longer has that variant. In a whole-shop read, a

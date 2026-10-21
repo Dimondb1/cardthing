@@ -88,7 +88,7 @@ H1 = re.compile(r"<h1[^>]*>(.*?)</h1>", re.I | re.S)
 CANONICAL = re.compile(r"<link[^>]+rel=[\"']canonical[\"'][^>]*href=[\"']([^\"']+)[\"']", re.I)
 TAGS = re.compile(r"<[^>]+>")
 SCRIPTS = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.I | re.S)
-STOCK_WORDS = {"in_stock": "in stock", "preorder": "pre-order", "out_of_stock": "out of stock"}
+STOCK_WORDS = {"in_stock": "in stock", "preorder": "pre-order", "out_of_stock": "out of stock", "lottery": "lottery"}
 
 
 def text_of(markup, limit):

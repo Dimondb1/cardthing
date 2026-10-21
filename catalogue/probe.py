@@ -88,6 +88,9 @@ def ask(listing, fetch=None, today=None):
             return None
         if not available:
             return price, Listing.Availability.OUT_OF_STOCK
+        # As a shop read does: an open draw is not stock.
+        if importers.says_lottery(data.get("title", ""), data.get("tags") or ()):
+            return price, Listing.Availability.LOTTERY
         # As a shop read does: a product whose own title or tags say pre-order is a pre-order while
         # available, so a probe never turns a newly opened pre-order into stock and a restock.
         if importers.says_preorder(data):

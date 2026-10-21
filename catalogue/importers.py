@@ -90,6 +90,11 @@ class Offer:
     # read did not carry one, which leaves the listing's as it was.
     description: str | None = None
 
+    def __post_init__(self):
+        # An open draw is not stock, from whichever source the offer came.
+        if self.availability in Listing.BUYABLE and says_lottery(self.title, self.tags):
+            self.availability = Listing.Availability.LOTTERY
+
 
 NO_DEAL = (None, None)
 
@@ -428,6 +433,16 @@ def offer_deal(offer, terms):
 
 # The background reader waits this long between products.json pages, on top of the shop's own rate.
 PAGE_PAUSE = 0.5
+
+
+# A scarce product some shops sell by a draw: tagged "Lottery" (Obsidia TCG, Oct 2026), or called a raffle or
+# ballot. Entering is not buying, so while the draw is open the listing is LOTTERY, never stock.
+LOTTERY_WORDS = re.compile(r"\b(?:lottery|lotteries|raffles?|ballots?)\b", re.I)
+
+
+def says_lottery(title="", tags=()):
+    """True when a product's title or one of its tags says it is sold by a draw."""
+    return bool(LOTTERY_WORDS.search(title or "")) or any(LOTTERY_WORDS.search(str(tag)) for tag in tags or ())
 
 
 def says_preorder(product):

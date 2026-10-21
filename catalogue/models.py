@@ -632,6 +632,8 @@ class Listing(models.Model):
         IN_STOCK = "in_stock", "In stock"
         PREORDER = "preorder", "Pre-order"
         OUT_OF_STOCK = "out_of_stock", "Out of stock"
+        # Sold by a draw the shop runs (importers.says_lottery): entering is not buying, so never stock.
+        LOTTERY = "lottery", "Lottery"
 
     BUYABLE = [Availability.IN_STOCK, Availability.PREORDER]
 

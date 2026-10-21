@@ -1002,6 +1002,12 @@ def product_detail(request, slug):
         ),
     )
     unavailable = [listing for listing in listings if not listing.is_buyable]
+    # Open draws at shops we read: listed with the prices under their own label, never as stock.
+    lotteries = [
+        listing for listing in unavailable
+        if listing.availability == Listing.Availability.LOTTERY and listing.is_active and listing.retailer.is_active
+        and not listing.is_stale and listing.sanity != Listing.Sanity.EXCLUDED
+    ]
     cheapest = current[0] if current else None
     shop_count = len({listing.retailer_id for listing in current})
     product.offers = current
@@ -1149,7 +1155,8 @@ def product_detail(request, slug):
             "meta_image": (request.build_absolute_uri(images.sized_image_url(product.image_src, images.SHARE_WIDTH))
                            if product.image_src else ""),
             "current": current,
-            "unavailable": unavailable,
+            "unavailable": [listing for listing in unavailable if listing not in lotteries],
+            "lotteries": sorted(lotteries, key=lambda listing: listing.delivered_price),
             "cheapest": cheapest,
             "shop_count": shop_count,
             "summary": summary,

@@ -1129,6 +1129,11 @@ ENTRIES = [
           "Column heading in the price list (large screens)."),
     Entry("product.compare.col.checked", T, "Column: last checked", "Checked",
           "Column heading in the price list (large screens)."),
+    Entry("product.compare.lottery", B, "Enter lottery button", "Enter lottery",
+          "On a price list row for a shop selling the product by a draw. Opens the shop's page."),
+    Entry("product.compare.lottery_note", T, "Lottery row note",
+          "This shop sells it by lottery: you enter, and only those drawn can buy. Not counted as in stock.",
+          "Under a price list row for a shop selling the product by a draw."),
     Entry(
         "product.compare.cheapest", T, "Cheapest marker",
         "Cheapest",

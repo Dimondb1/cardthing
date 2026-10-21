@@ -107,6 +107,7 @@
     {% for listing in current %}
       {% include "web/includes/offer_row.html" with cheapest_row=forloop.first muted=False %}
     {% endfor %}
+    {% for listing in lotteries %}{% include "web/includes/offer_row.html" with cheapest_row=False muted=False lottery=True %}{% endfor %}
     {% if amazon_search %}{% include "web/includes/offer_amazon.html" %}{% endif %}
   </ul>
     {% if unavailable %}
@@ -122,6 +123,7 @@
   {% else %}
   <ul class="offers">
     {% include "web/includes/offers_head.html" %}
+    {% for listing in lotteries %}{% include "web/includes/offer_row.html" with cheapest_row=False muted=False lottery=True %}{% endfor %}
     {% for listing in unavailable %}
       {% include "web/includes/offer_row.html" with cheapest_row=False muted=True %}
     {% endfor %}

@@ -20,6 +20,7 @@ SORTS = [
     ("price", "Lowest price"),
     ("saving", "Biggest saving"),
     ("low", "Lowest in 90 days"),
+    ("fair", "Fairest price"),
 ]
 LOW_DAYS = 90
 
@@ -72,6 +73,10 @@ def order_products(products, sort, first=None):
         )
         products = products.annotate(at_low=at_low)
         ordering = ["has_price", "at_low", F("lowest_price").asc(nulls_last=True), "name"]
+    elif sort == "fair":
+        # The Price check's verdict as stored each hour (fair_price.refresh_bands): lowest yet first, then good,
+        # fair, above average and high, then products with no verdict; the cheaper first within each.
+        ordering = ["has_price", F("price_band").desc(nulls_last=True), F("lowest_price").asc(nulls_last=True), "name"]
     elif sort == "soonest":
         # Not offered in the sort menu: the Pre-orders tab's own order, the next to come out first.
         ordering = ["has_price", F("release").asc(nulls_last=True), "name"]

@@ -6,7 +6,7 @@
       {% if product.language_name %}<span class="card__lang">{{ product.language_name }}{% info "lang" product.language product.language_name game=product.game.slug %}</span>{% endif %}
       <{{ heading_tag|default:"h2" }} class="card__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></{{ heading_tag|default:"h2" }}>
       <p class="card__meta">{% if not game %}{{ product.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{{ product.type_name }}</p>
-      {% if summary.best %}{% include "web/includes/badge.html" %}{% endif %}
+      {% if summary.best %}<div class="card__checks">{% include "web/includes/badge.html" %}{% include "web/includes/fair_card.html" %}</div>{% endif %}
     </div>
     <div class="card__save">{% include "web/includes/save_link.html" with price=summary.best.shown_price icon_only=True %}
       <a class="button button--quiet button--icon card__share" href="{{ product.get_absolute_url }}#share" data-card-share="{{ product.name }}">{% include "web/includes/share/icon.svg" %}<span class="visually-hidden">{% copy "product.share.button" %} {{ product.name }}</span></a></div>

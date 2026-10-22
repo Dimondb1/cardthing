@@ -159,3 +159,7 @@ class Command(BaseCommand):
         self.stdout.write("== types")
         changed = refresh_types(dry_run=dry_run)
         self.stdout.write(f"{changed} product types {'would change' if dry_run else 'set'}.")
+
+        if not dry_run:
+            self.stdout.write("== price checks")
+            call_command("refresh_price_checks", stdout=self.stdout)

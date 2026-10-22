@@ -257,6 +257,12 @@ class Product(models.Model):
     # Worked out from the name and the set whenever the product is saved (catalogue/languages.py). To
     # correct it, put the language in the name, for example "(Japanese)".
     language = models.CharField(max_length=7, blank=True, editable=False, db_index=True, help_text="Blank for English.")
+    # The Price check's band for the cheapest delivered price now (catalogue/fair_price.py: 5 lowest yet to 1 high),
+    # and what it rests on, kept by fair_price.refresh_bands each hour so lists can sort by it and show it at no
+    # cost. Empty while there is no verdict. The product page works its own out fresh.
+    price_band = models.PositiveSmallIntegerField("Price check", null=True, blank=True, editable=False)
+    price_basis = models.CharField("Price check from", max_length=6, blank=True, editable=False,
+                                   help_text="record (our own daily prices), market (Cardmarket) or both.")
 
     objects = ProductQuerySet.as_manager()
 
@@ -296,6 +302,15 @@ class Product(models.Model):
         from .types import type_label
 
         return type_label(self.game.slug, self.product_type)
+
+    @property
+    def price_check(self):
+        """The stored Price check (price_band) as a fair_price.Verdict, for its key and signal bars, or None."""
+        if not self.price_band:
+            return None
+        from .fair_price import Verdict
+
+        return Verdict(self.price_band, None)
 
     @property
     def language_name(self):

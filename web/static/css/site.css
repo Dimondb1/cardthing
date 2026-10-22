@@ -1088,6 +1088,14 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
   background: var(--fair-bg); color: var(--fair-ink); text-decoration: none;
 }
 .fair:hover .fair__word { text-decoration: underline; }
+/* On a product card: the same chip, smaller, its words on one line, beside the badge. */
+.card__checks { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.fair--small { margin-left: 0; min-height: 0; padding: var(--space-1) var(--space-2); gap: var(--space-1); font-size: var(--text-xs); }
+.fair--small .fair__bars { height: var(--fair-bars-small); }
+.fair--small .fair__icon { padding-left: var(--space-1); }
+.fair--small .fair__icon svg { width: var(--fair-icon-small); height: var(--fair-icon-small); }
+.fair--small .fair__word { max-width: none; white-space: nowrap; }
+.fair--small:hover .fair__word { text-decoration: none; }
 .fair__bars { display: inline-flex; align-items: flex-end; gap: var(--fair-bar-gap); height: var(--fair-bars); }
 .fair__bar { width: var(--fair-bar-width); border-radius: var(--radius-pill); background: currentColor; opacity: var(--fair-dim); }
 .fair__bar:nth-child(1) { height: 40%; }

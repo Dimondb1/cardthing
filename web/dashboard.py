@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.cache import cache
-from django.db.models import Count, Max, Min, Q, Sum
+from django.db.models import Count, Exists, Max, Min, OuterRef, Q, Sum
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -27,8 +27,8 @@ from django.views.decorators.http import require_GET
 from catalogue import checks, crawl, insights, judge, referrals, traffic
 from catalogue.drop_alerts import SENT_FIELD
 from catalogue.models import (
-    AffiliateSale, ClaudeJudge, DailyPageView, DailySearch, DailyVisitor, DropAlert, Listing, OutboundClick,
-    ReferralSettings, Retailer, SearchAlert, StockAlert, WorkerState,
+    AffiliateSale, CardmarketMatch, ClaudeJudge, DailyPageView, DailySearch, DailyVisitor, DropAlert, Listing,
+    OutboundClick, Product, ReferralSettings, Retailer, SearchAlert, StockAlert, WorkerState,
 )
 from content import service as copy
 from inbox.service import unread_count
@@ -377,6 +377,37 @@ def checks_section(now, store):
     }
 
 
+def prices_section(now, store):
+    """Of the products with a current price, how many show the Price check, and what it rests on: Cardmarket's
+    price, our own daily record, or both (Product.price_band, kept each hour), for the whole site and each game,
+    and how many Cardmarket matches wait for the owner. Two queries."""
+    from catalogue.fair_price import BOTH, MARKET, RECORD
+
+    on_sale = Exists(Listing.objects.buyable().filter(product=OuterRef("pk")))
+    rows = (
+        Product.objects.active().annotate(on_sale=on_sale).order_by().values("game__name")
+        .annotate(
+            priced=Count("pk", filter=Q(on_sale=True)),
+            checked=Count("pk", filter=Q(price_band__isnull=False)),
+            market=Count("pk", filter=Q(price_basis__in=(MARKET, BOTH))),
+            record=Count("pk", filter=Q(price_basis__in=(RECORD, BOTH))),
+        )
+    )
+    games = [{"name": row["game__name"], **{key: row[key] for key in ("priced", "checked", "market", "record")}}
+             for row in rows if row["priced"]]
+    for game in games:
+        game["share"] = rate(game["checked"], game["priced"])
+    total = {key: sum(game[key] for game in games) for key in ("priced", "checked", "market", "record")}
+    return {
+        **total,
+        "share": rate(total["checked"], total["priced"]),
+        "market_share": rate(total["market"], total["priced"]),
+        "record_share": rate(total["record"], total["priced"]),
+        "games": sorted(games, key=lambda g: (-g["priced"], g["name"])),
+        "waiting": CardmarketMatch.objects.filter(status=CardmarketMatch.Status.CHECK).count(),
+    }
+
+
 def shops_section(now, store):
     """Whether each shop is read on time: read in the last hour, up to date, paused, or late or failing (the
     shops to look at, failing first), the background reader and the last read to finish."""
@@ -482,6 +513,7 @@ SECTIONS = [
     ("money", money_section),
     ("traffic", traffic_section),
     ("checks", checks_section),
+    ("prices", prices_section),
     ("shops", shops_section),
     ("customers", customers_section),
     ("gaps", gaps_section),
@@ -521,6 +553,7 @@ def admin_links():
         "claude": reverse(changelist("claudeask")),
         "sales": reverse(changelist("affiliatesale")),
         "sales_import": reverse("admin:catalogue_affiliatesale_import"),
+        "matches": reverse(changelist("cardmarketmatch")) + "?status__exact=check",
         "admin": reverse("admin:index"),
     }
 

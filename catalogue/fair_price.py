@@ -38,7 +38,7 @@ from decimal import Decimal
 from django.db.models import Avg, Count, DecimalField, ExpressionWrapper, F, FloatField, IntegerField, Min, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from .models import CardmarketMatch, CardmarketPrice, DailyLowestPrice, ExchangeRate, Product
+from .models import CardmarketMatch, CardmarketPrice, DailyLowestPrice, ExchangeRate, Listing, Product
 from .offers import MAX_REAL_PERCENT
 
 WINDOW_DAYS = 365
@@ -150,6 +150,65 @@ def verdict(product, price, today=None, shops=MIN_SHOPS):
         return None
     found.band = min(bands)
     return found
+
+
+RECORD, MARKET, BOTH = "record", "market", "both"
+
+
+def refresh_bands(today=None):
+    """Store every active product's Price check band and what it rests on (Product.price_band, price_basis), as
+    verdict() works it out, so lists can sort by it and show it with no query of their own. A product whose
+    verdict is gone has both emptied. Six queries and one write for those that changed, however many products.
+    Returns how many changed."""
+    from .cardmarket import in_pounds
+
+    today = today or timezone.localdate()
+    prices = dict(
+        Listing.objects.buyable().filter(delivery_known=True, product__is_active=True, product__game__is_active=True)
+        .order_by().values("product_id").annotate(price=Min("delivered_price")).values_list("product_id", "price")
+    )
+    shops = dict(
+        Listing.objects.live().exclude(sanity=Listing.Sanity.EXCLUDED).filter(product_id__in=list(prices))
+        .order_by().values("product_id").annotate(n=Count("retailer_id", distinct=True)).values_list("product_id", "n")
+    )
+    records = {
+        row["product_id"]: row for row in
+        DailyLowestPrice.objects.filter(product_id__in=list(prices), date__lt=today,
+                                        date__gte=today - timedelta(days=WINDOW_DAYS))
+        .order_by().values("product_id").annotate(days=Count("pk"), average=Avg("price"), low=Min("price"))
+    }
+    matched = dict(CardmarketMatch.objects.filter(product_id__in=list(prices), status__in=CardmarketMatch.USED,
+                                                  cardmarket__isnull=False).values_list("product_id", "cardmarket_id"))
+    latest = {}
+    for row in (CardmarketPrice.objects.filter(product_id__in=set(matched.values()),
+                                               date__gte=today - timedelta(days=MARKET_FRESH_DAYS))
+                .order_by("product_id", "-date")):
+        latest.setdefault(row.product_id, row)
+    rate = ExchangeRate.latest() if latest else None
+    pence = Decimal("0.01")
+    wanted = {}
+    for product_id, price in prices.items():
+        bands, basis = [], []
+        record = records.get(product_id)
+        if shops.get(product_id, 0) >= MIN_SHOPS and record and record["days"] >= MIN_DAYS:
+            average = Decimal(record["average"]).quantize(pence)
+            bands.append(band_for(price, average, Decimal(record["low"]).quantize(pence)))
+            basis.append(RECORD)
+        row = latest.get(matched.get(product_id))
+        euros = (row.trend or row.avg) if row else None
+        if euros and rate is not None:
+            bands.append(market_band(price, in_pounds(euros, rate)))
+            basis.append(MARKET)
+        if bands:
+            wanted[product_id] = (min(bands), BOTH if len(basis) == 2 else basis[0])
+    changed = []
+    for product in Product.objects.active().only("pk", "price_band", "price_basis"):
+        band, basis = wanted.get(product.pk, (None, ""))
+        if (product.price_band, product.price_basis) != (band, basis):
+            product.price_band, product.price_basis = band, basis
+            changed.append(product)
+    Product.objects.bulk_update(changed, ["price_band", "price_basis"], batch_size=500)
+    return len(changed)
 
 
 def at_lowest(limit=12, today=None):

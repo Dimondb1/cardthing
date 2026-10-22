@@ -196,6 +196,22 @@
     <p class="dash-card__more"><a href="{{ links.checks }}">{% copy "dashboard.checks.more" %}</a></p>
   </section>
 
+  {# How many products show the Price check, and from what (dashboard.prices_section). #}
+  <section class="dash-card" id="prices" aria-labelledby="prices-title">
+    <h2 id="prices-title" class="dash-card__title">{% copy "dashboard.prices.title" %}</h2>
+    <p class="dash-card__intro">{% copy "dashboard.prices.intro" %}</p>
+    <dl class="dash-stats dash-stats--notes">
+      <div><dt>{% copy "dashboard.prices.checked" %}</dt><dd>{{ prices.share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.checked|number whole=prices.priced|number %}</span></dd></div>
+      <div><dt>{% copy "dashboard.prices.market" %}</dt><dd>{{ prices.market_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.market|number whole=prices.priced|number %}</span></dd></div>
+      <div><dt>{% copy "dashboard.prices.record" %}</dt><dd>{{ prices.record_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.record|number whole=prices.priced|number %}</span></dd></div>
+    </dl>
+    <ul class="dash-rows">{% for game in prices.games %}
+      <li class="dash-rows__row"><span class="dash-rows__name">{{ game.name }}</span><span class="dash-rows__count">{{ game.share|percent }}</span>
+        <span class="dash-rows__detail">{% copy "dashboard.prices.game_row" checked=game.checked|number priced=game.priced|number market=game.market|number %}</span></li>
+    {% endfor %}</ul>
+    <p class="dash-card__more"><a href="{{ links.matches }}">{% copy_count "dashboard.prices.waiting" prices.waiting %}</a></p>
+  </section>
+
   <section class="dash-card" id="shops" aria-labelledby="shops-title">
     <h2 id="shops-title" class="dash-card__title">{% copy "dashboard.shops.title" %}</h2>
     <p class="dash-card__intro">{% copy "dashboard.shops.intro" %}</p>

@@ -2882,6 +2882,19 @@ up to a year back and not counting today:
   does not cover (Football) has only our own record to go on. The
   thresholds are `GOOD`, `HIGH`, `MIN_DAYS` and `WINDOW_DAYS` in the same file.
 
+**In lists.** Each product's band is also stored, with what it rests on
+(`Product.price_band`, `price_basis`: record, market or both), by
+`fair_price.refresh_bands`: six or seven queries for the whole catalogue, the
+same rules as the product page. `tidy_all` runs it each hour
+(`refresh_price_checks`), and `install.sh` once after each update. From it:
+
+- **Fairest price** in Sort and filter (`sort=fair`): lowest yet first, then
+  good, fair, above average and high, then products with no Price check, the
+  cheaper first within each.
+- **Product cards** show the same chip, smaller, beside the badge
+  (`includes/fair_card.html`), at no query of their own. A card's chip can
+  lag the product page by up to an hour; the page works its own out fresh.
+
 The wording is under Product page in Site wording (`product.fair.*`).
 
 **The European market.** Once a product is matched to Cardmarket (see
@@ -3917,6 +3930,11 @@ anyone else is sent to the admin sign-in. Top to bottom:
 - **Today at a glance:** people today so far against the same time last
   week (or yesterday), clicks to shops from people today, rows waiting on
   Things to check, and Claude's spend this month against its limit.
+- **Price check coverage** (`prices_section`): of the products with a
+  price now, the share showing the Price check, the share whose check uses
+  Cardmarket's price and the share using our own record, then each game,
+  and a link to the Cardmarket matches waiting for you. From the bands
+  stored each hour; two queries.
 - **What clicks earn, last 30 days** (`money_section`), the first card,
   five rates for the whole site, each with the figures behind it:
   - *Retailer click-through rate*: visits with a click to a shop, out of

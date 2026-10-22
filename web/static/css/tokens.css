@@ -220,6 +220,8 @@
   --filter-clear-room: 7rem;        /* room the filter button leaves for Clear filters beside it */
   --fair-bars: 1.25rem;             /* the price check's signal bars: the tallest, and their width and gap */
   --fair-bar-width: 0.3125rem;
+  --fair-bars-small: 0.875rem;      /* the bars on a product card's smaller chip */
+  --fair-icon-small: 0.875rem;
   --fair-bar-gap: 2px;
   --fair-dim: 0.28;                 /* a bar that is not lit */
   --fair-word: 4.75em;              /* the verdict wraps onto two lines beside the icon */

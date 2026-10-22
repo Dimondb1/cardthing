@@ -4,6 +4,7 @@
     <div>
       <p class="share-dialog__title">{% copy "product.fair.title" %}</p>
       <p class="fair-sheet__verdict" id="fair-sheet-title"><span class="fair__dot" aria-hidden="true"></span>{{ fair_word }}</p>
+      {% copy "product.fair.how" as how %}{% if how %}<p class="fair-sheet__how">{{ how }}</p>{% endif %}
     </div>
     <button class="button button--quiet button--small" type="button" data-fair-close>{% copy "product.share.close" %}</button>
   </div>

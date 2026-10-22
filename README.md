@@ -3064,6 +3064,38 @@ time is up (counted from the confirmation). Insights counts those as
 Track price shows beside it only when eBay has it in stock with a known
 delivery cost.
 
+## The ⓘ cards
+
+For people new to card games (parents buying a present, say): a small grey ⓘ
+after a label opens two plain sentences about it, and nothing on the page
+grows. It is the browser's own popover (the `info` tag in
+`web/templatetags/ripraptor.py`), so it needs no script: up from the bottom
+on a phone like the other sheets, a small card in the middle from tablets
+up; a tap outside or Esc closes it. A browser too old for popovers shows no
+ⓘ at all rather than one that does nothing.
+
+Where they are, and only there:
+
+- **Product type** on the product page (Booster box, Elite Trainer Box,
+  Collector booster box and the rest): what it is and what is in it.
+- **Language** on the product page and on a product card's language label
+  (Japanese, Korean, Chinese, any other but English): who it is made for
+  and that packs often hold fewer cards. Pokémon adds a line: a Japanese or
+  Korean booster pack usually has 5 cards, an English one 10.
+- **The badge** beside the cheapest price (Lowest in 30 days, Best in 7
+  days, Lowest today, Dropping soon): what it means.
+- **The price check sheet** says how to read the gauge.
+
+The words are under "Info cards (the ⓘ buttons)" in Site wording
+(`info.*`, and `product.fair.how`). Blank one and its ⓘ goes. A game whose
+products need their own line can have one: `info.lang.ko_<game>` with the
+game's address in place of `<game>` and dashes as underscores, added to the
+registry. Each card is written into the page once however many buttons
+open it, under an id new for every request, so a list fetched by script
+never repeats one. Exact pack and card counts for one product wait for
+"What's inside" (not built yet), so no card states one as fact for a
+product it has not checked.
+
 ## Share on product pages
 
 Next to Save and Track price, "Share" (with the usual share icon) opens a

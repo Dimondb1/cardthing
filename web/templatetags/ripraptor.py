@@ -311,3 +311,75 @@ def inline_static(path):
             raise ValueError(f"{path} cannot be inlined: it contains '</'")
         _INLINE[path] = text
     return mark_safe(text)
+
+
+# The ⓘ cards: a small button after a label that opens two plain sentences about it, for people new to card
+# games. The browser's own popover (no script: it works with JavaScript off, and a tap outside or Esc closes it).
+# The words are in the registry under info.* and edited in Admin. A label with no words for it gets no button.
+INFO_ICON = mark_safe(
+    '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.5" fill="none" '
+    'stroke="currentColor" stroke-width="1.5"/><path d="M8 7.2v4" stroke="currentColor" stroke-width="1.6" '
+    'stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/></svg>'
+)
+INFO_KINDS = ("type", "lang", "badge")
+
+
+def info_keys(kind, value, game=""):
+    """The registry keys of an ⓘ card's words, in order: the card's text, then a line for this game when the
+    registry has one (a Japanese Pokémon pack's card count)."""
+    from catalogue.languages import CHINESE_FAMILY
+
+    if kind == "lang":
+        value = "zh" if value in CHINESE_FAMILY else value if value in ("ja", "ko") else "other" if value else ""
+    if not value or kind not in INFO_KINDS:
+        return []
+    return [f"info.{kind}.{value}", f"info.{kind}.{value}_{game.replace('-', '_')}" if game else ""]
+
+
+@register.simple_tag(takes_context=True)
+def info(context, kind, value, title="", game=""):
+    """An ⓘ button after a label (``title``, as the page shows it) and its card. ``kind`` is "type" (a product
+    type code), "lang" (a language code: Japanese, Korean, Chinese, or any other but English) or "badge" (a
+    badge's code). Each card is written once per page, however many buttons open it; its id carries a short
+    sum of the page's address, the same on every visit, so a list fetched into the page by script (another
+    address) never repeats one."""
+    import zlib
+
+    from content.registry import REGISTRY
+
+    keys = [key for key in info_keys(kind, value, game) if key in REGISTRY]
+    if not keys:
+        return ""
+    store = context.get("site_content")
+    title = title or (service.get(f"product.badge.{value}", store=store) if kind == "badge" else "")
+    words = [service.get(key, store=store, language=title) for key in keys]
+    words = [text for text in words if text]
+    if not words:
+        return ""
+    request = context.get("request")
+    cards = getattr(request, "_info_cards", None) if request is not None else None
+    if cards is None:
+        address = request.get_full_path() if request is not None else ""
+        cards = {"prefix": f"{zlib.crc32(address.encode()) & 0xFFFFF:x}", "done": set()}
+        if request is not None:
+            request._info_cards = cards
+    ident = f"info-{cards['prefix']}-{kind}-{keys[0].split('.')[-1]}".replace("_", "-")
+    button = format_html(
+        '<button type="button" class="info" popovertarget="{}" aria-label="{}">{}</button>',
+        ident, service.get("info.open", store=store, thing=title), INFO_ICON,
+    )
+    if ident in cards["done"]:
+        return button
+    cards["done"].add(ident)
+    return format_html(
+        '{}<span class="info-card" id="{}" popover role="dialog" aria-labelledby="{}-title">'
+        '<span class="info-card__head"><span class="info-card__title" id="{}-title">{}</span>'
+        '<button type="button" class="button button--quiet button--small" popovertarget="{}" '
+        'popovertargetaction="hide">{}</button></span>{}</span>',
+        button, ident, ident, ident, title, ident, service.get("product.share.close", store=store),
+        format_html_join_lines(words),
+    )
+
+
+def format_html_join_lines(lines):
+    return mark_safe("".join(format_html('<span class="info-card__text">{}</span>', line) for line in lines))

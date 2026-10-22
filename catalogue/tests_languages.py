@@ -200,7 +200,8 @@ class ProductTests(TestCase):
     def test_the_product_page_says_the_language(self):
         jp = make_product(self.set, name="151 (sv2a) Booster Box (Sealed/Shrink)", product_type="booster_box")
         page = self.client.get(jp.get_absolute_url())
-        self.assertContains(page, "Booster box · Japanese")
+        # Each label with its ⓘ (web/tests_info.py) after it.
+        self.assertContains(page, '</span> · Japanese<button type="button" class="info"')
         self.assertContains(page, "<dd>Japanese</dd>", html=True)
         en = make_product(self.set, name="Black Bolt Booster Box", product_type="booster_box")
         self.assertContains(self.client.get(en.get_absolute_url()), "<dd>English</dd>", html=True)

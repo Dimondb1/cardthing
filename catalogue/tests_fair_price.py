@@ -104,6 +104,9 @@ class ProductPageTests(TestCase):
         self.assertContains(response, 'aria-label="Price check: Good price. Show price history"')
         self.assertContains(response, 'href="#history-title" data-fair-open')
         self.assertContains(response, "data-fair-sheet")
+        # For anyone new to it: what the bars and colours mean.
+        self.assertContains(response, '<p class="fair-sheet__how">More bars mean a better price. Green is a good price, '
+                                      'grey is about usual, dark yellow is dearer than usual.</p>')
         self.assertContains(response, "Average of 20 days")
         self.assertContains(response, "From the cheapest delivered price we have recorded each day since")
         # The facts sit under the price history too, for anyone without the sheet.

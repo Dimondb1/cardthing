@@ -213,6 +213,7 @@
   --masthead-logo-home: 2.625rem;                                  /* the home page logo on phones: the 2.618rem step, the most a 320px screen holds beside the menu */
   --masthead-logo-home-wide: 4.25rem;                              /* and on wide screens (4.236rem) */
   --buy-height: 3.75rem;            /* the Buy now button */
+  --info-icon: 1.05em;              /* the ⓘ after a label, the size of the label's own letters */
   --stock-dot: 0.55em;              /* the in-stock dot beside a count, the size of the stock lines' dot */
   --filter-cell: 10rem;             /* the narrowest a filter gets on a tablet or wider; phones have two to a row */
   --filter-clear-room: 7rem;        /* room the filter button leaves for Clear filters beside it */

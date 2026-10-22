@@ -2125,7 +2125,7 @@ class RedesignTests(PageTestCase):
         japanese = make_product(self.pre, name="Prismatic Evolutions Booster Box (Japanese)", slug="pev-box-ja", product_type="booster_box")
         make_listing(japanese, self.harbour, price="70.00")
         html = self.client.get(reverse("web:search"), {"q": "prismatic"}).content.decode()
-        self.assertEqual(html.count('<span class="card__lang">Japanese</span>'), 1)
+        self.assertEqual(html.count('<span class="card__lang">Japanese<button type="button" class="info"'), 1)
         self.assertEqual(html.count('<span class="card__lang">'), 1)
         # One language at a time: the select shows the choice, and an old link with two keeps the last one.
         response = self.client.get(reverse("web:search"), {"lang": "ja"})
@@ -2466,7 +2466,7 @@ class ProductPageRedesignTests(PageTestCase):
     def test_the_first_screen_runs_name_picture_price_buy_then_compare(self):
         html = self.page(self.etb)
         order = [html.index(marker) for marker in (
-            'class="breadcrumbs"', '<h1 class="product-title">', 'class="product-facts">Elite Trainer Box · English<',
+            'class="breadcrumbs"', '<h1 class="product-title">', 'class="product-facts">Elite Trainer Box<button type="button" class="info"',
             'class="product-media"', 'class="buybox__price"', 'class="buy-now"', 'class="compare-jump"',
             'id="offers-title"',
         )]

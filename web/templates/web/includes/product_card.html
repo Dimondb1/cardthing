@@ -3,7 +3,7 @@
   <div class="card__top">
     <a class="card__image" href="{{ product.get_absolute_url }}" tabindex="-1" aria-hidden="true">{% product_image product "card" %}</a>
     <div class="card__body">
-      {% if product.language_name %}<span class="card__lang">{{ product.language_name }}</span>{% endif %}
+      {% if product.language_name %}<span class="card__lang">{{ product.language_name }}{% info "lang" product.language product.language_name game=product.game.slug %}</span>{% endif %}
       <{{ heading_tag|default:"h2" }} class="card__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></{{ heading_tag|default:"h2" }}>
       <p class="card__meta">{% if not game %}{{ product.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{{ product.type_name }}</p>
       {% if summary.best %}{% include "web/includes/badge.html" %}{% endif %}

@@ -10,7 +10,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from . import discord
-from .models import DailyLowestPrice, DiscordPost, Listing, PreorderOpen, Restock, Retailer
+from .models import DailyLowestPrice, DiscordPost, DiscordSettings, Listing, PreorderOpen, Restock, Retailer
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
 HOOK = "https://discord.example/api/webhooks/1/secret-token"
@@ -44,9 +44,9 @@ class DiscordTests(TestCase):
         return model.objects.create(product=product, retailer=retailer or self.shop, listing=listing,
                                     at=self.now - timedelta(minutes=minutes_ago), price=Decimal("50.00"))
 
-    def run_once(self, **kwargs):
+    def run_once(self, minutes_later=0, **kwargs):
         outbox = kwargs.pop("outbox", None) or Outbox()
-        return discord.run(now=self.now, post=outbox, **kwargs), outbox
+        return discord.run(now=self.now + timedelta(minutes=minutes_later), post=outbox, **kwargs), outbox
 
     def test_nothing_is_posted_until_a_webhook_is_set(self):
         self.restock("Surging Sparks Booster Box")
@@ -79,9 +79,11 @@ class DiscordTests(TestCase):
         self.assertNotIn("Harbour", str(data))
         # A product's name can never ping the server.
         self.assertEqual(data["allowed_mentions"], {"parse": []})
-        self.assertEqual(data["username"], "RipRaptor")
+        # The name the owner gave the webhook in Discord, with RipRaptor's logo.
+        self.assertNotIn("username", data)
+        self.assertTrue(data["avatar_url"].endswith("/static/img/apple-touch-icon.png"))
         # Posted once.
-        self.assertEqual(self.run_once()[1].sent, [])
+        self.assertEqual(self.run_once(minutes_later=10)[1].sent, [])
 
     def test_only_what_is_still_true_and_never_a_marketplace(self):
         self.run_once()   # switch on
@@ -96,12 +98,15 @@ class DiscordTests(TestCase):
 
     def test_a_busy_hour_posts_a_few_a_run_and_the_rest_next_time(self):
         self.run_once()
-        for n in range(discord.PER_RUN + 2):
+        per_post = DiscordSettings.current().per_post
+        for n in range(per_post + 2):
             self.restock(f"Booster Box {n}", minutes_ago=n + 1)
         first = self.run_once()[1]
-        self.assertEqual(len(first.embeds()), discord.PER_RUN)
+        self.assertEqual(len(first.embeds()), per_post)
         self.assertEqual(len(first.sent), 1)   # one message
-        second = self.run_once()[1]
+        # The rest at the next run, ten minutes on (the default how often).
+        self.assertEqual(self.run_once(minutes_later=5)[1].sent, [])
+        second = self.run_once(minutes_later=10)[1]
         self.assertEqual(len(second.embeds()), 2)
 
     def test_too_many_posts_stops_the_run_and_nothing_is_lost(self):
@@ -126,7 +131,7 @@ class DiscordTests(TestCase):
         [embed] = outbox.embeds()
         self.assertEqual(embed["title"], "Price drop: Journey Together Booster Box")
         self.assertTrue(embed["description"].startswith("Now £50.00 delivered, was £60.00 yesterday. Checked at "))
-        self.assertEqual(self.run_once()[1].sent, [])
+        self.assertEqual(self.run_once(minutes_later=10)[1].sent, [])
 
     @override_settings(RIPRAPTOR_DISCORD_WEBHOOK_DROPS=DROPS_HOOK)
     def test_a_set_out_today_goes_to_its_own_channel_from_eight(self):
@@ -161,6 +166,63 @@ class DiscordTests(TestCase):
             call_command("post_discord", "--test", stdout=out)
         self.assertIn("Not posted: Discord answered 404", out.getvalue())
         self.assertNotIn("secret-token", out.getvalue())
+
+    def test_the_owner_chooses_kinds_how_often_how_many_games_and_the_name(self):
+        controls = DiscordSettings.load()
+        controls.restocks, controls.every_minutes, controls.per_post = False, 60, 2
+        controls.name, controls.use_logo = "Raptor News", False
+        controls.save()
+        other = make_game(name="One Piece Card Game", slug="one-piece", short_name="One Piece")
+        controls.games.set([self.game])
+        self.run_once()   # switch on
+        self.restock("Off Kind Booster Box")
+        for n in range(3):
+            self.restock(f"Opening {n}", minutes_ago=n + 1, model=PreorderOpen, availability=Listing.Availability.PREORDER)
+        elsewhere = make_product(make_set(other, name="OP-15", slug="op-15"), name="OP-15 Booster Box")
+        listing = make_listing(elsewhere, self.shop, availability=Listing.Availability.PREORDER)
+        PreorderOpen.objects.create(product=elsewhere, retailer=self.shop, listing=listing, at=self.now, price="99.00")
+        sent, outbox = self.run_once()
+        self.assertNotIn("restock", sent)
+        [(_url, data)] = outbox.sent
+        self.assertEqual([e["title"] for e in data["embeds"]], ["Pre-orders open: Opening 0", "Pre-orders open: Opening 1"])
+        self.assertEqual(data["username"], "Raptor News")
+        self.assertNotIn("avatar_url", data)
+        # Not again until an hour has passed: then the one left over goes.
+        self.assertEqual(self.run_once()[1].sent, [])
+        later = Outbox()
+        discord.run(now=self.now + timedelta(minutes=58), post=later)
+        self.assertEqual([e["title"] for e in later.embeds()], ["Pre-orders open: Opening 2"])
+
+    def test_the_smallest_price_drop_is_the_owners(self):
+        controls = DiscordSettings.load()
+        controls.min_drop_percent = 20
+        controls.save()
+        self.run_once()
+        today = timezone.localdate(self.now)
+        product = make_product(self.set, name="Journey Together Booster Box")
+        make_listing(product, self.shop, price="47.01", delivery="2.99")
+        DailyLowestPrice.objects.create(product=product, date=today - timedelta(days=1), price="60.00")   # 16.7%
+        self.assertEqual(self.run_once()[1].sent, [])
+
+    def test_the_settings_page_opens_on_its_one_row_and_sends_a_test_post(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        page = self.client.get(reverse("admin:catalogue_discordsettings_changelist"))
+        self.assertRedirects(page, reverse("admin:catalogue_discordsettings_change", args=[1]))
+        form = self.client.get(reverse("admin:catalogue_discordsettings_change", args=[1]))
+        self.assertContains(form, "Every 10 minutes")
+        self.assertContains(form, "Send a test post")
+        with mock.patch.object(discord, "send") as send:
+            self.client.post(reverse("admin:catalogue_discordsettings_change", args=[1]), {
+                "restocks": "on", "preorders": "on", "price_drops": "on", "drop_days": "on", "every_minutes": "30",
+                "per_post": "5", "min_drop_percent": "10", "name": "Raptor News", "use_logo": "on", "send_test": "on",
+            })
+        self.assertEqual(send.call_count, 1)
+        self.assertEqual(send.call_args.args[1]["username"], "Raptor News")
+        controls = DiscordSettings.load()
+        self.assertEqual((controls.every_minutes, controls.per_post, controls.min_drop_percent), (30, 5, 10))
 
     def test_the_footer_links_to_the_discord_server(self):
         page = self.client.get("/")

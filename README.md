@@ -2947,14 +2947,25 @@ cron, posts news there (`catalogue/discord.py`):
 - Out today: a set's release day, from 8am UK time, with its cheapest
   offer.
 
+What posts and how often is chosen in admin, under Discord settings (one
+page, which opens straight away): each kind on or off, which games (none
+ticked means every game), the smallest price drop worth a post (5% to
+start), how often (every 10 minutes to once a day: each kind posts at most
+that often, with what happened since in one post), how many products a
+post holds (1 to 10, 8 to start), and the name and picture shown (empty
+uses the name given to the webhook in Discord; the RipRaptor logo is on to
+start). Ticking "Send a test post" and saving posts one hello to each
+channel. Discord posts, beside it, lists what has gone out. The channel's
+address is never in admin: it stays in `.env`.
+
 Each post names the product, the delivered price and when it was checked,
 and links to RipRaptor's page for it (tagged `utm_source=discord`), never
 to the shop: as with the search alert emails, people compare every shop
 on the page. eBay and Amazon never count, nor a price kept out of the
 comparison, nor a restock that has sold out again by the time the post
 would go. Each piece of news posts once (`DiscordPost`), a product at most
-once a day for each kind, and at most 8 of a kind each run, the rest
-following ten minutes later. The first run for a kind posts nothing and
+once a day for each kind; news beyond a post's limit waits for the next.
+The first run for a kind posts nothing and
 only notes what is already there, so switching it on never floods the
 channel with last week. Posts forbid mentions, so a product named
 "@everyone" pings nobody. Wording is in Site wording under `discord.*`.

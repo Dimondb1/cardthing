@@ -4,6 +4,7 @@ from urllib.parse import quote, urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Case, Count, F, Min, Q, Value, When
 from django.db.models.functions import Coalesce
@@ -1111,6 +1112,55 @@ class RemovedShop(models.Model):
     @classmethod
     def forget(cls, retailer):
         cls.matching(retailer.slug, retailer.website).delete()
+
+
+class DiscordSettings(models.Model):
+    """The one row of owner controls for the posts to Discord (catalogue/discord.py), in admin. The channel's
+    webhook address stays in .env: anyone holding it can post, so it is never in the database or admin."""
+
+    EVERY = [(10, "Every 10 minutes"), (30, "Every 30 minutes"), (60, "Every hour"), (180, "Every 3 hours"),
+             (360, "Every 6 hours"), (1440, "Once a day")]
+
+    restocks = models.BooleanField("back in stock", default=True, help_text="A UK shop has a product in stock again.")
+    preorders = models.BooleanField("pre-orders open", default=True, help_text="A UK shop opens pre-orders.")
+    price_drops = models.BooleanField("price drops", default=True,
+                                      help_text="A product's cheapest delivered price falls below yesterday's.")
+    drop_days = models.BooleanField("out today", default=True, help_text="A set's release day, from 8am.")
+    every_minutes = models.PositiveSmallIntegerField(
+        "how often", choices=EVERY, default=10,
+        help_text="Each kind posts at most this often, with what happened since in one post. Restocks still in "
+                  "stock and pre-orders still open are kept for the next post; older news is left out.",
+    )
+    per_post = models.PositiveSmallIntegerField(
+        "products per post", default=8, validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text="1 to 10, newest first. More than that wait for the next post.",
+    )
+    min_drop_percent = models.PositiveSmallIntegerField(
+        "smallest price drop (%)", default=5, validators=[MinValueValidator(1), MaxValueValidator(50)],
+        help_text="How far below yesterday's cheapest delivered price a price must fall to be posted.",
+    )
+    games = models.ManyToManyField(Game, blank=True, related_name="+",
+                                   help_text="Only these games. None chosen means every game.")
+    name = models.CharField("name shown", max_length=80, blank=True,
+                            help_text="Empty: the name you gave the webhook in Discord.")
+    use_logo = models.BooleanField("RipRaptor logo as the picture", default=True,
+                                   help_text="Off: the picture you gave the webhook in Discord.")
+
+    class Meta:
+        verbose_name = "Discord setting"
+        verbose_name_plural = "Discord settings"
+
+    def __str__(self):
+        return "Discord posts"
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    @classmethod
+    def current(cls):
+        """The row, or the defaults unsaved: a run that only reads it never writes."""
+        return cls.objects.filter(pk=1).first() or cls(pk=1)
 
 
 class DiscordPost(models.Model):

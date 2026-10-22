@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin, messages
 from django.db import models
 from django.db.models import Count
@@ -6,7 +7,7 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    ClaudeAsk, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    ClaudeAsk, DiscordPost, DiscordSettings, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, RemovedShop, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -542,6 +543,85 @@ class ReferralSettingsAdmin(admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
         referrals.refresh_flag(obj)
+
+
+class DiscordSettingsForm(forms.ModelForm):
+    send_test = forms.BooleanField(
+        label="Send a test post", required=False,
+        help_text="Tick and save to post one hello to each channel, with the name and picture above.",
+    )
+
+    class Meta:
+        model = DiscordSettings
+        fields = "__all__"
+        widgets = {"games": forms.CheckboxSelectMultiple}   # tick boxes: a phone can use them
+
+
+@admin.register(DiscordSettings)
+class DiscordSettingsAdmin(admin.ModelAdmin):
+    """What RipRaptor posts to the owner's Discord and how often (catalogue/discord.py). The list goes straight
+    to the one row. The channel's address is in .env, never here."""
+
+    form = DiscordSettingsForm
+    fieldsets = (
+        (None, {"fields": ("summary",)}),
+        ("What to post", {"fields": ("restocks", "preorders", "price_drops", "drop_days", "games", "min_drop_percent")}),
+        ("How often", {"fields": ("every_minutes", "per_post")}),
+        ("How it looks", {"fields": ("name", "use_logo", "send_test")}),
+    )
+    readonly_fields = ("summary",)
+
+    def has_add_permission(self, request):
+        return False   # the list opens the one row, made on first use
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        row = DiscordSettings.load()
+        return HttpResponseRedirect(reverse("admin:catalogue_discordsettings_change", args=[row.pk]))
+
+    @admin.display(description="Now")
+    def summary(self, obj):
+        from . import discord
+
+        if not discord.webhooks():
+            return "No Discord channel is set up: RIPRAPTOR_DISCORD_WEBHOOK is not in the server's .env, so nothing posts."
+        last = (DiscordPost.objects.exclude(kind=discord.NOTED).order_by("-posted_at")
+                .values_list("posted_at", flat=True).first())
+        when = f"Last post {timezone.localtime(last):%d %b %H:%M}." if last else "Nothing posted yet."
+        return f"Posting to {len(discord.webhooks())} Discord channel(s), checked every 10 minutes. {when}"
+
+    def save_model(self, request, obj, form, change):
+        from . import discord
+
+        super().save_model(request, obj, form, change)
+        if form.cleaned_data.get("send_test"):
+            try:
+                count = discord.test()
+            except discord.DiscordError as exc:
+                self.message_user(request, f"Test not posted: {exc}. Check the webhook address in .env.", messages.ERROR)
+            else:
+                self.message_user(request, f"Test posted to {count} Discord channel(s)." if count
+                                  else "No Discord channel is set up in .env, so nothing was posted.")
+
+
+@admin.register(DiscordPost)
+class DiscordPostAdmin(admin.ModelAdmin):
+    """What has been posted to Discord, newest first, so each piece of news goes once. Read only."""
+
+    list_display = ("key", "kind", "posted_at")
+    list_filter = ("kind",)
+    search_fields = ("key",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Referrer)

@@ -2154,6 +2154,18 @@ only one set fits (`catalogue/releases.py`, Filing products under sets):
   its words are matched, so "Unleashed RB 03 English Booster Pack" files under
   Unleashed by its name.
 
+**Korean sets** (Pokémon, `releases.KOREAN_MIRRORS`). Korean Pokémon sets are
+the Japanese sets, printed in Korean and released in Korea later, under the
+same names and codes. No release source lists them, and a Korean product never
+files under the Japanese set (its date is Japan's), so Korean products had no
+set and a Korean list offered none. Now a Korean product that names a
+Japanese set the site has, by code or by name ("25th Anniversary Collection
+s8a Korean Booster Box"), files under that set's Korean twin, added with the
+first one: "25th Anniversary Collection (Korean)", the Japanese code, and no
+release date, since Korea's is not Japan's and nothing says what it is. You
+can give one a date in Admin. English sources never take a twin as the set
+they speak of. The hourly tidy files them.
+
 **The back catalogue.** Every set a release source lists is recorded, the
 old ones too. A set released before the radar's 180 days becomes a set only
 when a product on the site names it by those rules, with its source's date
@@ -2902,7 +2914,8 @@ ending in "All sets" when it has more, which opens the game's whole list on
 the Games page (`/games/#game-<slug>`: the Games page shows a game's 8 newest
 sets and keeps the rest in the page, shown by CSS once the address names that
 game, so it needs no script). The chips follow the language and type chosen:
-with Korean picked, only sets with Korean products show. Each chip keeps the
+with Korean picked, only sets with Korean products show (Korean Pokémon
+products file under Korean twins of the Japanese sets, see Korean sets). Each chip keeps the
 language, type and sort in its link, so the set page opens on what the
 visitor was looking for; not the price band or 2+ shops, which could leave
 that page empty. A set page lists no other sets; under its

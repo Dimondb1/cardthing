@@ -1894,11 +1894,17 @@ def attach_sets(game, product_ids=None, now=None):
     products = Product.objects.filter(game=game, product_set__isnull=True)
     if product_ids is not None:
         products = products.filter(pk__in=product_ids)
+    mirrors = korean_mirror_rules(game.slug, rules)
     moves = defaultdict(list)
+    korean = defaultdict(list)   # a Japanese set's pk -> the Korean products that name it
     for pk, name in products.values_list("pk", "name"):
         chosen = choose_set(name, rules, game.slug)
         if chosen is not None:
             moves[chosen].append(pk)
+        elif mirrors and languages.language_of(name, game.slug) == languages.KOREAN:
+            japanese = choose_set(name, mirrors, game.slug)
+            if japanese is not None:
+                korean[japanese].append(pk)
     cutoff = recent_cutoff(today)
     moved = 0
     for set_pk, pks in moves.items():
@@ -1914,11 +1920,61 @@ def attach_sets(game, product_ids=None, now=None):
             logger.info("Filed %s %s product%s under set %s: %s", filed, game.slug, "" if filed == 1 else "s", set_pk,
                         ", ".join(str(pk) for pk in pks[:20]))
         moved += filed
+    for japanese_pk, pks in korean.items():
+        twin = korean_twin(game, japanese_pk)
+        if twin is None:
+            continue
+        filed = Product.objects.filter(pk__in=pks, product_set__isnull=True).update(product_set=twin, updated_at=now)
+        if filed:
+            logger.info("Filed %s Korean %s product%s under %s", filed, game.slug, "" if filed == 1 else "s", twin.name)
+        moved += filed
     if moved:
         from .signals import clear_list_caches
 
         clear_list_caches(force=True)
     return moved
+
+
+# Korean sets. Korean Pokémon products are the Japanese sets, printed in Korean and released in Korea later, under
+# the same names and codes ("25th Anniversary Collection s8a Korean Booster Box"). No release source lists Korean
+# sets, and a Korean product never files under the Japanese set (choose_set: its date is Japan's), so without this
+# a Korean product has no set and a Korean list offers no sets. A Korean product that names a Japanese set the site
+# has files under that set's Korean twin, added when the first one does: the Japanese set's name with "(Korean)"
+# and its code, and no release date, since Korea's is not Japan's and nothing here says what it is.
+KOREAN_MIRRORS = {"pokemon"}
+JAPANESE_IN_NAME = re.compile(r"[(\[]\s*(?:japanese|japan|jpn?)\s*[)\]]|(?<![\w-])(?:japanese|jpn)(?![\w-])", re.I)
+
+
+def korean_mirror_rules(game_slug, rules):
+    """The game's Japanese set rules, read as if Korean (for choose_set on a Korean name), or []."""
+    if game_slug not in KOREAN_MIRRORS:
+        return []
+    return [rule._replace(language=languages.KOREAN) for rule in rules
+            if rule.language == languages.JAPANESE and not isinstance(rule.pk, tuple)]
+
+
+def korean_twin_name(japanese_name):
+    """'Terastal Festival ex (Japanese)' -> 'Terastal Festival ex (Korean)'."""
+    return f"{' '.join(JAPANESE_IN_NAME.sub(' ', japanese_name).split())} (Korean)"
+
+
+def korean_twin(game, japanese_pk):
+    """The Korean twin of the game's Japanese set ``japanese_pk``, added when there is none. None if its name
+    would not read as Korean."""
+    japanese = ProductSet.objects.filter(pk=japanese_pk, game=game).first()
+    if japanese is None:
+        return None
+    name = korean_twin_name(japanese.name)
+    if len(name) > ProductSet._meta.get_field("name").max_length:
+        return None
+    if languages.language_of(f"{name} {japanese.code}", game.slug) != languages.KOREAN:
+        return None
+    key = name_key(name)
+    twin = ProductSet.objects.filter(game=game, slug=key).first()
+    if twin is None:
+        twin = ProductSet.objects.create(game=game, name=name, slug=key, code=japanese.code)
+        logger.info("Added Korean %s set %s, the twin of %s", game.slug, name, japanese.name)
+    return twin
 
 
 def attach_all():

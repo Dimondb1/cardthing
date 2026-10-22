@@ -89,6 +89,58 @@ class CodeTests(TestCase):
         self.assertEqual(set_of(filed), old)
 
 
+class KoreanSetTests(TestCase):
+    """The owner's case: with Korean picked, Pokémon's page offered no sets, because a Korean product never files
+    under the Japanese set it is a printing of, and no source lists Korean sets."""
+
+    def setUp(self):
+        self.pokemon = make_game()
+        self.anniversary = make_set(self.pokemon, name="25th Anniversary Collection (Japanese)",
+                                    slug="25th-anniversary-collection-japanese", code="s8a",
+                                    release_date=date(2021, 10, 22))
+        self.terastal = make_set(self.pokemon, name="Terastal Festival ex (Japanese)",
+                                 slug="terastal-festival-ex-japanese", code="sv8a")
+        self.english = make_set(self.pokemon, name="Surging Sparks", slug="surging-sparks", code="SV08")
+
+    def test_a_korean_product_files_under_the_korean_twin_of_its_japanese_set(self):
+        boxes = [product(self.pokemon, name) for name in (
+            "25th Anniversary Collection s8a Korean Booster Box", "Pokemon TCG Korean s8a Booster Pack")]
+        by_name = product(self.pokemon, "Pokemon Korean Terastal Festival ex Booster Box")
+        japanese = product(self.pokemon, "25th Anniversary Collection s8a Japanese Booster Box")
+        unknown = product(self.pokemon, "Pokemon Korean Mystery Box")
+        self.assertEqual(boxes[0].language, "ko")
+        self.assertEqual(releases.attach_sets(self.pokemon), 4)
+        twin = set_of(boxes[0])
+        self.assertEqual((twin.name, twin.code, twin.release_date), ("25th Anniversary Collection (Korean)", "s8a", None))
+        self.assertEqual(set_of(boxes[1]), twin)
+        self.assertEqual(set_of(by_name).name, "Terastal Festival ex (Korean)")
+        self.assertEqual(set_of(japanese), self.anniversary)
+        self.assertIsNone(set_of(unknown))
+        # A Korean product added later files straight under the twin, by its code, and no second twin is added.
+        later = product(self.pokemon, "s8a Korean Booster Box")
+        releases.attach_sets(self.pokemon, product_ids=[later.pk])
+        self.assertEqual(set_of(later), twin)
+        self.assertEqual(ProductSet.objects.filter(name__endswith="(Korean)").count(), 2)
+        # English sources never take the twin as the set they speak of, though it shares the Japanese code.
+        self.assertIsNone(releases.find_set(self.pokemon, "Something New", "s8a"))
+
+    def test_only_games_whose_korean_sets_are_the_japanese_ones(self):
+        lorcana = make_game(name="Disney Lorcana", slug="lorcana")
+        make_set(lorcana, name="The First Chapter (Japanese)", slug="the-first-chapter-japanese", code="TFC")
+        korean = product(lorcana, "The First Chapter Korean Booster Box")
+        releases.attach_sets(lorcana)
+        self.assertIsNone(set_of(korean))
+        self.assertEqual(releases.korean_twin_name("[JP] Battle Partners"), "Battle Partners (Korean)")
+        self.assertEqual(releases.korean_twin_name("Japanese Paradise Dragona"), "Paradise Dragona (Korean)")
+
+    def test_the_game_page_offers_korean_sets_with_korean_picked(self):
+        product(self.pokemon, "25th Anniversary Collection s8a Korean Booster Box")
+        releases.attach_sets(self.pokemon)
+        response = self.client.get("/games/pokemon/?lang=ko")
+        self.assertContains(response, ">25th Anniversary Collection (Korean)</a>")
+        self.assertNotContains(response, ">25th Anniversary Collection (Japanese)</a>")
+
+
 class NameTests(TestCase):
     def setUp(self):
         self.rift = make_game(name="Riftbound", slug="riftbound")

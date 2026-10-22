@@ -3049,14 +3049,18 @@ months. It is the same alert (`StockAlert` with `max_price` and
 `watch_days`), confirmed by email the same way, and one address can wait
 on 30 products across both kinds. A price that is not below the cheapest
 in stock now (at a shop, delivery known) is turned back, since the email
-would go at once. `send_stock_alerts` sends it once when a shop (not eBay
-or Amazon) has the product in stock for that price or less with its
-delivery known ("Under your price: <product>, £x delivered"). Like the
+would go at once. `send_stock_alerts` sends it once when a shop or eBay
+has the product in stock for that price or less with its delivery known
+("Under your price: <product>, £x delivered"). eBay counts at your request
+(its listings are new, buy it now, UK sellers with good feedback); Amazon
+never does, since its Associates rules forbid price alerts on its prices
+(`alerts.NOT_PRICE_ALERTED`). Like the
 search alerts, the email names the price and links to the product page,
 never the shop. The alert is deleted after that email, or unsent when its
 time is up (counted from the confirmation). Insights counts those as
-"expired". While no shop has the product, the back-in-stock form shows
-instead and Track price does not.
+"expired". While no shop has the product, the back-in-stock form shows;
+Track price shows beside it only when eBay has it in stock with a known
+delivery cost.
 
 ## Share on product pages
 

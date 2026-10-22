@@ -5,8 +5,8 @@ An alert asked for since settings.RIPRAPTOR_PREORDER_ALERTS_FROM is also sent, o
 pre-orders and no shop has the product in stock; that one email ends it like any other.
 
 A price alert (Track price on the product page) has a price and a time to keep looking: it is sent once
-when a shop has the product in stock for that price or less delivered, and deleted unsent when the time is
-up. Its email names the price and RipRaptor's page, never the shop.
+when a shop or eBay (never Amazon) has the product in stock for that price or less delivered, and deleted
+unsent when the time is up. Its email names the price and RipRaptor's page, never the shop.
 """
 
 from datetime import timedelta
@@ -25,6 +25,10 @@ from .manage_alerts import mail_link
 from .models import DailyPageView, Listing, Retailer, StockAlert
 
 MARKETPLACES = (Retailer.Source.AMAZON, Retailer.Source.EBAY)
+# A price alert follows eBay's price too (new, buy it now, UK sellers with good feedback: catalogue/ebay.py), at the
+# owner's request, but never Amazon's: Amazon's UK Associates policies forbid price alerting on its prices without
+# its written agreement (README, Amazon Associates rules). Back in stock still means a shop, not a marketplace.
+NOT_PRICE_ALERTED = (Retailer.Source.AMAZON,)
 MAX_PER_EMAIL = 30
 UNCONFIRMED_DAYS = 7
 CONFIRMED_DAYS = 183
@@ -85,12 +89,13 @@ def shop_stock(product, allow_preorder=False):
 
 
 def price_listing(product):
-    """The listing a price alert compares with: the cheapest in stock at a shop (never a marketplace) whose
-    delivery is known, so its delivered price is the whole price. None when there is none. One query."""
+    """The listing a price alert compares with: the cheapest in stock at a shop or on eBay (never Amazon,
+    NOT_PRICE_ALERTED) whose delivery is known, so its delivered price is the whole price. None when there is
+    none. One query."""
     return (
         Listing.objects.filter(product=product).buyable()
         .filter(availability=Listing.Availability.IN_STOCK, delivery_known=True)
-        .exclude(retailer__source_type__in=MARKETPLACES)
+        .exclude(retailer__source_type__in=NOT_PRICE_ALERTED)
         .order_by("delivered_price").first()
     )
 

@@ -1070,7 +1070,7 @@ def product_detail(request, slug):
     # What a price alert compares with (alerts.price_listing), from the listings already in hand.
     track_listing = min(
         (l for l in current if l.availability == Listing.Availability.IN_STOCK and l.delivery_known
-         and l.retailer.source_type not in alerts.MARKETPLACES),
+         and l.retailer.source_type not in alerts.NOT_PRICE_ALERTED),
         key=lambda l: l.delivered_price, default=None,
     )
 
@@ -1227,8 +1227,9 @@ def product_detail(request, slug):
             "alerts_on": alerts_on,
             "alerts_preorder": alerts_preorder,
             "alert_state": request.GET.get("alert") if request.GET.get("alert") in ALERT_STATES else "",
-            # Track price: a price alert, next to Save wherever the back-in-stock form is not shown.
-            "track_on": mail.enabled() and bool(current) and not alerts_on,
+            # Track price: a price alert, next to Save wherever the back-in-stock form is not shown, and beside it
+            # when only eBay has it in stock: a price alert follows eBay's price (alerts.NOT_PRICE_ALERTED).
+            "track_on": mail.enabled() and bool(current) and (not alerts_on or track_listing is not None),
             "track_now": track_listing.delivered_price if track_listing else None,
             "track_days": alerts.TRACK_DAYS,
             "track_default": alerts.TRACK_DEFAULT_DAYS,

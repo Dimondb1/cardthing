@@ -426,6 +426,17 @@ class TrackPriceTests(TestCase):
         page = self.client.get(self.product.get_absolute_url())
         self.assertNotContains(page, 'href="#track"')
         self.assertContains(page, "Email me when it is back in stock")
+        # The owner's case: only eBay has it. Track price follows eBay's price, beside the back-in-stock form.
+        ebay = make_listing(self.product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="10.48",
+                            delivery="2.70")
+        page = self.client.get(self.product.get_absolute_url())
+        self.assertContains(page, 'href="#track" aria-controls="track" data-panel-open>Track price')
+        self.assertContains(page, "It is £13.18 delivered now.")
+        self.assertContains(page, "Email me when it is back in stock")
+        # Only Amazon: never a price alert on Amazon's price (its Associates rules).
+        Listing.objects.filter(pk=ebay.pk).update(retailer=make_retailer("Amazon", source_type=Retailer.Source.AMAZON))
+        self.assertNotContains(self.client.get(self.product.get_absolute_url()), 'href="#track"')
+        Listing.objects.filter(pk=ebay.pk).delete()
         with self.settings(RIPRAPTOR_ZEPTOMAIL_TOKEN=""):
             Listing.objects.filter(pk=self.listing.pk).update(availability="in_stock")
             self.assertNotContains(self.client.get(self.product.get_absolute_url()), 'href="#track"')
@@ -469,11 +480,11 @@ class TrackPriceTests(TestCase):
     def test_one_email_when_a_shop_has_it_at_or_under_the_price_without_naming_the_shop(self):
         alert = self.confirmed()
         self.assertEqual(alerts.send_due(), (0, 0))   # £7.98, over £6.50
-        # Under the price but delivery not known, or only on eBay: not yet.
+        # Under the price but delivery not known, or only on Amazon: not yet.
         dear = make_retailer("Mystery Shop")
         unknown = make_listing(self.product, dear, price="3.00", availability="in_stock")
         Listing.objects.filter(pk=unknown.pk).update(delivery_known=False, delivered_price="3.00")
-        make_listing(self.product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="2.00", delivery="0.00")
+        make_listing(self.product, make_retailer("Amazon", source_type=Retailer.Source.AMAZON), price="2.00", delivery="0.00")
         self.assertEqual(alerts.send_due(), (0, 0))
         Listing.objects.filter(pk=self.listing.pk).update(price="3.50", delivered_price="6.49", last_checked=timezone.now())
         self.assertEqual(alerts.send_due(), (1, 0))
@@ -484,6 +495,19 @@ class TrackPriceTests(TestCase):
         for part in ("text", "html", "subject"):
             self.assertNotIn("Harbour Games", message[part])
         self.assertFalse(StockAlert.objects.filter(pk=alert.pk).exists())
+
+    def test_ebay_at_or_under_the_price_sends_it_without_naming_ebay(self):
+        # The owner: "I track the price of that even when it's on eBay".
+        self.confirmed(price="6.50")
+        make_listing(self.product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="6.50", delivery="0.00")
+        self.assertEqual(alerts.send_due(), (1, 0))
+        message = self.outbox.sent[0]
+        self.assertEqual(message["subject"], "Under your price: 30th Celebration Booster Pack, £6.50 delivered")
+        for part in ("text", "html", "subject"):
+            self.assertNotIn("eBay", message[part])
+        # And a price already met on eBay is turned back, as at a shop.
+        self.assertRedirects(self.track(price="7.00"), f"{self.product.get_absolute_url()}?track=under#track",
+                             fetch_redirect_response=False)
 
     def test_the_alert_is_deleted_unsent_when_its_time_is_up(self):
         alert = self.confirmed(**{"for": "7"})

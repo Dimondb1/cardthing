@@ -15,7 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from catalogue import alerts, mail, manage_alerts
+from catalogue import alerts, drop_alerts, mail, manage_alerts, search_alerts
 from catalogue.models import (
     DailyPageView, DropAlert, Listing, Product, Release, SearchAlert, SearchAlertSent, StockAlert,
 )
@@ -428,6 +428,94 @@ class StopTests(AlertsData):
         self.assertContains(self.client.get(self.manage_url(" BEN@Example.com ")), "Every alert for ben@example.com.")
         self.client.post(self.manage_url("Ben@Example.com"), {"stop": "all"})
         self.assertEqual(self.left("ben@example.com"), 0)
+
+
+# The link at the foot of every alert email -------------------------------------------------------
+
+@override_settings(**MAIL_ON)
+class EmailLinkTests(AlertsData):
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch("catalogue.mail.send")
+        self.send = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def assert_manage_link(self, call, email="ben@example.com"):
+        to, subject, text, html = call.args
+        self.assertEqual(to, email)
+        self.assertIn("Manage all your alerts", text)
+        self.assertIn("Manage all your alerts</a>", html)
+        token = tokens_in(text)[0]
+        self.assertEqual(tokens_in(html), [token])
+        self.assertIn(f"https://ripraptor.com/alerts/manage/{token}/", html)
+        self.assertEqual(manage_alerts.email_for(token), email)
+        # A week's link, not an hour's.
+        with mock.patch("django.core.signing.time.time", return_value=time.time() + 6 * 86400):
+            self.assertEqual(manage_alerts.email_for(token), email)
+        # The stop link is still there.
+        self.assertIn("/alerts/stop/", text)
+        self.assertIn("/alerts/stop/", html)
+
+    def test_back_in_stock_confirmation_and_email(self):
+        alerts.ask(self.bundle, "Ben@Example.com")
+        self.assert_manage_link(self.send.call_args)
+        StockAlert.objects.update(confirmed_at=timezone.now())
+        Listing.objects.filter(product=self.bundle).update(availability="in_stock", last_checked=timezone.now())
+        self.send.reset_mock()
+        self.assertEqual(alerts.send_due(), (1, 0))
+        call = self.send.call_args
+        self.assertEqual(call.args[1], "Back in stock: Ascended Heroes Booster Bundle")
+        self.assertIn("Manage all your alerts", call.args[2])
+        self.assertEqual(manage_alerts.email_for(tokens_in(call.args[2])[0]), "ben@example.com")
+
+    def test_track_price_confirmation_and_email(self):
+        make_listing(self.etb, self.shop, price="60.00", delivery="0.00")
+        alerts.ask(self.etb, "ben@example.com", max_price=Decimal("50.00"), days=30)
+        self.assert_manage_link(self.send.call_args)
+        StockAlert.objects.update(confirmed_at=timezone.now())
+        Listing.objects.filter(product=self.etb).update(price=Decimal("45.00"), last_checked=timezone.now())
+        self.send.reset_mock()
+        self.assertEqual(alerts.send_due(), (1, 0))
+        self.assertTrue(self.send.call_args.args[1].startswith("Under your price"))
+        self.assertIn("Manage all your alerts", self.send.call_args.args[2])
+        self.assertIn("Manage all your alerts</a>", self.send.call_args.args[3])
+
+    def test_drop_reminder_confirmation_and_email(self):
+        drop_alerts.ask(self.dated, "ben@example.com")
+        self.assert_manage_link(self.send.call_args)
+        alert = DropAlert.objects.get()
+        alert.confirmed_at = timezone.now()
+        subject, text, html, stop_url = drop_alerts.stage_mail(alert, drop_alerts.EVE, [], {})
+        self.assertIn("Manage all your alerts", text)
+        self.assertIn("Manage all your alerts</a>", html)
+        self.assertEqual(manage_alerts.email_for(tokens_in(text)[0]), "ben@example.com")
+
+    def test_search_alert_confirmation_and_email(self):
+        search_alerts.ask("ben@example.com", self.game, Product.Type.BOOSTER_BOX)
+        self.assert_manage_link(self.send.call_args)
+        SearchAlert.objects.update(confirmed_at=timezone.now() - timedelta(days=1))
+        make_listing(self.box, self.shop, price="120.00", delivery="0.00")
+        self.send.reset_mock()
+        self.assertEqual(search_alerts.send_due(), (1, 0))
+        self.assert_manage_link(self.send.call_args)
+
+    def test_every_alert_email_template_carries_it_and_others_do_not(self):
+        listing = make_listing(self.box, self.shop, price="120.00")
+        context = {"product": self.box, "listing": listing, "max_price": Decimal("130.00"), "product_url": "u",
+                   "stop_url": "https://ripraptor.com/alerts/stop/x/", "values": {"set": "S", "site_name": "RipRaptor"},
+                   "product_set": self.dated, "items": [], "offers": [], "stage": "eve",
+                   "manage_url": "https://ripraptor.com/alerts/manage/TOKEN/"}
+        for template in ("confirm", "back_in_stock", "price_drop", "preorder_open", "drop_confirm", "drop_reminder",
+                         "search_confirm", "search_match"):
+            text, html = alerts.render_mail(template, dict(context), {})
+            with self.subTest(template=template):
+                self.assertIn("Manage all your alerts: https://ripraptor.com/alerts/manage/TOKEN/", text)
+                self.assertIn('<a href="https://ripraptor.com/alerts/manage/TOKEN/" style="color:#cc4410;">Manage all your alerts</a>', html)
+                self.assertNotIn("—", text + html)
+        # Emails that are not alerts have no such link.
+        text, html = alerts.render_mail("test", {"subject": "Test"}, {})
+        self.assertNotIn("Manage all your alerts", text + html)
+        self.assertIn(">Unsubscribe</a>", html)
 
 
 # The terms and the house style ----------------------------------------------------------------------

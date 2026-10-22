@@ -53,6 +53,7 @@ from . import insights, languages, mail
 from .alerts import absolute
 from .drop_alerts import counted, render_mail
 from .images import EMAIL_WIDTH, sized_image_url
+from .manage_alerts import mail_link
 from .models import DailyPageView, Listing, Product, Retailer, SearchAlert, SearchAlertSent
 from .ordering import apply_languages
 from .types import type_label
@@ -193,6 +194,7 @@ def ask(email, game, product_type="", language="", max_price=None, now=None):
         "values": values,
         "confirm_url": link("web:search_alert_confirm", alert.token),
         "stop_url": stop_url,
+        "manage_url": mail_link(email),
     }, store)
     mail.send(email, subject, text, html, unsubscribe=stop_url)
     SearchAlert.objects.filter(pk=alert.pk).update(confirm_sent_at=now)
@@ -354,6 +356,7 @@ def match_mail(alert, items, more, store):
         "more": more,
         "more_url": list_url(alert),
         "stop_url": stop_url,
+        "manage_url": mail_link(alert.email),
     }, store)
     return subject, text, html, stop_url
 

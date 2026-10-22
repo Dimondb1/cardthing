@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 from django.contrib import admin, messages
 from django.db import models
@@ -7,7 +9,7 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    ClaudeAsk, DiscordPost, DiscordSettings, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, RemovedShop, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -545,55 +547,79 @@ class ReferralSettingsAdmin(admin.ModelAdmin):
         referrals.refresh_flag(obj)
 
 
-class DiscordSettingsForm(forms.ModelForm):
+# A Discord webhook's address: https://discord.com/api/webhooks/<id>/<token> (older ones say discordapp.com).
+DISCORD_WEBHOOK = re.compile(r"^https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[\w-]+$")
+
+
+class DiscordChannelForm(forms.ModelForm):
+    """The webhook address is typed as a password: never shown again once saved, and an empty box keeps it."""
+
+    webhook_url = forms.CharField(
+        label="Webhook address", required=False, widget=forms.PasswordInput(render_value=False),
+        help_text="In Discord: Edit Channel, Integrations, Webhooks, New Webhook, Copy Webhook URL. Paste it here. "
+                  "Leave empty to keep the one saved.",
+    )
     send_test = forms.BooleanField(
         label="Send a test post", required=False,
-        help_text="Tick and save to post one hello to each channel, with the name and picture above.",
+        help_text="Tick and save to post one hello to this channel, with the name and picture above.",
     )
 
     class Meta:
-        model = DiscordSettings
+        model = DiscordChannel
         fields = "__all__"
         widgets = {"games": forms.CheckboxSelectMultiple}   # tick boxes: a phone can use them
 
+    def clean_webhook_url(self):
+        typed = self.cleaned_data.get("webhook_url", "").strip()
+        if not typed:
+            if not self.instance.webhook_url:
+                raise forms.ValidationError("Paste the channel's webhook address from Discord.")
+            return self.instance.webhook_url
+        if not DISCORD_WEBHOOK.match(typed):
+            raise forms.ValidationError("That is not a Discord webhook address. It starts https://discord.com/api/webhooks/")
+        return typed
 
-@admin.register(DiscordSettings)
-class DiscordSettingsAdmin(admin.ModelAdmin):
-    """What RipRaptor posts to the owner's Discord and how often (catalogue/discord.py). The list goes straight
-    to the one row. The channel's address is in .env, never here."""
+    def clean(self):
+        cleaned = super().clean()
+        if not any(cleaned.get(name) for name in ("restocks", "preorders", "price_drops", "drop_days")):
+            raise forms.ValidationError("Tick at least one update for this channel.")
+        return cleaned
 
-    form = DiscordSettingsForm
+
+@admin.register(DiscordChannel)
+class DiscordChannelAdmin(admin.ModelAdmin):
+    """The channels RipRaptor posts to on the owner's Discord (catalogue/discord.py), one page each: its webhook,
+    which updates and games, how often, and how its posts look."""
+
+    form = DiscordChannelForm
+    list_display = ("label", "updates", "every_minutes", "is_active", "last_post")
+    list_filter = ("is_active",)
     fieldsets = (
-        (None, {"fields": ("summary",)}),
-        ("What to post", {"fields": ("restocks", "preorders", "price_drops", "drop_days", "games", "min_drop_percent")}),
+        (None, {"fields": ("label", "webhook_url", "webhook_saved", "is_active")}),
+        ("Updates for this channel", {"fields": ("restocks", "preorders", "price_drops", "drop_days", "games",
+                                                 "min_drop_percent")}),
         ("How often", {"fields": ("every_minutes", "per_post")}),
-        ("How it looks", {"fields": ("name", "use_logo", "send_test")}),
+        ("How it looks", {"fields": ("username", "use_logo", "send_test")}),
     )
-    readonly_fields = ("summary",)
+    readonly_fields = ("webhook_saved",)
 
-    def has_add_permission(self, request):
-        return False   # the list opens the one row, made on first use
+    @admin.display(description="Saved webhook")
+    def webhook_saved(self, obj):
+        return obj.webhook_hint if obj and obj.pk else "not set"
 
-    def has_delete_permission(self, request, obj=None):
-        return False
+    @admin.display(description="Updates")
+    def updates(self, obj):
+        names = [label for field, label in (("restocks", "Back in stock"), ("preorders", "Pre-orders"),
+                                            ("price_drops", "Price drops"), ("drop_days", "Out today"))
+                 if getattr(obj, field)]
+        return ", ".join(names) or "None"
 
-    def changelist_view(self, request, extra_context=None):
-        from django.http import HttpResponseRedirect
-        from django.urls import reverse
-
-        row = DiscordSettings.load()
-        return HttpResponseRedirect(reverse("admin:catalogue_discordsettings_change", args=[row.pk]))
-
-    @admin.display(description="Now")
-    def summary(self, obj):
+    @admin.display(description="Last post")
+    def last_post(self, obj):
         from . import discord
 
-        if not discord.webhooks():
-            return "No Discord channel is set up: RIPRAPTOR_DISCORD_WEBHOOK is not in the server's .env, so nothing posts."
-        last = (DiscordPost.objects.exclude(kind=discord.NOTED).order_by("-posted_at")
-                .values_list("posted_at", flat=True).first())
-        when = f"Last post {timezone.localtime(last):%d %b %H:%M}." if last else "Nothing posted yet."
-        return f"Posting to {len(discord.webhooks())} Discord channel(s), checked every 10 minutes. {when}"
+        last = obj.posts.exclude(kind=discord.NOTED).order_by("-posted_at").values_list("posted_at", flat=True).first()
+        return timezone.localtime(last).strftime("%d %b %H:%M") if last else "Nothing yet"
 
     def save_model(self, request, obj, form, change):
         from . import discord
@@ -601,12 +627,11 @@ class DiscordSettingsAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         if form.cleaned_data.get("send_test"):
             try:
-                count = discord.test()
+                discord.test(channels_to=[obj])
             except discord.DiscordError as exc:
-                self.message_user(request, f"Test not posted: {exc}. Check the webhook address in .env.", messages.ERROR)
+                self.message_user(request, f"Test not posted: {exc}. Check the webhook address.", messages.ERROR)
             else:
-                self.message_user(request, f"Test posted to {count} Discord channel(s)." if count
-                                  else "No Discord channel is set up in .env, so nothing was posted.")
+                self.message_user(request, f"Test posted to {obj.label}.")
 
 
 @admin.register(DiscordPost)

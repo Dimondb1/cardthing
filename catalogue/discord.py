@@ -4,18 +4,19 @@ Posts to the owner's Discord server: products back in stock, pre-orders opening,
     python manage.py post_discord           # what cron runs every ten minutes
     python manage.py post_discord --test    # one hello to each channel set up
 
-Each kind goes to a channel's webhook: settings.RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS (restocks and pre-orders
-opening), _PRICE_DROPS and _DROPS (sets out today), each falling back to RIPRAPTOR_DISCORD_WEBHOOK; a kind with
-no address posts nothing. A post names the product, its delivered price and when it was checked, and links to
-RipRaptor's page for it (utm_source=discord), never to the shop: as with the search alert emails, people compare
-every shop on the page. Marketplaces never count, nor a price kept out of the comparison.
+Each channel is set up in admin (DiscordChannel): its webhook address, which updates and games it gets, the
+smallest price drop worth a post, how often it posts (each update at most once in that time, with what
+happened since in one post), how many products a post holds, and the name and picture shown. Until the first
+channel is added there, a webhook address in .env (RIPRAPTOR_DISCORD_WEBHOOK) gets every update with the
+defaults.
 
-The owner chooses in admin (DiscordSettings) which kinds post, how often (each kind at most once in that
-time, with what happened since in one post), how many products a post holds, the smallest price drop worth a
-post, which games, and the name and picture shown. Each piece of news is posted once (DiscordPost keeps its
-key), a product at most once a day for each kind. The first run for a kind posts nothing and only notes what
-is there already, so turning a channel on never floods it with the week before. Product names never ping
-anyone: every post forbids mentions. A webhook's address is never printed or logged.
+A post names the product, its delivered price and when it was checked, and links to RipRaptor's page for it
+(utm_source=discord), never to the shop: as with the search alert emails, people compare every shop on the
+page. Marketplaces never count, nor a price kept out of the comparison. Each piece of news is posted once to a
+channel (DiscordPost keeps its key), a product at most once a day for each update. A channel's first run for an
+update posts nothing and only notes what is there already, so setting one up never floods it with the week
+before. Product names never ping anyone: every post forbids mentions. A webhook's address is never printed or
+logged.
 """
 
 import json
@@ -36,18 +37,12 @@ from content import service as copy
 from . import drops, pricing
 from .alerts import MARKETPLACES
 from .images import sized_image_url
-from .models import DiscordPost, DiscordSettings, Listing, PreorderOpen, ProductSet, Restock
+from .models import DiscordChannel, DiscordPost, Listing, PreorderOpen, ProductSet, Restock
 
 logger = logging.getLogger(__name__)
 
 RESTOCK, PREORDER, PRICE_DROP, DROP_DAY = "restock", "preorder", "price_drop", "drop_day"
 KINDS = (RESTOCK, PREORDER, PRICE_DROP, DROP_DAY)
-WEBHOOK_SETTING = {
-    RESTOCK: "RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS",
-    PREORDER: "RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS",
-    PRICE_DROP: "RIPRAPTOR_DISCORD_WEBHOOK_PRICE_DROPS",
-    DROP_DAY: "RIPRAPTOR_DISCORD_WEBHOOK_DROPS",
-}
 LOOK_BACK = timedelta(hours=6)     # a restock or opening older than this (or than the gap between posts) is not news
 SLACK = timedelta(minutes=2)       # cron's runs drift a little; a post due in under this is due now
 DROP_CANDIDATES = 40
@@ -77,13 +72,19 @@ class Post:
     at: datetime | None = None
 
 
-def webhook(kind):
-    return getattr(settings, WEBHOOK_SETTING[kind], "") or settings.RIPRAPTOR_DISCORD_WEBHOOK
+def channels():
+    """The channels set up in admin and posting; with none there yet, the address in .env as one channel (not
+    saved) that gets every update with the defaults."""
+    rows = list(DiscordChannel.objects.filter(is_active=True).exclude(webhook_url="").prefetch_related("games"))
+    if rows or DiscordChannel.objects.exists() or not settings.RIPRAPTOR_DISCORD_WEBHOOK:
+        return rows
+    return [DiscordChannel(label=".env", webhook_url=settings.RIPRAPTOR_DISCORD_WEBHOOK,
+                           restocks=True, preorders=True, price_drops=True, drop_days=True)]
 
 
-def webhooks():
-    """Each address set up, once, for --test."""
-    return list(dict.fromkeys(url for url in (webhook(kind) for kind in KINDS) if url))
+def prefix(channel):
+    """What a channel's DiscordPost keys start with."""
+    return f"{channel.pk or 'env'}:"
 
 
 def tracked(path):
@@ -97,15 +98,15 @@ def price_words(price, delivery_known, checked, store):
                     time=timezone.localtime(checked).strftime("%H:%M"))
 
 
-def look_back(controls):
-    return max(LOOK_BACK, timedelta(minutes=controls.every_minutes) + timedelta(hours=1))
+def look_back(channel):
+    return max(LOOK_BACK, timedelta(minutes=channel.every_minutes) + timedelta(hours=1))
 
 
-def shop_news(model, kind, title_key, availability, now, store, controls, games):
+def shop_news(model, kind, title_key, availability, now, store, channel, games):
     """Restocks or pre-order openings since look_back(), newest first, one a day per product, while the shop
     still has it that way."""
     rows = (
-        model.objects.filter(at__gte=now - look_back(controls), product__is_active=True, retailer__is_active=True,
+        model.objects.filter(at__gte=now - look_back(channel), product__is_active=True, retailer__is_active=True,
                              listing__is_active=True, listing__availability=availability)
         .exclude(retailer__source_type__in=MARKETPLACES).exclude(listing__sanity=Listing.Sanity.EXCLUDED)
         .select_related("product").order_by("-at")
@@ -123,12 +124,12 @@ def shop_news(model, kind, title_key, availability, now, store, controls, games)
                    path=row.product.get_absolute_url(), image=row.product.image_src, at=row.at)
 
 
-def price_drop_news(now, store, controls, games):
-    """Products whose cheapest delivered price is at least the owner's smallest drop below yesterday's, once a
-    day each."""
+def price_drop_news(now, store, channel, games):
+    """Products whose cheapest delivered price is at least the channel's smallest drop below yesterday's, once
+    a day each."""
     today = timezone.localdate(now)
     for product in pricing.price_drops(limit=DROP_CANDIDATES, days=1, today=today):
-        if product.drop_ratio < controls.min_drop_percent / 100 or (games and product.game_id not in games):
+        if product.drop_ratio < channel.min_drop_percent / 100 or (games and product.game_id not in games):
             continue
         checked = (Listing.objects.filter(product=product).buyable().filter(delivery_known=True)
                    .order_by("delivered_price").values_list("last_checked", flat=True).first()) or now
@@ -141,7 +142,7 @@ def price_drop_news(now, store, controls, games):
         )
 
 
-def drop_day_news(now, store, controls, games):
+def drop_day_news(now, store, channel, games):
     """Sets out today, from DROP_DAY_FROM_HOUR, with the cheapest offer when a shop has one."""
     local = timezone.localtime(now)
     today = local.date()
@@ -168,16 +169,16 @@ def drop_day_news(now, store, controls, games):
         )
 
 
-def news(kind, now, store, controls, games):
+def news(kind, now, store, channel, games):
     if kind == RESTOCK:
         return list(shop_news(Restock, RESTOCK, "discord.restock.title", Listing.Availability.IN_STOCK, now, store,
-                              controls, games))
+                              channel, games))
     if kind == PREORDER:
         return list(shop_news(PreorderOpen, PREORDER, "discord.preorder.title", Listing.Availability.PREORDER, now,
-                              store, controls, games))
+                              store, channel, games))
     if kind == PRICE_DROP:
-        return list(price_drop_news(now, store, controls, games))
-    return list(drop_day_news(now, store, controls, games))
+        return list(price_drop_news(now, store, channel, games))
+    return list(drop_day_news(now, store, channel, games))
 
 
 def absolute(url):
@@ -199,14 +200,13 @@ def embed(post, store):
     return data
 
 
-def message(store, posts=(), content="", controls=None):
-    """A webhook message that can never ping anyone, whatever a product's name says, under the owner's name and
-    picture for it, or the webhook's own."""
-    controls = controls or DiscordSettings.current()
+def message(store, channel, posts=(), content=""):
+    """A webhook message that can never ping anyone, whatever a product's name says, under the channel's name
+    and picture, or the webhook's own."""
     data = {"allowed_mentions": {"parse": []}}
-    if controls.name:
-        data["username"] = controls.name[:80]
-    if controls.use_logo:
+    if channel.username:
+        data["username"] = channel.username[:80]
+    if channel.use_logo:
         data["avatar_url"] = absolute(static("img/apple-touch-icon.png"))
     if content:
         data["content"] = content
@@ -230,65 +230,76 @@ def send(url, data):
         raise DiscordError(f"Discord could not be reached: {exc.__class__.__name__}") from exc
 
 
-def due(kind, now, controls):
-    """Whether the owner's gap since the kind's last post has passed."""
-    last = DiscordPost.objects.filter(kind=kind).aggregate(last=Max("posted_at"))["last"]
-    return last is None or now - last >= timedelta(minutes=controls.every_minutes) - SLACK
+def due(channel, kind, now):
+    """Whether the channel's gap since its last post of this update has passed."""
+    last = (DiscordPost.objects.filter(key__startswith=prefix(channel), kind=kind)
+            .aggregate(last=Max("posted_at"))["last"])
+    return last is None or now - last >= timedelta(minutes=channel.every_minutes) - SLACK
 
 
-def run(now=None, post=None, stdout=None):
-    """Post each kind's new news to its channel. Returns {kind: posts sent} for the kinds set up, switched on and
-    due; a kind's first run counts 0 and only notes what is there. A 429 (too many posts) stops the run; the
-    rest wait."""
-    now = now or timezone.now()
-    post = post or send
-    store = copy.load_all()
-    controls = DiscordSettings.current()
-    # Only these games; none chosen (or the settings never saved) means every game.
-    games = set() if controls._state.adding else set(controls.games.values_list("pk", flat=True))
+def post_channel(channel, now, store, post, stdout=None):
+    """Post one channel's due updates. Returns {kind: posts sent} for the updates it gets that were due; a first
+    run counts 0 and only notes what is there. A 429 (too many posts) leaves the channel's other updates for the
+    next run."""
     sent = {}
+    head = prefix(channel)
+    saved = channel if channel.pk else None
+    # Only these games; none ticked means every game.
+    games = {game.pk for game in channel.games.all()} if channel.pk else set()
     for kind in KINDS:
-        url = webhook(kind)
-        if not url or not getattr(controls, SWITCHES[kind]):
+        if not getattr(channel, SWITCHES[kind]):
             continue
-        seeded = DiscordPost.objects.filter(key=SEEDED + kind).exists()
-        if seeded and not due(kind, now, controls):
+        seeded = DiscordPost.objects.filter(key=head + SEEDED + kind).exists()
+        if seeded and not due(channel, kind, now):
             continue
-        posts = news(kind, now, store, controls, games)
-        known = set(DiscordPost.objects.filter(key__in=[p.key for p in posts]).values_list("key", flat=True))
-        fresh = [p for p in posts if p.key not in known]
+        posts = news(kind, now, store, channel, games)
+        known = set(DiscordPost.objects.filter(key__in=[head + p.key for p in posts]).values_list("key", flat=True))
+        fresh = [p for p in posts if head + p.key not in known]
         if not seeded:
-            # Switched on just now: what is already there is old news.
-            DiscordPost.objects.bulk_create([DiscordPost(key=p.key, kind=NOTED, posted_at=now) for p in fresh]
-                                            + [DiscordPost(key=SEEDED + kind, kind=NOTED, posted_at=now)],
-                                            ignore_conflicts=True)
+            # Set up just now: what is already there is old news.
+            DiscordPost.objects.bulk_create(
+                [DiscordPost(key=head + p.key, kind=NOTED, channel=saved, posted_at=now) for p in fresh]
+                + [DiscordPost(key=head + SEEDED + kind, kind=NOTED, channel=saved, posted_at=now)],
+                ignore_conflicts=True,
+            )
             sent[kind] = 0
             continue
-        batch = fresh[:controls.per_post]
+        batch = fresh[:channel.per_post]
         if not batch:
             sent[kind] = 0
             continue
         try:
-            post(url, message(store, batch, controls=controls))
+            post(channel.webhook_url, message(store, channel, batch))
         except DiscordError as exc:
-            logger.warning("Discord %s: %s", kind, exc)
+            logger.warning("Discord %s, %s: %s", channel.label, kind, exc)
             if stdout:
-                stdout.write(f"{kind}: not posted, {exc}")
+                stdout.write(f"{channel.label} {kind}: not posted, {exc}")
             if exc.status == 429:
                 break
             continue
-        DiscordPost.objects.bulk_create([DiscordPost(key=p.key, kind=kind, posted_at=now) for p in batch],
-                                        ignore_conflicts=True)
+        DiscordPost.objects.bulk_create(
+            [DiscordPost(key=head + p.key, kind=kind, channel=saved, posted_at=now) for p in batch], ignore_conflicts=True,
+        )
         sent[kind] = len(batch)
-    DiscordPost.objects.filter(posted_at__lt=now - timedelta(days=KEEP_DAYS)).exclude(key__startswith=SEEDED).delete()
     return sent
 
 
-def test(post=None):
-    """One hello to each channel set up. Returns how many were sent."""
+def run(now=None, post=None, stdout=None):
+    """Post every channel's due updates. Returns {channel label: {kind: posts sent}}."""
+    now = now or timezone.now()
+    post = post or send
+    store = copy.load_all()
+    sent = {channel.label: post_channel(channel, now, store, post, stdout) for channel in channels()}
+    DiscordPost.objects.filter(posted_at__lt=now - timedelta(days=KEEP_DAYS)).exclude(key__contains=":" + SEEDED).delete()
+    return sent
+
+
+def test(channels_to=None, post=None):
+    """One hello to each channel set up (or to ``channels_to``). Returns how many were sent."""
     post = post or send
     store = copy.load_all()
     hello = copy.get("discord.test", store=store, site=settings.RIPRAPTOR_SITE_URL)
-    for url in webhooks():
-        post(url, message(store, content=hello))
-    return len(webhooks())
+    targets = channels() if channels_to is None else channels_to
+    for channel in targets:
+        post(channel.webhook_url, message(store, channel, content=hello))
+    return len(targets)

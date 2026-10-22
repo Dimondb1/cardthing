@@ -1114,61 +1114,67 @@ class RemovedShop(models.Model):
         cls.matching(retailer.slug, retailer.website).delete()
 
 
-class DiscordSettings(models.Model):
-    """The one row of owner controls for the posts to Discord (catalogue/discord.py), in admin. The channel's
-    webhook address stays in .env: anyone holding it can post, so it is never in the database or admin."""
+class DiscordChannel(models.Model):
+    """One channel on the owner's Discord that RipRaptor posts to (catalogue/discord.py), set up in admin: its
+    webhook address, which updates and games it gets, how often, and the name and picture its posts show.
+
+    Anyone holding a webhook address can post to its channel, so admin never shows more than its last
+    characters. It is in the database and so in its backups."""
 
     EVERY = [(10, "Every 10 minutes"), (30, "Every 30 minutes"), (60, "Every hour"), (180, "Every 3 hours"),
              (360, "Every 6 hours"), (1440, "Once a day")]
 
-    restocks = models.BooleanField("back in stock", default=True, help_text="A UK shop has a product in stock again.")
-    preorders = models.BooleanField("pre-orders open", default=True, help_text="A UK shop opens pre-orders.")
-    price_drops = models.BooleanField("price drops", default=True,
+    label = models.CharField("channel", max_length=80, help_text="For you, for example #restocks.")
+    webhook_url = models.CharField("webhook address", max_length=300)
+    is_active = models.BooleanField("posting", default=True, help_text="Off stops this channel's posts.")
+    restocks = models.BooleanField("back in stock", default=False, help_text="A UK shop has a product in stock again.")
+    preorders = models.BooleanField("pre-orders open", default=False, help_text="A UK shop opens pre-orders.")
+    price_drops = models.BooleanField("price drops", default=False,
                                       help_text="A product's cheapest delivered price falls below yesterday's.")
-    drop_days = models.BooleanField("out today", default=True, help_text="A set's release day, from 8am.")
+    drop_days = models.BooleanField("out today", default=False, help_text="A set's release day, from 8am.")
+    games = models.ManyToManyField(Game, blank=True, related_name="+",
+                                   help_text="Only these games. None ticked means every game.")
+    min_drop_percent = models.PositiveSmallIntegerField(
+        "smallest price drop (%)", default=5, validators=[MinValueValidator(1), MaxValueValidator(50)],
+        help_text="How far below yesterday's cheapest delivered price a price must fall to be posted.",
+    )
     every_minutes = models.PositiveSmallIntegerField(
         "how often", choices=EVERY, default=10,
-        help_text="Each kind posts at most this often, with what happened since in one post. Restocks still in "
-                  "stock and pre-orders still open are kept for the next post; older news is left out.",
+        help_text="Each update posts here at most this often, with what happened since in one post. Restocks still "
+                  "in stock and pre-orders still open are kept for the next post; older news is left out.",
     )
     per_post = models.PositiveSmallIntegerField(
         "products per post", default=8, validators=[MinValueValidator(1), MaxValueValidator(10)],
         help_text="1 to 10, newest first. More than that wait for the next post.",
     )
-    min_drop_percent = models.PositiveSmallIntegerField(
-        "smallest price drop (%)", default=5, validators=[MinValueValidator(1), MaxValueValidator(50)],
-        help_text="How far below yesterday's cheapest delivered price a price must fall to be posted.",
-    )
-    games = models.ManyToManyField(Game, blank=True, related_name="+",
-                                   help_text="Only these games. None chosen means every game.")
-    name = models.CharField("name shown", max_length=80, blank=True,
-                            help_text="Empty: the name you gave the webhook in Discord.")
+    username = models.CharField("name shown", max_length=80, blank=True,
+                                help_text="Empty: the name you gave the webhook in Discord.")
     use_logo = models.BooleanField("RipRaptor logo as the picture", default=True,
                                    help_text="Off: the picture you gave the webhook in Discord.")
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        verbose_name = "Discord setting"
-        verbose_name_plural = "Discord settings"
+        ordering = ["label"]
+        verbose_name = "Discord channel"
 
     def __str__(self):
-        return "Discord posts"
+        return self.label
 
-    @classmethod
-    def load(cls):
-        return cls.objects.get_or_create(pk=1)[0]
-
-    @classmethod
-    def current(cls):
-        """The row, or the defaults unsaved: a run that only reads it never writes."""
-        return cls.objects.filter(pk=1).first() or cls(pk=1)
+    @property
+    def webhook_hint(self):
+        """The address's last characters, enough to tell two apart and never enough to post with."""
+        return f"ends ...{self.webhook_url[-4:]}" if self.webhook_url else "not set"
 
 
 class DiscordPost(models.Model):
-    """One piece of news catalogue/discord.py has posted to the owner's Discord, so it is posted once. A key
-    "seeded-<kind>" marks that the kind's first run has noted what was already there. Kept 30 days."""
+    """One piece of news catalogue/discord.py has posted to one channel, so it is posted there once. Its key
+    starts with the channel ("3:" or "env:"); "<channel>:seeded-<kind>" marks that the channel's first run for a
+    kind has noted what was already there (kind "noted"). Kept 30 days."""
 
     key = models.CharField(max_length=120, unique=True)
     kind = models.CharField(max_length=20)
+    channel = models.ForeignKey(DiscordChannel, on_delete=models.CASCADE, null=True, blank=True, related_name="posts",
+                                help_text="Empty for the address in .env.")
     posted_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:

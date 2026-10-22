@@ -2348,8 +2348,7 @@ index.
 | `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
 | `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
-| `RIPRAPTOR_DISCORD_WEBHOOK`    |         | A Discord channel's webhook address. Turns on `post_discord` (restocks, pre-orders, price drops, drop days). Keep it secret. |
-| `RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS`, `_PRICE_DROPS`, `_DROPS` | | Optional: a channel of their own for restocks and pre-orders, price drops, and sets out today. Each falls back to `RIPRAPTOR_DISCORD_WEBHOOK`. |
+| `RIPRAPTOR_DISCORD_WEBHOOK`    |         | Optional. A Discord channel's webhook address that gets every update until the first channel is added in admin (Discord channels). Keep it secret. |
 | `RIPRAPTOR_PREORDER_ALERTS_FROM` | written by install.sh | ISO date or date and time (UK time without a zone). Alerts asked for from then on are also emailed when a shop opens pre-orders. `deploy/install.sh` adds it with the install moment when it is missing and never moves it. Empty means no pre-order emails. A value that does not parse stops the site starting. |
 | `RIPRAPTOR_INBOX_NOTIFY_EMAIL` |         | Your own address. Each new Message us message is emailed to it through ZeptoMail with a link to reply in admin, and so are crawl problems (see below). Never shown on the site. |
 | `RIPRAPTOR_NTFY_TOPIC`         |         | A long, unguessable ntfy topic name. Each new message, and each crawl problem, sends a push to the free ntfy phone app subscribed to it. The push holds only a title and a link to admin, never a name, the words, a shop, a product or a price. |
@@ -2938,47 +2937,46 @@ come from the page's Open Graph tags (name, price and picture).
 The site's footer links to RipRaptor's Discord server
 (`https://discord.gg/5YKc77s4d7`), with Discord's own logo beside
 Instagram, Facebook and TikTok. `post_discord`, every ten minutes from
-cron, posts news there (`catalogue/discord.py`):
+cron, posts news to the channels set up in admin (`catalogue/discord.py`):
 
 - Back in stock: a UK shop has a product in stock again.
 - Pre-orders open: a UK shop opens pre-orders.
-- Price drop: a product's cheapest delivered price is at least 5% below
-  yesterday's.
+- Price drop: a product's cheapest delivered price falls below yesterday's
+  by at least the channel's smallest drop.
 - Out today: a set's release day, from 8am UK time, with its cheapest
   offer.
 
-What posts and how often is chosen in admin, under Discord settings (one
-page, which opens straight away): each kind on or off, which games (none
-ticked means every game), the smallest price drop worth a post (5% to
-start), how often (every 10 minutes to once a day: each kind posts at most
-that often, with what happened since in one post), how many products a
-post holds (1 to 10, 8 to start), and the name and picture shown (empty
+Each channel has its own page in admin, under Discord channels: its name
+(for you), its webhook address, which of the four updates it gets, which
+games (none ticked means every game), the smallest price drop (5% to
+start), how often it posts (every 10 minutes to once a day: each update at
+most that often, with what happened since in one post), how many products
+a post holds (1 to 10, 8 to start), and the name and picture shown (empty
 uses the name given to the webhook in Discord; the RipRaptor logo is on to
-start). Ticking "Send a test post" and saving posts one hello to each
-channel. Discord posts, beside it, lists what has gone out. The channel's
-address is never in admin: it stays in `.env`.
+start). A channel can be switched off without losing its settings. Ticking
+"Send a test post" and saving posts one hello to that channel. Discord
+posts, beside it, lists what has gone out.
+
+The webhook address is typed like a password: it is checked to be a
+Discord webhook, never shown again (the page shows only its last four
+characters) and kept when the box is left empty. Anyone holding it can
+post to the channel; it is in the database, so in its backups. To get one
+in Discord: Edit Channel, Integrations, Webhooks, New Webhook, Copy Webhook
+URL. Until the first channel is added in admin, a webhook address in
+`.env` (`RIPRAPTOR_DISCORD_WEBHOOK`) gets every update with the defaults.
 
 Each post names the product, the delivered price and when it was checked,
 and links to RipRaptor's page for it (tagged `utm_source=discord`), never
 to the shop: as with the search alert emails, people compare every shop
 on the page. eBay and Amazon never count, nor a price kept out of the
 comparison, nor a restock that has sold out again by the time the post
-would go. Each piece of news posts once (`DiscordPost`), a product at most
-once a day for each kind; news beyond a post's limit waits for the next.
-The first run for a kind posts nothing and
-only notes what is already there, so switching it on never floods the
-channel with last week. Posts forbid mentions, so a product named
+would go. Each piece of news posts once to a channel (`DiscordPost`, keyed
+by channel), a product at most once a day for each update; news beyond a
+post's limit waits for the next. A channel's first run for an update posts
+nothing and only notes what is already there, so adding a channel never
+floods it with last week. Posts forbid mentions, so a product named
 "@everyone" pings nobody. Wording is in Site wording under `discord.*`.
-
-Setting it up: in Discord, open the channel (Edit Channel, Integrations,
-Webhooks, New Webhook, Copy Webhook URL) and put the address in the
-server's `.env` as `RIPRAPTOR_DISCORD_WEBHOOK`, then restart. Never paste
-it in a chat or commit it: anyone holding it can post as RipRaptor. For
-separate channels, set `RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS` (restocks and
-pre-orders), `RIPRAPTOR_DISCORD_WEBHOOK_PRICE_DROPS` and
-`RIPRAPTOR_DISCORD_WEBHOOK_DROPS` (out today); each falls back to
-`RIPRAPTOR_DISCORD_WEBHOOK`. Check with `python manage.py post_discord
---test`, which posts one hello to each channel set up.
+`python manage.py post_discord --test` posts one hello to every channel.
 
 ## Refer a friend
 

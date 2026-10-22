@@ -284,19 +284,15 @@ RIPRAPTOR_NTFY_URL = os.environ.get("RIPRAPTOR_NTFY_URL", "https://ntfy.sh").str
 # The owner is also told when the background reader stops, a shop keeps failing for a day or doubtful
 # prices pile up, at most once a day each. Off sends nothing about crawling; new messages are still sent.
 RIPRAPTOR_CRAWL_PUSHES = env_bool("RIPRAPTOR_CRAWL_PUSHES", default=True)
-# Posts to the owner's Discord server (catalogue/discord.py): a channel webhook's address for every kind, or a
-# kind's own channel; empty posts nothing. Anyone holding one can post as RipRaptor, so they live only here.
+# Posts to the owner's Discord server (catalogue/discord.py) go to the channels set up in admin. Until the first
+# is, this one channel's webhook address gets every update.
 RIPRAPTOR_DISCORD_WEBHOOK = os.environ.get("RIPRAPTOR_DISCORD_WEBHOOK", "").strip()
-RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS = os.environ.get("RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS", "").strip()
-RIPRAPTOR_DISCORD_WEBHOOK_PRICE_DROPS = os.environ.get("RIPRAPTOR_DISCORD_WEBHOOK_PRICE_DROPS", "").strip()
-RIPRAPTOR_DISCORD_WEBHOOK_DROPS = os.environ.get("RIPRAPTOR_DISCORD_WEBHOOK_DROPS", "").strip()
 if TESTING:
     # A test run started from a shell holding the server's .env must never reach the owner's phone, inbox or
     # Discord.
     # Tests that send set these with override_settings and catch what would go out.
     RIPRAPTOR_NTFY_TOPIC = RIPRAPTOR_INBOX_NOTIFY_EMAIL = RIPRAPTOR_ZEPTOMAIL_TOKEN = ""
-    RIPRAPTOR_DISCORD_WEBHOOK = RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS = ""
-    RIPRAPTOR_DISCORD_WEBHOOK_PRICE_DROPS = RIPRAPTOR_DISCORD_WEBHOOK_DROPS = ""
+    RIPRAPTOR_DISCORD_WEBHOOK = ""
     # The server's cut-off would change which form and emails the alert tests see; they set their own.
     RIPRAPTOR_PREORDER_ALERTS_FROM = None
 

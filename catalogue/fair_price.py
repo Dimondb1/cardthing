@@ -52,6 +52,7 @@ MARKET_GOOD, MARKET_FAIR, MARKET_ABOVE = Decimal("0.95"), Decimal("1.15"), Decim
 MARKET_FRESH_DAYS = 7
 LOWEST, GOOD_PRICE, FAIR, ABOVE, HIGH_PRICE = 5, 4, 3, 2, 1
 KEYS = {LOWEST: "lowest", GOOD_PRICE: "good", FAIR: "fair", ABOVE: "above", HIGH_PRICE: "high"}
+SIGNAL_BARS = 4   # the Price check's signal bars: lit for the lowest yet, one fewer for each band dearer
 
 
 @dataclass
@@ -77,9 +78,11 @@ class Verdict:
         return KEYS[self.band]
 
     @property
-    def bands(self):
-        """The five bands from best at the top to dearest at the bottom, each marked when it is this one."""
-        return [{"band": band, "key": KEYS[band], "on": band == self.band} for band in sorted(KEYS, reverse=True)]
+    def signal(self):
+        """The Price check's four signal bars, shortest first, each lit or not: all four for the lowest yet, one
+        fewer for each band dearer, none for a high price."""
+        lit = self.band - HIGH_PRICE
+        return [bar < lit for bar in range(SIGNAL_BARS)]
 
 
 def applies(product):

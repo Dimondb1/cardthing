@@ -1044,34 +1044,32 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 }
 @keyframes sheet-up { from { opacity: 0; transform: translateY(1.5rem); } to { opacity: 1; transform: none; } }
 
-/* Price check (includes/fair_price.html): five steps standing to the right of "delivered", lowest we have seen at the
-   top, the one that applies drawn full and wider, with the verdict beside it. A link to the price history; product.js
-   opens the Price check sheet instead. */
-.fair--lowest { --fair-on: var(--color-fair-lowest); --fair-ink: var(--color-fair-lowest-text); }
-.fair--good { --fair-on: var(--color-fair-good); --fair-ink: var(--color-fair-good-text); }
-.fair--fair { --fair-on: var(--color-fair-fair); --fair-ink: var(--color-fair-fair-text); }
-.fair--above { --fair-on: var(--color-fair-above); --fair-ink: var(--color-fair-above-text); }
-.fair--high { --fair-on: var(--color-fair-high); --fair-ink: var(--color-fair-high-text); }
+/* Price check (includes/fair_price.html), the owner's design: one rounded chip to the right of "delivered", coloured
+   as a whole by the verdict (green good, grey fair, dark yellow dear), holding four signal bars (more lit is a
+   better price), a divider, the verdict's icon and its words. A link to the price history; product.js opens the
+   Price check sheet instead. */
+.fair--good, .fair--lowest { --fair-bg: var(--color-fair-good-bg); --fair-ink: var(--color-fair-good-ink); --fair-rule: var(--color-fair-good-rule); }
+.fair--fair { --fair-bg: var(--color-fair-even-bg); --fair-ink: var(--color-fair-even-ink); --fair-rule: var(--color-fair-even-rule); }
+.fair--above, .fair--high { --fair-bg: var(--color-fair-bad-bg); --fair-ink: var(--color-fair-bad-ink); --fair-rule: var(--color-fair-bad-rule); }
 .fair {
   display: inline-flex; align-items: center; gap: var(--space-2); align-self: center; margin-left: auto;
-  min-height: var(--tap); color: var(--fair-ink); text-decoration: none;
+  min-height: var(--tap); padding: var(--space-1) var(--space-3); border-radius: var(--radius);
+  background: var(--fair-bg); color: var(--fair-ink); text-decoration: none;
 }
 .fair:hover .fair__word { text-decoration: underline; }
-.fair__bar { display: grid; gap: var(--fair-step-gap); justify-items: start; }
-.fair__step { width: var(--fair-step-width); height: var(--fair-step); border-radius: var(--radius-pill); opacity: var(--fair-dim); transform-origin: left center; }
-.fair__step.is-on { opacity: 1; transform: scaleX(var(--fair-step-on)); }
-.fair__step--lowest { background: var(--color-fair-lowest); }
-.fair__step--good { background: var(--color-fair-good); }
-.fair__step--fair { background: var(--color-fair-fair); }
-.fair__step--above { background: var(--color-fair-above); }
-.fair__step--high { background: var(--color-fair-high); }
-.fair__word {
-  max-width: var(--fair-word); margin-left: calc(var(--fair-step-width) * (var(--fair-step-on) - 1));
-  font-size: var(--text-xs); font-weight: var(--weight-strong); line-height: var(--leading-snug);
-}
+.fair__bars { display: inline-flex; align-items: flex-end; gap: var(--fair-bar-gap); height: var(--fair-bars); }
+.fair__bar { width: var(--fair-bar-width); border-radius: var(--radius-pill); background: currentColor; opacity: var(--fair-dim); }
+.fair__bar:nth-child(1) { height: 40%; }
+.fair__bar:nth-child(2) { height: 60%; }
+.fair__bar:nth-child(3) { height: 80%; }
+.fair__bar:nth-child(4) { height: 100%; }
+.fair__bar.is-on { opacity: 1; }
+.fair__icon { display: inline-flex; padding-left: var(--space-2); border-left: var(--border-width) solid var(--fair-rule); }
+.fair__icon svg { width: var(--icon-button); height: var(--icon-button); }
+.fair__word { max-width: var(--fair-word); font-size: var(--text-xs); font-weight: var(--weight-strong); line-height: var(--leading-snug); }
 
 /* The Price check sheet: the verdict, today against the average and the lowest, and the chart. */
-.fair__dot { display: inline-block; width: var(--space-3); height: var(--space-3); margin-right: var(--space-2); border-radius: 50%; background: var(--fair-on); }
+.fair__dot { display: inline-block; width: var(--space-3); height: var(--space-3); margin-right: var(--space-2); border-radius: 50%; background: var(--fair-ink); }
 .fair-sheet__verdict { margin-top: var(--space-1); font-size: var(--text-lg); font-weight: var(--weight-heading); color: var(--fair-ink); }
 .fair-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin: 0; }
 .fair-facts dt { font-size: var(--text-xs); color: var(--color-ink-subtle); }

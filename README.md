@@ -2821,8 +2821,8 @@ The wording ("Compare prices", "{count} shops, cheapest delivered first",
 
 ### Price check (Pokémon, on trial)
 
-Beside "delivered" on a Pokémon product page, a short bar of five colours
-says whether today's cheapest delivered price is a good one for that product
+Beside "delivered" on a Pokémon product page, a small chip says whether
+today's cheapest delivered price is a good one for that product
 (`catalogue/fair_price.py`). It is judged against RipRaptor's own record of
 the cheapest delivered price each day (the same rows as the price history),
 up to a year back and not counting today:
@@ -2846,16 +2846,23 @@ up to a year back and not counting today:
   price, never "Lowest yet": the lowest band also needs the price to be 5%
   under the average.
 - The record is ours: it lives in the database whatever happens to any shop
-  or source, so the price check keeps working if a source stops. No outside
-  price data is read yet; backfilling older prices from another source would
-  need the owner's approval first.
+  or source, so the price check keeps working if a source stops. The only
+  outside reference is Cardmarket's European price (see The European
+  market below).
 - Tapping it opens the Price check sheet (`js/product.js`): the verdict,
   today against the average and the lowest, the price chart, and the date
   the record starts. Without JavaScript it is a link to the price history,
   which shows the same three figures above the chart.
-- The colours are the `--color-fair-*` tokens, the one place outside prices
-  and savings with colour, at the owner's request. The words use the darker
-  `-text` versions so they read on white.
+- The chip is the owner's design (`includes/fair_price.html`): four signal
+  bars, a divider, an icon and the verdict, the whole chip one colour.
+  Green for Lowest yet and Good price, grey for Fair price, dark yellow for
+  Above average and High price. Never red, which stays for a dearer shop's
+  price. Lit bars: 4 for Lowest yet down to none for High price
+  (`Verdict.signal`). Icons: a crown, a tick, an equals sign, one arrow up,
+  two arrows up (`includes/fair/*.svg`).
+- The colours are the `--color-fair-{good,even,bad}-{bg,ink,rule}` tokens,
+  the one place outside prices and savings with colour, at the owner's
+  request. Each ink reads at 4.5:1 or more on its tint.
 - The trial covers the games in `fair_price.GAMES` (Pokémon only). The
   thresholds are `GOOD`, `HIGH`, `MIN_DAYS` and `WINDOW_DAYS` in the same file.
 

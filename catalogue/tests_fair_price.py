@@ -62,8 +62,13 @@ class VerdictTests(TestCase):
         # The latest day at the low, and the first day recorded.
         self.assertEqual(verdict.low_date, self.today - timedelta(days=2))
         self.assertEqual(verdict.since, self.today - timedelta(days=20))
-        self.assertEqual([item["key"] for item in verdict.bands], ["lowest", "good", "fair", "above", "high"])
-        self.assertEqual([item["key"] for item in verdict.bands if item["on"]], ["fair"])
+        self.assertEqual(verdict.signal, [True, True, False, False])
+
+    def test_four_signal_bars_all_lit_for_the_lowest_yet_and_none_for_a_high_price(self):
+        lit = {key: sum(fair_price.Verdict(band, Decimal("1")).signal) for band, key in fair_price.KEYS.items()}
+        self.assertEqual(lit, {"lowest": 4, "good": 3, "fair": 2, "above": 1, "high": 0})
+        # Shortest bar first, so the lit ones always rise from the left.
+        self.assertEqual(fair_price.Verdict(fair_price.GOOD_PRICE, Decimal("1")).signal, [True, True, True, False])
 
 
 class ProductPageTests(TestCase):
@@ -81,6 +86,11 @@ class ProductPageTests(TestCase):
         response = self.client.get(self.etb.get_absolute_url())
         self.assertEqual(response.context["fair"].key, "good")
         self.assertContains(response, 'class="fair fair--good"')
+        # The owner's chip: four bars, three lit for a good price, then the tick and the words.
+        chip = response.content.decode().split('class="fair fair--good"')[1].split("</a>")[0]
+        self.assertEqual((chip.count('class="fair__bar is-on"'), chip.count('class="fair__bar"')), (3, 1))
+        self.assertIn('<span class="fair__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4.5 12.5', chip)
+        self.assertIn('<span class="fair__word" aria-hidden="true">Good price</span>', chip)
         self.assertContains(response, 'aria-label="Price check: Good price. Show price history"')
         self.assertContains(response, 'href="#history-title" data-fair-open')
         self.assertContains(response, "data-fair-sheet")

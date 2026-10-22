@@ -2651,13 +2651,18 @@ rows; the installer runs it, and it is safe to run again.
 
 ## Home page and product cards
 
-The home page opens with a short line above the headline (optional) and the
-headline, whose last sentence is shown in orange on a line of its own
-(`accent_last` in `web/templatetags/ripraptor.py`; a one-sentence headline
-stays on one line), then the search box, the latest shop price check, and
-"Find your game": a tile per game with its product count, every game in one
-row that swipes sideways (two and a bit on a phone, so the next tile peeks
-in; five and a half on a computer), then "More games". Each tile shows the box art of one of the game's own products, the
+The home page opens with a compact hero: a short line above the headline
+(optional), the headline on one line with its last sentence in orange
+(`accent_last` in `web/templatetags/ripraptor.py`), one line saying every
+price includes delivery, not just the basket price, then the large search
+box and the latest shop price check, all close together so the games and
+Picked for you start on the first screen. Then "Find your game": a short
+tile per game, its box art small beside its name and product count (a big
+count written short, "4.1k products", `compact_count`, never rounded up),
+every game in one row that swipes sideways (two and a bit on a phone, so the
+next tile peeks in; five and a half on a computer), then "More games". The
+home and Deals pages' sections sit 20px apart on a phone and 24px wider
+(`--rhythm-home`). Each tile shows the box art of one of the game's own products, the
 newest booster box with a picture, or else an elite trainer box, bundle and
 so on (`game_covers` in `web/views.py`), so no game logo is borrowed; a
 game with no pictures yet shows the booster box outline. After that come

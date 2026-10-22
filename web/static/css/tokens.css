@@ -60,6 +60,7 @@
   --rhythm-title: var(--space-4);       /* a section title to its content: section gap / title gap = phi squared */
   --rhythm-page-top: var(--space-5);    /* the header to a page's first heading */
   --rhythm-control: var(--space-4);     /* between stacked controls: set pills, stock tabs, filters, the list */
+  --rhythm-home: calc(1.25rem * var(--density));   /* between the home and deals pages' sections: tight, so a phone shows more */
   --split-gap: var(--space-6);          /* between two columns side by side */
   --card-pad: var(--space-4);           /* inside cards and tiles */
 
@@ -206,6 +207,7 @@
   --product-media-phone-long: clamp(7rem, 100vh - 35.5rem, 15rem);
   --product-media-note: 1.25rem;
   --product-media-min: 22rem;       /* the picture well beside the price box on wide screens: at least this tall, and as tall as the box */
+  --tile-game-art: 2.75rem;         /* a game tile's box art, beside its name */
   --masthead-search: 2.5rem;        /* the header search box: compact, still a full finger wide */
   --masthead-logo: 1.75rem;         /* the header logo's height on phones */
   --masthead-logo-wide: 2rem;       /* the same on tablets and desktops */
@@ -260,7 +262,7 @@
 
 /* Sections sit a phi step further apart once there is room. */
 @media (min-width: 48rem) {
-  :root { --rhythm-section: var(--space-7); }
+  :root { --rhythm-section: var(--space-7); --rhythm-home: calc(1.5rem * var(--density)); }
 }
 
 /* Browsers that know the small viewport unit measure the phone picture against the screen with its bars showing;

@@ -117,12 +117,27 @@ def short_date(value):
 
 
 @register.simple_tag(takes_context=True)
-def copy_count(context, key, count, **values):
-    """Pick ``key.one`` or ``key.other`` and fill in {count}."""
+def copy_count(context, key, count, shown=None, **values):
+    """Pick ``key.one`` or ``key.other`` and fill in {count}, written as ``shown`` when given (compact_count)."""
     suffix = "one" if count == 1 else "other"
     return service.render(
-        f"{key}.{suffix}", store=context.get("site_content"), count=count, **values
+        f"{key}.{suffix}", store=context.get("site_content"), count=count if shown is None else shown, **values
     )
+
+
+@register.filter
+def compact_count(value):
+    """A count short enough for a small tile: 950, 1.2k, 12k. Rounded down, so it never claims more than there is."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return value
+    if n < 1000:
+        return str(n)
+    if n < 10000:
+        tenths = n // 100
+        return f"{tenths // 10}k" if tenths % 10 == 0 else f"{tenths // 10}.{tenths % 10}k"
+    return f"{n // 1000}k"
 
 
 # Stands in for the price while the sentence around it is filled in and escaped.

@@ -1996,7 +1996,7 @@ class AnalyticsTests(PageTestCase):
 class RedesignTests(PageTestCase):
     """The home page tiles and cards, and the product card on listing pages."""
 
-    def test_the_home_page_has_the_tiles_the_watchlist_card_and_the_two_line_headline(self):
+    def test_the_home_page_has_the_tiles_the_watchlist_card_and_the_one_line_headline(self):
         from django.core.cache import cache
 
         hidden = make_game(name="Hidden game", slug="hidden", is_active=False)
@@ -2006,6 +2006,8 @@ class RedesignTests(PageTestCase):
         html = self.client.get(reverse("web:home")).content.decode()
         self.assertIn('<p class="hero__eyebrow">UK price comparison</p>', html)
         self.assertIn('Bad prices. <span class="hero__accent">Binned.</span></h1>', html)
+        # The line under it says every price is delivered.
+        self.assertIn("delivery included. Not just the basket price.", html)
         self.assertIn('<span class="search__button-text">Find best price</span>', html)
         self.assertIn('<a class="tile tile--game" href="/games/pokemon/"><span class="tile__cover" aria-hidden="true">', html)
         self.assertIn('<span class="tile__name">Pokémon</span><span class="tile__meta">3 products</span></a>', html)
@@ -2020,9 +2022,21 @@ class RedesignTests(PageTestCase):
         self.assertNotIn("type=tin", types)   # a product of a hidden game is not listed, so it is not counted
         self.assertIn('<a class="poster poster--watch" href="/watchlist/">', html)
         self.assertIn("Keep an eye on it.", html)
+        # The headline's orange sentence sits on the same line, and a game tile is one short row.
+        from django.contrib.staticfiles import finders
+
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn(".hero__accent { color: var(--color-brand); white-space: nowrap; }", css)
+        self.assertIn('grid-template-columns: var(--tile-game-art) minmax(0, 1fr); grid-template-areas: "art name" "art meta";', css)
         # Every row card ends with the same button.
         featured = html[html.index('id="featured-title"'):]
         self.assertIn('<span class="trending__cta">Compare prices<span aria-hidden="true"> →</span></span>', featured)
+
+    def test_a_game_tile_writes_a_big_count_short_never_rounding_up(self):
+        from .templatetags.ripraptor import compact_count
+
+        self.assertEqual([compact_count(n) for n in (7, 999, 1000, 1099, 4179, 9999, 12345)],
+                         ["7", "999", "1k", "1k", "4.1k", "9.9k", "12k"])
 
     def test_every_game_is_in_the_swipe_row_with_its_box_art(self):
         from django.core.cache import cache
@@ -2580,10 +2594,15 @@ class GoldenLayoutTests(PageTestCase):
         # The home page's first section no longer has a gap of its own.
         self.assertNotIn("home-section--games { margin-top", css)
         for rule in (".block { margin-top: var(--rhythm-section); }",
-                     ".home-section { margin-top: var(--rhythm-section); }",
                      ".prose-page section { margin-top: var(--rhythm-section); }",
                      ".saved { margin-top: var(--rhythm-section); }"):
             self.assertIn(rule, css)
+        # The home and deals pages' sections sit closer, 20px on a phone and 24px wider, so more shows on a screen.
+        self.assertIn(".home-section { margin-top: var(--rhythm-home); }", css)
+        self.assertIn(".hero + .home-section { margin-top: var(--rhythm-home); }", css)
+        tokens = self.css("tokens.css")
+        self.assertIn("--rhythm-home: calc(1.25rem * var(--density));", tokens)
+        self.assertIn("--rhythm-home: calc(1.5rem * var(--density));", tokens)
         # Side by side columns use the golden split.
         self.assertEqual(css.count("minmax(0, var(--split-major)) minmax(0, var(--split-minor))"), 3)
 

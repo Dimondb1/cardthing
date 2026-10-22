@@ -25,7 +25,7 @@
   {# Every game, in a row that swipes sideways; each is shown by the box art of one of its own products, so the tiles are recognisable without borrowing any logo. #}
   <ul class="tiles tiles--games">
     {% for game in games %}
-    <li class="tiles__item"><a class="tile tile--game" href="{{ game.get_absolute_url }}"><span class="tile__cover" aria-hidden="true">{% if game.cover %}{% product_image game.cover "cover" %}{% else %}<span class="product-image product-image--cover">{% include "web/includes/placeholder.svg" with type="booster_box" %}</span>{% endif %}</span><span class="tile__name">{{ game.display_short }}</span><span class="tile__meta">{% copy_count "browse.count" game.product_count %}</span></a></li>
+    <li class="tiles__item"><a class="tile tile--game" href="{{ game.get_absolute_url }}"><span class="tile__cover" aria-hidden="true">{% if game.cover %}{% product_image game.cover "cover" %}{% else %}<span class="product-image product-image--cover">{% include "web/includes/placeholder.svg" with type="booster_box" %}</span>{% endif %}</span><span class="tile__name">{{ game.display_short }}</span><span class="tile__meta">{% copy_count "browse.count" game.product_count shown=game.product_count|compact_count %}</span></a></li>
     {% endfor %}
   </ul>
 </section>

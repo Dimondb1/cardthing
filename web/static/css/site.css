@@ -349,27 +349,28 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 
 /* Home -------------------------------------------------------------------- */
 
-/* Hero: one unit. A line above, the headline with its orange second line, one line under, the search box and when
-   prices were checked. Left aligned on a phone, centred on larger screens. */
-.hero { padding: var(--space-3) 0 0; }
-.hero + .home-section { margin-top: var(--rhythm-hero); }
+/* Hero: one compact unit. A line above, the headline on one line with its last sentence in orange, one line under,
+   the search box and when prices were checked, close together so the games and picks start on the first screen.
+   Left aligned on a phone, centred on larger screens. */
+.hero { padding: var(--space-2) 0 0; }
+.hero + .home-section { margin-top: var(--rhythm-home); }
 /* The hero does not animate on load: text arriving in sequence is decoration, not information. */
 .reveal { opacity: 0; transform: translateY(6px); transition: opacity var(--motion-slow) var(--ease-out), transform var(--motion-slow) var(--ease-out); }
 .reveal.is-visible, .no-js .reveal { opacity: 1; transform: none; }
-.hero__eyebrow { margin-bottom: var(--space-2); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.09em; text-transform: uppercase; color: var(--color-brand-text); }
+.hero__eyebrow { margin-bottom: var(--space-1); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.09em; text-transform: uppercase; color: var(--color-brand-text); }
 .hero__title { font-size: var(--text-headline); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-tight); letter-spacing: -0.02em; max-width: 22ch; margin: 0; }
-.hero__accent { display: block; color: var(--color-brand); }
-.hero__subtitle { margin: var(--space-3) 0 0; max-width: 40ch; color: var(--color-ink-muted); font-size: var(--text-base); line-height: var(--leading-snug); }
-.hero__search { margin: var(--space-5) 0 0; max-width: 44rem; text-align: left; }
+.hero__accent { color: var(--color-brand); white-space: nowrap; }
+.hero__subtitle { margin: var(--space-2) 0 0; max-width: 40ch; color: var(--color-ink-muted); font-size: var(--text-base); line-height: var(--leading-snug); }
+.hero__search { margin: var(--space-3) 0 0; max-width: 44rem; text-align: left; }
 .hero .live { text-align: left; max-width: 44rem; }
-.hero__meta { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-subtle); }
+.hero__meta { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink-subtle); }
 .hero__icon { display: inline-block; vertical-align: text-bottom; width: 1em; height: 1em; margin-right: 0.4em; color: var(--color-brand-text); }   /* inline, so the line trims to its text */
 .hero__retailers { color: var(--color-ink-muted); font-weight: var(--weight-medium); }
 .hero__sep { color: var(--color-line-strong); }
 .masthead--home .wordmark__img { height: var(--masthead-logo-home); }
 .masthead--home .masthead__inner { padding-bottom: var(--space-2); }
 @media (min-width: 48rem) {
-  .hero { padding: var(--space-5) 0 0; text-align: center; }
+  .hero { padding: var(--space-4) 0 0; text-align: center; }
   .hero__title, .hero__subtitle, .hero__search, .hero .live { margin-inline: auto; }
   .hero__subtitle { font-size: var(--text-lg); }
   .masthead--home .wordmark__img { height: var(--masthead-logo-home-wide); }
@@ -391,8 +392,15 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .tile__art .placeholder { width: 82%; height: 82%; }
 .tile--type .tile__name { grid-area: name; align-self: end; font-size: var(--text-base); }
 .tile--type .tile__meta { grid-area: meta; align-self: start; }
-.tile--game { align-content: start; }
-.tile__cover { margin-bottom: var(--space-2); }
+/* A game: its box art small beside its name and count, so the row is one short line of tiles. */
+.tile--game {
+  grid-template-columns: var(--tile-game-art) minmax(0, 1fr); grid-template-areas: "art name" "art meta";
+  column-gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+}
+.tile--game .tile__cover { grid-area: art; }
+.tile--game .tile__name { grid-area: name; align-self: end; font-size: var(--text-base); line-height: var(--leading-tight); }
+.tile--game .tile__meta { grid-area: meta; align-self: start; }
+.tile--game .product-image--cover { aspect-ratio: 1; }
 .product-image--cover { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-sm); }
 /* The picture fills the well whatever its own size, so a tall box shot is scaled down rather than cut off. */
 .product-image--cover img { position: absolute; inset: 0; }
@@ -494,7 +502,7 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .game-links a:hover { text-decoration: underline; }
 .game-links__label { font-size: var(--text-sm); font-weight: var(--weight-body); color: var(--color-ink-subtle); }
 
-.home-section { margin-top: var(--rhythm-section); }
+.home-section { margin-top: var(--rhythm-home); }
 .home-section .section-head { margin-bottom: var(--rhythm-title); }
 /* A note under a title belongs to the title: close under it, the usual title gap before the content. */
 .home-section .section-head:has(+ .section-head__note) { margin-bottom: var(--space-1); }

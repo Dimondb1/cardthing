@@ -51,6 +51,8 @@ TIMEOUTS = {
     "check_set_retail": 1200,
     "tidy_referrals": 600,
     "warm_pages": 240,
+    "import_cardmarket": 900,
+    "match_cardmarket": 1200,
 }
 
 
@@ -212,13 +214,13 @@ class UploadLimitTests(TestCase):
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()
-        self.assertEqual(len(installed), 16)
+        self.assertEqual(len(installed), 18)
         self.assertEqual(installed, file_cron())
 
     def test_both_files_load_the_settings_before_every_command(self):
         for name, block in (("install.sh", install_block()), ("crontab", (DEPLOY / "crontab").read_text())):
             commands = [SCHEDULE.match(raw.strip()).group(2) for raw in block.splitlines() if "manage.py" in raw]
-            self.assertEqual(len(commands), 16, name)
+            self.assertEqual(len(commands), 18, name)
             for command in commands:
                 self.assertRegex(command, PREFIX, name)
 

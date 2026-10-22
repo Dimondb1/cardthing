@@ -1152,6 +1152,14 @@ ENTRIES = [
           "Under a back in stock or pre-order post's price, when the product has a Price check (Pokémon, two or more "
           "shops, 14 days of prices). {verdict} is the Price check's word, such as Good price or High price.",
           placeholders=("verdict", "average", "days")),
+    Entry("discord.fair.market_line", T, "Discord: price check against the market",
+          "Price check: {verdict}, against a European market price of {market}.",
+          "Under a back in stock or pre-order post's price, when the Price check uses Cardmarket's price and not "
+          "our own record. {market} is Cardmarket's price in pounds.", placeholders=("verdict", "market")),
+    Entry("discord.fair.both_line", T, "Discord: price check against both",
+          "Price check: {verdict}, against an average of {average} over {days} days and a European market price of {market}.",
+          "Under a back in stock or pre-order post's price, when the Price check uses our own record and "
+          "Cardmarket's price.", placeholders=("verdict", "average", "days", "market")),
     Entry("discord.fair.one_shop", T, "Discord: one shop only",
           "Only one UK shop we check lists it, so there is no other price to compare with.",
           "Under a back in stock or pre-order post's price when only one UK shop lists the product."),
@@ -1477,6 +1485,14 @@ ENTRIES = [
           placeholders=("days",)),
     Entry("product.fair.lowest", T, "Price check: lowest price", "Lowest",
           "In the price check sheet, beside the lowest cheapest price we have recorded and its date."),
+    Entry("product.fair.market", T, "Price check: European market", "European market",
+          "In the price check sheet, beside Cardmarket's price for the same product, in pounds."),
+    Entry("product.fair.market_when", T, "Price check: Cardmarket date", "Cardmarket, {date}",
+          "Under the European market price in the price check sheet.", placeholders=("date",)),
+    Entry("product.fair.market_basis", T, "Price check: European market basis",
+          "The European market price is Cardmarket's trend for the same product, in pounds at the day's European "
+          "Central Bank rate, before post to the UK and any import costs.",
+          "At the foot of the price check sheet when it uses Cardmarket's price."),
     Entry("product.fair.basis", T, "Price check: basis",
           "From the cheapest delivered price we have recorded each day since {since}.",
           "At the foot of the price check sheet.", placeholders=("since",)),

@@ -9,7 +9,7 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    AffiliateSale, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, RemovedShop, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -383,6 +383,51 @@ class OutboundClickAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(CardmarketProduct)
+class CardmarketProductAdmin(admin.ModelAdmin):
+    """Cardmarket's sealed products, as its daily catalogue lists them (catalogue/cardmarket.py). Read only."""
+
+    list_display = ("name", "category", "game", "latest_trend", "added_on")
+    list_filter = ("game", "category")
+    search_fields = ("name", "=id")
+    list_select_related = ("game",)
+
+    @admin.display(description="Trend (€)")
+    def latest_trend(self, obj):
+        price = obj.prices.order_by("-date").first()
+        return price.trend if price else None
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CardmarketMatch)
+class CardmarketMatchAdmin(admin.ModelAdmin):
+    """Which Cardmarket product each of ours is, as Claude matched it (catalogue/cardmarket_match.py). Only a
+    match Claude was sure of, or one you confirm, is used. Claude never asks again about one you answered."""
+
+    list_display = ("product", "cardmarket", "status", "confidence", "reason", "decided_at")
+    list_filter = ("status", "product__game")
+    search_fields = ("product__name", "cardmarket__name")
+    raw_id_fields = ("product", "cardmarket")
+    list_select_related = ("product", "cardmarket")
+    actions = ("confirm", "reject")
+
+    @admin.action(description="Confirm: this is the same product")
+    def confirm(self, request, queryset):
+        done = queryset.filter(cardmarket__isnull=False).update(status=CardmarketMatch.Status.CONFIRMED,
+                                                                 decided_at=timezone.now())
+        self.message_user(request, f"{done} confirmed. Rows with no Cardmarket product were left as they were.")
+
+    @admin.action(description="Reject: not the same product")
+    def reject(self, request, queryset):
+        done = queryset.update(status=CardmarketMatch.Status.REJECTED, cardmarket=None, decided_at=timezone.now())
+        self.message_user(request, f"{done} rejected. Claude will not ask about them again.")
 
 
 class SalesImportForm(forms.Form):

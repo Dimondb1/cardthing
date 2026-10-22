@@ -9,5 +9,6 @@
   </div>
   {% include "web/includes/fair_facts.html" %}
   {% if chart %}{% include "web/includes/price_chart.html" with brief=True %}{% endif %}
-  <p class="fair-sheet__basis">{% copy "product.fair.basis" since=fair.since|short_date %}</p>
+  {% if fair.days %}<p class="fair-sheet__basis">{% copy "product.fair.basis" since=fair.since|short_date %}</p>{% endif %}
+  {% if fair.market %}<p class="fair-sheet__basis">{% copy "product.fair.market_basis" %}</p>{% endif %}
 </dialog>

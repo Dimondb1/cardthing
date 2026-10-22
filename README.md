@@ -2861,6 +2861,17 @@ up to a year back and not counting today:
 
 The wording is under Product page in Site wording (`product.fair.*`).
 
+**The European market.** Once a product is matched to Cardmarket (see
+Cardmarket market prices), Cardmarket's trend price for it, in pounds at the
+day's ECB rate, is a second reference: at most 95% of it is a good price, up
+to 115% fair, up to 135% above average, more is high (Cardmarket's prices
+are before post to the UK and import costs, so a fair UK price sits a little
+over them). It works for a product only one UK shop lists, so the lone
+£1,199.99 Ultra Shiny GX box against Cardmarket's £577.70 is called a high
+price. With both references the verdict is the lower band of the two, and
+the market never makes a price "Lowest yet". The sheet then shows "European
+market £577.70, Cardmarket, 22 Oct" and says what that price is.
+
 ### When a price was checked
 
 A product page's headline price says which shop it is from and when that
@@ -3056,6 +3067,48 @@ sends visitors. The page's canonical address stays the plain one, so
 search engines see one page. The previews Reddit and messaging apps draw
 come from the page's Open Graph tags (name, price and picture).
 
+## Cardmarket market prices
+
+Cardmarket publishes its whole catalogue and a daily price guide as free
+downloads (https://www.cardmarket.com/Data/Download). `import_cardmarket`,
+daily at 6:44 from cron, reads the sealed products ("non-singles": boxes,
+packs, elite trainer boxes, tins, decks) and today's prices for every game
+Cardmarket covers that we do (`cardmarket.GAMES`: Pokémon, Magic, Yu-Gi-Oh,
+One Piece, Lorcana, Flesh and Blood, Digimon, Dragon Ball Super, Star Wars
+Unlimited, Riftbound), and keeps one row a day per product
+(`CardmarketPrice`: trend, average and lowest, in euros), so the history is
+ours whatever happens to the download. Singles are left out. It also keeps
+the European Central Bank's daily pound rate (`ExchangeRate`). A run takes
+seconds; a game that fails to download never stops the others.
+
+**Matching.** `match_cardmarket`, hourly at 29 past (waiting for the Claude
+judge's lock, so one Claude job runs at a time), asks Claude which
+Cardmarket product each of ours is: Pokémon first, then the other games,
+products a shop sells now first. The site shortlists up to eight
+Cardmarket products of a kind that can be ours sharing the set's words
+(the box itself, and the near misses: the 18-booster box, the case, the
+Pokémon Center edition), and Claude picks one or none
+(`catalogue/cardmarket_match.py`). A sure answer is used (Matched by
+Claude); a less sure one, or a match whose Cardmarket price is under a
+third or over four times ours (more often a pack against a box), waits for
+you (Claude was not sure: check it). A product with no candidate is noted
+without asking. Admin, Cardmarket matches lists them all with Confirm and
+Reject; Claude never asks again about one you answered, and asks again
+about any other only when our product or the candidates change.
+
+Cost: it uses the Claude judge's key, model and monthly limit, spends only
+while Claude is switched on in Things to check, and stops a run at $3 or
+120 products. Each question is a ClaudeAsk of kind "Cardmarket match",
+priced and counted with the judge's, so the monthly limit covers both. At
+the judge's typical cost, about $0.02 a product on Opus.
+
+What it is not: Cardmarket's prices are European, in euros, before post to
+the UK and import costs. They are a reference for the Price check (see
+Price check), never shown beside the UK shops' prices or as a price you
+can buy at. Cardmarket states no licence for the files beyond publishing
+them for everyone, so the site uses them to judge prices and does not
+republish the price list.
+
 ## Discord
 
 The site's footer links to RipRaptor's Discord server
@@ -3072,9 +3125,10 @@ cron, posts news to the channels set up in admin (`catalogue/discord.py`):
 
 Back in stock and Pre-orders open posts carry the product's Price check
 under the price ("Price check: High price, against an average of £42.00
-over 20 days."), so a dear restock says so, whenever the product has one
-(see Price check). When only one UK shop lists the product the post says
-there is no other price to compare with instead.
+over 20 days.", or "against a European market price of £577.70" when it is
+Cardmarket's), so a dear restock says so, whenever the product has one
+(see Price check). When only one UK shop lists the product and there is no
+market price, the post says there is no other price to compare with.
 
 Each channel has its own page in admin, under Discord channels: its name
 (for you), its webhook address, which of the four updates it gets, which

@@ -53,9 +53,10 @@ class VerdictTests(TestCase):
             with self.subTest(price=price):
                 self.assertEqual(fair_price.verdict(self.etb, Decimal(price), self.today).key, key)
 
-    def test_the_verdict_names_its_figures_in_two_queries(self):
+    def test_the_verdict_names_its_figures_in_three_queries(self):
         record(self.etb, ["45.00", "45.00"] + ["50.00"] * 16 + ["45.00", "55.00"], self.today)
-        with self.assertNumQueries(2):
+        # Its Cardmarket match (none here), the summary of our record, and the day of the low.
+        with self.assertNumQueries(3):
             verdict = fair_price.verdict(self.etb, Decimal("49.00"), self.today)
         self.assertEqual((verdict.days, verdict.average, verdict.low), (20, Decimal("49.50"), Decimal("45.00")))
         # The latest day at the low, and the first day recorded.

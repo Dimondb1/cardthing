@@ -12,10 +12,20 @@ Today's cheapest delivered price is set against the days before today, back up t
 
 A price that has never moved is its own lowest every day: that is a fair price, never "Lowest yet".
 
-A product gets no verdict without MIN_SHOPS UK shops listing it: one shop's prices measured against its own
-past say nothing about the market, so a lone £1,199.99 listing is never called a good price. Nor without
-MIN_DAYS days of prices before today, or without a delivered price now (a shop whose delivery is unknown), and
-only in the games in GAMES while this is on trial.
+Our own record counts only with MIN_SHOPS UK shops listing the product: one shop's prices measured against its
+own past say nothing about the market, so a lone £1,199.99 listing is never called a good price by it. It also
+needs MIN_DAYS days of prices before today.
+
+The market: when Claude matched the product to Cardmarket's surely, or the owner confirmed it
+(catalogue/cardmarket_match.py), Cardmarket's trend price for it in the last MARKET_FRESH_DAYS, in pounds at
+the day's ECB rate, is a second reference, and the price is banded against it too (market_band): at most
+MARKET_GOOD of it is good, up to MARKET_FAIR fair, up to MARKET_ABOVE above, more is high. Cardmarket's prices
+are before post to the UK and import costs, which is why a fair UK price may sit a little over them. The market
+never makes a price "Lowest yet" (that is our own record's word), and with both references the verdict is the
+lower band of the two, so neither can make a dear price look good.
+
+A product gets no verdict without either reference, or without a delivered price now (a shop whose delivery
+is unknown), and only in the games in GAMES while this is on trial.
 
 at_lowest lists the products whose cheapest delivered price now is the lowest of the last LOW_DAYS, for the
 Deals page.
@@ -28,7 +38,7 @@ from decimal import Decimal
 from django.db.models import Avg, Count, DecimalField, ExpressionWrapper, F, FloatField, IntegerField, Min, OuterRef, Q, Subquery
 from django.utils import timezone
 
-from .models import DailyLowestPrice, Product
+from .models import CardmarketMatch, CardmarketPrice, DailyLowestPrice, ExchangeRate, Product
 from .offers import MAX_REAL_PERCENT
 
 GAMES = {"pokemon"}
@@ -38,19 +48,29 @@ MIN_SHOPS = 2
 GOOD = Decimal("0.05")
 HIGH = Decimal("0.15")
 LOW_DAYS = 90       # at_lowest: the lowest of this many days back
+MARKET_GOOD, MARKET_FAIR, MARKET_ABOVE = Decimal("0.95"), Decimal("1.15"), Decimal("1.35")
+MARKET_FRESH_DAYS = 7
 LOWEST, GOOD_PRICE, FAIR, ABOVE, HIGH_PRICE = 5, 4, 3, 2, 1
 KEYS = {LOWEST: "lowest", GOOD_PRICE: "good", FAIR: "fair", ABOVE: "above", HIGH_PRICE: "high"}
+
+
+@dataclass
+class Market:
+    gbp: Decimal              # Cardmarket's price for the same product, in pounds
+    eur: Decimal
+    date: date
 
 
 @dataclass
 class Verdict:
     band: int                 # 1 (high) to 5 (lowest we've seen)
     price: Decimal            # today's cheapest delivered price
-    average: Decimal          # the average of the days before today
-    low: Decimal
-    low_date: date
-    days: int                 # days with a price before today
-    since: date               # the first of them
+    average: Decimal | None = None   # the average of the days before today (None without our own record)
+    low: Decimal | None = None
+    low_date: date | None = None
+    days: int = 0             # days with a price before today
+    since: date | None = None  # the first of them
+    market: Market | None = None
 
     @property
     def key(self):
@@ -76,23 +96,62 @@ def band_for(price, average, low):
     return HIGH_PRICE
 
 
+def market_reference(product, today=None):
+    """Cardmarket's price for ``product`` in pounds (Market), when its match is used and Cardmarket priced it in
+    the last MARKET_FRESH_DAYS, or None. Three queries at most."""
+    from .cardmarket import in_pounds
+
+    today = today or timezone.localdate()
+    found = (CardmarketMatch.objects.filter(product=product, status__in=CardmarketMatch.USED, cardmarket__isnull=False)
+             .values_list("cardmarket_id", flat=True).first())
+    if found is None:
+        return None
+    row = (CardmarketPrice.objects.filter(product_id=found, date__gte=today - timedelta(days=MARKET_FRESH_DAYS))
+           .order_by("-date").first())
+    euros = (row.trend or row.avg) if row else None
+    rate = ExchangeRate.latest() if euros else None
+    if rate is None:
+        return None
+    return Market(gbp=in_pounds(euros, rate), eur=euros, date=row.date)
+
+
+def market_band(price, market_gbp):
+    """The band for ``price`` against Cardmarket's price in pounds. Never LOWEST: that is our own record's."""
+    if price <= market_gbp * MARKET_GOOD:
+        return GOOD_PRICE
+    if price <= market_gbp * MARKET_FAIR:
+        return FAIR
+    if price <= market_gbp * MARKET_ABOVE:
+        return ABOVE
+    return HIGH_PRICE
+
+
 def verdict(product, price, today=None, shops=MIN_SHOPS):
     """The Verdict for ``product`` at ``price`` (its cheapest delivered price now), or None. ``shops`` is how
-    many UK shops list it, in stock or not. Two queries."""
-    if price is None or shops < MIN_SHOPS or not applies(product):
+    many UK shops list it, in stock or not. Up to five queries."""
+    if price is None or not applies(product):
         return None
     today = today or timezone.localdate()
-    rows = DailyLowestPrice.objects.filter(product=product, date__lt=today, date__gte=today - timedelta(days=WINDOW_DAYS))
-    summary = rows.aggregate(days=Count("pk"), average=Avg("price"), low=Min("price"), since=Min("date"))
-    if summary["days"] < MIN_DAYS:
+    found = Verdict(band=HIGH_PRICE, price=price, market=market_reference(product, today))
+    bands = []
+    if shops >= MIN_SHOPS:
+        rows = DailyLowestPrice.objects.filter(product=product, date__lt=today,
+                                               date__gte=today - timedelta(days=WINDOW_DAYS))
+        summary = rows.aggregate(days=Count("pk"), average=Avg("price"), low=Min("price"), since=Min("date"))
+        if summary["days"] >= MIN_DAYS:
+            pence = Decimal("0.01")
+            found.average = Decimal(summary["average"]).quantize(pence)
+            found.low = Decimal(summary["low"]).quantize(pence)
+            # The latest day at the low, so "Lowest £x on <date>" names the most recent time it was that cheap.
+            found.low_date = rows.filter(price=summary["low"]).order_by("-date").values_list("date", flat=True).first()
+            found.days, found.since = summary["days"], summary["since"]
+            bands.append(band_for(price, found.average, found.low))
+    if found.market is not None:
+        bands.append(market_band(price, found.market.gbp))
+    if not bands:
         return None
-    pence = Decimal("0.01")
-    average = Decimal(summary["average"]).quantize(pence)
-    low = Decimal(summary["low"]).quantize(pence)
-    # The latest day at the low, so "Lowest £x on <date>" names the most recent time it was that cheap.
-    low_date = rows.filter(price=summary["low"]).order_by("-date").values_list("date", flat=True).first()
-    return Verdict(band=band_for(price, average, low), price=price, average=average, low=low,
-                   low_date=low_date, days=summary["days"], since=summary["since"])
+    found.band = min(bands)
+    return found
 
 
 def at_lowest(limit=12, today=None):

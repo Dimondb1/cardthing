@@ -1099,6 +1099,99 @@ class AffiliateSale(models.Model):
         super().save(*args, **kwargs)
 
 
+class CardmarketProduct(models.Model):
+    """A sealed product in Cardmarket's public catalogue (its daily download), for a game we compare.
+
+    Read by catalogue/cardmarket.py. Only sealed products ("non-singles") are kept: RipRaptor compares sealed.
+    The id is Cardmarket's own (idProduct), so a product keeps its prices whatever its name becomes."""
+
+    id = models.PositiveIntegerField(primary_key=True)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="cardmarket_products")
+    name = models.CharField(max_length=255)
+    category_id = models.PositiveIntegerField()
+    category = models.CharField(max_length=120, help_text="Cardmarket's kind, such as Pokémon Display.")
+    expansion_id = models.PositiveIntegerField(default=0)
+    added_on = models.DateField(null=True, blank=True, help_text="When Cardmarket added it.")
+    seen_at = models.DateTimeField(default=timezone.now, help_text="The last catalogue that held it.")
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Cardmarket product"
+
+    def __str__(self):
+        return f"{self.name} ({self.category})"
+
+
+class CardmarketPrice(models.Model):
+    """Cardmarket's price guide for one sealed product on one day, in euros, kept as our own copy so the
+    history stays whatever happens to the download. trend is Cardmarket's trend price, avg the average sale
+    price, low the lowest listing (often an odd one)."""
+
+    product = models.ForeignKey(CardmarketProduct, on_delete=models.CASCADE, related_name="prices")
+    date = models.DateField(db_index=True)
+    trend = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    avg = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    low = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        ordering = ["-date"]
+        unique_together = [("product", "date")]
+        verbose_name = "Cardmarket price"
+
+    def __str__(self):
+        return f"{self.product} on {self.date}: €{self.trend}"
+
+
+class CardmarketMatch(models.Model):
+    """Which Cardmarket product one of ours is, as Claude matched it (catalogue/cardmarket_match.py) or the
+    owner set it. ``cardmarket`` is empty when there is none. Only a MATCHED or CONFIRMED one is used."""
+
+    class Status(models.TextChoices):
+        MATCHED = "matched", "Matched by Claude"
+        CHECK = "check", "Claude was not sure: check it"
+        NONE = "none", "No Cardmarket product"
+        CONFIRMED = "confirmed", "Confirmed by you"
+        REJECTED = "rejected", "Not this one (you)"
+
+    USED = (Status.MATCHED, Status.CONFIRMED)
+
+    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="cardmarket_match")
+    cardmarket = models.ForeignKey(CardmarketProduct, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="matches")
+    status = models.CharField(max_length=10, choices=Status.choices)
+    confidence = models.CharField(max_length=6, blank=True)
+    reason = models.CharField(max_length=200, blank=True)
+    candidates = models.JSONField(default=list, blank=True, help_text="The Cardmarket products Claude chose from.")
+    fingerprint = models.CharField(max_length=64, blank=True, help_text="What was asked: asked again when it changes.")
+    decided_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-decided_at"]
+        verbose_name = "Cardmarket match"
+        verbose_name_plural = "Cardmarket matches"
+
+    def __str__(self):
+        return f"{self.product} = {self.cardmarket or 'none'} ({self.get_status_display()})"
+
+
+class ExchangeRate(models.Model):
+    """The European Central Bank's reference rate for a day: pounds to one euro, to set Cardmarket's euro
+    prices beside ours."""
+
+    date = models.DateField(unique=True)
+    gbp_per_eur = models.DecimalField(max_digits=8, decimal_places=5)
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.date}: £{self.gbp_per_eur} to €1"
+
+    @classmethod
+    def latest(cls):
+        return cls.objects.order_by("-date").first()
+
+
 class Restock(models.Model):
     """One time a shop went from not having a product to having it in stock.
 
@@ -1719,6 +1812,7 @@ class ClaudeAsk(models.Model):
         PAIR = "pair", "Possible duplicates"
         SET = "set", "Announced set"
         RETAIL = "retail", "Set sold in shops"
+        MARKET = "market", "Cardmarket match"
 
     class Outcome(models.TextChoices):
         SENT = "sent", "Sent"

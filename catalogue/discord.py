@@ -105,13 +105,17 @@ def price_check_words(product, price, delivery_known, store):
     with a verdict."""
     shops = (Listing.objects.filter(product=product, is_active=True, retailer__is_active=True)
              .exclude(sanity=Listing.Sanity.EXCLUDED).values("retailer_id").distinct().count())
-    if shops < fair_price.MIN_SHOPS:
-        return copy.get("discord.fair.one_shop", store=store)
     found = fair_price.verdict(product, price, shops=shops) if delivery_known else None
     if found is None:
-        return ""
-    return copy.get("discord.fair.line", store=store, verdict=copy.get(f"product.fair.verdict_{found.key}", store=store),
-                    average=f"£{found.average:.2f}", days=found.days)
+        return copy.get("discord.fair.one_shop", store=store) if shops < fair_price.MIN_SHOPS else ""
+    word = copy.get(f"product.fair.verdict_{found.key}", store=store)
+    market = f"£{found.market.gbp:.2f}" if found.market else ""
+    if found.days and found.market:
+        return copy.get("discord.fair.both_line", store=store, verdict=word, average=f"£{found.average:.2f}",
+                        days=found.days, market=market)
+    if found.market:
+        return copy.get("discord.fair.market_line", store=store, verdict=word, market=market)
+    return copy.get("discord.fair.line", store=store, verdict=word, average=f"£{found.average:.2f}", days=found.days)
 
 
 def look_back(channel):

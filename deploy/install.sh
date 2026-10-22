@@ -124,6 +124,9 @@ sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/
 # Then build the lists the home, Deals and drops pages read, so the first visitors after a deploy do not wait
 # for them. A failure leaves them to be built by the first visitor, as before.
 sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py warm_pages" || true
+# Cardmarket's catalogue and prices, once, when none are held yet, so matching can start without waiting for the
+# daily read at 6:44. A failure leaves it to that read.
+sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py shell -c 'from catalogue.models import CardmarketProduct; raise SystemExit(0 if CardmarketProduct.objects.exists() else 1)' || timeout -k 30 900 .venv/bin/python manage.py import_cardmarket" || true
 
 # One address for the site: www. sends visitors and Google to the same page without it, permanently.
 # Serving both made Google index the whole site twice and split each page's standing between them.
@@ -165,6 +168,8 @@ systemctl reload caddy
 # while holding a lock would otherwise make every later run behind it give up silently.
 # The snapshot, the delivery check and tidy_all put timeout inside flock, so time spent waiting
 # for a long import does not use up their limit.
+# Cardmarket's sealed catalogue and price guide are read daily at 6:44 (after Cardmarket's own early update), and Claude
+# matches them to our products hourly at 29 past, waiting for the judge's lock so only one Claude job runs at once.
 # deploy/crontab carries the same lines; catalogue/tests_ops.py fails when they differ.
 echo "PYTHONUNBUFFERED=1
 0 * * * *  cd $DIR && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices --due --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
@@ -178,6 +183,8 @@ echo "PYTHONUNBUFFERED=1
 8-58/10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 300 flock -n /tmp/ripraptor-discord.lock .venv/bin/python manage.py post_discord >> /var/log/ripraptor-import.log 2>&1
 2-59/5 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 900 flock -n /tmp/ripraptor-judge.lock .venv/bin/python manage.py judge_checks >> /var/log/ripraptor-import.log 2>&1
 51 6 * * * cd $DIR && set -a && . ./.env && set +a && flock -w 1200 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py check_set_retail >> /var/log/ripraptor-import.log 2>&1
+44 6 * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 900 .venv/bin/python manage.py import_cardmarket >> /var/log/ripraptor-import.log 2>&1
+29 * * * * cd $DIR && set -a && . ./.env && set +a && flock -w 600 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py match_cardmarket >> /var/log/ripraptor-import.log 2>&1
 20 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1
 40 0 * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1

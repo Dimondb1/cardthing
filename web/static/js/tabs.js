@@ -43,7 +43,7 @@
     tabs.forEach((a, i) => (i === index ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
     mark();
     history.replaceState(history.state, "", urls[index]);
-    if (tabInput) tabInput.value = key;
+    if (tabInput) tabInput.value = key === opening ? "" : key;
     if (clearLink) {
       const url = new URL(clearLink.href, location.href);
       if (key === opening) url.searchParams.delete("tab");
@@ -117,8 +117,13 @@
   ["pointerdown", "touchstart", "wheel", "keydown"].forEach((type) => track.addEventListener(type, () => { touched = true; }, { passive: true }));
 
   function settle() {
-    if (!touched) return;
     const index = Math.round(track.scrollLeft / track.clientWidth);
+    // The browser can re-snap the track by itself while the lists load (Chrome does on a page opening on a later
+    // tab): a move the visitor did not make goes back to the list in view.
+    if (!touched) {
+      if (index !== current) track.scrollLeft = current * track.clientWidth;
+      return;
+    }
     if (index !== current && index >= 0 && index < keys.length) select(index);
   }
   if ("onscrollend" in window) {

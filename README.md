@@ -2835,19 +2835,30 @@ one row that scrolls sideways on a phone),
 ending in "All sets" when it has more, which opens the game's whole list on
 the Games page (`/games/#game-<slug>`: the Games page shows a game's 8 newest
 sets and keeps the rest in the page, shown by CSS once the address names that
-game, so it needs no script). A set page lists no other sets; under its
+game, so it needs no script). The chips follow the language and type chosen:
+with Korean picked, only sets with Korean products show. Each chip keeps the
+language, type and sort in its link, so the set page opens on what the
+visitor was looking for; not the price band or 2+ shops, which could leave
+that page empty. A set page lists no other sets; under its
 heading it gives its code and dates in small print and one link, "All
 <game> products".
 
 Game and set pages are kept short. The line under the heading says what
 the page holds (see the hubs below), so there is no second product count
-unless a filter narrows the list. On a game page, while anything is in
+unless a filter narrows the list, and none beside the stock tabs, which
+count their own lists. On a game page, while anything is in
 stock, it is one short line ("4,179 sealed products compared across 53 UK
 shops.", `browse.hub.brief`): the In stock tab gives that count, and the
 cheapest product's link is left to the set pages. Sort and filters show only for a list of
 12 or more products (`FILTERS_FROM`), folded under one "Sort and filter"
-button (a `<details>`, open while any filter or sort is chosen); a shorter
-list has none. "Email me when products like these are in stock" sits under
+button (a `<details>`); a shorter list has none unless something is chosen.
+The panel loads closed even while a filter is chosen, so a page reached
+from a set chip opens on its list: the button names the choices ("Sort and
+filter · Booster box · Korean") and Clear filters sits beside it. A change
+made in the open panel keeps it open on the page it loads (`site.js`,
+remembered for that browser tab only). The form carries the stock tab only
+when the address named one, so a filter that empties the tab in view opens
+on the first tab with products. "Email me when products like these are in stock" sits under
 the list, only while the list has products or the set is still to come.
 
 Game and set pages split their products into three tabs instead of the In

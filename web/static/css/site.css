@@ -1400,6 +1400,14 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 }
 .filter-panel[open] > .filter-panel__toggle::before, .drop-all[open] > .drop-all__toggle::before { transform: rotate(45deg); }
 .filter-panel .filters { padding-top: var(--space-2); }
+/* The folded panel with Clear filters beside its button: the panel takes the row, Clear sits at its right on the button's line. */
+.filter-bar { display: flex; align-items: flex-start; gap: var(--space-3); margin: var(--space-3) 0 var(--rhythm-control); }
+.filter-bar .filter-panel { flex: 1; min-width: 0; margin: 0; }
+.filter-bar__clear { flex: none; display: inline-flex; align-items: center; min-height: var(--tap); font-size: var(--text-sm); }
+.stock-tabs + .filter-bar { margin-top: 0; }
+.filter-panel__toggle { max-width: 100%; }
+.filter-panel__chosen { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-body); color: var(--color-ink-muted); }
+.filter-panel__chosen::before { content: "·"; margin-right: var(--space-2); color: var(--color-ink-subtle); }
 .stock-tabs + .filter-panel { margin-top: 0; }   /* the tab row keeps its own room below it */
 .drop-waiting { margin-top: var(--rhythm-section); }
 .drop-group { margin-top: var(--space-5); }

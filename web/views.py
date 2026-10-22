@@ -225,6 +225,20 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         if band in BAND_TOPS:
             params["max"] = BAND_TOPS[band]
         alert_url = reverse("web:watchlist") + "?" + urlencode(params) + "#alert"
+    # The choices in force, named on the folded Sort and filter button so the list says what it holds.
+    chosen = []
+    if sort not in (form.default_sort, "soonest"):
+        chosen.append(dict(form.fields["sort"].choices).get(sort))
+    for name, value in (("type", product_type), ("price", band), ("lang", form.value("lang"))):
+        if value:
+            chosen.append(dict(form.fields[name].choices).get(value))
+    if form.value("compared"):
+        chosen.append(form.fields["compared"].label)
+    # A set link on a game page keeps the language, type and sort: what the visitor was looking for. Not
+    # the price or 2+ shops, which could leave the set's page empty (the sets shown follow language and type).
+    kept = {"lang": form.value("lang"), "type": product_type,
+            "sort": sort if sort not in (form.default_sort, "soonest", "best") else ""}
+    kept = {name: value for name, value in kept.items() if value}
     # Clear filters keeps the search words, and the tab only when the address named it.
     clear = {key: value for key, value in (("q", query), ("tab", asked)) if value}
     stock_tabs = stock_tab_links(request, tab_counts, opening) if tabs else []
@@ -238,6 +252,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "cards": cards,
         "total": sum(tab_counts.values()) if tabs else paginator.count,
         "filters_active": filters_active,
+        "chosen_filters": [label for label in chosen if label],
+        "set_query": "?" + urlencode(kept) if kept else "",
         "clear_url": "?" + urlencode(clear),
         # A short list on a game or set page needs no sort or filters; a longer one folds them away.
         "show_filters": not tabs or filters_active or paginator.count >= FILTERS_FROM,
@@ -246,6 +262,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "games": Game.objects.filter(is_active=True),
         "tab": tab,
         "tab_opening": opening,
+        "tab_asked": asked,
         "tab_label": dict(STOCK_TABS).get(tab, ""),
         "stock_tabs": stock_tabs,
         "tab_row": shown_tabs if len(shown_tabs) > 1 else [],
@@ -744,8 +761,12 @@ def game_detail(request, game_slug):
     pane = bool(request.GET.get("pane"))
     # The newest sets, and one more to know whether All sets is needed. Newest first, spelled out: a distinct
     # query keeps the model's order only by chance.
+    # Only sets with products in the language and type in view: a Korean list offers only Korean sets.
+    in_view = apply_languages(Product.objects.active().filter(game=game), [request.GET.get("lang", "")])
+    if request.GET.get("type") in Product.Type.values:
+        in_view = in_view.filter(product_type=request.GET["type"])
     sets = [] if pane else list(
-        ProductSet.objects.filter(game=game, products__is_active=True).select_related("game").distinct()
+        ProductSet.objects.filter(game=game, pk__in=in_view.values("product_set_id")).select_related("game")
         .order_by(F("release_date").desc(nulls_last=True), "name")[:GAME_PAGE_SETS + 1]
     )
     words = hubs.Words(text, request)

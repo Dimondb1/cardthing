@@ -2645,13 +2645,17 @@ class GoldenLayoutTests(PageTestCase):
 
 class StockTabsScriptTests(TestCase):
     def test_only_the_visitors_own_swipe_changes_the_tab(self):
-        # Placing the list on load fires scrollend at once when motion is reduced; that must not move a
-        # Pre-orders link onto Out of stock.
+        # Placing the list on load fires scrollend at once when motion is reduced, and Chrome can re-snap the
+        # track by itself on a page opening on a later tab: neither may move a Pre-orders link onto Out of
+        # stock. A move the visitor did not make goes back to the list in view and returns before select().
         from django.contrib.staticfiles import finders
 
         script = open(finders.find("js/tabs.js"), encoding="utf-8").read()
-        settle = script[script.index("function settle() {"):]
-        self.assertTrue(settle.split("\n")[1].strip() == "if (!touched) return;")
+        settle = script[script.index("function settle() {"):script.index("if (\"onscrollend\" in window)")]
+        untouched = settle[settle.index("if (!touched) {"):settle.index("return;")]
+        self.assertIn("track.scrollLeft = current * track.clientWidth;", untouched)
+        self.assertNotIn("select(", untouched)
+        self.assertLess(settle.index("return;"), settle.index("select(index)"))
         self.assertIn('["pointerdown", "touchstart", "wheel", "keydown"]', script)
 
 

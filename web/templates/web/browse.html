@@ -33,14 +33,14 @@
   <h1 class="browse-head__title">{{ heading }}</h1>
   {% if intro %}<p class="browse-head__intro">{{ intro }}</p>{% endif %}
   {% if product_set %}<p class="browse-head__meta">{% for fact in set_facts %}{{ fact }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endfor %}<a href="{{ game.get_absolute_url }}">{% copy "browse.set.game_link" game=game.display_short %}</a></p>{% endif %}
-  {# The line under the heading already counts the products, unless a filter has narrowed the list. #}
-  {% if not intro or filters_active %}<p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>{% endif %}
+  {# The line under the heading already counts the products, unless a filter has narrowed the list; the stock tabs count them too. #}
+  {% if not tab_row %}{% if not intro or filters_active %}<p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>{% endif %}{% endif %}
 </div>
 
 {% if sets %}
 <nav class="set-nav" id="sets" aria-label="{% copy 'browse.game.sets_title' %}">
   <ul>
-    {% for item in sets %}<li><a href="{{ item.get_absolute_url }}">{{ item.name }}</a></li>{% endfor %}
+    {% for item in sets %}<li><a href="{{ item.get_absolute_url }}{{ set_query }}">{{ item.name }}</a></li>{% endfor %}
     {% if more_sets %}<li><a class="set-nav__all" href="{% url 'web:games' %}#game-{{ game.slug }}">{% copy "browse.game.all_sets" %}</a></li>{% endif %}
   </ul>
 </nav>
@@ -62,12 +62,15 @@
 {% endif %}
 
 {% if show_filters %}
-{% if fold_filters %}<details class="filter-panel"{% if filters_active %} open{% endif %}>
-  <summary class="filter-panel__toggle">{% copy "browse.filters.toggle" %}</summary>
+{# On game and set pages the choices fold under one button, closed even while some are chosen: the button names them, and Clear filters sits beside it. site.js keeps it open after a change made in it. #}
+{% if fold_filters %}<div class="filter-bar">
+<details class="filter-panel" data-filter-panel>
+  <summary class="filter-panel__toggle"><span>{% copy "browse.filters.toggle" %}</span>{% if chosen_filters %}<span class="filter-panel__chosen">{{ chosen_filters|join:" · " }}</span>{% endif %}</summary>
 {% endif %}
 <form class="filters" method="get" action="" data-autosubmit>
   {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
-  {% if tab %}<input type="hidden" name="tab" value="{{ tab }}" data-tab-input>{% endif %}
+  {# The tab only when the address named it (tabs.js: when one other than the opening tab is in view), so a filter that empties the tab in view opens on the first with products. #}
+  {% if tab %}<input type="hidden" name="tab" value="{{ tab_asked }}" data-tab-input>{% endif %}
   <div class="pill pill--sort">
     <label class="visually-hidden" for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
     {{ form.sort }}
@@ -94,10 +97,12 @@
   <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>
   <div class="filters__actions">
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
-    {% if filters_active %}<a class="filters__clear" href="{{ clear_url }}"{% if stock_tabs %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
+    {% if filters_active and not fold_filters %}<a class="filters__clear" href="{{ clear_url }}"{% if stock_tabs %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
   </div>
 </form>
-{% if fold_filters %}</details>{% endif %}
+{% if fold_filters %}</details>
+{% if filters_active %}<a class="filters__clear filter-bar__clear" href="{{ clear_url }}"{% if stock_tabs %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
+</div>{% endif %}
 {% endif %}
 
 {% if stock_tabs %}

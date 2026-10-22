@@ -2,6 +2,19 @@
 
 // Apply filters as soon as one changes. The "Show results" button is kept
 // for visitors without JavaScript.
+// The folded Sort and filter panel on game and set pages loads closed; a change made in it keeps it open on the
+// page that change loads, so the next choice is a tap away. Remembered for this tab only, and only for this page.
+const FILTERS_OPEN = "rr-filters-open";
+document.querySelectorAll("[data-filter-panel]").forEach((panel) => {
+  try {
+    if (sessionStorage.getItem(FILTERS_OPEN) === location.pathname) panel.open = true;
+    sessionStorage.removeItem(FILTERS_OPEN);
+  } catch (e) {}
+  panel.querySelector("form")?.addEventListener("submit", () => {
+    try { sessionStorage.setItem(FILTERS_OPEN, location.pathname); } catch (e) {}
+  });
+});
+
 document.querySelectorAll("form[data-autosubmit]").forEach((form) => {
   form.querySelectorAll("[data-autosubmit-hide]").forEach((el) => {
     el.hidden = true;

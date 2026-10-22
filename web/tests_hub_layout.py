@@ -219,9 +219,9 @@ class FilterTests(HubLayoutTestCase):
     def test_a_long_list_folds_them_under_one_button(self):
         self.fill(FILTERS_FROM)
         html = self.get(self.url)
-        self.assertIn('<details class="filter-panel">', html)
-        self.assertIn('<summary class="filter-panel__toggle">Sort and filter</summary>', html)
-        panel = html[html.index('<details class="filter-panel">'):html.index("</details>")]
+        self.assertIn('<details class="filter-panel" data-filter-panel>', html)
+        self.assertIn('<summary class="filter-panel__toggle"><span>Sort and filter</span></summary>', html)
+        panel = html[html.index('<details class="filter-panel"'):html.index("</details>")]
         self.assertIn('<form class="filters"', panel)
         self.assertIn('name="sort"', panel)
         # Without script the form still works: its button is in the page.
@@ -231,22 +231,25 @@ class FilterTests(HubLayoutTestCase):
         self.fill(3)
         self.fill(FILTERS_FROM, availability=OUT)
         self.assertNotIn("filter-panel", self.get(self.url))
-        self.assertIn('<details class="filter-panel">', self.get(self.url + "?tab=out-of-stock"))
+        self.assertIn('<details class="filter-panel" data-filter-panel>', self.get(self.url + "?tab=out-of-stock"))
 
-    def test_a_chosen_filter_or_sort_opens_the_panel_whatever_the_length(self):
+    def test_a_chosen_filter_or_sort_shows_the_panel_closed_naming_it_whatever_the_length(self):
         self.fill(2)
-        for query in ("?type=booster_box", "?sort=price", "?compared=on", "?lang=en"):
+        for query, named in (("?type=booster_box", "Booster box"), ("?sort=price", "Lowest price"),
+                             ("?compared=on", "2+ shops"), ("?lang=en", "English")):
             with self.subTest(query=query):
                 html = self.get(self.url + query)
-                self.assertIn('<details class="filter-panel" open>', html)
+                # Closed, so a page reached with filters chosen opens on its list; the button says what is chosen.
+                self.assertIn('<details class="filter-panel" data-filter-panel>', html)
+                self.assertIn(f'<span class="filter-panel__chosen">{named}</span>', html)
                 self.assertIn("Clear filters", html)
                 # The list it narrowed is counted, beside the line about the whole set.
                 self.assertIn('class="browse-head__count" role="status"', html)
 
     def test_clear_filters_keeps_a_tab_only_when_the_address_named_it(self):
         self.fill(2)
-        self.assertIn('<a class="filters__clear" href="?" data-tab-link>', self.get(self.url + "?sort=price"))
-        self.assertIn('<a class="filters__clear" href="?tab=out-of-stock" data-tab-link>',
+        self.assertIn('<a class="filters__clear filter-bar__clear" href="?" data-tab-link>', self.get(self.url + "?sort=price"))
+        self.assertIn('<a class="filters__clear filter-bar__clear" href="?tab=out-of-stock" data-tab-link>',
                       self.get(self.url + "?sort=price&tab=out-of-stock"))
 
     def test_search_keeps_its_filters_in_view(self):
@@ -254,6 +257,60 @@ class FilterTests(HubLayoutTestCase):
         html = self.get(reverse("web:search") + "?q=duelist")
         self.assertIn('<form class="filters"', html)
         self.assertNotIn("filter-panel", html)
+
+
+class GameSetRowTests(HubLayoutTestCase):
+    """The game page's row of sets follows the language and type in view, and each set keeps them."""
+
+    def setUp(self):
+        super().setUp()
+        self.english = make_set(self.game, name="Duelist Archive", slug="duelist-archive", code="DA01")
+        self.product(self.english, "Duelist Archive Box", (self.a, STOCK))
+        self.korean = make_set(self.game, name="Korean Pack Set", slug="korean-pack-set", code="")
+        box = self.product(self.korean, "Korean Pack Set Box", (self.a, STOCK))
+        Product.objects.filter(pk=box.pk).update(language="ko")
+        self.url = self.game.get_absolute_url()
+
+    def sets(self, query=""):
+        html = self.get(self.url + query)
+        row = html[html.index('<nav class="set-nav"'):html.index("</nav>", html.index('<nav class="set-nav"'))]
+        return re.findall(r'<a href="([^"]+)">([^<]+)</a>', row)
+
+    def test_the_sets_follow_the_language_and_type_chosen(self):
+        self.assertEqual({name for _, name in self.sets()}, {"Duelist Archive", "Korean Pack Set"})
+        self.assertEqual([name for _, name in self.sets("?lang=ko")], ["Korean Pack Set"])
+        self.assertEqual([name for _, name in self.sets("?lang=en")], ["Duelist Archive"])
+        tin = self.product(self.english, "Duelist Archive Tin", (self.a, STOCK), kind=Product.Type.TIN)
+        self.assertEqual([name for _, name in self.sets("?type=tin")], ["Duelist Archive"])
+        tin.delete()
+        self.assertNotIn("set-nav", self.get(self.url + "?type=tin"))
+
+    def test_a_set_keeps_the_language_type_and_sort_not_the_price_or_shops(self):
+        # Nothing chosen: plain addresses.
+        self.assertEqual({href for href, _ in self.sets()},
+                         {self.english.get_absolute_url(), self.korean.get_absolute_url()})
+        [(href, name)] = self.sets("?lang=ko&type=booster_box&sort=price&price=50-100&compared=on&page=2")
+        self.assertEqual(href, self.korean.get_absolute_url() + "?lang=ko&amp;type=booster_box&amp;sort=price")
+        # A value the form does not take is not passed on.
+        [(href, _)] = self.sets("?lang=ko&sort=nonsense")
+        self.assertEqual(href, self.korean.get_absolute_url() + "?lang=ko")
+        # The set page it opens holds what was looked for, its panel closed and naming it.
+        html = self.get(self.korean.get_absolute_url() + "?lang=ko&type=booster_box")
+        self.assertIn("Korean Pack Set Box", html)
+        self.assertIn('<span class="filter-panel__chosen">Booster box · Korean</span>', html)
+        self.assertNotIn("data-filter-panel open", html)
+
+    def test_a_filter_change_carries_the_tab_only_when_the_address_named_it(self):
+        # The form's tab stays empty on the tab the page opened on, so a filter that empties it opens the next.
+        self.product(self.english, "Duelist Archive Tin", (self.a, PRE), kind=Product.Type.TIN)
+        self.assertIn('name="tab" value="" data-tab-input', self.get(self.url + "?sort=price"))
+        self.assertIn('name="tab" value="pre-orders" data-tab-input', self.get(self.url + "?sort=price&tab=pre-orders"))
+
+    def test_no_separate_count_line_beside_the_stock_tabs(self):
+        self.product(self.english, "Duelist Archive Tin", (self.a, PRE), kind=Product.Type.TIN)
+        html = self.get(self.url + "?lang=en")
+        self.assertIn('class="stock-tabs', html)
+        self.assertNotIn("browse-head__count", html)
 
 
 class IntroWordingTests(HubLayoutTestCase):
@@ -314,11 +371,11 @@ class SetPageQueryTests(HubLayoutTestCase):
         many = queries()
         self.assertEqual(len(many), len(few))
         # The row of the game's sets went with the strip: no query lists them. The game page's row still does.
-        self.assertFalse([sql for sql in many if 'SELECT DISTINCT "catalogue_productset"' in sql])
+        row = '"catalogue_productset"."id" IN (SELECT'
+        self.assertFalse([sql for sql in many if row in sql])
         with CaptureQueriesContext(connection) as game_page:
             self.client.get(self.game.get_absolute_url())
-        self.assertEqual(len([query for query in game_page.captured_queries
-                              if 'SELECT DISTINCT "catalogue_productset"' in query["sql"]]), 1)
+        self.assertEqual(len([query for query in game_page.captured_queries if row in query["sql"]]), 1)
 
 
 class HubLayoutCopyStyleTests(HubLayoutTestCase):

@@ -25,7 +25,7 @@ never makes a price "Lowest yet" (that is our own record's word), and with both 
 lower band of the two, so neither can make a dear price look good.
 
 A product gets no verdict without either reference, or without a delivered price now (a shop whose delivery
-is unknown), and only in the games in GAMES while this is on trial.
+is unknown). Every game has it: Pokémon first, on trial, then all of them at the owner's request.
 
 at_lowest lists the products whose cheapest delivered price now is the lowest of the last LOW_DAYS, for the
 Deals page.
@@ -41,7 +41,6 @@ from django.utils import timezone
 from .models import CardmarketMatch, CardmarketPrice, DailyLowestPrice, ExchangeRate, Product
 from .offers import MAX_REAL_PERCENT
 
-GAMES = {"pokemon"}
 WINDOW_DAYS = 365
 MIN_DAYS = 14
 MIN_SHOPS = 2
@@ -83,10 +82,6 @@ class Verdict:
         fewer for each band dearer, none for a high price."""
         lit = self.band - HIGH_PRICE
         return [bar < lit for bar in range(SIGNAL_BARS)]
-
-
-def applies(product):
-    return product.game.slug in GAMES
 
 
 def band_for(price, average, low):
@@ -132,7 +127,7 @@ def market_band(price, market_gbp):
 def verdict(product, price, today=None, shops=MIN_SHOPS):
     """The Verdict for ``product`` at ``price`` (its cheapest delivered price now), or None. ``shops`` is how
     many UK shops list it, in stock or not. Up to five queries."""
-    if price is None or not applies(product):
+    if price is None:
         return None
     today = today or timezone.localdate()
     found = Verdict(band=HIGH_PRICE, price=price, market=market_reference(product, today))
@@ -158,7 +153,7 @@ def verdict(product, price, today=None, shops=MIN_SHOPS):
 
 
 def at_lowest(limit=12, today=None):
-    """Products in GAMES, listed by MIN_SHOPS shops or more, whose cheapest confirmed delivered price now is at or
+    """Products listed by MIN_SHOPS shops or more, whose cheapest confirmed delivered price now is at or
     below the lowest of the LOW_DAYS before today, with at least MIN_DAYS of them, and at least GOOD under their
     average: a price that has never moved is not news. Biggest saving on the average first, each with ``low_average`` (that average) and
     ``low_days``. One query.
@@ -175,7 +170,7 @@ def at_lowest(limit=12, today=None):
         return Subquery(window.annotate(value=aggregate).values("value"), output_field=field)
 
     return list(
-        Product.objects.for_lists().priced().filter(game__slug__in=GAMES, listing_count__gte=MIN_SHOPS)
+        Product.objects.for_lists().priced().filter(listing_count__gte=MIN_SHOPS)
         .annotate(
             low_days=summary(Count("pk"), IntegerField()),
             low_before=summary(Min("price"), money),

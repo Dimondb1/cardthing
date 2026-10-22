@@ -2670,7 +2670,7 @@ server rendered and in the sitemap. These used to sit on the home page;
 they moved here so the home page stays short. Its lists are cached like
 the home page's and cleared by imports.
 
-**Lowest in 90 days** sits under the savings: Pokémon products whose
+**Lowest in 90 days** sits under the savings: products whose
 cheapest confirmed delivered price now is at or below the lowest we recorded
 in the 90 days before today, with at least 14 of those days, and at least 5%
 under their average over them (a price that never moved is not news). Each
@@ -2831,9 +2831,9 @@ screens put the picture beside the name and the price box.
 The wording ("Compare prices", "{count} shops, cheapest delivered first",
 "at {retailer}") is under Product page in Site wording.
 
-### Price check (Pokémon, on trial)
+### Price check
 
-Beside "delivered" on a Pokémon product page, a small chip says whether
+Beside "delivered" on a product page, a small chip says whether
 today's cheapest delivered price is a good one for that product
 (`catalogue/fair_price.py`). It is judged against RipRaptor's own record of
 the cheapest delivered price each day (the same rows as the price history),
@@ -2877,7 +2877,9 @@ up to a year back and not counting today:
 - The colours are the `--color-fair-{good,even,bad}-{bg,ink,rule}` tokens,
   the one place outside prices and savings with colour, at the owner's
   request. Each ink reads at 4.5:1 or more on its tint.
-- The trial covers the games in `fair_price.GAMES` (Pokémon only). The
+- Every game has it: it began as a Pokémon trial and was switched on for
+  all games at your request once Cardmarket covered them. A game Cardmarket
+  does not cover (Football) has only our own record to go on. The
   thresholds are `GOOD`, `HIGH`, `MIN_DAYS` and `WINDOW_DAYS` in the same file.
 
 The wording is under Product page in Site wording (`product.fair.*`).

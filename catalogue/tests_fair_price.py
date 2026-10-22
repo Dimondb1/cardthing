@@ -37,11 +37,12 @@ class VerdictTests(TestCase):
             DailyLowestPrice.objects.create(product=self.etb, date=self.today - timedelta(days=back), price=Decimal("50"))
         self.assertIsNone(fair_price.verdict(self.etb, Decimal("40.00"), self.today))
 
-    def test_only_pokemon_while_on_trial(self):
+    def test_every_game_not_only_pokemon(self):
+        # A Pokémon trial first; switched on for every game at the owner's request.
         lorcana = make_product(make_set(make_game("Disney Lorcana", "lorcana"), name="The First Chapter", slug="tfc"),
                                name="The First Chapter Booster Box", slug="tfc-box")
         record(lorcana, ["100.00"] * 20, self.today)
-        self.assertIsNone(fair_price.verdict(lorcana, Decimal("80.00"), self.today))
+        self.assertEqual(fair_price.verdict(lorcana, Decimal("80.00"), self.today).key, "lowest")
         self.assertIsNone(fair_price.verdict(self.etb, None, self.today))
 
     def test_bands_against_the_average_and_the_low(self):
@@ -148,11 +149,11 @@ class AtLowestTests(TestCase):
         self.product("too-new", ["100.00"] * 5, "60.00")             # not enough days
         self.product("huge-fall", ["100.00"] * 20, "20.00")          # a wrong link, not a low
         lorcana = make_set(make_game("Disney Lorcana", "lorcana"), name="The First Chapter", slug="tfc", code="TFC")
-        self.product("lorcana-box", ["100.00"] * 20, "80.00", game_set=lorcana)   # not on trial
+        other_game = self.product("lorcana-box", ["100.00"] * 20, "80.00", game_set=lorcana)   # every game counts
         self.product("one-shop", ["100.00"] * 20, "80.00", shops=1)   # nothing to compare its price with
         with self.assertNumQueries(1):
             rows = fair_price.at_lowest(today=self.today)
-        self.assertEqual(rows, [deep, shallow])
+        self.assertEqual(rows, [deep, other_game, shallow])
         self.assertEqual(rows[0].low_days, 20)
         self.assertEqual(round(rows[0].low_average, 2), Decimal("99.00"))
 

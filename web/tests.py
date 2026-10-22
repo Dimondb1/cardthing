@@ -1168,7 +1168,7 @@ class HomeFootballTests(PageTestCase):
     def test_football_is_pinned_among_the_first_tiles(self):
         from django.core.cache import cache
 
-        football = make_game(name="Football cards", slug="football", search_aliases="")
+        football = make_game(name="Sports cards", slug="sports-cards", search_aliases="")
         attax = make_set(football, name="Match Attax 2026/27", slug="match-attax-2026-27", code="MA27")
         tin = make_product(attax, name="Match Attax 2026/27 Mega Tin", slug="ma27-mega-tin", product_type="tin")
         make_listing(tin, self.harbour, price="14.99")
@@ -1178,7 +1178,7 @@ class HomeFootballTests(PageTestCase):
         tiles = html[html.index('class="tiles tiles--games"'):html.index("</ul>", html.index('class="tiles tiles--games"'))]
         # Pinned: among the first tiles of the row, so it shows without swiping.
         links = re.findall(r'href="(/games/[^"]+/)"', tiles)
-        self.assertIn("/games/football/", links[:4])
+        self.assertIn("/games/sports-cards/", links[:4])
         # The football row moved off the home page; its game page lists the range.
         self.assertNotContains(response, "Football and sports cards")
         self.assertContains(self.client.get(football.get_absolute_url()), "Match Attax 2026/27 Mega Tin")

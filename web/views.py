@@ -22,7 +22,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_http_methods, require_POST, require_safe
 
-from catalogue import alerts, clicks, fair_price, images, insights, mail, offers, picks, popularity, pricing, traffic
+from catalogue import alerts, clicks, fair_price, images, insights, mail, offers, picks, popularity, pricing, sports, traffic
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
@@ -457,7 +457,7 @@ def featured_pick(products):
 
 
 # Games shown first on the home page, in this order; the rest follow by size.
-PINNED_GAMES = ["pokemon", "magic-the-gathering", "football", "one-piece", "yu-gi-oh", "lorcana"]
+PINNED_GAMES = ["pokemon", "magic-the-gathering", "sports-cards", "one-piece", "yu-gi-oh", "lorcana"]
 
 
 NEW_RELEASE_DAYS = 45    # a product counts as a drop while its release is this recent or still to come
@@ -758,8 +758,17 @@ def games(request):
     )
 
 
+def moved(request, target):
+    """A permanent redirect to ``target`` with the request's query kept: an old address's standing in search
+    engines moves to the new one, and a filtered list stays filtered."""
+    query = request.META.get("QUERY_STRING", "")
+    return HttpResponsePermanentRedirect(f"{target}?{query}" if query else target)
+
+
 @require_GET
 def game_detail(request, game_slug):
+    if sports.moved_from(game_slug):
+        return moved(request, reverse("web:game", args=[sports.GAME]))   # /games/football/ is Sports cards now
     game = get_object_or_404(Game, slug=game_slug, is_active=True)
     # Only the page as people land on it needs the numbers and the sets: a tab's list fetched by script shows
     # none of them.
@@ -813,6 +822,8 @@ def game_detail(request, game_slug):
 
 @require_GET
 def set_detail(request, game_slug, set_slug):
+    if sports.moved_from(game_slug):
+        return moved(request, reverse("web:set", args=[sports.GAME, set_slug]))
     product_set = get_object_or_404(
         ProductSet.objects.select_related("game"),
         game__slug=game_slug,

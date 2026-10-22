@@ -124,7 +124,7 @@ GAME_TYPES = {
         ("collection_box", "Premium set"),
         ("other", "Other"),
     ],
-    "football": [
+    "sports-cards": [
         ("booster_box", "Hobby or retail box"),
         ("booster_pack", "Pack"),
         ("tin", "Tin"),

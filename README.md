@@ -2180,8 +2180,8 @@ and "Spell Ruler (25th Anniversary Edition)"), so each keeps its own date. A
 back-catalogue set you delete in Admin stays deleted.
 
 **Sports cards by product line** (`catalogue/sports.py`). No release source
-lists sports card releases, so the sports game (once Football cards, still at
-`/games/football/`) takes its sets from its products' names: brand, line and
+lists sports card releases, so the sports game (Sports cards, at
+`/games/sports-cards/`) takes its sets from its products' names: brand, line and
 league, such as "Panini Prizm Premier League", "Topps Match Attax Extra" or
 "Panini Donruss Optic NFL". Every season of a line is one set, and each
 product's own name keeps its season; a set per season would leave most sets
@@ -2195,8 +2195,16 @@ rather than guessed at: add the line to `LINES` (or a league to `LEAGUES`).
 A set's name or a product moved in Admin stays; a renamed set keeps its
 address, which is how new products still find it. The hourly tidy files new
 products, and `python manage.py file_sports_cards`, which `install.sh` runs
-once after an update, renames the game from Football cards (a name you give
-it in Admin stays) and files them straight away.
+once after an update, files them straight away.
+
+The game was Football cards at `/games/football/` until 22 Oct 2026.
+`file_sports_cards` moves it to its sports address and name (a name you give
+it in Admin stays) and moves its page view counts with it. `install.sh` runs
+it straight after `migrate`, with the background reader stopped, so neither
+the old code nor the new ever meets the other's address. Every old address,
+`/games/football/`, a line under it and `/feeds/football.xml`, sends visitors
+and search engines to the same page at the new address for good (a 301,
+filters kept), once the game has moved.
 
 **Set codes no source lists.** For Digimon, Riftbound and Dragon Ball Super
 Masters the hourly `tidy_all` puts each set code in the names of products

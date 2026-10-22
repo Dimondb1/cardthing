@@ -184,23 +184,23 @@ class ClassifyLeakTests(TestCase):
 class FootballTests(TestCase):
     def test_match_attax_and_topps_products_are_football(self):
         sealed = classify("Topps Match Attax 2025/26 Booster Box (24 Packs)", "", "Topps", (), Decimal("45.00"))
-        self.assertEqual((sealed.game, sealed.product_type), ("football", "booster_box"))
+        self.assertEqual((sealed.game, sealed.product_type), ("sports-cards", "booster_box"))
         sealed = classify("Match Attax 2025/26 Starter Pack", "", "Topps", (), Decimal("9.99"))
-        self.assertEqual((sealed.game, sealed.product_type), ("football", "collection_box"))
+        self.assertEqual((sealed.game, sealed.product_type), ("sports-cards", "collection_box"))
         sealed = classify("Topps UEFA Champions League Chrome 2024/25 Hobby Box", "", "", (), Decimal("120.00"))
-        self.assertEqual(sealed.game, "football")
+        self.assertEqual(sealed.game, "sports-cards")
         sealed = classify("Panini Premier League 2026 Adrenalyn XL Mega Tin", "", "Panini", (), Decimal("12.00"))
-        self.assertEqual((sealed.game, sealed.product_type), ("football", "collection_box"))
+        self.assertEqual((sealed.game, sealed.product_type), ("sports-cards", "collection_box"))
 
     def test_card_vault_style_titles_are_football(self):
         sealed = classify("Panini - 2025/26 WLS Eternity Football (Soccer) - Hobby Box", "Booster Box", "Panini", (), Decimal("119.95"))
-        self.assertEqual((sealed.game, sealed.product_type), ("football", "booster_box"))
+        self.assertEqual((sealed.game, sealed.product_type), ("sports-cards", "booster_box"))
         sealed = classify("Topps - 2026/27 Premier League Flagship Edition Football (Soccer) - Super Tin", "Super Tin", "Topps", (), Decimal("19.95"))
-        self.assertEqual((sealed.game, sealed.product_type), ("football", "tin"))
+        self.assertEqual((sealed.game, sealed.product_type), ("sports-cards", "tin"))
 
     def test_a_shops_own_football_category_counts_and_formula_one_chrome_does_not(self):
         sealed = classify("Topps Premier League Debut Edition 2026 Golden Boot Tin", "football", "Topps", (), Decimal("29.99"))
-        self.assertEqual((sealed.game, sealed.product_type), ("football", "tin"))
+        self.assertEqual((sealed.game, sealed.product_type), ("sports-cards", "tin"))
         self.assertIsNone(classify("Topps Chrome Formula 1 2026 Hobby Box", "f1", "Topps", (), Decimal("649.99")))
 
     def test_football_stickers_and_singles_stay_out(self):

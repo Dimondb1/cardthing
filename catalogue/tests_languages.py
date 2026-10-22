@@ -45,7 +45,7 @@ class ReadingTests(TestCase):
             ("Magic 2015 M15 Booster Box", "magic-the-gathering"), ("Zendikar Intro Pack Kor Armory", "magic-the-gathering"),
             ("Shimmering Skies Starter Deck Elsa & Wreck It Ralph", "lorcana"),
             ("The First Chapter Starter Deck Cruella De Vil and Aladdin", "lorcana"),
-            ("Panini Luminance DFB Germany 2026 Hobby Box", "football"), ("Asian English OCG Booster Box", "yu-gi-oh"),
+            ("Panini Luminance DFB Germany 2026 Hobby Box", "sports-cards"), ("Asian English OCG Booster Box", "yu-gi-oh"),
             ("2025 World Championship Deck Yuya Okita (JP Raging Bolt)", POKEMON), ("OP-09 Booster Box", "one-piece"),
             ("Pokemon Center Japan Pikachu Plush", POKEMON),
         ]
@@ -67,7 +67,7 @@ class ReadingTests(TestCase):
             self.assertEqual(self.read(text), "zh-hans", text)
         self.assertEqual(self.read("One Piece OPC-01 Booster Box", "one-piece"), "zh-hans")
         self.assertEqual(self.read("One Piece OPC 15 Booster Box", "one-piece"), "zh-hans")
-        self.assertEqual(self.read("O-Pee-Chee OPC-23 Hockey Hobby Box", "football"), "")
+        self.assertEqual(self.read("O-Pee-Chee OPC-23 Hockey Hobby Box", "sports-cards"), "")
         self.assertEqual(self.read("One Piece OPK-05 Booster Box", "one-piece"), "ko")
 
     def test_sellers_codes_count_only_where_they_cannot_be_words(self):
@@ -99,14 +99,14 @@ class CheckedRulesTests(TestCase):
     def test_words_that_name_a_language_without_being_one(self):
         for text, game in (("Pokemon 151 Booster Box - ENGLISH (NOT Japanese)", POKEMON),
                            ("Portal Second Age: 2 Player Starter Set (Rulebook in Dutch)", "magic-the-gathering"),
-                           ("Panini Chinese New Year Basketball Box", "football"), ("Booster Box Made in Japan", POKEMON),
-                           ("Pokemon 151 ENG Booster Bundle sv2a", POKEMON), ("FIFA World Cup JPN KOR GER Hobby Box", "football"),
+                           ("Panini Chinese New Year Basketball Box", "sports-cards"), ("Booster Box Made in Japan", POKEMON),
+                           ("Pokemon 151 ENG Booster Bundle sv2a", POKEMON), ("FIFA World Cup JPN KOR GER Hobby Box", "sports-cards"),
                            ("Asian English Booster Box", "yu-gi-oh")):
             self.assertEqual(self.read(text, game), "", text)
 
     def test_codes_and_names_count_only_inside_their_game(self):
         for text, game in (("Airsoft M1A Rifle Booster Box", "magic-the-gathering"), ("Power Rangers Wild Force Deck", "lorcana"),
-                           ("Counter Strike CS2 C Case", "football"), ("Tarkir: Dragonstorm Play Booster Box", "magic-the-gathering"),
+                           ("Counter Strike CS2 C Case", "sports-cards"), ("Tarkir: Dragonstorm Play Booster Box", "magic-the-gathering"),
                            ("Pokemon Mega Charizard X ex Inferno X Premium Collection", POKEMON), ("Terastal Festival Booster Box", "")):
             self.assertEqual(self.read(text, game), "", text)
         self.assertEqual(self.read("Inferno X (M2) Booster Box"), "ja")

@@ -37,7 +37,7 @@ from django.db.models import Case, F, Q, Value, When
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from . import languages, pricing
+from . import languages, pricing, sports
 from .classify import GAMES, classify, find_game, variant_differs
 from .matching import (
     AUTO_LINK, SUGGEST, VARIANT_WORDS, best_match, chinese_code, code_key, contradiction, covers, match_key, names_something,
@@ -2026,7 +2026,7 @@ def create_from_offer(offer, catalogue, sealed=None, refused=()):
     if twin is not None and twin not in refused and Product.objects.filter(
             pk=twin, product_type=sealed.product_type).exists():
         return twin
-    game = Game.objects.filter(slug=sealed.game).first()
+    game = Game.objects.filter(slug__in=sports.known_as(sealed.game)).first()
     if game is None:
         for slug, name, short, words in GAMES:
             if slug == sealed.game:

@@ -50,7 +50,7 @@ CHINESE_FAMILY = ("zh", "zh-hans", "zh-hant")
 FILTER = [("en", "English"), ("ja", "Japanese"), ("zh", "Chinese"), ("ko", "Korean"), ("other", "Other languages")]
 OTHER = [code for code in NAMES if code not in ("ja", "ko", *CHINESE_FAMILY)]
 
-POKEMON, ONE_PIECE, FOOTBALL, MAGIC = "pokemon", "one-piece", "football", "magic-the-gathering"
+POKEMON, ONE_PIECE, SPORTS, MAGIC = "pokemon", "one-piece", "sports-cards", "magic-the-gathering"
 UNION_ARENA = "union-arena"
 
 
@@ -109,7 +109,7 @@ ENGLISH_WORDS = re.compile(r"(?<!asian )(?<!asia )(?<![\w-])(?:english|englisch|
                            r"|[(\[]\s*en\s*[)\]]")
 ASIAN_ENGLISH = re.compile(r"\basian? english\b|\basian?\s+edition\b")
 
-# Sellers' codes, on plain text. Never in football, where they are team codes. Tokens that are never
+# Sellers' codes, on plain text. Never in sports cards, where they are team codes. Tokens that are never
 # words count anywhere; short codes that are also words count in brackets, or as the last word after a
 # separator; the shortest only in brackets.
 CERTAIN_CODES = {"jpn": "ja", "chn": "zh", "kr": "ko"}
@@ -223,7 +223,7 @@ def stated_all(text, game="", loose=False):
     found = []
     for pattern, code in WORDS:
         found += [(match.start(), code) for match in pattern.finditer(low)]
-    if game != FOOTBALL:
+    if game != SPORTS:
         for pattern, code in PRODUCTS:
             found += [(match.start(), code) for match in pattern.finditer(low)]
         found += [(match.start(), "nl") for match in DUTCH.finditer(low)]

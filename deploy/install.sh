@@ -94,13 +94,16 @@ cat > /etc/logrotate.d/ripraptor <<'ROTATE'
 }
 ROTATE
 .venv/bin/python manage.py migrate -v0
+# Football cards became Sports cards at /games/sports-cards/, filed by product line (catalogue/sports.py). The
+# address moves before the language and type steps below read it, with the background reader stopped first so
+# its old code never meets the new address (it is started again at the end). The old pages send visitors on.
+systemctl stop ripraptor-worker 2>/dev/null || true
+.venv/bin/python manage.py file_sports_cards
 .venv/bin/python manage.py backfill_restocks >/dev/null
 .venv/bin/python manage.py set_languages >/dev/null
 .venv/bin/python manage.py set_types >/dev/null
 .venv/bin/python manage.py collectstatic --noinput -v0
 .venv/bin/python manage.py setup_shops
-# Football cards became Sports cards, filed by product line: now rather than at the next hourly tidy.
-.venv/bin/python manage.py file_sports_cards >/dev/null
 # Products added by hand rather than by a shop read, so they are on the site before any shop lists them.
 .venv/bin/python manage.py import_products catalogue/data/union_arena.csv >/dev/null
 grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb" >> .env

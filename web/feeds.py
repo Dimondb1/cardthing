@@ -18,11 +18,11 @@ from datetime import datetime, time, timedelta
 from django.conf import settings
 from django.contrib.syndication.views import Feed
 from django.core.cache import cache
-from django.http import Http404
+from django.http import Http404, HttpResponsePermanentRedirect
 from django.urls import reverse
 from django.utils import timezone
 
-from catalogue import pricing
+from catalogue import pricing, sports
 from catalogue.alerts import MARKETPLACES
 from catalogue.models import DailyLowestPrice, Game, Listing, PreorderOpen, Restock
 from content import service as copy
@@ -162,6 +162,11 @@ def feed_cache_keys(game_slugs=None):
 
 class DealsFeed(Feed):
     """Restocks, pre-order openings and price drops, site-wide or for one game. Built once every few minutes, like the home lists."""
+
+    def __call__(self, request, *args, **kwargs):
+        if sports.moved_from(kwargs.get("game_slug")):
+            return HttpResponsePermanentRedirect(reverse("web:feed_game", args=[sports.GAME]))
+        return super().__call__(request, *args, **kwargs)
 
     def get_object(self, request, game_slug="deals"):
         key = feed_cache_key(game_slug)

@@ -21,12 +21,13 @@ from django.utils.text import slugify
 
 logger = logging.getLogger(__name__)
 
-GAME = "football"            # the game's address, kept from when it held football cards only
+GAME = "sports-cards"         # the game's address
+OLD_SLUGS = ("football",)    # its address while it held football cards only; those pages send visitors on
 NAME, SHORT = "Sports cards", "Sports"
 OLD_NAMES = ("Football cards",)
 
 # The sport a name is for, when it is not football (soccer). Its league word stands in for a league the name
-# does not give, so "Panini Prizm NFL 2024" is never mistaken for Panini Prizm's football sets.
+# does not give, so "Panini Prizm NFL" is never mistaken for Panini Prizm's football sets.
 SPORTS = [
     ("NFL", re.compile(r"\(nfl\)|\bnfl\b|american football", re.I)),
     ("WNBA", re.compile(r"\bwnba\b", re.I)),
@@ -259,8 +260,36 @@ def attach(game, product_ids=None, now=None):
     return moved
 
 
-def rename_game():
-    """Give the game its sports name where it still has the football one; a name the owner chose is kept."""
+def moved_from(slug):
+    """True for the sports game's old address once the game has left it, so its pages send visitors on."""
     from .models import Game
 
-    return Game.objects.filter(slug=GAME, name__in=OLD_NAMES).update(name=NAME, short_name=SHORT)
+    return slug in OLD_SLUGS and not Game.objects.filter(slug=slug).exists()
+
+
+def known_as(slug):
+    """The addresses a game the classifier names may have in the database: the sports game's old one too, for
+    an import that runs between an update's new code and its rename_game."""
+    return (slug, *OLD_SLUGS) if slug == GAME else (slug,)
+
+
+def rename_game():
+    """Move the game from its football address and name to its sports ones, and say what changed. The address
+    always (the old pages send visitors on, web/views.py moved), with its page views; the name only where it is
+    still the football one, so a name the owner chose stays."""
+    from .models import DailyPageView, Game
+
+    changed = []
+    with transaction.atomic():
+        if not Game.objects.filter(slug=GAME).exists() and Game.objects.filter(slug__in=OLD_SLUGS).update(slug=GAME):
+            changed.append(f"its address is now /games/{GAME}/")
+            for row in DailyPageView.objects.filter(kind=DailyPageView.Kind.GAME, key__in=OLD_SLUGS):
+                kept, made = DailyPageView.objects.get_or_create(date=row.date, kind=row.kind, key=GAME,
+                                                                 defaults={"hits": row.hits})
+                if not made:
+                    kept.hits += row.hits
+                    kept.save(update_fields=["hits"])
+                row.delete()
+        if Game.objects.filter(slug=GAME, name__in=OLD_NAMES).update(name=NAME, short_name=SHORT):
+            changed.append(f"its name is now {NAME}")
+    return changed

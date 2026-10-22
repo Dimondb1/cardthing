@@ -21,6 +21,7 @@ from datetime import date
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.text import slugify
 
+from catalogue import sports
 from catalogue.classify import GAMES
 from catalogue.importers import clean_ean
 from catalogue.models import Game, Product, ProductSet
@@ -29,7 +30,8 @@ from catalogue.models import Game, Product, ProductSet
 def find_game(name):
     """The game a row names, by slug or name, created when the classifier knows it but no shop has brought
     one of its products in yet. None for a game the site does not know."""
-    game = Game.objects.filter(slug=slugify(name)).first() or Game.objects.filter(name__iexact=name).first()
+    wanted = sports.GAME if slugify(name) in sports.OLD_SLUGS else slugify(name)
+    game = Game.objects.filter(slug__in=sports.known_as(wanted)).first() or Game.objects.filter(name__iexact=name).first()
     if game is not None:
         return game
     for slug, full, short, words in GAMES:

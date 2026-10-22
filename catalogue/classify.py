@@ -33,9 +33,9 @@ GAMES = [
     ("riftbound", "Riftbound", "Riftbound", ("riftbound",)),
     ("cardfight-vanguard", "Cardfight!! Vanguard", "Vanguard", ("cardfight", "vanguard overdress", "vanguard: overdress")),
     ("weiss-schwarz", "Weiss Schwarz", "Weiss Schwarz", ("weiss schwarz", "weiß schwarz", "weiss-schwarz")),
-    # Sports cards: football first, then American football, basketball, baseball and racing. The address stays
-    # football, from when it held football cards only. catalogue/sports.py files them by product line.
-    ("football", "Sports cards", "Sports", ("football", "soccer", "match attax", "adrenalyn", "premier league",
+    # Sports cards: football first, then American football, basketball, baseball and racing. Its address was
+    # football while it held football cards only (catalogue/sports.py, which files them by product line).
+    ("sports-cards", "Sports cards", "Sports", ("football", "soccer", "match attax", "adrenalyn", "premier league",
                                                  "champions league", "uefa", "fifa", "topps football", "panini football",
                                                  "world cup", "euros 20", "euro 20", "merlin heritage", "topps merlin",
                                                  "bundesliga", "la liga", "serie a", "topps now", "women's super league",

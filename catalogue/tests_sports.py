@@ -120,19 +120,38 @@ class FilingTests(TestCase):
         releases.attach_sets(pokemon)
         self.assertEqual(self.set_of(item).name, "Surging Sparks")
 
-    def test_the_install_step_renames_the_game_once_and_files_its_products(self):
+    def test_the_install_step_moves_the_game_to_its_sports_address_and_name_once_and_files_its_products(self):
+        from datetime import date
+
+        from .models import DailyPageView
+
+        Game.objects.filter(pk=self.game.pk).update(slug="football")
+        views = DailyPageView.objects
+        views.create(date=date(2026, 10, 20), kind=DailyPageView.Kind.GAME, key="football", hits=7)
+        views.create(date=date(2026, 10, 21), kind=DailyPageView.Kind.GAME, key="football", hits=5)
+        views.create(date=date(2026, 10, 21), kind=DailyPageView.Kind.GAME, key=sports.GAME, hits=2)
         out = StringIO()
         call_command("file_sports_cards", stdout=out)
-        self.assertEqual(out.getvalue(), "Football cards is now Sports cards.\n"
+        self.assertEqual(out.getvalue(), "Sports cards: its address is now /games/sports-cards/.\n"
+                                         "Sports cards: its name is now Sports cards.\n"
                                          "3 sports card products filed under their product lines.\n")
         self.game.refresh_from_db()
-        self.assertEqual((self.game.name, self.game.short_name, self.game.slug), ("Sports cards", "Sports", "football"))
+        self.assertEqual((self.game.name, self.game.short_name, self.game.slug),
+                         ("Sports cards", "Sports", "sports-cards"))
+        # Its page views move with it, so the dashboard keeps its history.
+        self.assertEqual(sorted(views.filter(kind=DailyPageView.Kind.GAME).values_list("date", "key", "hits")),
+                         [(date(2026, 10, 20), sports.GAME, 7), (date(2026, 10, 21), sports.GAME, 7)])
         # A name the owner gives it in Admin stays.
         Game.objects.filter(pk=self.game.pk).update(name="Sport and football cards")
         out = StringIO()
         call_command("file_sports_cards", stdout=out)
         self.assertEqual(out.getvalue(), "0 sports card products filed under their product lines.\n")
         self.assertEqual(Game.objects.get(pk=self.game.pk).name, "Sport and football cards")
+
+    def test_an_import_between_the_new_code_and_the_rename_finds_the_game_at_its_old_address(self):
+        Game.objects.filter(pk=self.game.pk).update(slug="football")
+        self.assertEqual(Game.objects.get(slug__in=sports.known_as(sports.GAME)), self.game)
+        self.assertEqual(sports.known_as("pokemon"), ("pokemon",))
 
     def test_the_game_page_offers_the_lines_and_a_line_has_its_own_page(self):
         from .testing import make_listing, make_retailer
@@ -141,12 +160,41 @@ class FilingTests(TestCase):
         for item in (self.hobby, self.blaster, self.nfl):
             make_listing(item, shop, price="90.00")
         releases.attach_sets(self.game)
-        html = self.client.get("/games/football/").content.decode()
+        html = self.client.get("/games/sports-cards/").content.decode()
         # Lines have no dates: with no views yet, the one with more in stock comes first, not the first by name.
         self.assertLess(html.index("Panini Prizm Premier League"), html.index("Panini Prizm NFL"))
-        page = self.client.get("/games/football/panini-prizm-premier-league/")
+        page = self.client.get("/games/sports-cards/panini-prizm-premier-league/")
         self.assertEqual(page.status_code, 200)
         html = page.content.decode()
         self.assertIn(self.hobby.name, html)
         self.assertIn(self.blaster.name, html)
         self.assertNotIn(self.nfl.name, html)
+
+
+class OldAddressTests(TestCase):
+    """The game's football pages, which search engines have listed, send visitors to the same page at its sports
+    address for good, with the filters they carried."""
+
+    def setUp(self):
+        self.game = make_game(name="Sports cards", short_name="Sports", slug=sports.GAME)
+        make_set(self.game, name="Panini Prizm Premier League", slug="panini-prizm-premier-league", code="")
+
+    def test_the_game_its_lines_and_its_feed_move_for_good(self):
+        for old, new in (
+            ("/games/football/", "/games/sports-cards/"),
+            ("/games/football/?type=booster_box&sort=price", "/games/sports-cards/?type=booster_box&sort=price"),
+            ("/games/football/panini-prizm-premier-league/", "/games/sports-cards/panini-prizm-premier-league/"),
+            ("/feeds/football.xml", "/feeds/sports-cards.xml"),
+        ):
+            response = self.client.get(old)
+            self.assertEqual((response.status_code, response["Location"]), (301, new), old)
+        self.assertEqual(self.client.get("/games/sports-cards/panini-prizm-premier-league/").status_code, 200)
+        self.assertEqual(self.client.get("/feeds/sports-cards.xml").status_code, 200)
+
+    def test_until_the_game_has_moved_its_old_address_still_works(self):
+        Game.objects.filter(pk=self.game.pk).update(slug="football")
+        self.assertEqual(self.client.get("/games/football/").status_code, 200)
+        self.assertEqual(self.client.get("/feeds/football.xml").status_code, 200)
+
+    def test_another_game_is_not_moved(self):
+        self.assertEqual(self.client.get("/games/footballs/").status_code, 404)

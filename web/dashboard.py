@@ -13,11 +13,12 @@ anyway (catalogue/checks.py note_duplicate_counts) and shown with the time they 
 """
 
 from datetime import timedelta
+from decimal import Decimal
 from urllib.parse import urlsplit
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.cache import cache
-from django.db.models import Count, Max, Q, Sum
+from django.db.models import Count, Max, Min, Q, Sum
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -26,8 +27,8 @@ from django.views.decorators.http import require_GET
 from catalogue import checks, crawl, insights, judge, referrals, traffic
 from catalogue.drop_alerts import SENT_FIELD
 from catalogue.models import (
-    ClaudeJudge, DailyPageView, DailySearch, DailyVisitor, DropAlert, OutboundClick, ReferralSettings, Retailer,
-    SearchAlert, StockAlert, WorkerState,
+    AffiliateSale, ClaudeJudge, DailyPageView, DailySearch, DailyVisitor, DropAlert, Listing, OutboundClick,
+    ReferralSettings, Retailer, SearchAlert, StockAlert, WorkerState,
 )
 from content import service as copy
 from inbox.service import unread_count
@@ -128,6 +129,11 @@ def bars(days, keys):
     return days
 
 
+def rate(part, whole, scale=100):
+    """``part`` per ``scale`` of ``whole`` (a percentage by default), or None when there is no whole."""
+    return Decimal(part) * scale / whole if whole else None
+
+
 # Sections ------------------------------------------------------------------------------------------
 
 def traffic_section(now, store):
@@ -225,6 +231,123 @@ def traffic_section(now, store):
             "people_change": change(today_people, reference["then"]) if reference else None,
             "clicks_change": change(today_clicks, reference["then_clicks"]) if reference else None,
         },
+    }
+
+
+MONEY_DAYS = 30
+TOP_SHOPS = 12
+
+
+def money_section(now, store):
+    """What clicks to shops are worth over the last MONEY_DAYS days, whole site and by game and shop:
+
+    * retailer click-through rate: visits with a click to a shop / visits (from the first day clicks carried
+      the visit's token),
+    * commission per 100 clicks: approved commission / clicks to shops x 100,
+    * retailer conversion rate: sales the networks report (not declined) / clicks to shops,
+    * revenue per 1,000 visits: approved commission / visits x 1,000,
+    * affiliate coverage: in-stock offers at shops whose links earn / all in-stock offers.
+
+    Clicks are people's (clicks.py), visits are DailyVisitor rows under the views cap, sales are AffiliateSale
+    rows by order date, imported from the networks' reports. Visits cannot be split by game or shop, so the
+    click-through rate and revenue per visit are for the whole site. Seven queries, however many rows."""
+    today = timezone.localtime(now).date()
+    first = today - timedelta(days=MONEY_DAYS - 1)
+    clicks = OutboundClick.objects.people().filter(created_at__gte=traffic.start_of(first), created_at__lte=now)
+    clicks = clicks.order_by()
+    by = {"shop": {}, "game": {}}
+
+    def add(kind, pk, name, **values):
+        entry = by[kind].setdefault(pk, {"name": name, "clicks": 0, "sales": 0, "approved": Decimal("0"),
+                                         "pending": Decimal("0"), "offers": 0, "earning": 0})
+        for key, value in values.items():
+            entry[key] += value or 0
+
+    # Clicks by shop and game, with the first one that carried its visit's token.
+    tracked = None
+    for shop, shop_name, game, game_name, n, first_tracked in (
+        clicks.values_list("retailer_id", "retailer__name", "product__game_id", "product__game__name")
+        .annotate(n=Count("pk"), first_tracked=Min("created_at", filter=~Q(visitor="")))
+    ):
+        add("shop", shop, shop_name, clicks=n)
+        add("game", game, game_name, clicks=n)
+        if first_tracked and (tracked is None or first_tracked < tracked):
+            tracked = first_tracked
+    # The click-through rate counts from the first day clicks carried the visit's token, so days before it are
+    # not counted as visits that never clicked.
+    tracked_from = timezone.localtime(tracked).date() if tracked else first
+    clicked_visits = (clicks.exclude(visitor="").values("created_at__date", "visitor").distinct().count()
+                      if tracked else 0)
+    counts = DailyVisitor.objects.filter(date__gte=first, date__lte=today, views__lt=insights.VIEWS_PER_VISITOR_CAP)
+    counts = counts.aggregate(visits=Count("pk"), tracked=Count("pk", filter=Q(date__gte=tracked_from)))
+    visits, tracked_visits = counts["visits"], counts["tracked"]
+    clicked_visits = min(clicked_visits, tracked_visits)
+
+    # Sales the networks report, not declined, by shop and game; approved commission is what counts as earned.
+    for shop, shop_name, game, game_name, n, approved, pending in (
+        AffiliateSale.objects.filter(ordered_on__gte=first, ordered_on__lte=today)
+        .exclude(status=AffiliateSale.Status.DECLINED).order_by()
+        .values_list("retailer_id", "retailer__name", "game_id", "game__name")
+        .annotate(n=Count("pk"), approved=Sum("commission", filter=Q(status=AffiliateSale.Status.APPROVED)),
+                  pending=Sum("commission", filter=Q(status=AffiliateSale.Status.PENDING)))
+    ):
+        add("shop", shop, shop_name, sales=n, approved=approved, pending=pending)
+        add("game", game, game_name or say(store, "dashboard.money.no_game"), sales=n, approved=approved,
+            pending=pending)
+
+    # In-stock offers, and those at shops whose links earn (an affiliate link format, or eBay and Amazon, whose
+    # links carry our campaign and tag, as insights.earning_share counts them): what the programmes cover.
+    paying = (Retailer.Source.AMAZON, Retailer.Source.EBAY)
+    for shop, shop_name, template, source_type, game, game_name, n in (
+        Listing.objects.buyable().filter(availability=Listing.Availability.IN_STOCK, product__is_active=True)
+        .order_by().values_list("retailer_id", "retailer__name", "retailer__affiliate_url_template",
+                                "retailer__source_type", "product__game_id", "product__game__name")
+        .annotate(n=Count("pk"))
+    ):
+        earns = n if template.strip() or source_type in paying else 0
+        add("shop", shop, shop_name, offers=n, earning=earns)
+        add("game", game, game_name, offers=n, earning=earns)
+
+    def row(pk, entry, url=""):
+        return {
+            "name": entry["name"], "url": url, "clicks": entry["clicks"], "sales": entry["sales"],
+            "commission": entry["approved"], "per_100": rate(entry["approved"], entry["clicks"]),
+            "conversion": rate(entry["sales"], entry["clicks"]), "offers": entry["offers"],
+            "coverage": rate(entry["earning"], entry["offers"]),
+        }
+
+    def order(item):
+        return -item["commission"], -item["clicks"], item["name"].lower()
+
+    games = sorted((row(pk, entry) for pk, entry in by["game"].items()), key=order)
+    # The shops that matter here: those clicked or selling, and those with stock whose links earn nothing.
+    shops = [row(pk, entry, reverse("admin:catalogue_retailer_change", args=[pk])) for pk, entry in by["shop"].items()]
+    shops = [shop for shop in sorted(shops, key=order) if shop["clicks"] or shop["sales"] or shop["coverage"] == 0]
+
+    total = {key: sum(entry[key] for entry in by["shop"].values())
+             for key in ("clicks", "sales", "approved", "pending", "offers", "earning")}
+    labels = dict(OutboundClick.Button.choices)
+    pressed = [{"name": labels.get(key) or say(store, "dashboard.money.button_unknown"), "count": n}
+               for key, n in clicks.values_list("button").annotate(n=Count("pk"))]
+    compare = (DailyPageView.objects.filter(kind=DailyPageView.Kind.TAPS, date__gte=first, date__lte=today)
+               .aggregate(n=Sum("hits"))["n"] or 0)
+    if compare:
+        pressed.append({"name": say(store, "dashboard.money.compare"), "count": compare})
+    pressed.sort(key=lambda item: (-item["count"], item["name"]))
+    presses = sum(item["count"] for item in pressed)
+    for item in pressed:
+        item["share"] = share(item["count"], presses)
+    return {
+        "days": MONEY_DAYS, "visits": visits, "clicks": total["clicks"], "sales": total["sales"],
+        "commission": total["approved"], "pending": total["pending"], "has_sales": bool(total["sales"]),
+        "tracked_from": timezone.localtime(tracked).date() if tracked else None, "tracked_visits": tracked_visits,
+        "clicked_visits": clicked_visits, "ctr": rate(clicked_visits, tracked_visits) if tracked else None,
+        "per_100": rate(total["approved"], total["clicks"]), "conversion": rate(total["sales"], total["clicks"]),
+        "per_1000": rate(total["approved"], visits, 1000),
+        "offers": total["offers"], "earning_offers": total["earning"], "coverage": rate(total["earning"], total["offers"]),
+        "games": games, "shops": shops[:TOP_SHOPS], "more_shops": max(0, len(shops) - TOP_SHOPS),
+        "pressed": pressed, "best_game": max((game for game in games if game["per_100"]), default=None,
+                                            key=lambda game: game["per_100"]),
     }
 
 
@@ -356,6 +479,7 @@ def claude_section(now, store):
 
 
 SECTIONS = [
+    ("money", money_section),
     ("traffic", traffic_section),
     ("checks", checks_section),
     ("shops", shops_section),
@@ -395,6 +519,8 @@ def admin_links():
         "unread": reverse("admin:inbox_conversation_changelist") + "?unread__exact=1",
         "shops": reverse("admin:inbox_shopenquiry_changelist") + "?handled=no",
         "claude": reverse(changelist("claudeask")),
+        "sales": reverse(changelist("affiliatesale")),
+        "sales_import": reverse("admin:catalogue_affiliatesale_import"),
         "admin": reverse("admin:index"),
     }
 

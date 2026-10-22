@@ -29,3 +29,11 @@ def clock(moment):
 def join_dates(dates):
     """Days as "Tue 14 Oct, Wed 15 Oct"."""
     return ", ".join(f"{day:%a %-d %b}" for day in dates)
+
+
+@register.filter
+def percent(value):
+    """A rate as 1.3% (one decimal place), or an en dash when there is nothing to divide by."""
+    if value is None:
+        return "–"
+    return f"{value:.1f}%"

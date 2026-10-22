@@ -89,6 +89,8 @@
 /* Each figure sits on the foot of its column, so a label that wraps does not push its figure out of line. */
 .dash-stats > div { display: flex; flex-direction: column; justify-content: flex-end; }
 .dash-stats dt { font-size: var(--text-xs); color: var(--color-ink-subtle); line-height: var(--leading-snug); }
+.dash-stats--notes > div { justify-content: flex-start; }
+.dash-stats__note { display: block; margin-top: var(--space-1); font-size: var(--text-xs); font-weight: var(--weight-body); font-stretch: normal; color: var(--color-ink-subtle); line-height: var(--leading-snug); }
 .dash-stats dd { margin: 0; font-size: var(--text-stat); font-weight: var(--weight-heading); font-stretch: var(--stretch-price); line-height: var(--leading-tight); }
 
 /* Charts: inline SVG drawn on the server. Places are shares of the plot, so it fits any width without stretching

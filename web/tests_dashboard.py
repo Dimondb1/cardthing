@@ -483,7 +483,8 @@ class CacheTests(DashboardCase):
         with CaptureQueriesContext(connection) as many:
             self.page()
         self.assertEqual(len(few), len(many))
-        self.assertLessEqual(len(many), 50)
+        # What clicks earn reads seven of them (dashboard.money_section), however many clicks, sales and offers.
+        self.assertLessEqual(len(many), 55)
         # Within the minute the page reads its parts from the cache: the session, the user and the wording, and the
         # sign-in renews itself (SESSION_SAVE_EVERY_REQUEST: a transaction round one update).
         with CaptureQueriesContext(connection) as warm:
@@ -570,3 +571,76 @@ class SpendDecimalTests(DashboardCase):
         self.assertEqual(response.context["claude"]["share"], 100)
         self.assertContains(response, "meter meter--full")
         self.assertContains(response, "Claude reached this month&#x27;s limit.")
+
+
+class MoneyTests(DashboardCase):
+    """What clicks earn: the five rates, what people press, and each game and shop (dashboard.money_section)."""
+
+    def setUp(self):
+        super().setUp()
+        from catalogue.models import AffiliateSale, DailyVisitor
+
+        self.pokemon = make_product(make_set(make_game()), slug="pre-etb")
+        self.lorcana = make_product(make_set(make_game("Disney Lorcana", "lorcana"), name="The First Chapter",
+                                             slug="tfc", code="TFC"), name="The First Chapter Booster Box", slug="tfc-box")
+        self.harbour = make_retailer("Harbour Games", affiliate_url_template="https://aff.example/?u={url}")
+        self.plain = make_retailer("Plain Cards")
+        for product, shop in ((self.pokemon, self.harbour), (self.lorcana, self.harbour), (self.pokemon, self.plain)):
+            make_listing(product, shop)
+        # 20 visits today, 5 of them clicking through to a shop (one twice).
+        DailyVisitor.objects.bulk_create([DailyVisitor(date=TODAY, token=f"v{n}", views=2) for n in range(20)])
+        rows = [(self.pokemon, f"v{n % 5}", "buy_now") for n in range(6)] + [(self.lorcana, f"v{n}", "price_list")
+                                                                          for n in range(4)]
+        self.clicks = OutboundClick.objects.bulk_create([
+            OutboundClick(product=product, retailer=self.harbour, visitor=visitor, button=button, source="product",
+                          created_at=NOW - timedelta(hours=1)) for product, visitor, button in rows
+        ])
+        OutboundClick.objects.create(product=self.pokemon, retailer=self.harbour, suspect=True, created_at=NOW)
+        DailyPageView.objects.create(date=TODAY, kind=DailyPageView.Kind.TAPS, key="buy_box:product", hits=5)
+        sale = {"retailer": self.harbour, "ordered_on": TODAY - timedelta(days=1)}
+        AffiliateSale.objects.create(click=self.clicks[6], commission=Decimal("3.00"), status="approved", **sale)
+        AffiliateSale.objects.create(click=self.clicks[7], commission=Decimal("2.00"), status="approved", **sale)
+        AffiliateSale.objects.create(click=self.clicks[0], commission=Decimal("1.50"), status="pending", **sale)
+        AffiliateSale.objects.create(click=self.clicks[1], commission=Decimal("9.00"), status="declined", **sale)
+        AffiliateSale.objects.create(commission=Decimal("4.00"), status="approved", retailer=self.harbour,
+                                     ordered_on=TODAY - timedelta(days=40))   # before the 30 days
+
+    def test_the_five_rates(self):
+        money = self.page().context["money"]
+        self.assertEqual((money["visits"], money["clicks"], money["sales"]), (20, 10, 3))
+        self.assertEqual((money["clicked_visits"], money["tracked_visits"]), (5, 20))
+        self.assertEqual(money["ctr"], Decimal("25"))                       # visits with a click / visits
+        self.assertEqual(money["per_100"], Decimal("50"))                   # £5 approved / 10 clicks x 100
+        self.assertEqual(money["conversion"], Decimal("30"))                # 3 sales / 10 clicks
+        self.assertEqual(money["per_1000"], Decimal("250"))                 # £5 / 20 visits x 1,000
+        self.assertEqual((money["earning_offers"], money["offers"]), (2, 3))
+        self.assertAlmostEqual(float(money["coverage"]), 66.67, places=2)   # 2 of 3 in-stock offers earn
+        self.assertEqual(money["pending"], Decimal("1.50"))
+
+    def test_by_game_and_shop_and_what_people_press(self):
+        money = self.page().context["money"]
+        games = {row["name"]: row for row in money["games"]}
+        self.assertEqual([row["name"] for row in money["games"]], ["Disney Lorcana", "Pokémon"])
+        self.assertEqual((games["Disney Lorcana"]["commission"], games["Disney Lorcana"]["clicks"]), (Decimal("5.00"), 4))
+        self.assertEqual(games["Disney Lorcana"]["per_100"], Decimal("125"))
+        self.assertEqual(games["Pokémon"]["coverage"], Decimal("50"))      # Plain Cards' offer earns nothing
+        self.assertEqual(money["best_game"]["name"], "Disney Lorcana")
+        shops = {row["name"]: row for row in money["shops"]}
+        self.assertEqual(shops["Plain Cards"]["coverage"], Decimal("0"))   # listed: stock whose links earn nothing
+        self.assertEqual(shops["Harbour Games"]["sales"], 3)
+        self.assertEqual([(item["name"], item["count"]) for item in money["pressed"]],
+                         [("Buy now on a product page", 6), ("Compare prices", 5), ("A shop in a product's price list", 4)])
+        html = visible(self.page().content.decode())
+        for words in ("What clicks earn, last 30 days", "Retailer click-through rate", "25.0%", "5 of 20 visits since",
+                      "Commission per 100 clicks", "£50.00", "Retailer conversion rate", "30.0%",
+                      "Revenue per 1,000 visits", "£250.00", "Affiliate coverage", "66.7%", "2 of 3 in-stock offers earn",
+                      "Disney Lorcana earns the most per 100 clicks: £125.00.", "£1.50 more is pending with the networks."):
+            self.assertIn(words, html)
+
+    def test_with_no_sales_the_page_says_how_to_fill_them_in(self):
+        from catalogue.models import AffiliateSale
+
+        AffiliateSale.objects.all().delete()
+        html = visible(self.page(URL + "?fresh=1").content.decode())
+        self.assertIn("No sales imported for these days", html)
+        self.assertIn("Import a network report", html)

@@ -3747,6 +3747,28 @@ anyone else is sent to the admin sign-in. Top to bottom:
 - **Today at a glance:** people today so far against the same time last
   week (or yesterday), clicks to shops from people today, rows waiting on
   Things to check, and Claude's spend this month against its limit.
+- **What clicks earn, last 30 days** (`money_section`), the first card,
+  five rates for the whole site, each with the figures behind it:
+  - *Retailer click-through rate*: visits with a click to a shop, out of
+    visits (counted from the first day clicks carried their visit's token,
+    22 Oct 2026, so earlier days do not count as visits that never clicked).
+  - *Commission per 100 clicks*: approved commission / clicks x 100.
+  - *Retailer conversion rate*: sales the networks report (pending or
+    approved, not declined) / clicks.
+  - *Revenue per 1,000 visits*: approved commission / visits x 1,000.
+  - *Affiliate coverage*: in-stock offers at shops whose links earn (an
+    affiliate link format, or eBay and Amazon) / all in-stock offers.
+  Then commission still pending, **What people press** (Buy now, a shop in
+  the price list, a product card, Compare prices and the rest, as shares of
+  every press), and the same figures **by game** (most commission first,
+  naming the game that earns most per 100 clicks; the most profitable game
+  need not be the biggest) and **by shop** (the twelve with most commission
+  or clicks, and any shop with stock whose links earn nothing). Visits
+  cannot be split by game or shop, so the click-through rate and revenue
+  per visit are whole-site only. Sales and commission are read from
+  Affiliate sales, filled by importing each network's report (see Clicks
+  to shops); until one is imported they read nothing and the card says so.
+  Seven queries, however many rows.
 - **Visitors, last 7 days:** people a day as a bar chart (today marked "so
   far", burst days grey and left out of the totals), returning share, page
   views, where people came from, and the traffic explainer's top finding.

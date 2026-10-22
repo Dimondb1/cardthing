@@ -23,7 +23,7 @@ import json
 import logging
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
@@ -49,6 +49,7 @@ DROP_CANDIDATES = 40
 SWITCHES = {RESTOCK: "restocks", PREORDER: "preorders", PRICE_DROP: "price_drops", DROP_DAY: "drop_days"}
 DROP_DAY_FROM_HOUR = 8             # sets out today are posted from 8am UK time, like the drop-day emails
 KEEP_DAYS = 30
+RESTOCK_DAYS = 30                  # a restock post counts the restocks in this many days
 COLOUR = 0xE5470E                  # the buy button's orange (--color-brand-action)
 IMAGE_WIDTH = 200
 TIMEOUT = 10
@@ -70,6 +71,8 @@ class Post:
     path: str                      # RipRaptor's page for it, before the tracking is added
     image: str = ""
     at: datetime | None = None
+    label: str = ""                # what happened ("Back in stock"), on the line above the title beside the logo
+    fields: list = field(default_factory=list)   # (name, value) facts, side by side under the price
 
 
 def channels():
@@ -98,24 +101,63 @@ def price_words(price, delivery_known, checked, store):
                     time=timezone.localtime(checked).strftime("%H:%M"))
 
 
-def price_check_words(product, price, delivery_known, store):
-    """The Price check line for a restock or pre-order post (catalogue/fair_price.py): the verdict and the
-    average it is measured against, so a dear restock says so; a caveat when only one UK shop lists the product,
-    whose price then has nothing to be compared with; or "" while there is no verdict yet. One query, two more
-    with a verdict."""
+def span_words(delta):
+    """How long, in the plainest unit: "45 minutes", "5 hours", "3 days"."""
+    minutes = max(1, int(delta.total_seconds() // 60))
+    if minutes < 60:
+        number, unit = minutes, "minute"
+    elif minutes < 48 * 60:
+        number, unit = minutes // 60, "hour"
+    else:
+        number, unit = minutes // (24 * 60), "day"
+    return f"{number} {unit}{'' if number == 1 else 's'}"
+
+
+def price_check_field(product, price, delivery_known, store):
+    """("Price check", the verdict in bold and what it was measured against), the caveat when only one UK shop
+    lists the product, whose price then has nothing to be compared with, or None while there is no verdict yet
+    (catalogue/fair_price.py). One query, two more with a verdict."""
     shops = (Listing.objects.filter(product=product, is_active=True, retailer__is_active=True)
              .exclude(sanity=Listing.Sanity.EXCLUDED).values("retailer_id").distinct().count())
     found = fair_price.verdict(product, price, shops=shops) if delivery_known else None
+    name = copy.get("discord.field.price_check", store=store)
     if found is None:
-        return copy.get("discord.fair.one_shop", store=store) if shops < fair_price.MIN_SHOPS else ""
-    word = copy.get(f"product.fair.verdict_{found.key}", store=store)
-    market = f"£{found.market.gbp:.2f}" if found.market else ""
-    if found.days and found.market:
-        return copy.get("discord.fair.both_line", store=store, verdict=word, average=f"£{found.average:.2f}",
-                        days=found.days, market=market)
+        return (name, copy.get("discord.fair.one_shop", store=store)) if shops < fair_price.MIN_SHOPS else None
+    lines = [f"**{copy.get(f'product.fair.verdict_{found.key}', store=store)}**"]
+    if found.days:
+        lines.append(copy.get("discord.fair.short_average", store=store, average=f"£{found.average:.2f}", days=found.days))
     if found.market:
-        return copy.get("discord.fair.market_line", store=store, verdict=word, market=market)
-    return copy.get("discord.fair.line", store=store, verdict=word, average=f"£{found.average:.2f}", days=found.days)
+        lines.append(copy.get("discord.fair.short_market", store=store, market=f"£{found.market.gbp:.2f}"))
+    return name, "\n".join(lines)
+
+
+def stock_fields(product, store, restock=None, now=None):
+    """The stock facts under a restock or pre-order post, each only when known: how many of the UK shops that
+    list it have it in stock now; for a restock, how long the shop had been sold out, how many restocks it has
+    had in RESTOCK_DAYS and how long the shop's last stock lasted. Never a count of units: no shop we read
+    says how many it has. Marketplaces never count. Two queries, two more for a restock."""
+    now = now or timezone.now()
+    listed = (Listing.objects.filter(product=product, is_active=True, retailer__is_active=True)
+              .exclude(retailer__source_type__in=MARKETPLACES).exclude(sanity=Listing.Sanity.EXCLUDED))
+    total = listed.values("retailer_id").distinct().count()
+    stocked = (Listing.objects.filter(product=product).buyable().filter(availability=Listing.Availability.IN_STOCK)
+               .exclude(retailer__source_type__in=MARKETPLACES).values("retailer_id").distinct().count())
+    fields = []
+    if total:
+        fields.append((copy.get("discord.field.shops", store=store), f"{stocked} of {total}"))
+    if restock is None:
+        return fields
+    if restock.out_since:
+        fields.append((copy.get("discord.field.out_for", store=store), span_words(restock.at - restock.out_since)))
+    recent = Restock.objects.filter(product=product, at__gte=now - timedelta(days=RESTOCK_DAYS), at__lte=restock.at).count()
+    if recent >= 2:
+        fields.append((copy.get("discord.field.restocks", store=store, days=RESTOCK_DAYS), str(recent)))
+    if restock.out_since and restock.listing_id:
+        before = (Restock.objects.filter(listing_id=restock.listing_id, at__lt=restock.at)
+                  .order_by("-at").values_list("at", flat=True).first())
+        if before is not None and restock.out_since > before:
+            fields.append((copy.get("discord.field.lasted", store=store), span_words(restock.out_since - before)))
+    return fields
 
 
 def look_back(channel):
@@ -139,10 +181,11 @@ def shop_news(model, kind, title_key, availability, now, store, channel, games):
         if key in seen:
             continue
         seen.add(key)
-        check = price_check_words(row.product, row.price, row.delivery_known, store)
-        body = price_words(row.price, row.delivery_known, row.at, store)
-        yield Post(key=key, title=copy.get(title_key, store=store, product=row.product.name),
-                   body=f"{body}\n{check}" if check else body,
+        check = price_check_field(row.product, row.price, row.delivery_known, store)
+        facts = stock_fields(row.product, store, restock=row if kind == RESTOCK else None, now=now)
+        yield Post(key=key, title=row.product.name, label=copy.get(title_key, store=store, product=row.product.name),
+                   body=price_words(row.price, row.delivery_known, row.at, store),
+                   fields=([check] if check else []) + facts,
                    path=row.product.get_absolute_url(), image=row.product.image_src, at=row.at)
 
 
@@ -157,7 +200,7 @@ def price_drop_news(now, store, channel, games):
                    .order_by("delivered_price").values_list("last_checked", flat=True).first()) or now
         yield Post(
             key=f"{PRICE_DROP}-{product.pk}-{today.isoformat()}",
-            title=copy.get("discord.price_drop.title", store=store, product=product.name),
+            title=product.name, label=copy.get("discord.price_drop.title", store=store, product=product.name),
             body=copy.get("discord.price_drop.body", store=store, price=f"£{product.lowest_price:.2f}",
                           was=f"£{product.previous_price:.2f}", time=timezone.localtime(checked).strftime("%H:%M")),
             path=product.get_absolute_url(), image=product.image_src, at=checked,
@@ -185,7 +228,8 @@ def drop_day_news(now, store, channel, games):
             body = copy.get("discord.drop_day.none", store=store)
         yield Post(
             key=f"{DROP_DAY}-{product_set.pk}-{today.isoformat()}",
-            title=copy.get("discord.drop_day.title", store=store, set=product_set.name, game=product_set.game.display_short),
+            title=f"{product_set.name} ({product_set.game.display_short})",
+            label=copy.get("discord.drop_day.title", store=store, set=product_set.name, game=product_set.game.display_short),
             body=body, path=product_set.get_absolute_url(),
             image=best.product.image_src if best is not None else "", at=now,
         )
@@ -207,14 +251,27 @@ def absolute(url):
     return url if url.startswith(("http://", "https://")) else settings.RIPRAPTOR_SITE_URL + url
 
 
+def logo():
+    return absolute(static("img/apple-touch-icon.png"))
+
+
 def embed(post, store):
+    """One post in RipRaptor's look: the brand orange down its side, the logo beside what happened ("Back in
+    stock"), the product as the title linking to its RipRaptor page, the price in bold with a link to compare
+    every shop, the facts side by side, the picture, and the commission note."""
+    url = tracked(post.path)
+    compare = copy.get("discord.compare", store=store)
     data = {
         "title": post.title[:256],
-        "url": tracked(post.path),
-        "description": post.body[:4000],
+        "url": url,
+        "description": (f"{post.body}\n[{compare} →]({url})" if compare else post.body)[:4000],
         "color": COLOUR,
-        "footer": {"text": copy.get("discord.footer", store=store)[:2048]},
+        "footer": {"text": copy.get("discord.footer", store=store)[:2048], "icon_url": logo()},
     }
+    if post.label:
+        data["author"] = {"name": post.label[:256], "url": url, "icon_url": logo()}
+    if post.fields:
+        data["fields"] = [{"name": name[:256], "value": value[:1024], "inline": True} for name, value in post.fields[:6]]
     if post.image:
         data["thumbnail"] = {"url": absolute(sized_image_url(post.image, IMAGE_WIDTH))}
     if post.at:
@@ -229,7 +286,7 @@ def message(store, channel, posts=(), content=""):
     if channel.username:
         data["username"] = channel.username[:80]
     if channel.use_logo:
-        data["avatar_url"] = absolute(static("img/apple-touch-icon.png"))
+        data["avatar_url"] = logo()
     if content:
         data["content"] = content
     if posts:

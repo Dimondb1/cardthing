@@ -2934,10 +2934,14 @@ heading it gives its code and dates in small print and one link, "All
 Game and set pages are kept short. The line under the heading says what
 the page holds (see the hubs below), so there is no second product count
 unless a filter narrows the list, and none beside the stock tabs, which
-count their own lists. On a game page, while anything is in
-stock, it is one short line ("4,179 sealed products compared across 53 UK
-shops.", `browse.hub.brief`): the In stock tab gives that count, and the
-cheapest product's link is left to the set pages. Sort and filters show only for a list of
+count their own lists. While anything is in stock it is one short line
+("4,179 sealed products compared across 53 UK shops.", `browse.hub.brief`):
+the In stock tab gives that count. A set page then shows its cheapest
+product in stock as a small card under the small print ("Cheapest in
+stock", the picture, the name, the delivered price in green and the shop;
+`includes/cheapest_card.html`), rather than a second sentence, at your
+request. The whole card opens the product's page and counts as
+`hub_cheapest` among the Compare taps. Sort and filters show only for a list of
 12 or more products (`FILTERS_FROM`), folded under one "Sort and filter"
 button (a `<details>`); a shorter list has none unless something is chosen.
 The panel loads closed even while a filter is chosen, so a page reached
@@ -3191,12 +3195,29 @@ cron, posts news to the channels set up in admin (`catalogue/discord.py`):
 - Out today: a set's release day, from 8am UK time, with its cheapest
   offer.
 
-Back in stock and Pre-orders open posts carry the product's Price check
-under the price ("Price check: High price, against an average of £42.00
-over 20 days.", or "against a European market price of £577.70" when it is
-Cardmarket's), so a dear restock says so, whenever the product has one
-(see Price check). When only one UK shop lists the product and there is no
-market price, the post says there is no other price to compare with.
+Every post has RipRaptor's look: the brand orange down its side, the logo
+beside what happened ("Back in stock", "Pre-orders open", "Price drop",
+"Out today"), the product as the title linking to its RipRaptor page, the
+price in bold with "Compare every UK shop on RipRaptor", the picture, and
+the commission note under the logo. Back in stock and Pre-orders open posts
+add boxes side by side, each only when we know it:
+
+- **Price check**: the verdict and what it was measured against ("High
+  price", "Average £42.00 over 20 days" or "European market £577.70"), so a
+  dear restock says so. When only one UK shop lists the product and there is
+  no market price, it says there is nothing to compare with.
+- **UK shops with it**: how many of the UK shops that list it have it in
+  stock now, as "1 of 6". The honest kind of urgency: no shop we read says
+  how many units it has, so a post never claims "only 10 left".
+- **Out of stock for** (restocks): how long that shop had sold out. Each
+  listing now keeps when it last sold out (`Listing.sold_out_at`), copied
+  onto the restock (`Restock.out_since`); a shop seen only coming back has
+  no box.
+- **Restocks in 30 days**, when there has been more than one.
+- **Last stock lasted**: how long that shop's previous stock lasted before
+  it sold out, when we saw both.
+
+The words are under Discord posts in Site wording (`discord.*`).
 
 Each channel has its own page in admin, under Discord channels: its name
 (for you), its webhook address, which of the four updates it gets, which

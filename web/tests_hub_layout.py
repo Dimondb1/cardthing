@@ -405,7 +405,9 @@ class IntroWordingTests(HubLayoutTestCase):
 
     def test_in_stock_keeps_the_cheapest_line(self):
         self.product(self.archive, "Duelist Archive Box", (self.a, STOCK))
-        self.assertTrue(self.intro().startswith("1 sealed product compared across 1 UK shop, 1 in stock now."))
+        # One short line now: the cheapest in stock is a card of its own under it (web/tests_hubs.py).
+        self.assertEqual(self.intro(), "1 sealed product compared across 1 UK shop.")
+        self.assertIn('class="cheapest-card"', self.get(self.url))
 
     def test_hub_numbers_still_take_three_queries(self):
         from . import hubs

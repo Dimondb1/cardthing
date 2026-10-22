@@ -1,0 +1,10 @@
+{% load sitecopy ripraptor %}{# A set page's cheapest product in stock now, as a small card under the heading: its picture, name, delivered price in green and the shop. The whole card opens the product's page. #}
+<a class="cheapest-card" href="{{ listing.product.get_absolute_url }}" data-compare="hub_cheapest">
+  <span class="cheapest-card__image">{% product_image listing.product "thumb" %}</span>
+  <span class="cheapest-card__body">
+    <span class="cheapest-card__label">{% copy "browse.hub.cheapest_label" %}</span>
+    <span class="cheapest-card__name">{{ listing.product.name }}</span>
+    <span class="cheapest-card__offer"><span class="cheapest-card__price">{{ listing.delivered_price|gbp }}</span> <span class="delivered">{% copy "browse.price.label" %}</span><span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ listing.retailer.name }}</span>
+  </span>
+  <span class="cheapest-card__go" aria-hidden="true">→</span>
+</a>

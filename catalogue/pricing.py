@@ -101,9 +101,11 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     if price is None or price <= 0:
         if listing.pk and not listing._state.adding and availability == Listing.Availability.OUT_OF_STOCK:
             moved = listing.availability != availability
+            if listing.availability == Listing.Availability.IN_STOCK:
+                listing.sold_out_at = checked_at
             listing.availability = availability
             listing.last_checked = checked_at
-            fields = ["availability", "last_checked"]
+            fields = ["availability", "last_checked", "sold_out_at"]
             if moved and listing.is_active:
                 listing.changed_at = checked_at
                 fields.append("changed_at")
@@ -138,6 +140,10 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     if restocked:
         listing.back_in_stock_at = checked_at
         fields.append("back_in_stock_at")
+    if was_in_stock and availability != Listing.Availability.IN_STOCK and listing.pk and not listing._state.adding:
+        # Sold out (or only on pre-order now): when, so the next restock can say how long it was gone.
+        listing.sold_out_at = checked_at
+        fields.append("sold_out_at")
     # Pre-orders opening: a listing we already had, out of stock (not in stock: a shop relabelling stock it
     # has is not opening anything), now on pre-order. A listing seen for the first time never counts.
     preorder = availability == Listing.Availability.PREORDER
@@ -203,9 +209,10 @@ def record_restock(listing, at):
         return None
     if Restock.objects.filter(listing=listing, at__gte=at - RESTOCK_COLLAPSE).exists():
         return None
+    sold_out = listing.sold_out_at
     return Restock.objects.create(
         product_id=listing.product_id, retailer_id=listing.retailer_id, listing=listing, at=at, price=listing.total,
-        delivery_known=listing.delivery_known,
+        delivery_known=listing.delivery_known, out_since=sold_out if sold_out and sold_out < at else None,
     )
 
 

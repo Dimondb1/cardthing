@@ -34,7 +34,8 @@ class Outbox:
         return [embed for to, data in self.sent if url in (None, to) for embed in data.get("embeds", [])]
 
     def titles(self, url=None):
-        return [embed["title"] for embed in self.embeds(url)]
+        """What each post says it is and what it is about: "Back in stock: <product>"."""
+        return [f"{embed['author']['name']}: {embed['title']}" for embed in self.embeds(url)]
 
 
 @override_settings(RIPRAPTOR_SITE_URL="https://ripraptor.com")
@@ -72,8 +73,50 @@ class DiscordTests(TestCase):
         ])
         _sent, outbox = self.run_once()
         [(_url, data)] = outbox.sent
-        self.assertTrue(data["embeds"][0]["description"].endswith(
-            "\nPrice check: High price, against an average of £42.00 over 20 days."))
+        fields = {f["name"]: f["value"] for f in data["embeds"][0]["fields"]}
+        self.assertEqual(fields["Price check"], "**High price**\nAverage £42.00 over 20 days")
+
+    def test_a_restock_says_how_long_it_was_gone_and_how_long_the_last_stock_lasted(self):
+        # The owner: "I would like to know when they went out of stock and when they've been in stock". From
+        # what we saw: never a count of units, which no shop we read gives.
+        from . import pricing
+
+        self.channel()
+        self.run_once()
+        product = make_product(self.set, name="Ascended Heroes Elite Trainer Box")
+        listing = make_listing(product, self.shop, price="50.00", delivery="0.00")
+
+        def check(availability, at):
+            listing.refresh_from_db()
+            pricing.record_check(listing, price=Decimal("50.00"), delivery_cost=Decimal("0.00"),
+                                 availability=availability, checked_at=at)
+
+        out, back = Listing.Availability.OUT_OF_STOCK, Listing.Availability.IN_STOCK
+        check(out, self.now - timedelta(days=5))
+        check(back, self.now - timedelta(days=4))                      # a restock: gone a day
+        check(out, self.now - timedelta(days=4) + timedelta(hours=6))  # sold out again in 6 hours
+        check(back, self.now - timedelta(minutes=10))                  # back now, after 3 days and 18 hours
+        listing.refresh_from_db()
+        self.assertEqual(listing.sold_out_at, self.now - timedelta(days=4) + timedelta(hours=6))
+        restock = Restock.objects.filter(listing=listing).first()
+        self.assertEqual(restock.out_since, self.now - timedelta(days=4) + timedelta(hours=6))
+        make_listing(product, make_retailer("Northgate Cards"), price="55.00", availability=out)
+        _sent, outbox = self.run_once()
+        [embed] = outbox.embeds()
+        fields = [(f["name"], f["value"]) for f in embed["fields"]]
+        # Two shops list it and there are too few days for a Price check yet, so no Price check box.
+        self.assertEqual(fields, [("UK shops with it", "1 of 2"), ("Out of stock for", "3 days"),
+                                  ("Restocks in 30 days", "2"), ("Last stock lasted", "6 hours")])
+        # Seen only coming back, never going: nothing said about how long it was gone.
+        first = self.restock("Black Bolt Booster Box", minutes_ago=2)
+        names = [f["name"] for f in self.run_once(minutes_later=10)[1].embeds()[0]["fields"]]
+        self.assertNotIn("Out of stock for", names)
+        self.assertNotIn("Last stock lasted", names)
+        self.assertIsNone(first.out_since)
+
+    def test_how_long_reads_in_the_plainest_unit(self):
+        self.assertEqual([discord.span_words(timedelta(minutes=n)) for n in (0, 1, 45, 60, 61 * 5, 47 * 60, 50 * 60)],
+                         ["1 minute", "1 minute", "45 minutes", "1 hour", "5 hours", "47 hours", "2 days"])
 
     def test_nothing_is_posted_until_a_channel_is_set_up(self):
         self.restock("Surging Sparks Booster Box")
@@ -94,14 +137,25 @@ class DiscordTests(TestCase):
         [(url, data)] = outbox.sent
         self.assertEqual(url, HOOK)
         [embed] = data["embeds"]
-        self.assertEqual(embed["title"], "Back in stock: Prismatic Evolutions Elite Trainer Box")
-        # Only one UK shop lists it here, so the post says its price has nothing to be compared with.
+        # RipRaptor's look: what happened beside the logo, the product as the title, the price in bold.
+        logo = "https://ripraptor.com/static/img/apple-touch-icon.png"
+        page = (f"https://ripraptor.com{fresh.product.get_absolute_url()}"
+                "?utm_source=discord&utm_medium=social&utm_campaign=alerts")
+        self.assertEqual(embed["author"], {"name": "Back in stock", "url": page, "icon_url": logo})
+        self.assertEqual(embed["title"], "Prismatic Evolutions Elite Trainer Box")
         self.assertEqual(embed["description"],
-                         f"£50.00 delivered, checked at {timezone.localtime(fresh.at):%H:%M}. Compare every UK shop on RipRaptor.\n"
-                         "Only one UK shop we check lists it, so there is no other price to compare with.")
-        self.assertEqual(embed["url"], f"https://ripraptor.com{fresh.product.get_absolute_url()}"
-                                       "?utm_source=discord&utm_medium=social&utm_campaign=alerts")
+                         f"**£50.00** delivered, checked at {timezone.localtime(fresh.at):%H:%M}.\n"
+                         f"[Compare every UK shop on RipRaptor →]({page})")
+        self.assertEqual(embed["url"], page)
+        self.assertEqual(embed["color"], 0xE5470E)
+        # Only one UK shop lists it here, so the Price check box says its price has nothing to be compared with,
+        # and the shops box counts it in stock at that one.
+        self.assertEqual(embed["fields"], [
+            {"name": "Price check", "value": "Only one UK shop lists it, so nothing to compare with.", "inline": True},
+            {"name": "UK shops with it", "value": "1 of 1", "inline": True},
+        ])
         self.assertIn("commission", embed["footer"]["text"])
+        self.assertEqual(embed["footer"]["icon_url"], logo)
         # Never the shop: people compare every shop on the page.
         self.assertNotIn("Harbour", str(data))
         # A product's name can never ping the server; the webhook's own name shows, with RipRaptor's logo.
@@ -169,7 +223,7 @@ class DiscordTests(TestCase):
         sent, outbox = self.run_once()
         self.assertNotIn("restock", sent["#alerts"])
         [(_url, data)] = outbox.sent
-        self.assertEqual([e["title"] for e in data["embeds"]], ["Pre-orders open: Opening 0", "Pre-orders open: Opening 1"])
+        self.assertEqual(outbox.titles(), ["Pre-orders open: Opening 0", "Pre-orders open: Opening 1"])
         self.assertEqual(data["username"], "Raptor News")
         self.assertNotIn("avatar_url", data)
         # Not again until an hour has passed: then the one left over goes.
@@ -199,8 +253,8 @@ class DiscordTests(TestCase):
         DailyLowestPrice.objects.create(product=small, date=today - timedelta(days=1), price="62.00")    # 1.6%
         outbox = self.run_once()[1]
         [embed] = outbox.embeds(HOOK)
-        self.assertEqual(embed["title"], "Price drop: Journey Together Booster Box")
-        self.assertTrue(embed["description"].startswith("Now £50.00 delivered, was £60.00 yesterday. Checked at "))
+        self.assertEqual((embed["author"]["name"], embed["title"]), ("Price drop", "Journey Together Booster Box"))
+        self.assertTrue(embed["description"].startswith("Now **£50.00** delivered, was £60.00 yesterday. Checked at "))
         self.assertEqual(outbox.embeds(DROPS_HOOK), [])
         self.assertEqual(self.run_once(minutes_later=10)[1].sent, [])
 
@@ -217,8 +271,8 @@ class DiscordTests(TestCase):
         after = Outbox()
         discord.run(now=self.now, post=after)
         [embed] = after.embeds(DROPS_HOOK)
-        self.assertEqual(embed["title"], "Out today: Mega Evolution (Pokémon)")
-        self.assertTrue(embed["description"].startswith("Cheapest from £150.00 delivered, checked at "))
+        self.assertEqual((embed["author"]["name"], embed["title"]), ("Out today", "Mega Evolution (Pokémon)"))
+        self.assertTrue(embed["description"].startswith("Cheapest from **£150.00** delivered, checked at "))
         self.assertEqual(embed["url"], f"https://ripraptor.com{out.get_absolute_url()}"
                                        "?utm_source=discord&utm_medium=social&utm_campaign=alerts")
 

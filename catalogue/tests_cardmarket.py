@@ -307,8 +307,8 @@ class MarketDiscordTests(MarketPriceCheckTests):
     def test_a_restock_post_names_the_market_price_and_says_high(self):
         from . import discord
 
-        self.assertEqual(discord.price_check_words(self.box, Decimal("1199.99"), True, None),
-                         "Only one UK shop we check lists it, so there is no other price to compare with.")
+        self.assertEqual(discord.price_check_field(self.box, Decimal("1199.99"), True, None),
+                         ("Price check", "Only one UK shop lists it, so nothing to compare with."))
         CardmarketMatch.objects.create(product=self.box, cardmarket_id=550461, status=CardmarketMatch.Status.MATCHED)
-        self.assertEqual(discord.price_check_words(self.box, Decimal("1199.99"), True, None),
-                         "Price check: High price, against a European market price of £577.70.")
+        self.assertEqual(discord.price_check_field(self.box, Decimal("1199.99"), True, None),
+                         ("Price check", "**High price**\nEuropean market £577.70"))

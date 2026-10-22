@@ -852,7 +852,9 @@ def set_detail(request, game_slug, set_slug):
             "set_upcoming": upcoming,
             "set_facts": facts,
             "instead": instead,
-            "intro": hubs.intro(words, stats, date=intro_date, undated=undated),
+            # One short line, and the cheapest in stock as a small card of its own rather than a second sentence.
+            "intro": hubs.intro(words, stats, date=intro_date, undated=undated, brief=True),
+            "cheapest_card": stats.cheapest if stats.in_stock else None,
             "meta_title": meta_title,
             "meta_description": meta_description,
             "canonical_url": page_url,

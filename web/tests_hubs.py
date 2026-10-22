@@ -71,12 +71,16 @@ class GameHubTests(PageTestCase):
         # A game page keeps to one short line: its In stock tab counts the rest.
         html = self.client.get(self.game.get_absolute_url()).content.decode()
         self.assertIn('<p class="browse-head__intro">3 sealed products compared across 2 UK shops.</p>', html)
+        # A set page too, with its cheapest in stock as a small card rather than a second sentence (the owner:
+        # "not presented as a text mess").
         set_html = self.client.get(self.pre.get_absolute_url()).content.decode()
-        self.assertIn(
-            '3 sealed products compared across 2 UK shops, 1 in stock now. Cheapest in stock: '
-            f'<a href="{self.etb.get_absolute_url()}">{self.etb.name}</a>, £54.99 delivered at Harbour Games.',
-            set_html,
-        )
+        self.assertIn('<p class="browse-head__intro">3 sealed products compared across 2 UK shops.</p>', set_html)
+        card = set_html[set_html.index('<a class="cheapest-card"'):set_html.index("</a>", set_html.index('<a class="cheapest-card"'))]
+        self.assertIn(f'href="{self.etb.get_absolute_url()}" data-compare="hub_cheapest"', card)
+        self.assertIn('<span class="cheapest-card__label">Cheapest in stock</span>', card)
+        self.assertIn(f'<span class="cheapest-card__name">{self.etb.name}</span>', card)
+        self.assertIn('<span class="cheapest-card__price">£54.99</span> <span class="delivered">delivered</span>', card)
+        self.assertIn("Harbour Games", card)
 
     def test_the_cheapest_is_in_stock_not_a_pre_order(self):
         cheap_preorder = make_product(self.pre, name="Prismatic Evolutions Tin", product_type=Product.Type.TIN)
@@ -84,8 +88,8 @@ class GameHubTests(PageTestCase):
         html = self.client.get(self.game.get_absolute_url()).content.decode()
         self.assertIn("from £54.99 delivered", description_of(html))
         set_html = self.client.get(self.pre.get_absolute_url()).content.decode()
-        self.assertIn("£54.99 delivered at Harbour Games.", set_html)
-        self.assertNotIn("£10.00 delivered at", set_html)
+        self.assertIn('<span class="cheapest-card__price">£54.99</span>', set_html)
+        self.assertNotIn('<span class="cheapest-card__price">£10.00</span>', set_html)
 
     def test_stale_and_kept_out_prices_do_not_count(self):
         stale = make_product(self.pre, name="Prismatic Evolutions Booster Box", product_type=Product.Type.BOOSTER_BOX)
@@ -93,7 +97,8 @@ class GameHubTests(PageTestCase):
         excluded = make_product(self.pre, name="Prismatic Evolutions Mini Tin", product_type=Product.Type.TIN)
         make_listing(excluded, self.harbour, price="1.00", sanity=Listing.Sanity.EXCLUDED)
         html = self.client.get(self.game.get_absolute_url()).content.decode()
-        self.assertIn("1 in stock now", self.client.get(self.pre.get_absolute_url()).content.decode())
+        self.assertIn('<span class="cheapest-card__price">£54.99</span>',
+                      self.client.get(self.pre.get_absolute_url()).content.decode())
         self.assertIn("from £54.99 delivered", description_of(html))
         self.assertTrue(title_of(html).startswith("Cheapest Pokémon ETBs in stock"))
 
@@ -160,7 +165,7 @@ class GameHubTests(PageTestCase):
         marlow = make_retailer("Marlow Card Co.")
         make_listing(self.etb, marlow, price="40.00")
         html = self.client.get(self.pre.get_absolute_url()).content.decode()
-        self.assertIn("£40.00 delivered at Marlow Card Co. ", visible(html) + " ")
+        self.assertIn("£40.00 delivered · , Marlow Card Co.", visible(html))
         self.assertNotIn("Co..", html)
         product_html = self.client.get(self.etb.get_absolute_url()).content.decode()
         self.assertIn("£40.00 delivered at Marlow Card Co. Compare", description_of(product_html))
@@ -214,7 +219,7 @@ class SetHubTests(PageTestCase):
             "Prismatic Evolutions: 1 sealed Pokémon product in stock at 2 UK shops, from £54.99 delivered."
         ))
         self.assertLessEqual(len(description), 160)
-        self.assertIn("3 sealed products compared across 2 UK shops, 1 in stock now.", html)
+        self.assertIn('<p class="browse-head__intro">3 sealed products compared across 2 UK shops.</p>', html)
 
     def test_links_back_to_the_game_besides_the_breadcrumb(self):
         html = self.client.get(self.pre.get_absolute_url()).content.decode()

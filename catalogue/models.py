@@ -687,6 +687,10 @@ class Listing(models.Model):
         null=True, blank=True, db_index=True,
         help_text="When this shop last went from not having it to having it in stock.",
     )
+    sold_out_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When this shop last went from having it in stock to not having it.",
+    )
     # When what the product page shows for this shop last changed: its price, delivery or stock, whether it is
     # shown or kept out of the comparison, or the product it is listed under. A check that finds nothing new
     # leaves it alone, so the sitemap can tell search engines when a page really changed (web/sitemaps.py).
@@ -1206,6 +1210,10 @@ class Restock(models.Model):
     at = models.DateTimeField(default=timezone.now, db_index=True)
     price = models.DecimalField(max_digits=9, decimal_places=2, help_text="Delivered price when it came back.")
     delivery_known = models.BooleanField(default=True, help_text="Off when the price is the item price alone.")
+    out_since = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the shop had sold out before this, so how long it was gone. Empty when not seen.",
+    )
 
     class Meta:
         ordering = ["-at"]

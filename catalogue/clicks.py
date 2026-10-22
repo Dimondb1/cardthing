@@ -53,7 +53,7 @@ PAGES = {"home": "home", "product": "product", "game": "game", "set": "set", "se
 
 
 # The links to a product's prices a Compare tap can name (data-compare, counted by /api/note/?what=compare).
-COMPARE_PLACES = ("buy_box", "card", "featured", "picks", "recent", "trending", "out_now", "instead")
+COMPARE_PLACES = ("buy_box", "card", "featured", "picks", "recent", "trending", "out_now", "instead", "hub_cheapest")
 
 
 def page_of(request):

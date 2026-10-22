@@ -33,6 +33,7 @@
   <h1 class="browse-head__title">{{ heading }}</h1>
   {% if intro %}<p class="browse-head__intro">{{ intro }}</p>{% endif %}
   {% if product_set %}<p class="browse-head__meta">{% for fact in set_facts %}{{ fact }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endfor %}<a href="{{ game.get_absolute_url }}">{% copy "browse.set.game_link" game=game.display_short %}</a></p>{% endif %}
+  {% if cheapest_card %}{% include "web/includes/cheapest_card.html" with listing=cheapest_card %}{% endif %}
   {# The line under the heading already counts the products, unless a filter has narrowed the list; the stock tabs count them too. #}
   {% if not tab_row %}{% if not intro or filters_active %}<p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>{% endif %}{% endif %}
 </div>

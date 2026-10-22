@@ -117,3 +117,19 @@
     if (opening && field) field.focus();
   }));
 })();
+
+// Price check: a link to the price history, which without this file shows the same facts and chart further down.
+// Here it opens the Price check sheet; Close, a tap on the shaded page or Escape closes it.
+(() => {
+  const sheet = document.querySelector("[data-fair-sheet]");
+  const open = document.querySelector("[data-fair-open]");
+  if (!sheet || !open || typeof sheet.showModal !== "function") return;
+  open.setAttribute("aria-haspopup", "dialog");
+  open.addEventListener("click", (event) => {
+    event.preventDefault();
+    sheet.showModal();
+  });
+  sheet.addEventListener("click", (event) => {
+    if (event.target === sheet || event.target.closest("[data-fair-close]")) sheet.close();
+  });
+})();

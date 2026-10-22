@@ -1,0 +1,15 @@
+{% load sitecopy ripraptor %}{# The price history chart (views.price_chart): on the product page, and in its Price check sheet, which passes brief as it already names the lowest price. #}
+<figure class="chart">
+  <div class="chart__plot">
+    <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <line class="chart__guide" x1="0" x2="{{ chart.width }}" y1="{{ chart.high_y }}" y2="{{ chart.high_y }}"/>
+      <line class="chart__guide" x1="0" x2="{{ chart.width }}" y1="{{ chart.low_y }}" y2="{{ chart.low_y }}"/>
+      <path class="chart__line" d="{{ chart.path }}"/>
+    </svg>
+    <span class="chart__label chart__label--high" style="--y: {{ chart.high_top_pct }}%" aria-hidden="true">{{ chart.high|gbp }}</span>
+    <span class="chart__label chart__label--low" style="--y: {{ chart.low_top_pct }}%" aria-hidden="true">{{ chart.low|gbp }}</span>
+    <span class="chart__marker" style="--x: {{ chart.low_left_pct }}%; --y: {{ chart.low_top_pct }}%" aria-hidden="true"></span>
+  </div>
+  <div class="chart__axis" aria-hidden="true"><span>{{ chart.start|short_date }}</span><span>{{ chart.end|short_date }}</span></div>
+  {% if not brief %}<figcaption class="chart__summary">{% copy "product.history.summary" low=chart.low|gbp low_date=chart.low_date|short_date high=chart.high|gbp high_date=chart.high_date|short_date %}{% if month_ago %} {% copy "product.history.month_ago" price=month_ago|gbp %}{% endif %}</figcaption>{% endif %}
+</figure>

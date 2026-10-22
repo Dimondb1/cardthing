@@ -1,0 +1,13 @@
+{% load sitecopy ripraptor %}{# The Price check sheet the indicator beside the cheapest price opens (product.js): the verdict, today against the average and the lowest, the price history chart, and what it is based on. #}
+<dialog class="share-dialog fair-sheet fair--{{ fair.key }}" id="fair-sheet" aria-labelledby="fair-sheet-title" data-fair-sheet>
+  <div class="share-dialog__head">
+    <div>
+      <p class="share-dialog__title">{% copy "product.fair.title" %}</p>
+      <p class="fair-sheet__verdict" id="fair-sheet-title"><span class="fair__dot" aria-hidden="true"></span>{{ fair_word }}</p>
+    </div>
+    <button class="button button--quiet button--small" type="button" data-fair-close>{% copy "product.share.close" %}</button>
+  </div>
+  {% include "web/includes/fair_facts.html" %}
+  {% if chart %}{% include "web/includes/price_chart.html" with brief=True %}{% endif %}
+  <p class="fair-sheet__basis">{% copy "product.fair.basis" since=fair.since|short_date %}</p>
+</dialog>

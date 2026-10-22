@@ -22,7 +22,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_POST, require_safe
 
-from catalogue import alerts, clicks, images, insights, mail, offers, pricing, traffic
+from catalogue import alerts, clicks, fair_price, images, insights, mail, offers, pricing, traffic
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
@@ -1035,6 +1035,9 @@ def product_detail(request, slug):
     month_ago = pricing.previous_price_map([product.pk], days=30, today=today).get(product.pk)
     last_known = None if cheapest else pricing.last_known_price(product)
     restocks = pricing.restock_summary(product) if listings else None
+    # Price check: today's cheapest delivered price against our own daily record. None while on trial
+    # outside Pokémon, without enough days, or when the delivery cost is unknown.
+    fair = fair_price.verdict(product, cheapest.delivered_price, today) if cheapest and cheapest.delivery_known else None
 
     related = []
     if product.product_set_id:
@@ -1165,6 +1168,8 @@ def product_detail(request, slug):
             "last_checked": last_checked,
             "has_listings": bool(listings),
             "chart": chart,
+            "fair": fair,
+            "fair_word": text(request, f"product.fair.verdict_{fair.key}") if fair else "",
             "history_days": days,
             "month_ago": month_ago,
             "last_known": last_known,

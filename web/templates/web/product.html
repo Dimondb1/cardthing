@@ -29,7 +29,7 @@
           <p class="buybox__label">{% if cheapest.delivery_known %}{% copy "product.cheapest.label" %}{% else %}{% copy "product.cheapest.label_unknown" %}{% endif %}</p>
           {% include "web/includes/badge.html" %}
         </div>
-        <p class="buybox__price"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span></p>
+        <p class="buybox__price"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span>{% if fair %}{% include "web/includes/fair_price.html" %}{% endif %}</p>
         <p class="buybox__delivered"><span class="money" data-note-for="{{ cheapest.pk }}">{% include "web/includes/price_note.html" with listing=cheapest %}</span>{% if not cheapest.delivery_known %} {% copy "product.delivery.unknown_check" %}{% endif %}</p>
       </div>
       {# The cheapest offer a visitor can buy now, through /go/ so the click is counted and the shop's tracking applies. #}
@@ -92,6 +92,7 @@
     {% endif %}
   </section>
 </div>
+{% if fair %}{% include "web/includes/fair_sheet.html" %}{% endif %}
 
 {% if has_listings or amazon_search %}
 <section class="block offers-section" aria-labelledby="offers-title">
@@ -147,21 +148,9 @@
   <section class="history" aria-labelledby="history-title">
     <h2 id="history-title" class="section-title">{% copy "product.history.title" %}</h2>
     <p class="section-note">{% copy "product.history.caption" days=history_days %}</p>
+    {% if fair %}{% include "web/includes/fair_facts.html" %}{% endif %}
     {% if chart %}
-    <figure class="chart">
-      <div class="chart__plot">
-        <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-          <line class="chart__guide" x1="0" x2="{{ chart.width }}" y1="{{ chart.high_y }}" y2="{{ chart.high_y }}"/>
-          <line class="chart__guide" x1="0" x2="{{ chart.width }}" y1="{{ chart.low_y }}" y2="{{ chart.low_y }}"/>
-          <path class="chart__line" d="{{ chart.path }}"/>
-        </svg>
-        <span class="chart__label chart__label--high" style="--y: {{ chart.high_top_pct }}%" aria-hidden="true">{{ chart.high|gbp }}</span>
-        <span class="chart__label chart__label--low" style="--y: {{ chart.low_top_pct }}%" aria-hidden="true">{{ chart.low|gbp }}</span>
-        <span class="chart__marker" style="--x: {{ chart.low_left_pct }}%; --y: {{ chart.low_top_pct }}%" aria-hidden="true"></span>
-      </div>
-      <div class="chart__axis" aria-hidden="true"><span>{{ chart.start|short_date }}</span><span>{{ chart.end|short_date }}</span></div>
-      <figcaption class="chart__summary">{% copy "product.history.summary" low=chart.low|gbp low_date=chart.low_date|short_date high=chart.high|gbp high_date=chart.high_date|short_date %}{% if month_ago %} {% copy "product.history.month_ago" price=month_ago|gbp %}{% endif %}</figcaption>
-    </figure>
+    {% include "web/includes/price_chart.html" %}
     {% else %}
     <p class="history__empty">{% copy "product.history.empty" %}</p>
     {% endif %}

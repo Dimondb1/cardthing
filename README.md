@@ -2771,6 +2771,40 @@ screens put the picture beside the name and the price box.
 The wording ("Compare prices", "{count} shops, cheapest delivered first",
 "at {retailer}") is under Product page in Site wording.
 
+### Price check (Pokémon, on trial)
+
+Beside "delivered" on a Pokémon product page, a short bar of five colours
+says whether today's cheapest delivered price is a good one for that product
+(`catalogue/fair_price.py`). It is judged against RipRaptor's own record of
+the cheapest delivered price each day (the same rows as the price history),
+up to a year back and not counting today:
+
+| Band | Shown as | When |
+| --- | --- | --- |
+| 5 | Lowest yet | at or below the lowest recorded |
+| 4 | Good price | at least 5% under the average |
+| 3 | Fair price | within 5% of the average |
+| 2 | Above average | up to 15% over it |
+| 1 | High price | more than 15% over it |
+
+- No price check shows until a product has 14 days of prices before today,
+  or when the cheapest shop's delivery cost is unknown. Nothing is guessed.
+- The record is ours: it lives in the database whatever happens to any shop
+  or source, so the price check keeps working if a source stops. No outside
+  price data is read yet; backfilling older prices from another source would
+  need the owner's approval first.
+- Tapping it opens the Price check sheet (`js/product.js`): the verdict,
+  today against the average and the lowest, the price chart, and the date
+  the record starts. Without JavaScript it is a link to the price history,
+  which shows the same three figures above the chart.
+- The colours are the `--color-fair-*` tokens, the one place outside prices
+  and savings with colour, at the owner's request. The words use the darker
+  `-text` versions so they read on white.
+- The trial covers the games in `fair_price.GAMES` (Pokémon only). The
+  thresholds are `GOOD`, `HIGH`, `MIN_DAYS` and `WINDOW_DAYS` in the same file.
+
+The wording is under Product page in Site wording (`product.fair.*`).
+
 ### When a price was checked
 
 A product page's headline price says which shop it is from and when that

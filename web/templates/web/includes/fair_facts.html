@@ -1,0 +1,6 @@
+{% load sitecopy ripraptor %}{# Today's cheapest delivered price against the average and the lowest we have recorded (catalogue/fair_price.py): in the Price check sheet, and under the price history for anyone without it. #}
+<dl class="fair-facts">
+  <div><dt>{% copy "product.fair.today" %}</dt><dd>{{ fair.price|gbp }}</dd></div>
+  <div><dt>{% copy "product.fair.average" days=fair.days %}</dt><dd>{{ fair.average|gbp }}</dd></div>
+  <div><dt>{% copy "product.fair.lowest" %}</dt><dd>{{ fair.low|gbp }}<span class="fair-facts__when">{{ fair.low_date|short_date }}</span></dd></div>
+</dl>

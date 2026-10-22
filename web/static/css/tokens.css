@@ -136,6 +136,20 @@
   --color-price-soft: #e7f7ec;   /* green badges */
   --color-more: #c9271b;         /* dearer prices, red arrow */
 
+  /* Price check (catalogue/fair_price.py): its five steps, lowest we have seen at the top to high at the bottom.
+     The owner's choice: the traffic light scale collectors know from other price sites, the one place beyond
+     prices and savings with colour. Bars only; the verdict's words use the text-safe colours under each. */
+  --color-fair-lowest: #107a32;
+  --color-fair-good: #4fb06d;
+  --color-fair-fair: #f2c230;
+  --color-fair-above: #f08c2e;
+  --color-fair-high: #d93a2b;
+  --color-fair-lowest-text: var(--color-price);
+  --color-fair-good-text: var(--color-price);
+  --color-fair-fair-text: #8a6a00;   /* 5.0:1 on white */
+  --color-fair-above-text: var(--color-preorder);
+  --color-fair-high-text: var(--color-more);
+
   --color-in-stock: #107a32;
   --color-preorder: #b25e00;
   --color-out: #7a8190;
@@ -198,6 +212,13 @@
   --masthead-logo-home: 2.625rem;                                  /* the home page logo on phones: the 2.618rem step, the most a 320px screen holds beside the menu */
   --masthead-logo-home-wide: 4.25rem;                              /* and on wide screens (4.236rem) */
   --buy-height: 3.75rem;            /* the Buy now button */
+  --fair-step: 0.4375rem;           /* the height of each of the price check's five steps */
+  --fair-step-width: 0.5625rem;     /* and their width; the one that applies is drawn wider */
+  --fair-step-gap: 2px;
+  --fair-step-on: 1.75;             /* how much wider the step that applies is drawn */
+  --fair-dim: 0.35;                 /* the steps that do not apply */
+  --fair-word: 4.75em;              /* the verdict wraps onto two lines beside the bar */
+  --fair-chart: 8rem;               /* the price chart's height in the Price check sheet */
   --buy-mark: 3.25rem;              /* the raptor and bag inside it */
   --buy-mark-head: 2.75rem;         /* the raptor head, leaving room for the bag below its jaw */
   --buy-mark-card: 2rem;            /* the same mark on the Buy now and Pre-order buttons of cards and watchlist rows */

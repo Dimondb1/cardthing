@@ -1,0 +1,8 @@
+{% load sitecopy %}{% autoescape off %}{% copy "watchlist.manage.email.body" site_name=values.site_name %}
+
+{% copy "watchlist.manage.email.button" %}:
+{{ page_url }}
+
+{% copy "watchlist.manage.email.note" %}
+
+{% copy "watchlist.manage.email.footer" %}{% endautoescape %}

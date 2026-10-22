@@ -20,7 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
-from django.views.decorators.http import require_GET, require_POST, require_safe
+from django.views.decorators.http import require_GET, require_http_methods, require_POST, require_safe
 
 from catalogue import alerts, clicks, images, insights, mail, offers, pricing, traffic
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
@@ -1554,6 +1554,14 @@ class SearchAlertForm(forms.Form):
         return value
 
 
+class ManageAlertsForm(forms.Form):
+    """The Your alerts box: the address to email a link to its alerts. Its label is in the template."""
+
+    email = forms.EmailField(max_length=254)
+
+
+# What the Your alerts box says after it is sent. "sent" is the answer for every address, with alerts or not.
+MANAGE_STATES = ("sent", "busy")
 SEARCH_ALERT_STATES = ("sent", "busy", "failed")
 # Prefill from a browse page's filters: its price band becomes the band's top as the most to pay.
 BAND_TOPS = {"0-10": "10", "10-25": "25", "25-50": "50", "50-100": "100"}
@@ -1592,7 +1600,7 @@ def search_alert_described(values, request):
     return search_alerts.summary(game, product_type, language, max_price, store=copy.for_request(request))
 
 
-def watchlist_page(request, alert_form=None, status=200):
+def watchlist_page(request, alert_form=None, status=200, manage_form=None):
     wanted = slugs_in(request, WATCHLIST_MAX) or [
         slug for slug in request.POST.get("p", "").split(",") if slug
     ][:WATCHLIST_MAX]
@@ -1618,11 +1626,15 @@ def watchlist_page(request, alert_form=None, status=200):
             alert_form = SearchAlertForm(initial=prefill, request=request)
         described = search_alert_described(alert_form.cleaned_data if alert_form.is_bound and alert_form.is_valid()
                                            else prefill, request)
+        manage_state = request.GET.get("manage", "")
         context.update({
             "alert_form": alert_form,
             "alert_state": state,
             "alert_summary": described,
             "alert_again_url": reverse("web:watchlist") + (f"?p={','.join(wanted)}" if wanted else "") + "#alert",
+            "manage_form": manage_form or ManageAlertsForm(),
+            "manage_state": manage_state if manage_state in MANAGE_STATES else "",
+            "manage_again_url": reverse("web:watchlist") + (f"?p={','.join(wanted)}" if wanted else "") + "#manage",
         })
     return render(request, "web/watchlist.html", context, status=status)
 
@@ -1707,6 +1719,124 @@ def search_alert_stop(request, token):
     heading = text(request, "alerts.stopped.title")
     return render(request, "web/search_alert_done.html", {"heading": heading, "message": text(request, "watchlist.alert.stopped.body"),
                                                           "meta_title": heading, "noindex": True})
+
+
+# Your alerts: one place to see and stop every email alert (catalogue/manage_alerts.py) ---------------
+
+def private_page(response):
+    """The Your alerts page names an address: never kept by a cache or indexed, whatever robots.txt says."""
+    response["Cache-Control"] = "no-store"
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
+
+@require_POST
+def manage_ask(request):
+    """Take the Your alerts box and email a link to the address if it has alerts. The answer is the same
+    whether it has or not. Without JavaScript the visitor goes back to the watchlist page, which says so; an
+    address that is not one shows the page again with it marked. With JavaScript (search-alert.js) the box asks
+    for JSON and shows the answer in place."""
+    from catalogue import manage_alerts
+
+    wants_json = "application/json" in request.headers.get("Accept", "")
+    if request.POST.get("website") or not mail.enabled():
+        return HttpResponseRedirect(reverse("web:watchlist"))   # the hidden field is only ever filled by robots
+    form = ManageAlertsForm(request.POST)
+    if not form.is_valid():
+        if wants_json:
+            return JsonResponse({"state": "invalid"}, status=400)
+        return watchlist_page(request, manage_form=form, status=400)
+    if manage_alerts.address_allowed(insights.client_ip(request)):
+        manage_alerts.ask(form.cleaned_data["email"])
+        state = "sent"
+    else:
+        state = "busy"
+    if wants_json:
+        if state == "sent":
+            return JsonResponse({"state": state, "title": text(request, "watchlist.manage.done.title"),
+                                 "message": text(request, "watchlist.manage.done.body")})
+        return JsonResponse({"state": state, "message": text(request, "watchlist.manage.busy")})
+    params = {"manage": state}
+    slugs = [slug for slug in request.POST.get("p", "").split(",") if slug][:WATCHLIST_MAX]
+    if slugs:
+        params = {"p": ",".join(slugs), **params}
+    return HttpResponseRedirect(reverse("web:watchlist") + "?" + urlencode(params, safe=",") + "#manage")
+
+
+def manage_groups(request, email):
+    """The Your alerts page's groups, in plain words and in this order: back in stock, Track price, drop
+    reminders, search alerts, each [{"key", "label", "rows"}] and left out when empty. A row is {"kind", "pk",
+    "name", "url", "details", "waiting"}. Three queries however many alerts there are."""
+    from catalogue import manage_alerts, search_alerts
+    from catalogue.drops import Drop, month_start
+
+    found = manage_alerts.find(email)
+    store = copy.for_request(request)
+    today = timezone.localdate()
+
+    def row(kind, alert, name, url, details=()):
+        return {"kind": kind, "pk": alert.pk, "name": name, "url": url, "details": [d for d in details if d],
+                "waiting": alert.confirmed_at is None}
+
+    back, track = [], []
+    for alert in found["stock"]:
+        product = alert.product
+        if alert.max_price is None:
+            back.append(row("stock", alert, product.name, product.get_absolute_url()))
+            continue
+        details = [text(request, "watchlist.manage.price", price=gbp(alert.max_price))]
+        if alert.confirmed_at:
+            # It looks for the time chosen from the confirmation, and never past the six months any alert is kept.
+            ends = alerts.watch_ends(alert) or alert.confirmed_at + timedelta(days=alerts.CONFIRMED_DAYS)
+            details.append(text(request, "watchlist.manage.until", date=short_date(ends)))
+        track.append(row("stock", alert, product.name, product.get_absolute_url(), details))
+    reminders = []
+    for alert in found["drop"]:
+        product_set = alert.product_set
+        day = product_set.release_date
+        month = month_start(alert.set_month) if day is None and alert.set_month else None
+        drop = drop_words(request, Drop(product_set=product_set, day=day, month=month), today)
+        reminders.append(row("drop", alert, product_set.name, reverse("web:drops") + f"#drop-{product_set.pk}",
+                             [product_set.game.display_short, drop.date_text, drop.when_text]))
+    searches = [row("search", alert, search_alerts.alert_summary(alert, store), search_alerts.list_path(alert))
+                for alert in found["search"]]
+    groups = [("stock", back), ("price", track), ("drops", reminders), ("search", searches)]
+    return [{"key": key, "label": text(request, f"watchlist.manage.group.{key}"), "rows": rows}
+            for key, rows in groups if rows]
+
+
+@require_http_methods(["GET", "POST"])
+def alerts_manage(request, token):
+    """The page a Your alerts link opens: every alert for the link's address, each with a Stop button, and Stop
+    all. A stop is a POST with the CSRF token to this same address, and deletes an alert only when it belongs
+    to the link's address. It then comes back here with a short line saying what happened. An expired or
+    altered link shows the box for a new one. A private link: no third-party script (context_processors), kept
+    out of search engines (robots.txt, noindex) and never cached."""
+    from catalogue import manage_alerts
+
+    email = manage_alerts.email_for(token)
+    if email is None:
+        heading = text(request, "watchlist.manage.expired.title")
+        return private_page(render(request, "web/alerts_manage.html", {
+            "expired": True, "alerts_on": mail.enabled(), "manage_form": ManageAlertsForm(),
+            "heading": heading, "meta_title": heading, "noindex": True, "robots": "noindex, nofollow",
+        }))
+    here = reverse("web:alerts_manage", args=[token])
+    if request.method == "POST":
+        choice = request.POST.get("stop", "")
+        if choice == "all":
+            done = "all" if manage_alerts.stop_all(email) else ""
+        else:
+            kind, _, pk = choice.partition("-")
+            done = "one" if manage_alerts.stop(email, kind, pk) else ""
+        return HttpResponseRedirect(here + (f"?done={done}" if done else ""))
+    done = request.GET.get("done", "")
+    heading = text(request, "watchlist.manage.title")
+    return private_page(render(request, "web/alerts_manage.html", {
+        "email": email, "action": here, "groups": manage_groups(request, email),
+        "done": text(request, f"watchlist.manage.stopped.{done}") if done in ("one", "all") else "",
+        "heading": heading, "meta_title": heading, "noindex": True, "robots": "noindex, nofollow",
+    }))
 
 
 @require_GET

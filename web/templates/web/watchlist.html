@@ -86,6 +86,19 @@
   </form>
   {% endif %}
 </section>
+<section class="search-alert manage-box" id="manage" aria-labelledby="manage-title" data-search-alert-box>
+  <h2 class="section-title" id="manage-title">{% copy "watchlist.manage.title" %}</h2>
+  {% if manage_state == "sent" %}
+  <div class="search-alert__done" role="status">
+    <p class="search-alert__done-title">{% copy "watchlist.manage.done.title" %}</p>
+    <p>{% copy "watchlist.manage.done.body" %}</p>
+    <p><a href="{{ manage_again_url }}">{% copy "watchlist.manage.again" %}</a></p>
+  </div>
+  {% else %}
+  <p class="search-alert__intro">{% copy "watchlist.manage.intro" %}</p>
+  {% include "web/includes/manage_ask.html" %}
+  {% endif %}
+</section>
 {% endif %}
 {% if refer_advertised %}<p class="small-print"><a href="{% url 'web:refer' %}">{% copy "refer.nav" %}</a></p>{% endif %}
 {% endblock %}

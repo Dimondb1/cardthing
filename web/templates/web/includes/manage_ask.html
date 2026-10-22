@@ -1,0 +1,13 @@
+{% load sitecopy %}
+<form class="manage-ask" method="post" action="{% url 'web:manage_ask' %}#manage" data-search-alert>
+  {% csrf_token %}
+  {% if list_slugs %}<input type="hidden" name="p" value="{{ list_slugs }}">{% endif %}
+  <p class="alert-box__error" data-search-alert-status role="alert"{% if not manage_form.errors and manage_state != "busy" %} hidden{% endif %}>{% if manage_form.errors %}{% copy "alerts.form.invalid" %}{% elif manage_state == "busy" %}{% copy "watchlist.manage.busy" %}{% endif %}</p>
+  <label class="search-alert__label" for="manage-email">{% copy "watchlist.manage.email" %}</label>
+  <div class="drop-remind__row">
+    <input id="manage-email" class="alert-box__input search-alert__input drop-remind__input" type="email" name="email" value="{{ manage_form.email.value|default_if_none:'' }}" required autocomplete="email" inputmode="email" maxlength="254" placeholder="{% copy 'alerts.form.placeholder' %}"{% if not expired %} aria-describedby="manage-note"{% endif %}>
+    <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="button button--quiet button--small drop-remind__button" type="submit">{% copy "watchlist.manage.button" %}</button>
+  </div>
+  {% if not expired %}<p class="drop-remind__note" id="manage-note">{% copy "watchlist.manage.note" %}</p>{% endif %}{# the expired page says it already #}
+</form>

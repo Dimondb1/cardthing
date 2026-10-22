@@ -4,9 +4,9 @@ from django.conf import settings
 
 from catalogue import referrals
 
-# Addresses that are private links: a message thread, the links in stock alert and refer a friend emails, and the
-# owner's dashboard. analytics.js holds the same pattern.
-PRIVATE_LINK = re.compile(r"^/(?:contact/c|alerts/(?:confirm|stop)|refer/(?:confirm|claim|address|stop)|r|dashboard)/")
+# Addresses that are private links: a message thread, the links in stock alert and refer a friend emails (and the
+# Your alerts page they and the watchlist page link to), and the owner's dashboard. analytics.js holds the same pattern.
+PRIVATE_LINK = re.compile(r"^/(?:contact/c|alerts/(?:confirm|stop|manage)|refer/(?:confirm|claim|address|stop)|r|dashboard)/")
 # Pages the refer a friend card never interrupts: the offer's own pages, the swipe page, forms someone is filling in
 # and admin. Error pages leave it off in their templates.
 # Product pages too: on a phone the card would sit over the buy box, and the buy box comes first.

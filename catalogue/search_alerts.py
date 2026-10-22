@@ -132,15 +132,20 @@ def alert_summary(alert, store=None):
     return summary(alert.game, alert.product_type, alert.language, alert.max_price, store=store)
 
 
-def list_url(alert):
-    """The site's list of what the alert asks for, in stock and cheapest first."""
+def list_path(alert):
+    """The site's list of what the alert asks for, in stock and cheapest first, as a path on the site."""
     params = {"game": alert.game.slug}
     if alert.product_type:
         params["type"] = alert.product_type
     if alert.language:
         params["lang"] = alert.language
     params.update({"in_stock": "on", "sort": "price"})
-    return settings.RIPRAPTOR_SITE_URL + reverse("web:search") + "?" + urlencode(params)
+    return reverse("web:search") + "?" + urlencode(params)
+
+
+def list_url(alert):
+    """The same list as a full address, for an email."""
+    return settings.RIPRAPTOR_SITE_URL + list_path(alert)
 
 
 # Sign-up ------------------------------------------------------------------------------------------

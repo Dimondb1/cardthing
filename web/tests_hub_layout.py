@@ -252,6 +252,18 @@ class FilterTests(HubLayoutTestCase):
         self.assertIn('<a class="filters__clear filter-bar__clear" href="?tab=out-of-stock" data-tab-link>',
                       self.get(self.url + "?sort=price&tab=out-of-stock"))
 
+    def test_the_filters_are_an_even_grid_across_the_whole_row(self):
+        # The owner: "a cluster" of pills of every width. Two equal ones to a row on a phone, as many as fit wider,
+        # and the open panel takes the row's whole width, Clear filters sitting over its corner.
+        from django.contrib.staticfiles import finders
+
+        with open(finders.find("css/site.css"), encoding="utf-8") as handle:
+            css = handle.read()
+        self.assertIn(".filters:not(.filters--deck) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }", css)
+        self.assertIn("grid-template-columns: repeat(auto-fill, minmax(var(--filter-cell), 1fr));", css)
+        self.assertIn(".filter-bar .filter-panel { grid-area: 1 / 1 / 2 / 3;", css)
+        self.assertIn(".filter-bar__clear { grid-area: 1 / 2;", css)
+
     def test_search_keeps_its_filters_in_view(self):
         self.fill(2)
         html = self.get(reverse("web:search") + "?q=duelist")

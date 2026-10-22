@@ -674,6 +674,12 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .pill:focus-within { border-color: var(--color-brand); box-shadow: 0 0 0 3px var(--color-brand-soft); }
 @media (hover: hover) { .pill:hover { border-color: var(--color-ink-subtle); } }
 .filters__actions { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-sm); }
+/* The choices as an even grid, every one the same width with its arrow at the same edge: two to a row on a phone,
+   as many as fit on a wider screen. The swipe page keeps its one sideways row. */
+.filters:not(.filters--deck) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 48rem) { .filters:not(.filters--deck) { grid-template-columns: repeat(auto-fill, minmax(var(--filter-cell), 1fr)); } }
+.filters:not(.filters--deck) .pill select { flex: 1 1 auto; min-width: 0; max-width: none; }
+.filters__actions:not(:has(> :not([hidden]))) { display: none; }   /* only Apply, which site.js hides */
 .filters__clear { color: var(--color-brand-text); }
 /* On and off filters as switches. The real checkbox stays in the page for the keyboard and for forms without JavaScript. */
 .toggle {
@@ -1410,10 +1416,12 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 }
 .filter-panel[open] > .filter-panel__toggle::before, .drop-all[open] > .drop-all__toggle::before { transform: rotate(45deg); }
 .filter-panel .filters { padding-top: var(--space-2); }
-/* The folded panel with Clear filters beside its button: the panel takes the row, Clear sits at its right on the button's line. */
-.filter-bar { display: flex; align-items: flex-start; gap: var(--space-3); margin: var(--space-3) 0 var(--rhythm-control); }
-.filter-bar .filter-panel { flex: 1; min-width: 0; margin: 0; }
-.filter-bar__clear { flex: none; display: inline-flex; align-items: center; min-height: var(--tap); font-size: var(--text-sm); }
+/* The folded panel with Clear filters beside its button: the panel takes the whole row, so its choices do too once
+   open, and Clear sits over its top right corner on the button's line. */
+.filter-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: var(--space-3); margin: var(--space-3) 0 var(--rhythm-control); }
+.filter-bar .filter-panel { grid-area: 1 / 1 / 2 / 3; min-width: 0; margin: 0; }
+.filter-bar__clear { grid-area: 1 / 2; display: inline-flex; align-items: center; min-height: var(--tap); font-size: var(--text-sm); }
+.filter-bar:has(> .filter-bar__clear) .filter-panel__toggle { max-width: calc(100% - var(--filter-clear-room)); }
 .stock-tabs + .filter-bar { margin-top: 0; }
 .filter-panel__toggle { max-width: 100%; }
 .filter-panel__chosen { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-body); color: var(--color-ink-muted); }

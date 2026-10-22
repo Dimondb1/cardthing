@@ -1457,7 +1457,8 @@ AI_CRAWLERS = ("GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-S
 
 
 def deals_lists(fresh=False, candidates=None):
-    """Biggest savings, price drops and the restock log for the deals page, cached like the home lists.
+    """Biggest savings, lowest in 90 days, price drops and the restock log for the deals page, cached like the
+    home lists.
     ``fresh`` and ``candidates`` as for home_lists."""
     from catalogue.signals import DEALS_CACHE_KEY
 
@@ -1466,6 +1467,7 @@ def deals_lists(fresh=False, candidates=None):
         return {
             "savings": savings,
             "drops": list(pricing.price_drops(limit=12)),
+            "lowest": fair_price.at_lowest(limit=12),
             "restock_log": pricing.restock_log(days=7),
         }
 

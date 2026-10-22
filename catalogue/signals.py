@@ -13,7 +13,7 @@ from .models import Game, Listing, Product, ProductSet, RemovedShop, Retailer
 from .search import build_search_text
 
 HOME_CACHE_KEY = "web:home-lists:v6"
-DEALS_CACHE_KEY = "web:deals:v2"
+DEALS_CACHE_KEY = "web:deals:v3"
 NEW_CACHE_KEY = "web:home-new:v3"
 # Sets still to come; each game's own list is cached under this key plus ':<game>'.
 COMING_SOON_CACHE_KEY = "web:coming-soon:v2"

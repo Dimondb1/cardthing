@@ -2625,6 +2625,16 @@ server rendered and in the sitemap. These used to sit on the home page;
 they moved here so the home page stays short. Its lists are cached like
 the home page's and cleared by imports.
 
+**Lowest in 90 days** sits under the savings: Pokémon products whose
+cheapest confirmed delivered price now is at or below the lowest we recorded
+in the 90 days before today, with at least 14 of those days, and at least 5%
+under their average over them (a price that never moved is not news). Each
+row shows that average above today's price, biggest saving on it first. A
+fall over 70% is left out as a wrong product link, and a doubtful cheapest
+price waits until it is confirmed, as with price drops. It is built from the
+same daily record as the Price check (`fair_price.at_lowest`, one query) and
+covers the same games.
+
 ## Restock record
 
 Every time a shop goes from not having a product to having it in stock,

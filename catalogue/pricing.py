@@ -339,6 +339,16 @@ def snapshot_all(date=None):
     return count
 
 
+def doubtful_low():
+    """The cheapest current delivered price that is doubtful (Listing.Sanity.DOUBTFUL), to annotate a product
+    list with: a cheapest price no lower than it is confirmed, so news of a low can wait until it is."""
+    return Min("listings__delivered_price", filter=Q(
+        listings__is_active=True, listings__retailer__is_active=True, listings__last_checked__gte=stale_cutoff(),
+        listings__availability__in=Listing.BUYABLE, listings__delivery_known=True,
+        listings__sanity=Listing.Sanity.DOUBTFUL,
+    ))
+
+
 def price_drops(limit=6, days=None, today=None, game=None):
     """Products whose cheapest delivered price is lower than ``days`` ago, optionally within one game."""
     days = days or settings.RIPRAPTOR_TRENDING_DAYS
@@ -362,16 +372,11 @@ def price_drops(limit=6, days=None, today=None, game=None):
     products = Product.objects.for_lists().priced().filter(Exists(had_price))
     if game is not None:
         products = products.filter(game=game)
-    doubtful = Q(
-        listings__is_active=True, listings__retailer__is_active=True, listings__last_checked__gte=stale_cutoff(),
-        listings__availability__in=Listing.BUYABLE, listings__delivery_known=True,
-        listings__sanity=Listing.Sanity.DOUBTFUL,
-    )
     return (
         products
         .annotate(
             previous_price=Subquery(previous, output_field=money),
-            doubtful_low=Min("listings__delivered_price", filter=doubtful),
+            doubtful_low=doubtful_low(),
         )
         # Drops are measured on confirmed delivered prices only, like the history they come from.
         .filter(lowest_known__isnull=False, lowest_known=F("lowest_price"), lowest_price__lt=F("previous_price"))

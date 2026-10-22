@@ -30,6 +30,26 @@
 </section>
 {% endif %}
 
+{% if lowest %}
+<section class="home-section" aria-labelledby="lowest-title">
+  <div class="section-head">
+    <h2 id="lowest-title" class="section-head__title">{% copy "deals.lowest.title" %}</h2>
+  </div>
+  <p class="section-head__note">{% copy "deals.lowest.note" %}</p>
+  <ul class="drops">
+    {% for product in lowest %}
+    <li class="drop">
+      <a class="drop__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "thumb" %}
+        <span class="drop__body"><span class="drop__name">{{ product.name }}</span><span class="drop__meta">{{ product.game.display_short }} · {{ product.type_name }}</span></span>
+        <span class="drop__prices"><span class="drop__was">{% copy "deals.lowest.average" price=product.low_average|gbp %}</span>{% price product.lowest_price size="md" %}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% if drops %}
 <section class="home-section" aria-labelledby="drops-title">
   <div class="section-head">
@@ -98,7 +118,7 @@
 </section>
 {% endif %}
 
-{% if not savings and not drops and not restock_log and not trending %}
+{% if not savings and not lowest and not drops and not restock_log and not trending %}
 <p class="page-intro">{% copy "deals.empty" %}</p>
 {% endif %}
 <p class="small-print">{% copy "feeds.deals.link" %} <a href="{% url 'web:feed_deals' %}">{% url 'web:feed_deals' as feed_path %}{{ request.scheme }}://{{ request.get_host }}{{ feed_path }}</a></p>

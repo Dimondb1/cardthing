@@ -1873,6 +1873,13 @@ ENTRIES = [
     ),
     Entry("deals.savings.title", H, "Deals savings heading", "Biggest savings right now", "Deals page section heading."),
     Entry("deals.drops.title", H, "Deals drops heading", "Biggest price drops", "Deals page section heading."),
+    Entry("deals.lowest.title", H, "Deals lowest heading", "Lowest in 90 days", "Deals page section heading."),
+    Entry("deals.lowest.note", T, "Lowest in 90 days explanation",
+          "Pokémon products at their cheapest delivered price in 90 days, and well under their average.",
+          "Under the Lowest in 90 days heading on the Deals page."),
+    Entry("deals.lowest.average", T, "Average price", "Average {price}",
+          "Above the price on each Lowest in 90 days row: the product's average cheapest price over those days.",
+          placeholders=("price",)),
     Entry("deals.restock.title", H, "Deals restock heading", "Back in stock", "Deals page section heading."),
     Entry(
         "deals.restock.note", T, "Restock log explanation",

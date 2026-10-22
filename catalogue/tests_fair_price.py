@@ -98,3 +98,48 @@ class ProductPageTests(TestCase):
         response = self.client.get(self.etb.get_absolute_url())
         self.assertIsNone(response.context["fair"])
         self.assertNotContains(response, "data-fair-open")
+
+
+class AtLowestTests(TestCase):
+    """The Deals page's Lowest in 90 days: at the lowest of those days now, and well under their average."""
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        self.pokemon = make_set(make_game())
+        self.harbour = make_retailer("Harbour Games")
+
+    def product(self, slug, history, now, game_set=None):
+        product = make_product(game_set or self.pokemon, name=slug.replace("-", " ").title(), slug=slug)
+        record(product, history, self.today)
+        make_listing(product, self.harbour, price=now, delivery="0.00")
+        return product
+
+    def test_only_products_at_their_low_and_well_under_their_average(self):
+        deep = self.product("deep", ["100.00"] * 19 + ["80.00"], "70.00")
+        shallow = self.product("shallow", ["60.00"] * 19 + ["50.00"], "50.00")
+        self.product("flat", ["40.00"] * 20, "40.00")              # never moved: not news
+        self.product("above-low", ["90.00"] + ["100.00"] * 19, "92.00")   # under average but not at its low
+        self.product("too-new", ["100.00"] * 5, "60.00")             # not enough days
+        self.product("huge-fall", ["100.00"] * 20, "20.00")          # a wrong link, not a low
+        lorcana = make_set(make_game("Disney Lorcana", "lorcana"), name="The First Chapter", slug="tfc", code="TFC")
+        self.product("lorcana-box", ["100.00"] * 20, "80.00", game_set=lorcana)   # not on trial
+        with self.assertNumQueries(1):
+            rows = fair_price.at_lowest(today=self.today)
+        self.assertEqual(rows, [deep, shallow])
+        self.assertEqual(rows[0].low_days, 20)
+        self.assertEqual(round(rows[0].low_average, 2), Decimal("99.00"))
+
+    def test_days_before_the_window_do_not_set_the_low(self):
+        product = make_product(self.pokemon, slug="old-low")
+        for back in range(fair_price.LOW_DAYS + 1, fair_price.LOW_DAYS + 5):
+            DailyLowestPrice.objects.create(product=product, date=self.today - timedelta(days=back), price=Decimal("30"))
+        record(product, ["100.00"] * 20, self.today)
+        make_listing(product, self.harbour, price="80.00", delivery="0.00")
+        self.assertEqual(fair_price.at_lowest(today=self.today), [product])
+
+    def test_the_deals_page_lists_them(self):
+        self.product("deep", ["100.00"] * 19 + ["80.00"], "70.00")
+        response = self.client.get("/deals/")
+        self.assertContains(response, "Lowest in 90 days")
+        self.assertContains(response, "Average £99.00")
+        self.assertContains(response, "Deep")

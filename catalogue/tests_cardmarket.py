@@ -3,13 +3,14 @@ its products to ours (cardmarket_match.py)."""
 
 import json
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from . import cardmarket, cardmarket_match, judge
 from .models import (
@@ -139,6 +140,21 @@ class MatchTests(TestCase):
         self.assertEqual((found[0], sorted(found)), (784949, [784949, 784950, 784951]))
         self.assertEqual([c.pk for c in cardmarket_match.shortlist(self.shiny, pool)], [550461])
         self.assertEqual(cardmarket_match.shortlist(self.lonely, pool), [])
+
+    def test_the_products_people_look_at_are_matched_first(self):
+        from catalogue.models import DailyPageView
+
+        make_listing(self.sparks, make_retailer("Harbour Games"), price="150.00")
+        make_listing(self.lonely, make_retailer("Northgate Cards"), price="50.00")
+        # Selling now, then by name, while nobody has looked.
+        self.assertEqual([p.slug for p in cardmarket_match.to_do(["pokemon"])], ["qt-etb", "ssp-box", "sm8b-box"])
+        today = timezone.localdate()
+        DailyPageView.objects.create(kind=DailyPageView.Kind.PRODUCT, key="sm8b-box", date=today, hits=40)
+        DailyPageView.objects.create(kind=DailyPageView.Kind.PRODUCT, key="ssp-box", date=today, hits=3)
+        # A week ago does not count.
+        DailyPageView.objects.create(kind=DailyPageView.Kind.PRODUCT, key="qt-etb",
+                                     date=today - timedelta(days=cardmarket_match.VIEW_DAYS), hits=90)
+        self.assertEqual([p.slug for p in cardmarket_match.to_do(["pokemon"])], ["sm8b-box", "ssp-box", "qt-etb"])
 
     def test_nothing_is_asked_while_claude_is_off(self):
         result = cardmarket_match.run()

@@ -3117,7 +3117,8 @@ seconds; a game that fails to download never stops the others.
 **Matching.** `match_cardmarket`, hourly at 29 past (waiting for the Claude
 judge's lock, so one Claude job runs at a time), asks Claude which
 Cardmarket product each of ours is: Pokémon first, then the other games,
-products a shop sells now first. The site shortlists up to eight
+products a shop sells now first, and of those the ones viewed most in the
+last 7 days, so the pages people look at get their Price check soonest. The site shortlists up to eight
 Cardmarket products of a kind that can be ours sharing the set's words
 (the box itself, and the near misses: the 18-booster box, the case, the
 Pokémon Center edition), and Claude picks one or none

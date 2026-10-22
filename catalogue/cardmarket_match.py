@@ -32,12 +32,15 @@ import unicodedata
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from django.db.models import Case, Exists, IntegerField, OuterRef, Value, When
+from datetime import timedelta
+
+from django.db.models import Case, Exists, IntegerField, OuterRef, Subquery, Sum, Value, When
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from . import cardmarket, judge
 from .models import (
-    CardmarketMatch, CardmarketProduct, ClaudeAsk, ClaudeJudge, ExchangeRate, Listing, Product,
+    CardmarketMatch, CardmarketProduct, ClaudeAsk, ClaudeJudge, DailyPageView, ExchangeRate, Listing, Product,
 )
 from .types import type_label
 
@@ -47,6 +50,7 @@ logger = logging.getLogger(__name__)
 ORDER = list(cardmarket.GAMES)
 CANDIDATES = 8
 ROWS_PER_RUN = 120
+VIEW_DAYS = 7     # to_do: the most viewed in this many days are matched first
 RUN_BUDGET_USD = Decimal("3.00")
 RUN_SECONDS = 900
 MAX_TOKENS = 1500
@@ -236,17 +240,24 @@ def save(product, status, cardmarket_id, evidence, print_, confidence="", reason
     })
 
 
-def to_do(slugs):
+def to_do(slugs, today=None):
     """Our products in these games still to match: game by game in the order given (Pokémon first), those a
-    shop sells now first within each."""
+    shop sells now first within each, and of those the most viewed in the last VIEW_DAYS first, so the pages
+    people look at get their Price check soonest."""
+    today = today or timezone.localdate()
     selling = Listing.objects.filter(product=OuterRef("pk")).buyable()
     owner = CardmarketMatch.objects.filter(
         product=OuterRef("pk"), status__in=(CardmarketMatch.Status.CONFIRMED, CardmarketMatch.Status.REJECTED))
     rank = Case(*[When(game__slug=slug, then=Value(n)) for n, slug in enumerate(slugs)], default=Value(len(slugs)),
                 output_field=IntegerField())
+    views = (DailyPageView.objects.filter(kind=DailyPageView.Kind.PRODUCT, key=OuterRef("slug"),
+                                          date__gte=today - timedelta(days=VIEW_DAYS - 1))
+             .order_by().values("key").annotate(n=Sum("hits")).values("n"))
     return (Product.objects.active().filter(game__slug__in=slugs).exclude(Exists(owner))
-            .select_related("game", "product_set").annotate(selling=Exists(selling), rank=rank)
-            .order_by("rank", "-selling", "name"))
+            .select_related("game", "product_set")
+            .annotate(selling=Exists(selling), rank=rank,
+                      views=Coalesce(Subquery(views[:1], output_field=IntegerField()), Value(0)))
+            .order_by("rank", "-selling", "-views", "name"))
 
 
 def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER_RUN):

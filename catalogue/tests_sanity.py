@@ -136,9 +136,15 @@ class VerdictTests(Shops, TestCase):
         dear, cheap = self.shop(140, box), self.shop(140, box)
         self.check(cheap, 45)
         self.assertEqual(self.verdicts(half, dear, cheap), [OK, OK, OK])
+        # Both prices stay, but a saving against one dear shop is not claimed (offers.in_line): it says that
+        # shop is dear, not that the cheapest is a bargain.
+        summary = self.summary()
+        self.assertEqual((summary.suspect, summary.saving, summary.percent), (False, None, None))
+        self.assertIsNone(self.summary(box).percent)
+        # A third shop near the dear one shows the market is there, and the saving is claimed.
+        self.shop(104)
         summary = self.summary()
         self.assertEqual((summary.suspect, summary.saving, summary.percent), (False, Decimal("50.00"), 50))
-        self.assertEqual(self.summary(box).percent, 68)
 
     def test_a_price_of_nothing_never_makes_the_other_shop_doubtful(self):
         shop = self.shop(120)

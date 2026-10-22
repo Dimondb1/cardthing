@@ -382,7 +382,8 @@ ENTRIES = [
     Entry(
         "home.savings.save_vs", T, "Saving against a named shop",
         "Save {amount} vs {retailer}",
-        "Green label on featured deals: the saving and the next cheapest shop it is measured against.",
+        "Green label on featured deals: the saving and the next cheapest shop it is measured against. Only shown "
+        "when that shop's price is in line with the market (catalogue/offers.py), never against one dear listing.",
         placeholders=("amount", "retailer"),
     ),
     Entry(
@@ -429,12 +430,13 @@ ENTRIES = [
     ),
     Entry(
         "home.picks.hot", T, "Too good to miss label", "Too good to miss",
-        "Green label on a pick whose saving on the next shop is big, or whose price is the lowest of the week.",
+        "Green label on a pick with a saving of 15% or more on a next shop whose price is in line with the "
+        "market, or a verified 30-day low clearly under its average.",
     ),
     Entry("home.featured.title", H, "Featured deals heading", "Featured deals", "Home page row near the top."),
     Entry(
         "home.featured.note", T, "Featured deals note",
-        "Every featured deal is a real saving on the next shop or this week's lowest price. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
+        "Every featured deal has evidence behind it: its lowest delivered price in 30 days by our own daily record and clearly under its average, or a saving of at least 5% on the next shop when that shop's price is in line with the market. One unusually dear listing never makes a saving. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
         "On the terms page, under Independence. Says how the home page's featured deals row is chosen.",
         legal=True,
     ),
@@ -1029,6 +1031,13 @@ ENTRIES = [
         "product.delivery.unknown_check", T, "Delivery not known, check",
         "Check the total at the shop before you buy.",
         "Under the main price on a product page when its delivery charge is not known.",
+    ),
+    Entry(
+        "product.badge.low_30", T, "Badge: lowest in 30 days",
+        "Lowest in 30 days",
+        "Green badge when today's cheapest delivered price is at or below every day's cheapest over the last 30 "
+        "days, checked against our own daily record with at least 14 days recorded. On featured deals only when "
+        "it is also clearly under the month's average.",
     ),
     Entry(
         "product.badge.best_week", T, "Badge: best in 7 days",

@@ -478,7 +478,7 @@ class AmazonLinkTests(PageTestCase):
         with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
             response = self.client.get(self.etb.get_absolute_url())
         self.assertContains(response, "Compare on Amazon")
-        self.assertContains(response, f'href="/go/search/{self.etb.slug}/amazon/"')
+        self.assertContains(response, f'href="/go/search/{self.etb.slug}/amazon/?b=amazon"')
         self.assertNotContains(response, "tag=ripraptor-21")
         self.assertContains(response, 'rel="sponsored nofollow noopener"')
 
@@ -495,7 +495,8 @@ class AmazonLinkTests(PageTestCase):
             self.assertIn('<li class="offer offer--amazon">', rows)
             self.assertIn(self.ROW, rows)
             self.assertIn('Check on Amazon<span class="visually-hidden"> (opens in a new tab)</span></a>', rows)
-            self.assertIn(f'href="/go/search/{self.etb.slug}/amazon/" target="_blank" rel="sponsored nofollow noopener">Check on Amazon', rows)
+            self.assertIn(f'href="/go/search/{self.etb.slug}/amazon/?b=amazon" data-click="amazon"', rows)
+            self.assertIn('target="_blank" rel="sponsored nofollow noopener">Check on Amazon', rows)
             self.assertEqual(html.count(self.ROW), 1)
             # Sold out everywhere: the row follows the out-of-stock shop.
             sold = self.client.get(self.sold_out.get_absolute_url()).content.decode()
@@ -707,7 +708,7 @@ class WatchlistTests(PageTestCase):
         self.assertNotIn("no-such-product", body)
         self.assertIn('data-now="54.99"', body)
         self.assertIn("delivered at Harbour Games", body)
-        self.assertIn(f'href="{self.cheap.get_outbound_url()}?from=watchlist" target="_blank" rel="sponsored nofollow noopener"', body)
+        self.assertIn(f'href="{self.cheap.get_outbound_url()}?b=watchlist" data-click="watchlist"', body)
         self.assertIn("Last seen at £140.00", body)
         self.assertIn("Saved on this device only.", body)
         self.assertIn('<meta name="robots" content="noindex, follow">', body)
@@ -739,11 +740,13 @@ class WatchlistTests(PageTestCase):
         self.assertIn('data-watch-link="/watchlist/"', page)
         self.assertIn('<span data-watch-count></span>', page)
 
-    def test_clicks_from_a_watchlist_are_marked_and_other_sources_are_not(self):
+    def test_clicks_from_a_watchlist_are_marked_by_the_page_they_came_from(self):
         page = {"HTTP_USER_AGENT": "Mozilla/5.0 Firefox/130.0", "HTTP_REFERER": "http://testserver/watchlist/"}
-        self.client.get(self.cheap.get_outbound_url() + "?from=watchlist", **page)
-        self.client.get(self.cheap.get_outbound_url() + "?from=elsewhere", **page)
-        self.assertEqual(list(OutboundClick.objects.order_by("-pk").values_list("source", flat=True)[:2]), ["", "watchlist"])
+        self.client.get(self.cheap.get_outbound_url() + "?b=watchlist", **page)
+        self.client.get(self.cheap.get_outbound_url() + "?b=card", HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0",
+                        HTTP_REFERER="http://testserver/search/")
+        self.assertEqual(list(OutboundClick.objects.order_by("-pk").values_list("source", "button")[:2]),
+                         [("search", "card"), ("watchlist", "watchlist")])
 
     def test_each_product_on_a_loaded_list_is_counted_and_the_page_is_too(self):
         from catalogue.models import DailyPageView
@@ -860,7 +863,7 @@ class FeaturedAndMarketplaceTests(TestCase):
         self.assertNotIn("campid=", body)
         self.assertNotIn("tag=ripraptor-21", body)
         self.assertIn("Amazon and eBay sellers often still have it", body)
-        found = re.findall(r'<a[^>]+href="/go/search/30th-bundle/(?:ebay|amazon)/"[^>]+>', body)
+        found = re.findall(r'<a[^>]+href="/go/search/30th-bundle/(?:ebay|amazon)/\?b=(?:ebay|amazon)"[^>]+>', body)
         self.assertEqual(len(found), 3)   # Amazon and eBay in the price box, Amazon again as the last price row
         for tag in found:
             self.assertIn('rel="sponsored nofollow noopener"', tag)
@@ -1582,7 +1585,8 @@ class ComingSoonTests(PageTestCase):
         # The price links to our product page; the one button goes to the cheapest shop through /go/.
         self.assertIn(f'href="{product.get_absolute_url()}"', block)
         self.assertEqual(block.count("data-primary"), 1)
-        self.assertIn(f'href="/go/{cheapest.pk}/" target="_blank" rel="sponsored nofollow noopener" data-primary>', block)
+        self.assertIn(f'href="/go/{cheapest.pk}/?b=coming" data-click="coming"', block)
+        self.assertIn('target="_blank" rel="sponsored nofollow noopener" data-primary>', block)
         self.assertIn("Pre-order<span", block)
         self.assertNotIn("Remind me", block)
         home = self.client.get(reverse("web:home")).content.decode()
@@ -1603,8 +1607,9 @@ class ComingSoonTests(PageTestCase):
         # With no views, clicks or reminders and one shop each, popularity is soonness: the three soonest show.
         # The rest are rendered hidden, for the visitor's own games (interest.js), and show without script.
         rows = home.split('<li class="coming__row"')[1:]
-        shown = "".join(row for row in rows if not row.split(">", 1)[0].endswith(" hidden"))
-        self.assertEqual(len(rows) - shown.count("data-game="), 2)
+        shown = [row for row in rows if not row.split(">", 1)[0].endswith(" hidden")]
+        self.assertEqual(len(rows) - len(shown), 2)
+        shown = "".join(shown)
         for name in ("Future 0", "Future 1", "Future 2"):
             self.assertIn(name, shown)
         self.assertNotIn("Future 3", shown)
@@ -1623,7 +1628,7 @@ class ComingSoonTests(PageTestCase):
         self.assertIn("In stock from", block)
         self.assertIn("£120.00", block)
         self.assertIn("at Harbour Games", block)
-        self.assertIn(f'href="/go/{listing.pk}/"', block)
+        self.assertIn(f'href="/go/{listing.pk}/?b=coming"', block)
         self.assertIn("Buy now<span", block)
         self.assertNotIn("No pre-orders yet", block)
         # A pre-order price still leads when a shop takes pre-orders too.
@@ -2465,7 +2470,7 @@ class ProductPageRedesignTests(PageTestCase):
     def test_buy_now_goes_to_the_cheapest_available_offer_through_go(self):
         html = self.page(self.etb)
         button = html[html.index('<a class="buy-now"'):html.index("</a>", html.index('<a class="buy-now"'))]
-        self.assertIn(f'href="{self.cheap.get_outbound_url()}"', button)
+        self.assertIn(f'href="{self.cheap.get_outbound_url()}?b=buy_now"', button)
         self.assertIn('rel="sponsored nofollow noopener"', button)
         self.assertIn('<span class="buy-now__label">Buy now</span>', button)
         self.assertIn('<span class="buy-now__shop">at Harbour Games</span>', button)
@@ -2478,12 +2483,12 @@ class ProductPageRedesignTests(PageTestCase):
                             availability=Listing.Availability.OUT_OF_STOCK)
         html = self.page(self.etb)
         button = html[html.index('<a class="buy-now"'):html.index("</a>", html.index('<a class="buy-now"'))]
-        self.assertIn(f'href="{self.cheap.get_outbound_url()}"', button)
+        self.assertIn(f'href="{self.cheap.get_outbound_url()}?b=buy_now"', button)
         self.assertNotIn(sold.get_outbound_url(), button)
 
     def test_compare_prices_is_a_plain_link_to_a_focusable_heading(self):
         html = self.page(self.etb)
-        self.assertIn('<a class="compare-jump" href="#offers-title" data-jump>', html)
+        self.assertIn('<a class="compare-jump" href="#offers-title" data-jump data-compare="buy_box">', html)
         self.assertIn('Compare prices<span class="compare-jump__arrow" aria-hidden="true">↓</span>', html)
         self.assertIn('<span class="compare-jump__note">2 shops, cheapest delivered first</span>', html)
         self.assertIn('<h2 id="offers-title" class="section-title" tabindex="-1">', html)

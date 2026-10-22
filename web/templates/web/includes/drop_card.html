@@ -18,7 +18,7 @@
     {% endif %}
   </div>
   <div class="drop-card__actions">
-    {% if best %}<a class="button button--buy button--card drop-card__buy" href="{{ best.listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener" data-primary>{% include "web/includes/buy_mark.svg" %}{% if best.listing.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ best.product.name }} at {{ best.listing.retailer.name }} (opens in a new tab)</span></a>{% endif %}
+    {% if best %}<a class="button button--buy button--card drop-card__buy" {% go_link best.listing "drop" best.product drop.product_set.game %} target="_blank" rel="sponsored nofollow noopener" data-primary>{% include "web/includes/buy_mark.svg" %}{% if best.listing.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ best.product.name }} at {{ best.listing.retailer.name }} (opens in a new tab)</span></a>{% endif %}
     {% if drop.remind %}
     <details class="drop-remind"{% if drop.remind_open %} open{% endif %}>
       <summary class="button {% if best %}button--quiet{% else %}button--remind{% endif %} drop-remind__open"{% if not best %} data-primary{% endif %}>{% copy "drops.remind.open" %}</summary>
@@ -47,7 +47,7 @@
           <a class="drop-offer__name" href="{{ offer.product.get_absolute_url }}">{{ offer.product.name }}</a>
           <span class="drop-offer__meta"><span class="drop-offer__price">{{ listing.shown_price|gbp }}</span> <span class="delivered">{% include "web/includes/price_basis.html" %}</span><span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ listing.retailer.name }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span><span class="drop-offer__checked">{% copy "drops.checked" time=listing.last_checked|ago %}</span></span>
         </span>
-        <a class="button button--quiet button--small drop-offer__buy" href="{{ listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% if listing.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ offer.product.name }} at {{ listing.retailer.name }} (opens in a new tab)</span></a>
+        <a class="button button--quiet button--small drop-offer__buy" {% go_link listing "drop_offer" offer.product drop.product_set.game %} target="_blank" rel="sponsored nofollow noopener">{% if listing.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ offer.product.name }} at {{ listing.retailer.name }} (opens in a new tab)</span></a>
       </li>
       {% endwith %}{% with listing=offer.other_preorder %}{% if listing %}
       <li class="drop-offer">
@@ -55,7 +55,7 @@
           <a class="drop-offer__name" href="{{ offer.product.get_absolute_url }}">{{ offer.product.name }}</a>
           <span class="drop-offer__meta"><span class="drop-offer__price">{{ listing.shown_price|gbp }}</span> <span class="delivered">{% include "web/includes/price_basis.html" %}</span><span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ listing.retailer.name }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span><span class="drop-offer__checked">{% copy "drops.checked" time=listing.last_checked|ago %}</span></span>
         </span>
-        <a class="button button--quiet button--small drop-offer__buy" href="{{ listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.preorder.button" %}<span class="visually-hidden"> {{ offer.product.name }} at {{ listing.retailer.name }} (opens in a new tab)</span></a>
+        <a class="button button--quiet button--small drop-offer__buy" {% go_link listing "drop_offer" offer.product drop.product_set.game %} target="_blank" rel="sponsored nofollow noopener">{% copy "product.preorder.button" %}<span class="visually-hidden"> {{ offer.product.name }} at {{ listing.retailer.name }} (opens in a new tab)</span></a>
       </li>
       {% endif %}{% endwith %}{% endfor %}
     </ul>

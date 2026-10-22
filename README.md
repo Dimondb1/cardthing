@@ -1519,8 +1519,41 @@ it again after changing the mark and commit the files.
 - The Amazon and eBay search buttons on a product page go through
   `/go/search/<product slug>/amazon/` and `/go/search/<product slug>/ebay/`
   with the same check: a person gets the search with our tag or campaign,
-  anything else the same search without it. These are not saved as clicks.
+  anything else the same search without it. They are saved as clicks
+  against the site's Amazon or eBay shop when there is one (no listing was
+  clicked); with none there is nothing to count them against.
   No public page carries the tag or the campaign id itself.
+- Every click says where it came from and what was pressed (the affiliate
+  click). `OutboundClick` keeps the **page** (`source`: home, product, game,
+  set, search, deals, new, drops, watchlist, swipe or games, read from the
+  Referer the click already needs), the **button** (`button`, from the
+  link's `?b=`: `buy_now`, `price_list`, `lottery`, `card`, `deal`, `drop`,
+  `drop_offer`, `coming`, `watchlist`, `swipe`, `amazon`, `ebay`), the
+  product, the shop (and so the game) and the day's one-way visitor token
+  (`visitor`, the same as the visit's `DailyVisitor` row, which changes
+  every day and cannot be traced back), so the dashboard can count the
+  visits that ended at a shop. Every link to a shop is drawn by the
+  `go_link` template tag, which also gives Analytics its affiliate_click
+  details (`data-click`, `data-click-shop`, `data-click-product`,
+  `data-click-game`). Admin lists clicks by page and button.
+- Presses on Compare prices (the product page's button, a card's "Compare N
+  shops", a row card's Compare prices: `data-compare`) are counted on our
+  own server too, as `DailyPageView` kind "taps" keyed `where:page`
+  (`/api/note/?what=compare`, nothing about the visitor), so Buy now,
+  Compare prices and a shop's row in the price list can be set side by side.
+- **Sales.** A shop's affiliate link format can carry `{click}` where the
+  network takes our own reference (Awin: `&clickref={click}`), and an eBay
+  link with our campaign gets the click's number as its `customid`; the
+  network's report then names the click. Admin, Affiliate sales, Import a
+  network report takes the network's CSV of transactions
+  (`catalogue/sales.py`): columns are found by heading (date, shop or
+  advertiser, commission, status, order value, transaction id, click ref or
+  custom id), a report with no shop column takes the shop chosen on the
+  form, a sale already imported (same shop and transaction id) is updated
+  rather than added, so importing again after approvals is safe, and a sale
+  with a click reference is matched to that click and so its product and
+  game. Only clicks from people can be matched. Nothing about the customer
+  is read or kept.
 
 ## Putting it on a server
 
@@ -2891,8 +2924,27 @@ or the switches.
 ## Featured deals and sold-out pages
 
 "Featured deals" is the first deal row on the home page: up to eight in-stock products
-whose cheapest price is a real saving on the next shop or the week's
-lowest. Six of the eight places go to deals whose cheapest shop pays a
+with evidence that today's price is a good one (`offers.Summary.is_deal`),
+strongest first, each card naming its evidence:
+
+- **Lowest in 30 days**, verified from our own daily record: today's
+  cheapest delivered price is at or below every day's cheapest over the
+  last 30 days, with at least 14 days recorded, and at least 3% under the
+  month's average (a price that never moved is always its own low, so it
+  is not a deal).
+- **Save £X vs Shop**, a saving of at least 5% on the next shop, and only
+  when that shop's price is in line with the market: no more than half as
+  much again as the cheapest, or matched within 10% by a third shop. One
+  unusually dear listing (£250 against a lone £699.95) says that shop is
+  dear, not that £250 is a bargain, so no saving is claimed against it
+  anywhere on the site: cards, the Deals page's biggest savings, picks.
+
+The same 30-day low shows as a "Lowest in 30 days" badge on product pages
+and cards, ahead of the week's badges. "Too good to miss" on Picked for you
+needs a 15% saving on a shop in line with the market, or the 30-day low.
+The rules and their numbers are at the top of `catalogue/offers.py`.
+
+Six of the eight places go to deals whose cheapest shop pays a
 commission (an affiliate link format, eBay or Amazon), the best of the
 rest take the other two, and either side fills in when the other is
 short. The footer line on every page says featured deals favour shops
@@ -3212,8 +3264,8 @@ why the address carries the list: it can be bookmarked or pasted into a
 chat, and without JavaScript a Save link simply opens the watchlist page
 for that one product. Old product addresses resolve through
 `ProductAlias`. The page is `noindex` and `/watchlist/` is disallowed in
-robots.txt. Buy clicks from it carry `?from=watchlist`, stored in
-`OutboundClick.source`, and each product on a loaded list is counted as a
+robots.txt. Its Buy clicks are saved with the page "watchlist" (see
+Clicks to shops), and each product on a loaded list is counted as a
 "watchlist row" page view by slug, so Insights shows clicks from
 watchlists and the stock watcher can put watched products first.
 
@@ -3372,8 +3424,14 @@ cached.
 ## Google Analytics
 
 Google Analytics 4 (`RIPRAPTOR_GA_ID`) counts visits, pages, searches (the
-`q` in search addresses) and presses on Buy and shop links (a `buy_click`
-event). UK law needs a visitor's permission before analytics cookies are
+`q` in search addresses), every press on a link to a shop (an
+`affiliate_click` event with `button`, `retailer`, `product`, `game` and
+`page_type`) and every press on a Compare prices link (`compare_prices`,
+with `button` and `page_type`). Every link to a shop goes through our
+`/go/` address, so Analytics cannot see it leave the site as an outbound
+click by itself; the event says so instead. To report on its details,
+register `button`, `retailer`, `product`, `game` and `page_type` as
+event-scoped custom dimensions (Admin, Custom definitions). UK law needs a visitor's permission before analytics cookies are
 set, so a small card asks: Allow analytics or No analytics, equally plain.
 Until a visitor allows it no Google Analytics script loads and nothing is
 stored but the answer, which is kept in the browser (`ripraptor.analytics`)
@@ -3394,8 +3452,8 @@ while it is set up.
 
 In Google Analytics, keep data retention at 14 months or less (Admin,
 Data retention): the Terms page says Google keeps the detailed records
-for at most 14 months. To count Buy presses as conversions, mark
-`buy_click` as a key event (Admin, Events).
+for at most 14 months. To count clicks to shops as conversions, mark
+`affiliate_click` as a key event (Admin, Events).
 
 `python scripts/analytics_check.py` checks all of this in Chromium against
 a dev server on port 8000 started with `RIPRAPTOR_GA_ID=G-TEST123` and

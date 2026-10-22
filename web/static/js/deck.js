@@ -93,7 +93,8 @@
     const bottom = el("div", "swipe__bottom");
     const offer = el("div", "swipe__offer");
     if (c.badge) {
-      const badge = el("span", "badge badge--good", c.badge === "best_week" ? words.bestWeek : words.lowestToday);
+      const label = { low_30: words.lowMonth, best_week: words.bestWeek }[c.badge] || words.lowestToday;
+      const badge = el("span", "badge badge--good", label);
       offer.append(badge);
     }
     offer.append(el("span", "price swipe__price", c.price));
@@ -101,6 +102,8 @@
     const buy = el("a", "button button--buy button--card", words.buy);
     buy.href = c.buy; buy.target = "_blank"; buy.rel = "sponsored nofollow noopener";
     buy.dataset.stop = "1";
+    // What Analytics' affiliate_click event reports, as the server-drawn links carry (analytics.js).
+    Object.assign(buy.dataset, { click: "swipe", clickShop: c.retailer, clickProduct: c.name, clickGame: c.game || "" });
     bottom.append(offer, buy);
     const rank = el("ol", "rank");
     const first = el("li", "rank__item");

@@ -1,7 +1,7 @@
 {% load sitecopy ripraptor %}<ul class="trending" data-scroll>
 {% for product, summary in rows %}
   <li class="trending__item">
-    <a class="trending__link" href="{{ product.get_absolute_url }}">
+    <a class="trending__link" href="{{ product.get_absolute_url }}" data-compare="recent">
       {% product_image product "trend" %}
       <span class="trending__name">{{ product.name }}</span>
       {% if summary.best %}

@@ -125,6 +125,29 @@ def copy_count(context, key, count, shown=None, **values):
     )
 
 
+@register.simple_tag(takes_context=True)
+def page_key(context):
+    """The word for this page that clicks and Compare taps are saved under (catalogue/clicks.PAGES), or ""."""
+    from catalogue.clicks import PAGES
+
+    match = getattr(context.get("request"), "resolver_match", None)
+    return PAGES.get(getattr(match, "url_name", None), "")
+
+
+@register.simple_tag
+def go_link(listing, button, product=None, game=None):
+    """The attributes of a link to a shop through /go/: its address naming the button pressed (?b=, saved with
+    the click, catalogue/clicks.py) and what Analytics' affiliate_click event reports (analytics.js): the
+    button, the shop, the product and its game. ``product`` is the listing's and ``game`` the product's, passed
+    where the page has them loaded, so the link costs no query of its own."""
+    product = product or listing.product
+    game = game or product.game
+    return format_html(
+        'href="{}?b={}" data-click="{}" data-click-shop="{}" data-click-product="{}" data-click-game="{}"',
+        listing.get_outbound_url(), button, button, listing.retailer.name, product.name, game.display_short,
+    )
+
+
 @register.filter
 def compact_count(value):
     """A count short enough for a small tile: 950, 1.2k, 12k. Rounded down, so it never claims more than there is."""

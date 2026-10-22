@@ -52,8 +52,9 @@ class GoTests(ClickTestCase):
 
     def test_ebay_click_from_our_page_keeps_the_campaign(self):
         response = self.go(self.ebay_listing, referer="https://www.ripraptor.com/")
-        self.assertEqual(response["Location"], EBAY_AFFILIATE)
-        self.assertEqual(OutboundClick.objects.people().count(), 1)
+        click = OutboundClick.objects.people().get()
+        # The click's number goes in eBay's custom id, in its place, so eBay's report names the click.
+        self.assertEqual(response["Location"], EBAY_AFFILIATE.replace("customid=&", f"customid={click.pk}&"))
 
     def test_our_own_hosts_count(self):
         for referer in ("https://ripraptor.com/drops/", "https://www.ripraptor.com/", "http://testserver/"):
@@ -113,14 +114,17 @@ class GoTests(ClickTestCase):
 
     def test_a_connection_over_the_hourly_cap_goes_to_the_plain_address(self):
         for _ in range(clicks.CLICKS_PER_HOUR):
-            self.assertEqual(self.go(self.ebay_listing)["Location"], EBAY_AFFILIATE)
+            click_id = OutboundClick.objects.count() + 1
+            self.assertIn("campid=5339999999", self.go(self.ebay_listing)["Location"])
+            self.assertTrue(OutboundClick.objects.people().filter(pk=click_id).exists())
         response = self.go(self.ebay_listing)
         self.assertEqual(response.status_code, 302)
         self.assertNotIn("campid", response["Location"])
         self.assertEqual(OutboundClick.objects.people().count(), clicks.CLICKS_PER_HOUR)
         self.assertEqual(OutboundClick.objects.suspects().count(), 1)
         # Another connection is not held back.
-        self.assertEqual(self.go(self.ebay_listing, REMOTE_ADDR="10.0.0.9")["Location"], EBAY_AFFILIATE)
+        other = self.go(self.ebay_listing, REMOTE_ADDR="10.0.0.9")["Location"]
+        self.assertEqual(other, EBAY_AFFILIATE.replace("customid=&", f"customid={OutboundClick.objects.latest('pk').pk}&"))
 
     def test_the_cap_never_stores_the_address(self):
         self.go(self.listing, REMOTE_ADDR="203.0.113.7")
@@ -223,7 +227,10 @@ class MarketplaceSearchTests(ClickTestCase):
         amazon = self.search("amazon", referer=None)["Location"]
         self.assertTrue(amazon.startswith("https://www.amazon.co.uk/s?k="))
         self.assertNotIn("tag=", amazon)
-        self.assertEqual(OutboundClick.objects.count(), 0)
+        # Counted as direct hits against the eBay shop (a robot and a HEAD are not saved); nothing for Amazon,
+        # which has no shop here to count it against.
+        self.assertEqual(OutboundClick.objects.people().count(), 0)
+        self.assertEqual(OutboundClick.objects.suspects().count(), 2)
 
     def test_unknown_market_or_no_tracking_id_is_not_found(self):
         self.assertEqual(self.search("etsy").status_code, 404)
@@ -247,8 +254,8 @@ class MarketplaceSearchTests(ClickTestCase):
                     self.assertNotIn("5339999999", body)
                     self.assertNotIn("ripraptor-21", body)
             body = self.client.get(sold_out.get_absolute_url()).content.decode()
-        self.assertIn(f'href="/go/search/{sold_out.slug}/ebay/"', body)
-        self.assertIn(f'href="/go/search/{sold_out.slug}/amazon/"', body)
+        self.assertIn(f'href="/go/search/{sold_out.slug}/ebay/?b=ebay"', body)
+        self.assertIn(f'href="/go/search/{sold_out.slug}/amazon/?b=amazon"', body)
 
 
 class SuspectsLeftOutTests(ClickTestCase):

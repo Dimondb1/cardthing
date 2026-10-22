@@ -57,10 +57,23 @@
     if (started) location.reload();
   };
 
-  // A press on a Buy button or a shop's link, so Analytics can count how often a visit ends at a shop.
+  // affiliate_click: a press on a link to a shop (every one goes through /go/, so Analytics cannot see it leave as
+  // an outbound click), with the button, the shop, the product, its game and the page. compare_prices: a press on
+  // a Compare prices link. Our own server saves both too, with or without consent (catalogue/clicks.py).
   document.addEventListener("click", (e) => {
-    const link = e.target.closest && e.target.closest('a[rel~="sponsored"]');
-    if (link && started && answer === "granted") window.gtag("event", "buy_click", { link_url: link.href });
+    if (!started || answer !== "granted" || !e.target.closest) return;
+    const page_type = document.body.dataset.page || "";
+    const link = e.target.closest('a[rel~="sponsored"]');
+    if (link) {
+      const d = link.dataset;
+      window.gtag("event", "affiliate_click", {
+        button: d.click || "", retailer: d.clickShop || "", product: d.clickProduct || "", game: d.clickGame || "",
+        page_type, link_url: link.href, transport_type: "beacon",
+      });
+      return;
+    }
+    const compare = e.target.closest("[data-compare]");
+    if (compare) window.gtag("event", "compare_prices", { button: compare.dataset.compare, page_type, transport_type: "beacon" });
   });
 
   const again = document.querySelector("[data-consent-open]");

@@ -7,8 +7,9 @@ watchlist scripts). The home page sends it with one request; the server ranks an
 nothing about the visitor.
 
 A product counts as like one they looked at when it is in the same set, or the same game and kind, and
-more so in the same language. "Too good to miss" is only ever a true claim: a confirmed saving of at
-least GOOD_SAVING percent on the next shop, or the lowest price of the trending window.
+more so in the same language. "Too good to miss" is only ever a true claim with evidence: a confirmed
+saving of at least GOOD_SAVING percent on a next shop whose price is in line with the market, or a verified
+30-day low clearly under the month's average (offers.Summary.low_deal).
 """
 
 from django.db.models import Q
@@ -61,7 +62,7 @@ def picks(seen, limit=PICKS_MAX):
         summary = offers.summarise(product, week_lows)
         if summary.best is None:
             continue
-        hot = (summary.percent or 0) >= GOOD_SAVING or summary.badge == offers.BEST_WEEK
+        hot = (summary.percent or 0) >= GOOD_SAVING or summary.low_deal
         closeness = (2 if product.product_set_id in sets else 1) + (product.language in tongues)
         ranked.append(((hot, closeness, summary.percent or 0, product.in_stock_count), product, summary, hot))
     ranked.sort(key=lambda row: row[0], reverse=True)

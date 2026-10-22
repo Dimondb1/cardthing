@@ -33,7 +33,7 @@
         <p class="buybox__delivered"><span class="money" data-note-for="{{ cheapest.pk }}">{% include "web/includes/price_note.html" with listing=cheapest %}</span>{% if not cheapest.delivery_known %} {% copy "product.delivery.unknown_check" %}{% endif %}</p>
       </div>
       {# The cheapest offer a visitor can buy now, through /go/ so the click is counted and the shop's tracking applies. #}
-      <a class="buy-now" href="{{ cheapest.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener" data-buy-now>
+      <a class="buy-now" {% go_link cheapest "buy_now" product %} target="_blank" rel="sponsored nofollow noopener" data-buy-now>
         <span class="buy-now__mark">{% include "web/includes/buy_mark.svg" %}</span>
         <span class="buy-now__text">
           <span class="buy-now__label">{% if cheapest.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}</span>
@@ -55,14 +55,14 @@
     {% if not cheapest and amazon_search or not cheapest and ebay_search %}
       {# Sold out everywhere we check: Amazon and eBay are the obvious next step, so they lead. #}
       <div class="buybox__amazon buybox__amazon--lead">
-        {% if amazon_search %}<a class="button button--big buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
-        {% if ebay_search %}<a class="button {% if amazon_search %}button--quiet{% else %}button--big{% endif %} buybox__amazon-button" href="{{ ebay_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.ebay.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
+        {% if amazon_search %}<a class="button button--big buybox__amazon-button" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
+        {% if ebay_search %}<a class="button {% if amazon_search %}button--quiet{% else %}button--big{% endif %} buybox__amazon-button" href="{{ ebay_search }}" data-click="ebay" data-click-shop="eBay" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.ebay.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
         <p class="buybox__summary">{% copy "product.marketplaces.note_sold_out" %}{% if amazon_search %} {% copy "terms.amazon" %}{% endif %}</p>
       </div>
     {% endif %}
     {% if has_listings %}
       {# A plain link to the price list, so it works without script; product.js scrolls there smoothly and moves focus. #}
-      <a class="compare-jump" href="#offers-title" data-jump>
+      <a class="compare-jump" href="#offers-title" data-jump data-compare="buy_box">
         <span class="compare-jump__label">{% copy "product.compare.jump" %}<span class="compare-jump__arrow" aria-hidden="true">↓</span></span>
         {% if shop_count > 1 %}<span class="compare-jump__note">{% copy "product.compare.jump_note" count=shop_count %}</span>{% elif shop_count %}<span class="compare-jump__note">{% copy "product.compare.one_shop" %}</span>{% endif %}
       </a>
@@ -86,7 +86,7 @@
     {% include "web/includes/share_box.html" %}
     {% if amazon_search and cheapest %}
       <div class="buybox__amazon">
-        <a class="button button--small buybox__amazon-button" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+        <a class="button button--small buybox__amazon-button" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
         <p class="buybox__summary">{% copy "product.amazon.note" %} {% copy "terms.amazon" %}</p>
       </div>
     {% endif %}

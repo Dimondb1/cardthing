@@ -95,7 +95,7 @@
   <ul class="trending" data-scroll aria-labelledby="out-title">
     {% for product in latest %}
     <li class="trending__item{% if product.best_offer.availability == "preorder" %} is-upcoming{% endif %}">
-      <a class="trending__link" href="{{ product.get_absolute_url }}">
+      <a class="trending__link" href="{{ product.get_absolute_url }}" data-compare="out_now">
         {% product_image product "trend" %}
         {% if product.best_offer.availability == "preorder" %}<span class="badge badge--soon trending__badge">{% copy "product.badge.soon" %}</span>{% endif %}
         <span class="trending__name">{{ product.name }}</span>

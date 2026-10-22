@@ -1,4 +1,4 @@
-{% load static sitecopy %}<!doctype html>
+{% load static sitecopy ripraptor %}<!doctype html>
 <html lang="en-GB">
 <head>
   <meta charset="utf-8">
@@ -35,7 +35,7 @@
   {% if adsense_client and not noindex and not private_link %}<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_client }}" crossorigin="anonymous"></script>{% endif %}
   {% block scripts %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}" data-page="{% page_key %}" data-note="{% url 'web:note_api' %}">
   <a class="skip-link" href="#main">Skip to main content</a>
   {% include "web/includes/header.html" %}
   <main id="main" class="page {% block page_class %}{% endblock %}">

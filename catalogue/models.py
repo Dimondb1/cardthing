@@ -328,7 +328,9 @@ class Retailer(models.Model):
         blank=True,
         help_text="Leave empty to link straight to the retailer. Otherwise put {url} "
         "where the product link goes, for example "
-        "https://network.example/click?id=123&url={url}. The link is encoded for you.",
+        "https://network.example/click?id=123&url={url}. The link is encoded for you. Add {click} where the "
+        "network takes your own reference (Awin: &clickref={click}) and its sales report then names the click, "
+        "so each sale can be matched to its product and game on the dashboard.",
     )
     delivery_note = models.CharField(
         max_length=120,
@@ -548,11 +550,13 @@ class Retailer(models.Model):
         host = urlparse(self.website).netloc
         return host.removeprefix("www.")
 
-    def outbound_url(self, product_url):
+    def outbound_url(self, product_url, click=""):
+        """The tracked link to ``product_url``: the affiliate link format filled in, with the click's number
+        where it has {click} (empty when there is no click)."""
         template = self.affiliate_url_template.strip()
         if not template:
             return product_url
-        return template.replace("{url}", quote(product_url, safe=""))
+        return template.replace("{url}", quote(product_url, safe="")).replace("{click}", str(click or ""))
 
 
 class ProductAlias(models.Model):
@@ -1007,13 +1011,35 @@ class OutboundClickQuerySet(models.QuerySet):
 
 
 class OutboundClick(models.Model):
-    """A visit to a retailer from RipRaptor. No personal data is stored."""
+    """A visit to a retailer from RipRaptor: the affiliate click. No personal data is stored.
+
+    Each says which page it came from and which button was pressed (catalogue/clicks.py), and carries the day's
+    one-way visitor token (insights.visitor_token, as on DailyVisitor), so the dashboard can count the visits
+    that ended at a shop. The token changes every day and cannot be traced back to anyone.
+    """
+
+    class Button(models.TextChoices):
+        BUY_NOW = "buy_now", "Buy now on a product page"
+        PRICE_LIST = "price_list", "A shop in a product's price list"
+        LOTTERY = "lottery", "Enter lottery in a price list"
+        CARD = "card", "Buy on a product card"
+        DEAL = "deal", "Buy on a Deals page saving"
+        DROP = "drop", "Buy on a drop card"
+        DROP_OFFER = "drop_offer", "A shop on a drop card"
+        COMING = "coming", "Buy on a Coming soon row"
+        WATCHLIST = "watchlist", "Buy on the watchlist"
+        SWIPE = "swipe", "Buy on the swipe page"
+        AMAZON = "amazon", "Amazon search button"
+        EBAY = "ebay", "eBay search button"
 
     listing = models.ForeignKey(Listing, on_delete=models.SET_NULL, null=True, blank=True)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="outbound_clicks")
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="outbound_clicks")
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
-    source = models.CharField(max_length=12, blank=True)   # "watchlist" when the click came from a saved list
+    # The page the click came from (clicks.PAGES), from the address it was on: "product", "home", "watchlist".
+    source = models.CharField("page", max_length=12, blank=True)
+    button = models.CharField(max_length=12, blank=True, choices=Button.choices)
+    visitor = models.CharField(max_length=32, blank=True, help_text="The day's one-way visitor token.")
     suspect = models.BooleanField(
         default=False,
         help_text="A direct hit (no link from our pages, a robot, a prefetch or too many in an hour), sent to the "
@@ -1029,6 +1055,48 @@ class OutboundClick(models.Model):
 
     def __str__(self):
         return f"{self.product} to {self.retailer}"
+
+
+class AffiliateSale(models.Model):
+    """One sale an affiliate programme reported: what a click to a shop earned. Entered, or imported from the
+    network's report in admin (catalogue/sales.py). No personal data: no customer, only the order's value, the
+    commission and its status.
+
+    A sale is matched to the click that led to it by the click reference the network reports back (the {click}
+    in a shop's affiliate link format, or eBay's custom id), and through that to its product and game. A sale
+    with no click reference keeps the game entered for it, or none."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        DECLINED = "declined", "Declined"
+
+    retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="sales")
+    click = models.ForeignKey(OutboundClick, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales")
+    game = models.ForeignKey(Game, on_delete=models.SET_NULL, null=True, blank=True, related_name="sales",
+                             help_text="Filled in from the click when there is one.")
+    ordered_on = models.DateField("order date", db_index=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    commission = models.DecimalField(max_digits=9, decimal_places=2, help_text="What the sale earns RipRaptor, in pounds.")
+    order_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    reference = models.CharField(max_length=80, blank=True,
+                                 help_text="The network's own number for the sale, so an import never adds it twice.")
+    note = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-ordered_on", "-pk"]
+        constraints = [models.UniqueConstraint(fields=["retailer", "reference"], condition=~models.Q(reference=""),
+                                               name="sale_reference_once_per_shop")]
+        verbose_name = "affiliate sale"
+
+    def __str__(self):
+        return f"{self.retailer} {self.ordered_on}: £{self.commission} ({self.get_status_display()})"
+
+    def save(self, *args, **kwargs):
+        if self.click_id and self.game_id is None:
+            self.game_id = Product.objects.filter(pk=self.click.product_id).values_list("game_id", flat=True).first()
+        super().save(*args, **kwargs)
 
 
 class Restock(models.Model):
@@ -1416,6 +1484,7 @@ class DailyPageView(models.Model):
         WATCHED = "watched", "Watchlist rows"   # one per product on a loaded watchlist, keyed by slug
         INSTALL = "install", "Home screen"     # keyed by event: shown, added, dismissed, opened
         ALERTS = "alerts", "Stock alerts"     # keyed by event: asked, confirmed, sent, stopped
+        TAPS = "taps", "Compare taps"         # keyed "where:page": a Compare prices link pressed (catalogue/clicks.py)
         OTHER = "other", "Other"
 
     date = models.DateField(db_index=True)

@@ -9,7 +9,7 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    AffiliateSale, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, RemovedShop, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -372,8 +372,8 @@ class TypeBandAdmin(admin.ModelAdmin):
 
 @admin.register(OutboundClick)
 class OutboundClickAdmin(admin.ModelAdmin):
-    list_display = ("created_at", "product", "retailer", "suspect")
-    list_filter = ("suspect", "retailer")
+    list_display = ("created_at", "product", "retailer", "source", "button", "suspect")
+    list_filter = ("suspect", "button", "source", "retailer")
     search_fields = ("product__name",)
     list_select_related = ("product", "retailer")
     date_hierarchy = "created_at"
@@ -383,6 +383,57 @@ class OutboundClickAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+class SalesImportForm(forms.Form):
+    file = forms.FileField(label="Network report (CSV)")
+    retailer = forms.ModelChoiceField(
+        queryset=Retailer.objects.order_by("name"), required=False, label="Shop, when the file has no shop column",
+        help_text="eBay's and Amazon's own reports name no shop: choose eBay or Amazon here.",
+    )
+
+
+@admin.register(AffiliateSale)
+class AffiliateSaleAdmin(admin.ModelAdmin):
+    """Sales the affiliate programmes reported: what clicks earned. Imported from a network's CSV report, or
+    entered by hand. The dashboard reads them for commission per 100 clicks, conversion and revenue."""
+
+    list_display = ("ordered_on", "retailer", "game", "status", "commission", "order_value", "click")
+    list_filter = ("status", "retailer", "game")
+    date_hierarchy = "ordered_on"
+    raw_id_fields = ("click",)
+    search_fields = ("reference", "note")
+    list_select_related = ("retailer", "game", "click")
+    change_list_template = "admin/sales_change_list.html"
+
+    def get_urls(self):
+        from django.urls import path
+
+        return [path("import/", self.admin_site.admin_view(self.import_view), name="catalogue_affiliatesale_import")
+                ] + super().get_urls()
+
+    def import_view(self, request):
+        from django.http import HttpResponseRedirect
+        from django.shortcuts import render
+        from django.urls import reverse
+
+        from .sales import import_report
+
+        if not self.has_add_permission(request):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
+        form = SalesImportForm(request.POST or None, request.FILES or None)
+        if request.method == "POST" and form.is_valid():
+            result = import_report(form.cleaned_data["file"].read(), default_retailer=form.cleaned_data["retailer"])
+            messages.success(request, f"{result.added} sales added, {result.updated} updated.")
+            for line, reason in result.skipped[:20]:
+                messages.warning(request, f"Line {line} skipped: {reason}")
+            if len(result.skipped) > 20:
+                messages.warning(request, f"{len(result.skipped) - 20} more lines skipped.")
+            return HttpResponseRedirect(reverse("admin:catalogue_affiliatesale_changelist"))
+        context = {**self.admin_site.each_context(request), "form": form, "opts": self.model._meta,
+                   "title": "Import a network report"}
+        return render(request, "admin/sales_import.html", context)
 
 
 @admin.register(Restock)

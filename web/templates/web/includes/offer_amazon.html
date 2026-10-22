@@ -7,6 +7,6 @@
   <div class="offer__total num"></div>
   <div class="offer__checked"></div>
   <div class="offer__action">
-    <a class="button button--small" href="{{ amazon_search }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.amazon_button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+    <a class="button button--small" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.amazon_button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
   </div>
 </li>

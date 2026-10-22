@@ -94,7 +94,7 @@
           <span class="coming__meta">{{ drop.product_set.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ drop.when_text }}</span>
           {% with best=drop.best %}<span class="coming__offer">{% if best %}{% price_count "new.coming_soon.preorders_from" drop.preorder_shops best.listing.shown_price best.listing.delivery_known best.product.get_absolute_url %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy "new.coming_soon.checked" time=best.listing.last_checked|ago %}{% else %}<span class="coming__none">{% copy "drops.none.out" %}</span>{% endif %}</span>{% endwith %}
         </span>
-        {% with best=drop.best %}{% if best %}<span class="coming__action"><a class="button button--buy button--card" href="{{ best.listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/buy_mark.svg" %}{% copy "product.preorder.button" %}<span class="visually-hidden"> {{ best.product.name }} at {{ best.listing.retailer.name }} (opens in a new tab)</span></a></span>{% endif %}{% endwith %}
+        {% with best=drop.best %}{% if best %}<span class="coming__action"><a class="button button--buy button--card" {% go_link best.listing "drop" best.product drop.product_set.game %} target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/buy_mark.svg" %}{% copy "product.preorder.button" %}<span class="visually-hidden"> {{ best.product.name }} at {{ best.listing.retailer.name }} (opens in a new tab)</span></a></span>{% endif %}{% endwith %}
       </li>
       {% endfor %}
     </ul>

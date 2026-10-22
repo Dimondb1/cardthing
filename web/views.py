@@ -412,8 +412,10 @@ def featured_pick(products):
 
     The rows are the featured deals:
 
-    Only genuine deals qualify: the cheapest price is a saving on the next
-    shop or the lowest in the trending window. Among those, deals whose
+    Only deals with evidence qualify (offers.Summary.is_deal): a verified
+    30-day low clearly under the month's average, or a saving of at least
+    offers.DEAL_PERCENT on a next shop whose price is in line with the
+    market. The strongest come first. Among those, deals whose
     cheapest shop pays a commission take up to six of the eight places and
     the best of the rest take the others; if either side is short, the other
     fills in. The page says that featured deals favour those shops.
@@ -427,10 +429,10 @@ def featured_pick(products):
         # Promoted deals need a confirmed delivered price and no sign of a wrong product link.
         if not summary.best.delivery_known or summary.suspect:
             continue
-        if not (summary.badge or summary.saving):
+        if not summary.is_deal:
             continue
         good.append((product, summary))
-    good.sort(key=lambda row: (-(row[1].percent or 0), row[0].name))
+    good.sort(key=lambda row: (-row[1].strength, row[0].name))
     paying = [row for row in good if earns(row[1].best)]
     other = [row for row in good if not earns(row[1].best)]
     picked_paying = paying[:FEATURED_EARNING]
@@ -981,7 +983,7 @@ MARKET_SEARCHES = {"amazon": amazon_search_url, "ebay": ebay_search_url}
 
 def search_link(product, market, tracked):
     """Our address for a marketplace search button, or None when the button is not shown."""
-    return reverse("web:go_search", args=[product.slug, market]) if tracked else None
+    return f'{reverse("web:go_search", args=[product.slug, market])}?b={market}' if tracked else None
 
 
 def product_gone(request, gone):
@@ -1216,7 +1218,21 @@ def product_detail(request, slug):
     )
 
 
-CLICK_SOURCES = ("watchlist",)
+def save_click(request, reason, product, retailer, listing=None):
+    """Save a click to a shop: the page it came from, the button pressed and the day's visitor token
+    (catalogue/clicks.py), and whether it is suspect. A robot that says so is not worth a row; every other
+    direct hit is kept so Insights can show them. Saved on a best effort basis: a database too busy to save
+    it never stops the visitor's trip to the shop."""
+    if reason in ("robot", "method"):
+        return None
+    saved = None
+    with pricing.drop_if_locked("Click"):
+        saved = pricing.retry_locked(lambda: OutboundClick.objects.create(
+            listing=listing, product=product, retailer=retailer, suspect=bool(reason),
+            source=clicks.page_of(request), button=clicks.button_of(request),
+            visitor=insights.visitor_token(request, timezone.localdate()),
+        ))
+    return saved
 
 
 @require_safe
@@ -1230,21 +1246,14 @@ def go(request, listing_id):
         product__is_active=True,
     )
     reason = clicks.suspect_reason(request)
-    # A robot that says so is not worth a row; every other direct hit is kept so Insights can show them.
-    if reason not in ("robot", "method"):
-        source = request.GET.get("from", "")
-        # The click is saved on a best effort basis: a database too busy to save it never stops
-        # the visitor's trip to the shop.
-        with pricing.drop_if_locked("Click"):
-            pricing.retry_locked(lambda: OutboundClick.objects.create(
-                listing=listing, product=listing.product, retailer=listing.retailer,
-                source=source if source in CLICK_SOURCES else "", suspect=bool(reason),
-            ))
+    saved = save_click(request, reason, listing.product, listing.retailer, listing)
     if reason:
         # An affiliate click address with no shop address inside goes to the shop's front page instead.
         target = clicks.plain_url(listing.url) or listing.retailer.website or listing.product.get_absolute_url()
     else:
-        target = listing.retailer.outbound_url(listing.url)
+        # The click's number goes where the network reports it back, so a sale can be matched to it.
+        number = saved.pk if saved is not None else ""
+        target = clicks.with_click_ref(listing.retailer.outbound_url(listing.url, click=number), number)
     response = HttpResponseRedirect(target)
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
@@ -1253,7 +1262,9 @@ def go(request, listing_id):
 @require_safe
 def go_search(request, slug, market):
     """Send the visitor to an Amazon or eBay search for the product. Like go(): a person on our pages gets our
-    tag or campaign, anything else the same search without it. Not saved: no listing was clicked."""
+    tag or campaign, anything else the same search without it. Saved like go()'s clicks, against the site's
+    Amazon or eBay shop when there is one (no listing was clicked); without one there is nothing to count it
+    against."""
     builder = MARKET_SEARCHES.get(market)
     if builder is None:
         raise Http404("No such marketplace.")
@@ -1262,7 +1273,12 @@ def go_search(request, slug, market):
     tracked = builder(product, ())
     if tracked is None:
         raise Http404("No marketplace search.")
-    target = clicks.plain_url(tracked) if clicks.suspect_reason(request) else tracked
+    reason = clicks.suspect_reason(request)
+    source_type = Retailer.Source.AMAZON if market == "amazon" else Retailer.Source.EBAY
+    retailer = Retailer.objects.filter(source_type=source_type).order_by("-is_active", "pk").first()
+    if retailer is not None:
+        save_click(request, reason, product, retailer)
+    target = clicks.plain_url(tracked) if reason else tracked
     response = HttpResponseRedirect(target)
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
@@ -1403,7 +1419,8 @@ def card_data(request, product, summary):
         "full": picture["full"],
         "price": shown_text(request, best) if best else "",
         "retailer": best.retailer.name if best else "",
-        "buy": best.get_outbound_url() if best else "",
+        "buy": f"{best.get_outbound_url()}?b=swipe" if best else "",
+        "game": product.game.display_short,
         "checked": ago(best.last_checked) if best else "",
         "badge": summary.badge or "",
         "second": {"retailer": summary.second.retailer.name, "price": shown_text(request, summary.second)} if summary.second else None,
@@ -1904,10 +1921,18 @@ def picks_api(request):
 
 @require_GET
 def note_api(request):
-    """Count one home screen event (shown, added, dismissed, opened). Nothing about the visitor is kept."""
+    """Count one home screen event (shown, added, dismissed, opened), or one press of a Compare prices link
+    (what=compare, where it was and on which page), so the dashboard can set them beside Buy now and the
+    shops' rows. Nothing about the visitor is kept."""
     event = request.GET.get("what", "")
-    if event in insights.INSTALL_EVENTS and not insights.is_bot(request):
+    if insights.is_bot(request):
+        pass
+    elif event in insights.INSTALL_EVENTS:
         insights.bump(DailyPageView, kind=DailyPageView.Kind.INSTALL, key=event)
+    elif event == "compare":
+        where, page = request.GET.get("where", ""), request.GET.get("page", "")
+        if where in clicks.COMPARE_PLACES and page in clicks.PAGES.values():
+            insights.bump(DailyPageView, kind=DailyPageView.Kind.TAPS, key=f"{where}:{page}")
     response = HttpResponse(status=204)
     response["Cache-Control"] = "no-store"
     return response

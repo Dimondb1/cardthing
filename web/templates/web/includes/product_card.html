@@ -16,7 +16,7 @@
     <p class="card__price">{% price summary.best.shown_price size="card" %}</p>
     <p class="card__at"><span class="delivered">{% include "web/includes/price_basis.html" with listing=summary.best %}</span><span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ summary.best.retailer.name }}</p>
     {% with deal=summary.deal %}{% if deal %}<p class="card__deal">{% copy "product.deal.better" quantity=deal.deal_quantity price=deal.deal_price|gbp retailer=deal.retailer.name each=deal.deal_each|gbp %}</p>{% endif %}{% endwith %}
-    <a class="button button--buy button--card" href="{{ summary.best.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/buy_mark.svg" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>
+    <a class="button button--buy button--card" {% go_link summary.best "card" product %} target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/buy_mark.svg" %}{% if summary.best.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ summary.best.retailer.name }} (opens in a new tab)</span></a>
   </div>
   <ol class="shops" aria-label="{% copy 'browse.card.shops' %}">
     <li class="shops__row"><span class="shops__name">{{ summary.best.retailer.name }}</span>{% if summary.best.delivery_known %}<span class="shops__flag">{% copy "product.compare.cheapest" %}</span>{% endif %}<span class="shops__price">{{ summary.best.shown_price|gbp }}{% if not summary.best.delivery_known %} {% copy "browse.price.plus" %}{% endif %}</span></li>
@@ -29,7 +29,7 @@
   </div>
   {% endif %}
   <div class="card__foot">
-    {% if product.offers|length > 1 %}<a class="card__compare" href="{{ product.get_absolute_url }}#offers-title">{% copy "product.compare.shops" count=product.offers|length %}<span aria-hidden="true"> ›</span></a>{% else %}<span></span>{% endif %}
+    {% if product.offers|length > 1 %}<a class="card__compare" href="{{ product.get_absolute_url }}#offers-title" data-compare="card">{% copy "product.compare.shops" count=product.offers|length %}<span aria-hidden="true"> ›</span></a>{% else %}<span></span>{% endif %}
     <a class="card__check" href="{{ product.get_absolute_url }}#offers-title"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13 8A5 5 0 1 1 11.5 4.5M11 2v3h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "product.check_prices" %}</a>
   </div>
 </li>

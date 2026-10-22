@@ -573,7 +573,8 @@ class ClearMarksTests(Catalogue):
         real = views.home_drops_new
 
         def out_now_then_a_price_change(fresh=False):
-            Listing.objects.filter(product=self.deal, retailer=self.shop).update(price=Decimal("60.00"))
+            # Still a saving the site claims: within half as much again of the other shop (offers.in_line).
+            Listing.objects.filter(product=self.deal, retailer=self.shop).update(price=Decimal("75.00"))
             signals.clear_list_caches_now(force=True)
             return real(fresh=fresh)
 
@@ -583,7 +584,7 @@ class ClearMarksTests(Catalogue):
         warming.warm_pages()
         prices = [str(offer.price) for product, _ in listcache.peek(signals.DEALS_CACHE_KEY)["savings"]
                   for offer in product.offers]
-        self.assertIn("60.00", prices)
+        self.assertIn("75.00", prices)
 
 
 def file_cache(folder, **options):

@@ -1,0 +1,11 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; <a href="{% url 'admin:catalogue_affiliatesale_changelist' %}">Affiliate sales</a> &rsaquo; Import</div>{% endblock %}
+{% block content %}
+<p>Download a report of transactions from the network as a CSV file and choose it here. Each row becomes a sale, or updates the sale already imported with the same reference, so importing the same report again after sales are approved is safe.</p>
+<p>Columns are found by their heading: the date, the shop (advertiser), the commission, the status, the order value, the network's reference (transaction id) and the click reference (Awin's click ref, eBay's custom id). With a click reference each sale is matched to its click, and so to its product and game.</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+  {{ form.as_p }}
+  <input type="submit" value="Import">
+</form>
+{% endblock %}

@@ -23,6 +23,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from django.conf import settings
 from django.core.cache import cache
+from django.urls import Resolver404, resolve
 from django.utils import timezone
 
 from .insights import client_ip, is_bot
@@ -44,6 +45,37 @@ REDIRECTORS = {
     "anrdoezrs.net": "url", "dpbolvw.net": "url", "jdoqocy.com": "url", "kqzyfj.com": "url", "tkqlhce.com": "url",
     "emjcd.com": "url", "linksynergy.com": "murl",
 }
+
+
+# The pages a click can come from: the name of the page's address (web/urls.py), and the word kept for it.
+PAGES = {"home": "home", "product": "product", "game": "game", "set": "set", "search": "search", "deals": "deals",
+         "new": "new", "drops": "drops", "watchlist": "watchlist", "deck": "swipe", "games": "games"}
+
+
+# The links to a product's prices a Compare tap can name (data-compare, counted by /api/note/?what=compare).
+COMPARE_PLACES = ("buy_box", "card", "featured", "picks", "recent", "trending", "out_now")
+
+
+def page_of(request):
+    """The page the click came from, read from its Referer (a click is only counted when it has one from our
+    pages), or the ``from`` the link names (watchlist links before 22 Oct 2026), or ""."""
+    if from_our_pages(request):
+        try:
+            name = resolve(urlsplit(request.headers.get("Referer", "")).path).url_name
+        except (Resolver404, ValueError):
+            name = None
+        if name in PAGES:
+            return PAGES[name]
+    named = request.GET.get("from", "")
+    return named if named in PAGES.values() else ""
+
+
+def button_of(request):
+    """The button pressed, as the link names it (?b=), or "" for a link from an older page."""
+    from .models import OutboundClick
+
+    named = request.GET.get("b", "")
+    return named if named in OutboundClick.Button.values else ""
 
 
 def own_hosts(request):
@@ -103,6 +135,27 @@ def suspect_reason(request):
     if over_cap(request):
         return "cap"
     return ""
+
+
+def with_click_ref(url, number):
+    """An eBay Partner Network link with the click's number as its custom id, which eBay's report names, so a
+    sale can be matched to its click. Other links are left alone: theirs is the {click} in the shop's
+    affiliate link format. Nothing is added without a number or to a link without our campaign."""
+    if not number:
+        return url
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if not (host == "ebay.com" or ".ebay." in f".{host}" or host.startswith("ebay.")):
+        return url
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    if not any(name.lower() == "campid" and value for name, value in query):
+        return url
+    # In its place when the link has one, so the rest of eBay's link is left as it was.
+    if any(name.lower() == "customid" for name, _ in query):
+        query = [(name, str(number) if name.lower() == "customid" else value) for name, value in query]
+    else:
+        query.append(("customid", str(number)))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 def strip_query(url, names):

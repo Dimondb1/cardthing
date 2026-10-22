@@ -2,6 +2,17 @@
 
 // Apply filters as soon as one changes. The "Show results" button is kept
 // for visitors without JavaScript.
+// A press of a Compare prices link (data-compare: the product page's button, a card's "Compare N shops", a row
+// card) is counted on our own server beside the clicks to shops, so the dashboard can tell Buy now, Compare
+// prices and a shop's row apart. Nothing about the visitor is sent: where the link was and on which page.
+document.addEventListener("click", (event) => {
+  const link = event.target.closest && event.target.closest("[data-compare]");
+  const { note, page } = document.body.dataset;
+  if (!link || !note || !page) return;
+  const query = new URLSearchParams({ what: "compare", where: link.dataset.compare, page });
+  try { fetch(`${note}?${query}`, { keepalive: true }).catch(() => {}); } catch (e) { /* nothing to do */ }
+});
+
 // The folded Sort and filter panel on game and set pages loads closed; a change made in it keeps it open on the
 // page that change loads, so the next choice is a tap away. Remembered for this tab only, and only for this page.
 const FILTERS_OPEN = "rr-filters-open";

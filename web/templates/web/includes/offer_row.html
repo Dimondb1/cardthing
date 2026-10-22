@@ -18,11 +18,11 @@
   {% if listing.has_deal %}<p class="offer__deal">{% if listing.deal_delivery is None %}{% copy "product.deal.row_plus" quantity=listing.deal_quantity price=listing.deal_price|gbp each=listing.deal_each|gbp %}{% else %}{% copy "product.deal.row" quantity=listing.deal_quantity price=listing.deal_price|gbp each=listing.deal_each|gbp %}{% endif %}</p>{% endif %}
   <div class="offer__action">
     {% if lottery %}
-    <a class="button button--small button--quiet" href="{{ listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.lottery" %}<span class="visually-hidden"> at {{ listing.retailer.name }} (opens in a new tab)</span></a>
+    <a class="button button--small button--quiet" {% go_link listing "lottery" product %} target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.lottery" %}<span class="visually-hidden"> at {{ listing.retailer.name }} (opens in a new tab)</span></a>
     {% elif muted %}
-    <a class="offer__link" href="{{ listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.view" %}<span class="visually-hidden"> {{ listing.retailer.name }} (opens in a new tab)</span></a>
+    <a class="offer__link" {% go_link listing "price_list" product %} target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.view" %}<span class="visually-hidden"> {{ listing.retailer.name }} (opens in a new tab)</span></a>
     {% else %}
-    <a class="button button--small{% if not cheapest_row %} button--quiet{% endif %}" href="{{ listing.get_outbound_url }}" target="_blank" rel="sponsored nofollow noopener">{% if listing.availability == "preorder" %}{% copy "product.compare.preorder" %}{% else %}{% copy "product.compare.buy" %}{% endif %}<span class="visually-hidden"> at {{ listing.retailer.name }} (opens in a new tab)</span></a>
+    <a class="button button--small{% if not cheapest_row %} button--quiet{% endif %}" {% go_link listing "price_list" product %} target="_blank" rel="sponsored nofollow noopener">{% if listing.availability == "preorder" %}{% copy "product.compare.preorder" %}{% else %}{% copy "product.compare.buy" %}{% endif %}<span class="visually-hidden"> at {{ listing.retailer.name }} (opens in a new tab)</span></a>
     {% endif %}
   </div>
 </li>

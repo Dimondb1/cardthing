@@ -117,7 +117,7 @@ class DropPageTests(DropData):
         self.assertIn("Pre-orders from", card)
         self.assertIn("at 2 shops", card)
         self.assertIn("Ascended Heroes Elite Trainer Box at Harbour Games, checked 1 hour ago", card)
-        self.assertIn(f'href="/go/{self.cheap.pk}/"', card)
+        self.assertIn(f'href="/go/{self.cheap.pk}/?b=', card)
         for tag in re.findall(r'<a[^>]+href="/go/[^>]+>', html):
             self.assertIn('rel="sponsored nofollow noopener"', tag)
 
@@ -181,7 +181,7 @@ class DropPageTests(DropData):
         self.assertIn('class="card', html)
         self.assertIn("Journey Together Booster Box", html)
         self.assertIn("Buy now", html)
-        self.assertRegex(html, r'href="/go/\d+/" target="_blank" rel="sponsored nofollow noopener"')
+        self.assertRegex(html, r'href="/go/\d+/\?b=card" data-click="card"')
         # Pre-orders are under Coming soon, not here.
         self.assertNotIn("Ascended Heroes Elite Trainer Box", html)
         self.assertIn('<link rel="canonical" href="http://testserver/drops/?show=out">', html)
@@ -279,7 +279,7 @@ class OnePageTests(DropData):
         # Pre-order to the cheapest shop when a shop takes pre-orders, with Remind me as a quiet second.
         soon = found[self.soon.pk]
         primary = re.search(r"<a [^>]*data-primary[^>]*>", soon).group(0)
-        self.assertIn(f'href="/go/{self.cheap.pk}/"', primary)
+        self.assertIn(f'href="/go/{self.cheap.pk}/?b=', primary)
         self.assertIn('rel="sponsored nofollow noopener"', primary)
         self.assertIn('<summary class="button button--quiet drop-remind__open">Remind me</summary>', soon)
         # Remind me leads when no shop has it.
@@ -296,8 +296,8 @@ class OnePageTests(DropData):
         listed = card[card.index('<details class="drop-all">'):]
         self.assertIn("Ascended Heroes Elite Trainer Box", listed)
         self.assertIn("Ascended Heroes Booster Bundle", listed)
-        self.assertIn(f'href="/go/{bundle_listing.pk}/"', listed)
-        self.assertIn(f'href="/go/{self.cheap.pk}/"', listed)
+        self.assertIn(f'href="/go/{bundle_listing.pk}/?b=', listed)
+        self.assertIn(f'href="/go/{self.cheap.pk}/?b=', listed)
         self.assertIn('<details class="drop-remind">', card)
         self.assertIn(f'action="/drops/remind/{self.soon.pk}/"', card)
         # A Remind me row elsewhere opens that card's form, with no script.
@@ -369,7 +369,7 @@ class OnePageTests(DropData):
             html = self.page()
         self.assertLess(html.index("Lorwyn Eclipsed"), html.index("Date not announced yet"))
         card = cards(html)[self.undated.pk]
-        self.assertIn(f'href="/go/{listing.pk}/"', card)
+        self.assertIn(f'href="/go/{listing.pk}/?b=', card)
         self.assertNotIn("data-drop-remind", card)
         self.assertNotIn("drop-card__tile", card)
         self.assertIsNone(drops.upcoming_drop(self.undated, self.today))
@@ -443,16 +443,16 @@ class OneSourceTests(DropData):
         dear = make_listing(b, third, price="20.00", availability=Listing.Availability.PREORDER)
         card = cards(self.page())[both.pk]
         primary = re.search(r"<a [^>]*data-primary[^>]*>", card).group(0)
-        self.assertIn(f'href="/go/{cheap.pk}/"', primary)
+        self.assertIn(f'href="/go/{cheap.pk}/?b=', primary)
         self.assertIn("£8.00", card[:card.index('class="drop-card__actions"')])
         self.assertNotIn("£20.00", card[:card.index('class="drop-card__actions"')])
         # The product list shows each product's cheapest offer and, where it differs, its cheapest pre-order.
         listed = card[card.index('<details class="drop-all">'):]
         for listing in (stock, cheap, dear):
-            self.assertIn(f'href="/go/{listing.pk}/"', listed)
+            self.assertIn(f'href="/go/{listing.pk}/?b=', listed)
         row = self.game_row(both, self.game)
         self.assertIn("£8.00", row)
-        self.assertIn(f'href="/go/{cheap.pk}/"', row)
+        self.assertIn(f'href="/go/{cheap.pk}/?b=', row)
         # The hidden words on the row's button name what it buys, not the set.
         self.assertIn("Pre-order<span class=\"visually-hidden\"> Mixed Product A at Northgate Cards", row)
 

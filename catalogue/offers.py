@@ -1,6 +1,20 @@
 """
 What a product card needs beyond the cheapest price: the runner-up, the
 saving between them, and whether today's price is a low point.
+
+Deal claims rest on evidence, not on one dear listing:
+
+* A saving on the next shop is claimed only when that shop's price is in line
+  with the market: no more than OUTLIER_RATIO times the cheapest, or matched
+  within MATCHED of it by a third shop. A lone £699.95 listing against a
+  £250 cheapest says that shop is dear, not that £250 is a bargain.
+* "Lowest in 30 days" (LOW_30) is verified from our own daily record: today's
+  cheapest delivered price is at or below every day's cheapest over the last
+  LOW_DAYS, with at least LOW_MIN_DAYS of them recorded.
+* A product is a deal (Summary.is_deal: featured deals, Too good to miss)
+  only with a 30-day low that is also LOW_UNDER below that month's average
+  (a price that never moved is always its own low), or a credible saving of
+  at least DEAL_PERCENT.
 """
 
 from datetime import timedelta
@@ -12,8 +26,16 @@ from django.utils import timezone
 
 from .models import DailyLowestPrice, Listing, stale_cutoff
 
+LOW_30 = "low_30"
 BEST_WEEK = "best_week"
 LOWEST_TODAY = "lowest_today"
+
+LOW_DAYS = 30
+LOW_MIN_DAYS = 14
+LOW_UNDER = Decimal("0.03")       # a 30-day low counts as a deal this far under the month's average
+OUTLIER_RATIO = Decimal("1.5")    # a runner-up dearer than this many times the cheapest is out of line
+MATCHED = Decimal("0.10")         # unless a third shop is within this share of it
+DEAL_PERCENT = 5                  # a credible saving this big or bigger is a deal
 
 
 def buyable_prefetch():
@@ -46,12 +68,51 @@ MAX_REAL_PERCENT = 70
 
 
 class Summary:
-    __slots__ = ("best", "second", "saving", "percent", "badge", "suspect", "deal")
+    __slots__ = ("best", "second", "saving", "percent", "badge", "suspect", "deal", "under")
 
-    def __init__(self, best, second, saving, percent, badge, suspect=False, deal=None):
+    def __init__(self, best, second, saving, percent, badge, suspect=False, deal=None, under=None):
         self.best, self.second, self.saving, self.percent, self.badge = best, second, saving, percent, badge
         self.suspect = suspect
         self.deal = deal
+        self.under = under      # with LOW_30: how far today's price is under the 30-day average, in percent
+
+    @property
+    def low_deal(self):
+        """A verified 30-day low that is also clearly under the month's average."""
+        return self.badge == LOW_30 and (self.under or 0) >= LOW_UNDER * 100
+
+    @property
+    def is_deal(self):
+        """Evidence that today's price is a good one: a 30-day low under the average, or a credible saving."""
+        return self.low_deal or (self.percent or 0) >= DEAL_PERCENT
+
+    @property
+    def strength(self):
+        """How strong the evidence is, for ranking deals: the bigger of the two, in percent."""
+        return max((self.under or 0) if self.low_deal else 0, self.percent or 0)
+
+
+class Lows:
+    """A product's recent daily cheapest prices (week_low_map): the lowest of the trending window, and the lowest,
+    average and number of days over LOW_DAYS."""
+
+    __slots__ = ("week", "month", "average", "days")
+
+    def __init__(self):
+        self.week = self.month = self.average = None
+        self.days = 0
+
+
+def in_line(offers, second, best):
+    """True when the runner-up's price is in line with the market, so a saving on it means something: no more
+    than OUTLIER_RATIO times the cheapest, or matched within MATCHED by a third shop's confirmed price."""
+    if second.delivered_price <= best.delivered_price * OUTLIER_RATIO:
+        return True
+    return any(
+        offer.delivery_known and offer.sanity != Listing.Sanity.DOUBTFUL
+        and offer.delivered_price <= second.delivered_price * (1 + MATCHED)
+        for offer in offers[2:]
+    )
 
 
 def best_deal(offers, best):
@@ -90,23 +151,43 @@ def summarise(product, week_lows=None):
         if percent > MAX_REAL_PERCENT:
             saving = percent = None
             suspect = True
-    badge = None
-    if best and best.delivery_known and not suspect and week_lows is not None and product.pk in week_lows:
-        badge = BEST_WEEK if best.delivered_price <= week_lows[product.pk] else LOWEST_TODAY
-    return Summary(best, second, saving, percent, badge, suspect, best_deal(offers, best))
+        elif not in_line(offers, second, best):
+            # One dear listing: the gap says that shop is dear, not that the cheapest is a bargain.
+            saving = percent = None
+    badge = under = None
+    lows = week_lows.get(product.pk) if week_lows is not None else None
+    if best and best.delivery_known and not suspect and lows is not None:
+        price = best.delivered_price
+        if lows.days >= LOW_MIN_DAYS and price <= lows.month:
+            badge = LOW_30
+            under = int(((lows.average - price) / lows.average * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        elif lows.week is not None:
+            badge = BEST_WEEK if price <= lows.week else LOWEST_TODAY
+    return Summary(best, second, saving, percent, badge, suspect, best_deal(offers, best), under)
 
 
 def week_low_map(product_ids, days=None, today=None):
-    """Lowest recorded daily price per product over the last ``days`` days."""
+    """{product id: Lows} from the daily cheapest prices before today: the lowest over the last ``days`` (the
+    trending window) and the lowest, average and count over LOW_DAYS. One query."""
     days = days or settings.RIPRAPTOR_TRENDING_DAYS
     today = today or timezone.localdate()
-    lows = {}
+    week_from, month_from = today - timedelta(days=days), today - timedelta(days=LOW_DAYS)
+    lows, totals = {}, {}
     rows = DailyLowestPrice.objects.filter(
-        product_id__in=list(product_ids), date__gte=today - timedelta(days=days), date__lt=today
-    ).values_list("product_id", "price")
-    for pk, price in rows:
-        if pk not in lows or price < lows[pk]:
-            lows[pk] = price
+        product_id__in=list(product_ids), date__gte=min(week_from, month_from), date__lt=today
+    ).values_list("product_id", "date", "price")
+    for pk, day, price in rows:
+        row = lows.setdefault(pk, Lows())
+        if day >= week_from and (row.week is None or price < row.week):
+            row.week = price
+        if day >= month_from:
+            row.days += 1
+            totals[pk] = totals.get(pk, 0) + price
+            if row.month is None or price < row.month:
+                row.month = price
+    for pk, row in lows.items():
+        if row.days:
+            row.average = Decimal(totals[pk]) / row.days
     return lows
 
 

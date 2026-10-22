@@ -1,7 +1,7 @@
 {% load sitecopy ripraptor %}<ul class="trending" data-scroll>
 {% for product, summary, hot in rows %}
   <li class="trending__item">
-    <a class="trending__link" href="{{ product.get_absolute_url }}">
+    <a class="trending__link" href="{{ product.get_absolute_url }}" data-compare="picks">
       {% product_image product "trend" %}
       {% if hot %}<span class="badge badge--good trending__badge">{% copy "home.picks.hot" %}</span>{% endif %}
       <span class="trending__name">{{ product.name }}</span>

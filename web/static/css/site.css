@@ -884,7 +884,11 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .buybox__offer > p { margin: 0; }   /* the grid gap spaces these lines, not the usual paragraph margin */
 .buybox__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-2); }
 .buybox__label { font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-ink-subtle); }
-.buybox__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); line-height: 1; }
+/* The price, with the Price check chip beside it when there is one. The amount takes only the room its price needs,
+   so on a narrow box "delivered" drops under the price rather than the chip dropping under both and leaving a gap;
+   only a price too wide to share the line sends the chip below. */
+.buybox__price { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); line-height: 1; }
+.buybox__amount { flex: 1 1 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
 .buybox__price .price { font-size: var(--text-price-hero); }
 .buybox__price .delivered { font-weight: var(--weight-strong); color: var(--color-price); }
 .buybox__delivered { font-size: var(--text-sm); color: var(--color-ink-muted); }
@@ -1044,7 +1048,7 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 }
 @keyframes sheet-up { from { opacity: 0; transform: translateY(1.5rem); } to { opacity: 1; transform: none; } }
 
-/* Price check (includes/fair_price.html), the owner's design: one rounded chip to the right of "delivered", coloured
+/* Price check (includes/fair_price.html), the owner's design: one rounded chip to the right of the price, coloured
    as a whole by the verdict (green good, grey fair, dark yellow dear), holding four signal bars (more lit is a
    better price), a divider, the verdict's icon and its words. A link to the price history; product.js opens the
    Price check sheet instead. */
@@ -1053,7 +1057,7 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .fair--above, .fair--high { --fair-bg: var(--color-fair-bad-bg); --fair-ink: var(--color-fair-bad-ink); --fair-rule: var(--color-fair-bad-rule); }
 .fair {
   display: inline-flex; align-items: center; gap: var(--space-2); align-self: center; margin-left: auto;
-  min-height: var(--tap); padding: var(--space-1) var(--space-3); border-radius: var(--radius);
+  min-height: var(--tap); padding: var(--space-1) var(--space-2); border-radius: var(--radius);
   background: var(--fair-bg); color: var(--fair-ink); text-decoration: none;
 }
 .fair:hover .fair__word { text-decoration: underline; }

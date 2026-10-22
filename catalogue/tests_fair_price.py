@@ -91,6 +91,15 @@ class ProductPageTests(TestCase):
         self.assertEqual((chip.count('class="fair__bar is-on"'), chip.count('class="fair__bar"')), (3, 1))
         self.assertIn('<span class="fair__icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4.5 12.5', chip)
         self.assertIn('<span class="fair__word" aria-hidden="true">Good price</span>', chip)
+        # The chip sits beside the price, after the amount, so a narrow box drops "delivered" under the price
+        # rather than the chip under both (the owner's annotated screenshot: no empty band above the delivery line).
+        line = response.content.decode().split('<p class="buybox__price">')[1].split("</p>")[0]
+        self.assertTrue(line.startswith('<span class="buybox__amount"><span class="money"'))
+        self.assertLess(line.index("</span></span>"), line.index('<a class="fair'))
+        from django.contrib.staticfiles import finders
+        with open(finders.find("css/site.css"), encoding="utf-8") as handle:
+            css = handle.read()
+        self.assertIn(".buybox__amount { flex: 1 1 0; display: flex; flex-wrap: wrap;", css)
         self.assertContains(response, 'aria-label="Price check: Good price. Show price history"')
         self.assertContains(response, 'href="#history-title" data-fair-open')
         self.assertContains(response, "data-fair-sheet")

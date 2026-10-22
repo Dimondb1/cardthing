@@ -2853,7 +2853,9 @@ up to a year back and not counting today:
   today against the average and the lowest, the price chart, and the date
   the record starts. Without JavaScript it is a link to the price history,
   which shows the same three figures above the chart.
-- The chip is the owner's design (`includes/fair_price.html`): four signal
+- The chip is the owner's design (`includes/fair_price.html`), beside the
+  price: on a narrow box "delivered" drops under the price instead of the
+  chip dropping under both and leaving a gap. Four signal
   bars, a divider, an icon and the verdict, the whole chip one colour.
   Green for Lowest yet and Good price, grey for Fair price, dark yellow for
   Above average and High price. Never red, which stays for a dearer shop's

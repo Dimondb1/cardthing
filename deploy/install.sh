@@ -171,7 +171,7 @@ systemctl reload caddy
 # The snapshot, the delivery check and tidy_all put timeout inside flock, so time spent waiting
 # for a long import does not use up their limit.
 # Cardmarket's sealed catalogue and price guide are read daily at 6:44 (after Cardmarket's own early update), and Claude
-# matches them to our products hourly at 29 past, waiting for the judge's lock so only one Claude job runs at once.
+# matches them to our products every 15 minutes from 7 past, on its own lock so it never waits behind the judge.
 # deploy/crontab carries the same lines; catalogue/tests_ops.py fails when they differ.
 echo "PYTHONUNBUFFERED=1
 0 * * * *  cd $DIR && set -a && . ./.env && set +a && timeout -k 60 3300 flock -w 1800 /tmp/ripraptor-import.lock .venv/bin/python manage.py import_prices --due --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
@@ -186,7 +186,7 @@ echo "PYTHONUNBUFFERED=1
 2-59/5 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 900 flock -n /tmp/ripraptor-judge.lock .venv/bin/python manage.py judge_checks >> /var/log/ripraptor-import.log 2>&1
 51 6 * * * cd $DIR && set -a && . ./.env && set +a && flock -w 1200 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py check_set_retail >> /var/log/ripraptor-import.log 2>&1
 44 6 * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 900 .venv/bin/python manage.py import_cardmarket >> /var/log/ripraptor-import.log 2>&1
-29 * * * * cd $DIR && set -a && . ./.env && set +a && flock -w 600 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py match_cardmarket >> /var/log/ripraptor-import.log 2>&1
+7-59/15 * * * * cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-cardmarket.lock timeout -k 30 840 .venv/bin/python manage.py match_cardmarket >> /var/log/ripraptor-import.log 2>&1
 20 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1
 40 0 * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1

@@ -49,10 +49,17 @@ logger = logging.getLogger(__name__)
 # Pokémon first, then the other games, as the owner asked.
 ORDER = list(cardmarket.GAMES)
 CANDIDATES = 8
-ROWS_PER_RUN = 120
+# Picking one of a few shortlisted products is a narrow question: a quick model at low effort answers it in a
+# few seconds for about half a cent, where the judge's own (Opus at medium) took long enough that a run got
+# through only a handful. Asked WORKERS at a time, a run every 15 minutes (cron) gets through hundreds.
+MATCH_MODEL = "claude-sonnet-5-5"
+MATCH_EFFORT = "low"
+WORKERS = 6
+ROWS_PER_RUN = 600
 VIEW_DAYS = 7     # to_do: the most viewed in this many days are matched first
 RUN_BUDGET_USD = Decimal("3.00")
-RUN_SECONDS = 900
+RUN_SECONDS = 780       # inside cron's 840-second timeout and the 15 minutes between runs
+BUSY_LIMIT = 12         # this many "busy" answers in a run stops it until the next
 MAX_TOKENS = 1500
 PRICE_LOW, PRICE_HIGH = Decimal("0.33"), Decimal("4")
 PROMPT_VERSION = 1
@@ -187,13 +194,15 @@ def fingerprint(evidence):
 
 
 def request_params(state, evidence):
+    """The question for one product: always MATCH_MODEL at MATCH_EFFORT, whatever the judge uses for Things to
+    check, since picking one of a few shortlisted products needs neither its depth nor its time."""
     data = json.dumps(evidence, sort_keys=True, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e")
     return {
-        "model": state.model,
+        "model": MATCH_MODEL,
         "max_tokens": MAX_TOKENS,
         "system": [{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
         "messages": [{"role": "user", "content": "<evidence>" + data + "</evidence>"}],
-        "output_config": {"effort": state.effort, "format": {"type": "json_schema", "schema": SCHEMA}},
+        "output_config": {"effort": MATCH_EFFORT, "format": {"type": "json_schema", "schema": SCHEMA}},
     }
 
 
@@ -261,7 +270,14 @@ def to_do(slugs, today=None):
 
 
 def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER_RUN):
-    """Match up to ``limit`` products. Returns Result. ``dry_run`` shortlists and reports without asking."""
+    """Match up to ``limit`` products, WORKERS at a time. Returns Result. ``dry_run`` shortlists and reports
+    without asking.
+
+    Each question is made and paid for (reserved) here, then the WORKERS of a round are sent side by side and
+    their answers saved here as they come back, so only the waiting for Anthropic runs in threads, never the
+    database."""
+    from concurrent.futures import ThreadPoolExecutor
+
     result = Result()
     state = ClaudeJudge.load()
     if not dry_run and (not state.enabled or not judge.key()):
@@ -274,55 +290,87 @@ def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER
     known = {m.product_id: m.fingerprint for m in CardmarketMatch.objects.filter(product__game__slug__in=slugs)}
     started = time.monotonic()
     client = client or (None if dry_run else judge.make_client(judge.key()))
-    for product in to_do(slugs).iterator():
-        if result.asked >= limit:
-            result.note = result.note or "Reached the products for one run"
-            break
-        if time.monotonic() - started > RUN_SECONDS:
-            result.note = "Stopped for time"
-            break
-        candidates = shortlist(product, pools.get(product.game.slug, []))
-        prices = cardmarket.latest_prices([c.pk for c in candidates])
-        cheapest = (Listing.objects.filter(product=product, delivery_known=True).buyable()
-                    .order_by("delivered_price").values_list("delivered_price", flat=True).first())
-        evidence = evidence_for(product, candidates, prices, rate, cheapest)
-        print_ = fingerprint(evidence)
-        if known.get(product.pk) == print_:
-            continue
-        if not candidates:
-            if not dry_run:
-                save(product, CardmarketMatch.Status.NONE, None, evidence, print_,
-                     reason="No Cardmarket product shares the set's words", now=now)
-            result.none += 1
-            continue
-        if dry_run:
-            result.asked += 1
-            continue
-        params = request_params(state, evidence)
-        worst = judge.worst_case_micros(params, state.model)
-        moment = timezone.now()
-        if judge.spent_this_month(moment) + worst > judge.monthly_limit_micros(state):
-            result.note = "Reached Claude's monthly limit"
-            break
-        if result.spent + worst > RUN_BUDGET_USD * 1_000_000:
-            result.note = "Reached the limit for one run"
-            break
-        ask = ClaudeAsk.objects.create(
-            kind=ClaudeAsk.Kind.MARKET, row_key=evidence["ours"]["key"], fingerprint=print_, model_asked=state.model,
-            effort=state.effort, evidence=evidence, reserved_micros=worst, asked_at=moment, product=product,
-        )
-        try:
-            message = judge.send(client, params)
-        except Exception as error:
+    round_ = []
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        for product in to_do(slugs).iterator():
+            if result.asked + len(round_) >= limit:
+                result.note = result.note or "Reached the products for one run"
+                break
+            if time.monotonic() - started > RUN_SECONDS:
+                result.note = "Stopped for time"
+                break
+            candidates = shortlist(product, pools.get(product.game.slug, []))
+            prices = cardmarket.latest_prices([c.pk for c in candidates])
+            cheapest = (Listing.objects.filter(product=product, delivery_known=True).buyable()
+                        .order_by("delivered_price").values_list("delivered_price", flat=True).first())
+            evidence = evidence_for(product, candidates, prices, rate, cheapest)
+            print_ = fingerprint(evidence)
+            if known.get(product.pk) == print_:
+                continue
+            if not candidates:
+                if not dry_run:
+                    save(product, CardmarketMatch.Status.NONE, None, evidence, print_,
+                         reason="No Cardmarket product shares the set's words", now=now)
+                result.none += 1
+                continue
+            if dry_run:
+                result.asked += 1
+                continue
+            params = request_params(state, evidence)
+            worst = judge.worst_case_micros(params, params["model"])
+            moment = timezone.now()
+            if judge.spent_this_month(moment) + worst > judge.monthly_limit_micros(state):
+                result.note = "Reached Claude's monthly limit"
+                break
+            held = sum(job["worst"] for job in round_)
+            if result.spent + held + worst > RUN_BUDGET_USD * 1_000_000:
+                result.note = "Reached the limit for one run"
+                break
+            ask = ClaudeAsk.objects.create(
+                kind=ClaudeAsk.Kind.MARKET, row_key=evidence["ours"]["key"], fingerprint=print_,
+                model_asked=params["model"], effort=MATCH_EFFORT, evidence=evidence, reserved_micros=worst,
+                asked_at=moment, product=product,
+            )
+            round_.append({"product": product, "evidence": evidence, "print": print_, "ask": ask, "worst": worst,
+                           "params": params})
+            if len(round_) >= WORKERS:
+                if not settle(round_, pool, client, result, now):
+                    round_ = []
+                    break
+                round_ = []
+        if round_:
+            settle(round_, pool, client, result, now)
+    return result
+
+
+def ask_one(client, params):
+    """One question, in a worker thread: (reply, None) or (None, the error)."""
+    try:
+        return judge.send(client, params), None
+    except Exception as error:   # every failure is recorded by settle, in the run's own thread
+        return None, error
+
+
+def settle(round_, pool, client, result, now):
+    """Send a round's questions side by side and save each answer. Returns False when the run must stop:
+    Anthropic refused the key, credit or model, or stayed too busy."""
+    replies = list(pool.map(lambda job: ask_one(client, job["params"]), round_))
+    carry_on = True
+    for job, (message, error) in zip(round_, replies):
+        ask, worst, evidence = job["ask"], job["worst"], job["evidence"]
+        if error is not None:
             kind = judge.problem_of(error)
             judge.settle_failed(ask, error, kind, worst)
             result.errors.append(kind)
             if kind in ("key", "credit", "model", "bug"):
                 result.note = f"Anthropic stopped the run ({kind})"
-                break
+                carry_on = False
+            elif result.errors.count("busy") >= BUSY_LIMIT:
+                result.note = "Anthropic was too busy; the next run carries on"
+                carry_on = False
             continue
         outcome, answer = read_answer(message, evidence)
-        cost = judge.cost_micros(message, state.model)
+        cost = judge.cost_micros(message, job["params"]["model"])
         usage = message.usage
         fields = {
             "outcome": outcome, "reserved_micros": 0, "cost_micros": cost,
@@ -331,7 +379,7 @@ def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER
             "cache_write_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
             "cache_read_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
             "output_tokens": getattr(usage, "output_tokens", 0) or 0,
-            "fallback": judge.from_fallback(message, state.model),
+            "fallback": judge.from_fallback(message, job["params"]["model"]),
         }
         if answer is not None:
             fields.update(verdict=str(answer["match"]), confidence=answer["confidence"], reason=judge.clean(answer["reason"]))
@@ -341,11 +389,12 @@ def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER
         if answer is None:
             continue
         status = status_for(answer, evidence)
-        save(product, status, answer["match"], evidence, print_, answer["confidence"], judge.clean(answer["reason"]), now)
+        save(job["product"], status, answer["match"], evidence, job["print"], answer["confidence"],
+             judge.clean(answer["reason"]), now)
         if status == CardmarketMatch.Status.MATCHED:
             result.matched += 1
         elif status == CardmarketMatch.Status.CHECK:
             result.check += 1
         else:
             result.none += 1
-    return result
+    return carry_on

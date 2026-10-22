@@ -104,6 +104,7 @@ class FakeClient:
         content = params["messages"][0]["content"]
         evidence = json.loads(content[len("<evidence>"):-len("</evidence>")])
         self.sent.append(evidence)
+        self.asked_with = (params["model"], params["output_config"]["effort"])
         return self.answer(evidence)
 
 
@@ -205,6 +206,47 @@ class MatchTests(TestCase):
         self.assertEqual(result.matched, 0)
         self.assertFalse(CardmarketMatch.objects.filter(product=self.sparks).exists())
         self.assertEqual(ClaudeAsk.objects.get(kind="market").outcome, ClaudeAsk.Outcome.INVALID)
+
+    def test_a_quick_model_at_low_effort_whatever_the_judge_uses(self):
+        # The owner: "It could have done 8 in the last 3 hours." The judge's Opus at medium effort was slow;
+        # picking one of a few products needs neither.
+        self.switch_on()
+        ClaudeJudge.objects.filter(pk=1).update(model="claude-opus-5-5", effort="high")
+        client = FakeClient(lambda evidence: reply(evidence["ours"]["key"], evidence["candidates"][0]["id"]))
+        cardmarket_match.run(client=client)
+        self.assertEqual(client.asked_with, ("claude-sonnet-5-5", "low"))
+        self.assertEqual(set(ClaudeAsk.objects.filter(kind="market").values_list("model_asked", "effort")),
+                         {("claude-sonnet-5-5", "low")})
+
+    def test_many_products_are_asked_several_at_a_time_and_every_answer_saved(self):
+        self.switch_on()
+        game_set = make_set(self.pokemon, name="Surging Sparks", slug="ssp-more", code="SSP")
+        more = [make_product(game_set, name=f"Surging Sparks Booster Box {n}", slug=f"ssp-box-{n}",
+                             product_type="booster_box") for n in range(cardmarket_match.WORKERS * 2 + 1)]
+        client = FakeClient(lambda evidence: reply(evidence["ours"]["key"], evidence["candidates"][0]["id"]))
+        result = cardmarket_match.run(client=client)
+        self.assertEqual(result.asked, len(more) + 2)
+        self.assertEqual(CardmarketMatch.objects.filter(product__in=more, status=CardmarketMatch.Status.MATCHED).count(),
+                         len(more))
+        self.assertEqual(ClaudeAsk.objects.filter(kind="market", reserved_micros=0).count(), len(more) + 2)
+
+    def test_a_run_stops_when_anthropic_stays_busy(self):
+        import anthropic
+
+        from .tests_judge import error
+
+        self.switch_on()
+        game_set = make_set(self.pokemon, name="Surging Sparks", slug="ssp-more", code="SSP")
+        for n in range(cardmarket_match.BUSY_LIMIT + cardmarket_match.WORKERS):
+            make_product(game_set, name=f"Surging Sparks Booster Box {n}", slug=f"ssp-box-{n}", product_type="booster_box")
+
+        def busy(evidence):
+            raise error(anthropic.RateLimitError, 429, "rate_limit_error")
+
+        result = cardmarket_match.run(client=FakeClient(busy))
+        self.assertEqual(result.note, "Anthropic was too busy; the next run carries on")
+        self.assertLess(len(result.errors), cardmarket_match.BUSY_LIMIT + 2 * cardmarket_match.WORKERS)
+        self.assertFalse(CardmarketMatch.objects.exclude(status=CardmarketMatch.Status.NONE).exists())
 
     def test_the_monthly_limit_stops_a_run_before_it_spends(self):
         self.switch_on()

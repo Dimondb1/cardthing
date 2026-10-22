@@ -3165,8 +3165,9 @@ ours whatever happens to the download. Singles are left out. It also keeps
 the European Central Bank's daily pound rate (`ExchangeRate`). A run takes
 seconds; a game that fails to download never stops the others.
 
-**Matching.** `match_cardmarket`, hourly at 29 past (waiting for the Claude
-judge's lock, so one Claude job runs at a time), asks Claude which
+**Matching.** `match_cardmarket`, every 15 minutes from 7 past on its own
+lock (a run still going skips the next; it never waits behind the judge),
+asks Claude which
 Cardmarket product each of ours is: Pokémon first, then the other games,
 products a shop sells now first, and of those the ones viewed most in the
 last 7 days, so the pages people look at get their Price check soonest. The site shortlists up to eight
@@ -3181,11 +3182,19 @@ without asking. Admin, Cardmarket matches lists them all with Confirm and
 Reject; Claude never asks again about one you answered, and asks again
 about any other only when our product or the candidates change.
 
-Cost: it uses the Claude judge's key, model and monthly limit, spends only
-while Claude is switched on in Things to check, and stops a run at $3 or
-120 products. Each question is a ClaudeAsk of kind "Cardmarket match",
-priced and counted with the judge's, so the monthly limit covers both. At
-the judge's typical cost, about $0.02 a product on Opus.
+Speed and cost: picking one of a few shortlisted products is a narrow
+question, so it always asks Claude Sonnet 5.5 at low effort
+(`MATCH_MODEL`, `MATCH_EFFORT`), whatever the judge uses for Things to
+check, six questions at a time (`WORKERS`). It answers in seconds for
+roughly half a cent a product. It began on the judge's own Opus at medium
+effort, one product at a time, once an hour behind the judge's lock, and had
+matched 8 products in its first three hours; now a run gets through up to 600 products, $3 or 13 minutes,
+whichever comes first, so the whole catalogue takes hours, not weeks. A run
+that Anthropic keeps answering "busy" (12 times) stops and the next carries
+on. It uses the judge's key and monthly limit, and spends only while Claude
+is switched on in Things to check. Each question is a ClaudeAsk of kind
+"Cardmarket match", priced and counted with the judge's, so the monthly
+limit covers both.
 
 What it is not: Cardmarket's prices are European, in euros, before post to
 the UK and import costs. They are a reference for the Price check (see

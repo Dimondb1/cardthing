@@ -11,8 +11,9 @@
 # built again every 5 minutes (1 past the fives, on their own lock) when cleared or nearly expired, the floor
 # under the reader, which does it within seconds while it runs; a visitor is served the old copy meanwhile. The alerts (3 past) and the judge (2 past) start off the tens, so no
 # more than two of these Django processes start in the same minute on a 1 GB server. Install with: crontab deploy/crontab
-# Cardmarket's sealed catalogue and price guide are read daily at 6:44, and Claude matches them to our products hourly at
-# 29 past, waiting for the judge's lock so only one Claude job runs at once (it spends only while Claude is switched on).
+# Cardmarket's sealed catalogue and price guide are read daily at 6:44, and Claude matches them to our products every 15
+# minutes from 7 past, on its own lock so it never waits behind the judge, a run skipped while the last still goes (it
+# spends only while Claude is switched on, within its monthly limit).
 # deploy/install.sh writes the same lines (it is the source of truth); catalogue/tests_ops.py fails when they differ.
 # Every command runs under timeout, set to its budget plus five minutes, so a hung command cannot hold a lock for ever.
 # The snapshot, the delivery check and tidy_all put timeout inside flock, so waiting for a long import does not use up their limit.
@@ -29,7 +30,7 @@ PYTHONUNBUFFERED=1
 2-59/5 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 900 flock -n /tmp/ripraptor-judge.lock .venv/bin/python manage.py judge_checks >> /var/log/ripraptor-import.log 2>&1
 51 6 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && flock -w 1200 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py check_set_retail >> /var/log/ripraptor-import.log 2>&1
 44 6 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 900 .venv/bin/python manage.py import_cardmarket >> /var/log/ripraptor-import.log 2>&1
-29 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && flock -w 600 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py match_cardmarket >> /var/log/ripraptor-import.log 2>&1
+7-59/15 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-cardmarket.lock timeout -k 30 840 .venv/bin/python manage.py match_cardmarket >> /var/log/ripraptor-import.log 2>&1
 20 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1
 40 0 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1

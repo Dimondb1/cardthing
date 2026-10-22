@@ -52,7 +52,7 @@ TIMEOUTS = {
     "tidy_referrals": 600,
     "warm_pages": 240,
     "import_cardmarket": 900,
-    "match_cardmarket": 1200,
+    "match_cardmarket": 840,
 }
 
 

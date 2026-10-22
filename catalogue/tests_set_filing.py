@@ -137,8 +137,8 @@ class KoreanSetTests(TestCase):
         product(self.pokemon, "25th Anniversary Collection s8a Korean Booster Box")
         releases.attach_sets(self.pokemon)
         response = self.client.get("/games/pokemon/?lang=ko")
-        self.assertContains(response, ">25th Anniversary Collection (Korean)</a>")
-        self.assertNotContains(response, ">25th Anniversary Collection (Japanese)</a>")
+        self.assertContains(response, '>25th Anniversary Collection (Korean)<span class="set-nav__count')
+        self.assertNotContains(response, '>25th Anniversary Collection (Japanese)<span class="set-nav__count')
 
 
 class NameTests(TestCase):

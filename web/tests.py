@@ -2161,8 +2161,8 @@ class RedesignTests(PageTestCase):
         row = html[html.index('<nav class="set-nav"'):html.index("</nav>", html.index('<nav class="set-nav"'))]
         self.assertIn('<nav class="set-nav" id="sets" aria-label="Sets">', html)
         self.assertNotIn("set-nav__title", row)
-        self.assertIn(f'<a href="{self.pre.get_absolute_url()}">Prismatic Evolutions</a>', row)
-        self.assertIn(f'<a href="{later.get_absolute_url()}">Surging Sparks</a>', row)
+        self.assertIn(f'<a href="{self.pre.get_absolute_url()}">Prismatic Evolutions<span class="set-nav__count', row)
+        self.assertIn(f'<a href="{later.get_absolute_url()}">Surging Sparks<span class="set-nav__count', row)
         self.assertNotIn("aria-current", row)
         self.assertNotIn("All sets", row)
 
@@ -2184,10 +2184,15 @@ class RedesignTests(PageTestCase):
         for n in range(GAME_PAGE_SETS + 3):
             made = make_set(self.game, name=f"Era {n}", slug=f"era-{n}", code="", release_date=date(2030 + n, 1, 1))
             make_product(made, name=f"Era {n} Booster Box", slug=f"era-{n}-box")
+        # Nobody has looked at any set this week, so the newest come first (the sets people want lead otherwise).
+        from catalogue.models import DailyPageView, OutboundClick
+
+        DailyPageView.objects.all().delete()
+        OutboundClick.objects.all().delete()
         queries()   # the saves cleared the cached lists
         html, many = queries()
         row = html[html.index('<nav class="set-nav"'):html.index("</nav>", html.index('<nav class="set-nav"'))]
-        names = re.findall(r'<li><a href="[^"]+">([^<]+)</a></li>', row)
+        names = re.findall(r'<li><a href="[^"]+">([^<]+)<span class="set-nav__count', row)
         self.assertEqual(names, [f"Era {n}" for n in range(GAME_PAGE_SETS + 2, 2, -1)])
         self.assertIn(f'<a class="set-nav__all" href="{reverse("web:games")}#game-pokemon">All sets</a>', row)
         self.assertNotIn("Prismatic Evolutions", row)

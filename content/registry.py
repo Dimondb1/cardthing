@@ -898,6 +898,18 @@ ENTRIES = [
         placeholders=("date",),
     ),
     Entry(
+        "browse.game.set_stock.one", T, "Set chip: in stock (one)",
+        "1 in stock",
+        "Read out after a set's name in the row of sets on a game page; the chip shows the number alone.",
+    ),
+    Entry(
+        "browse.game.set_stock.other", T, "Set chip: in stock (more than one)",
+        "{count} in stock",
+        "Read out after a set's name in the row of sets on a game page; the chip shows the number alone. "
+        "Also used for none.",
+        placeholders=("count",),
+    ),
+    Entry(
         "browse.game.all_sets", B, "All sets link",
         "All sets",
         "Last chip in the row of newest sets on a game page, when the game has more sets than the row shows. "
@@ -1496,6 +1508,21 @@ ENTRIES = [
     Entry("product.fair.basis", T, "Price check: basis",
           "From the cheapest delivered price we have recorded each day since {since}.",
           "At the foot of the price check sheet.", placeholders=("since",)),
+    Entry(
+        "product.instead.title", H, "In stock instead heading",
+        "In stock instead",
+        "Above the closest products shops have in stock, on a product page nobody can sell now.",
+    ),
+    Entry(
+        "product.instead.note", T, "In stock instead note",
+        "Nobody has this in stock. These are the closest products that are.",
+        "Under the In stock instead heading.",
+    ),
+    Entry(
+        "browse.set.instead_note", T, "Sold-out set: In stock instead note",
+        "Nothing from this set is in stock. These are the closest products that are.",
+        "Under the In stock instead heading on a set page nobody has in stock or on pre-order.",
+    ),
     Entry(
         "product.related.title", H, "Related products heading",
         "More from {set}",

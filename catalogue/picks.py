@@ -12,7 +12,9 @@ saving of at least GOOD_SAVING percent on a next shop whose price is in line wit
 30-day low clearly under the month's average (offers.Summary.low_deal).
 """
 
-from django.db.models import Q
+from datetime import date
+
+from django.db.models import Case, IntegerField, Q, Value, When
 
 from . import offers
 from .models import Product
@@ -23,6 +25,8 @@ PICKS_MAX = 8
 CANDIDATES = 120
 # A confirmed saving this big on the next shop is too good to miss.
 GOOD_SAVING = 15
+# In stock instead: how many to show where what a visitor wanted is sold out.
+INSTEAD_MAX = 4
 # Search terms sent, and results read for each, to learn what a visitor is after.
 SEARCHES_READ = 3
 RESULTS_PER_SEARCH = 3
@@ -38,9 +42,11 @@ def from_searches(terms):
     return found
 
 
-def picks(seen, limit=PICKS_MAX):
+def picks(seen, limit=PICKS_MAX, closest_first=False):
     """[(product, summary, hot)] for up to ``limit`` in-stock products like ``seen``, never one of them:
-    the deals too good to miss first, then the closest to what was seen, then the most widely stocked."""
+    the deals too good to miss first, then the closest to what was seen, then the most widely stocked.
+
+    ``closest_first`` (instead) puts the closest first, then the deals, then the newest."""
     seen = [product for product in seen if product is not None]
     if not seen:
         return []
@@ -50,11 +56,16 @@ def picks(seen, limit=PICKS_MAX):
     related = Q(product_set_id__in=sets)
     for game_id, kind in kinds:
         related |= Q(game_id=game_id, product_type=kind)
+    order = ["-in_stock_count", "pk"]
+    if closest_first:
+        # The set's own products are priced first, however many of the kind are in stock across the game.
+        order.insert(0, Case(When(product_set_id__in=sets, then=Value(1)), default=Value(0),
+                             output_field=IntegerField()).desc())
     candidates = list(
         Product.objects.for_lists().in_stock().filter(related)
         .exclude(pk__in=[p.pk for p in seen])
         .prefetch_related(offers.buyable_prefetch())
-        .order_by("-in_stock_count", "pk")[:CANDIDATES]
+        .order_by(*order)[:CANDIDATES]
     )
     week_lows = offers.week_low_map([p.pk for p in candidates])
     ranked = []
@@ -64,6 +75,17 @@ def picks(seen, limit=PICKS_MAX):
             continue
         hot = (summary.percent or 0) >= GOOD_SAVING or summary.low_deal
         closeness = (2 if product.product_set_id in sets else 1) + (product.language in tongues)
-        ranked.append(((hot, closeness, summary.percent or 0, product.in_stock_count), product, summary, hot))
+        if closest_first:
+            key = (closeness, hot, product.release or date.min, summary.percent or 0, product.in_stock_count)
+        else:
+            key = (hot, closeness, summary.percent or 0, product.in_stock_count)
+        ranked.append((key, product, summary, hot))
     ranked.sort(key=lambda row: row[0], reverse=True)
     return [(product, summary, hot) for _, product, summary, hot in ranked[:limit]]
+
+
+def instead(wanted, limit=INSTEAD_MAX):
+    """The next best thing to products nobody has in stock: up to ``limit`` in-stock products closest to
+    ``wanted``, as picks gives them. The same set and language first, then the same set, then the same game and
+    kind in the same language; among those the deals with evidence, then the newest."""
+    return picks(wanted, limit=limit, closest_first=True)

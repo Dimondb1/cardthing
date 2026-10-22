@@ -22,7 +22,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_http_methods, require_POST, require_safe
 
-from catalogue import alerts, clicks, fair_price, images, insights, mail, offers, pricing, traffic
+from catalogue import alerts, clicks, fair_price, images, insights, mail, offers, picks, popularity, pricing, traffic
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
@@ -110,8 +110,11 @@ STOCK_TABS = [("in-stock", "In stock"), ("pre-orders", "Pre-orders"), ("out-of-s
 # Below this many products in the list in view, a game or set page shows no sort or filter choices: a short
 # list is read at a glance. From it up, they fold under one Sort and filter button.
 FILTERS_FROM = 12
-# Sets in the row on a game page, newest first; All sets opens the game's whole list on the Games page.
+# Sets in the row on a game page, the ones people want most this week first (popularity.set_demand), newest first
+# when equal; All sets opens the game's whole list on the Games page.
 GAME_PAGE_SETS = 8
+# A sold-out set page's In stock instead row looks for products like this many of the set's own.
+SET_INSTEAD_FROM = 12
 
 
 def default_tab(counts):
@@ -761,16 +764,25 @@ def game_detail(request, game_slug):
     # Only the page as people land on it needs the numbers and the sets: a tab's list fetched by script shows
     # none of them.
     pane = bool(request.GET.get("pane"))
-    # The newest sets, and one more to know whether All sets is needed. Newest first, spelled out: a distinct
-    # query keeps the model's order only by chance.
-    # Only sets with products in the language and type in view: a Korean list offers only Korean sets.
+    # The sets people want most this week, newest first when equal, each with how many of its products are in
+    # stock: a set everyone is after shows even when it has none, so they can see it and look. Newest first,
+    # spelled out: a distinct query keeps the model's order only by chance.
+    # Only sets with products in the language and type in view: a Korean list offers only Korean sets, and
+    # counts only Korean products in stock.
     in_view = apply_languages(Product.objects.active().filter(game=game), [request.GET.get("lang", "")])
     if request.GET.get("type") in Product.Type.values:
         in_view = in_view.filter(product_type=request.GET["type"])
-    sets = [] if pane else list(
-        ProductSet.objects.filter(game=game, pk__in=in_view.values("product_set_id")).select_related("game")
-        .order_by(F("release_date").desc(nulls_last=True), "name")[:GAME_PAGE_SETS + 1]
-    )
+    sets = []
+    if not pane:
+        stocked = (in_view.in_stock().filter(product_set=OuterRef("pk")).order_by().values("product_set")
+                   .annotate(n=Count("pk")).values("n"))
+        sets = list(
+            ProductSet.objects.filter(game=game, pk__in=in_view.values("product_set_id")).select_related("game")
+            .annotate(in_stock=Coalesce(Subquery(stocked[:1], output_field=IntegerField()), Value(0)))
+            .order_by(F("release_date").desc(nulls_last=True), "name")
+        )
+        wanted = popularity.set_demand([item.pk for item in sets])
+        sets.sort(key=lambda item: -wanted.get(item.pk, 0))   # stable: newest first among equals
     words = hubs.Words(text, request)
     stats = hubs.HubStats() if pane else hubs.hub_stats(game=game)
     meta_title, meta_description = hubs.game_meta(words, game, stats)
@@ -826,6 +838,11 @@ def set_detail(request, game_slug, set_slug):
         request, [(game.name, game.get_absolute_url()), (product_set.name, product_set.get_absolute_url())],
         page_url=page_url,
     )
+    # A released set nobody has in stock or on pre-order: the closest products that are in stock, so a visitor
+    # hunting it has somewhere to go.
+    instead = []
+    if stats.products and not stats.in_stock and not stats.preorder and not upcoming:
+        instead = picks.instead(list(Product.objects.active().filter(product_set=product_set)[:SET_INSTEAD_FROM]))
     return _browse(
         request,
         {
@@ -834,6 +851,7 @@ def set_detail(request, game_slug, set_slug):
             "product_set": product_set,
             "set_upcoming": upcoming,
             "set_facts": facts,
+            "instead": instead,
             "intro": hubs.intro(words, stats, date=intro_date, undated=undated),
             "meta_title": meta_title,
             "meta_description": meta_description,
@@ -1067,6 +1085,10 @@ def product_detail(request, slug):
     fair = (fair_price.verdict(product, cheapest.delivered_price, today, shops=shops_listing)
             if cheapest and cheapest.delivery_known else None)
 
+    # Nothing to buy here: the closest products shops have in stock, so a visitor hunting a sold-out product
+    # has somewhere to go.
+    instead = [] if cheapest else picks.instead([product])
+
     related = []
     if product.product_set_id:
         related = list(
@@ -1216,6 +1238,7 @@ def product_detail(request, slug):
             "amazon_search": search_link(product, "amazon", amazon_search_url(product, listings)),
             "ebay_search": search_link(product, "ebay", ebay_search_url(product, listings)),
             "related": related,
+            "instead": instead,
             "meta_title": meta_title,
             "meta_description": meta_description,
             "canonical_url": request.build_absolute_uri(product.get_absolute_url()),
@@ -1913,8 +1936,6 @@ def picks_api(request):
     What a visitor looked at lives in their browser; the server only ranks and prices, and keeps nothing.
     """
     from django.template.loader import render_to_string
-
-    from catalogue import picks
 
     seen = products_for_slugs(slugs_in(request, RECENT_MAX + WATCHLIST_MAX))
     searches = [term[:80] for term in request.GET.get("s", "").split("|")][:picks.SEARCHES_READ]

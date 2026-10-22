@@ -286,7 +286,59 @@ class GameSetRowTests(HubLayoutTestCase):
     def sets(self, query=""):
         html = self.get(self.url + query)
         row = html[html.index('<nav class="set-nav"'):html.index("</nav>", html.index('<nav class="set-nav"'))]
-        return re.findall(r'<a href="([^"]+)">([^<]+)</a>', row)
+        return re.findall(r'<a href="([^"]+)">([^<]+)<span class="set-nav__count', row)
+
+    def counts(self, query=""):
+        html = self.get(self.url + query)
+        row = html[html.index('<nav class="set-nav"'):html.index("</nav>", html.index('<nav class="set-nav"'))]
+        return dict(re.findall(r'>([^<]+)<span class="set-nav__count[^"]*"><span aria-hidden="true">(\d+)</span>', row))
+
+    def test_each_set_counts_its_products_in_stock_in_the_language_and_type_chosen(self):
+        # The owner: "can it show the number in stock in each button". Only in stock: not pre-orders, not sold out.
+        self.product(self.english, "Duelist Archive Tin", (self.a, STOCK), kind=Product.Type.TIN)
+        self.product(self.english, "Duelist Archive Deck", (self.a, PRE))
+        self.product(self.english, "Duelist Archive Pack", (self.a, OUT))
+        korean = self.product(self.english, "Duelist Archive Korean Box", (self.a, STOCK))
+        Product.objects.filter(pk=korean.pk).update(language="ko")
+        self.assertEqual(self.counts(), {"Duelist Archive": "3", "Korean Pack Set": "1"})
+        self.assertEqual(self.counts("?lang=ko"), {"Duelist Archive": "1", "Korean Pack Set": "1"})
+        self.assertEqual(self.counts("?type=tin"), {"Duelist Archive": "1"})
+        html = self.get(self.url)
+        self.assertIn('<span class="visually-hidden">, 3 in stock</span>', html)
+        # A set with none in stock still shows, at 0 with a grey dot: people looking for it can see it is out.
+        Listing.objects.filter(product__product_set=self.korean).update(availability=OUT)
+        self.assertEqual(self.counts()["Korean Pack Set"], "0")
+        self.assertIn('<span class="set-nav__count set-nav__count--none"><span aria-hidden="true">0</span>', self.get(self.url))
+
+    def test_the_sets_people_want_this_week_come_first(self):
+        from datetime import date
+
+        from catalogue.models import DailyPageView, OutboundClick
+
+        self.english.release_date, self.korean.release_date = date(2025, 1, 1), date(2024, 1, 1)
+        self.english.save()
+        self.korean.save()
+        # Newest first while nobody has looked.
+        self.assertEqual([name for _, name in self.sets()], ["Duelist Archive", "Korean Pack Set"])
+        # A click counts four views: three views of the newer set lose to one click on the older one.
+        today = timezone.localdate()
+        DailyPageView.objects.create(kind=DailyPageView.Kind.PRODUCT, key="duelist-archive-box", date=today, hits=3)
+        OutboundClick.objects.create(product=Product.objects.get(slug="korean-pack-set-box"),
+                                     retailer=self.a, source="game")
+        cache.clear()
+        self.assertEqual([name for _, name in self.sets()], ["Korean Pack Set", "Duelist Archive"])
+        # Views older than the week do not count.
+        DailyPageView.objects.create(kind=DailyPageView.Kind.PRODUCT, key="duelist-archive-box",
+                                     date=today - timedelta(days=8), hits=50)
+        cache.clear()
+        self.assertEqual([name for _, name in self.sets()], ["Korean Pack Set", "Duelist Archive"])
+
+    def test_the_demand_is_two_queries_however_many_sets(self):
+        from catalogue import popularity
+
+        more = [make_set(self.game, name=f"Other {n}", slug=f"other-{n}", code="") for n in range(5)]
+        with self.assertNumQueries(2):
+            popularity.set_demand([self.english.pk, self.korean.pk] + [item.pk for item in more])
 
     def test_the_sets_follow_the_language_and_type_chosen(self):
         self.assertEqual({name for _, name in self.sets()}, {"Duelist Archive", "Korean Pack Set"})

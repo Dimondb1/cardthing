@@ -40,10 +40,22 @@
 {% if sets %}
 <nav class="set-nav" id="sets" aria-label="{% copy 'browse.game.sets_title' %}">
   <ul>
-    {% for item in sets %}<li><a href="{{ item.get_absolute_url }}{{ set_query }}">{{ item.name }}</a></li>{% endfor %}
+    {# Each set with how many of its products are in stock (in the language and type chosen): a dot in the in-stock colour when some are, grey when none. #}
+    {% for item in sets %}<li><a href="{{ item.get_absolute_url }}{{ set_query }}">{{ item.name }}<span class="set-nav__count{% if not item.in_stock %} set-nav__count--none{% endif %}"><span aria-hidden="true">{{ item.in_stock }}</span><span class="visually-hidden">, {% copy_count "browse.game.set_stock" item.in_stock %}</span></span></a></li>{% endfor %}
     {% if more_sets %}<li><a class="set-nav__all" href="{% url 'web:games' %}#game-{{ game.slug }}">{% copy "browse.game.all_sets" %}</a></li>{% endif %}
   </ul>
 </nav>
+{% endif %}
+
+{% if instead %}
+{# A released set nobody has in stock or on pre-order: the closest products that are (catalogue/picks.instead), above its sold-out list. #}
+<section class="block instead" aria-labelledby="instead-title">
+  <div class="section-head">
+    <h2 id="instead-title" class="section-head__title">{% copy "product.instead.title" %}</h2>
+  </div>
+  <p class="section-head__note">{% copy "browse.set.instead_note" %}</p>
+  {% include "web/includes/picks_row.html" with rows=instead place="instead" %}
+</section>
 {% endif %}
 
 {% if stock_tabs %}

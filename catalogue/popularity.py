@@ -63,6 +63,34 @@ def interest_counts(set_ids, today=None):
     return {pk: (views, clicks, reminders) for pk, views, clicks, reminders in rows}
 
 
+def set_demand(set_ids, today=None):
+    """{set id: views + 4 x clicks} over the last DAYS days, for the sets people want right now (the game page's
+    row of sets). A set nobody looked at is left out. Two queries, however many sets and views."""
+    if not set_ids:
+        return {}
+    today = today or timezone.localdate()
+    ids = list(set_ids)
+    set_of = Product.objects.filter(slug=OuterRef("key")).values("product_set_id")[:1]
+    views = (
+        DailyPageView.objects.filter(
+            kind=DailyPageView.Kind.PRODUCT, date__gte=today - timedelta(days=DAYS - 1),
+            key__in=Product.objects.filter(product_set_id__in=ids).values("slug"),
+        )
+        .annotate(set_id=Subquery(set_of)).order_by().values("set_id").annotate(n=Sum("hits")).values_list("set_id", "n")
+    )
+    clicks = (
+        OutboundClick.objects.people()
+        .filter(product__product_set_id__in=ids, created_at__gte=timezone.now() - timedelta(days=DAYS))
+        .order_by().values("product__product_set_id").annotate(n=Count("id")).values_list("product__product_set_id", "n")
+    )
+    found = {}
+    for pk, n in views:
+        found[pk] = found.get(pk, 0) + WEIGHTS["views"] * (n or 0)
+    for pk, n in clicks:
+        found[pk] = found.get(pk, 0) + WEIGHTS["clicks"] * n
+    return found
+
+
 def score(views, clicks, reminders, shops, release_date, today):
     """The formula in this module's docstring."""
     interest = (WEIGHTS["views"] * views + WEIGHTS["clicks"] * clicks

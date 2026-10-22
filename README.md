@@ -2907,9 +2907,16 @@ badge and a bookmark to save it; the cheapest delivered price with the shop
 and Buy now; the two cheapest shops as rows, the cheapest flagged; then
 "Compare N shops" and "Check prices", both opening the product's price list.
 The filters above are one select each for sort, game, type, price and
-language, and two switches, In stock and 2+ shops. A game page lists its 8
-newest sets as chips with no heading on screen (screen readers hear "Sets";
-one row that scrolls sideways on a phone),
+language, and two switches, In stock and 2+ shops (an even grid of equal
+widths: two to a row on a phone, as many as fit wider). A game page lists 8
+sets as chips with no heading on screen (screen readers hear "Sets";
+one row that scrolls sideways on a phone): the sets people want most this
+week first (`popularity.set_demand`: product page views plus four for each
+click to a shop, over seven days), newest first when equal, so a set
+everyone is hunting leads the row even when it is sold out. Each chip shows
+how many of the set's products are in stock in the language and type chosen,
+after a dot in the in-stock colour (grey at none; screen readers hear "12
+in stock"),
 ending in "All sets" when it has more, which opens the game's whole list on
 the Games page (`/games/#game-<slug>`: the Games page shows a game's 8 newest
 sets and keeps the rest in the page, shown by CSS once the address names that
@@ -3514,6 +3521,15 @@ confirmed saving of at least 15% on the next shop, or the lowest price of
 the week), then the closest match (same set, same language), then the most
 widely stocked. It keeps nothing about the visitor, and the request is never
 cached.
+
+**In stock instead** (`picks.instead`). A product page nobody can sell now,
+and a released set page with nothing in stock or on pre-order, show up to 4
+of the closest products shops do have in stock, right under the buy box or
+above the set's list: the same set and language first, then the same set,
+then the same game and kind in the same language; among those, deals with
+evidence first, then the newest. The same ranking as Picked for you with
+closeness put first, so someone hunting a sold-out set has somewhere to go.
+A tap in the row counts as `instead` among the Compare taps.
 
 ## Google Analytics
 

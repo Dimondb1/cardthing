@@ -94,6 +94,17 @@
 </div>
 {% if fair %}{% include "web/includes/fair_sheet.html" %}{% endif %}
 
+{% if instead %}
+{# Nothing to buy here: the closest products shops have in stock (catalogue/picks.instead), right under the sold-out buy box. #}
+<section class="block instead" aria-labelledby="instead-title">
+  <div class="section-head">
+    <h2 id="instead-title" class="section-head__title">{% copy "product.instead.title" %}</h2>
+  </div>
+  <p class="section-head__note">{% copy "product.instead.note" %}</p>
+  {% include "web/includes/picks_row.html" with rows=instead place="instead" %}
+</section>
+{% endif %}
+
 {% if has_listings or amazon_search %}
 <section class="block offers-section" aria-labelledby="offers-title">
   <div class="section-head section-head--tight">

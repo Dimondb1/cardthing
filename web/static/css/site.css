@@ -505,8 +505,8 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .home-section { margin-top: var(--rhythm-home); }
 .home-section .section-head { margin-bottom: var(--rhythm-title); }
 /* A note under a title belongs to the title: close under it, the usual title gap before the content. */
-.home-section .section-head:has(+ .section-head__note) { margin-bottom: var(--space-1); }
-.home-section .section-head + .section-head__note { margin-bottom: var(--rhythm-title); }
+.home-section .section-head:has(+ .section-head__note), .instead .section-head:has(+ .section-head__note) { margin-bottom: var(--space-1); }
+.home-section .section-head + .section-head__note, .instead .section-head + .section-head__note { margin-bottom: var(--rhythm-title); }
 
 /* Trending: horizontal row of product cards */
 .trending {
@@ -655,6 +655,11 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 @media (min-width: 60rem) { .set-nav ul { flex-wrap: wrap; overflow: visible; margin-inline: 0; padding-inline: 0; } }
 .set-nav a { flex: none; display: inline-block; padding: 0.4em 0.9em; border: 1px solid var(--color-line); border-radius: var(--radius-pill); text-decoration: none; color: var(--color-ink-muted); font-size: var(--text-sm); white-space: nowrap; }
 .set-nav a:hover { border-color: var(--color-brand); color: var(--color-brand-text); }
+/* How many of the set's products are in stock, after its name: a dot in the in-stock colour, grey at none. Positioned so
+   the words read out stay inside the row that scrolls, not stretching the page. */
+.set-nav__count { position: relative; display: inline-flex; align-items: center; gap: var(--space-1); margin-left: var(--space-2); color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
+.set-nav__count::before { content: ""; width: var(--stock-dot); height: var(--stock-dot); border-radius: 50%; background: var(--color-in-stock); }
+.set-nav__count--none::before { background: var(--color-line-strong); }
 .set-nav .set-nav__all { border-color: transparent; color: var(--color-brand-text); font-weight: var(--weight-strong); }
 .set-nav .set-nav__all:hover { text-decoration: underline; }
 

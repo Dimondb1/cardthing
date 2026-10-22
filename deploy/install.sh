@@ -99,6 +99,8 @@ ROTATE
 .venv/bin/python manage.py set_types >/dev/null
 .venv/bin/python manage.py collectstatic --noinput -v0
 .venv/bin/python manage.py setup_shops
+# Football cards became Sports cards, filed by product line: now rather than at the next hourly tidy.
+.venv/bin/python manage.py file_sports_cards >/dev/null
 # Products added by hand rather than by a shop read, so they are on the site before any shop lists them.
 .venv/bin/python manage.py import_products catalogue/data/union_arena.csv >/dev/null
 grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/dbip-country.mmdb" >> .env

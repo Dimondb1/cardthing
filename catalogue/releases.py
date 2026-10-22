@@ -42,7 +42,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from .checks import DATE_GAP_DAYS
-from . import languages
+from . import languages, sports
 from .classify import find_game, language_of
 from .models import Game, Listing, Product, ProductSet, Release, ReleaseSourceState
 
@@ -1886,6 +1886,8 @@ def attach_sets(game, product_ids=None, now=None):
     that names one still inside the window waits for the release rules; and either keeps a product from a set
     whose name is only part of the product's.
     """
+    if game.slug == sports.GAME:
+        return sports.attach(game, product_ids, now)   # no source lists sports card sets: their names give them
     now = now or timezone.now()
     today = local_today(now)
     rules, listed = filing_rules(game, today)

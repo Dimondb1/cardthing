@@ -33,12 +33,15 @@ GAMES = [
     ("riftbound", "Riftbound", "Riftbound", ("riftbound",)),
     ("cardfight-vanguard", "Cardfight!! Vanguard", "Vanguard", ("cardfight", "vanguard overdress", "vanguard: overdress")),
     ("weiss-schwarz", "Weiss Schwarz", "Weiss Schwarz", ("weiss schwarz", "weiß schwarz", "weiss-schwarz")),
-    ("football", "Football cards", "Football", ("football", "soccer", "match attax", "adrenalyn", "premier league",
+    # Sports cards: football first, then American football, basketball, baseball and racing. The address stays
+    # football, from when it held football cards only. catalogue/sports.py files them by product line.
+    ("football", "Sports cards", "Sports", ("football", "soccer", "match attax", "adrenalyn", "premier league",
                                                  "champions league", "uefa", "fifa", "topps football", "panini football",
                                                  "world cup", "euros 20", "euro 20", "merlin heritage", "topps merlin",
                                                  "bundesliga", "la liga", "serie a", "topps now", "women's super league",
                                                  "topps tier one", "topps finest", "panini prizm", "panini select",
-                                                 "panini donruss", "panini obsidian", "panini mosaic", "panini score")),
+                                                 "panini donruss", "panini obsidian", "panini mosaic", "panini score",
+                                                 "(nfl)", "(nba)", "(mlb)", "basketball", "baseball", "nascar")),
 ]
 
 # Order matters: the first matching type wins.

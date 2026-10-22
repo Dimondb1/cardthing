@@ -2171,13 +2171,32 @@ old ones too. A set released before the radar's 180 days becomes a set only
 when a product on the site names it by those rules, with its source's date
 (as that source's, so a publisher or your own date stands over it); nothing
 is added that would stand empty, and no set ever comes from product names
-alone. Sets the sources list but the site does not have also stop a product
+alone (sports cards aside, below). Sets the sources list but the site does not have also stop a product
 being filed under a set whose name is only part of the product's ("Black &
 White" in "Black & White Dragons Exalted"). TCGdex's set ids are not the
 codes shops write, so sets from it carry no code; nor does a set whose code a
 source gives to another set as well (YGOPRODeck's SRL is both "Spell Ruler"
 and "Spell Ruler (25th Anniversary Edition)"), so each keeps its own date. A
 back-catalogue set you delete in Admin stays deleted.
+
+**Sports cards by product line** (`catalogue/sports.py`). No release source
+lists sports card releases, so the sports game (once Football cards, still at
+`/games/football/`) takes its sets from its products' names: brand, line and
+league, such as "Panini Prizm Premier League", "Topps Match Attax Extra" or
+"Panini Donruss Optic NFL". Every season of a line is one set, and each
+product's own name keeps its season; a set per season would leave most sets
+holding one product. Basketball, baseball and racing lines carry NBA, MLB or
+NASCAR, and a line made for several sports carries "Football" for its
+football sets. Topps's Champions League lines, renamed UEFA Club Competitions
+in 2022/23, are one line. A line whose name is an everyday word ("One",
+"Select", "Limited") counts only beside its brand's name. A name that names
+no line the file knows (a new brand, a club's own box) is left with no set
+rather than guessed at: add the line to `LINES` (or a league to `LEAGUES`).
+A set's name or a product moved in Admin stays; a renamed set keeps its
+address, which is how new products still find it. The hourly tidy files new
+products, and `python manage.py file_sports_cards`, which `install.sh` runs
+once after an update, renames the game from Football cards (a name you give
+it in Admin stays) and files them straight away.
 
 **Set codes no source lists.** For Digimon, Riftbound and Dragon Ball Super
 Masters the hourly `tidy_all` puts each set code in the names of products
@@ -2416,7 +2435,9 @@ index.
 The games the classifier recognises are listed in `catalogue/classify.py`
 (`GAMES`): Pokémon, Magic, One Piece, Lorcana, Yu-Gi-Oh, Star Wars
 Unlimited, Flesh and Blood, Digimon, Dragon Ball Super, Riftbound,
-Cardfight!! Vanguard, Weiss Schwarz, Union Arena and football cards. A game is created
+Cardfight!! Vanguard, Weiss Schwarz, Union Arena and sports cards (football,
+American football, basketball, baseball and racing, filed by product line:
+see Filing products under sets). A game is created
 in the database the first time a shop product of it is imported, so adding
 one means adding its words there, its filter labels in
 `catalogue/types.py`, its eBay search word in `catalogue/ebay.py` and its
@@ -2495,7 +2516,7 @@ language in words ("... (Japanese)").
 `catalogue/types.py` lists, for each game, which product types it has and
 what its players call them: Play booster box and Commander deck for
 Magic, Structure deck for Yu-Gi-Oh, Illumineer's Trove for Lorcana, Hobby
-or retail box for football, and so on. The type filter on game, set,
+or retail box for sports cards, and so on. The type filter on game, set,
 search and swipe pages offers only the types that game's catalogue holds,
 in the game's words, and product pages use the same words. Magic's
 collector boosters are their own types, and `tidy_catalogue` retypes any

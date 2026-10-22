@@ -20,12 +20,14 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from catalogue import releases
+from catalogue import releases, sports
 from catalogue.models import Game, Product
 
 
 def explain(name, rules, listed, game_slug):
     """Why a product is left with no set, in a few words."""
+    if game_slug == sports.GAME:
+        return "its name names no product line catalogue/sports.py knows"
     if not rules:
         return "the game has no sets"
     chosen, why = releases.choose_set_why(name, rules, game_slug)

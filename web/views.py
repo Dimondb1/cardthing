@@ -111,7 +111,7 @@ STOCK_TABS = [("in-stock", "In stock"), ("pre-orders", "Pre-orders"), ("out-of-s
 # list is read at a glance. From it up, they fold under one Sort and filter button.
 FILTERS_FROM = 12
 # Sets in the row on a game page, the ones people want most this week first (popularity.set_demand), newest first
-# when equal; All sets opens the game's whole list on the Games page.
+# when equal, then the most in stock; All sets opens the game's whole list on the Games page.
 GAME_PAGE_SETS = 8
 # A sold-out set page's In stock instead row looks for products like this many of the set's own.
 SET_INSTEAD_FROM = 12
@@ -779,7 +779,8 @@ def game_detail(request, game_slug):
         sets = list(
             ProductSet.objects.filter(game=game, pk__in=in_view.values("product_set_id")).select_related("game")
             .annotate(in_stock=Coalesce(Subquery(stocked[:1], output_field=IntegerField()), Value(0)))
-            .order_by(F("release_date").desc(nulls_last=True), "name")
+            # Undated sets (sports card lines) with the most in stock first, not by name.
+            .order_by(F("release_date").desc(nulls_last=True), "-in_stock", "name")
         )
         wanted = popularity.set_demand([item.pk for item in sets])
         sets.sort(key=lambda item: -wanted.get(item.pk, 0))   # stable: newest first among equals

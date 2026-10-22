@@ -2829,7 +2829,7 @@ up to a year back and not counting today:
 
 | Band | Shown as | When |
 | --- | --- | --- |
-| 5 | Lowest yet | at or below the lowest recorded |
+| 5 | Lowest yet | at least 5% under the average and at or below the lowest recorded |
 | 4 | Good price | at least 5% under the average |
 | 3 | Fair price | within 5% of the average |
 | 2 | Above average | up to 15% over it |
@@ -2837,6 +2837,14 @@ up to a year back and not counting today:
 
 - No price check shows until a product has 14 days of prices before today,
   or when the cheapest shop's delivery cost is unknown. Nothing is guessed.
+- No price check shows for a product only one UK shop lists (in stock or
+  not, `MIN_SHOPS`): one shop's price measured against its own past says
+  nothing about the market. A lone £1,199.99 Ultra Shiny GX box was being
+  called "Lowest yet" because its price had never moved; it now gets no
+  verdict, and no badge (see Featured deals).
+- A price that has never moved is its own lowest every day. That is a fair
+  price, never "Lowest yet": the lowest band also needs the price to be 5%
+  under the average.
 - The record is ours: it lives in the database whatever happens to any shop
   or source, so the price check keeps working if a source stops. No outside
   price data is read yet; backfilling older prices from another source would
@@ -2940,7 +2948,11 @@ strongest first, each card naming its evidence:
   anywhere on the site: cards, the Deals page's biggest savings, picks.
 
 The same 30-day low shows as a "Lowest in 30 days" badge on product pages
-and cards, ahead of the week's badges. "Too good to miss" on Picked for you
+and cards, ahead of the week's badges, and only when it is that 3% under the
+month's average. "Best in 7 days" needs the week to have been dearer at some
+point. A product only one UK shop lists gets no badge at all, and is never a
+featured deal or on Lowest in 90 days: there is no other price to judge it
+against. "Too good to miss" on Picked for you
 needs a 15% saving on a shop in line with the market, or the 30-day low.
 The rules and their numbers are at the top of `catalogue/offers.py`.
 
@@ -3057,6 +3069,12 @@ cron, posts news to the channels set up in admin (`catalogue/discord.py`):
   by at least the channel's smallest drop.
 - Out today: a set's release day, from 8am UK time, with its cheapest
   offer.
+
+Back in stock and Pre-orders open posts carry the product's Price check
+under the price ("Price check: High price, against an average of £42.00
+over 20 days."), so a dear restock says so, whenever the product has one
+(see Price check). When only one UK shop lists the product the post says
+there is no other price to compare with instead.
 
 Each channel has its own page in admin, under Discord channels: its name
 (for you), its webhook address, which of the four updates it gets, which

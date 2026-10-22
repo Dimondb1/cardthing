@@ -34,7 +34,7 @@ from django.utils import timezone
 
 from content import service as copy
 
-from . import drops, pricing
+from . import drops, fair_price, pricing
 from .alerts import MARKETPLACES
 from .images import sized_image_url
 from .models import DiscordChannel, DiscordPost, Listing, PreorderOpen, ProductSet, Restock
@@ -98,6 +98,22 @@ def price_words(price, delivery_known, checked, store):
                     time=timezone.localtime(checked).strftime("%H:%M"))
 
 
+def price_check_words(product, price, delivery_known, store):
+    """The Price check line for a restock or pre-order post (catalogue/fair_price.py): the verdict and the
+    average it is measured against, so a dear restock says so; a caveat when only one UK shop lists the product,
+    whose price then has nothing to be compared with; or "" while there is no verdict yet. One query, two more
+    with a verdict."""
+    shops = (Listing.objects.filter(product=product, is_active=True, retailer__is_active=True)
+             .exclude(sanity=Listing.Sanity.EXCLUDED).values("retailer_id").distinct().count())
+    if shops < fair_price.MIN_SHOPS:
+        return copy.get("discord.fair.one_shop", store=store)
+    found = fair_price.verdict(product, price, shops=shops) if delivery_known else None
+    if found is None:
+        return ""
+    return copy.get("discord.fair.line", store=store, verdict=copy.get(f"product.fair.verdict_{found.key}", store=store),
+                    average=f"£{found.average:.2f}", days=found.days)
+
+
 def look_back(channel):
     return max(LOOK_BACK, timedelta(minutes=channel.every_minutes) + timedelta(hours=1))
 
@@ -109,7 +125,7 @@ def shop_news(model, kind, title_key, availability, now, store, channel, games):
         model.objects.filter(at__gte=now - look_back(channel), product__is_active=True, retailer__is_active=True,
                              listing__is_active=True, listing__availability=availability)
         .exclude(retailer__source_type__in=MARKETPLACES).exclude(listing__sanity=Listing.Sanity.EXCLUDED)
-        .select_related("product").order_by("-at")
+        .select_related("product__game").order_by("-at")
     )
     if games:
         rows = rows.filter(product__game_id__in=games)
@@ -119,8 +135,10 @@ def shop_news(model, kind, title_key, availability, now, store, channel, games):
         if key in seen:
             continue
         seen.add(key)
+        check = price_check_words(row.product, row.price, row.delivery_known, store)
+        body = price_words(row.price, row.delivery_known, row.at, store)
         yield Post(key=key, title=copy.get(title_key, store=store, product=row.product.name),
-                   body=price_words(row.price, row.delivery_known, row.at, store),
+                   body=f"{body}\n{check}" if check else body,
                    path=row.product.get_absolute_url(), image=row.product.image_src, at=row.at)
 
 

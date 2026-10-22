@@ -1033,6 +1033,10 @@ def product_detail(request, slug):
     ]
     cheapest = current[0] if current else None
     shop_count = len({listing.retailer_id for listing in current})
+    # Every UK shop listing it, in stock or not: with one, its price has nothing to be compared with, so no
+    # badge or Price check calls it a good one (offers.summarise, fair_price.verdict).
+    shops_listing = len({listing.retailer_id for listing in listings if listing.sanity != Listing.Sanity.EXCLUDED})
+    product.listing_count = shops_listing
     product.offers = current
     summary = offers.summarise(product, offers.week_low_map([product.pk]))
 
@@ -1060,7 +1064,8 @@ def product_detail(request, slug):
     restocks = pricing.restock_summary(product) if listings else None
     # Price check: today's cheapest delivered price against our own daily record. None while on trial
     # outside Pokémon, without enough days, or when the delivery cost is unknown.
-    fair = fair_price.verdict(product, cheapest.delivered_price, today) if cheapest and cheapest.delivery_known else None
+    fair = (fair_price.verdict(product, cheapest.delivered_price, today, shops=shops_listing)
+            if cheapest and cheapest.delivery_known else None)
 
     related = []
     if product.product_set_id:

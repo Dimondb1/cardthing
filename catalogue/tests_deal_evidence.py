@@ -18,10 +18,13 @@ class DealEvidenceTests(TestCase):
         self.product_set = make_set(make_game())
         self.shops = [make_retailer(name) for name in ("Harbour Games", "Northgate Cards", "Tollgate TCG")]
 
-    def product(self, slug, *prices, history=()):
+    def product(self, slug, *prices, history=(), listed_by=2):
         product = make_product(self.product_set, name=slug.replace("-", " ").title(), slug=slug)
         for shop, price in zip(self.shops, prices):
             make_listing(product, shop, price=price, delivery="0.00")
+        # Shops listing it but sold out, so it is listed by ``listed_by`` shops in all: a price with a market.
+        for shop in self.shops[len(prices):listed_by]:
+            make_listing(product, shop, price="999.00", delivery="0.00", availability="out_of_stock")
         for back, price in enumerate(reversed(history), start=1):
             DailyLowestPrice.objects.create(product=product, date=self.today - timedelta(days=back), price=Decimal(price))
         return product
@@ -55,14 +58,20 @@ class DealEvidenceTests(TestCase):
         self.assertTrue(dropped.low_deal and dropped.is_deal)
         # A price that never moved is its own low every day: true, and no deal.
         flat = self.summary(self.product("flat", "60.00", history=["60.00"] * 20))
-        self.assertEqual((flat.badge, flat.under), (offers.LOW_30, 0))
         self.assertFalse(flat.is_deal)
-        # Too few days to verify a month: the week's badges as before.
+        self.assertIsNone(flat.badge)
+        # Too few days to verify a month: the week's badges, and "best in 7 days" only if the week was dearer.
         short = self.summary(self.product("short", "55.00", history=["60.00"] * 10))
         self.assertEqual(short.badge, offers.BEST_WEEK)
         above = self.summary(self.product("above", "65.00", history=["60.00"] * 10))
         self.assertEqual(above.badge, offers.LOWEST_TODAY)
         self.assertFalse(above.is_deal)
+        self.assertIsNone(self.summary(self.product("same-week", "60.00", history=["60.00"] * 10)).badge)
+
+    def test_a_product_one_shop_lists_gets_no_badge_whatever_its_history(self):
+        dropped = self.summary(self.product("lone-drop", "55.00", history=["60.00"] * 20, listed_by=1))
+        self.assertIsNone(dropped.badge)
+        self.assertFalse(dropped.is_deal)
 
     def test_the_lows_are_read_in_one_query(self):
         products = [self.product(f"p{n}", "50.00", history=["55.00"] * 30) for n in range(3)]

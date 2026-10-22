@@ -59,6 +59,22 @@ class DiscordTests(TestCase):
         outbox = outbox or Outbox()
         return discord.run(now=self.now + timedelta(minutes=minutes_later), post=outbox), outbox
 
+    def test_a_restock_says_what_the_price_check_says_so_a_dear_one_is_called_dear(self):
+        self.channel()
+        self.run_once()   # the first run only notes what is there
+        restock = self.restock("Prismatic Evolutions Elite Trainer Box", minutes_ago=2)
+        make_listing(restock.product, make_retailer("Northgate Cards"), price="60.00",
+                     availability=Listing.Availability.OUT_OF_STOCK)
+        today = timezone.localdate(self.now)
+        DailyLowestPrice.objects.bulk_create([
+            DailyLowestPrice(product=restock.product, date=today - timedelta(days=back), price=Decimal("42.00"))
+            for back in range(1, 21)
+        ])
+        _sent, outbox = self.run_once()
+        [(_url, data)] = outbox.sent
+        self.assertTrue(data["embeds"][0]["description"].endswith(
+            "\nPrice check: High price, against an average of £42.00 over 20 days."))
+
     def test_nothing_is_posted_until_a_channel_is_set_up(self):
         self.restock("Surging Sparks Booster Box")
         sent, outbox = self.run_once()
@@ -79,8 +95,10 @@ class DiscordTests(TestCase):
         self.assertEqual(url, HOOK)
         [embed] = data["embeds"]
         self.assertEqual(embed["title"], "Back in stock: Prismatic Evolutions Elite Trainer Box")
+        # Only one UK shop lists it here, so the post says its price has nothing to be compared with.
         self.assertEqual(embed["description"],
-                         f"£50.00 delivered, checked at {timezone.localtime(fresh.at):%H:%M}. Compare every UK shop on RipRaptor.")
+                         f"£50.00 delivered, checked at {timezone.localtime(fresh.at):%H:%M}. Compare every UK shop on RipRaptor.\n"
+                         "Only one UK shop we check lists it, so there is no other price to compare with.")
         self.assertEqual(embed["url"], f"https://ripraptor.com{fresh.product.get_absolute_url()}"
                                        "?utm_source=discord&utm_medium=social&utm_campaign=alerts")
         self.assertIn("commission", embed["footer"]["text"])

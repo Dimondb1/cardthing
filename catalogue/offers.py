@@ -10,11 +10,14 @@ Deal claims rest on evidence, not on one dear listing:
   £250 cheapest says that shop is dear, not that £250 is a bargain.
 * "Lowest in 30 days" (LOW_30) is verified from our own daily record: today's
   cheapest delivered price is at or below every day's cheapest over the last
-  LOW_DAYS, with at least LOW_MIN_DAYS of them recorded.
+  LOW_DAYS, with at least LOW_MIN_DAYS of them recorded, and LOW_UNDER below
+  that month's average (a price that never moved is always its own low, and
+  that is no news). "Best in 7 days" likewise needs the week to have been
+  dearer at some point.
+* No badge at all for a product only one UK shop lists: its price measured
+  against its own past says nothing about the market.
 * A product is a deal (Summary.is_deal: featured deals, Too good to miss)
-  only with a 30-day low that is also LOW_UNDER below that month's average
-  (a price that never moved is always its own low), or a credible saving of
-  at least DEAL_PERCENT.
+  only with such a 30-day low, or a credible saving of at least DEAL_PERCENT.
 """
 
 from datetime import timedelta
@@ -78,8 +81,8 @@ class Summary:
 
     @property
     def low_deal(self):
-        """A verified 30-day low that is also clearly under the month's average."""
-        return self.badge == LOW_30 and (self.under or 0) >= LOW_UNDER * 100
+        """A verified 30-day low clearly under the month's average (the LOW_30 badge is only given for one)."""
+        return self.badge == LOW_30
 
     @property
     def is_deal(self):
@@ -96,10 +99,10 @@ class Lows:
     """A product's recent daily cheapest prices (week_low_map): the lowest of the trending window, and the lowest,
     average and number of days over LOW_DAYS."""
 
-    __slots__ = ("week", "month", "average", "days")
+    __slots__ = ("week", "week_high", "month", "average", "days")
 
     def __init__(self):
-        self.week = self.month = self.average = None
+        self.week = self.week_high = self.month = self.average = None
         self.days = 0
 
 
@@ -156,13 +159,19 @@ def summarise(product, week_lows=None):
             saving = percent = None
     badge = under = None
     lows = week_lows.get(product.pk) if week_lows is not None else None
-    if best and best.delivery_known and not suspect and lows is not None:
+    # Shops listing it, in stock or not (with_prices' listing_count, or the product page's own count).
+    shops = max(len({offer.retailer_id for offer in offers}), getattr(product, "listing_count", 0) or 0)
+    if best and best.delivery_known and not suspect and lows is not None and shops >= 2:
         price = best.delivered_price
-        if lows.days >= LOW_MIN_DAYS and price <= lows.month:
-            badge = LOW_30
+        if lows.days >= LOW_MIN_DAYS and lows.average and price <= lows.month:
             under = int(((lows.average - price) / lows.average * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-        elif lows.week is not None:
-            badge = BEST_WEEK if price <= lows.week else LOWEST_TODAY
+        if under is not None and under >= LOW_UNDER * 100:
+            badge = LOW_30
+        elif lows.week is not None and price <= lows.week and price < lows.week_high:
+            badge = BEST_WEEK
+        elif lows.week is not None and price > lows.week:
+            badge = LOWEST_TODAY
+        under = under if badge == LOW_30 else None
     return Summary(best, second, saving, percent, badge, suspect, best_deal(offers, best), under)
 
 
@@ -178,8 +187,11 @@ def week_low_map(product_ids, days=None, today=None):
     ).values_list("product_id", "date", "price")
     for pk, day, price in rows:
         row = lows.setdefault(pk, Lows())
-        if day >= week_from and (row.week is None or price < row.week):
-            row.week = price
+        if day >= week_from:
+            if row.week is None or price < row.week:
+                row.week = price
+            if row.week_high is None or price > row.week_high:
+                row.week_high = price
         if day >= month_from:
             row.days += 1
             totals[pk] = totals.get(pk, 0) + price

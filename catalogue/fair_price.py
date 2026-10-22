@@ -4,14 +4,18 @@ one row a day (DailyLowestPrice), which the site keeps whatever happens to any s
 
 Today's cheapest delivered price is set against the days before today, back up to WINDOW_DAYS:
 
-    5  lowest   Lowest we've seen   at or below the lowest of those days
+    5  lowest   Lowest yet          at least GOOD under their average, and at or below the lowest of those days
     4  good     Good price          at least GOOD under their average
     3  fair     Fair price          within GOOD of it
     2  above    Above average       up to HIGH over it
     1  high     High price          more than HIGH over it
 
-A product gets no verdict without MIN_DAYS days of prices before today, or without a delivered price now (a
-shop whose delivery is unknown), and only in the games in GAMES while this is on trial.
+A price that has never moved is its own lowest every day: that is a fair price, never "Lowest yet".
+
+A product gets no verdict without MIN_SHOPS UK shops listing it: one shop's prices measured against its own
+past say nothing about the market, so a lone £1,199.99 listing is never called a good price. Nor without
+MIN_DAYS days of prices before today, or without a delivered price now (a shop whose delivery is unknown), and
+only in the games in GAMES while this is on trial.
 
 at_lowest lists the products whose cheapest delivered price now is the lowest of the last LOW_DAYS, for the
 Deals page.
@@ -30,6 +34,7 @@ from .offers import MAX_REAL_PERCENT
 GAMES = {"pokemon"}
 WINDOW_DAYS = 365
 MIN_DAYS = 14
+MIN_SHOPS = 2
 GOOD = Decimal("0.05")
 HIGH = Decimal("0.15")
 LOW_DAYS = 90       # at_lowest: the lowest of this many days back
@@ -62,10 +67,8 @@ def applies(product):
 
 
 def band_for(price, average, low):
-    if price <= low:
-        return LOWEST
     if price <= average * (1 - GOOD):
-        return GOOD_PRICE
+        return LOWEST if price <= low else GOOD_PRICE
     if price <= average * (1 + GOOD):
         return FAIR
     if price <= average * (1 + HIGH):
@@ -73,9 +76,10 @@ def band_for(price, average, low):
     return HIGH_PRICE
 
 
-def verdict(product, price, today=None):
-    """The Verdict for ``product`` at ``price`` (its cheapest delivered price now), or None. Two queries."""
-    if price is None or not applies(product):
+def verdict(product, price, today=None, shops=MIN_SHOPS):
+    """The Verdict for ``product`` at ``price`` (its cheapest delivered price now), or None. ``shops`` is how
+    many UK shops list it, in stock or not. Two queries."""
+    if price is None or shops < MIN_SHOPS or not applies(product):
         return None
     today = today or timezone.localdate()
     rows = DailyLowestPrice.objects.filter(product=product, date__lt=today, date__gte=today - timedelta(days=WINDOW_DAYS))
@@ -92,9 +96,9 @@ def verdict(product, price, today=None):
 
 
 def at_lowest(limit=12, today=None):
-    """Products in GAMES whose cheapest confirmed delivered price now is at or below the lowest of the LOW_DAYS
-    before today, with at least MIN_DAYS of them, and at least GOOD under their average: a price that has never
-    moved is not news. Biggest saving on the average first, each with ``low_average`` (that average) and
+    """Products in GAMES, listed by MIN_SHOPS shops or more, whose cheapest confirmed delivered price now is at or
+    below the lowest of the LOW_DAYS before today, with at least MIN_DAYS of them, and at least GOOD under their
+    average: a price that has never moved is not news. Biggest saving on the average first, each with ``low_average`` (that average) and
     ``low_days``. One query.
     """
     from .pricing import doubtful_low
@@ -109,7 +113,7 @@ def at_lowest(limit=12, today=None):
         return Subquery(window.annotate(value=aggregate).values("value"), output_field=field)
 
     return list(
-        Product.objects.for_lists().priced().filter(game__slug__in=GAMES)
+        Product.objects.for_lists().priced().filter(game__slug__in=GAMES, listing_count__gte=MIN_SHOPS)
         .annotate(
             low_days=summary(Count("pk"), IntegerField()),
             low_before=summary(Min("price"), money),

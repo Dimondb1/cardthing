@@ -45,10 +45,10 @@ class VerdictTests(TestCase):
         self.assertIsNone(fair_price.verdict(self.etb, None, self.today))
 
     def test_bands_against_the_average_and_the_low(self):
-        record(self.etb, ["48.00"] + ["50.00"] * 9 + ["52.00"] * 10, self.today)
-        # Average 50.90, lowest 48.00.
-        cases = [("48.00", "lowest"), ("47.50", "lowest"), ("48.35", "good"), ("50.90", "fair"), ("53.44", "fair"),
-                 ("53.45", "above"), ("58.53", "above"), ("58.54", "high")]
+        record(self.etb, ["46.00"] + ["50.00"] * 9 + ["52.00"] * 10, self.today)
+        # Average 50.80, lowest 46.00: lowest yet only at or under both 46.00 and 48.26 (5% under the average).
+        cases = [("46.00", "lowest"), ("45.50", "lowest"), ("46.01", "good"), ("48.26", "good"), ("48.27", "fair"),
+                 ("50.80", "fair"), ("53.34", "fair"), ("53.35", "above"), ("58.42", "above"), ("58.43", "high")]
         for price, key in cases:
             with self.subTest(price=price):
                 self.assertEqual(fair_price.verdict(self.etb, Decimal(price), self.today).key, key)
@@ -70,6 +70,9 @@ class ProductPageTests(TestCase):
         self.today = timezone.localdate()
         self.etb = make_product(make_set(make_game()), slug="pre-etb")
         self.harbour = make_retailer("Harbour Games")
+        # A second shop, sold out: two UK shops list it, so its price has something to be compared with.
+        make_listing(self.etb, make_retailer("Northgate Cards"), price="70.00", delivery="0.00",
+                     availability="out_of_stock")
 
     def test_the_price_check_shows_beside_the_cheapest_price_and_opens_its_sheet(self):
         record(self.etb, ["50.00"] + ["60.00"] * 19, self.today)
@@ -107,11 +110,14 @@ class AtLowestTests(TestCase):
         self.today = timezone.localdate()
         self.pokemon = make_set(make_game())
         self.harbour = make_retailer("Harbour Games")
+        self.northgate = make_retailer("Northgate Cards")
 
-    def product(self, slug, history, now, game_set=None):
+    def product(self, slug, history, now, game_set=None, shops=2):
         product = make_product(game_set or self.pokemon, name=slug.replace("-", " ").title(), slug=slug)
         record(product, history, self.today)
         make_listing(product, self.harbour, price=now, delivery="0.00")
+        if shops > 1:
+            make_listing(product, self.northgate, price="999.00", delivery="0.00", availability="out_of_stock")
         return product
 
     def test_only_products_at_their_low_and_well_under_their_average(self):
@@ -123,6 +129,7 @@ class AtLowestTests(TestCase):
         self.product("huge-fall", ["100.00"] * 20, "20.00")          # a wrong link, not a low
         lorcana = make_set(make_game("Disney Lorcana", "lorcana"), name="The First Chapter", slug="tfc", code="TFC")
         self.product("lorcana-box", ["100.00"] * 20, "80.00", game_set=lorcana)   # not on trial
+        self.product("one-shop", ["100.00"] * 20, "80.00", shops=1)   # nothing to compare its price with
         with self.assertNumQueries(1):
             rows = fair_price.at_lowest(today=self.today)
         self.assertEqual(rows, [deep, shallow])
@@ -135,6 +142,7 @@ class AtLowestTests(TestCase):
             DailyLowestPrice.objects.create(product=product, date=self.today - timedelta(days=back), price=Decimal("30"))
         record(product, ["100.00"] * 20, self.today)
         make_listing(product, self.harbour, price="80.00", delivery="0.00")
+        make_listing(product, self.northgate, price="90.00", delivery="0.00")
         self.assertEqual(fair_price.at_lowest(today=self.today), [product])
 
     def test_the_deals_page_lists_them(self):
@@ -143,3 +151,34 @@ class AtLowestTests(TestCase):
         self.assertContains(response, "Lowest in 90 days")
         self.assertContains(response, "Average £99.00")
         self.assertContains(response, "Deep")
+
+
+class OneShopTests(TestCase):
+    """The owner's case: Ultra Shiny GX at £1,199.99, listed by one UK shop, its price never moved. Nothing on the
+    page may call that a good price: not the Price check, not a badge."""
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        self.box = make_product(make_set(make_game(), name="Ultra Shiny GX", slug="sm8b", code="SM8B"),
+                                name="Ultra Shiny GX sm8b Japanese Booster Box", slug="sm8b-box",
+                                product_type="booster_box")
+        record(self.box, ["1199.99"] * 30, self.today)
+        self.japan = make_listing(self.box, make_retailer("Japan2UK"), price="1199.99", delivery="0.00")
+
+    def test_one_shop_gets_no_price_check_and_no_badge(self):
+        response = self.client.get(self.box.get_absolute_url())
+        self.assertIsNone(response.context["fair"])
+        self.assertIsNone(response.context["summary"].badge)
+        for words in ("Lowest in 30 days", "Lowest yet", "Best in 7 days", "Lowest today", "data-fair-open"):
+            self.assertNotContains(response, words)
+        self.assertIsNone(fair_price.verdict(self.box, Decimal("1199.99"), self.today, shops=1))
+
+    def test_a_second_shop_lets_the_price_be_judged_and_a_flat_price_is_only_fair(self):
+        make_listing(self.box, make_retailer("Harbour Games"), price="1250.00", delivery="0.00",
+                     availability="out_of_stock")
+        response = self.client.get(self.box.get_absolute_url())
+        # Its own lowest every day, because it never moved: a fair price, never "Lowest yet" or a 30-day low.
+        self.assertEqual(response.context["fair"].key, "fair")
+        self.assertNotEqual(response.context["summary"].badge, "low_30")
+        self.assertNotContains(response, "Lowest in 30 days")
+        self.assertNotContains(response, "Lowest yet")

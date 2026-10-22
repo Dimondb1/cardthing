@@ -1113,6 +1113,22 @@ class RemovedShop(models.Model):
         cls.matching(retailer.slug, retailer.website).delete()
 
 
+class DiscordPost(models.Model):
+    """One piece of news catalogue/discord.py has posted to the owner's Discord, so it is posted once. A key
+    "seeded-<kind>" marks that the kind's first run has noted what was already there. Kept 30 days."""
+
+    key = models.CharField(max_length=120, unique=True)
+    kind = models.CharField(max_length=20)
+    posted_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-posted_at"]
+        verbose_name = "Discord post"
+
+    def __str__(self):
+        return self.key
+
+
 class PreorderOpen(models.Model):
     """One time a shop opened pre-orders on a product it already listed as out of stock.
 

@@ -41,6 +41,7 @@ TIMEOUTS = {
     "send_stock_alerts": 540,
     "send_drop_alerts": 540,
     "send_search_alerts": 540,
+    "post_discord": 300,
     "snapshot_daily_prices": 1800,
     "check_delivery": 3000,
     "fetch_geoip": 1800,
@@ -211,13 +212,13 @@ class UploadLimitTests(TestCase):
 class CronTests(TestCase):
     def test_install_sh_and_crontab_carry_identical_cron_lines(self):
         installed = install_cron()
-        self.assertEqual(len(installed), 15)
+        self.assertEqual(len(installed), 16)
         self.assertEqual(installed, file_cron())
 
     def test_both_files_load_the_settings_before_every_command(self):
         for name, block in (("install.sh", install_block()), ("crontab", (DEPLOY / "crontab").read_text())):
             commands = [SCHEDULE.match(raw.strip()).group(2) for raw in block.splitlines() if "manage.py" in raw]
-            self.assertEqual(len(commands), 15, name)
+            self.assertEqual(len(commands), 16, name)
             for command in commands:
                 self.assertRegex(command, PREFIX, name)
 
@@ -340,6 +341,9 @@ class CronTests(TestCase):
         self.assertIn("flock -n /tmp/ripraptor-search-alerts.lock .venv/bin/python manage.py send_search_alerts",
                       lines["send_search_alerts"][1])
         self.assertNotIn("--if-worker-dead", lines["send_search_alerts"][1])
+        # The Discord posts every ten minutes at 8 past, a minute no other command starts on, on their own lock.
+        self.assertEqual(lines["post_discord"][0], "8-58/10 * * * *")
+        self.assertIn("flock -n /tmp/ripraptor-discord.lock .venv/bin/python manage.py post_discord", lines["post_discord"][1])
 
     def test_the_worker_unit_restarts_it_under_a_watchdog_and_install_starts_it(self):
         unit = (DEPLOY / "ripraptor-worker.service").read_text()

@@ -2348,6 +2348,8 @@ index.
 | `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
 | `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
+| `RIPRAPTOR_DISCORD_WEBHOOK`    |         | A Discord channel's webhook address. Turns on `post_discord` (restocks, pre-orders, price drops, drop days). Keep it secret. |
+| `RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS`, `_PRICE_DROPS`, `_DROPS` | | Optional: a channel of their own for restocks and pre-orders, price drops, and sets out today. Each falls back to `RIPRAPTOR_DISCORD_WEBHOOK`. |
 | `RIPRAPTOR_PREORDER_ALERTS_FROM` | written by install.sh | ISO date or date and time (UK time without a zone). Alerts asked for from then on are also emailed when a shop opens pre-orders. `deploy/install.sh` adds it with the install moment when it is missing and never moves it. Empty means no pre-order emails. A value that does not parse stops the site starting. |
 | `RIPRAPTOR_INBOX_NOTIFY_EMAIL` |         | Your own address. Each new Message us message is emailed to it through ZeptoMail with a link to reply in admin, and so are crawl problems (see below). Never shown on the site. |
 | `RIPRAPTOR_NTFY_TOPIC`         |         | A long, unguessable ntfy topic name. Each new message, and each crawl problem, sends a push to the free ntfy phone app subscribed to it. The push holds only a title and a link to admin, never a name, the words, a shop, a product or a price. |
@@ -2895,31 +2897,6 @@ instead and Track price does not.
 
 ## Share on product pages
 
-Next to Save and Track price, "Share" opens a panel (in place with
-JavaScript, by the link's `#share` without it; opening one panel closes
-the other). It holds:
-
-- "Post to Reddit": Reddit's own post form (`reddit.com/submit`) with the
-  product's link and a title ("<product>: UK prices compared",
-  `product.share.reddit_title`) filled in. A plain link, so it works
-  without JavaScript.
-- "Copy for Instagram" and "Copy for TikTok": neither app takes a link
-  from a web page, so these copy the link and say where to paste it (a
-  story's link sticker, a message or a bio). They need JavaScript and a
-  secure page.
-- "More ways to share": the phone's own share sheet, where the browser has
-  one.
-- The page's plain address in a box to copy by hand.
-
-Every link a button shares carries `utm_source` (reddit, instagram, tiktok
-or share_sheet), `utm_medium=social` and `utm_campaign=product_share`, so
-Google Analytics shows which network sends visitors. The page's canonical
-address stays the plain one, so search engines see one page. The previews
-Reddit and messaging apps draw come from the page's Open Graph tags
-(name, cheapest price in the description, and the product picture).
-
-## Share on product pages
-
 Next to Save and Track price, "Share" (with the usual share icon) opens a
 row of round logos, as a phone's share sheet lays them out (in place with
 JavaScript, by the link's `#share` without it; opening one panel closes
@@ -2955,6 +2932,42 @@ copy_link or share_sheet), `utm_medium=social` and
 sends visitors. The page's canonical address stays the plain one, so
 search engines see one page. The previews Reddit and messaging apps draw
 come from the page's Open Graph tags (name, price and picture).
+
+## Discord
+
+The site's footer links to RipRaptor's Discord server
+(`https://discord.gg/5YKc77s4d7`), with Discord's own logo beside
+Instagram, Facebook and TikTok. `post_discord`, every ten minutes from
+cron, posts news there (`catalogue/discord.py`):
+
+- Back in stock: a UK shop has a product in stock again.
+- Pre-orders open: a UK shop opens pre-orders.
+- Price drop: a product's cheapest delivered price is at least 5% below
+  yesterday's.
+- Out today: a set's release day, from 8am UK time, with its cheapest
+  offer.
+
+Each post names the product, the delivered price and when it was checked,
+and links to RipRaptor's page for it (tagged `utm_source=discord`), never
+to the shop: as with the search alert emails, people compare every shop
+on the page. eBay and Amazon never count, nor a price kept out of the
+comparison, nor a restock that has sold out again by the time the post
+would go. Each piece of news posts once (`DiscordPost`), a product at most
+once a day for each kind, and at most 8 of a kind each run, the rest
+following ten minutes later. The first run for a kind posts nothing and
+only notes what is already there, so switching it on never floods the
+channel with last week. Posts forbid mentions, so a product named
+"@everyone" pings nobody. Wording is in Site wording under `discord.*`.
+
+Setting it up: in Discord, open the channel (Edit Channel, Integrations,
+Webhooks, New Webhook, Copy Webhook URL) and put the address in the
+server's `.env` as `RIPRAPTOR_DISCORD_WEBHOOK`, then restart. Never paste
+it in a chat or commit it: anyone holding it can post as RipRaptor. For
+separate channels, set `RIPRAPTOR_DISCORD_WEBHOOK_RESTOCKS` (restocks and
+pre-orders), `RIPRAPTOR_DISCORD_WEBHOOK_PRICE_DROPS` and
+`RIPRAPTOR_DISCORD_WEBHOOK_DROPS` (out today); each falls back to
+`RIPRAPTOR_DISCORD_WEBHOOK`. Check with `python manage.py post_discord
+--test`, which posts one hello to each channel set up.
 
 ## Refer a friend
 

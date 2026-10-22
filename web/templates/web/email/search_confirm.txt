@@ -6,4 +6,6 @@
 {% copy "watchlist.email.confirm.note" %}
 
 {% copy "watchlist.email.stop.button" %}: {{ stop_url }}
-{% copy "watchlist.email.stop_note" %}{% endautoescape %}
+{% copy "watchlist.email.stop_note" %}{% if manage_url %}
+
+{% copy "watchlist.manage.email.link" %}: {{ manage_url }}{% endif %}{% endautoescape %}

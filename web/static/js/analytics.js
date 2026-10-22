@@ -8,7 +8,7 @@
   if (!id || !card) return;
   const KEY = "ripraptor.analytics";
   const ASK_AGAIN = 182 * 24 * 60 * 60 * 1000;
-  const PRIVATE = /^\/(?:contact\/c|alerts\/(?:confirm|stop)|refer\/(?:confirm|claim|address|stop)|r|dashboard)\//;
+  const PRIVATE = /^\/(?:contact\/c|alerts\/(?:confirm|stop|manage)|refer\/(?:confirm|claim|address|stop)|r|dashboard)\//;
   if (PRIVATE.test(location.pathname)) return;   // the server leaves this file off these pages; a 404 for one is caught here
   const read = () => {
     try {

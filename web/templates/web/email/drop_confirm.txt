@@ -5,4 +5,6 @@
 
 {% copy "drops.email.confirm.note" %}
 
-Unsubscribe and delete your email address: {{ stop_url }}{% endautoescape %}
+Unsubscribe and delete your email address: {{ stop_url }}{% if manage_url %}
+
+{% copy "watchlist.manage.email.link" %}: {{ manage_url }}{% endif %}{% endautoescape %}

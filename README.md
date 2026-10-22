@@ -2344,7 +2344,7 @@ index.
 | `RIPRAPTOR_EBAY_DAILY_LIMIT`   | 4000    | Products checked on eBay per day. |
 | `RIPRAPTOR_GEOIP_DB`           |         | Path of the DB-IP country database for visitor countries. Empty means countries are not recorded. |
 | `RIPRAPTOR_AWIN_PUBLISHER_ID`  | 3111686 | Awin publisher id; loads Awin's MasterTag on every public page. Empty means no Awin script. |
-| `RIPRAPTOR_ZEPTOMAIL_TOKEN`    |         | Send Mail token from a Zoho ZeptoMail Mail Agent. With `RIPRAPTOR_MAIL_FROM` set, turns on back-in-stock emails and drop reminders. |
+| `RIPRAPTOR_ZEPTOMAIL_TOKEN`    |         | Send Mail token from a Zoho ZeptoMail Mail Agent. With `RIPRAPTOR_MAIL_FROM` set, turns on back-in-stock emails, drop reminders, search alerts and the Your alerts box. |
 | `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
 | `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
@@ -3290,6 +3290,58 @@ about a second, and a run with nothing new took 0.6s. Alerts send whatever
 type a product has, so a wrong type in the catalogue (a binder page
 display filed as a booster box) reaches inboxes: fix it in admin.
 
+### Your alerts
+
+One place to see and stop every email alert an address has, with no
+account and no password (`catalogue/manage_alerts.py`). Under Alert me,
+while email is set up, the watchlist page has a Your alerts box: an email
+address and "Email me a link". It posts to `/watchlist/manage/`
+(`web:manage_ask`); without JavaScript the visitor goes back to the
+watchlist page (the saved list kept) at `#manage`, with JavaScript
+(`search-alert.js`, the same script as Alert me) the answer replaces the
+box. The answer is always "If that address has alerts, we have emailed a
+link to manage them": an address with any alert (back in stock, Track
+price, a drop reminder or a search alert, confirmed or not) is emailed the
+link (`web/templates/web/email/manage_link.*`, subject "Your RipRaptor
+alerts"), any other address is sent nothing, and a failed send is logged,
+not shown. One connection can ask 10 times an hour ("Too many links were
+asked for from here just now") and one address is sent at most 3 links a
+day, counted for every address typed, under one-way hashes in the cache
+like the other sign-ups. The honeypot field and CSRF token are as on the
+other forms.
+
+The link is `/alerts/manage/<token>/` (`web:alerts_manage`): a signed
+token (`django.core.signing`) carrying the address, lower-cased. Nothing
+new is stored, so a link cannot be cancelled; it expires. One from the box
+works for an hour. Every alert email (confirmations, back in stock, under
+your price, pre-orders open, drop reminders, search alert emails) carries
+one more small link at its foot, "Manage all your alerts", that works for
+a week. The two are signed under different salts, so an hour's link is
+never read as a week's. The page lists the address's alerts in four
+groups: Back in stock (the product, linked), Track price (the product,
+"At or under £X" and, once confirmed, "Until <date>": the time chosen or
+the six-month limit), Drop reminders (the set, its game and its date as
+the drops page words it) and Search alerts (the alert read back as on the
+watchlist page, linked to that list). Unconfirmed ones say "Waiting for
+you to confirm". Each row has a Stop button and the top has Stop all:
+plain forms that POST to the same address with the CSRF token, delete an
+alert only when its address is the link's (whatever id is sent), and
+come back with "Alert stopped and deleted." or "All your alerts are
+stopped and deleted." An expired or altered link shows "This link has
+expired" with the box for a new one. The page is a private link like the
+confirm and stop links: no analytics, Awin or AdSense script, the
+referrer cut to the site's address, `noindex, nofollow` (meta tag and
+`X-Robots-Tag`), `Cache-Control: no-store`, and `/alerts/` is disallowed
+in robots.txt. Three queries load every alert, however many there are.
+
+The token is signed, not encrypted: anyone holding a link can read the
+address in it, as they can read the page. It travels in the email and in
+the page's own address. Caddy and gunicorn as set up in `deploy/` keep no
+access log; one turned on would record addresses, these included. The
+alert counts (`DailyPageView`, kind "alerts") gain
+`manage_asked`, `manage_sent`, `manage_stopped` and `manage_stopped_all`.
+The Terms page's data section says the link exists.
+
 ## Recent searches and recently viewed
 
 The browser remembers the last 8 searches and the last 12 product pages
@@ -3333,7 +3385,7 @@ do the visitor's other open tabs and a page kept for the Back button.
 Google signals and advertising features are off.
 
 Message threads and stock alert links (`/contact/c/`, `/alerts/confirm/`,
-`/alerts/stop/`, matched by address in `web/context_processors.py` and in
+`/alerts/stop/`, `/alerts/manage/`, matched by address in `web/context_processors.py` and in
 `analytics.js`, so a mistyped one is covered too) are private: no Google
 Analytics, Awin or AdSense script loads there, and leaving one passes on
 only the site's address as the referrer. Without JavaScript there is no

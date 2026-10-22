@@ -1,4 +1,4 @@
-<!doctype html>
+{% load sitecopy %}<!doctype html>
 <html lang="en-GB">
 <head>
 <meta charset="utf-8">
@@ -20,12 +20,13 @@
     </td></tr>
     <tr><td style="padding:20px 28px 24px;background:#fff1ea;border-top:1px solid #ffd6c4;font-size:13px;line-height:1.5;color:#545b68;">
       {% block footer_note %}{% endblock %}
-      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 12px;"><tr>
+      {% block stop %}<table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 12px;"><tr>
         <td style="border:1px solid #cfd4dc;border-radius:999px;background:#ffffff;">
           <a href="{{ stop_url }}" style="display:inline-block;padding:9px 18px;font-size:14px;font-weight:bold;color:#1f2430;text-decoration:none;">{% block stop_label %}Unsubscribe{% endblock %}</a>
         </td>
       </tr></table>
-      <p style="margin:0;">{% block stop_note %}Unsubscribing deletes your email address from {{ site_name }} at once.{% endblock %} <a href="{{ site_url }}/terms/#terms-data" style="color:#cc4410;">How we use it</a></p>
+      <p style="margin:0;">{% block stop_note %}Unsubscribing deletes your email address from {{ site_name }} at once.{% endblock %} <a href="{{ site_url }}/terms/#terms-data" style="color:#cc4410;">How we use it</a></p>{% endblock %}
+      {% if manage_url %}<p style="margin:8px 0 0;"><a href="{{ manage_url }}" style="color:#cc4410;">{% copy "watchlist.manage.email.link" %}</a></p>{% endif %}
       {% block about %}<p style="margin:8px 0 0;">{{ site_name }} compares UK prices for sealed trading card products and may earn a commission when you buy through its links.</p>{% endblock %}
     </td></tr>
   </table>

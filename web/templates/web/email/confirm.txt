@@ -1,8 +1,10 @@
-You asked {{ site_name }} to email you when {{ product.name }} {% if max_price %}is in stock for £{{ max_price }} or less delivered{% elif preorder %}is in stock or open for pre-order{% else %}is back in stock{% endif %} at a UK shop we check.{% if watch_label %} We will look for {{ watch_label }} from when you confirm, then delete your address.{% endif %}
+{% load sitecopy %}You asked {{ site_name }} to email you when {{ product.name }} {% if max_price %}is in stock for £{{ max_price }} or less delivered{% elif preorder %}is in stock or open for pre-order{% else %}is back in stock{% endif %} at a UK shop we check.{% if watch_label %} We will look for {{ watch_label }} from when you confirm, then delete your address.{% endif %}
 
 Confirm with this link:
 {{ confirm_url }}
 
 Nothing is sent until you confirm. If this was not you, ignore this email and the request is deleted within a week.
 
-Unsubscribe and delete your email address: {{ stop_url }}
+Unsubscribe and delete your email address: {{ stop_url }}{% if manage_url %}
+
+{% copy "watchlist.manage.email.link" %}: {{ manage_url }}{% endif %}

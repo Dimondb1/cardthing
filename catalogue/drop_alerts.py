@@ -46,6 +46,7 @@ from content import service as copy
 
 from . import insights, mail
 from .drops import MARKETPLACES, in_drop, month_rows, month_start, next_month
+from .manage_alerts import mail_link
 from .models import DailyPageView, DropAlert, Listing, PreorderOpen
 
 MAX_PER_EMAIL = 30            # confirmed reminders one address can wait on
@@ -163,6 +164,7 @@ def ask(product_set, email, now=None):
         "values": values,
         "confirm_url": link("web:drop_confirm", alert.token),
         "stop_url": stop_url,
+        "manage_url": mail_link(email),
     }, store)
     mail.send(email, subject, text, html, unsubscribe=stop_url)
     DropAlert.objects.filter(pk=alert.pk).update(confirm_sent_at=now)
@@ -318,6 +320,7 @@ def stage_mail(alert, stage, listings, store, opened=()):
         "offers": offer_rows(listings, store),
         "drop_url": drop_url(product_set),
         "stop_url": stop_url,
+        "manage_url": mail_link(alert.email),
         "last": stage == DAY,
     }, store)
     return subject, text, html, stop_url

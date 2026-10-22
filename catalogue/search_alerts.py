@@ -53,6 +53,7 @@ from . import insights, languages, mail
 from .alerts import absolute
 from .drop_alerts import counted, render_mail
 from .images import EMAIL_WIDTH, sized_image_url
+from .manage_alerts import mail_link
 from .models import DailyPageView, Listing, Product, Retailer, SearchAlert, SearchAlertSent
 from .ordering import apply_languages
 from .types import type_label
@@ -132,15 +133,20 @@ def alert_summary(alert, store=None):
     return summary(alert.game, alert.product_type, alert.language, alert.max_price, store=store)
 
 
-def list_url(alert):
-    """The site's list of what the alert asks for, in stock and cheapest first."""
+def list_path(alert):
+    """The site's list of what the alert asks for, in stock and cheapest first, as a path on the site."""
     params = {"game": alert.game.slug}
     if alert.product_type:
         params["type"] = alert.product_type
     if alert.language:
         params["lang"] = alert.language
     params.update({"in_stock": "on", "sort": "price"})
-    return settings.RIPRAPTOR_SITE_URL + reverse("web:search") + "?" + urlencode(params)
+    return reverse("web:search") + "?" + urlencode(params)
+
+
+def list_url(alert):
+    """The same list as a full address, for an email."""
+    return settings.RIPRAPTOR_SITE_URL + list_path(alert)
 
 
 # Sign-up ------------------------------------------------------------------------------------------
@@ -188,6 +194,7 @@ def ask(email, game, product_type="", language="", max_price=None, now=None):
         "values": values,
         "confirm_url": link("web:search_alert_confirm", alert.token),
         "stop_url": stop_url,
+        "manage_url": mail_link(email),
     }, store)
     mail.send(email, subject, text, html, unsubscribe=stop_url)
     SearchAlert.objects.filter(pk=alert.pk).update(confirm_sent_at=now)
@@ -349,6 +356,7 @@ def match_mail(alert, items, more, store):
         "more": more,
         "more_url": list_url(alert),
         "stop_url": stop_url,
+        "manage_url": mail_link(alert.email),
     }, store)
     return subject, text, html, stop_url
 

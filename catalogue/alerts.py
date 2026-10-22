@@ -17,8 +17,11 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
+from content import service as copy
+
 from . import insights, mail
 from .images import EMAIL_WIDTH, sized_image_url
+from .manage_alerts import mail_link
 from .models import DailyPageView, Listing, Retailer, StockAlert
 
 MARKETPLACES = (Retailer.Source.AMAZON, Retailer.Source.EBAY)
@@ -110,7 +113,8 @@ def absolute(url):
     return url if url.startswith(("http://", "https://")) else settings.RIPRAPTOR_SITE_URL + url
 
 
-def render_mail(template, context):
+def render_mail(template, context, store=None):
+    """(text, html) for one email. ``store`` is the site wording, loaded once for a run of emails."""
     from django.templatetags.static import static
 
     product = context.get("product")
@@ -120,6 +124,7 @@ def render_mail(template, context):
         "logo_url": absolute(static("img/logo.png")),
         "image_url": absolute(sized_image_url(product.image_src, EMAIL_WIDTH)) if product is not None else "",
         "stop_url": settings.RIPRAPTOR_SITE_URL + "/",
+        "site_content": copy.load_all() if store is None else store,
         "preheader": "",
         **context,
     }
@@ -161,6 +166,7 @@ def ask(product, email, max_price=None, days=None):
         "watch_label": dict(TRACK_DAYS).get(days, "") if max_price is not None else "",
         "confirm_url": link("web:alert_confirm", existing.token),
         "stop_url": link("web:alert_stop", existing.token),
+        "manage_url": mail_link(email),
     })
     mail.send(email, f"Confirm your alert for {product.name}", text, html, unsubscribe=link("web:alert_stop", existing.token))
     note("asked")
@@ -197,7 +203,7 @@ def send_due(now=None, stdout=None):
     ).delete()
     sent = failed = 0
     waiting = StockAlert.objects.filter(confirmed_at__isnull=False).select_related("product")
-    stock, priced = {}, {}
+    stock, priced, store = {}, {}, None
     for alert in waiting:
         ends = watch_ends(alert)
         if ends is not None and ends <= now:
@@ -235,6 +241,7 @@ def send_due(now=None, stdout=None):
             preheader = f"In stock for £{listing.delivered_price} delivered, at or under your £{alert.max_price}. Checked just now."
         else:
             preheader = f"{price_words(listing)}{' delivered' if listing.delivery_known else ''} at {listing.retailer.name}, checked just now."
+        store = copy.load_all() if store is None else store
         text, html = render_mail(template, {
             "max_price": alert.max_price,
             "product": alert.product,
@@ -243,7 +250,8 @@ def send_due(now=None, stdout=None):
             "listing": listing,
             "product_url": product_url,
             "stop_url": stop_url,
-        })
+            "manage_url": mail_link(alert.email),
+        }, store)
         try:
             mail.send(alert.email, subject, text, html, unsubscribe=stop_url)
         except mail.MailError as exc:

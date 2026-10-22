@@ -1,0 +1,61 @@
+{% extends "web/base.html" %}
+{% load sitecopy static %}
+{% block scripts %}{% if expired and alerts_on %}<script src="{% static 'js/search-alert.js' %}" defer></script>{% endif %}{% endblock %}
+{% block content %}
+{% if expired %}
+<div class="page-head">
+  <h1 class="page-title">{{ heading }}</h1>
+  <p class="page-intro">{% copy "watchlist.manage.expired.body" %}</p>
+</div>
+{% if alerts_on %}
+<section class="search-alert manage-box manage-box--first" id="manage" aria-label="{% copy 'watchlist.manage.title' %}" data-search-alert-box>
+  {% include "web/includes/manage_ask.html" %}
+</section>
+{% endif %}
+{% else %}
+<div class="page-head">
+  <h1 class="page-title">{{ heading }}</h1>
+  <p class="page-intro">{% copy "watchlist.manage.page.intro" address=email %}</p>
+</div>
+<div class="manage">
+  {% if done or groups %}
+  <div class="manage__bar">
+    {% if done %}<p class="manage__done" role="status">{{ done }}</p>{% endif %}
+    {% if groups %}
+    <form class="manage__all" method="post" action="{{ action }}">
+      {% csrf_token %}
+      <button class="button button--quiet button--small" type="submit" name="stop" value="all">{% copy "watchlist.manage.stop_all" %}</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if groups %}
+  {% for group in groups %}
+  <section class="manage__group" aria-labelledby="manage-{{ group.key }}">
+    <h2 class="sub-head" id="manage-{{ group.key }}">{{ group.label }}</h2>
+    <ul class="manage__list">
+      {% for row in group.rows %}
+      <li class="manage__row">
+        <div class="manage__body">
+          <a class="manage__name" href="{{ row.url }}">{{ row.name }}</a>
+          {% if row.details %}<span class="manage__detail">{{ row.details|join:" · " }}</span>{% endif %}
+          {% if row.waiting %}<span class="manage__detail manage__waiting">{% copy "watchlist.manage.waiting" %}</span>{% endif %}
+        </div>
+        <form class="manage__stop" method="post" action="{{ action }}">
+          {% csrf_token %}
+          <button class="button button--quiet button--small" type="submit" name="stop" value="{{ row.kind }}-{{ row.pk }}">{% copy "watchlist.manage.stop" %}<span class="visually-hidden">: {{ row.name }}</span></button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+  {% else %}
+  <div class="manage__none">
+    <p>{% copy "watchlist.manage.none" %}</p>
+    <p><a class="button button--quiet" href="{% url 'web:watchlist' %}">{% copy "watchlist.alert.back" %}</a></p>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

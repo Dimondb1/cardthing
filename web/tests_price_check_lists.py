@@ -150,3 +150,35 @@ class CoverageTests(DashboardCase):
         self.assertContains(response, "1 Cardmarket match waits for you")
         self.assertContains(response, "/admin/catalogue/cardmarketmatch/?status__exact=check")
         del today
+
+    def test_the_dashboard_says_how_claudes_cardmarket_matching_is_going(self):
+        # The owner: "Why aren't I seeing Claude stats about matching Cardmarket products to old price history".
+        from catalogue.models import CardmarketProduct, ClaudeAsk, ClaudeJudge
+
+        game = make_game()
+        product_set = make_set(game)
+        products = [make_product(product_set, name=f"Box {n}", slug=f"box-{n}") for n in range(5)]
+        cm = CardmarketProduct.objects.create(pk=1, game=game, name="Box", category_id=1, category="Booster Boxes",
+                                              expansion_id=1, seen_at=timezone.now())
+        CardmarketPrice.objects.create(product=cm, date=timezone.localdate() - timedelta(days=1), trend=Decimal("50"))
+        CardmarketPrice.objects.create(product=cm, date=timezone.localdate(), trend=Decimal("51"))
+        status = CardmarketMatch.Status
+        for product, state in zip(products, (status.MATCHED, status.CONFIRMED, status.CHECK, status.NONE)):
+            CardmarketMatch.objects.create(product=product, status=state, cardmarket=cm if state != status.NONE else None)
+        ClaudeAsk.objects.create(kind=ClaudeAsk.Kind.MARKET, row_key="market:1", fingerprint="x", model_asked="m",
+                                 effort="low", cost_micros=1_250_000)
+        matching = self.page().context["prices"]["matching"]
+        self.assertEqual({k: matching[k] for k in ("products", "asked", "left", "matched", "waiting", "none")},
+                         {"products": 5, "asked": 4, "left": 1, "matched": 2, "waiting": 1, "none": 1})
+        self.assertEqual((matching["asks_month"], matching["spent"], matching["history_days"]), (1, "$1.25", 2))
+        cache.clear()
+        response = self.page()
+        self.assertContains(response, "Claude matching Cardmarket")
+        self.assertContains(response, "4 of 5, 1 to go")
+        self.assertContains(response, "Spent this month on matching: $1.25, products asked about: 1.")
+        self.assertContains(response, "Cardmarket price history: 2 days kept, from")
+        # Claude off: matching is paused, and the card says so.
+        self.assertContains(response, "Claude is switched off, so matching is paused.")
+        ClaudeJudge.objects.update_or_create(pk=1, defaults={"enabled": True})
+        cache.clear()
+        self.assertNotContains(self.page(), "matching is paused")

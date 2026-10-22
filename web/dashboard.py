@@ -24,11 +24,11 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from catalogue import checks, crawl, insights, judge, referrals, traffic
+from catalogue import cardmarket, checks, crawl, insights, judge, referrals, traffic
 from catalogue.drop_alerts import SENT_FIELD
 from catalogue.models import (
-    AffiliateSale, CardmarketMatch, ClaudeJudge, DailyPageView, DailySearch, DailyVisitor, DropAlert, Listing,
-    OutboundClick, Product, ReferralSettings, Retailer, SearchAlert, StockAlert, WorkerState,
+    AffiliateSale, CardmarketMatch, CardmarketPrice, ClaudeAsk, ClaudeJudge, DailyPageView, DailySearch, DailyVisitor,
+    DropAlert, Listing, OutboundClick, Product, ReferralSettings, Retailer, SearchAlert, StockAlert, WorkerState,
 )
 from content import service as copy
 from inbox.service import unread_count
@@ -380,19 +380,21 @@ def checks_section(now, store):
 def prices_section(now, store):
     """Of the products with a current price, how many show the Price check, and what it rests on: Cardmarket's
     price, our own daily record, or both (Product.price_band, kept each hour), for the whole site and each game,
-    and how many Cardmarket matches wait for the owner. Two queries."""
+    and Claude's matching of our products to Cardmarket's (matching). Five queries."""
     from catalogue.fair_price import BOTH, MARKET, RECORD
 
     on_sale = Exists(Listing.objects.buyable().filter(product=OuterRef("pk")))
     rows = (
-        Product.objects.active().annotate(on_sale=on_sale).order_by().values("game__name")
+        Product.objects.active().annotate(on_sale=on_sale).order_by().values("game__name", "game__slug")
         .annotate(
+            products=Count("pk"),
             priced=Count("pk", filter=Q(on_sale=True)),
             checked=Count("pk", filter=Q(price_band__isnull=False)),
             market=Count("pk", filter=Q(price_basis__in=(MARKET, BOTH))),
             record=Count("pk", filter=Q(price_basis__in=(RECORD, BOTH))),
         )
     )
+    rows = list(rows)
     games = [{"name": row["game__name"], **{key: row[key] for key in ("priced", "checked", "market", "record")}}
              for row in rows if row["priced"]]
     for game in games:
@@ -404,7 +406,33 @@ def prices_section(now, store):
         "market_share": rate(total["market"], total["priced"]),
         "record_share": rate(total["record"], total["priced"]),
         "games": sorted(games, key=lambda g: (-g["priced"], g["name"])),
-        "waiting": CardmarketMatch.objects.filter(status=CardmarketMatch.Status.CHECK).count(),
+        "matching": matching(now, sum(row["products"] for row in rows if row["game__slug"] in cardmarket.GAMES)),
+    }
+
+
+def matching(now, products):
+    """Claude matching our products to Cardmarket's (catalogue/cardmarket_match.py): of the ``products`` in the
+    games Cardmarket covers, how many it has looked at and what came of them, this month's spend and its last
+    ask, how many days of Cardmarket prices we keep, and whether Claude is switched on to carry on. Four
+    queries."""
+    statuses = dict(CardmarketMatch.objects.order_by().values("status").annotate(n=Count("pk"))
+                    .values_list("status", "n"))
+    status = CardmarketMatch.Status
+    asks = ClaudeAsk.objects.filter(kind=ClaudeAsk.Kind.MARKET).aggregate(
+        cost=Sum("cost_micros", filter=Q(asked_at__gte=judge.month_start(now))),
+        month=Count("pk", filter=Q(asked_at__gte=judge.month_start(now))), last=Max("asked_at"),
+    )
+    history = CardmarketPrice.objects.aggregate(since=Min("date"), days=Count("date", distinct=True))
+    asked = sum(statuses.values())
+    return {
+        "products": products, "asked": asked, "left": max(0, products - asked), "share": rate(asked, products),
+        "matched": statuses.get(status.MATCHED, 0) + statuses.get(status.CONFIRMED, 0),
+        "waiting": statuses.get(status.CHECK, 0),
+        "none": statuses.get(status.NONE, 0) + statuses.get(status.REJECTED, 0),
+        "asks_month": asks["month"], "spent": judge.dollars(asks["cost"] or 0),
+        "last": insights.clock(asks["last"], now) if asks["last"] else "",
+        "history_days": history["days"], "history_since": history["since"],
+        "claude_on": ClaudeJudge.current().enabled,
     }
 
 

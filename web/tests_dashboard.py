@@ -483,8 +483,9 @@ class CacheTests(DashboardCase):
         with CaptureQueriesContext(connection) as many:
             self.page()
         self.assertEqual(len(few), len(many))
-        # What clicks earn reads seven of them (dashboard.money_section), however many clicks, sales and offers.
-        self.assertLessEqual(len(many), 55)
+        # What clicks earn reads seven of them (dashboard.money_section), however many clicks, sales and offers,
+        # and the Price check coverage five, with Claude's Cardmarket matching (prices_section).
+        self.assertLessEqual(len(many), 60)
         # Within the minute the page reads its parts from the cache: the session, the user and the wording, and the
         # sign-in renews itself (SESSION_SAVE_EVERY_REQUEST: a transaction round one update).
         with CaptureQueriesContext(connection) as warm:

@@ -3934,7 +3934,13 @@ anyone else is sent to the admin sign-in. Top to bottom:
   price now, the share showing the Price check, the share whose check uses
   Cardmarket's price and the share using our own record, then each game,
   and a link to the Cardmarket matches waiting for you. From the bands
-  stored each hour; two queries.
+  stored each hour. Under it, **Claude matching Cardmarket**: of our
+  products in the games Cardmarket covers, how many Claude has looked at and
+  how many are left, how many it matched (or you confirmed), how many wait
+  for you and how many have no Cardmarket product; this month's spend on it
+  and when it last asked; how many days of Cardmarket prices we keep; and,
+  in red, that matching is paused while Claude is switched off. Five
+  queries.
 - **What clicks earn, last 30 days** (`money_section`), the first card,
   five rates for the whole site, each with the figures behind it:
   - *Retailer click-through rate*: visits with a click to a shop, out of

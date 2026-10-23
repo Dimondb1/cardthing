@@ -88,6 +88,47 @@ def tell_owner(conversation, message, opener=None):
     )
 
 
+# Listing reports: the Report link beside each shop's offer on a product page (web/views.py report_listing). Each
+# is a message in this inbox, named REPORT_NAME, with no name or email asked for. Its reasons in the owner's words;
+# the visitor reads them from the registry (product.report.reason.*).
+REPORT_NAME = "Listing report"
+REPORT_REASONS = {
+    "product": "A different product",
+    "language": "Another language",
+    "quantity": "Wrong quantity or box size",
+    "price": "Wrong price",
+    "stock": "Wrong stock status",
+    "condition": "Not sealed or not new",
+    "other": "Something else",
+}
+REPORT_NOTE_LENGTH = 500
+REPORTS_PER_HOUR = 20   # under NEW_THREADS_PER_HOUR, so a flood of reports never fills Message us for the hour
+
+
+def report(listing, reason, note="", now=None):
+    """File a visitor's report of a wrong listing as a message, for the owner to check in Admin. The same listing
+    and reason again within the hour adds nothing. Raises Refused past REPORTS_PER_HOUR. Nothing about the
+    listing changes: one unchecked report never hides a shop's price."""
+    now = now or timezone.now()
+    first_line = f"{REPORT_NAME}: {REPORT_REASONS[reason]} (listing {listing.pk})"
+    hour = now - timedelta(hours=1)
+    if Message.objects.filter(created_at__gte=hour, body__startswith=first_line + "\n").exists():
+        return None
+    if Conversation.objects.filter(name=REPORT_NAME, created_at__gte=hour).count() >= REPORTS_PER_HOUR:
+        raise Refused
+    product, site = listing.product, settings.RIPRAPTOR_SITE_URL
+    price = f"£{listing.delivered_price:.2f} delivered" if listing.delivery_known else f"£{listing.price:.2f} plus delivery"
+    body = "\n".join([
+        first_line,
+        f"Product: {product.name} {site}{product.get_absolute_url()}",
+        f"Shop: {listing.retailer.name} {listing.url}",
+        f"Shown: {price}, {listing.get_availability_display().lower()}, checked {listing.last_checked:%d %b %H:%M}",
+        f"Admin: {site}{reverse('admin:catalogue_listing_change', args=[listing.pk])}",
+        f"Note: {note.strip()[:REPORT_NOTE_LENGTH] or 'none'}",
+    ])
+    return start(body, name=REPORT_NAME, now=now)
+
+
 def forget_email(conversation):
     Conversation.objects.filter(pk=conversation.pk).update(email="")
 

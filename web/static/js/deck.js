@@ -92,11 +92,8 @@
 
     const bottom = el("div", "swipe__bottom");
     const offer = el("div", "swipe__offer");
-    if (c.badge) {
-      const label = { low_30: words.lowMonth, best_week: words.bestWeek }[c.badge] || words.lowestToday;
-      const badge = el("span", "badge badge--good", label);
-      offer.append(badge);
-    }
+    const label = { low_30: words.lowMonth, best_week: words.bestWeek }[c.badge];
+    if (label) offer.append(el("span", "badge badge--good", label));
     offer.append(el("span", "price swipe__price", c.price));
     offer.append(el("span", "swipe__at", fill(words.at, { retailer: c.retailer })));
     const buy = el("a", "button button--buy button--card", words.buy);

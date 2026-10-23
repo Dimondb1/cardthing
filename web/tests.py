@@ -2121,12 +2121,15 @@ class RedesignTests(PageTestCase):
         self.assertEqual(html.count("See product"), 1)
         self.assertLess(html.index("Compare prices"), html.index("See product"))
 
-    def test_a_card_names_the_language_when_it_is_not_english(self):
+    def test_a_card_names_its_language_english_too(self):
         japanese = make_product(self.pre, name="Prismatic Evolutions Booster Box (Japanese)", slug="pev-box-ja", product_type="booster_box")
         make_listing(japanese, self.harbour, price="70.00")
         html = self.client.get(reverse("web:search"), {"q": "prismatic"}).content.decode()
         self.assertEqual(html.count('<span class="card__lang">Japanese<button type="button" class="info"'), 1)
-        self.assertEqual(html.count('<span class="card__lang">'), 1)
+        # The site review: a card that says nothing leaves the visitor guessing. English has no card to explain it.
+        cards = html.count('<li class="card')
+        self.assertGreater(cards, 1)
+        self.assertEqual(html.count('<span class="card__lang">English</span>'), cards - 1)
         # One language at a time: the select shows the choice, and an old link with two keeps the last one.
         response = self.client.get(reverse("web:search"), {"lang": "ja"})
         self.assertContains(response, '<option value="ja" selected>')

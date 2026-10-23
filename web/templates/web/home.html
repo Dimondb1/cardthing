@@ -61,6 +61,8 @@
     <h2 id="featured-title" class="section-head__title">{% copy "home.featured.title" %}</h2>
     <a class="section-head__all" href="{% url 'web:deals' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
   </div>
+  {# Said beside the row it is about, not only in the footer: commission shapes which deals are picked, never a comparison's order. #}
+  <p class="section-head__note">{% copy "home.featured.disclosure" %} <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a></p>
   {# Every featured deal shows without script; the spares after them pass the same tests and wait hidden, so interest.js can put the visitor's own games first, a spare only ever taking the place of a deal from the same side. #}
   <ul class="trending" data-scroll data-interest data-interest-show="{{ featured|length }}">
     {% for product, summary in featured %}{% include "web/includes/featured_card.html" %}{% endfor %}
@@ -94,16 +96,16 @@
   <h3 id="out-title" class="sub-head"><a class="sub-head__link" href="{% url 'web:drops' %}?show=out">{% copy "drops.tab.out" %} <span aria-hidden="true">›</span></a></h3>
   <ul class="trending" data-scroll aria-labelledby="out-title">
     {% for product in latest %}
-    <li class="trending__item{% if product.best_offer.availability == "preorder" %} is-upcoming{% endif %}">
+    {# Out now leads with an in-stock shop (views.in_stock_offers) and holds only products that are out. #}
+    <li class="trending__item">
       <a class="trending__link" href="{{ product.get_absolute_url }}" data-compare="out_now">
         {% product_image product "trend" %}
-        {% if product.best_offer.availability == "preorder" %}<span class="badge badge--soon trending__badge">{% copy "product.badge.soon" %}</span>{% endif %}
         <span class="trending__name">{{ product.name }}</span>
         {% if product.best_offer %}
           <span class="trending__price">{% price product.best_offer.shown_price %}</span>
         <span class="trending__retailer"><span class="delivered">{% include "web/includes/price_basis.html" with listing=product.best_offer %}</span> · {{ product.best_offer.retailer.name }}</span>
         {% endif %}
-        {% if product.release %}<span class="trending__move trending__move--down">{% if product.best_offer.availability == "preorder" %}{% copy "home.new.out" date=product.release|short_date %}{% else %}{% copy "home.new.released" date=product.release|short_date %}{% endif %}</span>{% endif %}
+        {% if product.release %}<span class="trending__move trending__move--down">{% copy "home.new.released" date=product.release|short_date %}</span>{% endif %}
         <span class="trending__cta">{% copy "home.card.compare" %}<span aria-hidden="true"> →</span></span>
       </a>
     </li>

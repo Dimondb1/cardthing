@@ -27,7 +27,7 @@
       <div class="buybox__offer">
         <div class="buybox__top">
           <p class="buybox__label">{% if cheapest.delivery_known %}{% copy "product.cheapest.label" %}{% else %}{% copy "product.cheapest.label_unknown" %}{% endif %}</p>
-          <span class="buybox__badge">{% include "web/includes/badge.html" with explain=True %}</span>
+          <span class="buybox__badge">{% include "web/includes/badge.html" with explain=True gauge=fair %}</span>
         </div>
         <p class="buybox__price"><span class="buybox__amount"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span></span>{% if fair %}{% include "web/includes/fair_price.html" %}{% endif %}</p>
         <p class="buybox__delivered"><span class="money" data-note-for="{{ cheapest.pk }}">{% include "web/includes/price_note.html" with listing=cheapest %}</span>{% if not cheapest.delivery_known %} {% copy "product.delivery.unknown_check" %}{% endif %}</p>
@@ -144,6 +144,7 @@
     {% if amazon_search %}{% include "web/includes/offer_amazon.html" %}{% endif %}
   </ul>
   {% endif %}
+  {% if report_listing or report_state %}{% include "web/includes/report_form.html" %}{% endif %}
   {% if restocks %}
   <p class="restock-note">
     {% if restocks.count %}{% copy_count "product.restock.recent" restocks.count days=restocks.days retailer=restocks.latest.retailer.name date=restocks.latest_date|short_date %}{% else %}{% copy "product.restock.last" retailer=restocks.latest.retailer.name date=restocks.latest_date|short_date %}{% endif %}

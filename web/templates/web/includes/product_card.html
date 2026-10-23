@@ -3,10 +3,11 @@
   <div class="card__top">
     <a class="card__image" href="{{ product.get_absolute_url }}" tabindex="-1" aria-hidden="true">{% product_image product "card" %}</a>
     <div class="card__body">
-      {% if product.language_name %}<span class="card__lang">{{ product.language_name }}{% info "lang" product.language product.language_name game=product.game.slug %}</span>{% endif %}
+      {# Every card names its language, English too (nothing in its name or set says another), as the product page does. #}
+      <span class="card__lang">{{ product.language_name|default:"English" }}{% if product.language %}{% info "lang" product.language product.language_name game=product.game.slug %}{% endif %}</span>
       <{{ heading_tag|default:"h2" }} class="card__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></{{ heading_tag|default:"h2" }}>
       <p class="card__meta">{% if not game %}{{ product.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{{ product.type_name }}</p>
-      {% if summary.best %}<div class="card__checks">{% include "web/includes/badge.html" %}{% include "web/includes/fair_card.html" %}</div>{% endif %}
+      {% if summary.best %}<div class="card__checks">{% include "web/includes/badge.html" with gauge=product.card_check %}{% include "web/includes/fair_card.html" %}</div>{% endif %}
     </div>
     <div class="card__save">{% include "web/includes/save_link.html" with price=summary.best.shown_price icon_only=True %}
       <a class="button button--quiet button--icon card__share" href="{{ product.get_absolute_url }}#share" data-card-share="{{ product.name }}">{% include "web/includes/share/icon.svg" %}<span class="visually-hidden">{% copy "product.share.button" %} {{ product.name }}</span></a></div>

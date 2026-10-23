@@ -74,6 +74,16 @@
   {% if game %}{% include "web/includes/coming_soon.html" %}{% else %}{% include "web/includes/coming_soon.html" with show_game=True %}{% endif %}
 {% endif %}
 
+{% if quick %}
+{# A search's quick filters (views.quick_filters): plain links, so they work without script and the back button keeps them. #}
+<nav class="chips quick" aria-label="{% copy 'browse.quick.label' %}">
+  <ul class="chips__list">
+    {% for chip in quick %}<li><a class="chip" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}{% if chip.active %}<span class="chip__off" aria-hidden="true">×</span><span class="visually-hidden">, {% copy "browse.quick.remove" %}</span>{% endif %}</a></li>{% endfor %}
+    {% if quick_active %}<li><a class="chip chip--more" href="{{ clear_url }}">{% copy "browse.filters.clear" %}</a></li>{% endif %}
+  </ul>
+</nav>
+{% endif %}
+
 {% if show_filters %}
 {# On game and set pages the choices fold under one button, closed even while some are chosen: the button names them, and Clear filters sits beside it. site.js keeps it open after a change made in it. #}
 {% if fold_filters %}<div class="filter-bar">

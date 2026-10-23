@@ -1,0 +1,32 @@
+{% load sitecopy %}{# Report a problem with one shop's offer (views.report_listing): into the Message us inbox, with no name or email. Opened by the Report link in its row. #}
+<section class="report" id="report" tabindex="-1"{% if report_listing %} aria-labelledby="report-title"{% else %} aria-label="{% copy 'product.report.title' %}"{% endif %}>
+  {% if report_state == "sent" %}<p class="report__done" role="status">{% copy "product.report.sent" %}</p>
+  {% elif report_state == "busy" %}<p class="report__done" role="status">{% copy "product.report.busy" %}</p>{% endif %}
+  {% if report_listing %}
+  <h3 id="report-title" class="report__title">{% copy "product.report.title" %}</h3>
+  <p class="report__shop">{% copy "product.report.shop" retailer=report_listing.retailer.name %}</p>
+  {% if report_state == "reason" %}<p class="contact-form__error" role="alert">{% copy "product.report.reason_missing" %}</p>{% endif %}
+  <form class="report__form" method="post" action="{% url 'web:report_listing' product.slug %}">
+    {% csrf_token %}
+    <input type="hidden" name="listing" value="{{ report_listing.pk }}">
+    <fieldset class="report__reasons">
+      <legend>{% copy "product.report.reason_label" %}</legend>
+      <label><input type="radio" name="reason" value="product" required> {% copy "product.report.reason.product" %}</label>
+      <label><input type="radio" name="reason" value="language"> {% copy "product.report.reason.language" %}</label>
+      <label><input type="radio" name="reason" value="quantity"> {% copy "product.report.reason.quantity" %}</label>
+      <label><input type="radio" name="reason" value="price"> {% copy "product.report.reason.price" %}</label>
+      <label><input type="radio" name="reason" value="stock"> {% copy "product.report.reason.stock" %}</label>
+      <label><input type="radio" name="reason" value="condition"> {% copy "product.report.reason.condition" %}</label>
+      <label><input type="radio" name="reason" value="other"> {% copy "product.report.reason.other" %}</label>
+    </fieldset>
+    <label class="report__label" for="report-note">{% copy "product.report.note_label" %}</label>
+    <textarea class="contact-form__input contact-form__text" id="report-note" name="note" rows="3" maxlength="500"></textarea>
+    <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <p class="contact-form__note">{% copy "product.report.privacy" %}</p>
+    <div class="report__actions">
+      <button class="button button--small" type="submit">{% copy "product.report.send" %}</button>
+      <a class="report__cancel" href="{{ product.get_absolute_url }}#offers-title">{% copy "product.report.cancel" %}</a>
+    </div>
+  </form>
+  {% endif %}
+</section>

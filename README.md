@@ -1311,6 +1311,29 @@ runner-up. Swipe right (or press the right arrow) to save it to a list kept
 in the browser, left to skip, tap to open the product. Cards come from
 `/api/deck/` twelve at a time and the next batch loads before it is needed.
 
+## Search results
+
+**Best match.** The words as typed first (a name that starts with them, then
+one that holds them), then products with a price, then everyday products ahead
+of bulk lots, then the products more shops list, then the newest. A bulk lot
+is a display of bundles, tins or ETBs, a case, or a count such as "(10
+Bundles)" or "6x Booster Box" (`catalogue/search.py`, `BULK_PHRASES` and
+`BULK_COUNTS`); "Booster Display" (a booster box) and "Case of 36" (one box)
+are not. A search that names one ("151 bundle display", "etb case") ranks
+bulk lots as any other product. So "151" leads with the booster bundle, the
+ETB and the pack, not a £2,150 display of ten bundles.
+
+**Quick filters** above the results: English, In stock and the three
+commonest product types in the game's own words (Booster bundles, ETBs),
+each a plain link that turns its filter on or off, keeping the search and
+the other choices, with Clear filters once one is on. Only choices that
+change the list show: English while the results hold other languages too,
+In stock while some are not in stock. The full Sort and filter choices stay
+below. Every result card names its language, English too.
+
+Not done yet: mini tin artworks and other cosmetic variants are still one
+result each. Grouping them needs a "variant of" link between products.
+
 ## Search as you type
 
 The search box shows results while the visitor types, with the cheapest
@@ -2619,7 +2642,14 @@ Coming soon rows (only sets a shop takes pre-orders for, most popular
 first, see "Your games first" below) under a "Coming
 soon" heading that opens `/drops/`, then an "Out now" row of products just
 out and in stock (the same products as `/drops/?show=out`, which its heading
-opens), so everything it shows is behind its link. The home page and each
+opens), so everything it shows is behind its link. Out now holds only products
+that are out by the UK date: one whose own or set's release date is still to
+come stays under Coming soon, however a shop marks it (a shop taking orders
+early is not the release), and a date that has passed is never taken as stock.
+An undated product counts by its shops alone. Out now cards, and cards in the
+In stock tab or with the In stock filter on, lead with the cheapest shop that
+has it in stock, never a cheaper pre-order (`views.in_stock_offers`), and then
+leave out the Price check, which was worked out on that other price. The home page and each
 game page's Pre-orders tab show sets
 still to come as compact rows: the set, game, date, best price with when it
 was checked, and one button, Pre-order (or Buy now) to the cheapest shop
@@ -3038,7 +3068,10 @@ strongest first, each card naming its evidence:
 The same 30-day low shows as a "Lowest in 30 days" badge on product pages
 and cards, ahead of the week's badges, and only when it is that 3% under the
 month's average. "Best in 7 days" needs the week to have been dearer at some
-point. A product only one UK shop lists gets no badge at all, and is never a
+point. A card or price box shows one price history label: the Price check
+gauge when the product has one, else one of these two badges. Which shop is
+cheapest today is the price list's own "Cheapest" mark; there is no "Lowest
+today" badge (it sat beside "Above average" and read as a contradiction). A product only one UK shop lists gets no badge at all, and is never a
 featured deal or on Lowest in 90 days: there is no other price to judge it
 against. "Too good to miss" on Picked for you
 needs a 15% saving on a shop in line with the market, or the 30-day low.
@@ -3047,7 +3080,10 @@ The rules and their numbers are at the top of `catalogue/offers.py`.
 Six of the eight places go to deals whose cheapest shop pays a
 commission (an affiliate link format, eBay or Amazon), the best of the
 rest take the other two, and either side fills in when the other is
-short. The footer line on every page says featured deals favour shops
+short. A line under the Featured deals heading says so too, beside
+the row it is about, and that price comparisons are always cheapest
+delivered first and no shop can pay to move up, with a How it works link
+(`home.featured.disclosure`). The footer line on every page says featured deals favour shops
 that pay, and the Terms page explains how they are chosen. Product
 pages and their price order are unchanged.
 
@@ -3129,7 +3165,7 @@ Where they are, and only there:
   and that packs often hold fewer cards. Pokémon adds a line: a Japanese or
   Korean booster pack usually has 5 cards, an English one 10.
 - **The badge** beside the cheapest price (Lowest in 30 days, Best in 7
-  days, Lowest today, Dropping soon): what it means.
+  days, Dropping soon): what it means.
 - **The price check sheet** says how to read the gauge.
 
 The words are under "Info cards (the ⓘ buttons)" in Site wording
@@ -3422,6 +3458,19 @@ if they gave an address, is emailed to them through ZeptoMail with a link
 back. The email's Unsubscribe opens their page with a button that deletes
 the address (a button, because mail scanners open links). Tick Closed to
 stop follow-ups.
+
+**Listing reports.** Each shop's row in a product page's price list has a
+quiet Report link. It opens a form under the list (`?report=<listing>`,
+no script needed) with that shop named: a reason (a different product,
+another language, wrong quantity or box size, wrong price, wrong stock,
+not sealed or not new, something else) and an optional note. No name or
+email is asked for. It posts to `/products/<slug>/report/` and lands here
+as a conversation named "Listing report", with the product, the shop and
+its address, the price shown, and the listing's admin link
+(`inbox/service.py report`). The same listing and reason twice in an hour
+is kept once, the hidden field keeps robots out, and over 20 reports an
+hour are refused ("try again in an hour"), so Message us is never filled
+by them. A report changes nothing on its own: you decide in admin.
 
 You hear about new messages, and about crawl problems (see the background
 reader section), by email to `RIPRAPTOR_INBOX_NOTIFY_EMAIL`, by phone push

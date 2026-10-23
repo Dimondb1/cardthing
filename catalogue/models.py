@@ -313,6 +313,12 @@ class Product(models.Model):
         return Verdict(self.price_band, None)
 
     @property
+    def card_check(self):
+        """The Price check a product card shows: the stored one, unless the card leads with another price than the
+        one it was worked out on (web.views.in_stock_offers marks that ``narrowed``)."""
+        return None if getattr(self, "narrowed", False) else self.price_check
+
+    @property
     def language_name(self):
         """The product's language when it is not English ("Japanese"), else ""."""
         from .languages import name

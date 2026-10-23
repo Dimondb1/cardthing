@@ -63,8 +63,9 @@ class DealEvidenceTests(TestCase):
         # Too few days to verify a month: the week's badges, and "best in 7 days" only if the week was dearer.
         short = self.summary(self.product("short", "55.00", history=["60.00"] * 10))
         self.assertEqual(short.badge, offers.BEST_WEEK)
+        # Dearer than earlier in the week: no history badge (the shop list says which shop is cheapest today).
         above = self.summary(self.product("above", "65.00", history=["60.00"] * 10))
-        self.assertEqual(above.badge, offers.LOWEST_TODAY)
+        self.assertIsNone(above.badge)
         self.assertFalse(above.is_deal)
         self.assertIsNone(self.summary(self.product("same-week", "60.00", history=["60.00"] * 10)).badge)
 

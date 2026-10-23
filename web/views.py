@@ -22,14 +22,15 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_http_methods, require_POST, require_safe
 
-from catalogue import alerts, clicks, fair_price, images, insights, mail, offers, picks, popularity, pricing, sports, traffic
+from catalogue import (alerts, clicks, fair_price, images, insights, languages, mail, offers, picks, popularity, pricing,
+                       sports, traffic)
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
     Retailer, stale_cutoff,
 )
 from catalogue.search import apply_search
-from catalogue.types import type_choices, type_label
+from catalogue.types import DEFAULT as DEFAULT_TYPES, GAME_TYPES, plural_words, type_choices, type_label
 from content import service as copy
 from inbox import service as inbox
 from inbox.models import Conversation
@@ -132,12 +133,15 @@ def stock_tab(tab, compared=False):
 
 
 def _browse(request, template_context, *, base_queryset, fixed_game=None, default_ordering=None, tabs=False,
-            template="web/browse.html", structured=None):
+            template="web/browse.html", structured=None, stock_now=False):
     """Shared by search, game and set pages, and Out now on the drops page (``template``).
 
     ``structured``, when given, is called with the page of products shown and whether this is the canonical
     view (hub_is_canonical), and returns the page's structured data (a list of schema.org blocks), so a hub's
     ItemList names exactly the products on the page.
+
+    ``stock_now`` (Out now), the In stock tab and the In stock filter lead each card with its cheapest in-stock
+    shop (in_stock_offers), so a list about stock never shows a pre-order's price or Dropping soon.
 
     With ``tabs`` (game and set pages) the products are split into STOCK_TABS: the page shows one tab's
     list, counted for every tab in one query, and ``?pane=1`` returns just that tab's list for the
@@ -163,6 +167,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     game = form.value("game")
     if game is not None:
         products = products.filter(game=game)
+    pool = products   # a search's results before the filters below, for its quick filters
     product_type = form.value("type")
     if product_type:
         products = products.filter(product_type=product_type)
@@ -210,6 +215,9 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     page = paginator.get_page(request.GET.get("page"))
     if query and not request.GET.get("page"):
         insights.record_search(request, query, paginator.count)
+    # A list about stock now (Out now, the In stock tab or filter) leads each card with an in-stock shop.
+    if stock_now or tab == "in-stock" or (form.value("in_stock") and not tabs):
+        in_stock_offers(page.object_list)
     week_lows = offers.week_low_map([p.pk for p in page.object_list])
     cards = [(product, offers.summarise(product, week_lows)) for product in page.object_list]
 
@@ -245,6 +253,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     # Clear filters keeps the search words, and the tab only when the address named it.
     clear = {key: value for key, value in (("q", query), ("tab", asked)) if value}
     stock_tabs = stock_tab_links(request, tab_counts, opening) if tabs else []
+    quick = quick_filters(request, pool, form, game) if query and not tabs else []
     # Only the tabs with something in them, and the one in view; one list left needs no tab row.
     shown_tabs = [item for item in stock_tabs if item["count"] or item["key"] == tab]
     context = {
@@ -262,6 +271,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "show_filters": not tabs or filters_active or paginator.count >= FILTERS_FROM,
         "fold_filters": tabs,
         "no_matches": bool(query) and not filters_active and paginator.count == 0,
+        "quick": quick,
+        "quick_active": any(chip["active"] for chip in quick),
         "games": Game.objects.filter(is_active=True),
         "tab": tab,
         "tab_opening": opening,
@@ -285,6 +296,59 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     if structured is not None:
         context["structured_json"] = ld_json(structured(page, canonical=hub_is_canonical(request, page, opening)))
     return render(request, template, context)
+
+
+QUICK_TYPES = 3   # product types a search's quick filters offer: the commonest in its results
+
+
+def quick_filters(request, pool, form, chosen_game=None):
+    """The quick filters above a search's results: English, In stock and the commonest product types, each a
+    plain link that turns its filter on or, when on, off, keeping the search and the rest of the choices. Only
+    choices that change the list: English while the results hold other languages too, In stock while some are
+    not in stock, types while they hold more than one; one that is on always shows, so it can be taken off.
+    ``pool`` is the search's results before any filter but the game. Three queries."""
+    everything = Product.objects.filter(pk__in=pool.values("pk"))
+    counts = everything.aggregate(total=Count("pk"), english=Count("pk", filter=Q(language=languages.ENGLISH)))
+    if not counts["total"]:
+        return []
+    stocked = everything.in_stock().count()
+    kinds, games = {}, set()
+    for row in everything.order_by().values("product_type", "game__slug").annotate(n=Count("pk")):
+        kinds[row["product_type"]] = kinds.get(row["product_type"], 0) + row["n"]
+        games.add(row["game__slug"])
+    # The game's own words for its types ("Booster bundles" for Pokémon) when the results are one game's.
+    game_slug = chosen_game.slug if chosen_game else (next(iter(games)) if len(games) == 1 else None)
+    lang, in_stock, kind = form.value("lang"), bool(form.value("in_stock")), form.value("type")
+
+    def link(name, value):
+        params = request.GET.copy()
+        for gone in ("page", "pane"):
+            params.pop(gone, None)
+        if value:
+            params[name] = value
+        else:
+            params.pop(name, None)
+        return "?" + params.urlencode()
+
+    chips = []
+    if lang == "en" or 0 < counts["english"] < counts["total"]:
+        chips.append({"label": dict(LANGUAGES)["en"], "active": lang == "en", "url": link("lang", "" if lang == "en" else "en")})
+    if in_stock or 0 < stocked < counts["total"]:
+        chips.append({"label": form.fields["in_stock"].label, "active": in_stock,
+                      "url": link("in_stock", "" if in_stock else "on")})
+    # The commonest first, then in the game's own order of types (Booster box, Elite Trainer Box, ...).
+    place = {code: n for n, (code, _label) in enumerate(GAME_TYPES.get(game_slug, DEFAULT_TYPES))}
+    common = sorted((code for code in kinds if code != Product.Type.OTHER),
+                    key=lambda code: (-kinds[code], place.get(code, len(place)), code))
+    shown = common[:QUICK_TYPES] if len(kinds) > 1 else []
+    if kind and kind not in shown:
+        shown.append(kind)
+    for code in shown:
+        words = plural_words(game_slug, [code])
+        label = words[0] if words else type_label(game_slug, code)
+        chips.append({"label": label[:1].upper() + label[1:], "active": kind == code,
+                      "url": link("type", "" if kind == code else code)})
+    return chips
 
 
 def stock_tab_links(request, counts, opening=STOCK_TABS[0][0]):
@@ -508,7 +572,8 @@ def home_drops_new(fresh=False):
     from catalogue.signals import NEW_CACHE_KEY
 
     def build():
-        rows = list(out_now_queryset().prefetch_related(offers.buyable_prefetch()).order_by(*DROPS_ORDER)[:10])
+        rows = in_stock_offers(list(out_now_queryset().prefetch_related(offers.buyable_prefetch())
+                                    .order_by(*DROPS_ORDER)[:10]))
         for product in rows:
             product.best_offer = product.offers[0] if product.offers else None
         return rows
@@ -1224,6 +1289,10 @@ def product_detail(request, slug):
             "current": current,
             "unavailable": [listing for listing in unavailable if listing not in lotteries],
             "lotteries": sorted(lotteries, key=lambda listing: listing.delivered_price),
+            # ?report=<listing> opens the report form under the shops for that offer; ?report_state= says how
+            # sending went (report_listing).
+            "report_listing": next((listing for listing in listings if str(listing.pk) == request.GET.get("report")), None),
+            "report_state": request.GET.get("report_state") if request.GET.get("report_state") in REPORT_STATES else "",
             "cheapest": cheapest,
             "shop_count": shop_count,
             "summary": summary,
@@ -2014,6 +2083,32 @@ def track_price(raw):
     return value if value.is_finite() and MIN_PRICE <= value <= MAX_PRICE else None
 
 
+REPORT_STATES = ("sent", "busy", "reason")
+
+
+@require_POST
+def report_listing(request, slug):
+    """Take a visitor's report that a shop's offer is wrong (Report beside each offer on the product page) into
+    the Message us inbox (inbox.service.report), and send them back to the product with how it went. No name
+    or email is asked for; the hidden field and the hourly limit keep robots out. Works without JavaScript."""
+    product = get_object_or_404(Product.objects.active(), slug=slug)
+    back = product.get_absolute_url()
+    pk = request.POST.get("listing", "")
+    listing = (Listing.objects.filter(pk=pk, product=product).select_related("retailer", "product").first()
+               if pk.isdigit() else None)
+    if request.POST.get("website") or listing is None:
+        return HttpResponseRedirect(back)   # the hidden field is only ever filled by robots
+    reason = request.POST.get("reason", "")
+    if reason not in inbox.REPORT_REASONS:
+        return HttpResponseRedirect(f"{back}?report={listing.pk}&report_state=reason#report")
+    try:
+        inbox.report(listing, reason, request.POST.get("note", ""))
+        state = "sent"
+    except inbox.Refused:
+        state = "busy"
+    return HttpResponseRedirect(f"{back}?report_state={state}#report")
+
+
 @require_POST
 def alert_ask(request, slug):
     """Take an email address for a back-in-stock alert, or with ``track`` a price alert (a price and how long
@@ -2121,9 +2216,23 @@ def drop_words(request, drop, today):
 
 
 def out_now_queryset():
-    """Out now on the drops page: what the old Latest drops page listed (released in the last few weeks or
-    just listed by shops) that a shop has in stock now. Pre-orders are under Coming soon."""
-    return latest_drops_queryset().in_stock()
+    """Out now on the drops page and the home page: what the old Latest drops page listed (released in the last
+    few weeks or just listed by shops) that a shop has in stock now and that is out. A product whose release date
+    (its own or its set's) is still to come, by the UK date, stays under Coming soon however a shop marks it: a
+    shop taking orders early is not the release. Undated products count by their shops alone."""
+    return latest_drops_queryset().in_stock().filter(Q(release__isnull=True) | Q(release__lte=timezone.localdate()))
+
+
+def in_stock_offers(products):
+    """Narrow each product's ``offers`` (buyable_prefetch) to its in-stock ones, for a list that is about stock
+    now (Out now, the In stock tab and filter): its card then leads with the cheapest shop that has it, never
+    a cheaper pre-order. A product whose cheapest offer was a pre-order is marked ``narrowed``, so the card
+    leaves out the Price check, which was worked out on that cheaper price."""
+    for product in products:
+        offers_now = [offer for offer in product.offers if offer.availability == Listing.Availability.IN_STOCK]
+        product.narrowed = bool(product.offers) and (not offers_now or offers_now[0] is not product.offers[0])
+        product.offers = offers_now
+    return products
 
 
 def drops_url(show="soon", game=None):
@@ -2209,7 +2318,7 @@ def drops(request):
             base = base.filter(game=chosen)
         context.update({"waiting": waiting, "game": chosen})
         return _browse(request, context, base_queryset=base, fixed_game=chosen, default_ordering=DROPS_ORDER,
-                       template="web/drops.html")
+                       template="web/drops.html", stock_now=True)
 
     reminders_on = mail.enabled()
     try:

@@ -13,7 +13,8 @@ Deal claims rest on evidence, not on one dear listing:
   LOW_DAYS, with at least LOW_MIN_DAYS of them recorded, and LOW_UNDER below
   that month's average (a price that never moved is always its own low, and
   that is no news). "Best in 7 days" likewise needs the week to have been
-  dearer at some point.
+  dearer at some point. Both are price history; which shop is cheapest today
+  is the shop list's own "Cheapest" mark, never a badge.
 * No badge at all for a product only one UK shop lists: its price measured
   against its own past says nothing about the market.
 * A product is a deal (Summary.is_deal: featured deals, Too good to miss)
@@ -31,7 +32,6 @@ from .models import DailyLowestPrice, Listing, stale_cutoff
 
 LOW_30 = "low_30"
 BEST_WEEK = "best_week"
-LOWEST_TODAY = "lowest_today"
 
 LOW_DAYS = 30
 LOW_MIN_DAYS = 14
@@ -169,8 +169,6 @@ def summarise(product, week_lows=None):
             badge = LOW_30
         elif lows.week is not None and price <= lows.week and price < lows.week_high:
             badge = BEST_WEEK
-        elif lows.week is not None and price > lows.week:
-            badge = LOWEST_TODAY
         under = under if badge == LOW_30 else None
     return Summary(best, second, saving, percent, badge, suspect, best_deal(offers, best), under)
 

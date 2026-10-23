@@ -184,6 +184,27 @@ class DiscordTests(TestCase):
         self.channel("#everything", hook="https://discord.com/api/webhooks/3/third")
         self.assertEqual(self.run_once(minutes_later=10)[1].titles("https://discord.com/api/webhooks/3/third"), [])
 
+    def test_a_channel_for_one_set_posts_only_that_sets_news_and_the_set_can_be_swapped(self):
+        # The owner: "a Pokémon 30th restock discord ... when 30th is no longer in most demand we can swap it".
+        celebration = make_set(self.game, name="30th Celebration", slug="30th-celebration", code="CEL")
+        heroes = make_set(self.game, name="Ascended Heroes", slug="ascended-heroes", code="ASC")
+        channel = self.channel("#30th-restocks", restocks=True, preorders=False, price_drops=False, drop_days=False)
+        channel.games.set([self.game])
+        channel.sets.set([celebration])
+        self.run_once()
+        self.restock("30th Celebration Booster Bundle", minutes_ago=3, product_set=celebration)
+        self.restock("Ascended Heroes Elite Trainer Box", minutes_ago=2, product_set=heroes)
+        self.restock("Prismatic Evolutions Booster Box", minutes_ago=1)
+        self.assertEqual(self.run_once()[1].titles(HOOK), ["Back in stock: 30th Celebration Booster Bundle"])
+        # Swapped to another set: its restocks post from then on, those of the last hour still in stock too, and
+        # 30th Celebration's no more.
+        channel.sets.set([heroes])
+        self.restock("30th Celebration Elite Trainer Box", minutes_ago=0, product_set=celebration)
+        self.restock("Ascended Heroes Booster Bundle", minutes_ago=0, product_set=heroes)
+        self.assertEqual(self.run_once(minutes_later=10)[1].titles(HOOK),
+                         ["Back in stock: Ascended Heroes Booster Bundle",
+                          "Back in stock: Ascended Heroes Elite Trainer Box"])
+
     def test_a_channel_switched_off_posts_nothing(self):
         self.channel(is_active=False)
         self.restock("Surging Sparks Booster Box")
@@ -344,6 +365,21 @@ class ChannelAdminTests(TestCase):
         self.client.post(change, self.form(webhook_url="", every_minutes="60", price_drops="on"))
         channel.refresh_from_db()
         self.assertEqual((channel.webhook_url, channel.every_minutes, channel.price_drops), (HOOK, 60, True))
+
+    def test_a_set_is_chosen_by_typing_its_name_and_the_list_names_it(self):
+        celebration = make_set(self.game, name="30th Celebration", slug="30th-celebration", code="CEL")
+        add = reverse("admin:catalogue_discordchannel_add")
+        page = self.client.get(add).content.decode()
+        self.assertIn('name="sets"', page)
+        self.assertIn("admin-autocomplete", page)
+        found = self.client.get(reverse("admin:autocomplete"), {"term": "30th", "app_label": "catalogue",
+                                                                  "model_name": "discordchannel", "field_name": "sets"})
+        self.assertEqual([row["text"] for row in found.json()["results"]], ["30th Celebration"])
+        self.client.post(add, self.form(games=[self.game.pk], sets=[celebration.pk]))
+        channel = DiscordChannel.objects.get()
+        self.assertEqual(list(channel.sets.all()), [celebration])
+        listing = self.client.get(reverse("admin:catalogue_discordchannel_changelist")).content.decode()
+        self.assertIn("Back in stock (30th Celebration only)", listing)
 
     def test_a_test_post_goes_to_that_channel_only(self):
         channel = DiscordChannel.objects.create(label="#restocks", webhook_url=HOOK, restocks=True)

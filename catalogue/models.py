@@ -1324,6 +1324,12 @@ class DiscordChannel(models.Model):
     drop_days = models.BooleanField("out today", default=False, help_text="A set's release day, from 8am.")
     games = models.ManyToManyField(Game, blank=True, related_name="+",
                                    help_text="Only these games. None ticked means every game.")
+    sets = models.ManyToManyField(
+        "ProductSet", blank=True, related_name="+",
+        help_text="Only these sets, for example 30th Celebration: type a set's name to add it. Chosen, only their "
+                  "products post here, whatever the games above. None means every set. Swap them when another set "
+                  "is the one people want.",
+    )
     min_drop_percent = models.PositiveSmallIntegerField(
         "smallest price drop (%)", default=5, validators=[MinValueValidator(1), MaxValueValidator(50)],
         help_text="How far below yesterday's cheapest delivered price a price must fall to be posted.",

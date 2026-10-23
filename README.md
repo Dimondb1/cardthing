@@ -3315,7 +3315,11 @@ The words are under Discord posts in Site wording (`discord.*`).
 
 Each channel has its own page in admin, under Discord channels: its name
 (for you), its webhook address, which of the four updates it gets, which
-games (none ticked means every game), the smallest price drop (5% to
+games (none ticked means every game), which sets (typed by name; chosen,
+only their products post, whatever the games, so a "#30th-restocks"
+channel follows 30th Celebration alone until you swap the set for the next
+one people want; after a swap, the new set's restocks of the last hour
+still in stock post too), the smallest price drop (5% to
 start), how often it posts (every 10 minutes to once a day: each update at
 most that often, with what happened since in one post), how many products
 a post holds (1 to 10, 8 to start), and the name and picture shown (empty

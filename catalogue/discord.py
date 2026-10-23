@@ -4,7 +4,7 @@ Posts to the owner's Discord server: products back in stock, pre-orders opening,
     python manage.py post_discord           # what cron runs every ten minutes
     python manage.py post_discord --test    # one hello to each channel set up
 
-Each channel is set up in admin (DiscordChannel): its webhook address, which updates and games it gets, the
+Each channel is set up in admin (DiscordChannel): its webhook address, which updates and games (or sets) it gets, the
 smallest price drop worth a post, how often it posts (each update at most once in that time, with what
 happened since in one post), how many products a post holds, and the name and picture shown. Until the first
 channel is added there, a webhook address in .env (RIPRAPTOR_DISCORD_WEBHOOK) gets every update with the
@@ -164,7 +164,7 @@ def look_back(channel):
     return max(LOOK_BACK, timedelta(minutes=channel.every_minutes) + timedelta(hours=1))
 
 
-def shop_news(model, kind, title_key, availability, now, store, channel, games):
+def shop_news(model, kind, title_key, availability, now, store, channel, games, sets=frozenset()):
     """Restocks or pre-order openings since look_back(), newest first, one a day per product, while the shop
     still has it that way."""
     rows = (
@@ -173,7 +173,9 @@ def shop_news(model, kind, title_key, availability, now, store, channel, games):
         .exclude(retailer__source_type__in=MARKETPLACES).exclude(listing__sanity=Listing.Sanity.EXCLUDED)
         .select_related("product__game").order_by("-at")
     )
-    if games:
+    if sets:
+        rows = rows.filter(product__product_set_id__in=sets)
+    elif games:
         rows = rows.filter(product__game_id__in=games)
     seen = set()
     for row in rows:
@@ -189,12 +191,13 @@ def shop_news(model, kind, title_key, availability, now, store, channel, games):
                    path=row.product.get_absolute_url(), image=row.product.image_src, at=row.at)
 
 
-def price_drop_news(now, store, channel, games):
+def price_drop_news(now, store, channel, games, sets=frozenset()):
     """Products whose cheapest delivered price is at least the channel's smallest drop below yesterday's, once
     a day each."""
     today = timezone.localdate(now)
     for product in pricing.price_drops(limit=DROP_CANDIDATES, days=1, today=today):
-        if product.drop_ratio < channel.min_drop_percent / 100 or (games and product.game_id not in games):
+        if product.drop_ratio < channel.min_drop_percent / 100 or not in_scope(product.game_id, product.product_set_id,
+                                                                                  games, sets):
             continue
         checked = (Listing.objects.filter(product=product).buyable().filter(delivery_known=True)
                    .order_by("delivered_price").values_list("last_checked", flat=True).first()) or now
@@ -207,7 +210,7 @@ def price_drop_news(now, store, channel, games):
         )
 
 
-def drop_day_news(now, store, channel, games):
+def drop_day_news(now, store, channel, games, sets=frozenset()):
     """Sets out today, from DROP_DAY_FROM_HOUR, with the cheapest offer when a shop has one."""
     local = timezone.localtime(now)
     today = local.date()
@@ -215,7 +218,7 @@ def drop_day_news(now, store, channel, games):
         return
     upcoming, _recent = drops.tracker(today)
     for drop in upcoming:
-        if drop.day != today or (games and drop.product_set.game_id not in games):
+        if drop.day != today or not in_scope(drop.product_set.game_id, drop.product_set.pk, games, sets):
             continue
         product_set = drop.product_set
         best = drop.best
@@ -235,16 +238,24 @@ def drop_day_news(now, store, channel, games):
         )
 
 
-def news(kind, now, store, channel, games):
+def in_scope(game_id, set_id, games, sets):
+    """Whether a product or set is one a channel posts: its sets when it has some (whatever its games), else its
+    games, else everything."""
+    if sets:
+        return set_id in sets
+    return not games or game_id in games
+
+
+def news(kind, now, store, channel, games, sets=frozenset()):
     if kind == RESTOCK:
         return list(shop_news(Restock, RESTOCK, "discord.restock.title", Listing.Availability.IN_STOCK, now, store,
-                              channel, games))
+                              channel, games, sets))
     if kind == PREORDER:
         return list(shop_news(PreorderOpen, PREORDER, "discord.preorder.title", Listing.Availability.PREORDER, now,
-                              store, channel, games))
+                              store, channel, games, sets))
     if kind == PRICE_DROP:
-        return list(price_drop_news(now, store, channel, games))
-    return list(drop_day_news(now, store, channel, games))
+        return list(price_drop_news(now, store, channel, games, sets))
+    return list(drop_day_news(now, store, channel, games, sets))
 
 
 def absolute(url):
@@ -323,15 +334,16 @@ def post_channel(channel, now, store, post, stdout=None):
     sent = {}
     head = prefix(channel)
     saved = channel if channel.pk else None
-    # Only these games; none ticked means every game.
+    # Only these sets, else these games; none chosen means everything.
     games = {game.pk for game in channel.games.all()} if channel.pk else set()
+    sets = {product_set.pk for product_set in channel.sets.all()} if channel.pk else set()
     for kind in KINDS:
         if not getattr(channel, SWITCHES[kind]):
             continue
         seeded = DiscordPost.objects.filter(key=head + SEEDED + kind).exists()
         if seeded and not due(channel, kind, now):
             continue
-        posts = news(kind, now, store, channel, games)
+        posts = news(kind, now, store, channel, games, sets)
         known = set(DiscordPost.objects.filter(key__in=[head + p.key for p in posts]).values_list("key", flat=True))
         fresh = [p for p in posts if head + p.key not in known]
         if not seeded:

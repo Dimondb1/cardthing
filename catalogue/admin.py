@@ -730,12 +730,16 @@ class DiscordChannelAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     fieldsets = (
         (None, {"fields": ("label", "webhook_url", "webhook_saved", "is_active")}),
-        ("Updates for this channel", {"fields": ("restocks", "preorders", "price_drops", "drop_days", "games",
+        ("Updates for this channel", {"fields": ("restocks", "preorders", "price_drops", "drop_days", "games", "sets",
                                                  "min_drop_percent")}),
         ("How often", {"fields": ("every_minutes", "per_post")}),
         ("How it looks", {"fields": ("username", "use_logo", "send_test")}),
     )
     readonly_fields = ("webhook_saved",)
+    autocomplete_fields = ("sets",)   # type a set's name: hundreds of sets are too many to tick
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("sets")   # the list names each channel's sets
 
     @admin.display(description="Saved webhook")
     def webhook_saved(self, obj):
@@ -746,7 +750,8 @@ class DiscordChannelAdmin(admin.ModelAdmin):
         names = [label for field, label in (("restocks", "Back in stock"), ("preorders", "Pre-orders"),
                                             ("price_drops", "Price drops"), ("drop_days", "Out today"))
                  if getattr(obj, field)]
-        return ", ".join(names) or "None"
+        sets = [product_set.name for product_set in obj.sets.all()]
+        return (", ".join(names) or "None") + (f" ({', '.join(sets)} only)" if sets else "")
 
     @admin.display(description="Last post")
     def last_post(self, obj):

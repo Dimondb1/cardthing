@@ -15,7 +15,7 @@ import unicodedata
 from dataclasses import dataclass
 
 from . import languages
-from .matching import expand
+from .matching import chosen_option, expand
 
 # slug, name, short name, words that identify the game in a title, vendor or tag
 GAMES = [
@@ -337,6 +337,8 @@ def tidy_name(title):
     for _ in range(2):
         name = SHOP_TAILS.sub("", SHOP_HEADS.sub("", name)).strip(" :,-")
     name = re.sub(r"\b(\w+)( \1\b)+", r"\1", name, flags=re.I)  # "Booster Booster Pack"
+    # "(Default)" from a shop's system, and of "Sylveon / Greninja Ex Tin (Greninja)" only the one chosen.
+    name = chosen_option(name)
     return drop_repeated_tail(drop_repeated_set(name).replace(" | ", " "))
 
 

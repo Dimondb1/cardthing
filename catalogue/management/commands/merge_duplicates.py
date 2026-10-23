@@ -441,7 +441,7 @@ def set_key(name, game_slug, product_set):
 
 # Keys that only point at a pair: the two names must also agree on everything the hourly merge checks, and on
 # their size and wrapping, before the pair is offered.
-POINTING_KEYS = {"code", "set"}
+POINTING_KEYS = {"code", "set", "set_ex"}
 
 
 def pair_keys(product, language):
@@ -453,6 +453,9 @@ def pair_keys(product, language):
     code: a name's one set code, size and kind ("Eeveelutions Terastal Festival ex sv8a" and "Terastal
         Festival sv8a High Class Booster Box").
     set: for a product filed under a set, its words that are not the set's, with its kind.
+    set_ex: the same for a Pokémon product, without "ex", which shops write or leave out of a tin's or a box's
+        name ("30th Celebration Greninja Tin", "30th Celebration Greninja ex Tin"). It only points at a pair:
+        the names differ, so the owner or Claude says whether they are one.
     barcode: the same barcode.
     """
     from catalogue.importers import ean_key
@@ -466,7 +469,10 @@ def pair_keys(product, language):
         ("barcode", product.game_id, family, ean_key(product.ean)),
     ]
     if product.product_set_id:
-        keys.append(("set", product.product_set_id, family, set_key(product.name, slug, product.product_set)))
+        in_set = set_key(product.name, slug, product.product_set)
+        keys.append(("set", product.product_set_id, family, in_set))
+        if slug == "pokemon" and in_set:
+            keys.append(("set_ex", product.product_set_id, family, " ".join(w for w in in_set.split() if w != "ex")))
     return [key for key in keys if key[-1]]
 
 

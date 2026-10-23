@@ -3836,6 +3836,18 @@ product ("OP-09 Emperors in the New World" and "Emperors in the New World"),
 and stays when nothing else does ("OP-09 Booster Box", "Premium Booster
 PRB-01"). Magic's "M20" and "M21" stay codes.
 
+Shop wording that once kept one product on several pages
+(`matching.chosen_option`): a shop system's "(Default)" or "Default Title"
+goes, and a page that sells several artworks and names the one chosen in
+brackets is that one only ("30th Celebration Sylveon / Greninja Ex Tin
+(Greninja)" is the Greninja tin; "Paldea Collection Sprigatito / Fuecoco /
+Quaxly (Sprigatito)" the Sprigatito one). The hourly tidy applies both to
+names already in the catalogue too. For Pokémon, "30th Anniversary" is the
+30th Celebration set. A Pokémon name that differs from another in its set
+only by "ex" ("30th Celebration Greninja Tin" and "Greninja ex Tin") is
+offered as a possible duplicate (the `set_ex` key), for the owner or Claude,
+never merged by the rules alone.
+
 The hourly merge only joins names whose numbers agree. A volume or set
 number is never read as a pack count ("Gem Pack Vol 4 Booster Pack" and
 "Vol 6" are two products), and two names with different numbers ("Mystery

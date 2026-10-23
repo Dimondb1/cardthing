@@ -34,6 +34,43 @@ SUGGEST = 60
 
 ABBREVIATIONS = {" etb ": " elite trainer box ", " bb ": " booster box ", " upc ": " ultra premium collection "}
 
+# A shop that sells several artworks on one page names the one chosen in brackets at the end: "30th Celebration
+# Sylveon / Greninja Ex Tin (Greninja)" is the Greninja tin, which other shops call "30th Celebration Greninja ex
+# Tin", and "Paldea Collection Sprigatito / Fuecoco / Quaxly (Sprigatito)" the Sprigatito one. Each option has as
+# many words as the choice: the first ends the words before the first slash, the last starts those after the last.
+CHOSEN = re.compile(r"^(?P<before>[^()]*/[^()]*?)\s*\((?P<chosen>[^()/]+)\)\s*$")
+# The variant a shop's system names when a product has only one ("Default", "Default Title"): never part of it.
+DEFAULT_VARIANT = re.compile(r"\s*[\[(]\s*default(?: title)?\s*[\])]\s*$|\s*[-–:|]\s*default title\s*$", re.I)
+
+
+def chosen_option(name):
+    """The name with only the chosen one of a shop's options, and without a "(Default)" variant."""
+    name = DEFAULT_VARIANT.sub("", name or "")
+    found = CHOSEN.match(name)
+    if not found:
+        return name
+    chosen = found.group("chosen").split()
+    n = len(chosen)
+    parts = [part.split() for part in found.group("before").split("/")]
+    first, middle, last = parts[0], parts[1:-1], parts[-1]
+    if len(first) < n or len(last) < n or any(len(part) != n for part in middle):
+        return name
+    options = [first[-n:], *middle, last[:n]]
+    if [w.lower() for w in chosen] not in [[w.lower() for w in option] for option in options]:
+        return name
+    return " ".join(first[:-n] + chosen + last[n:])
+    left, _slash, right = found.group("before").partition("/")
+    left_words, right_words = left.split(), right.split()
+    chosen = found.group("chosen").split()
+    n = len(chosen)
+    if len(left_words) < n or not right_words:
+        return name
+    if [w.lower() for w in right_words[:n]] == [w.lower() for w in chosen]:
+        return " ".join(left_words[:-n] + right_words)
+    if [w.lower() for w in left_words[-n:]] == [w.lower() for w in chosen]:
+        return " ".join(left_words + right_words[n:])
+    return name
+
 
 # Remembered: one eBay run scores each of up to 200,000 titles against hundreds of our product names, and
 # cleaning the same name again each time was nearly all of its work. Both depend only on the text.
@@ -213,7 +250,7 @@ def _spaced(text):
 def key_text(text, game=""):
     """The name with every phrase shops add or drop at will taken out, and every code spelt one way. ``game``
     (the game's slug) adds the rules only one game's names need."""
-    expanded = " " + expand(text) + " "
+    expanded = " " + expand(chosen_option(text)) + " "
     expanded = re.sub(r"\b(\w+)( \1\b)+", r"\1", expanded)  # "booster booster box", a shop's slip
     for phrase in PHRASES:
         expanded = expanded.replace(f" {phrase} ", " ")
@@ -226,6 +263,8 @@ def key_text(text, game=""):
         # A Japanese High Class box is the set's only box, and the Booster Bundle the set's only bundle:
         # shops say so or not ("Mega Dream ex High Class Booster Box", "Journey Together Bundle").
         expanded = re.sub(r"\bhigh class\b", " ", expanded)
+        # The 2026 set is 30th Celebration; shops call it 30th Anniversary too ("30th Anniversary Celebration").
+        expanded = re.sub(r"\b30th anniversary(?: celebration)?\b", "30th celebration", expanded)
         expanded = re.sub(r"\bbooster bundle\b", "bundle", expanded)
         expanded = re.sub(r"\bpc (?=elite trainer box)", "center ", expanded)
         expanded = MEGA_EVOLUTION.sub(" me ", expanded)

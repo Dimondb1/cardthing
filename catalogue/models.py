@@ -2189,6 +2189,35 @@ class ReferralSettings(models.Model):
         return cls.objects.filter(pk=1).first() or cls(pk=1)
 
 
+class FeaturedSettings(models.Model):
+    """The one row of owner controls for the home page's Featured deals (web/views.py featured_pick)."""
+
+    paying_only = models.BooleanField(
+        "only shops that pay", default=False,
+        help_text="Ticked: Featured deals show only deals at shops that pay a commission (an affiliate link format "
+                  "on the retailer, eBay or Amazon), so the row can hold fewer than eight deals, or none and then "
+                  "it is not shown. Not ticked: up to six of the eight go to those shops and the best deals from "
+                  "the rest take the others. The line under the heading and the Terms page say which, by "
+                  "themselves.",
+    )
+
+    class Meta:
+        verbose_name = "featured deals setting"
+        verbose_name_plural = "featured deals settings"
+
+    def __str__(self):
+        return "Featured deals"
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    @classmethod
+    def current(cls):
+        """The row, or the defaults unsaved: a page that only reads it never writes."""
+        return cls.objects.filter(pk=1).first() or cls(pk=1)
+
+
 class Referrer(models.Model):
     """Someone who asked for a link to share. Their own email address, given by them and confirmed."""
 

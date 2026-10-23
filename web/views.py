@@ -26,7 +26,7 @@ from catalogue import (alerts, clicks, fair_price, images, insights, languages, 
                        sports, traffic)
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
-    DailyPageView, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
+    DailyPageView, FeaturedSettings, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
     Retailer, stale_cutoff,
 )
 from catalogue.search import apply_search
@@ -485,7 +485,8 @@ def featured_pick(products):
     market. The strongest come first. Among those, deals whose
     cheapest shop pays a commission take up to six of the eight places and
     the best of the rest take the others; if either side is short, the other
-    fills in. The page says that featured deals favour those shops.
+    fills in. The page says that featured deals favour those shops. With
+    FeaturedSettings.paying_only only those shops' deals are featured.
     """
     week_lows = offers.week_low_map([p.pk for p in products])
     good = []
@@ -501,7 +502,8 @@ def featured_pick(products):
         good.append((product, summary))
     good.sort(key=lambda row: (-row[1].strength, row[0].name))
     paying = [row for row in good if earns(row[1].best)]
-    other = [row for row in good if not earns(row[1].best)]
+    # The owner's choice (Admin, Featured deals settings): only shops that pay, however few deals that leaves.
+    other = [] if FeaturedSettings.current().paying_only else [row for row in good if not earns(row[1].best)]
     picked_paying = paying[:FEATURED_EARNING]
     picked_other = other[:FEATURED_SLOTS - len(picked_paying)]
     room = FEATURED_SLOTS - len(picked_paying) - len(picked_other)
@@ -768,6 +770,7 @@ def home(request):
             "last_checked": last_checked,
             "featured": featured,
             "featured_spares": featured_spares,
+            "featured_paying_only": FeaturedSettings.current().paying_only if featured else False,
             "latest": home_drops_new(),
             "coming_soon": home_coming_soon(),
             "coming_soon_shown": COMING_SOON_ON_HOME,
@@ -1409,6 +1412,7 @@ def terms(request):
             # The keyring offer's rules and data use, while it runs or anyone's details are still held.
             # A friend's referral and address can outlive the referrer's details, so either counts.
             "refer_terms": ReferralSettings.current().is_on or Referrer.objects.exists() or Referral.objects.exists(),
+            "featured_paying_only": FeaturedSettings.current().paying_only,
         },
     )
 

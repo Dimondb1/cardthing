@@ -3080,7 +3080,14 @@ The rules and their numbers are at the top of `catalogue/offers.py`.
 Six of the eight places go to deals whose cheapest shop pays a
 commission (an affiliate link format, eBay or Amazon), the best of the
 rest take the other two, and either side fills in when the other is
-short. A line under the Featured deals heading says so too, beside
+short. To feature only shops that pay, tick **Only shops that pay** in Admin under
+Products and prices -> Featured deals settings (off by default). The page lists the
+shops that count as paying now; a shop counts once its retailer has an
+affiliate link format, and eBay and Amazon always do. Ticked, the row can
+hold fewer than eight deals, or none, and then it is not shown; the line
+under the heading and the Terms page switch to "Featured deals come only
+from shops that pay us a commission" by themselves. Saving rebuilds the
+home page's row at once. A line under the Featured deals heading says so too, beside
 the row it is about, and that price comparisons are always cheapest
 delivered first and no shop can pay to move up, with a How it works link
 (`home.featured.disclosure`). The footer line on every page says featured deals favour shops

@@ -9,7 +9,7 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, RemovedShop, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -641,6 +641,44 @@ class ReferralSettingsAdmin(admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
         referrals.refresh_flag(obj)
+
+
+@admin.register(FeaturedSettings)
+class FeaturedSettingsAdmin(admin.ModelAdmin):
+    """The one row for the home page's Featured deals. The list goes straight to it."""
+
+    fields = ("paying_only", "paying_shops")
+    readonly_fields = ("paying_shops",)
+
+    def has_add_permission(self, request):
+        return False   # the list opens the one row, made on first use
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        row = FeaturedSettings.load()
+        return HttpResponseRedirect(reverse("admin:catalogue_featuredsettings_change", args=[row.pk]))
+
+    @admin.display(description="Shops that count as paying")
+    def paying_shops(self, obj):
+        """The shops whose deals count as paying now: an affiliate link format on the retailer, or eBay or Amazon."""
+        names = list(Retailer.objects.filter(is_active=True).filter(
+            ~models.Q(affiliate_url_template="")
+            | models.Q(source_type__in=[Retailer.Source.EBAY, Retailer.Source.AMAZON])
+        ).order_by("name").values_list("name", flat=True))
+        if not names:
+            return "None yet. Add a shop's affiliate link format under Retailers and it counts from then on."
+        return ", ".join(names) + ". Add a shop's affiliate link format under Retailers to add it."
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from .signals import clear_list_caches
+
+        clear_list_caches(force=True)   # the home page's cached row is built again with the new choice
 
 
 # A Discord webhook's address: https://discord.com/api/webhooks/<id>/<token> (older ones say discordapp.com).

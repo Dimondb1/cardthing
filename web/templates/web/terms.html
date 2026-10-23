@@ -21,7 +21,7 @@
   <section aria-labelledby="terms-independence">
     <h2 id="terms-independence">{% copy "terms.independence.title" %}</h2>
     <p class="prose">{% copy "footer.independence_disclaimer" %}</p>
-    <p class="prose">{% copy "home.featured.note" %}</p>
+    <p class="prose">{% if featured_paying_only %}{% copy "home.featured.note_paying" %}{% else %}{% copy "home.featured.note" %}{% endif %}</p>
   </section>
 
   <section aria-labelledby="terms-data">

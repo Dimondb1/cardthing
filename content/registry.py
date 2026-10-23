@@ -438,9 +438,23 @@ ENTRIES = [
         legal=True,
     ),
     Entry(
+        "home.featured.disclosure_paying", T, "Featured deals disclosure, paying shops only",
+        "Featured deals come only from shops that pay us a commission. Price comparisons are always cheapest "
+        "delivered first, and no shop can pay to move up.",
+        "Replaces the Featured deals disclosure while Featured deals settings has Only shops that pay ticked.",
+        legal=True,
+    ),
+    Entry(
         "home.featured.note", T, "Featured deals note",
         "Every featured deal has evidence behind it: its lowest delivered price in 30 days by our own daily record and clearly under its average, or a saving of at least 5% on the next shop when that shop's price is in line with the market. One unusually dear listing never makes a saving. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
         "On the terms page, under Independence. Says how the home page's featured deals row is chosen.",
+        legal=True,
+    ),
+    Entry(
+        "home.featured.note_paying", T, "Featured deals note, paying shops only",
+        "Every featured deal has evidence behind it: its lowest delivered price in 30 days by our own daily record and clearly under its average, or a saving of at least 5% on the next shop when that shop's price is in line with the market. One unusually dear listing never makes a saving. Featured deals come only from shops that pay us a commission, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
+        "Replaces the Featured deals note on the terms page while Featured deals settings has Only shops that "
+        "pay ticked.",
         legal=True,
     ),
 

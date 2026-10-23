@@ -62,7 +62,7 @@
     <a class="section-head__all" href="{% url 'web:deals' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
   </div>
   {# Said beside the row it is about, not only in the footer: commission shapes which deals are picked, never a comparison's order. #}
-  <p class="section-head__note">{% copy "home.featured.disclosure" %} <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a></p>
+  <p class="section-head__note">{% if featured_paying_only %}{% copy "home.featured.disclosure_paying" %}{% else %}{% copy "home.featured.disclosure" %}{% endif %} <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a></p>
   {# Every featured deal shows without script; the spares after them pass the same tests and wait hidden, so interest.js can put the visitor's own games first, a spare only ever taking the place of a deal from the same side. #}
   <ul class="trending" data-scroll data-interest data-interest-show="{{ featured|length }}">
     {% for product, summary in featured %}{% include "web/includes/featured_card.html" %}{% endfor %}

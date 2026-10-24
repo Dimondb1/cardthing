@@ -3,7 +3,8 @@ The background reader: one long-running process (manage.py run_worker) that keep
 
 It reads each shop when its turn comes (Retailer.due, the same rules as the hourly cron) and, between
 reads, asks shops about single listings of the products people care about (catalogue/heat.py): HOT
-ones every ten minutes, WARM ones every hour. Every 15 minutes it also looks at each Shopify shop's
+ones every ten minutes, WARM ones every hour. A due read always starts before any other job when there
+is room for it, since one read sees every listing a shop has. Every 15 minutes it also looks at each Shopify shop's
 collection list for new pre-orders (importers.poll_collections), every 5 minutes it looks for other
 shops selling products that one shop sells, or none (catalogue/finder.py), and every 6 hours (Scryfall
 every 24) it reads each release source for announced sets and dates (catalogue/releases.py), one source
@@ -82,7 +83,8 @@ RELEASE_SCAN = "release_scan"
 FINDER_KEY = 0
 # Release sources are not shops: one is read at a time, held under this key.
 RELEASE_KEY = -1
-# Priority is weight times minutes overdue, so nothing waits for ever behind something heavier.
+# Reads go before every other job (plan). Among reads, and among the rest, priority is weight times minutes
+# overdue, so nothing waits for ever behind something heavier.
 WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, PULSE: 300, FINDER: 50, RELEASE_SCAN: 20}
 # A shop never read before has no next read; it counts as an hour overdue.
 NEVER_READ_MINUTES = 60
@@ -407,7 +409,8 @@ class Worker:
         return max(1, min(MAX_READS, self.threads - 1))
 
     def plan(self, now):
-        """Every job due now, highest priority first, at most one per shop. Reads nothing from any shop."""
+        """Every job due now: the due reads, then the rest highest priority first. A shop whose read has room
+        to start is neither probed nor pulsed. Reads nothing from any shop."""
         if crawl.all_paused():
             return []
         with self.lock:
@@ -424,6 +427,7 @@ class Worker:
             reads.append(Task(SHOP_READ, shop.pk, shop.source_type, WEIGHTS[SHOP_READ] * max(1.0, overdue),
                               f"Read {shop.name}"[:120], last_read_seconds=shop.last_read_seconds))
         reads.sort(key=lambda t: -t.priority)
+        # The reads there is room for now.
         chosen = []
         for task in reads:
             if len(chosen) >= reads_free:
@@ -444,7 +448,11 @@ class Worker:
         probed = {t.retailer_id for t in probes}
         pulses = late + [t for t in pulses if not t.late and t.retailer_id not in probed]
         extra = self.plan_finder(now, busy) + self.plan_releases(now, busy)
-        return sorted(chosen + probes + pulses + extra, key=lambda t: -t.priority)
+        # Every due read goes before every other job. One read sees all of a shop's listings, where a probe
+        # sees one a request, and probes of listings an hour or more old outweigh any read by priority, so
+        # reads queued among them waited for hours. The reads with no room yet are queued too: dispatch keeps
+        # to the read limits and fills a slot at the next turn after a read ends, not at the next plan.
+        return reads + sorted(probes + pulses + extra, key=lambda t: -t.priority)
 
     def plan_releases(self, now, busy):
         """The most overdue release source, one at a time (releases.due_sources, one query)."""

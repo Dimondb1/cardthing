@@ -1864,7 +1864,13 @@ that keeps prices fresh all day:
 
 There is no job list: every minute it works out what is due from the shops
 and listings themselves, so a crash or a deploy loses only the jobs that
-were running. It is polite: one job per shop at a time; at most one request
+were running. A due whole-shop read starts before anything else whenever
+there is room for one, and the next read starts within seconds of the last
+ending, since one read sees every listing a shop has while a single-listing
+check sees one. Until 24 Oct 2026 reads queued by priority with the
+single-listing checks, which outweighed them once listings were an hour old,
+so on a two-thread server shops went two hours or more between reads.
+It is polite: one job per shop at a time; at most one request
 a second to a Shopify shop (three at once), one every two seconds to a
 website shop and one every ten seconds to a feed; two a second in all;
 half a second between Shopify product pages; at most two whole-shop reads
@@ -1910,6 +1916,9 @@ and stops. It runs `RIPRAPTOR_WORKER_THREADS` jobs at once (3 unless set);
 `install.sh` writes 2 in `.env` on a server with under 1.5 GB of memory (a
 "1 GB" server reports about 960 MB). `install.sh` copies the unit file on
 every update, so the setting belongs in `.env`, not in the unit. `--max-threads` overrides it for one run.
+With 2 threads one whole-shop read runs at a time, so a long website read
+(Magic Madhouse takes about half an hour) holds every other shop's read
+until it ends; 3 threads allow a second read beside it.
 `check_worker` prints how old the heartbeat is and exits with code 1 when
 it is over ten minutes old or there has never been one; cron runs it hourly
 so the log shows when the reader stopped. Insights lists "Worker not

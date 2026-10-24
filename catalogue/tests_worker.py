@@ -272,14 +272,15 @@ class PolitenessTests(WorkerTestCase):
         executor = HeldExecutor()
         reader = self.make_worker(executor=executor)
         reader.queue = reader.plan(self.clock())
-        reads = [t for t in reader.queue if t.kind == worker.SHOP_READ]
-        self.assertEqual(len(reads), 2)
-        self.assertEqual(sum(t.source_type == Retailer.Source.WEBSITE for t in reads), 1)
+        # Every due read is queued; only two start, one of them a website shop.
+        self.assertEqual(sum(t.kind == worker.SHOP_READ for t in reader.queue), 3)
         reader.dispatch(self.clock())
         self.assertEqual([t.kind for t in executor.jobs], [worker.SHOP_READ, worker.SHOP_READ])
-        # The next pass plans no read while both are running, and the import lock is held for them.
+        self.assertEqual(sum(t.source_type == Retailer.Source.WEBSITE for t in executor.jobs), 1)
+        # The next pass starts no read while both are running, and the import lock is held for them.
         self.clock.advance(minutes=1)
-        self.assertEqual([t for t in reader.plan(self.clock()) if t.kind == worker.SHOP_READ], [])
+        reader.queue = reader.plan(self.clock())
+        self.assertEqual(reader.dispatch(self.clock()), 0)
         self.assertTrue(reader.import_lock.held)
 
     def test_a_read_waits_while_another_command_holds_the_import_lock_and_probes_go_on(self):
@@ -295,6 +296,30 @@ class PolitenessTests(WorkerTestCase):
         reader.dispatch(self.clock())
         self.assertEqual([t.kind for t in executor.jobs], [worker.PROBE])
         self.assertIsNone(Retailer.objects.get(name="Due Shop").next_read_at)
+
+    def test_a_due_read_starts_before_probes_that_outweigh_it_and_its_slot_is_refilled_at_once(self):
+        # The owner's Crawl health on 24 Oct 2026, 14:35: two threads, so one read at a time, and 45 of 55 shops
+        # "due now" with reads up to two and a half hours old, while the only work done was probes. A probe of
+        # a listing last seen at a read two hours ago outweighs that shop's read by priority, so it never came.
+        first = self.shop("Bad Wolf", next_read_at=self.clock() - timedelta(minutes=61))
+        second = self.shop("Bremner", next_read_at=self.clock() - timedelta(minutes=40))
+        for n in range(3):
+            self.listing(self.product(f"hot-{n}", views=3), self.shop(f"Probe Shop {n}"), 110)
+        executor = HeldExecutor()
+        reader = self.make_worker(executor=executor, threads=2)
+        reader.queue = reader.plan(self.clock())
+        read, probe_task = reader.queue[0], reader.queue[2]
+        self.assertEqual((read.kind, read.retailer_id), (worker.SHOP_READ, first.pk))
+        self.assertGreater(probe_task.priority, read.priority)
+        reader.dispatch(self.clock())
+        # One thread reads, one probes: the read never takes the last thread.
+        self.assertEqual([t.kind for t in executor.jobs], [worker.SHOP_READ, worker.PROBE])
+        # The read ends 20 seconds later: the next due read starts at the next turn, with no new plan.
+        self.clock.advance(seconds=20)
+        reader.running.pop(first.pk)
+        reader.import_lock.release()
+        reader.dispatch(self.clock())
+        self.assertEqual((executor.jobs[-1].kind, executor.jobs[-1].retailer_id), (worker.SHOP_READ, second.pk))
 
     def test_after_twenty_minutes_of_reads_the_import_lock_is_let_go_before_another_read(self):
         lock = worker.ImportLock(self.import_lock)

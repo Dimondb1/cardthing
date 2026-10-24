@@ -1162,10 +1162,13 @@ def product_detail(request, slug):
     month_ago = pricing.previous_price_map([product.pk], days=30, today=today).get(product.pk)
     last_known = None if cheapest else pricing.last_known_price(product)
     restocks = pricing.restock_summary(product) if listings else None
-    # Price check: today's cheapest delivered price against our own daily record. None while on trial
-    # outside Pokémon, without enough days, or when the delivery cost is unknown.
-    fair = (fair_price.verdict(product, cheapest.delivered_price, today, shops=shops_listing)
-            if cheapest and cheapest.delivery_known else None)
+    # Price check: today's cheapest delivered price against our own daily record, which counts only UK shops
+    # (not eBay or Amazon searches). None without enough days, when the delivery cost is unknown, or when the
+    # cheapest price is doubtful: it may not be this product.
+    uk_shops = len({listing.retailer_id for listing in listings if listing.sanity != Listing.Sanity.EXCLUDED
+                    and listing.retailer.source_type not in pricing.MARKETPLACES})
+    fair = (fair_price.verdict(product, cheapest.delivered_price, today, shops=uk_shops)
+            if cheapest and cheapest.delivery_known and cheapest.sanity != Listing.Sanity.DOUBTFUL else None)
 
     # Nothing to buy here: the closest products shops have in stock, so a visitor hunting a sold-out product
     # has somewhere to go.

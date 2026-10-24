@@ -2918,7 +2918,17 @@ up to a year back and not counting today:
   not, `MIN_SHOPS`): one shop's price measured against its own past says
   nothing about the market. A lone £1,199.99 Ultra Shiny GX box was being
   called "Lowest yet" because its price had never moved; it now gets no
-  verdict, and no badge (see Featured deals).
+  verdict, and no badge (see Featured deals). eBay and Amazon are searches,
+  not shops, so they never count towards the two.
+- No price check shows on a doubtful cheapest price: it may not be this
+  product. A price that only eBay or Amazon sellers give, for a product no
+  UK shop we read lists in stock or not, is doubtful ("found by a search,
+  and no shop we read lists it to compare with"): shown, never called a
+  low, a saving or a deal, and put to Claude, who hides it when the
+  listing is not the product. The hourly `tidy_listings` judges such
+  products again, so one left alone when its last shop listing went is
+  checked within the hour. On 24 Oct 2026 two promo cards from the Holiday
+  Calendar 2025 were its only price, as "Lowest yet".
 - A price that has never moved is its own lowest every day. That is a fair
   price, never "Lowest yet": the lowest band also needs the price to be 5%
   under the average.

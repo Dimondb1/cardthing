@@ -13,8 +13,9 @@ Today's cheapest delivered price is set against the days before today, back up t
 A price that has never moved is its own lowest every day: that is a fair price, never "Lowest yet".
 
 Our own record counts only with MIN_SHOPS UK shops listing the product: one shop's prices measured against its
-own past say nothing about the market, so a lone £1,199.99 listing is never called a good price by it. It also
-needs MIN_DAYS days of prices before today.
+own past say nothing about the market, so a lone £1,199.99 listing is never called a good price by it. eBay and
+Amazon are searches, not shops, so they never count towards it. It also needs MIN_DAYS days of prices before
+today. A doubtful cheapest price (catalogue/sanity.py) gets no verdict: it may not be this product.
 
 The market: when Claude matched the product to Cardmarket's surely, or the owner confirmed it
 (catalogue/cardmarket_match.py), Cardmarket's trend price for it in the last MARKET_FRESH_DAYS, in pounds at
@@ -163,12 +164,21 @@ def refresh_bands(today=None):
     from .cardmarket import in_pounds
 
     today = today or timezone.localdate()
-    prices = dict(
+    from .pricing import MARKETPLACES
+
+    # A product whose cheapest price is doubtful gets no band: it may not be this product.
+    prices = {
+        pk: price for pk, price, doubtful in
         Listing.objects.buyable().filter(delivery_known=True, product__is_active=True, product__game__is_active=True)
-        .order_by().values("product_id").annotate(price=Min("delivered_price")).values_list("product_id", "price")
-    )
+        .order_by().values("product_id")
+        .annotate(price=Min("delivered_price"),
+                  doubtful=Min("delivered_price", filter=Q(sanity=Listing.Sanity.DOUBTFUL)))
+        .values_list("product_id", "price", "doubtful")
+        if doubtful is None or doubtful > price
+    }
     shops = dict(
-        Listing.objects.live().exclude(sanity=Listing.Sanity.EXCLUDED).filter(product_id__in=list(prices))
+        Listing.objects.live().exclude(sanity=Listing.Sanity.EXCLUDED).exclude(retailer__source_type__in=MARKETPLACES)
+        .filter(product_id__in=list(prices))
         .order_by().values("product_id").annotate(n=Count("retailer_id", distinct=True)).values_list("product_id", "n")
     )
     records = {

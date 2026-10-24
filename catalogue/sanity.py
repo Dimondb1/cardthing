@@ -50,6 +50,10 @@ PEER_EXCLUDE_HIGH = Decimal("4.0")
 # another item (a single pack, another language, one card). Under this share of what the shops charge it
 # is doubtful however many shops there are: shown, never claimed as a saving, and put to Claude.
 MARKET_DOUBT_LOW = Decimal("0.65")
+# A search result for a product no UK shop we read lists, in stock or not, has nothing to be measured by: two
+# promo cards from the Holiday Calendar were its only price, as "Lowest yet", on 24 Oct 2026. It is doubtful
+# until Claude or the owner checks it is the product.
+ONLY_MARKETPLACE = "found by a search, and no shop we read lists it to compare with"
 # With only one other shop we cannot tell which is wrong: a gap this wide makes both doubtful.
 ONE_PEER_LOW = Decimal("0.30")
 ONE_PEER_HIGH = Decimal("3.33")
@@ -294,6 +298,7 @@ def verdicts(rows, now, evidence=None, repriced=()):
         evidence = Evidence(rows[0]["product_id"], now)
     cutoff = stale_cutoff(now)
     peers = [row for row in rows if is_peer(row, cutoff)]
+    no_shop = all(row["retailer__source_type"] in MARKETPLACES for row in rows)
     peer_pks = {row["pk"] for row in peers}
     trusted = {row["pk"] for row in rows if is_trusted(row, now)}
 
@@ -318,6 +323,8 @@ def verdicts(rows, now, evidence=None, repriced=()):
             if not others:
                 if not judged:
                     lone.add(row["pk"])
+                if no_shop and figure(row) > 0:
+                    own = worse(own, (DOUBTFUL, noted(ONLY_MARKETPLACE, row, []), None))
                 result[row["pk"]] = worse(result.get(row["pk"]), own)
                 continue
             sanity, reason, ratio, both = peer_verdict(row, others)

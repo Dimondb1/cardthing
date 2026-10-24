@@ -20,7 +20,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from catalogue import languages
+from catalogue import languages, sanity
 from catalogue.classify import NOT_SEALED, box_contents, find_game
 from catalogue.ebay import EbayError, fill_titles, too_cheap_listings, wrong_listings
 from catalogue.importers import barcode_owners, ean_key, link_key, listing_page, slug_words, valid_gtin
@@ -253,6 +253,18 @@ class Command(BaseCommand):
                         correct_daily_lowest(listing.product_id)
                 if wrong or cheap:
                     clear_list_caches(force=True)
+            # A search result for a product no UK shop lists is doubtful (sanity.ONLY_MARKETPLACE), put to Claude
+            # and never claimed as a low. A price check gives the verdict, but one left alone when its last shop
+            # listing went may not be checked for a day, so such products are judged again here.
+            shop_listed = Listing.objects.exclude(retailer__source_type__in=sanity.MARKETPLACES).values("product_id")
+            alone = set(
+                Listing.objects.filter(retailer__source_type__in=sanity.MARKETPLACES, is_active=True,
+                                       sanity=Listing.Sanity.OK, product__is_active=True)
+                .exclude(product_id__in=shop_listed).values_list("product_id", flat=True)
+            )
+            if not dry_run:
+                for product_id in sorted(alone):
+                    sanity.judge_product(product_id)
             if dry_run:
                 transaction.set_rollback(True)
         self.stdout.write(f"{removed} listings. {Listing.objects.count()} remain. {len(cheap)} eBay prices too low to trust.")

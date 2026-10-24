@@ -82,7 +82,7 @@ NOT_SEALED = re.compile(
     r"\bdeck box\b|\bportfolio\b|\btoploader|\bevent\b|\bpre[\s-]?release event\b|\bticket\b|\bcase\b(?! of)|\bcarton\b|"
     # A plush packed in a tin with booster packs is the tin ("Electric Plush Blind Box Tin", Solent Cards), also
     # in an address that glues the tin to the next word ("...-blind-box-tinsimplified-chinese"). Not "tiny".
-    r"\bdamaged\b|\bopened\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b(?!.*\btins?(?![a-rt-z]))|\bkeyring\b|\bposter\b(?! box)|"
+    r"\bdamaged\b|\bopened\b|\bripped seals?\b|\bcut seals?\b|\bbroken seals?\b|\bseals? (?:ripped|cut|broken)\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b(?!.*\btins?(?![a-rt-z]))|\bkeyring\b|\bposter\b(?! box)|"
     # Toys and building sets that carry a card game's name, not cards.
     r"\bnanoblock\b|\bmega construx\b|\bmega bloks\b|\blego\b|\bfunko\b|\bbuilding (?:block|set)s?\b|"
     r"\bcode card\b|\bgraded\b|\bpsa\b|\bcgc\b|\bproxy\b|\bbulk\b|\blot of\b|\bjapanese single|\bpromo card\b|"

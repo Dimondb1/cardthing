@@ -72,3 +72,17 @@ class MergeTests(TestCase):
         self.assertIn(self.no_ex.pk, flat)
         self.assertNotIn(self.mini.pk, flat)
         self.assertNotIn(self.sylveon.pk, flat)
+
+
+class RippedSealTests(TestCase):
+    def test_a_product_sold_with_ripped_seals_is_not_a_sealed_product(self):
+        from decimal import Decimal
+
+        from .classify import classify
+
+        for title in ("30th Anniversary Products (RIPPED SEALS) (Greninja Bundle (Tin & EX Box))",
+                      "WAVE 2 Pokemon TCG: 30th Anniversary Products (RIPPED SEALS) (Greninja Bundle (Tin & EX Box))",
+                      "Surging Sparks Booster Box - Seal Broken", "Prismatic Evolutions Elite Trainer Box (cut seal)"):
+            self.assertIsNone(classify(title, "", "", (), Decimal("40.00")), title)
+        self.assertIsNotNone(classify("Pokemon 30th Celebration Greninja ex Tin", "", "", (), Decimal("24.99")))
+

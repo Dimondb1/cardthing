@@ -23,7 +23,9 @@ from django.utils import timezone
 from catalogue import languages, sanity
 from catalogue.classify import NOT_SEALED, box_contents, find_game
 from catalogue.ebay import EbayError, fill_titles, too_cheap_listings, wrong_listings
-from catalogue.importers import barcode_owners, ean_key, link_key, listing_page, slug_words, valid_gtin
+from catalogue.importers import (
+    barcode_owners, calls_itself_a_card, ean_key, link_key, listing_page, remove_not_sealed, slug_words, valid_gtin,
+)
 from catalogue.matching import (
     AUTO_LINK, DIFFERENT, LANGUAGE_DIFFERENT, contradiction, expand, key_words, match_key, score, shop_title,
 )
@@ -220,6 +222,21 @@ class Command(BaseCommand):
                 (listing, listing.retailer_id, listing.url, listing.title, listing.product.name, listing.product.game.slug)
                 for listing in listings if listing.pk not in gone
             ])
+            # A listing whose shop description calls it a card from a product ("... is a Basic Pokemon Card from
+            # the My First Battle Deck", Magic Madhouse) is a single card, whatever its title: the page reader
+            # now refuses such pages (importers.not_sealed_reason), and these were linked before it did.
+            gone |= {listing.pk for listing in misfits}
+            described = dict(Listing.objects.filter(description__icontains="card from").values_list("pk", "description"))
+            singles = [listing for listing in listings if listing.pk in described and listing.pk not in gone
+                       and calls_itself_a_card(listing.title or listing.product.name, described[listing.pk])]
+            for listing in singles:
+                self.stdout.write(f"{'would remove' if dry_run else 'removed'} (a single card): {listing.product.name} <- "
+                                  f"{listing.retailer.name} {listing.url}")
+            if singles:
+                removed += len(singles)
+                if not dry_run:
+                    with transaction.atomic():
+                        remove_not_sealed(listing.pk for listing in singles)
             for listing in misfits:
                 removed += 1
                 self.stdout.write(f"{'would remove' if dry_run else 'removed'}: {listing.product.name} <- {listing.retailer.name} {listing.url}")

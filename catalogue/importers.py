@@ -89,6 +89,8 @@ class Offer:
     # The shop's description as plain text (clean_description): "" when the shop gives none, None when the
     # read did not carry one, which leaves the listing's as it was.
     description: str | None = None
+    # Why the shop's own page says this is no sealed product (a single card, a used item), or "" (page_offer).
+    not_sealed: str = ""
 
     def __post_init__(self):
         # An open draw is not stock, from whichever source the offer came.
@@ -864,6 +866,20 @@ SITEMAP_ENTRY_END = re.compile(r"</(?:url|sitemap)\s*>", re.I)
 JSON_LD = re.compile(r"<script[^>]+type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>", re.I | re.S)
 META = re.compile(r"<meta[^>]+(?:property|name)=[\"']([^\"']+)[\"'][^>]+content=[\"']([^\"']*)[\"']", re.I)
 TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+# What a shop's own page says that makes it no sealed product, whatever its title: an offer of a used item
+# (schema.org UsedCondition, DamagedCondition or RefurbishedCondition), a breadcrumb filing it under single
+# cards, or a description that calls it a card from a product. Magic Madhouse sells the cards of My First Battle
+# Deck as "My First Battle Deck: Pikachu Deck / Electabuzz", filed under "Pokémon Singles", in "Mint / Near Mint"
+# condition, marked UsedCondition and described as "... is a Basic Pokemon Card from the My First Battle Deck":
+# twenty of them were pages on the site on 24 Oct 2026.
+USED_CONDITION = re.compile(r"[\"']itemCondition[\"']\s*:\s*[\"'][^\"']*(?:Used|Damaged|Refurbished)Condition|"
+                            r"itemprop=[\"']itemCondition[\"'][^>]*(?:href|content)=[\"'][^\"']*(?:Used|Damaged|Refurbished)Condition",
+                            re.I)
+SINGLES_CRUMB = re.compile(r"\bsingles?\b|\bsingle cards?\b", re.I)
+SINGLE_CARD_TEXT = re.compile(r"\bis an? (?:[\w'’-]+ ){0,4}card from\b", re.I)
+CRUMB_LIST = re.compile(r"itemtype=[\"']https?://schema\.org/BreadcrumbList[\"'][^>]*>(.*?)</(?:ol|ul|nav)>", re.I | re.S)
+CRUMB_NAME = re.compile(r"itemprop=[\"']name[\"'][^>]*>([^<]+)<|<meta[^>]+itemprop=[\"']name[\"'][^>]+content=[\"']([^\"']+)",
+                        re.I)
 PRODUCT_PATH_WORDS = ("/product", "/products/", "/p/", "/item", "/shop/", "-p-")
 MAX_PAGES = 3000   # pages of one shop kept in its index, the ones worth fetching first
 PAGES_PER_READ = 600   # pages fetched in one read, so a 3,000 page shop is read through in five
@@ -1108,18 +1124,78 @@ def offer_price(offers):
     return None, "GBP"
 
 
+def breadcrumbs(html, nodes=()):
+    """The names in the page's breadcrumb trail, from its schema.org data or its microdata."""
+    names = []
+    for node in nodes:
+        kind = node.get("@type", "")
+        if "BreadcrumbList" in (kind if isinstance(kind, list) else [kind]):
+            for item in node.get("itemListElement") or []:
+                if isinstance(item, dict):
+                    inner = item.get("item")
+                    name = item.get("name") or (inner.get("name") if isinstance(inner, dict) else "")
+                    if name:
+                        names.append(str(name))
+    for block in CRUMB_LIST.findall(html):
+        names += [html_.unescape(a or b).strip() for a, b in CRUMB_NAME.findall(block)]
+    return names
+
+
+def calls_itself_a_card(title, description):
+    """Whether a description opens by calling the item a card from a product: "My First Battle Deck: Pikachu Deck /
+    Electabuzz is a Basic Pokemon Card from the My First Battle Deck". Only the item itself, named as in its title:
+    a sealed box's description may say its promo "is a full art card from" a set."""
+    found = SINGLE_CARD_TEXT.search(description or "")
+    if not found or not title:
+        return False
+    def plain(text):
+        return " ".join(re.sub(r"[^\w/&]+", " ", html_.unescape(text).lower()).split())
+    return plain(description[:found.start()]) == plain(title)
+
+
+def not_sealed_reason(html, title="", description="", nodes=()):
+    """Why a product page says it is no sealed product, whatever its title, or "": see USED_CONDITION."""
+    if USED_CONDITION.search(html):
+        return "the shop sells it used"
+    if any(SINGLES_CRUMB.search(name) and "sealed" not in name.lower() for name in breadcrumbs(html, nodes)):
+        return "the shop files it under single cards"
+    if calls_itself_a_card(title, description):
+        return "the shop calls it a single card"
+    return ""
+
+
+def remove_not_sealed(listing_pks):
+    """Remove shop listings that are not sealed products after all (a single card, a used item). A product no
+    other shop lists was made from them, so its eBay and Amazon listings go too: the hourly tidy then retires
+    the page (its address answers 410 Gone). Today's price history is worked out again. Returns how many went."""
+    rows = list(Listing.objects.filter(pk__in=list(listing_pks)).values_list("pk", "product_id"))
+    if not rows:
+        return 0
+    pks = {pk for pk, _ in rows}
+    products = {product_id for _, product_id in rows}
+    shops_left = set(Listing.objects.filter(product_id__in=products).exclude(pk__in=pks)
+                     .exclude(retailer__source_type__in=pricing.MARKETPLACES).values_list("product_id", flat=True))
+    orphaned = products - shops_left
+    Listing.objects.filter(Q(pk__in=pks) | Q(product_id__in=orphaned)).delete()
+    for product_id in products:
+        pricing.correct_daily_lowest(product_id)
+    return len(pks)
+
+
 def page_offer(url, html):
     """An Offer from a product page's schema.org data or Open Graph tags, or None. A page whose data names
     several products is a list of them (a shop's category page), not one product's page: None."""
     if listing_page(url):
         return None
     named = set()
+    every_node = []
     for block in JSON_LD.findall(html):
         try:
             data = json.loads(block.strip(), strict=False)
         except json.JSONDecodeError:
             continue
         for node in _walk(data):
+            every_node.append(node)
             kind = node.get("@type", "")
             if "Product" in (kind if isinstance(kind, list) else [kind]) and node.get("name"):
                 named.add(" ".join(str(node["name"]).lower().split()))
@@ -1150,14 +1226,17 @@ def page_offer(url, html):
             if not ean:
                 upc = re.search(r'"(?:upc|gtin|ean|barcode)"\s*:\s*"(\d{8,14})"', html)
                 ean = clean_ean(upc.group(1)) if upc else ""
+            description = clean_description(node.get("description") or page_description(html))
+            title = html_.unescape(str(node.get("name", ""))).strip()
             return Offer(
-                title=html_.unescape(str(node.get("name", ""))).strip(),
+                title=title,
                 url=offers.get("url") or url,
                 price=price,
                 ean=ean,
                 availability=_availability(str(offers.get("availability", ""))),
                 image=image,
-                description=clean_description(node.get("description") or page_description(html)),
+                description=description,
+                not_sealed=not_sealed_reason(html, title, description, every_node),
             )
     meta = {key.lower(): value for key, value in META.findall(html)}
     upc = re.search(r'"(?:upc|gtin|ean|barcode)"\s*:\s*"(\d{8,14})"', html)
@@ -1165,12 +1244,14 @@ def page_offer(url, html):
         price = money(meta["product:price:amount"])
         if price is not None:
             title = meta.get("og:title") or (TITLE.search(html).group(1).strip() if TITLE.search(html) else "")
+            description = clean_description(page_description(html, meta))
             return Offer(
                 title=title, url=url, price=price,
                 ean=clean_ean(meta.get("product:gtin13") or meta.get("product:ean") or meta.get("product:gtin") or (upc.group(1) if upc else "")),
                 availability=_availability(meta.get("product:availability", "") or page_stock_hint(html)),
                 image=meta.get("og:image", ""),
-                description=clean_description(page_description(html, meta)),
+                description=description,
+                not_sealed=not_sealed_reason(html, title, description, every_node),
             )
     return None
 
@@ -1548,6 +1629,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
     found = updated = 0
     unmatched = []
     seen_products = set()
+    not_sealed = set()   # links of pages that say they are no sealed product
     images_by_product = {}
     # A page the owner said is not one of ours is never matched by name. A No to the stockist finder is
     # about one product only: the page can still be matched by name to any other.
@@ -1679,6 +1761,12 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if listing_page(offer.url):
                 # A shop's list of products: whichever title came with it is not this page's product.
                 unmatched.append(f"{offer.title} [a page listing many products] {offer.url}")
+                continue
+            if offer.not_sealed:
+                # The shop's own page says it is a single card or a used item, whatever its title: never a
+                # listing, and one made before the page said so goes at the end of the read.
+                unmatched.append(f"{offer.title} [{offer.not_sealed}] {offer.url}")
+                not_sealed.add(link_key(offer.url))
                 continue
             if offer.variant:
                 # "1 Pack", "18 Packs", "Half Box" or "Case" on a booster box page is another product at another
@@ -1820,6 +1908,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         for product in Product.objects.filter(pk__in=images_by_product, image="", image_url=""):
             product.image_url = images_by_product[product.pk][:1000]
             product.save(update_fields=["image_url"])
+
+    if not_sealed:
+        remove_not_sealed(pk for pk, url in Listing.objects.filter(retailer=retailer).values_list("pk", "url")
+                          if link_key(url) in not_sealed)
 
     # Anything the retailer no longer lists is out of stock there.
     if complete:

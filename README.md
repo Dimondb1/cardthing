@@ -637,7 +637,18 @@ a rarity, a grade or a card's condition; "2025 Holiday Calendar Eevee
 133/165 Pikachu 025/165" was the calendar's cheapest price on 24 Oct 2026).
 A removed listing leaves no row on the page, the next eBay search can find
 the product itself, and the days its price set as the product's lowest go
-from the price history. Listings keep the shop's own
+from the price history. A shop's single card named after the product it
+comes from ("My First Battle Deck: Pikachu Deck / Electabuzz" at £2.45,
+Magic Madhouse, 24 Oct 2026) is caught from what the shop's own page says
+(`importers.not_sealed_reason`): an offer marked used (schema.org
+UsedCondition, DamagedCondition or RefurbishedCondition), a breadcrumb
+under single cards ("Pokémon Singles", not "Sealed"), or a description
+that opens with the item's own title and calls it "a ... card from" a
+product. Such a page never becomes a listing; one linked before is removed
+when its page is read again, and this command removes those whose stored
+description says so. When no other shop lists the product, its eBay and
+Amazon listings go too, and `tidy_catalogue` retires the page (410 Gone).
+Listings keep the shop's own
 title for this, so a new rule applies at the next hourly import rather
 than the next eBay run; an eBay listing saved before titles were kept has
 its title fetched through eBay's bulk lookup first, which does not touch the

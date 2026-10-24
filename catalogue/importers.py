@@ -1093,6 +1093,21 @@ def page_description(html, meta=None):
     return meta.get("og:description") or meta.get("description") or ""
 
 
+def offer_price(offers):
+    """(price, currency) from a schema.org Offer, or (None, "GBP"). WooCommerce can give the price only in
+    priceSpecification, where an entry marked ListPrice or StrikethroughPrice is the price before a sale."""
+    price = money(offers.get("price") or offers.get("lowPrice"))
+    if price is not None:
+        return price, (offers.get("priceCurrency") or "GBP").upper()
+    specs = offers.get("priceSpecification") or []
+    for spec in specs if isinstance(specs, list) else [specs]:
+        if isinstance(spec, dict) and not re.search(r"ListPrice|Strikethrough", str(spec.get("priceType", ""))):
+            price = money(spec.get("price"))
+            if price is not None:
+                return price, (spec.get("priceCurrency") or offers.get("priceCurrency") or "GBP").upper()
+    return None, "GBP"
+
+
 def page_offer(url, html):
     """An Offer from a product page's schema.org data or Open Graph tags, or None. A page whose data names
     several products is a list of them (a shop's category page), not one product's page: None."""
@@ -1123,8 +1138,7 @@ def page_offer(url, html):
             offers = node.get("offers") or {}
             if isinstance(offers, list):
                 offers = offers[0] if offers else {}
-            price = money(offers.get("price") or offers.get("lowPrice"))
-            currency = (offers.get("priceCurrency") or "GBP").upper()
+            price, currency = offer_price(offers)
             if price is None or currency != "GBP":
                 continue
             image = node.get("image") or ""

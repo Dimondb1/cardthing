@@ -598,6 +598,27 @@ class WebsiteScraperTests(TestCase):
         self.assertEqual((etb.price, etb.ean, etb.availability, etb.image), (Decimal("84.99"), "0820650851230", Listing.Availability.PREORDER, "https://img.example/etb.jpg"))
         self.assertEqual(titles["Surging Sparks Booster Box"].price, Decimal("139.99"))
 
+    def test_a_woocommerce_page_with_the_price_only_in_its_price_specification(self):
+        # WooCommerce's own product data (Poke Stadium Cards, added 24 Oct 2026): escaped slashes, a list of
+        # offers, and on a sale the price before it marked ListPrice.
+        from .importers import page_offer
+
+        page = """<script type="application/ld+json">{"@context":"https:\\/\\/schema.org\\/","@graph":[
+        {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"item":{"name":"Shop","@id":"https:\\/\\/shop.example\\/shop\\/"}}]},
+        {"@type":"Product","name":"Pok&eacute;mon TCG: Destined Rivals Elite Trainer Box","sku":"DRI-ETB",
+         "offers":[{"@type":"Offer","priceSpecification":[
+           {"@type":"UnitPriceSpecification","price":"54.99","priceCurrency":"GBP","valueAddedTaxIncluded":true},
+           {"@type":"UnitPriceSpecification","price":"64.99","priceCurrency":"GBP","priceType":"https:\\/\\/schema.org\\/ListPrice"}],
+          "availability":"http:\\/\\/schema.org\\/OutOfStock","url":"https:\\/\\/shop.example\\/shop\\/dri-etb\\/"}]}]}</script>"""
+        offer = page_offer("https://shop.example/shop/dri-etb/", page)
+        self.assertEqual((offer.title, offer.price, offer.availability, offer.url),
+                         ("Pokémon TCG: Destined Rivals Elite Trainer Box", Decimal("54.99"),
+                          Listing.Availability.OUT_OF_STOCK, "https://shop.example/shop/dri-etb/"))
+        # The usual shape, a price on the offer itself, still wins.
+        page = page.replace('"@type":"Offer",', '"@type":"Offer","price":"52.50","priceCurrency":"GBP",')
+        self.assertEqual(page_offer("https://shop.example/shop/dri-etb/", page).price, Decimal("52.50"))
+        self.assertIsNone(page_offer("https://shop.example/shop/dri-etb/", page.replace("GBP", "EUR").replace('"52.50"', '""')))
+
     def test_run_import_for_a_website_retailer(self):
         retailer = make_retailer("Shop", source_type=Retailer.Source.WEBSITE, source_url="https://shop.example/")
         product = make_product(make_set(make_game()), ean="0820650851230")

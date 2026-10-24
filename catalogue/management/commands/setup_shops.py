@@ -137,6 +137,9 @@ SHOPS = [
     # sealed collections are read (COLLECTIONS), with its newest products for releases filed elsewhere.
     ("impact-league-tcg", "Impact League TCG", "https://impactleaguetcg.co.uk/", S.SHOPIFY, "5.99", None,
      "Standard £5.99 (basket check), no free threshold published, read 15 Oct 2026"),
+    # Added at the owner's request after the shop asked to be listed: a WooCommerce shop, read from its sitemap.
+    ("poke-stadium-cards", "Poke Stadium Cards", "https://pokestadiumcards.co.uk/", S.WEBSITE, None, None,
+     "Delivery charge not yet confirmed"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's

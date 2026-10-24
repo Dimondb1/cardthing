@@ -346,18 +346,38 @@ prices and matches products by barcode or name. Then run `check_delivery`
 ```sh
 python manage.py check_delivery            # report what each shop says
 python manage.py check_delivery --apply    # and save it
+python manage.py check_delivery --apply --unknown   # only shops whose standard charge is not known
 ```
 
 reads each shop's UK delivery charges from the shop itself, two ways. Its
 delivery page (found through the "Delivery" or "Shipping" link on the home
 page, or the usual addresses) gives the free-delivery threshold and, when
-written out, the standard charge. For a Shopify shop the command also puts
-one cheap product in a basket, asks the shop for its UK delivery options,
-takes the cheapest posted one and empties the basket; when the page gave a
-threshold, a basket just over it is priced too, to confirm it is free.
-Every figure saved carries its source and the date in the retailer's
-delivery note, so it can be checked. A shop that gives nothing readable is
-listed with its address for checking by hand. The server runs this weekly.
+written out, the standard charge. A page with one threshold for single
+cards and another for sealed products gives the sealed one ("FREE Royal
+Mail 48h Tracked delivery on single card orders over £20 and on sealed
+product orders over £30": £30, Unicorn Cards); one only for single cards
+never counts. For a Shopify shop the command also puts one cheap product
+in a basket, priced in pounds for the UK (a shop that sells abroad
+otherwise prices it in the server's currency), asks for its UK delivery
+options, takes the cheapest posted one and empties the basket. The basket
+stays under the page's threshold; one that comes back free is tried again
+with a cheaper product, since it may be over a threshold no page gave, and
+a product the basket refuses gives way to the next (up to five). When the
+page gave a threshold, a basket just over it is priced too, to confirm it
+is free. Every figure saved carries its source and the date in the
+retailer's delivery note, so it can be checked. A shop that gives nothing
+readable is listed with its address for checking by hand. The server
+checks every shop on Sundays at 3:30 and, at 4:30 every day, the shops
+whose standard charge is still unknown. Shops with an unknown charge go
+first, one shop's fault is reported and never stops the rest, and no shop
+is started after 40 minutes, so the cron's limit never cuts a run short.
+
+Not every shop can be read this way. Magic Madhouse (BigCommerce) shows
+its charge only at its own checkout, whose delivery options refuse
+anything but its own pages, and Card Empire's basket refuses every
+product; Monarch Cards (Wix) and Shiny Vault publish no charge. For those,
+type the charge from the shop's checkout into the retailer's "standard
+delivery" in admin: a charge you set is kept, and the daily check skips it.
 
 A charge nobody has confirmed is unknown, never free. Leave "standard
 delivery" empty in admin when you do not know it (and set "standard charge

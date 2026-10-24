@@ -175,6 +175,8 @@ systemctl reload caddy
 # while holding a lock would otherwise make every later run behind it give up silently.
 # The snapshot, the delivery check and tidy_all put timeout inside flock, so time spent waiting
 # for a long import does not use up their limit.
+# The delivery check reads every shop's charges on Sundays at 3:30, and at 4:30 every day the shops whose
+# standard charge is still unknown, waiting up to 30 minutes for the import lock and otherwise trying the next day.
 # Cardmarket's sealed catalogue and price guide are read daily at 6:44 (after Cardmarket's own early update), and Claude
 # matches them to our products every 15 minutes from 7 past, on its own lock so it never waits behind the judge.
 # deploy/crontab carries the same lines; catalogue/tests_ops.py fails when they differ.
@@ -183,6 +185,7 @@ echo "PYTHONUNBUFFERED=1
 5 * * * *  cd $DIR && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-tidy.lock flock -w 1800 /tmp/ripraptor-import.lock timeout -k 60 1500 .venv/bin/python manage.py tidy_all >> /var/log/ripraptor-import.log 2>&1
 15 0 * * * cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 1800 .venv/bin/python manage.py snapshot_daily_prices >> /var/log/ripraptor-import.log 2>&1
 30 3 * * 0 cd $DIR && set -a && . ./.env && set +a && flock /tmp/ripraptor-import.lock timeout -k 60 3000 .venv/bin/python manage.py check_delivery --apply >> /var/log/ripraptor-import.log 2>&1
+30 4 * * * cd $DIR && set -a && . ./.env && set +a && flock -w 1800 /tmp/ripraptor-import.lock timeout -k 60 3000 .venv/bin/python manage.py check_delivery --apply --unknown >> /var/log/ripraptor-import.log 2>&1
 */10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-import.lock .venv/bin/python manage.py watch_stock --if-worker-dead 30 >> /var/log/ripraptor-import.log 2>&1
 3-59/10 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-alerts.lock .venv/bin/python manage.py send_stock_alerts >> /var/log/ripraptor-import.log 2>&1
 9-59/15 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-drops.lock .venv/bin/python manage.py send_drop_alerts >> /var/log/ripraptor-import.log 2>&1

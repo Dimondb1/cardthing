@@ -20,7 +20,7 @@ import urllib.request
 from dataclasses import dataclass
 from decimal import Decimal
 from http.cookiejar import CookieJar
-from urllib.parse import urljoin
+from urllib.parse import urlencode, urljoin
 
 from . import importers
 from .classify import classify
@@ -59,6 +59,19 @@ STANDARD = [
 ]
 
 
+# A page may give one threshold for single cards and another for sealed products ("FREE Royal Mail 48h Tracked
+# delivery on single card orders over £20 and on sealed product orders over £30", Unicorn Cards, 24 Oct 2026),
+# in words FREE_OVER does not foresee. RipRaptor compares sealed products, so a sealed threshold wins and one
+# only for single cards never counts.
+FREE_SENTENCE = re.compile(r"[^.!?]*\bfree\b[^.!?]*?(?:deliver|shipping|postage|p&p)[^.!?]*", re.I)
+FREE_FIGURE = re.compile(r"(?:over|above|from|exceeding|more than)\s*" + MONEY, re.I)
+SINGLES = re.compile(r"\bsingles?\b|\bsingle cards?\b", re.I)
+SEALED = re.compile(r"\bsealed\b", re.I)
+# A sentence about sending abroad ("Free international shipping on orders over £150") is not the UK threshold.
+ABROAD = re.compile(r"\binternational|\boverseas\b|\bworldwide\b|\beurope|\beu\b|\busa?\b|rest of the world|"
+                    r"outside (?:of )?(?:the )?uk", re.I)
+
+
 @dataclass
 class Finding:
     url: str
@@ -83,19 +96,56 @@ def page_text(raw):
 
 
 def _quote(text, match):
-    start = max(0, match.start() - 60)
-    end = min(len(text), match.end() + 40)
-    return re.sub(r"^\S*\s|\s\S*$", "", text[start:end]).strip()
+    return _quote_at(text, match.start(), match.end())
+
+
+def _quote_at(text, start, end):
+    """The words around text[start:end], without a word cut in two at either side."""
+    start, end = max(0, start - 60), min(len(text), end + 40)
+    quote = text[start:end]
+    if start > 0:
+        quote = re.sub(r"^\S*\s", "", quote)
+    if end < len(text):
+        quote = re.sub(r"\s\S*$", "", quote)
+    return quote.strip()
+
+
+def free_thresholds(text):
+    """[(figure, what, quote)] for every threshold in a sentence that offers free delivery, in page order. ``what``
+    is "sealed" or "singles" when the words since the sentence's previous figure say which orders it is for."""
+    found = []
+    for sentence in FREE_SENTENCE.finditer(text):
+        words = sentence.group(0)
+        if ABROAD.search(words):
+            continue
+        since = 0
+        for figure in FREE_FIGURE.finditer(words):
+            before = words[since:figure.start()]
+            what = "sealed" if SEALED.search(before) else "singles" if SINGLES.search(before) else ""
+            found.append((Decimal(figure.group(1)), what,
+                          _quote_at(text, sentence.start() + figure.start(), sentence.start() + figure.end())))
+            since = figure.end()
+    return found
 
 
 def parse_delivery(text):
     """(cost, free_over, cost_quote, free_quote) read from delivery page text."""
     free_over = free_quote = None
-    for pattern in FREE_OVER:
+    thresholds = free_thresholds(text)
+    for figure, what, quote in thresholds:
+        if what == "sealed":
+            free_over, free_quote = figure, quote
+            break
+    for pattern in FREE_OVER if free_over is None else ():
         match = pattern.search(text)
-        if match:
+        if match and not (SINGLES.search(match.group(0)) and not SEALED.search(match.group(0))):
             free_over, free_quote = Decimal(match.group(1)), _quote(text, match)
             break
+    if free_over is None:
+        for figure, what, quote in thresholds:
+            if what == "":
+                free_over, free_quote = figure, quote
+                break
     cost = cost_quote = None
     for pattern in STANDARD:
         for match in pattern.finditer(text):
@@ -190,14 +240,36 @@ class CartSession:
     def post(self, url, payload):
         return self._open(url, json.dumps(payload).encode())
 
+    def post_form(self, url, fields):
+        """Send a form, as a shop's own page does; the answer is a page, not read."""
+        request = urllib.request.Request(url, data=urlencode(fields).encode(), headers={
+            "User-Agent": "RipRaptor price checker (+https://ripraptor.com)",
+            "Content-Type": "application/x-www-form-urlencoded"})
+        try:
+            with self.opener.open(request, timeout=self.timeout) as response:
+                response.read()
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            raise ImportError_(f"Could not fetch {url}: {exc}") from exc
 
-def sample_variant(products, low=Decimal("3"), high=Decimal("60")):
-    """(variant id, price) of a cheap, in-stock product that has to be posted.
 
-    A sealed product is preferred: in a singles-heavy shop a single card gets
-    the "singles post" rate, which is not what a booster box pays.
+def localize(session, base):
+    """Ask the shop to price the basket in pounds for the UK. A Shopify shop that sells abroad prices a basket in
+    the visitor's currency, and the server may not be in the UK: Kongs Cards answered in dollars, which no
+    charge can be read from. Harmless where a shop sells in pounds only."""
+    try:
+        session.post_form(f"{base}/localization", {"form_type": "localization", "_method": "put", "country_code": "GB",
+                                                   "return_to": "/cart"})
+    except ImportError_:
+        pass
+
+
+def sample_variants(products, low=Decimal("3"), high=Decimal("60")):
+    """[(variant id, price)] of cheap, in-stock products that have to be posted, in the shop's own order.
+
+    Sealed products come first: in a singles-heavy shop a single card gets the "singles post" rate, which is
+    not what a booster box pays.
     """
-    fallback = None
+    sealed_ones, others = [], []
     for product in products:
         sealed = classify(product.get("title", ""), product.get("product_type", ""), product.get("vendor", ""),
                           tuple(product.get("tags") or []))
@@ -207,10 +279,14 @@ def sample_variant(products, low=Decimal("3"), high=Decimal("60")):
             except (ArithmeticError, TypeError, ValueError):
                 continue
             if variant.get("available") and variant.get("requires_shipping", True) and low <= price <= high:
-                if sealed:
-                    return variant["id"], price
-                fallback = fallback or (variant["id"], price)
-    return fallback
+                (sealed_ones if sealed else others).append((variant["id"], price))
+    return sealed_ones + others
+
+
+def sample_variant(products, low=Decimal("3"), high=Decimal("60")):
+    """The first of sample_variants, or None."""
+    found = sample_variants(products, low, high)
+    return found[0] if found else None
 
 
 def uk_rate(session, base, variant_id, quantity):
@@ -235,21 +311,48 @@ def uk_rate(session, base, variant_id, quantity):
     return min(prices) if prices else None
 
 
+# Products tried for one basket check: one the basket refuses (Card Empire answered 422) or that gets no UK
+# rate gives way to the next.
+MAX_TRIES = 5
+
+
 def shopify_delivery(base, session=None, fetch=None, free_over=None):
     """(standard charge, free_over confirmed?) from a basket check on a Shopify shop.
 
-    ``free_over`` is the threshold read from the shop's page; when given, a
-    basket just over it is priced too, to confirm it delivers free.
+    ``free_over`` is the threshold read from the shop's page; when given, the basket is kept under it, and a
+    basket just over it is priced too, to confirm it delivers free. A basket that comes back free may be over a
+    threshold no page gave (Kongs Cards: free over £20), so a cheaper product is tried before free is believed.
     """
     base = base.rstrip("/")
     fetch = fetch or importers.fetch
     session = session or CartSession()
     products = json.loads(fetch(f"{base}/products.json?limit=250")).get("products", [])
-    sample = sample_variant(products)
-    if sample is None:
+    candidates = sample_variants(products)
+    if free_over is not None:
+        candidates = [candidate for candidate in candidates if candidate[1] < free_over] or candidates
+    if not candidates:
         return None, False
-    variant_id, price = sample
-    cost = uk_rate(session, base, variant_id, 1)
+    localize(session, base)
+    cost = chosen = None
+    tries = 0
+    for variant_id, price in candidates:
+        if chosen is not None and price >= chosen[1]:
+            continue
+        if tries >= MAX_TRIES:
+            break
+        tries += 1
+        try:
+            rate = uk_rate(session, base, variant_id, 1)
+        except ImportError_:
+            continue
+        if rate is None:
+            continue
+        cost, chosen = rate, (variant_id, price)
+        if rate > 0:
+            break
+    if cost is None:
+        return None, False
+    variant_id, price = chosen
     confirmed = False
     if cost is not None and free_over is not None and price < free_over:
         quantity = math.ceil(free_over / price) + 1

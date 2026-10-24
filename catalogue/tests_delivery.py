@@ -4,7 +4,7 @@ from io import StringIO
 from django.core.management import call_command
 from django.test import TestCase
 
-from .delivery import check_delivery, page_text, parse_delivery, sample_variant, shopify_delivery, uk_rate
+from .delivery import check_delivery, free_thresholds, page_text, parse_delivery, sample_variant, shopify_delivery, uk_rate
 from .importers import ImportError_
 from .models import Retailer
 from .testing import make_retailer
@@ -39,6 +39,14 @@ class DeliveryPageTests(TestCase):
             ("Our courier service is £25.", (None, None)),
             ("Standard shipping is £4 or free on orders over £150.", (Decimal("4"), Decimal("150"))),
             ("Royal Mail Tracked 48 £3.99 (free on orders over £50)", (Decimal("3.99"), Decimal("50"))),
+            # Unicorn Cards' page, 24 Oct 2026: the sealed threshold, not the single cards' one.
+            ("UK Shipping. Enjoy FREE Royal Mail 48h Tracked delivery on single card orders over £20 and on sealed "
+             "product orders over £30!. You can upgrade your order to Royal Mail Tracked 24.", (None, Decimal("30"))),
+            ("Free delivery on single card orders over £10.", (None, None)),
+            ("Free international shipping on orders over £150. Free UK shipping on all orders over £60.",
+             (None, Decimal("60"))),
+            ("FREE tracked international delivery on orders over £150.", (None, None)),
+            ("FREE Royal Mail 48h Tracked delivery on all orders over £45.", (None, Decimal("45"))),
         ]:
             cost, free_over, _c, _f = parse_delivery(text)
             self.assertEqual((cost, free_over), expected, text)
@@ -69,6 +77,9 @@ class FakeSession:
     def __init__(self):
         self.quantity = 0
         self.calls = []
+
+    def post_form(self, url, fields):
+        self.calls.append(url)
 
     def post(self, url, payload):
         self.calls.append(url)
@@ -111,6 +122,87 @@ class BasketCheckTests(TestCase):
         self.assertEqual((cost, confirmed), (Decimal("3.49"), False))
 
 
+class ShopBasket:
+    """A Shopify basket priced as a shop that sells abroad prices it: in dollars until it is told the visitor is
+    in the UK. Tracked 48 is £3.00, free over £20 (Kongs Cards, 24 Oct 2026). ``refuse`` holds variants its
+    basket will not take."""
+
+    def __init__(self, refuse=()):
+        self.prices = {}
+        self.basket = Decimal("0")
+        self.pounds = False
+        self.refuse = set(refuse)
+        self.calls = []
+
+    def post_form(self, url, fields):
+        self.calls.append(url)
+        self.pounds = url.endswith("/localization") and fields.get("country_code") == "GB"
+
+    def post(self, url, payload):
+        self.calls.append(url)
+        if url.endswith("/cart/add.js"):
+            item = payload["items"][0]
+            if item["id"] in self.refuse:
+                raise ImportError_("Could not fetch cart/add.js: HTTP Error 422: Unprocessable Entity")
+            self.basket = self.prices[item["id"]] * item["quantity"]
+        if url.endswith("/cart/clear.js"):
+            self.basket = Decimal("0")
+        return {}
+
+    def get(self, url):
+        self.calls.append(url)
+        currency = "GBP" if self.pounds else "USD"
+        return {"shipping_rates": [
+            {"name": "Free UK Delivery", "price": "0.00", "currency": currency},
+            {"name": "Royal Mail Tracked 48", "price": "3.00" if self.pounds else "5.00", "currency": currency},
+        ][0 if self.basket >= 20 else 1:]}
+
+
+def shop_products(*rows):
+    import json
+
+    return json.dumps({"products": [
+        {"title": title, "variants": [{"id": pk, "price": price, "available": True}]} for pk, title, price in rows
+    ]}).encode()
+
+
+class AbroadBasketTests(TestCase):
+    PRODUCTS = shop_products((1, "Riftbound Vendetta Vault Bundle", "34.99"), (2, "Riftbound Vendetta Booster Pack", "5.49"),
+                             (3, "Pokemon Surging Sparks Booster Pack", "6.00"))
+
+    def basket(self, refuse=()):
+        session = ShopBasket(refuse)
+        session.prices = {1: Decimal("34.99"), 2: Decimal("5.49"), 3: Decimal("6.00")}
+        return session
+
+    def test_the_basket_is_priced_in_pounds_and_under_a_free_threshold_no_page_gave(self):
+        session = self.basket()
+        cost, confirmed = shopify_delivery("https://shop.example", session=session, fetch=lambda url: self.PRODUCTS)
+        # The bundle's basket was free (over £20): a cheaper product gave the real charge, in pounds.
+        self.assertEqual((cost, confirmed), (Decimal("3.00"), False))
+        self.assertLess(session.calls.index("https://shop.example/localization"),
+                        session.calls.index("https://shop.example/cart/add.js"))
+
+    def test_a_product_the_basket_refuses_gives_way_to_the_next(self):
+        cost, _ = shopify_delivery("https://shop.example", session=self.basket(refuse={2}), fetch=lambda url: self.PRODUCTS,
+                                   free_over=Decimal("20"))
+        self.assertEqual(cost, Decimal("3.00"))
+
+    def test_free_everywhere_stays_free(self):
+        session = self.basket()
+        session.prices = {1: Decimal("34.99"), 2: Decimal("25.00"), 3: Decimal("26.00")}
+        products = shop_products((1, "Riftbound Vendetta Vault Bundle", "34.99"), (2, "Riftbound Booster Box", "25.00"),
+                                 (3, "Surging Sparks Booster Bundle", "26.00"))
+        cost, _ = shopify_delivery("https://shop.example", session=session, fetch=lambda url: products)
+        self.assertEqual(cost, Decimal("0"))
+
+    def test_thresholds_name_what_they_are_for(self):
+        found = free_thresholds("Enjoy FREE Royal Mail 48h Tracked delivery on single card orders over £20 and on "
+                                "sealed product orders over £30!")
+        self.assertEqual([(figure, what) for figure, what, _ in found], [(Decimal("20"), "singles"), (Decimal("30"), "sealed")])
+        self.assertIn("sealed product orders over £30", found[1][2])
+
+
 class CheckDeliveryCommandTests(TestCase):
     def test_apply_saves_figures_with_their_source(self):
         from unittest import mock
@@ -133,3 +225,36 @@ class CheckDeliveryCommandTests(TestCase):
         self.assertIn("confirmed by basket", retailer.delivery_note)
         self.assertIn("read ", retailer.delivery_note)
         self.assertIn("saved:", out.getvalue())
+
+    def test_one_shops_fault_never_stops_the_rest_and_unknown_charges_go_first(self):
+        from unittest import mock
+
+        known = make_retailer("Alpha Cards", website="https://alpha.example/", delivery_cost=Decimal("2.99"))
+        make_retailer("Broken Shop", website="https://broken.example/")
+        unknown = make_retailer("Zulu Cards", website="https://zulu.example/")
+        make_retailer("eBay", website="https://www.ebay.co.uk/", source_type=Retailer.Source.EBAY)
+        asked = []
+
+        def fetch(url):
+            asked.append(url.split("/")[2])
+            if "broken.example" in url:
+                raise ValueError("a page that is not a page")
+            if url == "https://zulu.example/pages/delivery":
+                return b"<p>Free UK delivery on orders over &pound;40. Standard delivery &pound;2.50</p>"
+            raise ImportError_("missing")
+
+        out = StringIO()
+        with mock.patch("catalogue.importers.fetch", fetch):
+            call_command("check_delivery", "--apply", stdout=out)
+        unknown.refresh_from_db()
+        self.assertEqual((unknown.delivery_cost, unknown.free_delivery_over), (Decimal("2.50"), Decimal("40")))
+        self.assertIn("Broken Shop: check failed: a page that is not a page", out.getvalue())
+        order = list(dict.fromkeys(asked))
+        self.assertEqual(order, ["broken.example", "zulu.example", "alpha.example"])
+        self.assertNotIn("www.ebay.co.uk", order)
+        asked.clear()
+        with mock.patch("catalogue.importers.fetch", fetch):
+            call_command("check_delivery", "--unknown", stdout=StringIO())
+        self.assertEqual(list(dict.fromkeys(asked)), ["broken.example"])
+        known.refresh_from_db()
+        self.assertEqual(known.delivery_cost, Decimal("2.99"))

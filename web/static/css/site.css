@@ -1279,6 +1279,9 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .live__item--recent .live__link { font-weight: var(--weight-medium); }
 
 /* Add to home screen card ------------------------------------------------- */
+/* A long search wraps inside its chip rather than running off the screen. */
+.resume__chips li { min-width: 0; max-width: 100%; }
+.resume__chips .chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; line-height: var(--leading-snug); }
 
 .install {
   position: fixed; left: var(--gutter); right: var(--gutter); bottom: var(--gutter); z-index: 20;

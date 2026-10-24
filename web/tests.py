@@ -2619,6 +2619,12 @@ class GoldenLayoutTests(PageTestCase):
         # Side by side columns use the golden split.
         self.assertEqual(css.count("minmax(0, var(--split-major)) minmax(0, var(--split-minor))"), 3)
 
+    def test_a_long_recent_search_wraps_inside_the_screen(self):
+        # 24 Oct 2026: "30th Celebration Premium Deck Set Espeon & Umbreon ex" ran off a phone's screen.
+        css = self.css("site.css")
+        self.assertIn(".resume__chips li { min-width: 0; max-width: 100%; }", css)
+        self.assertIn(".resume__chips .chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere;", css)
+
     def test_the_logo_sits_at_the_left_with_no_back_arrow(self):
         css = self.css("site.css")
         self.assertIn(".wordmark { grid-area: brand; justify-self: start;", css)

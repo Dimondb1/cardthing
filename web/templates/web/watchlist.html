@@ -5,6 +5,7 @@
 <div class="page-head">
   <h1 class="page-title">{% copy "watchlist.title" %}</h1>
   <p class="page-intro">{% copy "watchlist.intro" %}</p>
+  {% if alerts_on %}<p class="page-jump"><a href="#manage">{% copy "watchlist.manage.jump" %}</a></p>{% endif %}
 </div>
 
 <div data-watchlist data-watchlist-url="{% url 'web:watchlist' %}" data-saved-at="{% copy 'watchlist.saved_at' price='{price}' %}">
@@ -49,6 +50,19 @@
 {% endif %}
 </div>
 {% if alerts_on %}
+<section class="search-alert manage-box" id="manage" aria-labelledby="manage-title" data-search-alert-box>
+  <h2 class="section-title" id="manage-title">{% copy "watchlist.manage.title" %}</h2>
+  {% if manage_state == "sent" %}
+  <div class="search-alert__done" role="status">
+    <p class="search-alert__done-title">{% copy "watchlist.manage.done.title" %}</p>
+    <p>{% copy "watchlist.manage.done.body" %}</p>
+    <p><a href="{{ manage_again_url }}">{% copy "watchlist.manage.again" %}</a></p>
+  </div>
+  {% else %}
+  <p class="search-alert__intro">{% copy "watchlist.manage.intro" %}</p>
+  {% include "web/includes/manage_ask.html" %}
+  {% endif %}
+</section>
 <section class="search-alert" id="alert" aria-labelledby="alert-title" data-search-alert-box>
   <h2 class="section-title" id="alert-title">{% copy "watchlist.alert.title" %}</h2>
   {% if alert_state == "sent" %}
@@ -84,19 +98,6 @@
     </div>
     <p class="drop-remind__note">{% copy "watchlist.alert.note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
   </form>
-  {% endif %}
-</section>
-<section class="search-alert manage-box" id="manage" aria-labelledby="manage-title" data-search-alert-box>
-  <h2 class="section-title" id="manage-title">{% copy "watchlist.manage.title" %}</h2>
-  {% if manage_state == "sent" %}
-  <div class="search-alert__done" role="status">
-    <p class="search-alert__done-title">{% copy "watchlist.manage.done.title" %}</p>
-    <p>{% copy "watchlist.manage.done.body" %}</p>
-    <p><a href="{{ manage_again_url }}">{% copy "watchlist.manage.again" %}</a></p>
-  </div>
-  {% else %}
-  <p class="search-alert__intro">{% copy "watchlist.manage.intro" %}</p>
-  {% include "web/includes/manage_ask.html" %}
   {% endif %}
 </section>
 {% endif %}

@@ -35,7 +35,7 @@
     <h2 class="sub-head" id="manage-{{ group.key }}">{{ group.label }}</h2>
     <ul class="manage__list">
       {% for row in group.rows %}
-      <li class="manage__row">
+      <li class="manage__row" id="alert-{{ row.kind }}-{{ row.pk }}">
         <div class="manage__body">
           <a class="manage__name" href="{{ row.url }}">{{ row.name }}</a>
           {% if row.details %}<span class="manage__detail">{{ row.details|join:" · " }}</span>{% endif %}
@@ -45,6 +45,29 @@
           {% csrf_token %}
           <button class="button button--quiet button--small" type="submit" name="stop" value="{{ row.kind }}-{{ row.pk }}">{% copy "watchlist.manage.stop" %}<span class="visually-hidden">: {{ row.name }}</span></button>
         </form>
+        {% if row.change %}{% with refused=change_row|default:""|stringformat:"s" pk=row.pk|stringformat:"s" %}
+        {# A new price and how long to keep looking, from today (manage_alerts.change). Native, so it works without JavaScript. #}
+        <details class="manage__change"{% if refused == pk %} open{% endif %}>
+          <summary class="manage__change-toggle">{% copy "watchlist.manage.change" %}<span class="visually-hidden">: {{ row.name }}</span></summary>
+          <form class="manage__change-form" method="post" action="{{ action }}">
+            {% csrf_token %}
+            <input type="hidden" name="change" value="{{ row.pk }}">
+            {% if refused == pk %}<p class="alert-box__error" role="alert">{{ change_error }}</p>{% endif %}
+            <div class="search-alert__fields">
+              <div class="search-alert__field{% if refused == pk %} is-wrong{% endif %}">
+                <label class="search-alert__label" for="change-price-{{ row.pk }}">{% copy "alerts.track.price_label" %}</label>
+                <span class="track-box__money"><span aria-hidden="true">£</span><input id="change-price-{{ row.pk }}" class="alert-box__input search-alert__input" type="text" name="price" value="{{ row.change.price }}" required inputmode="decimal" autocomplete="off" maxlength="9"></span>
+              </div>
+              <div class="search-alert__field">
+                <label class="search-alert__label" for="change-for-{{ row.pk }}">{% copy "alerts.track.for_label" %}</label>
+                <span class="pill search-alert__pill"><select id="change-for-{{ row.pk }}" name="for">{% for days, label in track_days %}<option value="{{ days }}"{% if days == row.change.days %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></span>
+              </div>
+            </div>
+            <p class="manage__change-note">{% copy "watchlist.manage.change.note" %}</p>
+            <button class="button button--small" type="submit">{% copy "watchlist.manage.change.save" %}<span class="visually-hidden">: {{ row.name }}</span></button>
+          </form>
+        </details>
+        {% endwith %}{% endif %}
       </li>
       {% endfor %}
     </ul>

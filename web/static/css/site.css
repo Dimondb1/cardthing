@@ -84,6 +84,9 @@ ul, ol { margin: 0; padding: 0; }
 .page-title { font-size: var(--text-page-title); margin: var(--rhythm-page-top) 0 var(--rhythm-title); }
 .page-head .page-title, .page-title:has(+ .prose--lead) { margin-bottom: var(--space-2); }   /* an intro under the title is its subtitle */
 .page-intro { max-width: 44rem; margin-bottom: var(--rhythm-title); color: var(--color-ink-muted); }
+/* A page's link to a part further down it (the watchlist's Your alerts). */
+.page-head .page-jump { margin-top: calc(-1 * var(--space-3)); margin-bottom: var(--rhythm-title); font-weight: var(--weight-strong); }
+.page-jump a { color: var(--color-brand-text); }
 .section-title { font-size: var(--text-section); }
 .section-note { margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-ink-subtle); }
 .block { margin-top: var(--rhythm-section); }
@@ -1276,12 +1279,12 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .resume__block[hidden] { display: none; }
 .resume__label { margin-bottom: var(--space-2); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-ink-subtle); }
 .resume__chips { flex-wrap: wrap; justify-content: flex-start; overflow: visible; padding: 0; }
-.live__item--recent .live__link { font-weight: var(--weight-medium); }
-
-/* Add to home screen card ------------------------------------------------- */
 /* A long search wraps inside its chip rather than running off the screen. */
 .resume__chips li { min-width: 0; max-width: 100%; }
 .resume__chips .chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; line-height: var(--leading-snug); }
+.live__item--recent .live__link { font-weight: var(--weight-medium); }
+
+/* Add to home screen card ------------------------------------------------- */
 
 .install {
   position: fixed; left: var(--gutter); right: var(--gutter); bottom: var(--gutter); z-index: 20;
@@ -1677,6 +1680,13 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .manage__detail { font-size: var(--text-sm); color: var(--color-ink-muted); }
 .manage__waiting { color: var(--color-ink-subtle); }
 .manage__none { display: grid; gap: var(--space-4); justify-items: start; color: var(--color-ink-muted); }
+/* Change on a Track price alert: under the row, across both columns, opened in place (a native <details>). */
+.manage__change { grid-column: 1 / -1; }
+.manage__change-toggle { display: inline-flex; align-items: center; min-height: var(--tap); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-brand-text); cursor: pointer; list-style: none; }
+.manage__change-toggle::-webkit-details-marker { display: none; }
+.manage__change-form { display: grid; gap: var(--space-3); justify-items: start; padding-bottom: var(--space-2); }
+.manage__change-form .search-alert__fields { width: 100%; }
+.manage__change-note { font-size: var(--text-sm); color: var(--color-ink-muted); }
 /* Under the list: a quiet way to hear about products like these. */
 .browse-alert { margin-top: var(--space-5); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .browse-alert a { color: var(--color-brand-text); }

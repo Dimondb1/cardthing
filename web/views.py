@@ -27,7 +27,7 @@ from catalogue import (alerts, clicks, fair_price, images, insights, languages, 
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, FeaturedSettings, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
-    Retailer, stale_cutoff,
+    Retailer, StockAlert, stale_cutoff,
 )
 from catalogue.search import apply_search
 from catalogue.types import DEFAULT as DEFAULT_TYPES, GAME_TYPES, plural_words, type_choices, type_label
@@ -1942,6 +1942,8 @@ def manage_groups(request, email):
         return {"kind": kind, "pk": alert.pk, "name": name, "url": url, "details": [d for d in details if d],
                 "waiting": alert.confirmed_at is None}
 
+    offered = [days for days, _label in alerts.TRACK_DAYS]
+
     back, track = [], []
     for alert in found["stock"]:
         product = alert.product
@@ -1953,7 +1955,10 @@ def manage_groups(request, email):
             # It looks for the time chosen from the confirmation, and never past the six months any alert is kept.
             ends = alerts.watch_ends(alert) or alert.confirmed_at + timedelta(days=alerts.CONFIRMED_DAYS)
             details.append(text(request, "watchlist.manage.until", date=short_date(ends)))
-        track.append(row("stock", alert, product.name, product.get_absolute_url(), details))
+        # Change opens with the alert's own price and the nearest of the times offered.
+        track.append({**row("stock", alert, product.name, product.get_absolute_url(), details),
+                      "change": {"price": alert.max_price, "days": min(offered, key=lambda days: abs(
+                          days - (alert.watch_days or alerts.CONFIRMED_DAYS)))}})
     reminders = []
     for alert in found["drop"]:
         product_set = alert.product_set
@@ -1986,6 +1991,8 @@ def alerts_manage(request, token):
             "heading": heading, "meta_title": heading, "noindex": True, "robots": "noindex, nofollow",
         }))
     here = reverse("web:alerts_manage", args=[token])
+    if request.method == "POST" and request.POST.get("change"):
+        return HttpResponseRedirect(here + change_alert(email, request.POST))
     if request.method == "POST":
         choice = request.POST.get("stop", "")
         if choice == "all":
@@ -1996,11 +2003,43 @@ def alerts_manage(request, token):
         return HttpResponseRedirect(here + (f"?done={done}" if done else ""))
     done = request.GET.get("done", "")
     heading = text(request, "watchlist.manage.title")
+    done_keys = {"one": "watchlist.manage.stopped.one", "all": "watchlist.manage.stopped.all",
+                 "changed": "watchlist.manage.changed"}
+    # A change that was refused opens that alert's Change again, saying why.
+    refused = {"price": "alerts.track.price_invalid", "under": "watchlist.manage.change.under"}
+    error = request.GET.get("error", "")
     return private_page(render(request, "web/alerts_manage.html", {
         "email": email, "action": here, "groups": manage_groups(request, email),
-        "done": text(request, f"watchlist.manage.stopped.{done}") if done in ("one", "all") else "",
+        "track_days": alerts.TRACK_DAYS,
+        "change_row": request.GET.get("row", "") if error in refused else "",
+        "change_error": text(request, refused[error]) if error in refused else "",
+        "done": text(request, done_keys[done]) if done in done_keys else "",
         "heading": heading, "meta_title": heading, "noindex": True, "robots": "noindex, nofollow",
     }))
+
+
+def change_alert(email, data):
+    """Change one Track price alert from the Your alerts page's form. Returns where to send the visitor back to on
+    the page: what happened, and on a refusal which alert's Change to open again and why."""
+    from catalogue import manage_alerts
+
+    pk = data.get("change", "")
+    if not str(pk).isdigit():
+        return ""
+    anchor = f"#alert-stock-{pk}"
+    price = track_price(data.get("price", ""))
+    if price is None:
+        return f"?error=price&row={pk}{anchor}"
+    alert = StockAlert.objects.filter(pk=pk, email=manage_alerts.normal(email), max_price__isnull=False).first()
+    if alert is None:
+        return ""
+    listing = alerts.price_listing(alert.product)
+    if listing is not None and listing.delivered_price <= price:
+        # It is there now: the alert would be sent at once.
+        return f"?error=under&row={pk}{anchor}"
+    offered = {str(days): days for days, _label in alerts.TRACK_DAYS}
+    days = offered.get(data.get("for", ""), alerts.TRACK_DEFAULT_DAYS)
+    return f"?done=changed{anchor}" if manage_alerts.change(email, pk, price, days) else ""
 
 
 @require_GET

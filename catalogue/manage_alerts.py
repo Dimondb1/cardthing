@@ -3,7 +3,8 @@ Your alerts: one page to see and stop every email alert an address has, with no 
 
 On the watchlist page a visitor types their address and presses "Email me a link". If the address has any
 alert (back in stock, Track price, a drop reminder or a search alert, confirmed or not) it is emailed a link
-to a page listing them all, each with a Stop button and "Stop all" at the top. An address with no alerts is
+to a page listing them all, each with a Stop button and "Stop all" at the top, and each Track price alert
+with Change: a new price and how long to keep looking, from today. An address with no alerts is
 sent nothing. The answer on the page is the same either way, and a failed send is not told apart either, so
 the form never says whether an address is known.
 
@@ -113,6 +114,26 @@ def stop(email, kind, pk):
     if deleted:
         note("stopped")
     return bool(deleted)
+
+
+def change(email, pk, max_price, days, now=None):
+    """Set a Track price alert's price and how long it looks, from now, when it belongs to this address. The
+    page's link was sent to the address, as the confirm link was, so a change confirms an alert still waiting
+    too, and its six months start again. Returns the alert, or None when there is no such Track price alert."""
+    from django.utils import timezone
+
+    try:
+        pk = int(pk)
+    except (TypeError, ValueError):
+        return None
+    alert = (StockAlert.objects.filter(pk=pk, email=normal(email), max_price__isnull=False)
+             .select_related("product").first())
+    if alert is None:
+        return None
+    alert.max_price, alert.watch_days, alert.confirmed_at = max_price, days, now or timezone.now()
+    alert.save(update_fields=["max_price", "watch_days", "confirmed_at"])
+    note("changed")
+    return alert
 
 
 def stop_all(email):

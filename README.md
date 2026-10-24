@@ -3664,8 +3664,9 @@ display filed as a booster box) reaches inboxes: fix it in admin.
 ### Your alerts
 
 One place to see and stop every email alert an address has, with no
-account and no password (`catalogue/manage_alerts.py`). Under Alert me,
-while email is set up, the watchlist page has a Your alerts box: an email
+account and no password (`catalogue/manage_alerts.py`). While email is set
+up, the watchlist page links to it under its title ("See, change or stop
+your email alerts") and has a Your alerts box above Alert me: an email
 address and "Email me a link". It posts to `/watchlist/manage/`
 (`web:manage_ask`); without JavaScript the visitor goes back to the
 watchlist page (the saved list kept) at `#manage`, with JavaScript
@@ -3694,7 +3695,14 @@ groups: Back in stock (the product, linked), Track price (the product,
 the six-month limit), Drop reminders (the set, its game and its date as
 the drops page words it) and Search alerts (the alert read back as on the
 watchlist page, linked to that list). Unconfirmed ones say "Waiting for
-you to confirm". Each row has a Stop button and the top has Stop all:
+you to confirm". Each Track price alert has Change (a native `<details>`,
+so it works without JavaScript): a new price, delivered, and how long to
+keep looking (1 week, 1 month, 3 months, 6 months), from today. It is
+refused, opening again with the reason, for a price the form never takes
+or one at or over the cheapest in stock now (the alert would be sent at
+once). A change confirms an alert still waiting, since the link was sent
+to the address as the confirm link was, and its six months start again
+(`manage_alerts.change`). Each row has a Stop button and the top has Stop all:
 plain forms that POST to the same address with the CSRF token, delete an
 alert only when its address is the link's (whatever id is sent), and
 come back with "Alert stopped and deleted." or "All your alerts are

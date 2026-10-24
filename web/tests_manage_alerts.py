@@ -408,9 +408,10 @@ class StopTests(AlertsData):
         mine = self.all_kinds()
         html = self.client.get(self.manage_url()).content.decode()
         action = f'action="{self.manage_url()}"'
-        self.assertEqual(html.count(action), 7)   # Stop all and one for each of the six alerts
-        self.assertEqual(html.count('method="post"'), 7)
-        self.assertEqual(html.count("csrfmiddlewaretoken"), 7)
+        # Stop all, a Stop for each of the six alerts, and Change for each of the two Track price alerts.
+        self.assertEqual(html.count(action), 9)
+        self.assertEqual(html.count('method="post"'), 9)
+        self.assertEqual(html.count("csrfmiddlewaretoken"), 9)
         self.assertIn('class="button button--quiet button--small" type="submit" name="stop" value="all">Stop all</button>', html)
         self.assertIn(f'value="stock-{mine["back"].pk}">Stop<span class="visually-hidden">: Ascended Heroes Booster Bundle</span>', html)
         self.assertNotIn("<script src=\"/static/js/search-alert.js", html)
@@ -559,3 +560,70 @@ class WordingTests(AlertsData):
         html = self.client.get(self.manage_url()).content.decode()
         ends = date(2026, 10, 1) + timedelta(days=alerts.CONFIRMED_DAYS)
         self.assertIn(f"Until {ends.day} {ends:%b %Y}", html)
+
+
+@override_settings(**MAIL_ON)
+class ChangeTests(AlertsData):
+    """Change on a Track price alert: a new price and how long to keep looking, from today. The owner, on 24 Oct
+    2026: "We never finished the my alerts bit" (the page could only stop an alert)."""
+
+    def change(self, alert, price, days="91", email="ben@example.com"):
+        return self.client.post(self.manage_url(email), {"change": alert.pk, "price": price, "for": days})
+
+    def test_a_track_price_alert_gets_a_new_price_and_time_from_today(self):
+        mine = self.all_kinds()
+        before = timezone.now()
+        response = self.change(mine["track"], "39.50")
+        self.assertEqual(response.url, self.manage_url() + f"?done=changed#alert-stock-{mine['track'].pk}")
+        alert = StockAlert.objects.get(pk=mine["track"].pk)
+        self.assertEqual((alert.max_price, alert.watch_days), (Decimal("39.50"), 91))
+        self.assertGreaterEqual(alert.confirmed_at, before)
+        page = self.client.get(response.url).content.decode()
+        self.assertIn('role="status">Price alert saved.</p>', page)
+        self.assertIn("At or under £39.50", page)
+        self.assertIn(f"Until {(timezone.localtime(alert.confirmed_at) + timedelta(days=91)).strftime('%-d %b %Y')}", page)
+        # A change proves the address as the confirm link would: one still waiting is confirmed by it.
+        self.change(mine["track_waiting"], "99.00", days="7")
+        waiting = StockAlert.objects.get(pk=mine["track_waiting"].pk)
+        self.assertIsNotNone(waiting.confirmed_at)
+        self.assertEqual((waiting.max_price, waiting.watch_days), (Decimal("99.00"), 7))
+
+    def test_only_track_price_alerts_offer_change_and_open_with_their_own_values(self):
+        mine = self.all_kinds()
+        page = self.client.get(self.manage_url()).content.decode()
+        self.assertEqual(page.count('class="manage__change"'), 2)
+        track = page[page.index(f'id="alert-stock-{mine["track"].pk}"'):]
+        track = track[:track.index("</li>")]
+        self.assertIn('name="price" value="45.00"', track)
+        self.assertIn('<option value="30" selected>1 month</option>', track)
+        back = page[page.index(f'id="alert-stock-{mine["back"].pk}"'):]
+        self.assertNotIn("manage__change", back[:back.index("</li>")])
+
+    def test_a_refused_change_reopens_with_why_and_changes_nothing(self):
+        mine = self.all_kinds()
+        response = self.change(mine["track"], "a lot")
+        self.assertEqual(response.url, self.manage_url() + f"?error=price&row={mine['track'].pk}#alert-stock-{mine['track'].pk}")
+        page = self.client.get(response.url).content.decode()
+        track = page[page.index(f'id="alert-stock-{mine["track"].pk}"'):]
+        self.assertIn('<details class="manage__change" open>', track[:track.index("</li>")])
+        self.assertIn("Enter a price in pounds, like 6.50.", track)
+        # At or over the cheapest in stock now, the alert would be sent at once.
+        make_listing(self.etb, self.shop, price="40.00")
+        response = self.change(mine["track"], "45.00")
+        self.assertIn("?error=under", response.url)
+        self.assertIn("It is already at or under that price.", self.client.get(response.url).content.decode())
+        alert = StockAlert.objects.get(pk=mine["track"].pk)
+        self.assertEqual((alert.max_price, alert.watch_days), (Decimal("45.00"), 30))
+
+    def test_a_link_never_changes_another_address_or_a_back_in_stock_alert(self):
+        theirs = self.all_kinds("someone@example.com")
+        mine = self.all_kinds()
+        self.assertEqual(self.change(theirs["track"], "10.00").url, self.manage_url())
+        self.assertEqual(StockAlert.objects.get(pk=theirs["track"].pk).max_price, Decimal("45.00"))
+        self.change(mine["back"], "10.00")
+        self.assertIsNone(StockAlert.objects.get(pk=mine["back"].pk).max_price)
+
+    def test_the_watchlist_page_leads_to_your_alerts_before_alert_me(self):
+        page = self.client.get(reverse("web:watchlist")).content.decode()
+        self.assertIn('<p class="page-jump"><a href="#manage">See, change or stop your email alerts</a></p>', page)
+        self.assertLess(page.index('id="manage"'), page.index('id="alert"'))

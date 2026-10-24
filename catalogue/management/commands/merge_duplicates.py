@@ -568,7 +568,7 @@ def why_not_merge(keep, other, apart=frozenset()):
     ``apart`` holds the pairs the owner said are not the same (checks.kept_apart)."""
     if frozenset((keep.pk, other.pk)) in apart:
         return "you said they are not the same"
-    if identity_numbers(keep.name) != identity_numbers(other.name):
+    if identity_numbers(keep.name, game_slug_of(keep)) != identity_numbers(other.name, game_slug_of(other)):
         return "their numbers differ"
     if codes_differ(keep.name, other.name, game_slug_of(keep)):
         return "their set codes differ"

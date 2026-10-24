@@ -15,7 +15,7 @@ import unicodedata
 from dataclasses import dataclass
 
 from . import languages
-from .matching import chosen_option, expand
+from .matching import SHOP_NOTES, chosen_option, expand
 
 # slug, name, short name, words that identify the game in a title, vendor or tag
 GAMES = [
@@ -215,8 +215,12 @@ def find_game(*texts):
     return None
 
 
+# A set's number is not a "box set": "Fabled Booster Box (Set 9)" is a booster box. Read on expand()ed text.
+SET_NUMBER = re.compile(r"\b(?:set|chapter) \d{1,2}\b")
+
+
 def find_type(title, shop_type=""):
-    text = " " + expand(title) + " "
+    text = " " + SET_NUMBER.sub(" ", expand(title)) + " "
     shop_type = (shop_type or "").lower()
     for kind, words in TYPES:
         if any(w.lower() in shop_type for w in words if len(w) > 3) and kind != "booster_pack":
@@ -245,7 +249,7 @@ UNSURE_KIND = re.compile(r"\bcheck\s?lane\b|\bdouble\s+pack\b|\bdisplay\s+set\b|
 
 
 def says_kind(title, kind):
-    text = " " + expand(box_contents(title)) + " "
+    text = " " + SET_NUMBER.sub(" ", expand(box_contents(title))) + " "
     return any(f" {phrase} " in text for phrase in KIND_PHRASES.get(kind, ()))
 
 
@@ -336,6 +340,10 @@ def tidy_name(title):
     name = re.sub(r"\s*:\s*:\s*", ": ", name)               # "Tin: : Brand New" from an empty shop field
     for _ in range(2):
         name = SHOP_TAILS.sub("", SHOP_HEADS.sub("", name)).strip(" :,-")
+    # A shop's note on how many each customer may buy or when it comes out ("*1pp limit*", "(Releases
+    # 27.03.26)", "February Restock"), and the brackets or stars it leaves empty.
+    name = re.sub(r"\(\s*\)|\[\s*\]|\*\s*\*", " ", SHOP_NOTES.sub(" ", name))
+    name = re.sub(r"\s*[(\[]\s*$", "", re.sub(r"\s+", " ", name)).strip(" :,-")
     name = re.sub(r"\b(\w+)( \1\b)+", r"\1", name, flags=re.I)  # "Booster Booster Pack"
     # "(Default)" from a shop's system, and of "Sylveon / Greninja Ex Tin (Greninja)" only the one chosen.
     name = chosen_option(name)

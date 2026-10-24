@@ -32,15 +32,46 @@ AUTO_LINK = 100
 SUGGEST = 60
 
 
-ABBREVIATIONS = {" etb ": " elite trainer box ", " bb ": " booster box ", " upc ": " ultra premium collection "}
+ABBREVIATIONS = {" etb ": " elite trainer box ", " bb ": " booster box ", " upc ": " ultra premium collection ",
+                 " centre ": " center "}
 
 # A shop that sells several artworks on one page names the one chosen in brackets at the end: "30th Celebration
 # Sylveon / Greninja Ex Tin (Greninja)" is the Greninja tin, which other shops call "30th Celebration Greninja ex
 # Tin", and "Paldea Collection Sprigatito / Fuecoco / Quaxly (Sprigatito)" the Sprigatito one. Each option has as
 # many words as the choice: the first ends the words before the first slash, the last starts those after the last.
 CHOSEN = re.compile(r"^(?P<before>[^()]*/[^()]*?)\s*\((?P<chosen>[^()/]+)\)\s*$")
-# The variant a shop's system names when a product has only one ("Default", "Default Title"): never part of it.
-DEFAULT_VARIANT = re.compile(r"\s*[\[(]\s*default(?: title)?\s*[\])]\s*$|\s*[-–:|]\s*default title\s*$", re.I)
+# The variant a shop's system names when a product has only one ("Default", "Default Title"), or the plain one
+# beside a damaged one ("Normal"): never part of it.
+DEFAULT_VARIANT = re.compile(r"\s*[\[(]\s*(?:default(?: title)?|normal)\s*[\])]\s*$|\s*[-–:|]\s*default title\s*$", re.I)
+# Notes a shop adds to a name that never say which product it is: how many each customer may buy ("*1pp limit*",
+# "WEBSTORE 1 PER CUSTOMER", "Limit 2"), and when it comes out or came back ("(Releases 27.03.26)", "February
+# Restock", "Final Drop", "Wave 2"). Read on the name as the shop wrote it, before any other rule.
+SHOP_NOTES = re.compile(
+    r"\b(?:webstore\s+)?(?:(?:strictly|max(?:imum)?|limit(?:ed)?(?:\s+to)?)\s+)?\d+\s*"
+    r"(?:pp|per\s*(?:person|customer|household|order|address|account))\b(?:\s+limit(?:ed)?\b)?"
+    r"|\blimit(?:ed)?\s+(?:to\s+|of\s+)?\d+\b"
+    r"|(?:\b(?:releases?|released|release\s+date|out|available|dispatch(?:es|ed|ing)?|ships?|shipping)"
+    r"(?:\s+(?:on|from))?:?\s+)?\b\d{1,2}[./-]\d{1,2}[./-](?:\d{4}|\d{2})\b"
+    r"|\b(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+)?re-?stock(?:ed)?\b"
+    r"|\bfinal\s+drop\b|\bwave\s*\d+\b",
+    re.I,
+)
+# That one is sold ("(1 Box)"), and what a booster pack holds, in brackets ("Booster Packs (12 Cards)"). Only a
+# booster pack's: "Tin of Ancient Battles Mega Pack (18 Cards)" is one pack from the tin, not the tin.
+ONE_SOLD = re.compile(r"\(\s*1\s*(?:box|unit)\s*\)", re.I)
+CARD_COUNT = re.compile(r"\(\s*\d{1,3}\s*cards?\s*\)", re.I)
+BOOSTER_PACK = re.compile(r"\bbooster\b.*\bpacks?\b|\bpacks?\b.*\bbooster\b", re.I)
+NOT_A_PACK = re.compile(r"\b(?:tins?|box|display|decks?|bundle|collection|case|blisters?)\b", re.I)
+# Lorcana's sets have numbers, which shops add or leave out: "Fabled (Set 9)", "Fabled (Chapter 9)".
+LORCANA_NUMBER = re.compile(r"\b(?:set|chapter)\s*\d{1,2}\b", re.I)
+
+
+def without_notes(text, game=""):
+    """The name without SHOP_NOTES, what a pack holds, or (for Lorcana) the set's number."""
+    text = ONE_SOLD.sub(" ", SHOP_NOTES.sub(" ", text or ""))
+    if BOOSTER_PACK.search(text) and not NOT_A_PACK.search(text):
+        text = CARD_COUNT.sub(" ", text)
+    return LORCANA_NUMBER.sub(" ", text) if game == "lorcana" else text
 
 
 def chosen_option(name):
@@ -59,17 +90,6 @@ def chosen_option(name):
     if [w.lower() for w in chosen] not in [[w.lower() for w in option] for option in options]:
         return name
     return " ".join(first[:-n] + chosen + last[n:])
-    left, _slash, right = found.group("before").partition("/")
-    left_words, right_words = left.split(), right.split()
-    chosen = found.group("chosen").split()
-    n = len(chosen)
-    if len(left_words) < n or not right_words:
-        return name
-    if [w.lower() for w in right_words[:n]] == [w.lower() for w in chosen]:
-        return " ".join(left_words[:-n] + right_words)
-    if [w.lower() for w in left_words[-n:]] == [w.lower() for w in chosen]:
-        return " ".join(left_words + right_words[n:])
-    return name
 
 
 # Remembered: one eBay run scores each of up to 200,000 titles against hundreds of our product names, and
@@ -142,6 +162,9 @@ SET_CODES = re.compile(r"\b((?:op|eb|prb)[ck]?|st|bt|ex|lm|pb|fb|fs|sd)[- ]?(\d{
 POKEMON_CODES = re.compile(r"\b(?:me ?(0\d)|(me|m|s)(\d{1,2}))(?: (5)(?= |$))?([a-z]{0,2})\b")
 # Pokémon's Mega Evolution series, written in front of its sets' names or left out.
 MEGA_EVOLUTION = re.compile(r"\bmega evolutions?\b")
+# With the set's number after it ("Mega Evolution 2 Phantasmal Flames", "Mega Evolution 2.5 Ascended Heroes"):
+# the set's code, ME02 and ME02.5. Not a count: "Mega Evolution 2 Pack Blister" is two packs.
+MEGA_SET_NUMBER = re.compile(r"\bmega evolutions? (\d{1,2})( 5)?\b(?! ?x\b| (?:packs?|boosters?|blisters?|pk)\b)")
 # What a booster box is called at many shops: "Booster Display", "Booster Display Box", "Boosters Display Box",
 # "Booster Box Display". Not "Tin Display", "Bundle Display" or "Elite Trainer Box Display", which hold tins,
 # bundles or boxes.
@@ -155,7 +178,8 @@ NO_SHRINK = re.compile(r"\b(?:no (?:shrink ?wrap|shrink|plastic wrap|plastic|wra
 # Numbers shops write in words or numerals: "Rarity Collection II", "Three Pack Blister".
 NUMBER_WORDS = ((re.compile(r"\bii\b"), "2"), (re.compile(r"\biii\b"), "3"),
                 (re.compile(r"\btwo(?= (?:pack|booster|player|deck))"), "2"),
-                (re.compile(r"\bthree(?= (?:pack|booster|player|deck))"), "3"))
+                (re.compile(r"\bthree(?= (?:pack|booster|player|deck))"), "3"),
+                (re.compile(r"\btriple(?= blister)"), "3 pack"))
 # Kinds of Pokémon product that a set's name says "ex" in and shops leave out: "Shiny Treasure ex Booster
 # Box" and "Shiny Treasure Booster Box". A collection, tin, deck or gift is named after its Pokémon, and
 # "Charizard ex" is not "Charizard".
@@ -250,7 +274,7 @@ def _spaced(text):
 def key_text(text, game=""):
     """The name with every phrase shops add or drop at will taken out, and every code spelt one way. ``game``
     (the game's slug) adds the rules only one game's names need."""
-    expanded = " " + expand(chosen_option(text)) + " "
+    expanded = " " + expand(without_notes(chosen_option(text), game)) + " "
     expanded = re.sub(r"\b(\w+)( \1\b)+", r"\1", expanded)  # "booster booster box", a shop's slip
     for phrase in PHRASES:
         expanded = expanded.replace(f" {phrase} ", " ")
@@ -258,6 +282,7 @@ def key_text(text, game=""):
     for pattern, number in NUMBER_WORDS:
         expanded = pattern.sub(number, expanded)
     expanded = BOOSTER_DISPLAY.sub("booster box", expanded)
+    expanded = re.sub(r"\bfull (?=booster box\b)", "", expanded)
     expanded = NO_SHRINK.sub("noshrink", expanded)
     if game == POKEMON:
         # A Japanese High Class box is the set's only box, and the Booster Bundle the set's only bundle:
@@ -265,7 +290,11 @@ def key_text(text, game=""):
         expanded = re.sub(r"\bhigh class\b", " ", expanded)
         # The 2026 set is 30th Celebration; shops call it 30th Anniversary too ("30th Anniversary Celebration").
         expanded = re.sub(r"\b30th anniversary(?: celebration)?\b", "30th celebration", expanded)
-        expanded = re.sub(r"\bbooster bundle\b", "bundle", expanded)
+        expanded = re.sub(r"\bbooster bundle\b|(?<!\d )\bbooster pack bundle\b", "bundle", expanded)
+        # A checklane is a blister, and a three pack blister a triple blister, whichever a shop writes.
+        expanded = re.sub(r"\bcheck ?lane blisters?\b", "checklane", expanded)
+        expanded = re.sub(r"\b3 ?(?:x )?(?:booster )?packs? blisters?(?: packs?)?\b", "triple blister", expanded)
+        expanded = MEGA_SET_NUMBER.sub(lambda m: f" me{int(m.group(1))}{m.group(2) or ''} ", expanded)
         expanded = re.sub(r"\bpc (?=elite trainer box)", "center ", expanded)
         expanded = MEGA_EVOLUTION.sub(" me ", expanded)
         # Shops' names for the Simplified Chinese Gem Pack boxes: "Gem Series 4", "Gem Pack Vol. 4", "Gem 4".
@@ -308,10 +337,12 @@ BOX_NAME = re.compile(r"\bbooster\s+box\b|\bdisplay\b|\belite\s+trainer\s+box\b|
 
 
 @lru_cache(maxsize=65536)
-def identity_numbers(name):
+def identity_numbers(name, game=""):
     """The numbers that say which product a name is: a volume, a set number, how many packs a multi-pack
-    holds. Not a series or set code, nor what a box holds. Two names with different ones are two products,
-    even when every word matches ("Gem Pack Vol 4" and "Vol 6", "5 Sealed Booster Packs" and "10")."""
+    holds. Not a series or set code, what a box holds, nor a shop's note (without_notes). Two names with
+    different ones are two products, even when every word matches ("Gem Pack Vol 4" and "Vol 6", "5 Sealed
+    Booster Packs" and "10")."""
+    name = without_notes(name, game)
     half = set()
     if BOX_NAME.search(name or ""):
         # A half box ("(18 Packs)", "(12 Packs)") is another product from the full box, so its count stays.
@@ -320,7 +351,10 @@ def identity_numbers(name):
     text = " " + expand(name) + " "
     for pattern, number in NUMBER_WORDS:
         text = pattern.sub(number, text)
-    text = SERIES.sub(" ", text)
+    text = SERIES.sub(" ", MEGA_SET_NUMBER.sub(" ", text))
+    if game == POKEMON and re.search(r"\bbooster (?:pack )?bundle\b", text):
+        # A Pokémon Booster Bundle holds six packs, which some shops say: what it holds, not which it is.
+        text = re.sub(r"\b6 ?x? (?:sealed )?(?:booster )?packs?\b", " ", text)
     text = CHINESE_CODE.sub(" ", text)
     text = SHARED_CHINESE_CODE.sub(r" \1 ", text)
     text = CODES.sub(" ", text)
@@ -465,7 +499,7 @@ def same_product(a, b, game=""):
     agree ("Vol 4" is not "Vol 6"), and so do their set codes, booster kinds and the words that mark another
     product ("Collector's Edition Commander Deck" is left for a person, and the hourly tidy would take the
     listings it brought off "Collector Commander Deck")."""
-    return (identity_numbers(a) == identity_numbers(b) and not codes_differ(a, b, game)
+    return (identity_numbers(a, game) == identity_numbers(b, game) and not codes_differ(a, b, game)
             and booster_kinds(a) == booster_kinds(b) and marked_different(a) == marked_different(b))
 
 

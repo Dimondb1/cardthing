@@ -86,3 +86,114 @@ class RippedSealTests(TestCase):
             self.assertIsNone(classify(title, "", "", (), Decimal("40.00")), title)
         self.assertIsNotNone(classify("Pokemon 30th Celebration Greninja ex Tin", "", "", (), Decimal("24.99")))
 
+
+
+class ShopNoteTests(TestCase):
+    """Names read off the live site on 24 Oct 2026, when the owner asked for a check that the naming rules keep
+    one product on one page: shops' notes on limits and dates, "(Normal)", Lorcana's set numbers, "Mega Evolution 2",
+    Centre and Center, and the blister names each kept a second page of a product."""
+
+    SAME = [
+        ("lorcana", "Fabled Booster Box", "Fabled Booster Box (Set 9)", "Fabled (Chapter 9) Booster Box"),
+        ("lorcana", "Disney Lorcana TCG Fabled Booster Pack", "Set 9 Fabled Booster Pack", "Fabled (Chapter 9) Booster Pack",
+         "Card Game Fabled Booster Packs (12 Cards)"),
+        ("lorcana", "Fabled Ariel & Mulan Starter Deck", "Fabled Set 9 Starter Deck Ariel & Mulan"),
+        ("pokemon", "Perfect Order Elite Trainer Box", "Perfect Order Elite Trainer Box (Normal)",
+         "Mega Evolution 3 Perfect Order Elite Trainer Box",
+         "Elite Trainer Box Mega Evolutions Perfect Order *1per person limit*"),
+        ("pokemon", "Perfect Order Booster Pack", "Perfect Order Booster Pack (Releases 27.03.26)"),
+        ("pokemon", "Scarlet & Violet Surging Sparks Booster Box", "Surging Sparks Full Booster Box",
+         "Scarlet & Violet 8 Surging Sparks Booster Box (1 Box)", "Surging Sparks Booster Box February Restock"),
+        ("pokemon", "Mega Evolution Ascended Heroes Elite Trainer Box", "Mega Evolution 2.5 Ascended Heroes Elite Trainer Box",
+         "Mega Evolution Ascended Heroes Elite Trainer Box Final Drop"),
+        ("pokemon", "Ascended Heroes Elite Trainer Box (Pokémon Centre Edition)",
+         "Ascended Heroes Pokémon Center Elite Trainer Box English"),
+        ("pokemon", "Destined Rivals Elite Trainer Box",
+         "WEBSTORE 1 PER CUSTOMER Pokémon TCG: Scarlet & Violet 10 Destined Rivals Elite Trainer Box"),
+        ("pokemon", "151 Booster Bundle", "Scarlet & Violet 151 Booster Bundle *2pp limit*"),
+        ("pokemon", "Perfect Order Booster Bundle Pokémon TCG 6 Booster Packs", "Perfect Order Booster Pack Bundle"),
+        ("pokemon", "Phantasmal Flames Checklane Whimsicott", "Phantasmal Flames Checklane Blister (Whimsicott)"),
+        ("pokemon", "Phantasmal Flames Sneasel 3 Pack Blister Pack", "Phantasmal Flames Triple Blister (Sneasel)"),
+        ("pokemon", "Prismatic Evolutions Elite Trainer Box",
+         "WAVE 2: Pokémon TCG: Scarlet & Violet 8.5 Prismatic Evolutions Elite Trainer Box (ETB)"),
+    ]
+    APART = [
+        ("pokemon", "Mega Evolution 2 Pack Blister", "Phantasmal Flames 2 Pack Blister"),
+        ("pokemon", "Base Set 2 Booster Box", "Base Set Booster Box"),
+        ("pokemon", "Phantasmal Flames Premium Checklane Blaziken", "Phantasmal Flames Checklane Blaziken"),
+        ("pokemon", "Perfect Order 3 Pack Blister", "Perfect Order 1 Pack Blister"),
+        ("pokemon", "Surging Sparks Half Booster Box", "Surging Sparks Booster Box"),
+        ("pokemon", "Ascended Heroes Elite Trainer Box", "Ascended Heroes Pokémon Center Elite Trainer Box"),
+        ("pokemon", "30th Celebration Mini Tin", "30th Celebration Mini Tin Pikachu"),
+        ("lorcana", "The First Chapter Booster Box", "Fabled Booster Box"),
+    ]
+
+    def test_one_product_in_shops_words_is_one_key_and_the_numbers_agree(self):
+        from .management.commands.merge_duplicates import why_not_merge
+        from types import SimpleNamespace
+
+        for game, *names in self.SAME:
+            keys = {merge_key(tidy_name(name), game) for name in names}
+            self.assertEqual(len(keys), 1, (names, keys))
+            first = SimpleNamespace(pk=1, name=tidy_name(names[0]), game_slug=game)
+            for name in names[1:]:
+                self.assertEqual(why_not_merge(first, SimpleNamespace(pk=2, name=tidy_name(name), game_slug=game)), "", name)
+
+    def test_what_tells_two_products_apart_still_does(self):
+        from .management.commands.merge_duplicates import why_not_merge
+        from types import SimpleNamespace
+
+        for game, first, second in self.APART:
+            apart = merge_key(first, game) != merge_key(second, game) or why_not_merge(
+                SimpleNamespace(pk=1, name=first, game_slug=game), SimpleNamespace(pk=2, name=second, game_slug=game))
+            self.assertTrue(apart, (first, second))
+
+    def test_the_page_shows_the_name_without_the_shops_note(self):
+        for shown, name in [
+            ("Elite Trainer Box Mega Evolutions Perfect Order", "Elite Trainer Box Mega Evolutions Perfect Order *1per person limit*"),
+            ("Perfect Order Booster Pack", "Perfect Order Booster Pack (Releases 27.03.26)"),
+            ("Surging Sparks Booster Box", "Surging Sparks Booster Box February Restock"),
+            ("Pokémon TCG: Scarlet & Violet 10 Destined Rivals Elite Trainer Box",
+             "WEBSTORE 1 PER CUSTOMER Pokémon TCG: Scarlet & Violet 10 Destined Rivals Elite Trainer Box"),
+            ("Perfect Order Booster Box", "Perfect Order Booster Box (Normal)"),
+            ("OP13 Carrying On His Will Booster Box", "OP13 Carrying On His Will Booster Box *1pp Limit*"),
+            # What says which product it is stays.
+            ("Fabled Booster Box (Set 9)", "Fabled Booster Box (Set 9)"),
+            ("Limited Edition Booster Box", "Limited Edition Booster Box"),
+            ("Kanto Friends Mini Tin Pikachu 2025", "Kanto Friends Mini Tin Pikachu 2025"),
+        ]:
+            self.assertEqual(tidy_name(name), shown)
+
+    def test_a_sets_number_is_not_a_box_set(self):
+        from .classify import find_type, plain_type
+
+        self.assertEqual(find_type("Fabled Booster Box (Set 9)"), "booster_box")
+        self.assertEqual(plain_type("Fabled Booster Box (Set 9)", "collection_box"), "booster_box")
+        self.assertEqual(find_type("Pokemon TCG Box Set"), "collection_box")
+        self.assertIsNone(plain_type("Collection Starter Fabled Set 9", "collection_box"))
+
+
+class ShopNoteMergeTests(TestCase):
+    def test_the_hourly_tidy_retypes_and_joins_the_pages(self):
+        from .types import refresh_types
+
+        lorcana = make_game("Disney Lorcana", "lorcana")
+        fabled = make_set(lorcana, name="Fabled", slug="fabled", code="9")
+        box = make_product(fabled, name="Fabled Booster Box", slug="fabled-box", product_type=Product.Type.BOOSTER_BOX)
+        filed_wrong = make_product(fabled, name="Fabled Booster Box (Set 9)", slug="fabled-box-set-9",
+                                   product_type=Product.Type.COLLECTION_BOX)
+        perfect = make_set(make_game(), name="Perfect Order", slug="perfect-order", code="ME3")
+        etb = make_product(perfect, name="Perfect Order Elite Trainer Box", slug="po-etb", product_type=Product.Type.ELITE_TRAINER_BOX)
+        limited = make_product(perfect, name="Elite Trainer Box Mega Evolutions Perfect Order *1per person limit*",
+                               slug="po-etb-limit", product_type=Product.Type.ELITE_TRAINER_BOX)
+        numbered = make_product(perfect, name="Mega Evolution 3 Perfect Order Elite Trainer Box", slug="po-etb-3",
+                                product_type=Product.Type.ELITE_TRAINER_BOX)
+        for n, product in enumerate((box, filed_wrong, etb, limited, numbered)):
+            for shop in range(2 if product in (box, etb) else 1):
+                make_listing(product, make_retailer(f"Shop {n}-{shop}"), price="40.00")
+        self.assertEqual(refresh_types(), 1)
+        call_command("merge_duplicates", stdout=StringIO())
+        shown = set(Product.objects.filter(is_active=True))
+        self.assertEqual(shown, {box, etb})
+        self.assertEqual(box.listings.count(), 3)
+        self.assertEqual(etb.listings.count(), 4)

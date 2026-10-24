@@ -3848,6 +3848,22 @@ only by "ex" ("30th Celebration Greninja Tin" and "Greninja ex Tin") is
 offered as a possible duplicate (the `set_ex` key), for the owner or Claude,
 never merged by the rules alone.
 
+Shop notes never name a product (`matching.without_notes`, checked against
+the live site on 24 Oct 2026): a purchase limit ("*1pp limit*", "WEBSTORE 1
+PER CUSTOMER", "MAX 10 PER CUSTOMER"), a release or restock note ("(Releases
+27.03.26)", "February Restock", "Final Drop", "Wave 2"), "(Normal)" beside a
+damaged variant, "(1 Box)", and a booster pack's card count ("(12 Cards)";
+only a plain booster pack's, so "Mega Pack (18 Cards)" stays apart from its
+tin). The hourly tidy takes the notes out of names already shown too.
+Lorcana's set number goes ("Fabled (Set 9)", "Fabled (Chapter 9)"), and a
+set number is never read as a "box set", so "Fabled Booster Box (Set 9)" is
+a booster box. For Pokémon, "Mega Evolution 2 Phantasmal Flames" is ME02
+(not when a pack count follows: "Mega Evolution 2 Pack Blister"), a
+"Checklane Blister" is a "Checklane", a "3 Pack Blister" a "Triple Blister",
+a "Booster Pack Bundle" the Booster Bundle, whose six packs are what it
+holds; "Full Booster Box" is the booster box, and "Centre" is "Center"
+everywhere.
+
 The hourly merge only joins names whose numbers agree. A volume or set
 number is never read as a pack count ("Gem Pack Vol 4 Booster Pack" and
 "Vol 6" are two products), and two names with different numbers ("Mystery

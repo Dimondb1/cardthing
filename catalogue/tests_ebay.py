@@ -581,7 +581,7 @@ class FallbackSearchTests(TestCase):
         self.assertEqual([(o.product_pk, o.availability) for o in offers], [(pack.pk, Listing.Availability.OUT_OF_STOCK)])
         self.assertEqual(api.searches(), [])
 
-    def test_tidy_fetches_missing_titles_and_hides_a_chinese_pack(self):
+    def test_tidy_fetches_missing_titles_and_removes_a_chinese_pack(self):
         pack = make_product(self.set, name="30th Celebration Booster Pack", slug="30th-pack", product_type="booster_pack")
         chinese = make_listing(pack, self.retailer, price="5.44", url="https://www.ebay.co.uk/itm/1?campid=1")
         etb = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", slug="pev-etb")
@@ -592,10 +592,11 @@ class FallbackSearchTests(TestCase):
         out = StringIO()
         with mock.patch.object(ebay, "http", api), mock.patch.object(ebay, "PAUSE", 0):
             call_command("tidy_listings", stdout=out)
-        chinese.refresh_from_db()
         english.refresh_from_db()
-        self.assertEqual(chinese.title, "CHS Pokémon TCG 30th Celebration Booster Pack")
-        self.assertEqual(chinese.availability, Listing.Availability.OUT_OF_STOCK)
+        # Another language is not the product: its row goes, so the next eBay search can find the English pack.
+        self.assertFalse(Listing.objects.filter(pk=chinese.pk).exists())
+        self.assertIn("removed: 30th Celebration Booster Pack <- eBay CHS Pokémon TCG 30th Celebration Booster Pack",
+                      out.getvalue())
         self.assertEqual(english.availability, Listing.Availability.IN_STOCK)
         self.assertIn("2 eBay titles fetched", out.getvalue())
         self.assertEqual(api.searches(), [])
@@ -624,7 +625,7 @@ class FallbackSearchTests(TestCase):
         self.assertFalse(ebay.junk(jp, "ポケモン Pokemon Abyss Eye Booster Pack Japanese"))
         self.assertTrue(ebay.junk(jp, "Pokemon Abyss Eye Booster Pack CHS"))
 
-    def test_the_import_keeps_the_ebay_title_and_tidy_hides_one_the_rules_now_refuse(self):
+    def test_the_import_keeps_the_ebay_title_and_tidy_removes_one_the_rules_now_refuse(self):
         from io import StringIO
 
         from django.core.management import call_command
@@ -638,8 +639,7 @@ class FallbackSearchTests(TestCase):
         # A match saved before the rule existed: its title now fails, so the tidy-up hides it.
         Listing.objects.filter(pk=listing.pk).update(title="Pokemon XY Breakpoint Sampling Pack Booster Pack NEW and SEALED")
         call_command("tidy_listings", stdout=StringIO())
-        listing.refresh_from_db()
-        self.assertEqual(listing.availability, Listing.Availability.OUT_OF_STOCK)
+        self.assertFalse(Listing.objects.filter(pk=listing.pk).exists())
 
     def test_tidy_hides_an_ebay_price_far_under_the_shops(self):
         from io import StringIO
@@ -674,6 +674,35 @@ class FallbackSearchTests(TestCase):
         with mock.patch.object(ebay, "http", FakeApi([])), mock.patch.object(ebay, "PAUSE", 0):
             call_command("tidy_listings", stdout=StringIO())
         self.assertTrue(lists_due())
+
+    def test_single_cards_from_a_product_are_not_the_product(self):
+        # The Holiday Calendar's cheapest price on 24 Oct 2026 was two of its promo cards on eBay.
+        calendar = make_product(self.set, name="Holiday Calendar 2025", slug="holiday-2025", product_type="collection_box")
+        for title in ("*SEALED* Pokémon TCG 2025 Holiday Calendar Eevee 133/165 Pikachu 025/165",
+                      "Pokemon 2025 Holiday Calendar Pikachu PSA 10", "Pokemon Holiday Calendar 2025 Snorlax Reverse Holo",
+                      "Holiday Calendar 2025 Eevee Illustration Rare Near Mint"):
+            self.assertTrue(ebay.junk(calendar, title), title)
+        for title in ("Pokemon TCG 2025 Holiday Calendar Brand New Sealed", "1x Pokemon Holiday Calendar 2025 Sealed",
+                      "Pokemon Holiday Calendar 2025 Released 07/11/2025 Factory Sealed"):
+            self.assertFalse(ebay.junk(calendar, title), title)
+        pack = make_product(self.set, name="Surging Sparks Booster Pack", slug="ssp-pack", product_type="booster_pack")
+        self.assertFalse(ebay.junk(pack, "Pokemon Surging Sparks Single Booster Pack Sealed"))
+
+    def test_tidy_removes_a_single_card_and_takes_its_price_out_of_the_record(self):
+        from .models import DailyLowestPrice
+
+        calendar = make_product(self.set, name="Holiday Calendar 2025", slug="holiday-2025", product_type="collection_box")
+        cards = make_listing(calendar, self.retailer, price="19.36", delivery="2.72", url="https://www.ebay.co.uk/itm/3?campid=1",
+                             title="*SEALED* Pokémon TCG 2025 Holiday Calendar Eevee 133/165 Pikachu 025/165")
+        today = timezone.localdate()
+        for back, price in ((40, "44.99"), (2, "22.08"), (1, "22.08"), (0, "22.08")):
+            DailyLowestPrice.objects.create(product=calendar, date=today - datetime.timedelta(days=back), price=Decimal(price))
+        with mock.patch.object(ebay, "http", FakeApi([])), mock.patch.object(ebay, "PAUSE", 0):
+            call_command("tidy_listings", stdout=StringIO())
+        self.assertFalse(Listing.objects.filter(pk=cards.pk).exists())
+        self.assertEqual(list(DailyLowestPrice.objects.filter(product=calendar).values_list("price", flat=True)),
+                         [Decimal("44.99")])
+        self.assertNotIn("£22.08", self.client.get(calendar.get_absolute_url()).content.decode())
 
     def test_check_command_shows_the_pick_and_why_others_were_refused(self):
         from io import StringIO

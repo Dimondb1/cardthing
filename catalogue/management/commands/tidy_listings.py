@@ -22,12 +22,13 @@ from django.utils import timezone
 
 from catalogue import languages
 from catalogue.classify import NOT_SEALED, box_contents, find_game
-from catalogue.ebay import EbayError, fill_titles, too_cheap_listings
+from catalogue.ebay import EbayError, fill_titles, too_cheap_listings, wrong_listings
 from catalogue.importers import barcode_owners, ean_key, link_key, listing_page, slug_words, valid_gtin
 from catalogue.matching import (
     AUTO_LINK, DIFFERENT, LANGUAGE_DIFFERENT, contradiction, expand, key_words, match_key, score, shop_title,
 )
-from catalogue.models import Game, Listing, Product, shown_change
+from catalogue.models import DailyLowestPrice, Game, Listing, Product, shown_change
+from catalogue.pricing import correct_daily_lowest
 from catalogue.signals import clear_list_caches
 
 
@@ -225,19 +226,32 @@ class Command(BaseCommand):
                 if not dry_run:
                     with transaction.atomic():
                         listing.delete()
-            # An eBay listing the current rules refuse (far under every shop's price, or a title that is a
-            # multi-buy, a code or a sampling pack) is hidden until eBay is searched again.
-            cheap = too_cheap_listings()
+            # An eBay listing whose title is plainly another thing (a single card, a part, a multi-buy, a code)
+            # is removed, in stock or not: the next eBay search can find the product itself. One far under
+            # every shop's price is hidden until eBay is searched again. Either way its price was never the
+            # product's, so the days it set as the product's lowest go from the record (the Price check never
+            # calls a real price dear against it) and today is worked out again from what still counts.
+            wrong = wrong_listings()
+            for listing in wrong:
+                self.stdout.write(f"{'would remove' if dry_run else 'removed'}: {listing.product.name} <- eBay "
+                                  f"{listing.title}")
+            removed += len(wrong)
+            cheap = [listing for listing in too_cheap_listings() if listing not in wrong]
             for listing in cheap:
                 self.stdout.write(f"{'would hide' if dry_run else 'hidden'}: {listing.product.name} <- eBay £{listing.delivered_price}")
             if not dry_run:
                 with transaction.atomic():
+                    Listing.objects.filter(pk__in=[listing.pk for listing in wrong]).delete()
                     Listing.objects.filter(pk__in=[listing.pk for listing in cheap]).exclude(
                         availability=Listing.Availability.OUT_OF_STOCK
                     ).update(
                         availability=Listing.Availability.OUT_OF_STOCK, changed_at=shown_change(timezone.now())
                     )
-                if cheap:
+                    for listing in wrong + cheap:
+                        DailyLowestPrice.objects.filter(product_id=listing.product_id,
+                                                        price=listing.delivered_price).delete()
+                        correct_daily_lowest(listing.product_id)
+                if wrong or cheap:
                     clear_list_caches(force=True)
             if dry_run:
                 transaction.set_rollback(True)

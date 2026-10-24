@@ -99,6 +99,18 @@ NOT_SEALED = re.compile(
     r"\bposters?\b|\bbeanie\b|\bscarf\b|\bfigures\b|\binch\b|\bmug\b|\bkeychain\b|\bwallet\b|\bhoodie\b|\bt-shirt\b|\bsocks\b|\bpuzzle\b|\bsofbits\b|\bshokugan\b",
     re.I,
 )
+# What only a single card's title says: a card number ("Eevee 133/165", not a date), a Pokémon promo number
+# ("SVP 066"), a rarity, a grade or a card's condition. A marketplace title that says one sells cards from a
+# product, not the product: "*SEALED* Pokémon TCG 2025 Holiday Calendar Eevee 133/165 Pikachu 025/165" on eBay
+# was the Holiday Calendar's cheapest price on 24 Oct 2026. Narrower than NOT_SEALED, whose "1x" and "single"
+# sellers also write of a sealed box or pack.
+SINGLE_CARD = re.compile(
+    r"(?<![/\d])\b\d{1,3}\s*/\s*\d{1,3}\b(?!\s*/\s*\d)|\b(?:svp|swshp?|smp?|xyp?|bwp?)[ -]?\d{3}\b|"
+    r"\b(?:super|ultra|secret|hyper|special|illustration|alternate|alt) ?(?:art )?rare\b|\brare foil\b|holofoil|"
+    r"\bholo rare\b|\breverse holo\b|\bgraded\b|\bpsa\b|\bcgc\b|\bbgs\b|\bpromo cards?\b|\bnear mint\b|\(nm\)|"
+    r"\blightly played\b",
+    re.I,
+)
 # "Booster Box (36x Packs)" says what is inside the box, not that it is a multi-buy, but NOT_SEALED's
 # "36x" rule would refuse it. Only a count of 6 to 36 packs in brackets straight after the box itself
 # ("Booster Box (36x Packs)", "Display [24x Packs]") is rewritten, and only once. Any other count stays

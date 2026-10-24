@@ -609,9 +609,15 @@ shop's title names exactly one of them in full, or the words in its shop address
 the address counts against the product only when it names another language
 than the product's, so "...-simplified-chinese-gem-4-booster-box" stays on
 "Chinese Gem Pack Vol 4 Booster Box"; it also hides an
-eBay listing the current rules refuse: a price under 40% of the cheapest
-any shop last showed, in stock or not, or a title that is a multi-buy, a
-code, a sampling pack or another language. Listings keep the shop's own
+eBay listing priced under 40% of the cheapest any shop last showed, in
+stock or not, and removes one whose title is plainly another thing: a
+multi-buy, a code, a sampling pack, another language, or single cards
+(`classify.SINGLE_CARD`: a card number such as "133/165", a promo number,
+a rarity, a grade or a card's condition; "2025 Holiday Calendar Eevee
+133/165 Pikachu 025/165" was the calendar's cheapest price on 24 Oct 2026).
+A removed listing leaves no row on the page, the next eBay search can find
+the product itself, and the days its price set as the product's lowest go
+from the price history. Listings keep the shop's own
 title for this, so a new rule applies at the next hourly import rather
 than the next eBay run; an eBay listing saved before titles were kept has
 its title fetched through eBay's bulk lookup first, which does not touch the

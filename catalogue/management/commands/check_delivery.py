@@ -69,7 +69,7 @@ class Command(BaseCommand):
                 self.stdout.write("Out of time: the other shops are checked at the next run.")
                 break
             try:
-                self.check(retailer, apply, today)
+                self.check_shop(retailer, apply, today)
             except Exception as exc:  # one shop's fault never stops the rest
                 logger.exception("Delivery check for %s failed", retailer.name)
                 self.stdout.write(f"{retailer.name}: check failed: {exc}")
@@ -78,7 +78,7 @@ class Command(BaseCommand):
 
             cache.clear()
 
-    def check(self, retailer, apply, today):
+    def check_shop(self, retailer, apply, today):
         """Read one shop's charges and, with ``apply``, save them."""
         base = retailer.website.rstrip("/")
         cost = free_over = None

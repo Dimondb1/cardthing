@@ -606,3 +606,34 @@ class WorkerThreadsInstallTests(TestCase):
     def test_it_is_written_before_the_reader_starts(self):
         text = (DEPLOY / "install.sh").read_text()
         self.assertLess(text.index("grep -q RIPRAPTOR_WORKER_THREADS"), text.index("systemctl restart ripraptor-worker"))
+
+
+class CommandMethodTests(TestCase):
+    """A command's own method named like one of Django's (check, execute) replaces it: check_delivery's check()
+    took the place of Django's system checks, so every run from cron or the console stopped before it began, while
+    the tests, which call commands without those checks, passed."""
+
+    ALLOWED = {"handle", "add_arguments", "help", "requires_system_checks", "requires_migrations_checks",
+               "output_transaction", "suppressed_base_arguments", "leave_locale_alone", "stealth_options"}
+
+    def test_no_command_replaces_a_method_django_calls(self):
+        from importlib import import_module
+
+        from django.core.management import get_commands
+        from django.core.management.base import BaseCommand
+
+        ours = {name: app for name, app in get_commands().items() if app in ("catalogue", "web", "content", "inbox")}
+        self.assertIn("check_delivery", ours)
+        clashes = []
+        for name, app in ours.items():
+            command = import_module(f"{app}.management.commands.{name}").Command
+            for attribute in vars(command):
+                if attribute in self.ALLOWED or attribute.startswith("__"):
+                    continue
+                if hasattr(BaseCommand, attribute):
+                    clashes.append(f"{name}.{attribute}")
+        self.assertEqual(clashes, [])
+
+    def test_check_delivery_runs_with_djangos_checks(self):
+        out = StringIO()
+        call_command("check_delivery", "no-such-shop", skip_checks=False, stdout=out, stderr=StringIO())

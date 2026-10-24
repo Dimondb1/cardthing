@@ -204,6 +204,7 @@
       <div><dt>{% copy "dashboard.prices.checked" %}</dt><dd>{{ prices.share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.checked|number whole=prices.priced|number %}</span></dd></div>
       <div><dt>{% copy "dashboard.prices.market" %}</dt><dd>{{ prices.market_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.market|number whole=prices.priced|number %}</span></dd></div>
       <div><dt>{% copy "dashboard.prices.record" %}</dt><dd>{{ prices.record_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.record|number whole=prices.priced|number %}</span></dd></div>
+      <div><dt>{% copy "dashboard.prices.rrp" %}</dt><dd>{{ prices.rrp_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.rrp|number whole=prices.priced|number %}</span></dd></div>
     </dl>
     <ul class="dash-rows">{% for game in prices.games %}
       <li class="dash-rows__row"><span class="dash-rows__name">{{ game.name }}</span><span class="dash-rows__count">{{ game.share|percent }}</span>

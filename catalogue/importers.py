@@ -91,6 +91,9 @@ class Offer:
     description: str | None = None
     # Why the shop's own page says this is no sealed product (a single card, a used item), or "" (page_offer).
     not_sealed: str = ""
+    # The RRP or before-sale price the shop gives beside its price: NO_LIST_PRICE when the read looked and the
+    # shop gives none, None when the read did not look, which leaves the listing's as it was.
+    list_price: Decimal | None = None
 
     def __post_init__(self):
         # An open draw is not stock, from whichever source the offer came.
@@ -99,6 +102,7 @@ class Offer:
 
 
 NO_DEAL = (None, None)
+NO_LIST_PRICE = Decimal("0")
 
 
 class ImportError_(Exception):
@@ -497,6 +501,7 @@ def product_offers(base, product, preorder=False):
             tags=tuple(product.get("tags", []) or []),
             published_at=published_at,
             description=description,
+            list_price=money(variant.get("compare_at_price")) or NO_LIST_PRICE,
             # Only a page with several variants can mix products up; a lone "6 Packs" variant is the page itself.
             variant=variant["title"] if len(product.get("variants") or []) > 1 and variant.get("title") not in (None, "", "Default Title") else "",
         )
@@ -583,7 +588,8 @@ def js_product(data):
         "images": [{"src": absolute(src)} for src in data.get("images") or [] if isinstance(src, str)],
         "variants": [
             {"id": v.get("id"), "title": v.get("title"), "available": bool(v.get("available")), "barcode": v.get("barcode"),
-             "price": pounds(v.get("price")), "featured_image": {"src": absolute((v.get("featured_image") or {}).get("src"))}}
+             "price": pounds(v.get("price")), "compare_at_price": pounds(v.get("compare_at_price")),
+             "featured_image": {"src": absolute((v.get("featured_image") or {}).get("src"))}}
             for v in data.get("variants") or []
         ],
     }
@@ -1124,6 +1130,22 @@ def offer_price(offers):
     return None, "GBP"
 
 
+LIST_PRICE_TYPE = re.compile(r"ListPrice|Strikethrough|MSRP|SRP")
+
+
+def offer_list_price(offers):
+    """The RRP or before-sale price a schema.org Offer gives in pounds (a priceSpecification marked ListPrice,
+    StrikethroughPrice, MSRP or SRP), or NO_LIST_PRICE."""
+    specs = offers.get("priceSpecification") or []
+    for spec in specs if isinstance(specs, list) else [specs]:
+        if (isinstance(spec, dict) and LIST_PRICE_TYPE.search(str(spec.get("priceType", "")))
+                and (spec.get("priceCurrency") or offers.get("priceCurrency") or "GBP").upper() == "GBP"):
+            price = money(spec.get("price"))
+            if price:
+                return price
+    return NO_LIST_PRICE
+
+
 def breadcrumbs(html, nodes=()):
     """The names in the page's breadcrumb trail, from its schema.org data or its microdata."""
     names = []
@@ -1237,6 +1259,7 @@ def page_offer(url, html):
                 image=image,
                 description=description,
                 not_sealed=not_sealed_reason(html, title, description, every_node),
+                list_price=offer_list_price(offers),
             )
     meta = {key.lower(): value for key, value in META.findall(html)}
     upc = re.search(r'"(?:upc|gtin|ean|barcode)"\s*:\s*"(\d{8,14})"', html)
@@ -1701,8 +1724,11 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         description = listing.description if offer.description is None else offer.description
         # Written once: the offer stays in this read's best offers, which then never hold every description.
         offer.description = None
+        # The shop's RRP, set or cleared by a read that looked for it and left by one that did not. Not shown as a
+        # change on the page: the Price check takes it up at the next hourly refresh.
+        list_price = listing.list_price if offer.list_price is None else (offer.list_price or None)
         if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
-                or deal != held or listing.description != description):
+                or deal != held or listing.description != description or listing.list_price != list_price):
             # The page shows the multi-buy and links to the shop's page: a new one of either is a change. Another
             # variant of the same page is not.
             shown = not created and listing.is_active and (deal != held or page_key(listing.url) != page_key(offer.url))
@@ -1714,6 +1740,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
             if listing.description != description:
                 listing.description = description
                 fields.append("description")
+            if listing.list_price != list_price:
+                listing.list_price = list_price
+                fields.append("list_price")
             if published:
                 listing.shop_published_at = published
                 fields.append("shop_published_at")

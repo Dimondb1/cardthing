@@ -263,6 +263,17 @@ class Product(models.Model):
     price_band = models.PositiveSmallIntegerField("Price check", null=True, blank=True, editable=False)
     price_basis = models.CharField("Price check from", max_length=6, blank=True, editable=False,
                                    help_text="record (our own daily prices), market (Cardmarket) or both.")
+    # The recommended retail price. The owner's, typed in Admin, always wins; without it, the RRP UK shops give
+    # for it (Listing.list_price) when at least fair_price.RRP_SHOPS of them give the same one, kept each hour by
+    # fair_price.refresh_bands with how many do. The Price check never lets a price far over it look fair.
+    rrp = models.DecimalField(
+        "RRP", max_digits=8, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(Decimal("0.01"))],
+        help_text="The recommended retail price, if you know it. It always wins over the RRP UK shops give. "
+        "Leave empty to use theirs.",
+    )
+    shop_rrp = models.DecimalField("RRP UK shops give", max_digits=8, decimal_places=2, null=True, blank=True,
+                                   editable=False)
+    shop_rrp_shops = models.PositiveSmallIntegerField("shops giving that RRP", null=True, blank=True, editable=False)
 
     objects = ProductQuerySet.as_manager()
 
@@ -311,6 +322,16 @@ class Product(models.Model):
         from .fair_price import Verdict
 
         return Verdict(self.price_band, None)
+
+    @property
+    def rrp_now(self):
+        """(RRP, how many UK shops give it) the Price check measures against: the owner's with no count, else the
+        one UK shops agree on as kept each hour, else None."""
+        if self.rrp:
+            return self.rrp, None
+        if self.shop_rrp:
+            return self.shop_rrp, self.shop_rrp_shops
+        return None
 
     @property
     def card_check(self):
@@ -747,6 +768,13 @@ class Listing(models.Model):
     deal_price = models.DecimalField(
         "multi-buy price", max_digits=8, decimal_places=2, null=True, blank=True, editable=False,
         help_text="What the shop charges for the multi-buy quantity together, read from the shop.",
+    )
+
+    # The RRP or before-sale price the shop gives beside its price (Shopify's compare-at price, a schema.org
+    # ListPrice, MSRP or SRP), from each read that carries it. Products take theirs from it (Product.shop_rrp).
+    list_price = models.DecimalField(
+        "shop's RRP", max_digits=8, decimal_places=2, null=True, blank=True, editable=False,
+        help_text="The RRP or price before a sale that the shop gives beside its own price.",
     )
 
     # The shop's own description as plain text (at most importers.DESCRIPTION_CHARS), from what each read

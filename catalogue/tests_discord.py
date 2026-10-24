@@ -60,21 +60,26 @@ class DiscordTests(TestCase):
         outbox = outbox or Outbox()
         return discord.run(now=self.now + timedelta(minutes=minutes_later), post=outbox), outbox
 
-    def test_a_restock_says_what_the_price_check_says_so_a_dear_one_is_called_dear(self):
+    def test_a_restock_says_what_the_price_check_says_and_a_high_price_is_not_posted(self):
         self.channel()
         self.run_once()   # the first run only notes what is there
-        restock = self.restock("Prismatic Evolutions Elite Trainer Box", minutes_ago=2)
-        make_listing(restock.product, make_retailer("Northgate Cards"), price="60.00",
-                     availability=Listing.Availability.OUT_OF_STOCK)
         today = timezone.localdate(self.now)
-        DailyLowestPrice.objects.bulk_create([
-            DailyLowestPrice(product=restock.product, date=today - timedelta(days=back), price=Decimal("42.00"))
-            for back in range(1, 21)
-        ])
+        for name, usual in (("Prismatic Evolutions Elite Trainer Box", "45.00"), ("Destined Rivals Elite Trainer Box", "42.00")):
+            restock = self.restock(name, minutes_ago=2)
+            make_listing(restock.product, make_retailer(f"Northgate {usual}"), price="60.00",
+                         availability=Listing.Availability.OUT_OF_STOCK)
+            DailyLowestPrice.objects.bulk_create([
+                DailyLowestPrice(product=restock.product, date=today - timedelta(days=back), price=Decimal(usual))
+                for back in range(1, 21)
+            ])
         _sent, outbox = self.run_once()
+        # £50.00 is 11% over a usual £45.00, which is above average, and 19% over a usual £42.00, which is high:
+        # the owner wants nothing massively overpriced shared.
         [(_url, data)] = outbox.sent
-        fields = {f["name"]: f["value"] for f in data["embeds"][0]["fields"]}
-        self.assertEqual(fields["Price check"], "**High price**\nAverage £42.00 over 20 days")
+        [embed] = data["embeds"]
+        self.assertEqual(embed["title"], "Prismatic Evolutions Elite Trainer Box")
+        fields = {f["name"]: f["value"] for f in embed["fields"]}
+        self.assertEqual(fields["Price check"], "**Above average**\nAverage £45.00 over 20 days")
 
     def test_a_restock_says_how_long_it_was_gone_and_how_long_the_last_stock_lasted(self):
         # The owner: "I would like to know when they went out of stock and when they've been in stock". From
@@ -275,7 +280,8 @@ class DiscordTests(TestCase):
         self.channel("#big-drops", hook=DROPS_HOOK, min_drop_percent=20)
         self.run_once()
         today = timezone.localdate(self.now)
-        dropped = make_product(self.set, name="Journey Together Booster Box")
+        # An RRP to measure the new price by: without any, a drop is not posted (tests_rrp.py).
+        dropped = make_product(self.set, name="Journey Together Booster Box", rrp=Decimal("59.99"))
         make_listing(dropped, self.shop, price="47.01", delivery="2.99")
         DailyLowestPrice.objects.create(product=dropped, date=today - timedelta(days=1), price="60.00")   # 16.7%
         small = make_product(self.set, name="Black Bolt Booster Box")
@@ -285,6 +291,7 @@ class DiscordTests(TestCase):
         [embed] = outbox.embeds(HOOK)
         self.assertEqual((embed["author"]["name"], embed["title"]), ("Price drop", "Journey Together Booster Box"))
         self.assertTrue(embed["description"].startswith("Now **£50.00** delivered, was £60.00 yesterday. Checked "))
+        self.assertEqual(embed["fields"], [{"name": "Price check", "value": "**Fair price**\nRRP £59.99", "inline": True}])
         self.assertEqual(outbox.embeds(DROPS_HOOK), [])
         self.assertEqual(self.run_once(minutes_later=10)[1].sent, [])
 

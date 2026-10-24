@@ -1218,6 +1218,9 @@ ENTRIES = [
     Entry("discord.fair.short_market", T, "Discord: price check market", "European market {market}",
           "In the Price check box, under the verdict, when it is measured against Cardmarket's price in pounds.",
           placeholders=("market",)),
+    Entry("discord.fair.short_rrp", T, "Discord: price check RRP", "RRP {rrp}",
+          "In the Price check box, under the verdict, when the product has an RRP: the owner's, or the one UK shops "
+          "give.", placeholders=("rrp",)),
     Entry("discord.fair.one_shop", T, "Discord: one shop only",
           "Only one UK shop lists it, so nothing to compare with.",
           "In the Price check box when only one UK shop lists the product."),
@@ -1572,6 +1575,14 @@ ENTRIES = [
           "The European market price is Cardmarket's trend for the same product, in pounds at the day's European "
           "Central Bank rate, before post to the UK and any import costs.",
           "At the foot of the price check sheet when it uses Cardmarket's price."),
+    Entry("product.fair.rrp", T, "Price check: RRP", "RRP",
+          "In the price check sheet, beside the product's recommended retail price."),
+    Entry("product.fair.rrp_shops", T, "Price check: RRP from shops", "Given by {count} UK shops",
+          "Under the RRP in the price check sheet when it is the one UK shops give beside their price.",
+          placeholders=("count",)),
+    Entry("product.fair.rrp_basis", T, "Price check: RRP basis",
+          "A price more than 15% over the RRP is never called fair, whatever else it is measured against.",
+          "At the foot of the price check sheet when the product has an RRP."),
     Entry("product.fair.how", T, "Price check: how to read it",
           "More bars mean a better price. Green is a good price, grey is about usual, dark yellow is dearer than "
           "usual.",
@@ -3292,6 +3303,8 @@ ENTRIES = [
           "The share whose Price check uses Cardmarket's price (matched, and priced in the last week)."),
     Entry("dashboard.prices.record", T, "Dashboard from our record", "From our own price record",
           "The share whose Price check uses our own daily prices (two shops, 14 days)."),
+    Entry("dashboard.prices.rrp", T, "Dashboard with an RRP", "With an RRP",
+          "The share of products on sale with an RRP: the one typed in Admin, or one two UK shops agree on."),
     Entry("dashboard.prices.of", T, "Dashboard part of a whole", "{part} of {whole}",
           "Under each Price check share.", placeholders=("part", "whole")),
     Entry("dashboard.prices.game_row", T, "Dashboard Price check game row",

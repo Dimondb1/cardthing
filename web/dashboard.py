@@ -379,8 +379,9 @@ def checks_section(now, store):
 
 def prices_section(now, store):
     """Of the products with a current price, how many show the Price check, and what it rests on: Cardmarket's
-    price, our own daily record, or both (Product.price_band, kept each hour), for the whole site and each game,
-    and Claude's matching of our products to Cardmarket's (matching). Five queries."""
+    price, our own daily record, or both (Product.price_band, kept each hour), and how many have an RRP (the
+    owner's or UK shops'), for the whole site and each game, and Claude's matching of our products to Cardmarket's
+    (matching). Five queries."""
     from catalogue.fair_price import BOTH, MARKET, RECORD
 
     on_sale = Exists(Listing.objects.buyable().filter(product=OuterRef("pk")))
@@ -392,19 +393,21 @@ def prices_section(now, store):
             checked=Count("pk", filter=Q(price_band__isnull=False)),
             market=Count("pk", filter=Q(price_basis__in=(MARKET, BOTH))),
             record=Count("pk", filter=Q(price_basis__in=(RECORD, BOTH))),
+            rrp=Count("pk", filter=Q(on_sale=True) & (Q(rrp__isnull=False) | Q(shop_rrp__isnull=False))),
         )
     )
     rows = list(rows)
-    games = [{"name": row["game__name"], **{key: row[key] for key in ("priced", "checked", "market", "record")}}
+    games = [{"name": row["game__name"], **{key: row[key] for key in ("priced", "checked", "market", "record", "rrp")}}
              for row in rows if row["priced"]]
     for game in games:
         game["share"] = rate(game["checked"], game["priced"])
-    total = {key: sum(game[key] for game in games) for key in ("priced", "checked", "market", "record")}
+    total = {key: sum(game[key] for game in games) for key in ("priced", "checked", "market", "record", "rrp")}
     return {
         **total,
         "share": rate(total["checked"], total["priced"]),
         "market_share": rate(total["market"], total["priced"]),
         "record_share": rate(total["record"], total["priced"]),
+        "rrp_share": rate(total["rrp"], total["priced"]),
         "games": sorted(games, key=lambda g: (-g["priced"], g["name"])),
         "matching": matching(now, sum(row["products"] for row in rows if row["game__slug"] in cardmarket.GAMES)),
     }

@@ -25,7 +25,13 @@ are before post to the UK and import costs, which is why a fair UK price may sit
 never makes a price "Lowest yet" (that is our own record's word), and with both references the verdict is the
 lower band of the two, so neither can make a dear price look good.
 
-A product gets no verdict without either reference, or without a delivered price now (a shop whose delivery
+The RRP (Product.rrp_now): the owner's, typed in Admin, or the one at least RRP_SHOPS UK shops give beside their
+price (shop_rrps). It is a ceiling, never a reason to praise a price: up to RRP_FAIR of it changes nothing (and
+is a fair price when nothing else measures it), up to RRP_ABOVE of it is above, more is high, whatever the other
+references say. The owner: "ensure that deals we share on Discord aren't massively overpriced, not just a
+pointless discount".
+
+A product gets no verdict without any reference, or without a delivered price now (a shop whose delivery
 is unknown). Every game has it: Pokémon first, on trial, then all of them at the owner's request.
 
 at_lowest lists the products whose cheapest delivered price now is the lowest of the last LOW_DAYS, for the
@@ -50,6 +56,10 @@ HIGH = Decimal("0.15")
 LOW_DAYS = 90       # at_lowest: the lowest of this many days back
 MARKET_GOOD, MARKET_FAIR, MARKET_ABOVE = Decimal("0.95"), Decimal("1.15"), Decimal("1.35")
 MARKET_FRESH_DAYS = 7
+RRP_SHOPS = 2
+RRP_FAIR, RRP_ABOVE = Decimal("1.15"), Decimal("1.35")
+# A shop's RRP more than this many times its own price, or under its price divided by it, is not believed.
+RRP_SPREAD = Decimal("2")
 LOWEST, GOOD_PRICE, FAIR, ABOVE, HIGH_PRICE = 5, 4, 3, 2, 1
 KEYS = {LOWEST: "lowest", GOOD_PRICE: "good", FAIR: "fair", ABOVE: "above", HIGH_PRICE: "high"}
 SIGNAL_BARS = 4   # the Price check's signal bars: lit for the lowest yet, one fewer for each band dearer
@@ -72,6 +82,8 @@ class Verdict:
     days: int = 0             # days with a price before today
     since: date | None = None  # the first of them
     market: Market | None = None
+    rrp: Decimal | None = None
+    rrp_shops: int | None = None   # how many UK shops give the RRP; None when the owner set it
 
     @property
     def key(self):
@@ -125,6 +137,54 @@ def market_band(price, market_gbp):
     return HIGH_PRICE
 
 
+def rrp_cap(price, rrp):
+    """The band the RRP holds ``price`` down to, or None when it is within RRP_FAIR of it."""
+    if price <= rrp * RRP_FAIR:
+        return None
+    return ABOVE if price <= rrp * RRP_ABOVE else HIGH_PRICE
+
+
+def settle(bands, price, rrp):
+    """The verdict's band from the record's and the market's bands and the RRP, or None without any of them."""
+    if rrp:
+        cap = rrp_cap(price, rrp)
+        if cap is not None:
+            bands = bands + [cap]
+        elif not bands:
+            bands = [FAIR]
+    return min(bands) if bands else None
+
+
+def shop_rrps(product_ids=None):
+    """{product id: (RRP, how many UK shops give it)} for the products whose live UK shop listings agree on an
+    RRP: at least RRP_SHOPS shops give the same one, to the pound, and more give it than any other. Each shop's
+    must be within RRP_SPREAD of its own price. The figure is the one most of them give, the lowest on a tie.
+    One query."""
+    from .pricing import MARKETPLACES
+
+    rows = (
+        Listing.objects.live().exclude(sanity=Listing.Sanity.EXCLUDED).exclude(retailer__source_type__in=MARKETPLACES)
+        .filter(list_price__isnull=False, list_price__lte=F("price") * RRP_SPREAD, list_price__gte=F("price") / RRP_SPREAD)
+    )
+    if product_ids is not None:
+        rows = rows.filter(product_id__in=list(product_ids))
+    given = {}
+    for product_id, retailer_id, rrp in rows.order_by().values_list("product_id", "retailer_id", "list_price"):
+        given.setdefault(product_id, {})[retailer_id] = rrp
+    found = {}
+    for product_id, by_shop in given.items():
+        groups = {}
+        for rrp in by_shop.values():
+            groups.setdefault(rrp.quantize(Decimal("1")), []).append(rrp)
+        ranked = sorted(groups.values(), key=len, reverse=True)
+        best = ranked[0]
+        if len(best) < RRP_SHOPS or (len(ranked) > 1 and len(ranked[1]) == len(best)):
+            continue
+        figure = min(set(best), key=lambda value: (-best.count(value), value))
+        found[product_id] = (figure, len(best))
+    return found
+
+
 def verdict(product, price, today=None, shops=MIN_SHOPS):
     """The Verdict for ``product`` at ``price`` (its cheapest delivered price now), or None. ``shops`` is how
     many UK shops list it, in stock or not. Up to five queries."""
@@ -147,20 +207,25 @@ def verdict(product, price, today=None, shops=MIN_SHOPS):
             bands.append(band_for(price, found.average, found.low))
     if found.market is not None:
         bands.append(market_band(price, found.market.gbp))
-    if not bands:
+    rrp = product.rrp_now
+    if rrp is not None:
+        found.rrp, found.rrp_shops = rrp
+    band = settle(bands, price, found.rrp)
+    if band is None:
         return None
-    found.band = min(bands)
+    found.band = band
     return found
 
 
-RECORD, MARKET, BOTH = "record", "market", "both"
+RECORD, MARKET, BOTH, RRP = "record", "market", "both", "rrp"
 
 
 def refresh_bands(today=None):
     """Store every active product's Price check band and what it rests on (Product.price_band, price_basis), as
-    verdict() works it out, so lists can sort by it and show it with no query of their own. A product whose
-    verdict is gone has both emptied. Six queries and one write for those that changed, however many products.
-    Returns how many changed."""
+    verdict() works it out, so lists can sort by it and show it with no query of their own, and the RRP UK shops
+    give for it (Product.shop_rrp, shop_rrp_shops). A product whose verdict is gone has both emptied; the basis is
+    the RRP's only when nothing else measures it. Seven queries and one write for those that changed, however many
+    products. Returns how many changed."""
     from .cardmarket import in_pounds
 
     today = today or timezone.localdate()
@@ -195,9 +260,11 @@ def refresh_bands(today=None):
                 .order_by("product_id", "-date")):
         latest.setdefault(row.product_id, row)
     rate = ExchangeRate.latest() if latest else None
+    agreed = shop_rrps()
     pence = Decimal("0.01")
-    wanted = {}
-    for product_id, price in prices.items():
+
+    def checked(product_id, price, rrp):
+        """(band, basis) for the product at ``price``, or (None, "")."""
         bands, basis = [], []
         record = records.get(product_id)
         if shops.get(product_id, 0) >= MIN_SHOPS and record and record["days"] >= MIN_DAYS:
@@ -209,15 +276,22 @@ def refresh_bands(today=None):
         if euros and rate is not None:
             bands.append(market_band(price, in_pounds(euros, rate)))
             basis.append(MARKET)
-        if bands:
-            wanted[product_id] = (min(bands), BOTH if len(basis) == 2 else basis[0])
+        band = settle(bands, price, rrp)
+        if band is None:
+            return None, ""
+        return band, BOTH if len(basis) == 2 else basis[0] if basis else RRP
+
     changed = []
-    for product in Product.objects.active().only("pk", "price_band", "price_basis"):
-        band, basis = wanted.get(product.pk, (None, ""))
-        if (product.price_band, product.price_basis) != (band, basis):
-            product.price_band, product.price_basis = band, basis
+    fields = ["price_band", "price_basis", "shop_rrp", "shop_rrp_shops"]
+    for product in Product.objects.active().only("pk", "rrp", *fields):
+        rrp, shops_giving = agreed.get(product.pk, (None, None))
+        price = prices.get(product.pk)
+        now = (checked(product.pk, price, product.rrp or rrp) if price is not None else (None, "")) + (rrp, shops_giving)
+        if tuple(getattr(product, name) for name in fields) != now:
+            for name, value in zip(fields, now):
+                setattr(product, name, value)
             changed.append(product)
-    Product.objects.bulk_update(changed, ["price_band", "price_basis"], batch_size=500)
+    Product.objects.bulk_update(changed, fields, batch_size=500)
     return len(changed)
 
 

@@ -129,10 +129,11 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ("name", "ean", "product_set__name", "product_set__code")
     autocomplete_fields = ("product_set",)
     prepopulated_fields = {"slug": ("name",)}
-    readonly_fields = ("image_preview", "created_at", "updated_at")
+    readonly_fields = ("image_preview", "created_at", "updated_at", "shops_rrp")
     fieldsets = (
         (None, {"fields": ("name", "slug", "game", "product_set", "product_type", "is_active")}),
         ("Details", {"fields": ("image", "image_url", "image_preview", "ean", "amazon_asin", "release_date")}),
+        ("RRP", {"fields": ("rrp", "shops_rrp")}),
         ("Record", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
     inlines = [ListingInline]
@@ -151,6 +152,13 @@ class ProductAdmin(admin.ModelAdmin):
     @admin.display(description="Image", boolean=True)
     def has_image(self, obj):
         return bool(obj.image_src)
+
+    @admin.display(description="RRP UK shops give")
+    def shops_rrp(self, obj):
+        """The RRP at least two UK shops give beside their price, as kept each hour; the RRP above wins over it."""
+        if not obj.shop_rrp:
+            return "None yet: fewer than two UK shops give the same RRP."
+        return f"£{obj.shop_rrp:.2f}, given by {obj.shop_rrp_shops} UK shops"
 
     @admin.display(description="Current image")
     def image_preview(self, obj):

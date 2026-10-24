@@ -12,7 +12,9 @@ defaults.
 
 A post names the product, its delivered price and when it was checked, and links to RipRaptor's page for it
 (utm_source=discord), never to the shop: as with the search alert emails, people compare every shop on the
-page. Marketplaces never count, nor a price kept out of the comparison. Each piece of news is posted once to a
+page. Marketplaces never count, nor a price kept out of the comparison. Nothing the Price check calls a high
+price is posted, and a price drop only when it calls the new price fair or better (catalogue/fair_price.py:
+Cardmarket, the RRP and our own record). Each piece of news is posted once to a
 channel (DiscordPost keeps its key), a product at most once a day for each update. A channel's first run for an
 update posts nothing and only notes what is there already, so setting one up never floods it with the week
 before. Product names never ping anyone: every post forbids mentions. A webhook's address is never printed or
@@ -120,13 +122,20 @@ def span_words(delta):
     return f"{number} {unit}{'' if number == 1 else 's'}"
 
 
-def price_check_field(product, price, delivery_known, store):
+def judged(product, price, delivery_known):
+    """(the Price check's verdict on ``price``, or None, and how many UK shops list the product). eBay and Amazon
+    are not shops. No verdict while the delivery is unknown. One query, up to five more for the verdict."""
+    shops = (Listing.objects.filter(product=product, is_active=True, retailer__is_active=True)
+             .exclude(sanity=Listing.Sanity.EXCLUDED).exclude(retailer__source_type__in=MARKETPLACES)
+             .values("retailer_id").distinct().count())
+    return (fair_price.verdict(product, price, shops=shops) if delivery_known else None), shops
+
+
+def price_check_field(product, price, delivery_known, store, judgement=None):
     """("Price check", the verdict in bold and what it was measured against), the caveat when only one UK shop
     lists the product, whose price then has nothing to be compared with, or None while there is no verdict yet
-    (catalogue/fair_price.py). One query, two more with a verdict."""
-    shops = (Listing.objects.filter(product=product, is_active=True, retailer__is_active=True)
-             .exclude(sanity=Listing.Sanity.EXCLUDED).values("retailer_id").distinct().count())
-    found = fair_price.verdict(product, price, shops=shops) if delivery_known else None
+    (catalogue/fair_price.py). ``judgement`` is judged()'s answer when the caller has it."""
+    found, shops = judgement or judged(product, price, delivery_known)
     name = copy.get("discord.field.price_check", store=store)
     if found is None:
         return (name, copy.get("discord.fair.one_shop", store=store)) if shops < fair_price.MIN_SHOPS else None
@@ -135,6 +144,8 @@ def price_check_field(product, price, delivery_known, store):
         lines.append(copy.get("discord.fair.short_average", store=store, average=f"£{found.average:.2f}", days=found.days))
     if found.market:
         lines.append(copy.get("discord.fair.short_market", store=store, market=f"£{found.market.gbp:.2f}"))
+    if found.rrp:
+        lines.append(copy.get("discord.fair.short_rrp", store=store, rrp=f"£{found.rrp:.2f}"))
     return name, "\n".join(lines)
 
 
@@ -173,7 +184,8 @@ def look_back(channel):
 
 def shop_news(model, kind, title_key, availability, now, store, channel, games, sets=frozenset()):
     """Restocks or pre-order openings since look_back(), newest first, one a day per product, while the shop
-    still has it that way."""
+    still has it that way, unless the Price check calls the price high: more than 35% over the European market
+    or the RRP, or 15% over its own average."""
     rows = (
         model.objects.filter(at__gte=now - look_back(channel), product__is_active=True, retailer__is_active=True,
                              listing__is_active=True, listing__availability=availability)
@@ -190,7 +202,12 @@ def shop_news(model, kind, title_key, availability, now, store, channel, games, 
         if key in seen:
             continue
         seen.add(key)
-        check = price_check_field(row.product, row.price, row.delivery_known, store)
+        judgement = judged(row.product, row.price, row.delivery_known)
+        if judgement[0] is not None and judgement[0].band == fair_price.HIGH_PRICE:
+            # Stock at a price far over what it should cost is no news to share. The owner: "ensure that deals
+            # we share on Discord aren't massively overpriced".
+            continue
+        check = price_check_field(row.product, row.price, row.delivery_known, store, judgement)
         facts = stock_fields(row.product, store, restock=row if kind == RESTOCK else None, now=now)
         yield Post(key=key, title=row.product.name, label=copy.get(title_key, store=store, product=row.product.name),
                    body=price_words(row.price, row.delivery_known, row.at, store),
@@ -200,11 +217,16 @@ def shop_news(model, kind, title_key, availability, now, store, channel, games, 
 
 def price_drop_news(now, store, channel, games, sets=frozenset()):
     """Products whose cheapest delivered price is at least the channel's smallest drop below yesterday's, once
-    a day each."""
+    a day each, when the Price check calls the new price fair or better. A drop that leaves a price over the
+    market, the RRP or its usual is a discount on an inflated price, not a deal, and with nothing to measure it
+    by there is no saying it is one."""
     today = timezone.localdate(now)
     for product in pricing.price_drops(limit=DROP_CANDIDATES, days=1, today=today):
         if product.drop_ratio < channel.min_drop_percent / 100 or not in_scope(product.game_id, product.product_set_id,
                                                                                   games, sets):
+            continue
+        judgement = judged(product, product.lowest_price, True)
+        if judgement[0] is None or judgement[0].band < fair_price.FAIR:
             continue
         checked = (Listing.objects.filter(product=product).buyable().filter(delivery_known=True)
                    .order_by("delivered_price").values_list("last_checked", flat=True).first()) or now
@@ -214,6 +236,7 @@ def price_drop_news(now, store, channel, games, sets=frozenset()):
             body=copy.get("discord.price_drop.body", store=store, price=f"£{product.lowest_price:.2f}",
                           was=f"£{product.previous_price:.2f}", time=timezone.localtime(checked).strftime("%H:%M"),
                           when=when_words(checked)),
+            fields=[price_check_field(product, product.lowest_price, True, store, judgement)],
             path=product.get_absolute_url(), image=product.image_src, at=checked,
         )
 

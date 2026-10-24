@@ -1,7 +1,8 @@
-{% load sitecopy ripraptor %}{# Today's cheapest delivered price against the average and the lowest we have recorded, and Cardmarket's European price for the same product (catalogue/fair_price.py): in the Price check sheet, and under the price history for anyone without it. #}
+{% load sitecopy ripraptor %}{# Today's cheapest delivered price against the average and the lowest we have recorded, and Cardmarket's European price for the same product and its RRP (catalogue/fair_price.py): in the Price check sheet, and under the price history for anyone without it. #}
 <dl class="fair-facts">
   <div><dt>{% copy "product.fair.today" %}</dt><dd>{{ fair.price|gbp }}</dd></div>
   {% if fair.days %}<div><dt>{% copy "product.fair.average" days=fair.days %}</dt><dd>{{ fair.average|gbp }}</dd></div>
   <div><dt>{% copy "product.fair.lowest" %}</dt><dd>{{ fair.low|gbp }}<span class="fair-facts__when">{{ fair.low_date|short_date }}</span></dd></div>{% endif %}
   {% if fair.market %}<div><dt>{% copy "product.fair.market" %}</dt><dd>{{ fair.market.gbp|gbp }}<span class="fair-facts__when">{% copy "product.fair.market_when" date=fair.market.date|short_date %}</span></dd></div>{% endif %}
+  {% if fair.rrp %}<div><dt>{% copy "product.fair.rrp" %}</dt><dd>{{ fair.rrp|gbp }}{% if fair.rrp_shops %}<span class="fair-facts__when">{% copy "product.fair.rrp_shops" count=fair.rrp_shops %}</span>{% endif %}</dd></div>{% endif %}
 </dl>

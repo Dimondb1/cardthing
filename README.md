@@ -2973,9 +2973,27 @@ up to a year back and not counting today:
   price, never "Lowest yet": the lowest band also needs the price to be 5%
   under the average.
 - The record is ours: it lives in the database whatever happens to any shop
-  or source, so the price check keeps working if a source stops. The only
-  outside reference is Cardmarket's European price (see The European
-  market below).
+  or source, so the price check keeps working if a source stops. The
+  outside references are Cardmarket's European price (see The European
+  market below) and the RRP (below).
+- **RRP**: the recommended retail price is a ceiling, never a reason to
+  praise a price. Up to 15% over it (delivery included) changes nothing,
+  and is Fair price when nothing else measures the product; up to 35% over
+  it is at best Above average; more is High price, however low the price
+  is against our record or Cardmarket. The RRP is the one you type on the
+  product in Admin (RRP box), which always wins; otherwise the one UK
+  shops give beside their own price, when at least two give the same
+  figure (to the pound) and more give it than any other. Each read keeps
+  the shop's figure on its listing (`Listing.list_price`): a Shopify
+  shop's compare-at price, or a page's schema.org ListPrice,
+  StrikethroughPrice, MSRP or SRP. A shop's figure more than twice its own
+  price, or under half of it, is not believed. The hourly
+  `refresh_price_checks` keeps the product's (`Product.shop_rrp`, with how
+  many shops give it), shown read-only under the RRP box in Admin. The
+  Price check sheet shows the RRP and who gives it. Shops tend to show an
+  RRP only when they sell under it, so a product every shop sells over
+  RRP needs yours typed in. The dashboard's Price check card shows the
+  share of products on sale with an RRP.
 - Tapping it opens the Price check sheet (`js/product.js`): the verdict,
   today against the average and the lowest, the price chart, and the date
   the record starts. Without JavaScript it is a link to the price history,
@@ -3341,9 +3359,20 @@ cron, posts news to the channels set up in admin (`catalogue/discord.py`):
 - Back in stock: a UK shop has a product in stock again.
 - Pre-orders open: a UK shop opens pre-orders.
 - Price drop: a product's cheapest delivered price falls below yesterday's
-  by at least the channel's smallest drop.
+  by at least the channel's smallest drop, and the Price check calls the
+  new price Fair price or better. A drop that leaves a price over its
+  RRP, the European market or its own usual is a discount on an inflated
+  price, not a deal, and a drop with nothing to measure it by (no RRP, no
+  Cardmarket match, and under two UK shops or 14 days of our record) is
+  not posted either. The post carries the Price check box.
 - Out today: a set's release day, from 8am UK time, with its cheapest
   offer.
+
+Nothing the Price check calls High price is posted: a restock or a
+pre-order more than 35% over its RRP or the European market, or 15% over
+its own usual price, is not shared. The owner, 24 Oct 2026: "ensure that
+deals we share on Discord aren't massively overpriced, not just a
+pointless discount".
 
 Every post has RipRaptor's look: the brand orange down its side, the logo
 beside what happened ("Back in stock", "Pre-orders open", "Price drop",
@@ -3352,9 +3381,9 @@ price in bold with "Compare every UK shop on RipRaptor", the picture, and
 the commission note under the logo. Back in stock and Pre-orders open posts
 add boxes side by side, each only when we know it:
 
-- **Price check**: the verdict and what it was measured against ("High
-  price", "Average £42.00 over 20 days" or "European market £577.70"), so a
-  dear restock says so. When only one UK shop lists the product and there is
+- **Price check**: the verdict and what it was measured against ("Above
+  average", "Average £45.00 over 20 days", "European market £577.70" or
+  "RRP £49.99"), so a dearer restock says so. When only one UK shop lists the product and there is
   no market price, it says there is nothing to compare with.
 - **UK shops with it**: how many of the UK shops that list it have it in
   stock now, as "1 of 6". The honest kind of urgency: no shop we read says

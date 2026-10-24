@@ -114,6 +114,15 @@ class DiscordTests(TestCase):
         self.assertNotIn("Last stock lasted", names)
         self.assertIsNone(first.out_since)
 
+    def test_a_post_says_the_day_date_and_time_in_uk_time(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        # 23:30 on Friday in UTC is already Saturday in London in summer.
+        self.assertEqual(discord.when_words(datetime(2026, 7, 3, 23, 30, tzinfo=ZoneInfo("UTC"))), "Sat 4 Jul, 00:30")
+        self.assertEqual(discord.when_words(datetime(2026, 10, 24, 14, 5, tzinfo=ZoneInfo("Europe/London"))),
+                         "Sat 24 Oct, 14:05")
+
     def test_how_long_reads_in_the_plainest_unit(self):
         self.assertEqual([discord.span_words(timedelta(minutes=n)) for n in (0, 1, 45, 60, 61 * 5, 47 * 60, 50 * 60)],
                          ["1 minute", "1 minute", "45 minutes", "1 hour", "5 hours", "47 hours", "2 days"])
@@ -144,7 +153,7 @@ class DiscordTests(TestCase):
         self.assertEqual(embed["author"], {"name": "Back in stock", "url": page, "icon_url": logo})
         self.assertEqual(embed["title"], "Prismatic Evolutions Elite Trainer Box")
         self.assertEqual(embed["description"],
-                         f"**£50.00** delivered, checked at {timezone.localtime(fresh.at):%H:%M}.\n"
+                         f"**£50.00** delivered, checked {discord.when_words(fresh.at)}.\n"
                          f"[Compare every UK shop on RipRaptor →]({page})")
         self.assertEqual(embed["url"], page)
         self.assertEqual(embed["color"], 0xE5470E)
@@ -275,7 +284,7 @@ class DiscordTests(TestCase):
         outbox = self.run_once()[1]
         [embed] = outbox.embeds(HOOK)
         self.assertEqual((embed["author"]["name"], embed["title"]), ("Price drop", "Journey Together Booster Box"))
-        self.assertTrue(embed["description"].startswith("Now **£50.00** delivered, was £60.00 yesterday. Checked at "))
+        self.assertTrue(embed["description"].startswith("Now **£50.00** delivered, was £60.00 yesterday. Checked "))
         self.assertEqual(outbox.embeds(DROPS_HOOK), [])
         self.assertEqual(self.run_once(minutes_later=10)[1].sent, [])
 
@@ -293,7 +302,7 @@ class DiscordTests(TestCase):
         discord.run(now=self.now, post=after)
         [embed] = after.embeds(DROPS_HOOK)
         self.assertEqual((embed["author"]["name"], embed["title"]), ("Out today", "Mega Evolution (Pokémon)"))
-        self.assertTrue(embed["description"].startswith("Cheapest from **£150.00** delivered, checked at "))
+        self.assertTrue(embed["description"].startswith("Cheapest from **£150.00** delivered, checked "))
         self.assertEqual(embed["url"], f"https://ripraptor.com{out.get_absolute_url()}"
                                        "?utm_source=discord&utm_medium=social&utm_campaign=alerts")
 

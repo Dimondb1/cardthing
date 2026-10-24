@@ -96,9 +96,16 @@ def tracked(path):
     return f"{settings.RIPRAPTOR_SITE_URL}{path}?{query}"
 
 
+def when_words(at):
+    """When, as the post says it, in UK time: "Sat 24 Oct, 14:05". The owner: "include the date, day of week and
+    time in the post, so I can see when it was"."""
+    local = timezone.localtime(at)
+    return f"{local:%a} {local.day} {local:%b, %H:%M}"
+
+
 def price_words(price, delivery_known, checked, store):
     return copy.get("discord.price" if delivery_known else "discord.price_plus", store=store, price=f"£{price:.2f}",
-                    time=timezone.localtime(checked).strftime("%H:%M"))
+                    time=timezone.localtime(checked).strftime("%H:%M"), when=when_words(checked))
 
 
 def span_words(delta):
@@ -205,7 +212,8 @@ def price_drop_news(now, store, channel, games, sets=frozenset()):
             key=f"{PRICE_DROP}-{product.pk}-{today.isoformat()}",
             title=product.name, label=copy.get("discord.price_drop.title", store=store, product=product.name),
             body=copy.get("discord.price_drop.body", store=store, price=f"£{product.lowest_price:.2f}",
-                          was=f"£{product.previous_price:.2f}", time=timezone.localtime(checked).strftime("%H:%M")),
+                          was=f"£{product.previous_price:.2f}", time=timezone.localtime(checked).strftime("%H:%M"),
+                          when=when_words(checked)),
             path=product.get_absolute_url(), image=product.image_src, at=checked,
         )
 

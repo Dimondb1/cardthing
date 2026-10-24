@@ -110,6 +110,16 @@ class BasketCheckTests(TestCase):
         # The single card (id 3) is cheaper but a booster pack pays the real parcel rate.
         self.assertEqual(sample_variant(json.loads(PRODUCTS)["products"]), (2, Decimal("6.00")))
 
+    def test_a_boxed_product_is_priced_before_a_pack_that_goes_as_a_letter(self):
+        # Hammerhead TCG on 24 Oct 2026: £2.00 to post a booster pack, £3.75 a booster box. The comparison is
+        # mostly of boxes, so the basket check prices one first.
+        import json
+
+        products = json.loads(PRODUCTS)["products"] + [
+            {"title": "Pokemon Surging Sparks Elite Trainer Box", "variants": [{"id": 4, "price": "49.99", "available": True}]},
+        ]
+        self.assertEqual(sample_variant(products), (4, Decimal("49.99")))
+
     def test_uk_rate_is_the_cheapest_real_delivery_option(self):
         session = FakeSession()
         self.assertEqual(uk_rate(session, "https://shop.example", 2, 1), Decimal("3.49"))

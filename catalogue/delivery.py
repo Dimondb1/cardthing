@@ -25,6 +25,7 @@ from urllib.parse import urlencode, urljoin
 from . import importers
 from .classify import classify
 from .importers import ImportError_
+from .models import Product
 
 PATHS = [
     "/pages/delivery", "/pages/delivery-information", "/pages/delivery-info", "/pages/delivery-returns",
@@ -263,24 +264,29 @@ def localize(session, base):
         pass
 
 
+PACKS = (Product.Type.BOOSTER_PACK, Product.Type.COLLECTOR_BOOSTER_PACK)
+
+
 def sample_variants(products, low=Decimal("3"), high=Decimal("60")):
     """[(variant id, price)] of cheap, in-stock products that have to be posted, in the shop's own order.
 
-    Sealed products come first: in a singles-heavy shop a single card gets the "singles post" rate, which is
-    not what a booster box pays.
+    Boxed sealed products come first, then sealed packs, then the rest: in a singles-heavy shop a single card
+    gets the "singles post" rate, and a lone booster pack goes as a letter, neither of which is what a box pays.
+    Hammerhead TCG on 24 Oct 2026: £2.00 for a booster pack, £3.75 for a booster box.
     """
-    sealed_ones, others = [], []
+    boxed, packs, others = [], [], []
     for product in products:
         sealed = classify(product.get("title", ""), product.get("product_type", ""), product.get("vendor", ""),
                           tuple(product.get("tags") or []))
+        group = others if sealed is None else packs if sealed.product_type in PACKS else boxed
         for variant in product.get("variants", []):
             try:
                 price = Decimal(str(variant.get("price")))
             except (ArithmeticError, TypeError, ValueError):
                 continue
             if variant.get("available") and variant.get("requires_shipping", True) and low <= price <= high:
-                (sealed_ones if sealed else others).append((variant["id"], price))
-    return sealed_ones + others
+                group.append((variant["id"], price))
+    return boxed + packs + others
 
 
 def sample_variant(products, low=Decimal("3"), high=Decimal("60")):

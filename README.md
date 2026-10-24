@@ -362,20 +362,29 @@ otherwise prices it in the server's currency), asks for its UK delivery
 options, takes the cheapest posted one and empties the basket. The basket
 stays under the page's threshold; one that comes back free is tried again
 with a cheaper product, since it may be over a threshold no page gave, and
-a product the basket refuses gives way to the next (up to five). When the
+a product the basket refuses gives way to the next (up to five). A boxed
+sealed product is priced before a booster pack, and a pack before anything
+else: a lone pack often goes as a letter (Hammerhead TCG, 24 Oct 2026:
+£2.00 for a pack, £3.75 for a booster box), and the comparison is mostly of
+boxes. When the
 page gave a threshold, a basket just over it is priced too, to confirm it
 is free. Every figure saved carries its source and the date in the
 retailer's delivery note, so it can be checked. A shop that gives nothing
 readable is listed with its address for checking by hand. The server
 checks every shop on Sundays at 3:30 and, at 4:30 every day, the shops
-whose standard charge is still unknown. Shops with an unknown charge go
+whose standard charge is still unknown. (For a few hours on 24 Oct 2026
+every run would have stopped before it began: a method of the command
+named `check` replaced Django's system checks, which the tests skip.
+`tests_ops` now fails on any command method named like one of Django's.) Shops with an unknown charge go
 first, one shop's fault is reported and never stops the rest, and no shop
 is started after 40 minutes, so the cron's limit never cuts a run short.
 
 Not every shop can be read this way. Magic Madhouse (BigCommerce) shows
 its charge only at its own checkout, whose delivery options refuse
 anything but its own pages, and Card Empire's basket refuses every
-product; Monarch Cards (Wix) and Shiny Vault publish no charge. For those,
+product; Monarch Cards (Wix) and Shiny Vault publish no charge. Apla
+Cards (Wix) publishes only its free thresholds (free over £49), so its
+smaller orders show "+ delivery". For those,
 type the charge from the shop's checkout into the retailer's "standard
 delivery" in admin: a charge you set is kept, and the daily check skips it.
 

@@ -140,6 +140,14 @@ SHOPS = [
     # Added at the owner's request after the shop asked to be listed: a WooCommerce shop, read from its sitemap.
     ("poke-stadium-cards", "Poke Stadium Cards", "https://pokestadiumcards.co.uk/", S.WEBSITE, None, None,
      "Delivery charge not yet confirmed"),
+    # Added at the owner's request on 24 Oct 2026, after a Reddit reader named them as cheaper shops.
+    ("hammerhead-tcg", "Hammerhead TCG", "https://www.hammerheadtcg.co.uk/", S.SHOPIFY, "3.75", None,
+     "Standard £3.75 for a booster box (basket check; a single pack goes for £2.00), no free threshold "
+     "published, read 24 Oct 2026"),
+    # A Wix shop, read from its sitemap's product pages. Its charge under the free threshold is worked out at
+    # checkout, which no read can see, so it stays unknown there.
+    ("apla-cards", "Apla Cards", "https://www.aplacards.co.uk/", S.WEBSITE, None, "49",
+     "Free over £49 by Royal Mail 48 (FAQ page); the charge under it is worked out at checkout, read 24 Oct 2026"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's

@@ -36,7 +36,27 @@ LOCK_WAITS = (0.5, 1, 2)
 # wait (20 s) is raised, so a request never waits the busy timeout twice.
 LOCK_QUICK_SECONDS = 1.0
 
+# The home page says how many UK shops the site compares; counted at most this often.
+SHOPS_COMPARED_KEY = "shops-compared"
+SHOPS_COMPARED_SECONDS = 600
+
 logger = logging.getLogger(__name__)
+
+
+def shops_compared():
+    """How many UK shops the site has current prices from: shops (not eBay or Amazon, which are searches) with
+    a listing checked inside the stale cutoff and not kept out of the comparison, so a shop that stops being read
+    drops out of the count and a new one joins it with its first read. Counted at most every
+    SHOPS_COMPARED_SECONDS. The owner: "I want it to say how many shops it compares and should dynamically
+    change"."""
+    from django.core.cache import cache
+
+    count = cache.get(SHOPS_COMPARED_KEY)
+    if count is None:
+        count = (Listing.objects.current().exclude(retailer__source_type__in=MARKETPLACES)
+                 .exclude(sanity=Listing.Sanity.EXCLUDED).order_by().values("retailer_id").distinct().count())
+        cache.set(SHOPS_COMPARED_KEY, count, SHOPS_COMPARED_SECONDS)
+    return count
 
 
 def retry_locked(fn, attempts=LOCK_ATTEMPTS, waits=LOCK_WAITS):

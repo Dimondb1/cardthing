@@ -768,6 +768,7 @@ def home(request):
             "games": games,
             "product_types": home_types(),
             "last_checked": last_checked,
+            "shops_compared": pricing.shops_compared(),
             "featured": featured,
             "featured_spares": featured_spares,
             "featured_paying_only": FeaturedSettings.current().paying_only if featured else False,

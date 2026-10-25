@@ -5,7 +5,7 @@
 <section class="hero" aria-labelledby="hero-title">
   {% copy "home.hero.eyebrow" as eyebrow %}{% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
   {% copy "home.hero.title" as title %}<h1 id="hero-title" class="hero__title">{{ title|accent_last }}</h1>
-  {% copy "home.hero.subtitle" as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
+  {% copy "home.hero.subtitle" shops=shops_compared as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
   </div>

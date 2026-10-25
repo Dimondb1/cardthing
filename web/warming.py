@@ -89,6 +89,10 @@ def warm_pages(fresh=False, only=None):
         started = time.monotonic()
         build()
         took[name] = time.monotonic() - started
+    # The count of shops under the home page's headline, so no visitor counts them either (one query when due).
+    from catalogue.pricing import shops_compared
+
+    shops_compared()
     return took
 
 

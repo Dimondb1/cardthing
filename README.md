@@ -2838,10 +2838,20 @@ rows; the installer runs it, and it is safe to run again.
 
 The home page opens with a compact hero: a short line above the headline
 (optional), the headline on one line with its last sentence in orange
-(`accent_last` in `web/templatetags/ripraptor.py`), one line saying every
-price includes delivery, not just the basket price, then the large search
+(`accent_last` in `web/templatetags/ripraptor.py`), one line saying how
+many UK shops the site compares and that every price includes delivery,
+not just the basket price ("Sealed TCG prices from 87 UK shops, ..."), then
+the large search
 box and the latest shop price check, all close together so the games and
-Picked for you start on the first screen. Then "Find your game": a short
+Picked for you start on the first screen. The number of shops
+(`pricing.shops_compared`) counts the UK shops with a current price on the
+site, so it moves as shops are added, stop being read or come back: eBay
+and Amazon are searches and never count, nor a price kept out of the
+comparison. It is counted at most every ten minutes, and the background
+reader counts it with the cached page lists, so no visitor waits for it.
+The wording is `home.hero.subtitle` in Site wording, with `{shops}` where
+the number goes; wording you have edited there keeps your text until you
+add `{shops}` to it. Then "Find your game": a short
 tile per game, its box art small beside its name and product count (a big
 count written short, "4.1k products", `compact_count`, never rounded up),
 every game in one row that swipes sideways (two and a bit on a phone, so the

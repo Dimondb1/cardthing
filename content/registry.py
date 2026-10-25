@@ -249,9 +249,10 @@ ENTRIES = [
     ),
     Entry(
         "home.hero.subtitle", T, "Line under the headline",
-        "Sealed TCG prices from UK shops, delivery included. Not just the basket price.",
-        "One sentence under the headline, above the search box. Leave empty to hide it.",
-        optional=True,
+        "Sealed TCG prices from {shops} UK shops, delivery included. Not just the basket price.",
+        "One sentence under the headline, above the search box. {shops} is how many UK shops the site has "
+        "current prices from (not eBay or Amazon), counted every ten minutes. Leave empty to hide it.",
+        optional=True, placeholders=("shops",),
     ),
     Entry(
         "home.search.button", B, "Home search button",

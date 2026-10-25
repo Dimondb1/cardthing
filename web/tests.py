@@ -1998,8 +1998,42 @@ class AnalyticsTests(PageTestCase):
                 self.assertRegex(path, r"^/(?:contact/c|alerts/(?:confirm|stop))/")
 
 
+class ShopsComparedTests(TestCase):
+    """The line under the home headline says how many UK shops the site compares, and the number follows the shops
+    as they are read. The owner: "I want it to say how many shops it compares and should dynamically change"."""
+
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.set = make_set(make_game())
+
+    def subtitle(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        html = self.client.get(reverse("web:home")).content.decode()
+        return re.search(r'<p class="hero__subtitle">([^<]*)</p>', html).group(1)
+
+    def test_it_counts_the_uk_shops_with_current_prices(self):
+        box = make_product(self.set, name="Surging Sparks Booster Box", slug="ssp-box")
+        for name in ("Harbour Games", "Northgate Cards"):
+            make_listing(box, make_retailer(name), price="99.00")
+        # eBay is a search, a shop not read for days has nothing current, and a hidden listing is not compared.
+        make_listing(box, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="90.00")
+        stale = make_listing(box, make_retailer("Fenland Games"), price="98.00")
+        Listing.objects.filter(pk=stale.pk).update(last_checked=timezone.now() - timedelta(days=5))
+        make_listing(box, make_retailer("Kestrel Cards"), price="97.00", sanity=Listing.Sanity.EXCLUDED)
+        self.assertEqual(self.subtitle(),
+                         "Sealed TCG prices from 2 UK shops, delivery included. Not just the basket price.")
+        # A shop's first read puts it in the count.
+        make_listing(box, make_retailer("Marlow Card Co."), price="98.50")
+        self.assertIn("from 3 UK shops", self.subtitle())
+
+
 class RedesignTests(PageTestCase):
     """The home page tiles and cards, and the product card on listing pages."""
+
 
     def test_the_home_page_has_the_tiles_the_watchlist_card_and_the_one_line_headline(self):
         from django.core.cache import cache

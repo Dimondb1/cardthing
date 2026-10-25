@@ -110,6 +110,26 @@ class BasketCheckTests(TestCase):
         # The single card (id 3) is cheaper but a booster pack pays the real parcel rate.
         self.assertEqual(sample_variant(json.loads(PRODUCTS)["products"]), (2, Decimal("6.00")))
 
+    def test_a_shop_with_no_sealed_product_in_stock_keeps_its_charge_unknown(self):
+        # Tier Zero Games on 25 Oct 2026: its first products were single cards, which go for £2.50 as a letter.
+        singles = b'{"products": [{"title": "Charizard ex 199/165 (Near Mint)", "variants": [{"id": 3, "price": "4.00", "available": true}]}]}'
+        self.assertEqual(shopify_delivery("https://shop.example", session=FakeSession(), fetch=lambda url: singles),
+                         (None, False))
+
+    def test_free_under_the_shops_own_threshold_is_not_believed(self):
+        # Pixel and Block on 25 Oct 2026: free over £200 on its page, £0.00 from the basket for a £57.50 box.
+        class FreeSession(FakeSession):
+            def get(self, url):
+                self.calls.append(url)
+                return {"shipping_rates": [{"name": "Standard", "price": "0.00", "currency": "GBP"}]}
+
+        cost, confirmed = shopify_delivery("https://shop.example", session=FreeSession(), fetch=lambda url: PRODUCTS,
+                                           free_over=Decimal("200"))
+        self.assertEqual((cost, confirmed), (None, False))
+        # With no threshold on its page, a free answer that a cheaper product confirms is the shop's charge.
+        cost, _ = shopify_delivery("https://shop.example", session=FreeSession(), fetch=lambda url: PRODUCTS)
+        self.assertEqual(cost, Decimal("0.00"))
+
     def test_a_boxed_product_is_priced_before_a_pack_that_goes_as_a_letter(self):
         # Hammerhead TCG on 24 Oct 2026: £2.00 to post a booster pack, £3.75 a booster box. The comparison is
         # mostly of boxes, so the basket check prices one first.

@@ -363,10 +363,15 @@ options, takes the cheapest posted one and empties the basket. The basket
 stays under the page's threshold; one that comes back free is tried again
 with a cheaper product, since it may be over a threshold no page gave, and
 a product the basket refuses gives way to the next (up to five). A boxed
-sealed product is priced before a booster pack, and a pack before anything
-else: a lone pack often goes as a letter (Hammerhead TCG, 24 Oct 2026:
-£2.00 for a pack, £3.75 for a booster box), and the comparison is mostly of
-boxes. When the
+sealed product is priced before a booster pack: a lone pack often goes as
+a letter (Hammerhead TCG, 24 Oct 2026: £2.00 for a pack, £3.75 for a
+booster box), and the comparison is mostly of boxes. Nothing but sealed
+products is tried, since a single card or an accessory goes cheaper still,
+so a shop with no sealed product in stock keeps its charge unknown (Tier
+Zero Games, 25 Oct 2026: £2.50 for a single card). A basket that comes
+back free under the threshold the shop's own page gives is not believed
+either: an option such as collection has slipped through (Pixel and Block,
+free over £200, answered £0.00 for a £57.50 box). When the
 page gave a threshold, a basket just over it is priced too, to confirm it
 is free. Every figure saved carries its source and the date in the
 retailer's delivery note, so it can be checked. A shop that gives nothing

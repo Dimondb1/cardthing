@@ -270,15 +270,18 @@ PACKS = (Product.Type.BOOSTER_PACK, Product.Type.COLLECTOR_BOOSTER_PACK)
 def sample_variants(products, low=Decimal("3"), high=Decimal("60")):
     """[(variant id, price)] of cheap, in-stock products that have to be posted, in the shop's own order.
 
-    Boxed sealed products come first, then sealed packs, then the rest: in a singles-heavy shop a single card
-    gets the "singles post" rate, and a lone booster pack goes as a letter, neither of which is what a box pays.
-    Hammerhead TCG on 24 Oct 2026: £2.00 for a booster pack, £3.75 for a booster box.
+    Boxed sealed products come first, then sealed packs: a lone booster pack goes as a letter, which is not what
+    a box pays (Hammerhead TCG on 24 Oct 2026: £2.00 for a booster pack, £3.75 for a booster box). Nothing else
+    is tried: a single card gets the "singles post" rate and an accessory its own, so a shop with no sealed
+    product in stock keeps its charge unknown (Tier Zero Games on 25 Oct 2026: £2.50 for a single card).
     """
-    boxed, packs, others = [], [], []
+    boxed, packs = [], []
     for product in products:
         sealed = classify(product.get("title", ""), product.get("product_type", ""), product.get("vendor", ""),
                           tuple(product.get("tags") or []))
-        group = others if sealed is None else packs if sealed.product_type in PACKS else boxed
+        if sealed is None:
+            continue
+        group = packs if sealed.product_type in PACKS else boxed
         for variant in product.get("variants", []):
             try:
                 price = Decimal(str(variant.get("price")))
@@ -286,7 +289,7 @@ def sample_variants(products, low=Decimal("3"), high=Decimal("60")):
                 continue
             if variant.get("available") and variant.get("requires_shipping", True) and low <= price <= high:
                 group.append((variant["id"], price))
-    return boxed + packs + others
+    return boxed + packs
 
 
 def sample_variant(products, low=Decimal("3"), high=Decimal("60")):
@@ -359,6 +362,11 @@ def shopify_delivery(base, session=None, fetch=None, free_over=None):
     if cost is None:
         return None, False
     variant_id, price = chosen
+    if cost == 0 and free_over is not None and price < free_over:
+        # Free under the threshold the shop's own page gives is not believed: an option such as collection slipped
+        # through, and a £0 charge would make every item there look delivered free (Pixel and Block, free over
+        # £200, answered £0.00 for a £57.50 box on 25 Oct 2026).
+        return None, False
     confirmed = False
     if cost is not None and free_over is not None and price < free_over:
         quantity = math.ceil(free_over / price) + 1

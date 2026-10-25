@@ -347,8 +347,20 @@ class PageTests(AlertsData):
 
 # Stopping -------------------------------------------------------------------------------------------
 
+class SameSecond:
+    """Every link signed in the same second. These tests compare whole manage links, whose signature carries the
+    second each was made in, so a test that crossed a second's edge failed for nothing."""
+
+    def setUp(self):
+        super().setUp()
+        frozen = signing.b62_encode(int(time.time()))
+        patcher = mock.patch.object(signing.TimestampSigner, "timestamp", lambda signer: frozen)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
 @override_settings(**MAIL_ON)
-class StopTests(AlertsData):
+class StopTests(SameSecond, AlertsData):
     def stop(self, value, email="ben@example.com", follow=False):
         return self.client.post(self.manage_url(email), {"stop": value}, follow=follow)
 
@@ -563,7 +575,7 @@ class WordingTests(AlertsData):
 
 
 @override_settings(**MAIL_ON)
-class ChangeTests(AlertsData):
+class ChangeTests(SameSecond, AlertsData):
     """Change on a Track price alert: a new price and how long to keep looking, from today. The owner, on 24 Oct
     2026: "We never finished the my alerts bit" (the page could only stop an alert)."""
 

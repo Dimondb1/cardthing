@@ -111,8 +111,10 @@ grep -q RIPRAPTOR_GEOIP_DB .env || echo "RIPRAPTOR_GEOIP_DB=/var/lib/ripraptor/d
 # Written once, so a later update never moves the cut-off and an earlier subscriber never hears about pre-orders.
 grep -q RIPRAPTOR_PREORDER_ALERTS_FROM .env || echo "RIPRAPTOR_PREORDER_ALERTS_FROM=$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" >> .env
 # A server with under 1.5 GB of memory runs two background reader jobs at once instead of three, so
-# the reader stays under its 300 MB limit beside the site. A "1 GB" server reports about 960 MB, which
-# the old 900 MB line missed. Written once; a value set by hand stays.
+# the reader stays under its memory limit beside the site. A "1 GB" server reports about 960 MB, which
+# the old 900 MB line missed. Written once; a value set by hand stays. A server resized to 1.5 GB or more
+# since loses the 2 written for it, so its reader runs three jobs at the next update.
+[ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 1500000 ] || sed -i '/^RIPRAPTOR_WORKER_THREADS=2$/d' .env
 grep -q RIPRAPTOR_WORKER_THREADS .env || { [ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 1500000 ] && echo "RIPRAPTOR_WORKER_THREADS=2" >> .env || true; }
 set -a; . ./.env; set +a
 [ -f /var/lib/ripraptor/dbip-country.mmdb ] || .venv/bin/python manage.py fetch_geoip || true

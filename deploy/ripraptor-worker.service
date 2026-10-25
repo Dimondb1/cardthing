@@ -3,7 +3,8 @@
 # when it stops, and when its heartbeat to the watchdog stops for three minutes. If it never runs, the hourly
 # cron reads the shops instead (import_prices --if-worker-dead 30). Its log: journalctl -u ripraptor-worker
 # install.sh copies this file on every update, so change nothing here by hand: the number of jobs it runs at
-# once is RIPRAPTOR_WORKER_THREADS in .env (3 unless set; install.sh writes 2 on a server with under 1.5 GB of memory).
+# once is RIPRAPTOR_WORKER_THREADS in .env (3 unless set; install.sh writes 2 on a server with under 1.5 GB of memory
+# and takes it out again once the server is resized past that).
 [Unit]
 Description=RipRaptor background reader
 After=network.target
@@ -21,8 +22,10 @@ ExecStart=/srv/ripraptor/.venv/bin/python manage.py run_worker
 Restart=always
 RestartSec=10
 WatchdogSec=180
-MemoryMax=300M
-# Past its 300 MB it may use a little swap, then it is restarted, rather than fill the swap the site relies on.
+# A share of the server's memory, about 300 MB on a "1 GB" server and 600 MB on a 2 GB one, so a bigger server
+# gives its three jobs room without an edit here.
+MemoryMax=32%
+# Past its limit it may use a little swap, then it is restarted, rather than fill the swap the site relies on.
 MemorySwapMax=100M
 # When the whole server runs out of memory, the kernel stops the reader before the site.
 OOMScoreAdjust=500

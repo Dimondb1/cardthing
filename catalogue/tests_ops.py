@@ -356,7 +356,7 @@ class CronTests(TestCase):
 
     def test_the_worker_unit_restarts_it_under_a_watchdog_and_install_starts_it(self):
         unit = (DEPLOY / "ripraptor-worker.service").read_text()
-        for setting in ("Type=notify", "WatchdogSec=180", "MemoryMax=300M", "Restart=always", "RestartSec=10",
+        for setting in ("Type=notify", "WatchdogSec=180", "MemoryMax=32%", "Restart=always", "RestartSec=10",
                         "StartLimitIntervalSec=0", "Nice=10", "KillSignal=SIGINT", "TimeoutStopSec=60",
                         "User=ripraptor", "EnvironmentFile=/srv/ripraptor/.env", "manage.py run_worker"):
             self.assertIn(setting, unit)
@@ -579,7 +579,7 @@ class WorkerThreadsInstallTests(TestCase):
 
     def run_line(self, env_text, mem_kb):
         text = (DEPLOY / "install.sh").read_text()
-        [line] = [l for l in text.splitlines() if l.startswith("grep -q RIPRAPTOR_WORKER_THREADS")]
+        line = "\n".join(l for l in text.splitlines() if "RIPRAPTOR_WORKER_THREADS" in l and not l.startswith("#"))
         folder = Path(tempfile.mkdtemp(prefix="ripraptor-install-test-"))
         self.addCleanup(shutil.rmtree, folder, True)
         (folder / ".env").write_text(env_text)
@@ -602,6 +602,15 @@ class WorkerThreadsInstallTests(TestCase):
         env = self.run_line("RIPRAPTOR_WORKER_THREADS=3\n", 480000)
         self.assertEqual(env.count("RIPRAPTOR_WORKER_THREADS"), 1)
         self.assertIn("RIPRAPTOR_WORKER_THREADS=3", env)
+        self.assertIn("RIPRAPTOR_WORKER_THREADS=4", self.run_line("RIPRAPTOR_WORKER_THREADS=4\n", 2000000))
+
+    def test_a_server_resized_to_2_gb_loses_the_two_written_for_it(self):
+        # The owner's 1 GB server, resized: the next update lets its reader run three jobs at once.
+        env = self.run_line("DJANGO_DEBUG=0\nRIPRAPTOR_WORKER_THREADS=2\n", 2000000)
+        self.assertNotIn("RIPRAPTOR_WORKER_THREADS", env)
+        self.assertIn("DJANGO_DEBUG=0", env)
+        # Still 1 GB: it keeps its two.
+        self.assertIn("RIPRAPTOR_WORKER_THREADS=2", self.run_line("RIPRAPTOR_WORKER_THREADS=2\n", 985000))
 
     def test_it_is_written_before_the_reader_starts(self):
         text = (DEPLOY / "install.sh").read_text()

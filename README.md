@@ -1678,7 +1678,7 @@ adds a 1 GB swap file at `/swapfile` when the server has no swap (made
 once, kept in `/etc/fstab`, with `vm.swappiness=10` so the site stays in
 memory while there is room); has the kernel stop the reader before the
 site when memory runs out (`OOMScoreAdjust` in both unit files; the reader
-may use 100 MB of swap past its 300 MB, then it is restarted); runs the
+may use 100 MB of swap past its limit, then it is restarted); runs the
 reader with two jobs at once on a server under 1.5 GB; and starts the
 stock alerts at 3 past the tens, the search alerts at 4 past the
 quarters and the Claude judge at 2 past the fives,
@@ -1935,8 +1935,9 @@ shops due again at once, and ends the process; systemd starts a new one
 ten seconds later, and on start the reader closes the runs it had in flight
 and any older than three hours. It writes a heartbeat every 30 seconds to
 the database (Crawl health reads it) and to systemd's watchdog, which
-restarts it after three minutes without one. It is capped at 300 MB of
-memory and runs at a lower priority than the site.
+restarts it after three minutes without one. It is capped at 32% of the
+server's memory (`MemoryMax`: about 300 MB on a "1 GB" server, 600 MB on a
+2 GB one) and runs at a lower priority than the site.
 
 To stop it, start it or read its log on the server:
 
@@ -1949,7 +1950,10 @@ journalctl -u ripraptor-worker -f
 `run_worker --once` plans once, runs every job due in the calling thread
 and stops. It runs `RIPRAPTOR_WORKER_THREADS` jobs at once (3 unless set);
 `install.sh` writes 2 in `.env` on a server with under 1.5 GB of memory (a
-"1 GB" server reports about 960 MB). `install.sh` copies the unit file on
+"1 GB" server reports about 960 MB), and takes that 2 out again at the
+first update after the server is resized to 1.5 GB or more, so a resized
+server runs three jobs with no edit (a 2 typed by hand on a big server
+goes too; any other value stays). `install.sh` copies the unit file on
 every update, so the setting belongs in `.env`, not in the unit. `--max-threads` overrides it for one run.
 With 2 threads one whole-shop read runs at a time, so a long website read
 (Magic Madhouse takes about half an hour) holds every other shop's read
@@ -2509,7 +2513,7 @@ index.
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How old the cached page lists may grow before the background jobs build them again. Imports and edits mark them stale sooner. |
 | `RIPRAPTOR_LIST_MAX_STALE_SECONDS` | 600 | A cached page list is never served once its build started longer ago than this: the visitor who finds it builds it first. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
-| `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1.5 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing. Restart `ripraptor-worker` after changing it. |
+| `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1.5 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing, and removes that 2 once the server has 1.5 GB or more. Restart `ripraptor-worker` after changing it. |
 | `RIPRAPTOR_AMAZON_ACCESS_KEY`  |         | Product Advertising API key from Amazon Associates. |
 | `RIPRAPTOR_AMAZON_SECRET_KEY`  |         | Its secret. |
 | `RIPRAPTOR_AMAZON_PARTNER_TAG` |         | The Associates tracking tag, for example `ripraptor-21`. All three set means Amazon is read once a day. |

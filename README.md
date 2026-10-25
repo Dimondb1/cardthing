@@ -1293,6 +1293,17 @@ network is the way in for all of these.
   were sold out (1 of 70 boxes, 1 of 51 sealed products). **The Awesome
   Card Shop**: Las Vegas, in dollars. **Manaleak, Spirit Games, Dark
   Sphere**: no sitemap to read.
+- Probed the same day among the shops a UK stock tracker follows, when 27
+  more were added: **Incom Gaming, Loaded Dice**: single cards, almost no
+  sealed stock. **365 Games**: wargaming; its Star Wars Shatterpoint packs
+  were read as Star Wars Unlimited boosters, which the classifier now
+  refuses. **Mythic Cardboard, Endo Collects, NJ Cards UK**: sealed ranges
+  sold out. **Just Play Games**: its sealed products are pre-orders for
+  local events, for collection. **Game On Games**: a US shop in dollars.
+  **Ravensburger UK**: the publisher's own store, left out as Asmodee UK
+  is. No shop site found for The Game Collection, Endgame, Trainer's
+  Haven, Deck Market, Gamers at Hart, The Chase, Alchemists Workshop or
+  Pulse Collective.
 
 ## Getting real prices in
 

@@ -178,6 +178,57 @@ SHOPS = [
      "Delivery charge not yet confirmed"),
     ("gifts-for-geeks", "Gifts for Geeks", "https://www.giftsforgeeks.org.uk/", S.WEBSITE, None, "60",
      "Free over £60 (delivery page); the charge under it is not published, read 25 Oct 2026"),
+    # Found on 25 Oct 2026 among the shops a UK stock tracker follows, and checked as above. The last eight sell
+    # much else besides cards (toys, models, wargames, board games, single cards); the classifier keeps their
+    # sealed card products only, and the last two, mostly single cards, are read by their sealed collections.
+    ("evo-cards", "Evo Cards", "https://evocards.co.uk/", S.SHOPIFY, None, None, "Delivery charge not yet confirmed"),
+    ("pixel-and-block", "Pixel and Block", "https://pixelandblock.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("ember-vault", "Ember Vault", "https://embervault.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("moon-whale", "Moon Whale", "https://moon-whale.com/", S.SHOPIFY, None, None, "Delivery charge not yet confirmed"),
+    ("mintside-cards", "Mintside Cards", "https://mintsidecards.com/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("eclipse-cards", "Eclipse Cards", "https://eclipsecards.com/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("the-collectors-emporium", "The Collectors Emporium", "https://thecollectorsemporium.com/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("fabled-cards", "Fabled Cards", "https://fabledcards.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("crack-the-pack", "Crack The Pack", "https://crackthepack.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("romulus-games", "Romulus Games", "https://romulusgames.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("kuma-cards", "Kuma Cards", "https://kumacards.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("jumping-jack-cards", "Jumping Jack Cards", "https://jumpingjackcards.com/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("deckhead-uk", "DeckHead UK", "https://deckheaduk.com/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("playtcg", "PlayTCG", "https://playtcg.uk/", S.SHOPIFY, None, None, "Delivery charge not yet confirmed"),
+    ("dice-and-dumplings", "Dice and Dumplings", "https://diceanddumplings.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("winstons-emporium", "Winston's Emporium", "https://winstonsemporium.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("binderly", "Binderly", "https://binderly.co.uk/", S.SHOPIFY, None, None, "Delivery charge not yet confirmed"),
+    ("shop4ducks", "Shop4Ducks", "https://shop4ducks.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("be-more-geek", "Be More Geek", "https://bemoregeek.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("dice-cup-cafe", "Dice Cup Cafe", "https://dicecupcafe.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("aj-toys", "AJ Toys", "https://ajtoys.co.uk/", S.SHOPIFY, None, None, "Delivery charge not yet confirmed"),
+    ("hype-locker-uk", "Hype Locker UK", "https://hypelockeruk.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("jk-games", "JK Games", "https://jkgames.co.uk/", S.SHOPIFY, None, None, "Delivery charge not yet confirmed"),
+    ("toy-barnhaus", "Toy Barnhaus", "https://toybarnhaus.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("phillips-hobbies", "Phillips Hobbies", "https://phillipshobbies.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("northumbrian-tin-soldier", "Northumbrian Tin Soldier", "https://northumbriantinsoldier.com/", S.SHOPIFY,
+     None, None, "Delivery charge not yet confirmed"),
+    ("tier-zero-games", "Tier Zero Games", "https://tierzerogames.com/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's
@@ -217,6 +268,20 @@ COLLECTIONS = {
     "elemental-cards": "sealed-pokemon pokemon-booster-box pokemon-booster-pack elite-trainer-box-etb "
                        "collections-tins-decks japanese-and-korean-products magic-sealed lorcana-booster-box "
                        "lorcana-booster-pack one-piece-booster-box riftbound-league-of-legends troves",
+    "tier-zero-games": "digimon-tcg-booster-boxes digimon-tcg-starter-decks magic-booster "
+                       "magic-the-gathering-booster-boxes magic-the-gathering-booster-packs "
+                       "magic-the-gathering-bundles magic-the-gathering-collector-booster-boxes "
+                       "magic-the-gathering-collector-booster-packs magic-the-gathering-commander-decks "
+                       "magic-the-gathering-set-boosters mtg-sealed pokemon-booster-boxes pokemon-booster-packs "
+                       "pokemon-collection-boxes pokemon-elite-trainer-boxes pokemon-sealed-products "
+                       "pokemon-theme-decks riftbound-boosters-booster-boxes riftbound-sealed "
+                       "riftbound-sealed-product riftbound-starter-sets-champion-decks",
+    "northumbrian-tin-soldier": "disney-lorcana-booster-boxes disney-lorcana-booster-packs "
+                                "magic-the-gathering-booster-packs magic-the-gathering-collector-boosters "
+                                "magic-the-gathering-commander-decks magic-the-gathering-pre-order-1 "
+                                "pokemon-battle-decks pokemon-booster-boxes pokemon-booster-packs "
+                                "pokemon-collection-boxes pokemon-elite-trainer-boxes pokemon-gift-tins "
+                                "pokemon-pre-order",
 }
 
 # Shops whose standard charge is only known up to an order value; above it the charge is not published.

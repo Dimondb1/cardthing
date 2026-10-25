@@ -216,3 +216,4 @@ echo "Done. https://$DOMAIN should answer within a minute (Caddy fetches the cer
 echo "Create your admin login with:"
 echo "  cd $DIR && sudo -u ripraptor bash -c 'set -a; . ./.env; set +a; .venv/bin/python manage.py createsuperuser'"
 echo "Prices are being read now; watch with: journalctl -fu ripraptor-worker"
+echo "The background reader runs ${RIPRAPTOR_WORKER_THREADS:-3} jobs at once on this server's $(( $(awk '/^MemTotal:/ {print $2}' /proc/meminfo) / 1024 )) MB of memory."

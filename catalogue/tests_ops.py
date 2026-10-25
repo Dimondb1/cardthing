@@ -612,6 +612,17 @@ class WorkerThreadsInstallTests(TestCase):
         # Still 1 GB: it keeps its two.
         self.assertIn("RIPRAPTOR_WORKER_THREADS=2", self.run_line("RIPRAPTOR_WORKER_THREADS=2\n", 985000))
 
+    def test_the_update_says_how_many_jobs_the_reader_runs(self):
+        # So the owner can see a resize took effect from the update's own output.
+        text = (DEPLOY / "install.sh").read_text()
+        [line] = [l for l in text.splitlines() if l.startswith('echo "The background reader runs')]
+        folder = Path(tempfile.mkdtemp(prefix="ripraptor-install-test-"))
+        self.addCleanup(shutil.rmtree, folder, True)
+        (folder / "meminfo").write_text("MemTotal:       2000000 kB\n")
+        line = line.replace("/proc/meminfo", str(folder / "meminfo"))
+        said = subprocess.run(["bash", "-euo", "pipefail", "-c", line], check=True, capture_output=True, text=True).stdout
+        self.assertEqual(said.strip(), "The background reader runs 3 jobs at once on this server's 1953 MB of memory.")
+
     def test_it_is_written_before_the_reader_starts(self):
         text = (DEPLOY / "install.sh").read_text()
         self.assertLess(text.index("grep -q RIPRAPTOR_WORKER_THREADS"), text.index("systemctl restart ripraptor-worker"))

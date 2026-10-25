@@ -57,6 +57,19 @@ class ClassifyTests(TestCase):
 
 
 class ClassifyLeakTests(TestCase):
+    def test_star_wars_miniatures_are_not_star_wars_unlimited(self):
+        # 365 Games, a wargaming shop, on 25 Oct 2026: its Shatterpoint packs read as Star Wars Unlimited boosters.
+        for title in [
+            "Star Wars: Shatterpoint: First Contact Mission Pack",
+            "Star Wars: Shatterpoint We Don't Need Their Scum Squad Pack",
+            "Star Wars X-Wing: T-65 Expansion Pack",
+            "Star Wars: Armada - Starter Set",
+            "Star Wars Legion: Clone Troopers Unit Expansion",
+        ]:
+            self.assertIsNone(classify(title, price=20), title)
+        found = classify("Star Wars: Unlimited - Legends of the Force Booster Box", price=90)
+        self.assertEqual((found.game, found.product_type), ("star-wars-unlimited", "booster_box"))
+
     def test_singles_and_multipacks_are_rejected(self):
         for title in [
             "Basic Metal Energy SM1S Collection Sun (Near Mint)",

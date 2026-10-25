@@ -85,6 +85,10 @@ NOT_SEALED = re.compile(
     r"\bdamaged\b|\bopened\b|\bripped seals?\b|\bcut seals?\b|\bbroken seals?\b|\bseals? (?:ripped|cut|broken)\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b(?!.*\btins?(?![a-rt-z]))|\bkeyring\b|\bposter\b(?! box)|"
     # Toys and building sets that carry a card game's name, not cards.
     r"\bnanoblock\b|\bmega construx\b|\bmega bloks\b|\blego\b|\bfunko\b|\bbuilding (?:block|set)s?\b|"
+    # Star Wars miniatures and board games, which wargaming shops sell by the hundred: "Star Wars" alone would
+    # make each a Star Wars Unlimited booster pack ("Star Wars: Shatterpoint ... Mission Pack", 365 Games).
+    r"\bshatterpoint\b|\bstar wars\W+(?:x-?\s?wing|armada|legion|imperial assault|destiny|outer rim|villainous|"
+    r"rebellion|rivals)\b|"
     r"\bcode card\b|\bgraded\b|\bpsa\b|\bcgc\b|\bproxy\b|\bbulk\b|\blot of\b|\bjapanese single|\bpromo card\b|"
     r"\(near mint\)|\bnear mint\b|\blightly played\b|\bmoderately played\b|\(nm\)|\bpromo pack\b|\bpromotion pack\b|\bpower pack\b|"
     r"\bborderless\b|\bextended art\b|\(showcase\)|\bfoil etched\b|\bart card\b(?!.*tin)|"

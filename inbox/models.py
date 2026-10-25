@@ -77,3 +77,57 @@ class ShopEnquiry(models.Model):
 
     def __str__(self):
         return f"{self.name}: {self.domain}"
+
+
+class ShopContact(models.Model):
+    """Who to email at a shop RipRaptor lists, and where things stand with them (inbox/outreach.py).
+
+    The owner writes to shops from their own mailbox: the Shop outreach page in admin fills in an email with the
+    shop's own figures and opens it in their mail app, and replies are handled there. Only a business address is
+    kept, typed by the owner, and nothing is ever sent from the site. "Do not email" is kept for good, so a shop
+    that asked never hears from RipRaptor again.
+    """
+
+    class Status(models.TextChoices):
+        NEW = "new", "Not contacted"
+        EMAILED = "emailed", "Emailed"
+        REPLIED = "replied", "Replied"
+        AFFILIATE = "affiliate", "Affiliate link live"
+        DECLINED = "declined", "Not interested"
+        DO_NOT_EMAIL = "do_not_email", "Do not email"
+
+    retailer = models.OneToOneField("catalogue.Retailer", on_delete=models.CASCADE, related_name="contact",
+                                    verbose_name="shop")
+    email = models.EmailField(
+        max_length=254, blank=True,
+        help_text="The shop's business address, as its website gives it (info@, hello@). Kept only to write to them.",
+    )
+    status = models.CharField(max_length=14, choices=Status.choices, default=Status.NEW, db_index=True)
+    notes = models.TextField(blank=True, help_text="Your own notes: who you spoke to, what they said. Never shown.")
+    follow_up_on = models.DateField("follow up on", null=True, blank=True,
+                                    help_text="Set to two weeks on when you mark an email as sent, unless set.")
+    last_emailed_at = models.DateTimeField("last emailed", null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ["retailer__name"]
+        verbose_name = "shop outreach"
+        verbose_name_plural = "shop outreach"
+
+    def __str__(self):
+        return str(self.retailer)
+
+
+class OutreachEmail(models.Model):
+    """One email the owner marked as sent to a shop: which draft and its subject. The email itself is in the
+    owner's own Sent folder."""
+
+    contact = models.ForeignKey(ShopContact, on_delete=models.CASCADE, related_name="emails")
+    kind = models.CharField(max_length=12)
+    subject = models.CharField(max_length=200)
+    sent_at = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ["-sent_at"]
+
+    def __str__(self):
+        return f"{self.contact}: {self.subject}"

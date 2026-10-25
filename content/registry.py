@@ -60,6 +60,7 @@ SECTIONS = [
     ("meta", "Page titles and search engine descriptions"),
     ("insights", "Insights page in admin (owner only)"),
     ("dashboard", "Dashboard page (owner only)"),
+    ("outreach", "Shop outreach emails (owner only)"),
 ]
 SECTION_KEYS = {key for key, _ in SECTIONS}
 
@@ -118,6 +119,15 @@ PLACEHOLDER_HELP = {
     "clock": "a time of day, for example 14:05, or a day and time, for example 18 Oct 14:05",
     "spent": "an amount in US dollars, for example $12.40",
     "limit": "an amount in US dollars, for example $100.00",
+    "shop": "the shop's name",
+    "visitors_month": "how many shoppers RipRaptor sent the shop in the last 30 days",
+    "visitors_quarter": "how many shoppers RipRaptor sent the shop in the last 3 months",
+    "visitors_total": "how many shoppers RipRaptor has sent the shop since the first",
+    "since": "the date of the first shopper RipRaptor sent the shop",
+    "top_products": "the shop's three most clicked products in the last 3 months",
+    "listed": "how many of the shop's products RipRaptor lists",
+    "in_stock": "how many of those were in stock when last checked",
+    "site_url": "RipRaptor's address, https://ripraptor.com",
     "address": "the visitor's own email address",
 }
 
@@ -3569,6 +3579,53 @@ ENTRIES = [
     Entry("info.badge.soon", T, "Info: Dropping soon",
           "Shops are taking pre-orders. Order now and the shop sends it when it comes out.",
           "The ⓘ card after this badge on product pages. Leave it blank for no ⓘ.", optional=True),
+    # Shop outreach emails (owner only) -------------------------------------
+    # Drafts the owner sends from their own mailbox (inbox/outreach.py), filled in with each shop's own figures.
+    Entry("outreach.affiliate.subject", T, "Affiliate ask: subject",
+          "RipRaptor sent {visitors_quarter} shoppers to {shop} in the last 3 months",
+          "Subject of the email asking a shop for an affiliate link.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+    Entry("outreach.affiliate.body", P, "Affiliate ask: email",
+          "Hello {shop} team,\n\n"
+          "I run RipRaptor ({site_url}), a UK site that compares delivered prices for sealed trading card products. "
+          "We list {listed} of your products and link every one straight to your shop.\n\n"
+          "In the last 3 months we sent {visitors_quarter} shoppers to you, {visitors_month} of them in the last 30 days. "
+          "The products they clicked most were {top_products}.\n\n"
+          "Do you run an affiliate programme we could join, or would you consider one? If you use a network such as "
+          "Awin, or an app such as UpPromote or GoAffPro, we would add your link to every RipRaptor link to your shop.",
+          "The email asking a shop for an affiliate link. The sign-off and the line about not emailing again are added "
+          "after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+    Entry("outreach.report.subject", T, "Monthly report: subject",
+          "Shoppers RipRaptor sent to {shop}: {visitors_month} in the last 30 days",
+          "Subject of the email telling a shop what RipRaptor sent them.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+    Entry("outreach.report.body", P, "Monthly report: email",
+          "Hello {shop} team,\n\n"
+          "A short update from RipRaptor ({site_url}). In the last 30 days we sent {visitors_month} shoppers to your "
+          "shop, and {visitors_quarter} in the last 3 months. The products they clicked most were {top_products}.\n\n"
+          "We list {listed} of your products, {in_stock} of them in stock when we last checked. If a price, stock "
+          "level or link of yours looks wrong on RipRaptor, reply and we will put it right.",
+          "The email telling a shop what RipRaptor sent them. The sign-off and the line about not emailing again are "
+          "added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+    Entry("outreach.listing.subject", T, "Listings request: subject",
+          "Your products on RipRaptor",
+          "Subject of the email asking a shop for a product feed.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+    Entry("outreach.listing.body", P, "Listings request: email",
+          "Hello {shop} team,\n\n"
+          "I run RipRaptor ({site_url}), a UK site that compares delivered prices for sealed trading card products. "
+          "We list {listed} of your products and have sent you {visitors_quarter} shoppers in the last 3 months.\n\n"
+          "Could you send us a product feed, as a spreadsheet or a link to one, with each product's price, stock and "
+          "barcode? It keeps your prices and stock on RipRaptor right, and new products show within the hour.",
+          "The email asking a shop for a product feed. Edit it in your mail app before sending to ask for something "
+          "else. The sign-off and the line about not emailing again are added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+    Entry("outreach.signoff", P, "Sign-off",
+          "Thanks,\nRipRaptor\n{site_url}",
+          "Added to the end of every outreach email, before the line about not emailing again.",
+          placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+    Entry("outreach.optout", T, "Line about not emailing again",
+          "If you would rather we did not email you again, reply STOP and we will not.",
+          "The last line of every outreach email. UK rules expect an easy way to say no more."),
+    Entry("outreach.top_none", T, "No clicks yet",
+          "none in particular yet",
+          "Stands in for the most clicked products when nobody has clicked through to the shop in 3 months."),
 ]
 
 REGISTRY = {entry.key: entry for entry in ENTRIES}

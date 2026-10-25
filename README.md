@@ -3656,6 +3656,42 @@ page never says what it knows. `tidy_all` (hourly) deletes enquiries a
 year after they are marked handled, or two years after they arrived if
 they never are. The Terms page's data section says so.
 
+## Shop outreach
+
+Admin -> Messages -> Shop outreach is where you write to the shops
+RipRaptor lists: to ask for an affiliate link, to tell them how many
+shoppers you sent them, or to ask for a product feed. Nothing is sent from
+the site. Each draft opens in your own mail app (a `mailto:` link), so it
+goes from your Zoho address and the replies come back there. ZeptoMail is
+for the automatic alert emails only and is never used for this.
+
+Every shop except eBay and Amazon has a row, made when the page opens
+(`inbox/outreach.py ensure_contacts`). The list puts the shops that get
+the most shoppers from you first, with where things stand (Not contacted,
+Emailed, Replied, Affiliate link live, Not interested, Do not email), when
+to follow up and when you last wrote. The admin home says how many shops
+are due a follow-up: emailed, no reply marked, and the follow-up date
+reached.
+
+Open a shop to see its figures and three drafts filled in with them:
+shoppers sent in the last 30 days, the last 3 months and in all (people's
+clicks only, never robots or direct hits), the products they clicked most,
+and how many of the shop's products show on the site now and how many are
+in stock (listings checked recently and not kept out, as the home page
+count has them). Type in the shop's business address (from their website)
+and save, press Open in your mail app, send it, then press Mark as sent.
+That saves the page too, logs the email under Emails you sent, moves a
+shop not contacted yet to Emailed (Replied and Affiliate link live stay as
+they are) and sets the follow-up to two weeks on unless you set a later
+one. Change the status by hand when they reply.
+
+The wording is in Site wording under Shop outreach emails
+(`outreach.*`). Every draft ends with the sign-off and a line saying to
+reply STOP for no more, which UK rules expect for sole traders. When a shop
+asks, set it to Do not email: the page then shows no drafts and Mark as
+sent records nothing. Rows cannot be deleted, so that answer is kept.
+Only the address you type is stored, and only to write to them.
+
 ## Watchlist
 
 Every product page and card has a Save link. With JavaScript it adds the

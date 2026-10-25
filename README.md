@@ -1283,6 +1283,16 @@ network is the way in for all of these.
   card items are hidden from its product feed and are collection-only.
   **Ancient Warrior**: connected, but sells no sealed card products.
   **Asmodee UK**: the distributor's own store; the owner chose not to compare it.
+- Probed on 25 Oct 2026, when twelve shops were added (`setup_shops`):
+  **Element Games, Firestorm Games**: product pages carry no price data
+  the reader can use. **Wayland Games**: mostly wargaming, and its sitemap
+  reaches only part of its card range. **PokePiece TCG**: every page gives
+  the same other product's data, and its boxes are "live rip and ship".
+  **Collecterz TCG**: mostly articles, a dozen card products. **Monster
+  Card Corner, Go Cards UK**: mostly single cards, and their sealed ranges
+  were sold out (1 of 70 boxes, 1 of 51 sealed products). **The Awesome
+  Card Shop**: Las Vegas, in dollars. **Manaleak, Spirit Games, Dark
+  Sphere**: no sitemap to read.
 
 ## Getting real prices in
 

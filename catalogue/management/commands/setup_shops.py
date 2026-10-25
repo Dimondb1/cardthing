@@ -148,6 +148,36 @@ SHOPS = [
     # checkout, which no read can see, so it stays unknown there.
     ("apla-cards", "Apla Cards", "https://www.aplacards.co.uk/", S.WEBSITE, None, "49",
      "Free over £49 by Royal Mail 48 (FAQ page); the charge under it is worked out at checkout, read 24 Oct 2026"),
+    # Found by searching for UK shops at the owner's request on 25 Oct 2026, and checked: UK based, priced in
+    # pounds, sealed stock online, readable with no bot challenge.
+    ("parabox-games", "Parabox Games", "https://parabox.co.uk/", S.SHOPIFY, "4.99", "100",
+     "Standard £4.99 (basket check), free over £100 (delivery page, confirmed by basket), read 25 Oct 2026"),
+    ("mega-cards", "Mega Cards", "https://megacards.co.uk/", S.SHOPIFY, "3.49", "30",
+     "Standard £3.49 (basket check), free over £30 (delivery page, confirmed by basket), read 25 Oct 2026"),
+    ("pixel-hub", "Pixel-Hub", "https://pixel-hub.co.uk/", S.SHOPIFY, "4.99", None,
+     "Standard £4.99 (basket check), no free threshold published, read 25 Oct 2026"),
+    ("hokey-poke-games", "Hokey Poke Games", "https://hokeypokegames.co.uk/", S.SHOPIFY, "2.99", None,
+     "Standard £2.99 (basket check), no free threshold published, read 25 Oct 2026"),
+    ("rare-tcg", "RareTCG", "https://raretcg.co.uk/", S.SHOPIFY, "2.99", "60",
+     "Standard £2.99 (basket check), free over £60 (delivery page, confirmed by basket), read 25 Oct 2026"),
+    ("tcg-paradise", "TCG Paradise", "https://tcgparadise.co.uk/", S.SHOPIFY, "4.99", None,
+     "Standard £4.99 (basket check), no free threshold published, read 25 Oct 2026"),
+    ("my-tcg", "MY TCG", "https://mytcg.co.uk/", S.SHOPIFY, "2.85", None,
+     "Standard £2.85 (basket check), no free threshold published, read 25 Oct 2026"),
+    # About 10,000 products, mostly single cards, so only its sealed collections are read (COLLECTIONS).
+    ("elemental-cards", "Elemental Cards", "https://elemental.cards/", S.SHOPIFY, "3.95", None,
+     "Standard £3.95 (basket check), no free threshold published, read 25 Oct 2026"),
+    # Website shops, read from their sitemaps' product pages: a Korean and Japanese specialist (about 3,000
+    # dated pages, so later reads fetch only the changed ones), a Wix shop, a WooCommerce shop and a Leicester
+    # games shop.
+    ("moore-collectables", "Moore Collectables", "https://moorecollectables.co.uk/", S.WEBSITE, "3.99", "35",
+     "Standard £3.99, free over £35 (delivery page), read 25 Oct 2026"),
+    ("catching-collectibles", "Catching Collectibles", "https://www.catchingcollectibles.co.uk/", S.WEBSITE, None, None,
+     "Delivery charge not yet confirmed"),
+    ("display-box", "Display Box", "https://displaybox.co.uk/", S.WEBSITE, None, None,
+     "Delivery charge not yet confirmed"),
+    ("gifts-for-geeks", "Gifts for Geeks", "https://www.giftsforgeeks.org.uk/", S.WEBSITE, None, "60",
+     "Free over £60 (delivery page); the charge under it is not published, read 25 Oct 2026"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's
@@ -183,6 +213,10 @@ COLLECTIONS = {
     "impact-league-tcg": "pokemon-booster-boxes pokemon-booster-packs english-etb-ex-boxes-and-other-sealed-products "
                          "magic-the-gathering lorcana one-piece riftbound yu-gi-oh dragon-ball star-wars-unlimited "
                          "topps-products yu-gi-oh-dragonball-and-other-products",
+    # Its sealed collections on 25 Oct 2026; singles, slabs and merchandise sit in collections of their own.
+    "elemental-cards": "sealed-pokemon pokemon-booster-box pokemon-booster-pack elite-trainer-box-etb "
+                       "collections-tins-decks japanese-and-korean-products magic-sealed lorcana-booster-box "
+                       "lorcana-booster-pack one-piece-booster-box riftbound-league-of-legends troves",
 }
 
 # Shops whose standard charge is only known up to an order value; above it the charge is not published.

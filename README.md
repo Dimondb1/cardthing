@@ -2527,6 +2527,7 @@ index.
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How old the cached page lists may grow before the background jobs build them again. Imports and edits mark them stale sooner. |
+| `RIPRAPTOR_PAGE_CACHE_SECONDS` | 300     | How long a built game or set page (each tab and set of filters under its own address) is served whole from the shared cache. 0 turns it off. |
 | `RIPRAPTOR_LIST_MAX_STALE_SECONDS` | 600 | A cached page list is never served once its build started longer ago than this: the visitor who finds it builds it first. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
 | `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1.5 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing, and removes that 2 once the server has 1.5 GB or more. Restart `ripraptor-worker` after changing it. |
@@ -3183,7 +3184,36 @@ auto; }` in `site.css`): a short fade in place of a flash of white, with
 the masthead staying put (`view-transition-name: masthead`), in browsers
 with cross-document view transitions (Chrome 126+, Safari 18.2+; the rest
 load as before). Both fades last `--motion-normal` and are off under
-reduced motion. "Email me when products like these are in stock" sits under
+reduced motion.
+
+### Pages ready before the tap
+
+Three things make a tap feel instant. Game and set pages are built once
+and kept whole in the shared cache for `RIPRAPTOR_PAGE_CACHE_SECONDS`
+(`web/pagecache.py`): every visitor sees the same page, so the next one is
+served the copy, each tab's list and each set of filters under its own
+address. Prices on a list can be that many seconds behind the shops; the
+product page is never cached, and an edit of the owner's (a hard clear of
+the lists, `web.listcache.mark_stale`) forgets every kept page at once.
+`warm_pages` builds each game's own page before anyone asks (the tap from
+the home page) and `--due` builds any whose copy has gone, so the first
+visitor never pays either; a page served from the cache says
+`X-RipRaptor-Page: cached`. The tests run with the cache off
+(`RIPRAPTOR_PAGE_CACHE_SECONDS` is 0 under `manage.py test`) and its own
+tests turn it on.
+
+In Chrome, a link touched or hovered is rendered in the background before
+it is tapped (speculation rules in `base.html`, `eagerness: moderate`), so
+the page is there the moment it is. Never a shop link (`/go/` counts a
+click), the admin, search (it records the search), the swipe page, the
+watchlist or a private page. A page fetched or rendered this way is not
+counted as a view when fetched (`web.middleware` skips a request marked
+`Sec-Purpose: prefetch`, and a tab's list fetched by script, `?pane=1`);
+`site.js` counts it through `/api/note/?what=view` once it is shown, and
+`history.js` and `install.js` wait until then to remember anything, so the
+dashboard counts visits, not the browser's guesses. Every tap answers at
+once (`touch-action: manipulation`), and a list's cards no longer fade in
+as they scroll into view: a list is there as soon as the page is. "Email me when products like these are in stock" sits under
 the list, only while the list has products or the set is still to come.
 
 Game and set pages split their products into three tabs instead of the In

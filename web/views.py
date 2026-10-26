@@ -3,7 +3,7 @@ import time
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from functools import wraps
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from django import forms
 from django.conf import settings
@@ -36,6 +36,7 @@ from inbox import service as inbox
 from inbox.models import Conversation
 
 from . import hubs, listcache
+from .pagecache import cached_page
 from .charts import price_chart
 from .templatetags.ripraptor import gbp, short_date
 
@@ -213,7 +214,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     if tabs:
         paginator.count = tab_counts[tab]   # counted with the tabs already
     page = paginator.get_page(request.GET.get("page"))
-    if query and not request.GET.get("page"):
+    if query and not request.GET.get("page") and not clicks.prefetching(request):
         insights.record_search(request, query, paginator.count)
     # A list about stock now (Out now, the In stock tab or filter) leads each card with an in-stock shop.
     if stock_now or tab == "in-stock" or (form.value("in_stock") and not tabs):
@@ -835,6 +836,7 @@ def moved(request, target):
 
 
 @require_GET
+@cached_page
 def game_detail(request, game_slug):
     if sports.moved_from(game_slug):
         return moved(request, reverse("web:game", args=[sports.GAME]))   # /games/football/ is Sports cards now
@@ -890,6 +892,7 @@ def game_detail(request, game_slug):
 
 
 @require_GET
+@cached_page
 def set_detail(request, game_slug, set_slug):
     if sports.moved_from(game_slug):
         return moved(request, reverse("web:set", args=[sports.GAME, set_slug]))
@@ -2090,6 +2093,19 @@ def note_api(request):
         where, page = request.GET.get("where", ""), request.GET.get("page", "")
         if where in clicks.COMPARE_PLACES and page in clicks.PAGES.values():
             insights.bump(DailyPageView, kind=DailyPageView.Kind.TAPS, key=f"{where}:{page}")
+    elif event == "view" and not clicks.prefetching(request):
+        # A page the browser rendered ahead of a tap (the speculation rules in base.html) was not counted when
+        # fetched (web.middleware): the page's script counts it here once it is shown, as the view it is.
+        from django.urls import Resolver404, resolve
+
+        from .middleware import KEYS, KINDS
+
+        try:
+            match = resolve(urlsplit(request.GET.get("path", ""))[2])
+        except Resolver404:
+            match = None
+        if match is not None and match.namespace == "web" and match.url_name in KINDS:
+            insights.record_view(request, KINDS[match.url_name], match.kwargs.get(KEYS.get(match.url_name, ""), ""))
     response = HttpResponse(status=204)
     response["Cache-Control"] = "no-store"
     return response

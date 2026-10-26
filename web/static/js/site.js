@@ -13,6 +13,19 @@ document.addEventListener("click", (event) => {
   try { fetch(`${note}?${query}`, { keepalive: true }).catch(() => {}); } catch (e) { /* nothing to do */ }
 });
 
+// A page the browser fetched or rendered ahead of a tap (the speculation rules in base.html) was not counted
+// when fetched: it is counted once it is shown, so the dashboard counts visits, not the browser's guesses.
+{
+  const entry = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
+  const ahead = document.prerendering || (entry && entry.deliveryType === "navigational-prefetch");
+  const { note } = document.body.dataset;
+  if (ahead && note) {
+    const count = () => { try { fetch(`${note}?what=view&path=${encodeURIComponent(location.pathname)}`, { keepalive: true }).catch(() => {}); } catch (e) { /* nothing to do */ } };
+    if (document.prerendering) document.addEventListener("prerenderingchange", count, { once: true });
+    else count();
+  }
+}
+
 // Apply filters as soon as one changes; the "Show results" button is kept for visitors without JavaScript. On
 // game, set and search pages browse.js answers the submit by changing the list in place. Run again for a form
 // those pages swap in later (ripraptor:content), once per form.
@@ -224,7 +237,8 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
 
 // One-time reveals for lists below the fold. Nothing replays on scroll.
 if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-  const targets = document.querySelectorAll(".saving, .card, .drop, .trending__item");
+  // Not a list's cards: a list is there as soon as the page is, so a filter change or a scroll never waits on it.
+  const targets = document.querySelectorAll(".saving, .drop, .trending__item");
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       if (entry.isIntersecting) {

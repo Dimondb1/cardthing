@@ -3,7 +3,9 @@
 // Android Chrome gives us its install prompt; iPhone Safari has none, so
 // there the card explains the Share menu instead. Each step is counted
 // in Insights with no record of who.
-(() => {
+// A page the browser rendered ahead of a tap (the speculation rules in base.html) waits until it is shown:
+// nothing is remembered or counted for a page nobody opened.
+function offer() {
   const card = document.querySelector("[data-install]");
   if (!card) return;
   const DONE = "ripraptor.install";     // "done" once answered or installed
@@ -56,4 +58,6 @@
     const choice = await prompt.userChoice.catch(() => ({ outcome: "dismissed" }));
     finish(choice.outcome === "accepted" ? "added" : "dismissed");
   });
-})();
+}
+if (document.prerendering) document.addEventListener("prerenderingchange", offer, { once: true });
+else offer();

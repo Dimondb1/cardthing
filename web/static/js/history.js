@@ -1,7 +1,9 @@
 // Recent searches and recently viewed products, kept in this browser only.
 // Nothing here is required: the home page simply has no "Pick up where you
 // left off" section without it, and the search box shows no recent searches.
-(() => {
+// A page the browser rendered ahead of a tap (the speculation rules in base.html) waits until it is shown:
+// nothing is remembered or counted for a page nobody opened.
+function remember() {
   const VIEWED = "ripraptor.viewed";
   const SEARCHES = "ripraptor.searches";
   const GAMES = "ripraptor.games";   // game and set pages visited, for interest.js on the home page
@@ -106,4 +108,6 @@
     forget(GAMES);
     section.hidden = true;
   });
-})();
+}
+if (document.prerendering) document.addEventListener("prerenderingchange", remember, { once: true });
+else remember();

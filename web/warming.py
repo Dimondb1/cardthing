@@ -43,16 +43,24 @@ def active_games():
 
 
 def missing(games=None):
-    """The keys of cached_keys not in the cache now. Reads no list: has_key checks the entry alone."""
+    """The keys of cached_keys not in the cache now, and the game pages not kept (web.pagecache). Reads no
+    list: has_key checks the entry alone."""
+    from web import pagecache
+
     games = active_games() if games is None else games
-    return [key for key in cached_keys(games) if not cache.has_key(key)]
+    return ([key for key in cached_keys(games) if not cache.has_key(key)]
+            + [f"page:{path}" for path in pagecache.game_paths(games) if not pagecache.has(path)])
 
 
 def due(games=None):
-    """The keys of cached_keys the jobs should build again now (web.listcache.is_due)."""
+    """The keys of cached_keys the jobs should build again now (web.listcache.is_due), and the game pages not
+    kept (web.pagecache): a page is due once its copy has gone."""
+    from web import pagecache
+
     games = active_games() if games is None else games
     now, marks = time.time(), listcache.cleared()
-    return [key for key in cached_keys(games) if listcache.is_due(key, now=now, marks=marks)]
+    return ([key for key in cached_keys(games) if listcache.is_due(key, now=now, marks=marks)]
+            + [f"page:{path}" for path in pagecache.game_paths(games) if not pagecache.has(path)])
 
 
 def warm_pages(fresh=False, only=None):
@@ -93,6 +101,15 @@ def warm_pages(fresh=False, only=None):
     from catalogue.pricing import shops_compared
 
     shops_compared()
+    # Each game's own page, built whole and kept (web.pagecache), so the tap from the home page never waits.
+    from web import pagecache
+
+    for path in pagecache.game_paths(games):
+        if (only is not None and f"page:{path}" not in only) or (not fresh and pagecache.has(path)):
+            continue
+        started = time.monotonic()
+        pagecache.warm(path)
+        took[f"page: {path}"] = time.monotonic() - started
     return took
 
 

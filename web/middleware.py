@@ -6,6 +6,7 @@ day counts as a returning visitor. It carries no identifier.
 
 from django.http import HttpResponse
 
+from catalogue.clicks import prefetching
 from catalogue.insights import RETURN_COOKIE, RETURN_COOKIE_DAYS, is_bot, record_view
 from catalogue.models import DailyPageView
 
@@ -34,7 +35,11 @@ class PageViewMiddleware:
     def __call__(self, request):
         response = self.get_response(request)
         match = getattr(request, "resolver_match", None)
-        if response.status_code == 200 and match and match.namespace == "web" and match.url_name in KINDS:
+        # Not a view: a page the browser fetched or rendered ahead of a tap (the speculation rules in base.html,
+        # counted by views.note_api once it is shown) or a tab's list fetched by the page's own script (?pane=1).
+        fetched_ahead = prefetching(request) or bool(request.GET.get("pane"))
+        if (response.status_code == 200 and match and match.namespace == "web" and match.url_name in KINDS
+                and not fetched_ahead):
             key = match.kwargs.get(KEYS.get(match.url_name, ""), "")
             record_view(request, KINDS[match.url_name], key)
             if request.method == "GET" and not is_bot(request) and RETURN_COOKIE not in request.COOKIES:

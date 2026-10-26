@@ -233,6 +233,9 @@ RIPRAPTOR_HOME_CACHE_SECONDS = int(os.environ.get("RIPRAPTOR_HOME_CACHE_SECONDS"
 # A cached list (web/listcache.py) is served while the background jobs build it again, stale or not, but
 # never once its build started longer ago than this: the visitor who finds it that old builds it first.
 RIPRAPTOR_LIST_MAX_STALE_SECONDS = int(os.environ.get("RIPRAPTOR_LIST_MAX_STALE_SECONDS", "600"))
+# How long a built game or set page is served whole from the shared cache (web.pagecache). 0 turns it off,
+# as the tests do: a test reads a page, changes something and reads it again, and its own tests turn it on.
+RIPRAPTOR_PAGE_CACHE_SECONDS = 0 if TESTING else int(os.environ.get("RIPRAPTOR_PAGE_CACHE_SECONDS", "300"))
 
 # A product counts as "back in stock" for this long after a shop restocks it.
 

@@ -201,6 +201,11 @@ def mark_stale(force=False, hard=False, cache=None, now=None):
     now = time.time() if now is None else now
     names = ["at"] + (["forced_at"] if force or hard else []) + (["hard_at"] if hard else [])
     state(cache).raise_marks(names, now)
+    if hard:
+        # The whole pages kept (web.pagecache) go the same way: nobody sees a page built before the edit.
+        from web import pagecache
+
+        pagecache.forget()
 
 
 def is_stale(key, cache=None, marks=None):

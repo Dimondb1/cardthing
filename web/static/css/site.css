@@ -131,6 +131,8 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
   .button:hover { background: var(--color-brand-hover); border-color: var(--color-brand-hover); transform: translateY(-1px); box-shadow: var(--shadow-button-hover); }
 }
 .button:active { transform: scale(0.985); box-shadow: var(--shadow-button); transition-duration: 60ms; }
+/* A tap answers at once: no wait for a second tap that could mean a zoom. */
+a, button, summary, select, input, label { touch-action: manipulation; }
 .button[aria-disabled="true"], .button:disabled { opacity: 0.55; pointer-events: none; }
 .button--quiet { background: transparent; color: var(--color-ink); border-color: var(--color-line); box-shadow: none; }
 @media (hover: hover) { .button--quiet:hover { background: var(--color-shelf); border-color: var(--color-ink-subtle); box-shadow: none; } }

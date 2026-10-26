@@ -3141,11 +3141,33 @@ request. The whole card opens the product's page and counts as
 button (a `<details>`); a shorter list has none unless something is chosen.
 The panel loads closed even while a filter is chosen, so a page reached
 from a set chip opens on its list: the button names the choices ("Sort and
-filter · Booster box · Korean") and Clear filters sits beside it. A change
-made in the open panel keeps it open on the page it loads (`site.js`,
-remembered for that browser tab only). The form carries the stock tab only
-when the address named one, so a filter that empties the tab in view opens
-on the first tab with products. "Email me when products like these are in stock" sits under
+filter · Booster box · Korean") and Clear filters sits beside it. The form
+carries the stock tab only when the address named one, so a filter that
+empties the tab in view opens on the first tab with products.
+
+A change in the filters, a quick filter chip or Clear filters changes the
+list in place (`js/browse.js`, on game, set and search pages): the page the
+change names is fetched and the part under `<div data-browse>` (everything
+but the share sheet) takes the place of the one on screen, under the
+browser's own short cross-fade where it has view transitions and motion is
+not reduced. Nothing scrolls away, the folded panel stays open, the select
+keeps its focus, the address follows (`pushState`) and Back and Forward go
+through the lists seen, fetched again. While the new list is on its way the
+old one dims a touch, only once the wait is long enough to notice. The
+scripts that enhance a list hear `ripraptor:content` (images, Save links,
+the filter form) and `ripraptor:page` (the stock tabs set up again) and
+take the new markup on. A page of results is still a page load, so the
+top of the new page is in view, and other pages' links are theirs. Without
+the script, or when the fetch fails, the form or link loads its page in
+full, and the panel the change was made in opens on it (remembered for that
+browser tab only).
+
+Moving between pages cross-fades too (`@view-transition { navigation:
+auto; }` in `site.css`): a short fade in place of a flash of white, with
+the masthead staying put (`view-transition-name: masthead`), in browsers
+with cross-document view transitions (Chrome 126+, Safari 18.2+; the rest
+load as before). Both fades last `--motion-normal` and are off under
+reduced motion. "Email me when products like these are in stock" sits under
 the list, only while the list has products or the set is still to come.
 
 Game and set pages split their products into three tabs instead of the In

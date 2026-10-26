@@ -180,6 +180,7 @@
   --motion-slow: 340ms;      /* cards leaving the deck, entrances */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);      /* entrances and movement */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);     /* buttons and small state changes */
+  --opacity-waiting: 0.6;    /* a list on screen while the one replacing it is on its way */
   --lift: -2px;              /* hover lift for cards and rows */
   --tab-bar: 3px;            /* the line under the stock tab in view */
 

@@ -76,7 +76,8 @@ class OwnersCaseTests(HubLayoutTestCase):
         html = self.get(self.url)
         self.assertEqual(names(html), ["Magnificent Maestros Booster Box"])
         self.assertEqual(tab_keys(html), [])
-        self.assertNotIn("tabs.js", html)
+        self.assertNotIn('class="stock-tabs', html)
+        self.assertIn("tabs.js", html)   # loaded all the same, for the tab row a filter change can bring in
         self.assertNotIn('<form class="filters"', html)
         self.assertNotIn("Sort and filter", html)
         self.assertNotIn("set-nav", html)

@@ -13,31 +13,25 @@ document.addEventListener("click", (event) => {
   try { fetch(`${note}?${query}`, { keepalive: true }).catch(() => {}); } catch (e) { /* nothing to do */ }
 });
 
-// The folded Sort and filter panel on game and set pages loads closed; a change made in it keeps it open on the
-// page that change loads, so the next choice is a tap away. Remembered for this tab only, and only for this page.
-const FILTERS_OPEN = "rr-filters-open";
-document.querySelectorAll("[data-filter-panel]").forEach((panel) => {
-  try {
-    if (sessionStorage.getItem(FILTERS_OPEN) === location.pathname) panel.open = true;
-    sessionStorage.removeItem(FILTERS_OPEN);
-  } catch (e) {}
-  panel.querySelector("form")?.addEventListener("submit", () => {
-    try { sessionStorage.setItem(FILTERS_OPEN, location.pathname); } catch (e) {}
+// Apply filters as soon as one changes; the "Show results" button is kept for visitors without JavaScript. On
+// game, set and search pages browse.js answers the submit by changing the list in place. Run again for a form
+// those pages swap in later (ripraptor:content), once per form.
+function autosubmit(root) {
+  root.querySelectorAll("form[data-autosubmit]:not([data-autosubmit-ready])").forEach((form) => {
+    form.dataset.autosubmitReady = "";
+    form.querySelectorAll("[data-autosubmit-hide]").forEach((el) => {
+      el.hidden = true;
+    });
+    form.addEventListener("change", () => {
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit();
+      } else {
+        form.submit();
+      }
+    });
   });
-});
-
-document.querySelectorAll("form[data-autosubmit]").forEach((form) => {
-  form.querySelectorAll("[data-autosubmit-hide]").forEach((el) => {
-    el.hidden = true;
-  });
-  form.addEventListener("change", () => {
-    if (typeof form.requestSubmit === "function") {
-      form.requestSubmit();
-    } else {
-      form.submit();
-    }
-  });
-});
+}
+autosubmit(document);
 
 // A filter pill is as wide as its chosen option, not its widest one: "Type" stays short until a type is picked.
 // Without this the browser sizes each select to its longest option and the pills take a row each on a phone.
@@ -266,4 +260,8 @@ function settleImages(root) {
   });
 }
 settleImages(document);
-document.addEventListener("ripraptor:content", (event) => settleImages(event.detail));
+document.addEventListener("ripraptor:content", (event) => {
+  settleImages(event.detail);
+  autosubmit(event.detail);
+  fitPills();
+});

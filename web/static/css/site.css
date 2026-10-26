@@ -1464,8 +1464,19 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 
 /* Motion ------------------------------------------------------------------ */
 
+/* Moving between pages: a short cross-fade in place of a flash of white, the masthead staying put, in browsers
+   with cross-document view transitions (the rest load as before). A filter change on a game, set or search page
+   swaps its list in under the same fade (browse.js); while the new list is on its way the old one dims a touch,
+   and only once the wait is long enough to notice. Nothing moves under reduced motion. */
+@view-transition { navigation: auto; }
+::view-transition-old(root), ::view-transition-new(root), ::view-transition-group(masthead) { animation-duration: var(--motion-normal); }
+.masthead { view-transition-name: masthead; }
+[data-browse] .stock-panes, [data-browse] > .cards, [data-browse] > .empty { transition: opacity var(--motion-fast) var(--ease-standard); }
+[data-browse][aria-busy="true"] .stock-panes, [data-browse][aria-busy="true"] > .cards, [data-browse][aria-busy="true"] > .empty { opacity: var(--opacity-waiting); transition-delay: var(--motion-fast); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; animation-delay: 0ms !important; }
+  ::view-transition-group(*), ::view-transition-image-pair(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   .reveal { opacity: 1; transform: none; }
   .swipe--settle, .swipe--fly { transition-duration: 1ms !important; }
 }

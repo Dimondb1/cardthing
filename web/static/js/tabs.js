@@ -1,14 +1,25 @@
 // Stock tabs on game and set pages: swipe or tap between In stock, Pre-orders and Out of stock (only
-// the tabs with products are there; a page with one list has no tabs and does not load this file).
+// the tabs with products are there; a page with one list has no tabs and sets nothing up).
 // Without this file each tab is a link to its own page, which holds only that tab's list. With it,
 // the other lists are fetched one after the other once the page is idle and slotted in beside the
 // first, so a swipe moves between them at once. During a swipe only the browser's own scrolling
 // moves; the tab, the address and the height change once it settles.
+// A filter change swaps the whole list area in (browse.js sends ripraptor:page): the tabs are set up
+// again from the new markup, and the old set-up's window listeners go with it.
 (() => {
+  let stop = null;
+  function start() {
+    if (stop) stop();
+    stop = setup();
+  }
+
+  function setup() {
   const root = document.querySelector("[data-stock]");
   const track = root && root.querySelector(".stock-panes");
   const nav = root && root.querySelector(".stock-tabs");
-  if (!track || !nav || !("fetch" in window)) return;
+  if (!track || !nav || !("fetch" in window)) return null;
+  const gone = new AbortController();
+  const { signal } = gone;
   // The tab the page opens on needs no tab in its address.
   const opening = root.dataset.opening;
   const tabs = Array.from(nav.querySelectorAll("a[data-tab]"));
@@ -61,7 +72,7 @@
     if (loaded.has(key)) return Promise.resolve();
     if (pending.has(key)) return pending.get(key);
     const holder = pane(key);
-    const job = fetch(holder.dataset.src, { credentials: "same-origin" })
+    const job = fetch(holder.dataset.src, { credentials: "same-origin", signal })
       .then((response) => {
         if (!response.ok) throw new Error(String(response.status));
         return response.text();
@@ -78,7 +89,8 @@
         document.dispatchEvent(new CustomEvent("ripraptor:content", { detail: fresh }));
         fit();
       })
-      .catch(() => {
+      .catch((error) => {
+        if (error.name === "AbortError") return;
         // Not fetched: the tab's own page still has the list.
         const note = holder.querySelector(".stock-pane__loading");
         if (note) {
@@ -135,13 +147,23 @@
   window.addEventListener("resize", () => {
     track.scrollLeft = current * track.clientWidth;
     fit();
-  });
+  }, { signal });
 
   // The other lists, nearest first, one at a time so the server answers one request at once.
   const idle = window.requestIdleCallback || ((run) => setTimeout(run, 300));
   idle(() => {
+    if (signal.aborted) return;
     keys.filter((key) => !loaded.has(key))
       .sort((a, b) => Math.abs(keys.indexOf(a) - current) - Math.abs(keys.indexOf(b) - current))
       .reduce((chain, key) => chain.then(() => load(key)), Promise.resolve());
   });
+
+  return () => {
+    gone.abort();
+    if (sizes) sizes.disconnect();
+  };
+  }
+
+  start();
+  document.addEventListener("ripraptor:page", start);
 })();

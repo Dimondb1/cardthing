@@ -1,6 +1,6 @@
 {% load sitecopy ripraptor %}{# Price check: today's cheapest delivered price against RipRaptor's own record and the European market (catalogue/fair_price.py), the owner's design: one chip coloured by the verdict, with four signal bars (more lit is a better price), the verdict's icon and its words. A link to the price history; product.js opens the Price check sheet instead. #}
 <a class="fair fair--{{ fair.key }}" href="#history-title" data-fair-open aria-controls="fair-sheet" aria-label="{% copy 'product.fair.label' verdict=fair_word %}">
   <span class="fair__bars" aria-hidden="true">{% for lit in fair.signal %}<span class="fair__bar{% if lit %} is-on{% endif %}"></span>{% endfor %}</span>
-  <span class="fair__icon" aria-hidden="true">{% include "web/includes/fair/"|add:fair.key|add:".svg" %}</span>
+  <span class="fair__icon" aria-hidden="true">{% if fair.key == "high" %}<span class="fair__rex"></span>{% else %}{% include "web/includes/fair/"|add:fair.key|add:".svg" %}{% endif %}</span>
   <span class="fair__word" aria-hidden="true">{{ fair_word }}</span>
 </a>

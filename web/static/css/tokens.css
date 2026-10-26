@@ -223,6 +223,9 @@
   --fair-bar-width: 0.3125rem;
   --fair-bars-small: 0.875rem;      /* the bars on a product card's smaller chip */
   --fair-icon-small: 0.875rem;
+  --fair-rex: 1.75rem;              /* Rip off Rex (img/rex-small.svg) beside "High price": on the product page's chip, */
+  --fair-rex-small: 1.25rem;        /* on a product card's, */
+  --fair-rex-sheet: 3rem;           /* and the full drawing (img/rex.svg) on the Price check sheet, 48px and over as drawn */
   --fair-bar-gap: 2px;
   --fair-dim: 0.28;                 /* a bar that is not lit */
   --fair-word: 4.75em;              /* the verdict wraps onto two lines beside the icon */

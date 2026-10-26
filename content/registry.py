@@ -1689,7 +1689,9 @@ ENTRIES = [
         "Retailers cannot pay to change that order.\n\n"
         "The featured deals row on the home page is different: it favours deals at "
         "retailers that pay us a commission. Every featured deal is still a genuine low "
-        "price or saving.",
+        "price or saving.\n\n"
+        "The Price check's High price warning is not shown when the cheapest price is at a "
+        "retailer that pays us a commission. Every shop's price is still listed, cheapest first.",
         "Affiliate disclosure on the how it works page.",
         legal=True,
     ),

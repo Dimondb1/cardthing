@@ -465,8 +465,7 @@ FEATURED_SPARES = 2    # per side: qualifying deals rendered hidden, for the vis
 
 
 def earns(listing):
-    retailer = listing.retailer
-    return bool(retailer.affiliate_url_template) or retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY)
+    return listing.retailer.pays_commission
 
 
 def featured_deals(products):
@@ -1173,6 +1172,10 @@ def product_detail(request, slug):
                     and listing.retailer.source_type not in pricing.MARKETPLACES})
     fair = (fair_price.verdict(product, cheapest.delivered_price, today, shops=uk_shops)
             if cheapest and cheapest.delivery_known and cheapest.sanity != Listing.Sanity.DOUBTFUL else None)
+    # The owner: never "High price" beside a shop that pays a commission, whatever the price. The check is left
+    # off, not softened, so nothing on the page calls the price better than it is; the Terms page says so.
+    if fair is not None and fair.band == fair_price.HIGH_PRICE and cheapest.retailer.pays_commission:
+        fair = None
 
     # Nothing to buy here: the closest products shops have in stock, so a visitor hunting a sold-out product
     # has somewhere to go.

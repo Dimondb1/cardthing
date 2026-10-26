@@ -336,8 +336,15 @@ class Product(models.Model):
     @property
     def card_check(self):
         """The Price check a product card shows: the stored one, unless the card leads with another price than the
-        one it was worked out on (web.views.in_stock_offers marks that ``narrowed``)."""
-        return None if getattr(self, "narrowed", False) else self.price_check
+        one it was worked out on (web.views.in_stock_offers marks that ``narrowed``), and never "High price" beside
+        a shop that pays a commission (the owner's rule, as on the product page)."""
+        if getattr(self, "narrowed", False):
+            return None
+        check = self.price_check
+        offers = getattr(self, "offers", None)
+        if check is not None and check.key == "high" and offers and offers[0].retailer.pays_commission:
+            return None
+        return check
 
     @property
     def language_name(self):
@@ -591,6 +598,11 @@ class Retailer(models.Model):
     def domain(self):
         host = urlparse(self.website).netloc
         return host.removeprefix("www.")
+
+    @property
+    def pays_commission(self):
+        """Whether a sale through this shop can earn a commission: an affiliate link, or a marketplace search."""
+        return bool(self.affiliate_url_template.strip()) or self.source_type in (self.Source.AMAZON, self.Source.EBAY)
 
     def outbound_url(self, product_url, click=""):
         """The tracked link to ``product_url``: the affiliate link format filled in, with the click's number

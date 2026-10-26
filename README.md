@@ -3018,6 +3018,15 @@ up to a year back and not counting today:
 | 2 | Above average | up to 15% over it |
 | 1 | High price | more than 15% over it |
 
+A High price chip carries Rip off Rex, the owner's own character
+(`web/static/img/rex-small.svg` on the chips, `rex.svg` on the Price check
+sheet), drawn through a mask in the chip's ink like every other icon on
+the site, in place of the arrows. It is never shown beside a shop that
+pays a commission (an affiliate link, eBay or Amazon), at the owner's
+request: the Price check is left off the page rather than softened, on the
+product page (`web.views.product_detail`) and on a card led by that shop
+(`Product.card_check`), and the Terms page says so.
+
 - No price check shows until a product has 14 days of prices before today,
   or when the cheapest shop's delivery cost is unknown. Nothing is guessed.
 - No price check shows for a product only one UK shop lists (in stock or

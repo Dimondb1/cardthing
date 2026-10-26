@@ -1114,6 +1114,18 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .fair__bar.is-on { opacity: 1; }
 .fair__icon { display: inline-flex; padding-left: var(--space-2); border-left: var(--border-width) solid var(--fair-rule); }
 .fair__icon svg { width: var(--icon-button); height: var(--icon-button); }
+/* Rip off Rex, the owner's own character (web/static/img/rex-small.svg on the chips, rex.svg from 48px on the
+   sheet), drawn through a mask in the chip's own ink beside "High price", in place of the icon: one colour, like
+   every other icon on the site. Never beside a shop that pays a commission (web.views, Product.card_check). */
+.fair__rex {
+  display: inline-block; flex: none; width: var(--fair-rex); height: var(--fair-rex); background: currentColor;
+  -webkit-mask: url("../img/rex-small.svg") center / contain no-repeat; mask: url("../img/rex-small.svg") center / contain no-repeat;
+}
+.fair--small .fair__rex { width: var(--fair-rex-small); height: var(--fair-rex-small); }
+.fair-sheet__verdict .fair__rex--sheet {
+  width: var(--fair-rex-sheet); height: var(--fair-rex-sheet); vertical-align: middle; margin-right: var(--space-2);
+  -webkit-mask-image: url("../img/rex.svg"); mask-image: url("../img/rex.svg");
+}
 .fair__word { max-width: var(--fair-word); font-size: var(--text-xs); font-weight: var(--weight-strong); line-height: var(--leading-snug); }
 
 /* The Price check sheet: the verdict, today against the average and the lowest, and the chart. */

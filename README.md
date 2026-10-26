@@ -92,6 +92,13 @@ top-5000-trading-card-games football`: a check of all of Zatu on 13 Oct 2026
 found 49 buyable card products outside `trading-card-games` alone, among
 them the Topps football tins, and none worth having outside these three.
 
+A shop's feed is read page by page until an empty page. Some shops answer
+a request past their last page with an error instead, so a later page
+failing ends the read too; it is still not the whole shop, so the products
+the read never reached keep their last state (a complete read would have
+marked every one of them out of stock), and the run's log says which page
+was lost and why.
+
 So nothing new is missed, a shop read this way is also read from its
 newest products (the first two pages of `/products.json`, about a week of
 new listings at Zatu). Any of them that are our kind of product but sit
@@ -1244,10 +1251,14 @@ Box" or "Case" on a booster box page) is left out before any matching, so it
 never prices the box; "English", "Japanese" or the page's own count ("36
 Packs" on a "(36x Packs)" page) are not left out. A box title counts its packs
 only in brackets straight after the box ("Booster Box (36x Packs)"); any other
-"36x" is read as a multi-buy and refused. eBay and Amazon listings are
-never checked this way, and nor are feed shops: their prices come from the
-feed agreed with them, and their links are affiliate clicks a server must
-never follow.
+"36x" is read as a multi-buy and refused. A shop's note of what a pack or
+box holds ("| 5 Cards Per Pack", "(5 Cards)", "Booster Box | 30 Packs") is
+not part of the name, so the shop's pack joins everyone else's product
+instead of becoming a second one (Titan Cards, Oct 2026); the hourly tidy
+takes the note off names already in the catalogue. eBay and Amazon
+listings are never checked this way, and nor are feed shops: their prices
+come from the feed agreed with them, and their links are affiliate clicks
+a server must never follow.
 
 Price history starts the day a product first gets a price and is kept for
 ever; the product page charts the last 90 days and, after 30 days, says
@@ -1869,7 +1880,12 @@ every 30 seconds while the read runs and at once on an error, so a read the
 background reader cuts off at its time limit still shows how far it got,
 followed by the cut-off note; a read that crashes gets its traceback added.
 Keys and tokens in addresses (`apikey=`, `/apikey/...`, `token=`) are blanked
-first. Logs are cleared after a week by `tidy_all`.
+first. Logs are cleared after a week by `tidy_all`. The run's list of
+unmatched titles says why each was left out; a page an earlier No (the
+owner's, the autopilot's or Claude's) keeps off a product it now names
+word for word is listed as "an earlier No for <product>", so a No that
+keeps a shop's price off the site for good can be found in admin (Shop
+products to review, filtered by the shop and "Not one of ours") and undone.
 
 ## Background reader
 

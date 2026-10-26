@@ -2506,3 +2506,51 @@ class PreorderSignalTests(TestCase):
         offer.published_at = timezone.now()   # the shop republished it
         apply_offers(shop, [offer])
         self.assertEqual(Listing.objects.get(product=product).shop_published_at, first)
+
+
+class ShopifyPageLostTests(TestCase):
+    """A later page of a shop's feed failing ends the read, as some shops answer past their last page with an
+    error. It is still not the whole shop: the products never reached keep their last state, and the run's log
+    says which page was lost, instead of every one of them going out of stock each hour."""
+
+    def test_the_products_after_a_lost_page_keep_their_stock_state(self):
+        retailer = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+        pset = make_set(make_game())
+        unseen = make_product(pset, name="Surging Sparks Booster Box", product_type="booster_box")
+        make_listing(unseen, retailer, availability="in_stock", url="https://shop.example/products/surging-sparks-booster-box")
+        page_one = [{"handle": "prismatic-evolutions-elite-trainer-box", "title": "Pokemon Prismatic Evolutions Elite Trainer Box",
+                     "tags": [], "variants": [{"price": "84.99", "available": True, "barcode": ""}]}]
+
+        def fetch(url):
+            if url.endswith("/meta.json"):
+                return b'{"currency": "GBP"}'
+            if "page=1" in url and "/collections/" not in url:
+                return shopify_page(page_one)
+            if "page=2" in url:
+                raise ImportError_(f"Could not fetch {url}: HTTP Error 429: Too Many Requests")
+            raise ImportError_("none")
+
+        run = run_import(retailer, fetch=fetch)
+        self.assertTrue(run.ok, run.error)
+        self.assertEqual(Listing.objects.get(product=unseen).availability, "in_stock")
+        self.assertEqual(Listing.objects.filter(retailer=retailer).count(), 2)
+        self.assertIn("page 2 of https://shop.example/products.json was not read", run.log)
+        self.assertIn("keep their last state", run.log)
+
+    def test_a_shop_that_ends_with_an_empty_page_is_read_in_full(self):
+        retailer = make_retailer("Shop", source_type=Retailer.Source.SHOPIFY, source_url="https://shop.example/")
+        pset = make_set(make_game())
+        gone = make_product(pset, name="Surging Sparks Booster Box", product_type="booster_box")
+        make_listing(gone, retailer, availability="in_stock", url="https://shop.example/products/surging-sparks-booster-box")
+
+        def fetch(url):
+            if url.endswith("/meta.json"):
+                return b'{"currency": "GBP"}'
+            if "page=" in url and "/collections/" not in url:
+                return shopify_page([])
+            raise ImportError_("none")
+
+        run = run_import(retailer, fetch=fetch)
+        self.assertTrue(run.ok, run.error)
+        self.assertEqual(Listing.objects.get(product=gone).availability, "out_of_stock")
+        self.assertEqual(run.log, "")

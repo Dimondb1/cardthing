@@ -346,6 +346,17 @@ SHOP_HEADS = re.compile(
 )
 
 
+# A shop's note of what a pack or box holds, in the title or after a bar ("| 5 Cards Per Pack", "(5 Cards)",
+# "Booster Box | 30 Packs"): the product is the same without it, and other shops leave it out, so with it
+# the shop's pack or box became a second product of its own (Titan Cards, Oct 2026).
+PACK_NOTES = re.compile(
+    r"\s*\(\s*\d{1,3}\s*cards?\s*\)"
+    r"|\s*[|,]?\s*\b\d{1,3}\s*cards?\s+(?:per|in\s+(?:each|a|every))\s+(?:booster\s+)?pack\b"
+    r"|\s*\|\s*\d{1,3}\s*(?:x\s*)?(?:sealed\s+)?(?:booster\s+)?packs?\b(?=\s*(?:\||$))",
+    re.I,
+)
+
+
 def tidy_name(title):
     """The light fixes safe to apply to a name that is already in the catalogue."""
     name = re.sub(r"\s+", " ", html.unescape(title)).strip()
@@ -358,7 +369,7 @@ def tidy_name(title):
         name = SHOP_TAILS.sub("", SHOP_HEADS.sub("", name)).strip(" :,-")
     # A shop's note on how many each customer may buy or when it comes out ("*1pp limit*", "(Releases
     # 27.03.26)", "February Restock"), and the brackets or stars it leaves empty.
-    name = re.sub(r"\(\s*\)|\[\s*\]|\*\s*\*", " ", SHOP_NOTES.sub(" ", name))
+    name = re.sub(r"\(\s*\)|\[\s*\]|\*\s*\*", " ", PACK_NOTES.sub(" ", SHOP_NOTES.sub(" ", name)))
     name = re.sub(r"\s*[(\[]\s*$", "", re.sub(r"\s+", " ", name)).strip(" :,-")
     name = re.sub(r"\b(\w+)( \1\b)+", r"\1", name, flags=re.I)  # "Booster Booster Pack"
     # "(Default)" from a shop's system, and of "Sylveon / Greninja Ex Tin (Greninja)" only the one chosen.

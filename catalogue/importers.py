@@ -536,9 +536,13 @@ def section_handles(retailer):
     return [h for h in re.split(r"[\s,]+", retailer.collection or "") if h]
 
 
-def shopify_pages(listing, fetch=fetch, pause=0.0, max_pages=MAX_SHOPIFY_PAGES):
-    """The products of a products.json listing, page by page. The first page failing raises ImportError_;
-    a later one ends the listing, which is how a shop says it has no more pages."""
+def shopify_pages(listing, fetch=fetch, pause=0.0, max_pages=MAX_SHOPIFY_PAGES, short=None):
+    """The products of a products.json listing, page by page. The first page failing raises ImportError_.
+
+    A later page failing ends the listing: some shops answer a request past their last page with an error
+    rather than an empty page. It is still not the shop's whole range, so the failure is logged and added to
+    ``short`` (a list) when one is given, and the read then leaves the products it never reached as they were
+    (apply_offers) instead of taking every one of them as no longer listed."""
     page = 1
     first_handle = None
     while page <= max_pages:
@@ -547,13 +551,15 @@ def shopify_pages(listing, fetch=fetch, pause=0.0, max_pages=MAX_SHOPIFY_PAGES):
         try:
             raw = fetch(f"{listing}?limit=250&page={page}")
             products = json.loads(raw).get("products", [])
-        except ImportError_:
+        except (ImportError_, json.JSONDecodeError) as exc:
             if page == 1:
-                raise
-            return  # past the last page
-        except json.JSONDecodeError as exc:
-            if page == 1:
+                if isinstance(exc, ImportError_):
+                    raise
                 raise ImportError_(f"{listing} did not return Shopify JSON") from exc
+            reason = f"page {page} of {listing} was not read ({exc})"
+            logger.warning("%s; the products after it keep their last state", reason)
+            if short is not None:
+                short.append(reason)
             return
         if not products:
             return
@@ -600,7 +606,8 @@ def gone(exc):
     return "HTTP Error 404" in str(exc) or "HTTP Error 410" in str(exc)
 
 
-def shopify_offers(retailer, fetch=fetch, pause=0.0):
+def shopify_offers(retailer, fetch=fetch, pause=0.0, short=None):
+    """Every offer of a Shopify shop. ``short`` (a list) is told when a page of the shop could not be read."""
     base = retailer.source_url.rstrip("/")
     currency = shop_currency(base, fetch=fetch)
     if currency and currency != "GBP":
@@ -620,7 +627,7 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0):
 
     sections = section_handles(retailer)
     if not sections:
-        for product in shopify_pages(f"{base}/products.json", fetch, pause):
+        for product in shopify_pages(f"{base}/products.json", fetch, pause, short=short):
             yield from offers_of(product)
         return
     # A shop that sells far more than cards (Zatu: board games, puzzles, books) is read from its card
@@ -628,7 +635,7 @@ def shopify_offers(retailer, fetch=fetch, pause=0.0):
     # is read once.
     seen = set()
     for section in sections:
-        for product in shopify_pages(f"{base}/collections/{section}/products.json", fetch, pause):
+        for product in shopify_pages(f"{base}/collections/{section}/products.json", fetch, pause, short=short):
             handle = product.get("handle")
             if handle in seen:
                 continue
@@ -1615,12 +1622,13 @@ def stamp_checked(pks, checked_at):
     pks.clear()
 
 
-def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
+def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, short=None):
     """Update listings from ``offers``.
 
     ``complete`` says the offers cover the shop's whole range, so anything not
     among them is out of stock there. A website read fetches PAGES_PER_READ pages
-    and is not complete: its unseen products keep their last state.
+    and is not complete: its unseen products keep their last state. So does a read
+    that ``short`` (a list the offers fill in as they come) says lost a page.
 
     Offers match a product by barcode, or by the link of a listing that was
     added by hand for this retailer, or by a page the owner said Yes to before
@@ -1824,13 +1832,17 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
                     continue
                 match, value = catalogue.best_match(offer.title, game=sealed.game)
                 if match is not None and match[0] in refused.get(offer.url, ()):
-                    # The owner said this page is not that product.
-                    unmatched.append(f"{offer.title} [{offer.ean or 'no barcode'}] {offer.url}")
+                    # The owner or Claude said this page is not that product: the read log says so, so a No
+                    # that keeps a shop's price off the site for good can be seen and undone.
+                    unmatched.append(f"{offer.title} [an earlier No for {match[1]}] {offer.url}")
                     continue
                 if (match is None or value < AUTO_LINK) and getattr(settings, "RIPRAPTOR_AUTO_CATALOGUE", True):
                     created_pk = create_from_offer(offer, catalogue, sealed=sealed, refused=refused.get(offer.url, ()))
                     if created_pk is not None:
                         product_pk = created_pk
+                    elif refused.get(offer.url):
+                        unmatched.append(f"{offer.title} [an earlier No for the product of this name] {offer.url}")
+                        continue
                 if product_pk is not None:
                     pass
                 elif match and value >= AUTO_LINK and match[0] not in seen_products:
@@ -1942,8 +1954,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True):
         remove_not_sealed(pk for pk, url in Listing.objects.filter(retailer=retailer).values_list("pk", "url")
                           if link_key(url) in not_sealed)
 
-    # Anything the retailer no longer lists is out of stock there.
-    if complete:
+    # Anything the retailer no longer lists is out of stock there, once every page of the shop was read.
+    if complete and not short:
         Listing.objects.filter(retailer=retailer).exclude(product_id__in=seen_products).exclude(
             availability=Listing.Availability.OUT_OF_STOCK
         ).update(availability=Listing.Availability.OUT_OF_STOCK, last_checked=checked_at,
@@ -2239,11 +2251,12 @@ def run_import(retailer, feed_path=None, fetch=None, page_pause=0.0):
 
 def _run_import(run, retailer, feed_path, fetch, page_pause):
     fetch = retailer_fetch(retailer, fetch)
+    short = []   # pages of the shop that could not be read, filled in as the offers come
     try:
         if retailer.source_type == Retailer.Source.SHOPIFY:
             if not retailer.source_url:
                 raise ImportError_("Set the shop address on the retailer first.")
-            offers = shopify_offers(retailer, fetch=fetch, pause=page_pause)
+            offers = shopify_offers(retailer, fetch=fetch, pause=page_pause, short=short)
         elif retailer.source_type == Retailer.Source.WEBSITE:
             if not retailer.source_url:
                 raise ImportError_("Set the shop address on the retailer first.")
@@ -2285,7 +2298,7 @@ def _run_import(run, retailer, feed_path, fetch, page_pause):
         else:
             raise ImportError_("This retailer's prices are entered by hand.")
         complete = retailer.source_type not in (Retailer.Source.WEBSITE, Retailer.Source.EBAY)
-        found, updated, unmatched = apply_offers(retailer, offers, run=run, complete=complete)
+        found, updated, unmatched = apply_offers(retailer, offers, run=run, complete=complete, short=short)
         run.offers_found = found
         run.listings_updated = updated
         run.unmatched = unmatched_text(unmatched)

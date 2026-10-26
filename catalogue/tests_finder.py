@@ -822,10 +822,12 @@ class WebsiteTests(FinderCase):
         self.assertEqual(list(ShopProduct.objects.values_list("status", "suggested")),
                          [(ShopProduct.Status.IGNORED, self.etb.pk)])
         self.assertEqual(self.search(centre, self.site).outcome, StockistSearch.Outcome.NONE)
-        # So a read still never matches the page to the product the owner refused.
-        apply_offers(self.site, [Offer(title="Pokemon Prismatic Evolutions Elite Trainer Box", url=SITE_ETB,
-                                       price=Decimal("55.00"))], complete=False)
+        # So a read still never matches the page to the product the owner refused, and its log says why.
+        _found, _updated, unmatched = apply_offers(
+            self.site, [Offer(title="Pokemon Prismatic Evolutions Elite Trainer Box", url=SITE_ETB, price=Decimal("55.00"))],
+            complete=False)
         self.assertFalse(Listing.objects.filter(retailer=self.site).exists())
+        self.assertEqual(unmatched, [f"Pokemon Prismatic Evolutions Elite Trainer Box [an earlier No for {self.etb.name}] {SITE_ETB}"])
         # The same holds for a page read at a Shopify shop.
         ShopProduct.objects.update(retailer=self.gg)
         offer = Offer(title=PE_TITLE, url=f"{GG}/products/{PE_HANDLE}", price=Decimal("58.00"))

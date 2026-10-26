@@ -584,3 +584,32 @@ class ToyTests(TestCase):
                       "Funko Pop Pokemon Charizard"):
             with self.subTest(title=title):
                 self.assertIsNone(classify(title, "", "", (), 10), title)
+
+
+class PackNotesTests(TestCase):
+    """A shop's note of what a pack or box holds is not part of the name: with it the shop's pack became a
+    second product beside everyone else's (Titan Cards, Oct 2026)."""
+
+    def test_cards_per_pack_and_pack_counts_after_a_bar_leave_the_name(self):
+        cases = {
+            "Pokémon TCG Nihil Zero M3 Japanese Booster Pack | 5 Cards Per Pack": "Nihil Zero M3 Japanese Booster Pack",
+            "Pokemon TCG Mega Symphonia m1s Japanese Booster Pack (5 Cards)": "Mega Symphonia m1s Japanese Booster Pack",
+            "Pokémon TCG Nihil Zero M3 Japanese Booster Box | 30 Packs | 5 Cards Per Pack": "Nihil Zero M3 Japanese Booster Box",
+            "Triplet Beat SV1A Korean Booster Pack 5 Cards Per Pack": "Triplet Beat SV1A Korean Booster Pack",
+            "Raging Surf SV3A Korean Booster Pack, 5 cards in each pack": "Raging Surf SV3A Korean Booster Pack",
+        }
+        for title, expected in cases.items():
+            with self.subTest(title=title):
+                self.assertEqual(clean_name(title, "pokemon"), expected)
+                sealed = classify(title, shop_type="Pokemon", price=Decimal("2.15"))
+                self.assertEqual(sealed.product_type, "booster_box" if "Box" in expected else "booster_pack")
+
+    def test_a_count_that_is_part_of_the_name_stays(self):
+        for title in ("Pokemon 151 Booster Bundle", "Terastal Festival SV8A Booster Pack 10 Cards Japanese High Class",
+                      "Scarlet & Violet Journey Together Booster Pack Contains 10 Pokemon Cards"):
+            with self.subTest(title=title):
+                self.assertEqual(clean_name(title, "pokemon"), title.removeprefix("Pokemon "))
+
+    def test_a_name_already_in_the_catalogue_is_tidied_the_same_way(self):
+        self.assertEqual(tidy_name("Nihil Zero M3 Japanese Booster Pack 5 Cards Per Pack"), "Nihil Zero M3 Japanese Booster Pack")
+        self.assertEqual(tidy_name("TCG Phantom Revenge Booster Box 24 Packs 7 Cards Per Pack"), "TCG Phantom Revenge Booster Box 24 Packs")

@@ -1852,6 +1852,9 @@ class ClaudeJudge(models.Model):
     key_checked_at = models.DateTimeField(null=True, blank=True, help_text="When Anthropic last accepted the key.")
     # The run going now, so the page can say how far it has got.
     running_since = models.DateTimeField(null=True, blank=True)
+    # Cardmarket matching's last run (catalogue/cardmarket_match.py), for the dashboard.
+    market_run_at = models.DateTimeField(null=True, blank=True)
+    market_run_note = models.CharField(max_length=200, blank=True)
     run_asked = models.PositiveIntegerField(default=0)
     run_total = models.PositiveIntegerField(default=0)
     # The last few runs, newest first: {"at", "asked", "sorted", "suggested", "left", "spent", "note"}.

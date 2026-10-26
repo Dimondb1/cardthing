@@ -16,11 +16,14 @@ What an answer does:
   becomes CHECK whatever Claude said: that gap more often means a pack against a box or a case.
 
 The owner's own answers (CONFIRMED, REJECTED) are never asked again. Any other product is asked again when
-what would be sent changes (our name, set, kind or language, or the candidates), at most once per change.
+what would be sent changes (our name, set, kind or language, or the candidates), at most once per change. An
+answer that could not be read (cut off, declined, or not naming a candidate) is asked again once; after RETRIES
+of them the product waits for the owner (CHECK) rather than being asked every run.
 
 Cost: it uses the Claude judge's key, model and monthly limit, and only while Claude is switched on in
 Things to check. Each question is a ClaudeAsk of kind "market", priced and counted like the judge's, and a
-run stops at RUN_BUDGET_USD or ROWS_PER_RUN. Products a shop sells now are asked first.
+run stops at RUN_BUDGET_USD or ROWS_PER_RUN. Products a shop sells now are asked first. What each run did and
+what stopped it is kept on ClaudeJudge (market_run_at, market_run_note) for the dashboard.
 """
 
 import hashlib
@@ -29,12 +32,13 @@ import logging
 import re
 import time
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 from decimal import Decimal
 
 from datetime import timedelta
 
-from django.db.models import Case, Exists, IntegerField, OuterRef, Subquery, Sum, Value, When
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Subquery, Sum, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -60,6 +64,8 @@ VIEW_DAYS = 7     # to_do: the most viewed in this many days are matched first
 RUN_BUDGET_USD = Decimal("3.00")
 RUN_SECONDS = 780       # inside cron's 840-second timeout and the 15 minutes between runs
 BUSY_LIMIT = 12         # this many "busy" answers in a run stops it until the next
+RETRIES = 2             # answers that could not be read before the product waits for the owner instead
+UNUSABLE = (ClaudeAsk.Outcome.INVALID, ClaudeAsk.Outcome.REFUSED, ClaudeAsk.Outcome.CUT_OFF)
 MAX_TOKENS = 1500
 PRICE_LOW, PRICE_HIGH = Decimal("0.33"), Decimal("4")
 PROMPT_VERSION = 1
@@ -126,6 +132,37 @@ class Result:
     spent: int = 0
     note: str = ""
     errors: list = field(default_factory=list)
+
+    def summary(self, what="asked"):
+        """One line: "asked 312, matched 40, to check 120, none 150, spent $1.60. Reached the limit for one
+        run"."""
+        text = (f"{what} {self.asked}, matched {self.matched}, to check {self.check}, none {self.none}, "
+                f"spent ${self.spent / 1_000_000:.2f}")
+        return f"{text}. {self.note}" if self.note else text
+
+
+def note_run(state, result, now=None):
+    """Keep what the run did and what stopped it on the judge's row (market_run_note), for the dashboard. A run
+    that asked nothing keeps only why."""
+    note = result.note if not (result.asked or result.none or result.check) and result.note else result.summary("Asked")
+    ClaudeJudge.objects.filter(pk=state.pk).update(market_run_at=now or timezone.now(),
+                                                   market_run_note=(note.rstrip(".") + ".")[:200])
+
+
+def unusable_answers(slugs):
+    """How many times each product's current question got an answer that could not be read:
+    {(product id, fingerprint): count}. One query."""
+    rows = (ClaudeAsk.objects.filter(kind=ClaudeAsk.Kind.MARKET, outcome__in=UNUSABLE, product__game__slug__in=slugs)
+            .order_by().values("product_id", "fingerprint").annotate(n=Count("pk")))
+    return Counter({(row["product_id"], row["fingerprint"]): row["n"] for row in rows})
+
+
+def give_up(product, evidence, print_, result, now):
+    """After RETRIES answers that could not be read, the product waits for the owner rather than being asked
+    every run."""
+    save(product, CardmarketMatch.Status.CHECK, None, evidence, print_,
+         reason=f"Claude's answer could not be read {RETRIES} times: choose yourself", now=now)
+    result.check += 1
 
 
 def words(text):
@@ -282,12 +319,14 @@ def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER
     state = ClaudeJudge.load()
     if not dry_run and (not state.enabled or not judge.key()):
         result.note = "Claude is switched off or has no key (Things to check)"
+        note_run(state, result, now)
         return result
     rate = ExchangeRate.latest()
     pools = {}
     for item in CardmarketProduct.objects.filter(game__slug__in=slugs).select_related("game"):
         pools.setdefault(item.game.slug, []).append(item)
     known = {m.product_id: m.fingerprint for m in CardmarketMatch.objects.filter(product__game__slug__in=slugs)}
+    failed = unusable_answers(slugs)
     started = time.monotonic()
     client = client or (None if dry_run else judge.make_client(judge.key()))
     round_ = []
@@ -313,14 +352,19 @@ def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER
                          reason="No Cardmarket product shares the set's words", now=now)
                 result.none += 1
                 continue
+            if failed[(product.pk, print_)] >= RETRIES:
+                if not dry_run:
+                    give_up(product, evidence, print_, result, now)
+                continue
             if dry_run:
                 result.asked += 1
                 continue
             params = request_params(state, evidence)
             worst = judge.worst_case_micros(params, params["model"])
             moment = timezone.now()
-            if judge.spent_this_month(moment) + worst > judge.monthly_limit_micros(state):
-                result.note = "Reached Claude's monthly limit"
+            month_spent, month_limit = judge.spent_this_month(moment), judge.monthly_limit_micros(state)
+            if month_spent + worst > month_limit:
+                result.note = limit_note(month_spent, month_limit, moment)
                 break
             held = sum(job["worst"] for job in round_)
             if result.spent + held + worst > RUN_BUDGET_USD * 1_000_000:
@@ -334,13 +378,24 @@ def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER
             round_.append({"product": product, "evidence": evidence, "print": print_, "ask": ask, "worst": worst,
                            "params": params})
             if len(round_) >= WORKERS:
-                if not settle(round_, pool, client, result, now):
+                if not settle(round_, pool, client, result, now, failed):
                     round_ = []
                     break
                 round_ = []
         if round_:
-            settle(round_, pool, client, result, now)
+            settle(round_, pool, client, result, now, failed)
+    if not dry_run:
+        note_run(state, result, now)
     return result
+
+
+def limit_note(spent, limit, moment):
+    """Why a run stopped at the monthly limit, with the figures: the limit is shared with Things to check, so
+    the owner can see which of the two spent it."""
+    market = (ClaudeAsk.objects.filter(kind=ClaudeAsk.Kind.MARKET, asked_at__gte=judge.month_start(moment))
+              .aggregate(cost=Sum("cost_micros"))["cost"] or 0)
+    return (f"Reached Claude's monthly limit: {judge.dollars(spent)} of {judge.dollars(limit)} spent this month, "
+            f"{judge.dollars(market)} of it on matching")
 
 
 def ask_one(client, params):
@@ -351,9 +406,11 @@ def ask_one(client, params):
         return None, error
 
 
-def settle(round_, pool, client, result, now):
+def settle(round_, pool, client, result, now, failed=None):
     """Send a round's questions side by side and save each answer. Returns False when the run must stop:
-    Anthropic refused the key, credit or model, or stayed too busy."""
+    Anthropic refused the key, credit or model, or stayed too busy. ``failed`` counts the answers that could
+    not be read, per product and question (unusable_answers)."""
+    failed = failed if failed is not None else Counter()
     replies = list(pool.map(lambda job: ask_one(client, job["params"]), round_))
     carry_on = True
     for job, (message, error) in zip(round_, replies):
@@ -387,6 +444,10 @@ def settle(round_, pool, client, result, now):
         result.asked += 1
         result.spent += cost
         if answer is None:
+            if outcome in UNUSABLE:
+                failed[(job["product"].pk, job["print"])] += 1
+                if failed[(job["product"].pk, job["print"])] >= RETRIES:
+                    give_up(job["product"], evidence, job["print"], result, now)
             continue
         status = status_for(answer, evidence)
         save(job["product"], status, answer["match"], evidence, job["print"], answer["confidence"],

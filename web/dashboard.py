@@ -27,8 +27,9 @@ from django.views.decorators.http import require_GET
 from catalogue import cardmarket, checks, crawl, insights, judge, referrals, traffic
 from catalogue.drop_alerts import SENT_FIELD
 from catalogue.models import (
-    AffiliateSale, CardmarketMatch, CardmarketPrice, ClaudeAsk, ClaudeJudge, DailyPageView, DailySearch, DailyVisitor,
-    DropAlert, Listing, OutboundClick, Product, ReferralSettings, Retailer, SearchAlert, StockAlert, WorkerState,
+    AffiliateSale, CardmarketMatch, CardmarketPrice, CardmarketProduct, ClaudeAsk, ClaudeJudge, DailyPageView, DailySearch,
+    DailyVisitor, DropAlert, Listing, OutboundClick, Product, ReferralSettings, Retailer, SearchAlert, StockAlert,
+    WorkerState,
 )
 from content import service as copy
 from inbox.service import unread_count
@@ -381,7 +382,9 @@ def prices_section(now, store):
     """Of the products with a current price, how many show the Price check, and what it rests on: Cardmarket's
     price, our own daily record, or both (Product.price_band, kept each hour), and how many have an RRP (the
     owner's or UK shops'), for the whole site and each game, and Claude's matching of our products to Cardmarket's
-    (matching). Five queries."""
+    (matching): for each game Cardmarket lists, how many products Claude has looked at and matched, how many
+    Cardmarket products were read and when their prices last were, so a game stuck at nought says why. Seven
+    queries."""
     from catalogue.fair_price import BOTH, MARKET, RECORD
 
     on_sale = Exists(Listing.objects.buyable().filter(product=OuterRef("pk")))
@@ -394,10 +397,16 @@ def prices_section(now, store):
             market=Count("pk", filter=Q(price_basis__in=(MARKET, BOTH))),
             record=Count("pk", filter=Q(price_basis__in=(RECORD, BOTH))),
             rrp=Count("pk", filter=Q(on_sale=True) & (Q(rrp__isnull=False) | Q(shop_rrp__isnull=False))),
+            looked=Count("cardmarket_match"),
+            matched=Count("cardmarket_match", filter=Q(cardmarket_match__status__in=CardmarketMatch.USED)),
         )
     )
     rows = list(rows)
-    games = [{"name": row["game__name"], **{key: row[key] for key in ("priced", "checked", "market", "record", "rrp")}}
+    listed = dict(CardmarketProduct.objects.order_by().values_list("game__slug").annotate(n=Count("pk")))
+    priced_on = dict(CardmarketPrice.objects.order_by().values_list("product__game__slug").annotate(day=Max("date")))
+    games = [{"name": row["game__name"], "covered": row["game__slug"] in cardmarket.GAMES,
+              "listed": listed.get(row["game__slug"], 0), "priced_on": priced_on.get(row["game__slug"]),
+              **{key: row[key] for key in ("products", "priced", "checked", "market", "record", "rrp", "looked", "matched")}}
              for row in rows if row["priced"]]
     for game in games:
         game["share"] = rate(game["checked"], game["priced"])
@@ -427,6 +436,7 @@ def matching(now, products):
     )
     history = CardmarketPrice.objects.aggregate(since=Min("date"), days=Count("date", distinct=True))
     asked = sum(statuses.values())
+    state = ClaudeJudge.current()
     return {
         "products": products, "asked": asked, "left": max(0, products - asked), "share": rate(asked, products),
         "matched": statuses.get(status.MATCHED, 0) + statuses.get(status.CONFIRMED, 0),
@@ -435,7 +445,8 @@ def matching(now, products):
         "asks_month": asks["month"], "spent": judge.dollars(asks["cost"] or 0),
         "last": insights.clock(asks["last"], now) if asks["last"] else "",
         "history_days": history["days"], "history_since": history["since"],
-        "claude_on": ClaudeJudge.current().enabled,
+        "claude_on": state.enabled,
+        "last_run": insights.clock(state.market_run_at, now) if state.market_run_at else "", "last_note": state.market_run_note,
     }
 
 

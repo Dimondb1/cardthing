@@ -3466,7 +3466,21 @@ that Anthropic keeps answering "busy" (12 times) stops and the next carries
 on. It uses the judge's key and monthly limit, and spends only while Claude
 is switched on in Things to check. Each question is a ClaudeAsk of kind
 "Cardmarket match", priced and counted with the judge's, so the monthly
-limit covers both.
+limit covers both. An answer that could not be read (cut off, declined, or
+not naming a candidate) is asked again once; after two (`RETRIES`) the
+product waits for you in Admin, Cardmarket matches, rather than being asked
+every run.
+
+**Seeing how it is going.** The dashboard's Price check coverage part shows,
+for each game with a price, how many products Claude has looked at and
+matched, how many of Cardmarket's sealed products the morning read holds
+for the game and when their prices were last read (or that the game's list
+has not been read, or that Cardmarket does not list the game at all), and
+under Claude matching Cardmarket what the last run did and what stopped
+it ("Asked 312, matched 40, to check 120, none 150, spent $1.60. Reached
+the limit for one run."), kept on the judge's row (`ClaudeJudge.market_run_at`,
+`market_run_note`). A run stopped by the monthly limit says how much of it
+went on Things to check and how much on matching, since the two share it.
 
 What it is not: Cardmarket's prices are European, in euros, before post to
 the UK and import costs. They are a reference for the Price check (see

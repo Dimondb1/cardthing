@@ -248,13 +248,63 @@ class MatchTests(TestCase):
         self.assertLess(len(result.errors), cardmarket_match.BUSY_LIMIT + 2 * cardmarket_match.WORKERS)
         self.assertFalse(CardmarketMatch.objects.exclude(status=CardmarketMatch.Status.NONE).exists())
 
-    def test_the_monthly_limit_stops_a_run_before_it_spends(self):
+    def test_the_monthly_limit_stops_a_run_before_it_spends_and_says_who_spent_it(self):
         self.switch_on()
-        ClaudeJudge.objects.filter(pk=1).update(monthly_budget_usd=Decimal("0.00"))
+        # The limit is shared with Things to check: $2.00 of this month's $3.00 went on the judge, $1.50 on matching.
+        ClaudeJudge.objects.filter(pk=1).update(monthly_budget_usd=Decimal("3.00"))
+        for kind, cost in ((ClaudeAsk.Kind.OFFER, 2_000_000), (ClaudeAsk.Kind.MARKET, 1_500_000)):
+            ClaudeAsk.objects.create(kind=kind, row_key="x", fingerprint="f", model_asked="m", effort="low",
+                                     outcome=ClaudeAsk.Outcome.ANSWERED, cost_micros=cost)
         client = FakeClient(lambda evidence: reply(evidence["ours"]["key"], 0))
         result = cardmarket_match.run(client=client)
-        self.assertEqual((client.sent, result.note), ([], "Reached Claude's monthly limit"))
+        self.assertEqual(client.sent, [])
+        self.assertEqual(result.note, "Reached Claude's monthly limit: $3.50 of $3.00 spent this month, $1.50 of it on matching")
         self.assertEqual(ExchangeRate.objects.count(), 1)
+        # Kept for the dashboard: a run that asked nothing keeps only why.
+        self.assertEqual(ClaudeJudge.current().market_run_note, result.note + ".")
+
+    def test_each_run_is_kept_for_the_dashboard_with_what_stopped_it(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        cardmarket_match.run()
+        state = ClaudeJudge.current()
+        self.assertEqual(state.market_run_note, "Claude is switched off or has no key (Things to check).")
+        self.assertIsNotNone(state.market_run_at)
+        self.switch_on()
+        # A dry run changes nothing.
+        out = StringIO()
+        call_command("match_cardmarket", "--dry-run", stdout=out)
+        self.assertEqual(out.getvalue().strip(), "Cardmarket matching: would ask 2, matched 0, to check 0, none 1, spent $0.00")
+        self.assertEqual(ClaudeJudge.current().market_run_at, state.market_run_at)
+        client = FakeClient(lambda evidence: reply(evidence["ours"]["key"], evidence["candidates"][0]["id"]))
+        result = cardmarket_match.run(client=client, limit=1)
+        state = ClaudeJudge.current()
+        self.assertEqual(state.market_run_note, f"Asked 1, matched 1, to check 0, none 0, spent ${result.spent / 1_000_000:.2f}. "
+                                                "Reached the products for one run.")
+        self.assertGreater(state.market_run_at, timezone.now() - timedelta(minutes=1))
+        self.assertEqual(result.summary(), state.market_run_note[0].lower() + state.market_run_note[1:-1])
+
+    def test_an_answer_that_cannot_be_read_is_asked_again_once_then_waits_for_the_owner(self):
+        self.switch_on()
+        client = FakeClient(lambda evidence: reply(evidence["ours"]["key"], 123456789))   # never a candidate
+        first = cardmarket_match.run(client=client)
+        self.assertEqual((first.asked, first.check), (2, 0))
+        self.assertFalse(CardmarketMatch.objects.filter(product=self.sparks).exists())
+        second = cardmarket_match.run(client=client)
+        self.assertEqual((second.asked, second.check), (2, 2))
+        match = CardmarketMatch.objects.get(product=self.sparks)
+        self.assertEqual((match.status, match.cardmarket_id), (CardmarketMatch.Status.CHECK, None))
+        self.assertEqual(match.reason, "Claude's answer could not be read 2 times: choose yourself")
+        self.assertEqual(sorted(match.candidates), [784949, 784950, 784951])
+        # Not asked a third time, until our product or the candidates change.
+        self.assertEqual(cardmarket_match.run(client=client).asked, 0)
+        self.assertEqual(len(client.sent), 4)
+        self.sparks.name = "Surging Sparks Booster Box (36 packs)"
+        self.sparks.save()
+        self.assertEqual(cardmarket_match.run(client=client).asked, 1)
+        self.assertEqual(len(client.sent), 5)
 
 
 class AdminTests(TestCase):

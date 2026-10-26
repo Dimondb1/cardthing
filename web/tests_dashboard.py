@@ -390,6 +390,42 @@ class FigureTests(DashboardCase):
         self.assertEqual(claude["last_run"], "12:53")
         self.assertContains(self.page(), f"$2.50 of {claude['limit']} this month.")
 
+    def test_cardmarket_matching_for_each_game_and_its_last_run(self):
+        from catalogue.models import CardmarketMatch, CardmarketPrice, CardmarketProduct
+
+        pokemon = self.box.game
+        # A game Cardmarket does not list, and one it lists whose products the morning read has not fetched.
+        for name, slug in (("Weiss Schwarz", "weiss-schwarz"), ("Magic", "magic-the-gathering")):
+            product = make_product(make_set(make_game(name, slug), slug=f"{slug}-set"), name=f"{name} Box", slug=f"{slug}-box")
+            make_listing(product, self.awin, price="90.00")
+        listed = CardmarketProduct.objects.create(pk=784949, game=pokemon, name="Prismatic Evolutions Booster Box",
+                                                  category_id=53, category="Pokémon Display")
+        CardmarketPrice.objects.create(product=listed, date=TODAY - timedelta(days=1), trend=Decimal("250.24"))
+        CardmarketMatch.objects.create(product=self.box, cardmarket=listed, status=CardmarketMatch.Status.MATCHED)
+        CardmarketMatch.objects.create(product=self.etb, status=CardmarketMatch.Status.CHECK)
+        ClaudeJudge.objects.update_or_create(pk=1, defaults={
+            "market_run_at": NOW - timedelta(minutes=20),
+            "market_run_note": "Asked 12, matched 3, to check 4, none 5, spent $0.06. Reached the limit for one run.",
+        })
+        response = self.page()
+        rows = {row["name"]: row for row in response.context["prices"]["games"]}
+        self.assertEqual((rows["Pokémon"]["looked"], rows["Pokémon"]["matched"], rows["Pokémon"]["listed"],
+                          rows["Pokémon"]["priced_on"]), (2, 1, 1, TODAY - timedelta(days=1)))
+        self.assertContains(response, "Claude looked at 2 of 3, matched 1. Cardmarket lists 1, prices read 17 Oct.")
+        self.assertContains(response, "Cardmarket does not list this game.")
+        self.assertContains(response, "list for this game has not been read: nothing can be matched until it is.")
+        self.assertContains(response, "Last run 12:53: Asked 12, matched 3, to check 4, none 5, spent $0.06. "
+                                      "Reached the limit for one run.")
+        self.assertEqual(response.context["prices"]["matching"]["last_run"], "12:53")
+        # Before the matcher has run, and with the list read but no prices yet, each says so.
+        CardmarketPrice.objects.all().delete()
+        ClaudeJudge.objects.filter(pk=1).update(market_run_at=None, market_run_note="")
+        cache.clear()
+        response = self.page()
+        self.assertContains(response, "Claude looked at 2 of 3, matched 1. Cardmarket lists 1, no prices read yet.")
+        self.assertNotContains(response, "Last run 12:53:")
+        self.assertEqual(response.context["prices"]["matching"]["last_run"], "")
+
     def test_every_link_into_admin_resolves_and_opens(self):
         self.staff.is_superuser = True
         self.staff.save()
@@ -484,7 +520,7 @@ class CacheTests(DashboardCase):
             self.page()
         self.assertEqual(len(few), len(many))
         # What clicks earn reads seven of them (dashboard.money_section), however many clicks, sales and offers,
-        # and the Price check coverage five, with Claude's Cardmarket matching (prices_section).
+        # and the Price check coverage seven, with Claude's Cardmarket matching (prices_section).
         self.assertLessEqual(len(many), 60)
         # Within the minute the page reads its parts from the cache: the session, the user and the wording, and the
         # sign-in renews itself (SESSION_SAVE_EVERY_REQUEST: a transaction round one update).

@@ -108,6 +108,8 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
   margin-block: calc(-1 * var(--space-1)); line-height: var(--leading-snug);
   transition: color var(--motion-fast);
 }
+/* Never more than half the row beside its title: with very large text the link's words wrap instead of running off. */
+.section-head__all, .section-head > .refresh { max-width: 50%; }
 .section-head__all:hover { color: var(--color-brand-text); }
 .section-head__note { font-size: var(--text-sm); color: var(--color-ink-subtle); }
 /* Rhythm is measured glyph to glyph. A heading's box starts at its capitals and a line of text that closes a section
@@ -225,8 +227,9 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .masthead--home .masthead__inner { grid-template-areas: "brand . nav"; }
 
 .wordmark { grid-area: brand; justify-self: start; display: block; line-height: 0; border-radius: var(--radius); }
-/* Never narrower than its own shape: the logo keeps its proportions however crowded the row. */
-.wordmark__img { height: var(--masthead-logo-wide); width: auto; max-width: none; }
+/* The logo keeps its proportions however crowded the row. When a narrow screen or very large text leaves less room
+   than its full width beside the menu, it draws smaller inside its own box rather than pushing the page sideways. */
+.wordmark__img { height: var(--masthead-logo-wide); width: auto; max-width: 100%; object-fit: contain; object-position: left center; }
 .masthead__search { grid-area: search; position: relative; }
 .masthead__nav { grid-area: nav; justify-self: end; display: flex; gap: var(--space-4); font-size: var(--text-sm); font-weight: var(--weight-strong); }
 .masthead__nav a { text-decoration: none; padding-block: var(--space-1); white-space: nowrap; color: var(--color-ink); transition: color var(--motion-fast); text-underline-offset: 0.35em; text-decoration-thickness: 2px; }
@@ -246,6 +249,13 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   /* Compact on phones: the page under it, not the header, should fill the first screen. */
   .wordmark__img { height: var(--masthead-logo); }
   .masthead .search--header input { height: var(--masthead-search); }
+}
+/* Very large text on a phone: the two icons without their words, so the logo keeps a readable size beside them.
+   Screen readers still hear the words. */
+@media (max-width: 14.99rem) {
+  .masthead__inner { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand nav" "search search"; column-gap: var(--space-2); }
+  .masthead--home .masthead__inner { grid-template-areas: "brand nav"; }
+  .masthead__swipe > span, .masthead__watch > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 @media (min-width: 48rem) {
   .masthead__inner { max-width: calc(var(--page-width) + 2 * var(--gutter-wide)); padding: var(--space-4) var(--gutter-wide); gap: var(--space-4) var(--space-5); }
@@ -389,6 +399,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 
 /* Tiles: the games under the search box and the product types lower down */
 .tiles { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+/* Two product types side by side need about 19rem: a narrower screen, or very large text, stacks them instead. */
+@media (max-width: 18.99rem) { .tiles--types { grid-template-columns: minmax(0, 1fr); } }
 .tile {
   display: grid; gap: 2px; height: 100%; padding: var(--card-pad); border: 1px solid var(--color-line); border-radius: var(--radius-card);
   background: var(--color-paper); text-decoration: none; color: inherit;
@@ -785,7 +797,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   }
 }
 .card {
-  position: relative; display: grid; gap: var(--space-3); padding: var(--card-pad);
+  /* One column no wider than the card: a long shop name shortens with an ellipsis instead of widening the card. */
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding: var(--card-pad);
   border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-card);
   transition: transform var(--motion-normal) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out);
 }
@@ -828,7 +841,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .card__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .card__compare { position: relative; z-index: 1; display: inline-flex; align-items: center; min-height: 2.5rem; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-brand-text); text-decoration: none; }
 .card__compare:hover { text-decoration: underline; }
-.card__check { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.35em; min-height: 2.5rem; font-size: var(--text-sm); color: var(--color-ink-muted); text-decoration: none; white-space: nowrap; transition: color var(--motion-fast); }
+/* On one line wherever it fits: its words wrap only when the line alone is too narrow, as with very large text. */
+.card__check { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.35em; min-height: 2.5rem; font-size: var(--text-sm); color: var(--color-ink-muted); text-decoration: none; transition: color var(--motion-fast); }
 .card__check svg { width: 1em; height: 1em; color: var(--color-brand-text); }
 .card__check:hover { color: var(--color-ink); }
 @media (min-width: 60rem) {
@@ -860,7 +874,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .result:hover .result__name a { text-decoration: underline; }
 .result__meta { margin-top: 2px; font-size: var(--text-sm); color: var(--color-ink-muted); }
 .result__offer { grid-area: offer; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); }
-.result__price { display: flex; align-items: baseline; gap: var(--space-2); }
+.result__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); }
 .result__price-label { font-size: var(--text-xs); color: var(--color-ink-subtle); }
 @media (min-width: 48rem) {
   .result { grid-template-columns: auto minmax(0, 1fr) minmax(11rem, auto); grid-template-areas: "image body offer"; align-items: center; }
@@ -888,7 +902,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
    name and details above the picture, the price straight under it, then the buttons. Wide screens put the picture
    beside the name and the price box. */
 .page--product > .breadcrumbs { margin-top: var(--space-3); }
-.product-head { display: grid; grid-template-areas: "intro" "media" "buy"; gap: var(--space-3); margin-top: var(--space-3); }
+.product-head { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "intro" "media" "buy"; gap: var(--space-3); margin-top: var(--space-3); }
 .product-intro { grid-area: intro; display: grid; gap: var(--space-1); min-width: 0; }
 .product-title { font-size: var(--text-product-title); line-height: var(--leading-tight); color: var(--color-ink); overflow-wrap: anywhere; }
 .product-head--long .product-title { font-size: var(--text-product-title-long); line-height: var(--leading-snug); }
@@ -915,13 +929,14 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 
 .buybox {
   --buybox-pad: var(--card-pad);   /* the same inner edge as every other card */
-  grid-area: buy; position: relative; isolation: isolate; display: grid; gap: var(--space-3); padding: var(--buybox-pad);
+  grid-area: buy; position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding: var(--buybox-pad);
   border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-card);
 }
 /* The price and Buy now, with the arrival sweep behind them. */
 .buybox > p { margin: 0; }   /* the grid gap spaces the box, not the usual paragraph margin */
-.buybox__lead { position: relative; isolation: isolate; display: grid; gap: var(--space-3); }
-.buybox__offer { display: grid; gap: var(--space-1); }
+/* Each a single column no wider than the box, so with very large text the price and its words wrap inside it. */
+.buybox__lead { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.buybox__offer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
 .buybox__offer > p { margin: 0; }   /* the grid gap spaces these lines, not the usual paragraph margin */
 .buybox__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-2); }
 .buybox__badge { display: inline-flex; align-items: center; }   /* the badge and its ⓘ together, at the right */
@@ -1348,7 +1363,11 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .details__list div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); align-items: baseline; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line); }
 .details__list dt { color: var(--color-ink-subtle); font-size: var(--text-sm); }
 .details__list dd { margin: 0; text-align: left; }
-.details__list dd a, .small-print a, .prose a { display: inline-block; padding-block: 2px; }
+/* Very large text leaves no room for the label column: each label sits over its value instead. */
+@media (max-width: 15.99rem) { .details__list div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); } }
+/* Kept whole on one line where they fit; a link longer than the line, like the feed's address, wraps rather than
+   pushing the page sideways. */
+.details__list dd a, .small-print a, .prose a { display: inline-block; max-width: 100%; overflow-wrap: anywhere; padding-block: 2px; }
 .related .section-title { margin-bottom: var(--rhythm-title); }
 
 /* Games index and text pages ---------------------------------------------- */
@@ -1420,6 +1439,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   .swipe__name { font-size: var(--text-lg); }
   .swipe__price { font-size: var(--text-price-card-sm); }
 }
+@media (max-width: 14.99rem) { .body--deck .masthead__inner { grid-template-areas: "brand nav"; } }   /* the header's two columns at very large text */
 .deck-hint { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink-subtle); }
 
 .deck { position: relative; height: min(70vh, 34rem); margin-top: var(--space-4); touch-action: pan-y; user-select: none; -webkit-user-select: none; }

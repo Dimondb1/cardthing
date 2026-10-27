@@ -2659,6 +2659,31 @@ class GoldenLayoutTests(PageTestCase):
         self.assertIn(".resume__chips li { min-width: 0; max-width: 100%; }", css)
         self.assertIn(".resume__chips .chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere;", css)
 
+    def test_large_text_stays_inside_a_phone_screen(self):
+        # 27 Oct 2026: with a phone's text set large, the header's search box and menu ran off the right of the screen.
+        css, tokens = self.css("site.css"), self.css("tokens.css")
+        # The logo draws smaller inside its own box rather than pushing the menu off.
+        self.assertIn(".wordmark__img { height: var(--masthead-logo-wide); width: auto; max-width: 100%; object-fit: contain;", css)
+        self.assertNotIn(".wordmark__img { height: var(--masthead-logo-wide); width: auto; max-width: none; }", css)
+        # At very large text the menu keeps its icons, the words go to screen readers, and the empty column goes.
+        narrow = css[css.index("@media (max-width: 14.99rem) {"):]
+        self.assertIn('grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand nav" "search search";', narrow)
+        self.assertIn(".masthead__swipe > span, .masthead__watch > span { position: absolute; width: 1px;", narrow)
+        self.assertIn('.body--deck .masthead__inner { grid-template-areas: "brand nav"; }', css)
+        # Cards, the price box and the product head are one column no wider than themselves.
+        self.assertIn("position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding: var(--card-pad);", css)
+        self.assertIn('.product-head { display: grid; grid-template-columns: minmax(0, 1fr);', css)
+        self.assertIn("grid-area: buy; position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr);", css)
+        # Long links, row prices, section links and card links wrap; the hero price is capped by the screen's width.
+        self.assertIn(".details__list dd a, .small-print a, .prose a { display: inline-block; max-width: 100%; overflow-wrap: anywhere;", css)
+        self.assertIn(".result__price { display: flex; flex-wrap: wrap;", css)
+        self.assertIn(".section-head__all, .section-head > .refresh { max-width: 50%; }", css)
+        self.assertNotIn("white-space: nowrap", css[css.index(".card__check {"):css.index("}", css.index(".card__check {"))])
+        self.assertIn("--text-price-hero: min(clamp(2.25rem, 1.8rem + 2vw, 3.5rem), 12vw);", tokens)
+        # Product types and product details stack when two columns no longer fit.
+        self.assertIn("@media (max-width: 18.99rem) { .tiles--types { grid-template-columns: minmax(0, 1fr); } }", css)
+        self.assertIn("@media (max-width: 15.99rem) { .details__list div { grid-template-columns: minmax(0, 1fr);", css)
+
     def test_the_logo_sits_at_the_left_with_no_back_arrow(self):
         css = self.css("site.css")
         self.assertIn(".wordmark { grid-area: brand; justify-self: start;", css)

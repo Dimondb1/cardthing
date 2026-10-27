@@ -97,7 +97,7 @@
   --text-hero: clamp(2.5rem, 1.6rem + 3.6vw, 4.25rem);          /* logo on the home page */
   --text-product-title: clamp(1.375rem, 1.1rem + 1.2vw, 2.25rem);
   --text-product-title-long: clamp(1.125rem, 1rem + 0.8vw, 1.75rem);   /* names over 60 characters */
-  --text-price-hero: clamp(2.25rem, 1.8rem + 2vw, 3.5rem);             /* the cheapest price on a product page */
+  --text-price-hero: min(clamp(2.25rem, 1.8rem + 2vw, 3.5rem), 12vw); /* the cheapest price on a product page; an eighth of the screen at most, so very large text still fits a phone */
   --text-price-lg: clamp(2.75rem, 2.2rem + 2vw, 3.75rem);
   --text-price-card: 2rem;
   --text-price-card-sm: 1.75rem;

@@ -2734,6 +2734,17 @@ def llms_txt(request):
         "in the last month, and every game and set",
         "",
     ]
+    # The published guides and the Fair Price Checker: plain advice for parents and new collectors, the pages an
+    # assistant asked "is this a fair price" or "what should I buy my child" should point to.
+    from guides.models import Guide
+
+    guides = list(Guide.objects.filter(is_published=True).order_by("position", "pk").values_list("slug", "title", "one_line_answer"))
+    if guides:
+        lines += ["## Guides", ""]
+        lines += [f"- [{title}]({request.build_absolute_uri(reverse('web:guide', args=[slug]))}): {answer}"
+                  for slug, title, answer in guides]
+        lines += [f"- [{text(request, 'guides.checker.title')}]({request.build_absolute_uri(reverse('web:fair_price'))}): "
+                  f"{text(request, 'guides.checker.intro')}", ""]
     return HttpResponse("\n".join(lines), content_type="text/markdown; charset=utf-8")
 
 

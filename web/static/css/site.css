@@ -374,6 +374,10 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .hero__icon { display: inline-block; vertical-align: text-bottom; width: 1em; height: 1em; margin-right: 0.4em; color: var(--color-brand-text); }   /* inline, so the line trims to its text */
 .hero__retailers { color: var(--color-ink-muted); font-weight: var(--weight-medium); }
 .hero__sep { color: var(--color-line-strong); }
+/* Phones have no room for Guides in the header: the home page carries the link under the search box instead. */
+.hero__guides { margin-top: var(--space-2); font-size: var(--text-sm); }
+.hero__guides a { color: var(--color-brand-text); }
+@media (min-width: 48rem) { .hero__guides { display: none; } }
 .masthead--home .wordmark__img { height: var(--masthead-logo-home); }
 .masthead--home .masthead__inner { padding-bottom: var(--space-2); }
 @media (min-width: 48rem) {
@@ -1772,11 +1776,12 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .guide-card__offer .card__price { grid-area: auto; }   /* the product card's own place for it does not apply here */
 .guide-card__label, .guide-card__checked { font-size: var(--text-sm); color: var(--color-ink-subtle); }
 .guide-card__stock { font-size: var(--text-sm); color: var(--color-ink-muted); }
-.guide-card__button { margin-top: var(--space-2); }
+.guide-card__buttons { margin-top: var(--space-2); display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .guide-source { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-subtle); }
 
 .guide-foot { margin-top: var(--rhythm-section); padding-top: var(--space-5); border-top: var(--border-width) solid var(--color-line); display: grid; gap: var(--space-5); }
 .guide-foot .small-print { margin-top: 0; }
+.guide-foot__again { font-weight: var(--weight-strong); }
 .guide-foot__title, .guide-feedback__title { font-size: var(--text-lg); }
 .guide-sources__list { margin-top: var(--space-2); padding-left: var(--space-5); display: grid; gap: var(--space-1); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .guide-share__buttons, .guide-feedback__buttons, .verdict__buttons, .checklist__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }

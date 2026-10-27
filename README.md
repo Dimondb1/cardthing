@@ -3522,6 +3522,10 @@ line starts a paragraph, lines starting `- ` or `1. ` are lists, and
 a shop or a marketplace (a shop's price goes in as a price card, so every
 price is live and dated and shop links stay marked as sponsored).
 
+The Admin hints ask for the reason behind every piece of advice and every
+green or red flag, and for a search title under 50 characters, since
+" | RipRaptor" is added after it and Google cuts long titles.
+
 **Checks** (`guides/text.py`). Any save is refused with an em dash, an
 exclamation mark, HTML, a stock phrase the site never uses, "guaranteed",
 "the best price" or "every shop in the UK", or ETB before Elite Trainer Box
@@ -3536,7 +3540,9 @@ counts it, and the dashboard marks it.
 delivered price now at a UK shop we track (in stock first, eBay, Amazon and
 doubtful prices left out), how many have it in stock, when the prices were
 checked, the stored Price check chip (never High price beside a shop that
-pays a commission, as everywhere) and Compare prices to the product page.
+pays a commission, as everywhere), Compare prices to the product page, and
+Watch the price to its price alert (its back in stock alert when sold out),
+the strongest reason for a parent reading in November to come back.
 All the cards on a guide cost two queries, however many.
 
 **The Fair Price Checker** (`guides/checker.py`) uses the product pages' own
@@ -3544,9 +3550,11 @@ Price check (`catalogue/fair_price.py`) on the price someone was offered, so
 the two never disagree. It shows the cheapest delivered price today at a UK
 shop we track and how many have it in stock, the usual price with where it
 comes from (our record's average, Cardmarket's European price or the RRP),
-and one next step: buy, compare, shop around and watch the price, or, at
-twice the usual price or more (`SCALPER_TIMES`), "Scalper price" with Rip
-off Rex and walk away. Sold out at every UK shop we track points to Watch the
+and one next step with its reason: buy, paying by card or PayPal so the
+money can be claimed back; compare, because stock and delivery times differ;
+shop around; or, at twice the usual price or more (`SCALPER_TIMES`), "Scalper
+price" with Rip off Rex, what a scalper is, and do not pay it. Every result
+offers Watch the price. Sold out at every UK shop we track points to Watch the
 price and Drops, never to a marketplace. Without script it is a GET form:
 words list products to choose from, then the price is checked; with script
 (`checker.js`) the products are offered as you type. Each check is counted by
@@ -3554,7 +3562,14 @@ product and verdict (Admin, Fair Price Checker uses), never the price or
 anything about who checked; a robot's or the browser's prefetch is not
 counted, and the speculation rules never render it ahead of a tap.
 
-**Doors in.** A guide's "linked from" puts its link words under the price on
+**Coming back.** Every guide ends with why to check again ("Shop prices change
+often") before its sources, and its price cards and the checker offer Watch
+the price on every result.
+
+**Doors in.** On phones the header has room only for Swipe and Watchlist, so
+the home page carries "New to trading cards? Read our guides." under the
+search box there. llms.txt, the page AI assistants read, lists each published
+guide with its one-line answer, and the checker. A guide's "linked from" puts its link words under the price on
 every product page with a price (the parent's guide) or on sold-out product
 pages (the scams guide), and the scams guide's title in the High price check
 sheet and under the checker's verdict. One guide per place, the first

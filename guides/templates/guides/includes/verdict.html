@@ -27,13 +27,13 @@
     {% elif result.scalper %}<p>{% copy "guides.checker.next.walk_away" %}</p>
       <p class="verdict__buttons"><a class="button" href="{{ url }}#track" data-compare="checker">{% copy "guides.checker.watch" %}</a> <a class="button button--quiet" href="{% url 'web:drops' %}">{% copy "guides.checker.drops" %}</a></p>
     {% elif not result.verdict %}<p>{% copy "guides.checker.next.unknown" %}</p>
-      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.compare" %}</a></p>
+      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.compare" %}</a> <a class="button button--quiet" href="{{ url }}#track" data-compare="checker">{% copy "guides.checker.watch" %}</a></p>
     {% elif result.verdict.key == "high" or result.verdict.key == "above" %}<p>{% copy "guides.checker.next.shop_around" %}</p>
       <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.compare" %}</a> <a class="button button--quiet" href="{{ url }}#track" data-compare="checker">{% copy "guides.checker.watch" %}</a></p>
     {% elif result.verdict.key == "fair" and not result.at_or_under %}<p>{% copy "guides.checker.next.compare" %}</p>
-      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.compare" %}</a></p>
+      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.compare" %}</a> <a class="button button--quiet" href="{{ url }}#track" data-compare="checker">{% copy "guides.checker.watch" %}</a></p>
     {% else %}<p>{% copy "guides.checker.next.buy" %}</p>
-      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.see" %}</a></p>
+      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.see" %}</a> <a class="button button--quiet" href="{{ url }}#track" data-compare="checker">{% copy "guides.checker.watch" %}</a></p>
     {% endif %}
     {% if scams_door and not result.sold_out %}<p class="verdict__guide"><a href="{{ scams_door.url }}">{{ scams_door.title|default:scams_door.line }}</a></p>{% endif %}
   </div>

@@ -18,6 +18,9 @@
     <p class="guide-card__stock">{% copy "guides.card.sold_out" %}</p>
     {% endif %}
     {% if product.guide_checked %}<p class="guide-card__checked">{% copy "guides.card.checked" clock=product.guide_checked|ago %}</p>{% endif %}
-    <a class="button button--small guide-card__button" href="{{ product.get_absolute_url }}" data-compare="guide_card">{% copy "guides.card.button" %}<span class="visually-hidden"> {{ product.name }}</span></a>
+    <p class="guide-card__buttons">
+      <a class="button button--small" href="{{ product.get_absolute_url }}" data-compare="guide_card">{% copy "guides.card.button" %}<span class="visually-hidden"> {{ product.name }}</span></a>
+      <a class="button button--small button--quiet" href="{{ product.get_absolute_url }}{% if product.guide_cheapest is not None %}#track{% else %}#alert{% endif %}" data-compare="guide_card">{% copy "guides.card.watch" %}<span class="visually-hidden"> {{ product.name }}</span></a>
+    </p>
   </div>
 </li>

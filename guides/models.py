@@ -41,8 +41,8 @@ class Guide(models.Model):
     title = models.CharField(max_length=120)
     search_title = models.CharField(
         "title in search results", max_length=70, blank=True,
-        help_text="In the words parents type, for example: Buying Pokémon cards for Christmas: a UK parent's guide. "
-                  "Blank uses the title.")
+        help_text="In the words parents type, under 50 characters: | RipRaptor is added after it and Google cuts "
+                  "long titles. For example: Pokémon cards for Christmas: a parent's guide. Blank uses the title.")
     one_line_answer = models.CharField(
         max_length=200, help_text="Under the title, on the Guides page and in search results.")
     audience = models.CharField(max_length=10, choices=Audience.choices, default=Audience.EVERYONE)
@@ -91,18 +91,21 @@ class Section(models.Model):
     position = models.PositiveSmallIntegerField(default=0)
     question = models.CharField(max_length=160, help_text="In the reader's words, for example: Is this shop real?")
     short_answer = models.TextField(
-        help_text="Two or three sentences, ending with something to do. A parent who reads only these should "
-                  "still get it right.")
+        help_text="Two or three sentences: what to do, why, and something to do next. A parent who reads only "
+                  "these should still get it right, and know the reason.")
     body = models.TextField(
         blank=True,
-        help_text="The detail. A blank line starts a new paragraph. Lines starting with - are a list, lines "
+        help_text="The detail, saying why each piece of advice holds. A blank line starts a new paragraph. Lines starting with - are a list, lines "
                   "starting with 1. a numbered list. A link: [Citizens Advice](https://www.citizensadvice.org.uk/). "
                   "No links to shops: add the product as a price card instead.")
     states_facts = models.BooleanField(
         default=True,
         help_text="Money, legal or product facts. Needs at least one source before the guide can be published.")
-    green_flags = models.TextField(blank=True, help_text="Good signs, one per line.")
-    red_flags = models.TextField(blank=True, help_text="Warning signs, one per line.")
+    green_flags = models.TextField(blank=True, help_text="Good signs, one per line, each with its reason: "
+                                   "Card or PayPal at checkout, so you can claim your money back.")
+    red_flags = models.TextField(blank=True, help_text="Warning signs, one per line, each with its reason: "
+                                 "Bank transfer only, because card and PayPal protection is quicker and more "
+                                 "certain.")
     products = models.ManyToManyField(
         "catalogue.Product", blank=True, related_name="guide_sections", verbose_name="price cards",
         help_text="Live price cards: the cheapest delivered price today at every UK shop we track.")

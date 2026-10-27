@@ -14,6 +14,7 @@
     <span class="hero__checked"><svg class="hero__icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.6 1.8v3.2h-3.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "home.search.checked" time=last_checked|ago %}</span>
   </p>
   {% endif %}
+  {% if guides_live %}<p class="hero__guides"><a href="{% url 'web:guides' %}">{% copy "home.guides" %}</a></p>{% endif %}
 </section>
 
 {% if games %}

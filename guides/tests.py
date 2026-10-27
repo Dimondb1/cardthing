@@ -294,6 +294,8 @@ class GuidePageTests(PageCase):
         self.assertNotIn("40.00", card)
         self.assertIn("In stock at 2 UK shops we track", card)
         self.assertIn(f'href="{self.etb.get_absolute_url()}"', card)
+        # Watch the price: the price alert, so a parent reading early hears when it drops.
+        self.assertIn(f'href="{self.etb.get_absolute_url()}#track" data-compare="guide_card">Watch the price', card)
         for name in ("Harbour Games", "Quay Cards", "eBay"):
             self.assertNotIn(name, card)
         self.assertNotIn('href="/go/', html)
@@ -302,7 +304,9 @@ class GuidePageTests(PageCase):
         html = self.page()
         foot = html[html.index('class="guide-foot"'):]
         self.assertIn("Citizens Advice: changing your mind</a>, read 27 Oct 2026", foot)
-        self.assertIn("RipRaptor may earn commission from shop links.", foot)
+        self.assertIn("We may earn a commission if you buy through a shop link. The cheapest price is shown first, "
+                      "whoever pays us.", foot)
+        self.assertIn("Shop prices change often, so check again before you buy.", foot)
         self.assertIn("https://wa.me/?text=", foot)
         self.assertIn("Printable checklist", foot)
         self.assertIn("Was this useful?", foot)
@@ -477,9 +481,10 @@ class CheckerTests(PageCase):
         self.assertIn("Scalper price", html)
         self.assertIn("That is 2.4 times the usual price.", html)
         self.assertIn('<span class="fair__rex"></span>', html)
-        self.assertIn("The cheapest delivered price today at a UK shop we track is £53.98, £66.02 less.", html)
+        self.assertIn("A UK shop we track sells it for £53.98 today, delivery included. That is £66.02 less.", html)
         self.assertIn("Usual price: £50.00, the average delivered price at UK shops we track over 20 days.", html)
-        self.assertIn("Walk away.", html)
+        self.assertIn("Scalpers buy up new stock and resell it at prices like this.", html)
+        self.assertIn("Do not pay this. Watch the price and we will email you if a UK shop sells it for less.", html)
         self.assertIn(f'href="{self.etb.get_absolute_url()}#track"', html)
         self.assertNotIn("ebay", html.lower().split("<main")[1].split("</main>")[0])   # never sends anyone to a marketplace
         self.assertEqual(PriceCheck.objects.get().verdict, "scalper")
@@ -489,8 +494,9 @@ class CheckerTests(PageCase):
         url = reverse("web:fair_price") + f"?product={self.etb.slug}"
         html = self.client.get(url + "&price=45").content.decode()
         self.assertIn("Lowest yet", html)
-        self.assertIn("That is at or under £53.98, the cheapest delivered price today at every UK shop we track.", html)
-        self.assertIn("A good price.", html)
+        self.assertIn("That is at or under £53.98, the cheapest price today at any UK shop we track, delivery included.", html)
+        self.assertIn("A good price. Pay by card or PayPal Goods and Services, so you can get your money back", html)
+        self.assertIn(f'href="{self.etb.get_absolute_url()}#track" data-compare="checker">Watch the price', html)
         html = self.client.get(url + "&price=lots").content.decode()
         self.assertIn("Type the price in pounds, for example 49.99.", html)
         self.assertNotIn("You were offered", html)
@@ -562,3 +568,38 @@ class DashboardTests(PageCase):
         response = self.client.get(reverse("web:dashboard") + "?fresh=1")
         self.assertIsNone(response.context["guides"])
         self.assertNotContains(response, 'id="guides"')
+
+
+class FollowUpTests(PageCase):
+    def test_a_sold_out_card_watches_for_the_restock(self):
+        Listing.objects.filter(product=self.etb).update(availability=Listing.Availability.OUT_OF_STOCK)
+        html = self.client.get(self.guide.get_absolute_url()).content.decode()
+        self.assertIn("Sold out at every UK shop we track", html)
+        self.assertIn(f'href="{self.etb.get_absolute_url()}#alert" data-compare="guide_card">Watch the price', html)
+
+    def test_every_checker_result_offers_to_watch_the_price(self):
+        record(self.etb, ["50.00"] * 20, timezone.localdate())
+        url = reverse("web:fair_price") + f"?product={self.etb.slug}&price="
+        for price in ("45", "50", "56", "70", "120"):
+            with self.subTest(price):
+                self.assertIn(">Watch the price<", self.client.get(url + price).content.decode())
+        Listing.objects.filter(product=self.etb).update(availability=Listing.Availability.OUT_OF_STOCK)
+        self.assertIn(">Watch the price<", self.client.get(url + "60").content.decode())   # sold out
+
+    def test_phones_get_a_guides_link_on_the_home_page(self):
+        html = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('<p class="hero__guides"><a href="/guides/">New to trading cards? Read our guides.</a></p>', html)
+        Guide.objects.all().delete()
+        self.assertNotIn("hero__guides", self.client.get(reverse("web:home")).content.decode())
+
+    def test_ai_assistants_are_told_about_the_guides(self):
+        text_ = self.client.get("/llms.txt").content.decode()
+        self.assertIn("## Guides", text_)
+        self.assertIn("- [A parent's guide to buying trading cards](http://testserver/guides/parents/): What to buy", text_)
+        self.assertIn("- [Fair Price Checker](http://testserver/guides/fair-price/): Been offered a price?", text_)
+        Guide.objects.update(is_published=False)
+        self.assertNotIn("## Guides", self.client.get("/llms.txt").content.decode())
+
+    def test_admin_hints_ask_for_the_reason(self):
+        self.assertIn("why", Section._meta.get_field("short_answer").help_text)
+        self.assertIn("under 50 characters", Guide._meta.get_field("search_title").help_text)

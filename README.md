@@ -3581,7 +3581,8 @@ never stored), and files an optional note in Message us as "Guide feedback",
 at most 20 an hour. No name or email is asked for. "Spotted a mistake?" links
 to Message us. Views of the Guides pages are counted (kind Guides), and taps
 from a price card or the checker to a product page are Compare taps
-(`guide_card`, `checker`).
+(`guide_card`, `checker`). Whether readers come back on a later day is
+counted with the `rr_guide` cookie (see Insights).
 
 **Search and sharing.** Each guide has its own title for search results, an
 Article and BreadcrumbList block, a canonical address and a 1200 by 630 share
@@ -3591,8 +3592,8 @@ not (results carry noindex). Share links: WhatsApp, Copy link (with script)
 and the checklist.
 
 **Dashboard.** Once a guide is published, a Guides part shows the last 7
-days' guide visits, taps to a product page and prices checked with their
-verdicts, Yes and No for the last 30 days, and each guide's visits, votes and
+days' guide visits, taps to a product page, visits by earlier guide readers
+and prices checked with their verdicts, Yes and No for the last 30 days, and each guide's visits, votes and
 whether its review is due.
 
 ## Discord
@@ -4537,6 +4538,15 @@ time a browser views a page. It holds only "1", for a year, so a visit on
 a later day is marked as a return; the daily token cannot do this because
 it changes every day. Nothing identifies the person, and the Terms page
 says so. The page shows the returning share and a Returning column by day.
+
+A second cookie, `rr_guide`, is set when a browser reads a guide or its
+checklist (owner's yes, 27 Oct 2026). It also holds only "1", for 180 days,
+and is never set for a robot or a page fetched ahead of a tap (a guide
+rendered ahead is marked once it is shown, through the view note). Each
+day's visitor row records whether the browser carried it
+(`DailyVisitor.guide_reader`), so a visit on a later day by someone who read
+a guide is counted: the dashboard's Guides part shows them as "Visits by
+earlier guide readers". The Terms page names it beside `rr_back`.
 
 The page opens with "Areas to improve": a ranked list worked out from the
 figures, such as shops whose imports are failing, the share of clicks

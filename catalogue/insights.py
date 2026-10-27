@@ -139,6 +139,18 @@ def source_group(host):
 # Set once a browser has viewed a page, holding only "1": the next day's visit then counts as a return.
 RETURN_COOKIE = "rr_back"
 RETURN_COOKIE_DAYS = 365
+# Set when a browser reads a guide (guides/), holding only "1": a visit on a later day then counts as a guide
+# reader coming back (DailyVisitor.guide_reader), so the owner can see whether the guides bring parents back.
+GUIDE_COOKIE = "rr_guide"
+GUIDE_COOKIE_DAYS = 180
+GUIDE_READ_PAGES = ("guide", "guide_checklist")
+
+
+def mark_guide_reader(request, response):
+    """Set the guide reader cookie on ``response`` once, for a person reading a guide."""
+    if GUIDE_COOKIE not in request.COOKIES and not is_bot(request):
+        response.set_cookie(GUIDE_COOKIE, "1", max_age=GUIDE_COOKIE_DAYS * 24 * 3600, httponly=True,
+                            samesite="Lax", secure=request.is_secure())
 
 
 def landing_of(kind, key=""):
@@ -162,6 +174,7 @@ def record_visitor(request, kind="", key=""):
                 date=day, token=token, country=geo.country_of(client_ip(request)),
                 device=device_of(request), source=source_of(request),
                 returning=request.COOKIES.get(RETURN_COOKIE) == "1", views=1,
+                guide_reader=request.COOKIES.get(GUIDE_COOKIE) == "1",
                 first_seen=timezone.now(), landing=landing_of(kind, key) if kind else "",
             )
 

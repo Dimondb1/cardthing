@@ -2561,8 +2561,8 @@ ENTRIES = [
         "by us, and you can clear them from the home page. Your browser uses them to put your games "
         "first on the home page, without telling us. Our own count of clicks to retailers "
         "does not record who clicked. One small cookie of ours remembers only that your browser "
-        "has visited before, so we can count returning visitors. It holds nothing "
-        "about you.\n\n"
+        "has visited before, so we can count returning visitors, and another only that it has read one of our "
+        "guides, so we can count readers who come back. Each holds nothing about you.\n\n"
         "If you ask to be emailed when a product is back in stock, or with Track price when it is "
         "in stock at or under a price you choose, we keep your email address (and that price and "
         "how long to look) for that alone. Nothing is sent until you confirm by the link we email "
@@ -3385,10 +3385,13 @@ ENTRIES = [
           "Shown before Cardmarket's prices have been read once."),
     Entry("dashboard.guides.title", H, "Dashboard guides heading", "Guides", "Heading of the guides part."),
     Entry("dashboard.guides.intro", T, "Dashboard guides intro",
-          "The last 7 days: visits to the guides, taps from them to a product page, and Fair Price Checker uses. "
-          "Yes and No are the last 30 days.", "Under the guides heading."),
+          "The last 7 days: visits to the guides, taps from them to a product page, visits by people who read a "
+          "guide on an earlier day, and Fair Price Checker uses. Yes and No are the last 30 days.",
+          "Under the guides heading."),
     Entry("dashboard.guides.views", T, "Dashboard guide visits", "Guide visits", "Tile in the guides part."),
     Entry("dashboard.guides.taps", T, "Dashboard guide taps", "Taps to a product page", "Tile in the guides part."),
+    Entry("dashboard.guides.back", T, "Dashboard guide readers back", "Visits by earlier guide readers",
+          "Tile in the guides part: visits on a later day by browsers that had read a guide. Counted from 27 Oct 2026."),
     Entry("dashboard.guides.checks", T, "Dashboard checker uses", "Prices checked", "Tile in the guides part."),
     Entry("dashboard.guides.useful", T, "Dashboard was this useful", "Useful, yes / no", "Tile in the guides part."),
     Entry("dashboard.guides.mix", T, "Dashboard checker verdicts", "Verdicts:", "Before the checker's verdict counts."),

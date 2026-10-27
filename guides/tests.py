@@ -603,3 +603,54 @@ class FollowUpTests(PageCase):
     def test_admin_hints_ask_for_the_reason(self):
         self.assertIn("why", Section._meta.get_field("short_answer").help_text)
         self.assertIn("under 50 characters", Guide._meta.get_field("search_title").help_text)
+
+
+class ReturningReaderTests(PageCase):
+    def test_reading_a_guide_sets_a_cookie_holding_only_one(self):
+        from catalogue.insights import GUIDE_COOKIE
+
+        response = self.client.get(self.guide.get_absolute_url(), HTTP_USER_AGENT=BROWSER)
+        cookie = response.cookies[GUIDE_COOKIE]
+        self.assertEqual(cookie.value, "1")
+        self.assertEqual(cookie["max-age"], 180 * 24 * 3600)
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["samesite"], "Lax")
+        # Set once: a browser that has it is not sent it again.
+        self.assertNotIn(GUIDE_COOKIE, self.client.get(self.guide.get_absolute_url(), HTTP_USER_AGENT=BROWSER).cookies)
+        self.assertIn(GUIDE_COOKIE, self.client.cookies)
+
+    def test_only_a_guide_or_its_checklist_and_only_for_a_person(self):
+        from django.test import Client
+
+        from catalogue.insights import GUIDE_COOKIE
+
+        for url in (reverse("web:guides"), reverse("web:fair_price"), self.etb.get_absolute_url(), reverse("web:home")):
+            with self.subTest(url):
+                self.assertNotIn(GUIDE_COOKIE, Client().get(url, HTTP_USER_AGENT=BROWSER).cookies)
+        checklist = reverse("web:guide_checklist", args=["parents"])
+        self.assertIn(GUIDE_COOKIE, Client().get(checklist, HTTP_USER_AGENT=BROWSER).cookies)
+        self.assertNotIn(GUIDE_COOKIE, Client().get(self.guide.get_absolute_url(), HTTP_USER_AGENT="Googlebot/2.1").cookies)
+        ahead = Client().get(self.guide.get_absolute_url(), HTTP_USER_AGENT=BROWSER, HTTP_SEC_PURPOSE="prefetch;prerender")
+        self.assertNotIn(GUIDE_COOKIE, ahead.cookies)
+        # A guide rendered ahead of a tap marks its reader once it is shown.
+        shown = Client().get(reverse("web:note_api") + "?what=view&path=/guides/parents/", HTTP_USER_AGENT=BROWSER)
+        self.assertEqual(shown.cookies[GUIDE_COOKIE].value, "1")
+        other = Client().get(reverse("web:note_api") + "?what=view&path=/deals/", HTTP_USER_AGENT=BROWSER)
+        self.assertNotIn(GUIDE_COOKIE, other.cookies)
+
+    def test_a_reader_coming_back_on_a_later_day_is_counted(self):
+        from catalogue.models import DailyVisitor
+
+        self.client.get(self.guide.get_absolute_url(), HTTP_USER_AGENT=BROWSER)
+        self.assertFalse(DailyVisitor.objects.get().guide_reader)   # the day they read it is not a return
+        DailyVisitor.objects.all().delete()                         # a later day: a new visitor row
+        self.client.get(self.etb.get_absolute_url(), HTTP_USER_AGENT=BROWSER)
+        self.assertTrue(DailyVisitor.objects.get().guide_reader)
+        self.as_staff()
+        response = self.client.get(reverse("web:dashboard") + "?fresh=1")
+        self.assertEqual(response.context["guides"]["back"], 1)
+        self.assertContains(response, "Visits by earlier guide readers")
+
+    def test_the_terms_page_says_so(self):
+        self.assertContains(self.client.get(reverse("web:terms")),
+                            "another only that it has read one of our guides, so we can count readers who come back")

@@ -1703,6 +1703,7 @@ class DailyVisitor(models.Model):
     device = models.CharField(max_length=8, blank=True)    # mobile, tablet or desktop
     source = models.CharField(max_length=80, blank=True)   # the site that sent them, domain only; empty means typed or bookmarked
     returning = models.BooleanField(default=False)         # their browser carried the "been here before" cookie
+    guide_reader = models.BooleanField(default=False)      # and the "read a guide before" one (guides/), from 27 Oct 2026
     views = models.PositiveIntegerField(default=0)         # pages they opened that day, so a scraper can be capped
     # When their first counted page of the day was opened (empty on rows from before 18 Oct 2026), so part of
     # a day can be compared with the same hours of another day, and the kind of that page with its slug, for

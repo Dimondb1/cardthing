@@ -2094,6 +2094,7 @@ def note_api(request):
     (what=compare, where it was and on which page), so the dashboard can set them beside Buy now and the
     shops' rows. Nothing about the visitor is kept."""
     event = request.GET.get("what", "")
+    match = None
     if insights.is_bot(request):
         pass
     elif event in insights.INSTALL_EVENTS:
@@ -2117,6 +2118,9 @@ def note_api(request):
             insights.record_view(request, KINDS[match.url_name], view_key(match))
     response = HttpResponse(status=204)
     response["Cache-Control"] = "no-store"
+    # A guide rendered ahead of a tap set no cookie when fetched: its reader is marked once it is shown.
+    if match is not None and match.namespace == "web" and match.url_name in insights.GUIDE_READ_PAGES:
+        insights.mark_guide_reader(request, response)
     return response
 
 

@@ -7,7 +7,7 @@ day counts as a returning visitor. It carries no identifier.
 from django.http import HttpResponse
 
 from catalogue.clicks import prefetching
-from catalogue.insights import RETURN_COOKIE, RETURN_COOKIE_DAYS, is_bot, record_view
+from catalogue.insights import GUIDE_READ_PAGES, RETURN_COOKIE, RETURN_COOKIE_DAYS, is_bot, mark_guide_reader, record_view
 from catalogue.models import DailyPageView
 
 KINDS = {
@@ -57,6 +57,8 @@ class PageViewMiddleware:
                     RETURN_COOKIE, "1", max_age=RETURN_COOKIE_DAYS * 24 * 3600,
                     httponly=True, samesite="Lax", secure=request.is_secure(),
                 )
+            if request.method == "GET" and match.url_name in GUIDE_READ_PAGES:
+                mark_guide_reader(request, response)
         return response
 
 

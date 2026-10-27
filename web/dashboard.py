@@ -553,9 +553,10 @@ def claude_section(now, store):
 
 def guides_section(now, store):
     """How the guides are doing (marketing's measures): visits to each guide in the last week, taps from a guide
-    or the Fair Price Checker to a product page, checker uses by verdict, and Yes and No in the last 30 days.
-    None before a guide is published, read from the cached flag (guides.state) so it costs nothing until then.
-    Five queries."""
+    or the Fair Price Checker to a product page, checker uses by verdict, visits on a later day by browsers that
+    read a guide before (the guide reader cookie, catalogue.insights.GUIDE_COOKIE), and Yes and No in the last 30
+    days. None before a guide is published, read from the cached flag (guides.state) so it costs nothing until
+    then. Six queries."""
     from guides import state
     from guides.models import Guide, PriceCheck, Vote
 
@@ -570,6 +571,7 @@ def guides_section(now, store):
                  .values_list("key").annotate(n=Sum("hits")))
     taps = (DailyPageView.objects.filter(kind=DailyPageView.Kind.TAPS, date__gte=first)
             .filter(Q(key__startswith="guide_card:") | Q(key__startswith="checker:")).aggregate(n=Sum("hits"))["n"] or 0)
+    back = DailyVisitor.objects.filter(date__gte=first, guide_reader=True).count()
     verdicts = dict(PriceCheck.objects.filter(date__gte=first).order_by().values_list("verdict").annotate(n=Sum("hits")))
     votes = {}
     for guide_id, useful, n in (Vote.objects.filter(date__gte=month).order_by().values_list("guide", "useful")
@@ -583,7 +585,7 @@ def guides_section(now, store):
     mix = [{"key": key, "label": say(store, f"dashboard.guides.verdict.{key}"), "count": verdicts[key]}
            for key in order if verdicts.get(key)]
     return {
-        "views": sum(row["views"] for row in rows), "taps": taps, "checks": sum(verdicts.values()), "mix": mix,
+        "views": sum(row["views"] for row in rows), "taps": taps, "back": back, "checks": sum(verdicts.values()), "mix": mix,
         "yes": sum(row["yes"] for row in rows), "no": sum(row["no"] for row in rows), "rows": rows,
         "due": sum(1 for row in rows if row["due"]),
         "admin": reverse("admin:guides_guide_changelist"),

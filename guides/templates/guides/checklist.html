@@ -1,0 +1,15 @@
+{% extends "web/base.html" %}
+{% load sitecopy static %}
+{% block page_class %}page--checklist{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol><li><a href="{% url 'web:guides' %}">{% copy "guides.title" %}</a></li><li><a href="{{ guide.get_absolute_url }}">{{ guide.title }}</a></li></ol>
+</nav>
+<div class="checklist">
+  <h1 class="page-title">{{ guide.checklist_title|default:guide.title }}</h1>
+  <ul class="checklist__list">{% for item in items %}<li class="checklist__item"><span class="checklist__box" aria-hidden="true"></span><span>{{ item }}</span></li>{% endfor %}</ul>
+  <p class="checklist__from">{{ site_name }}: {{ request.scheme }}://{{ request.get_host }}{{ guide.get_absolute_url }}{% if guide.last_reviewed %}. {% copy "guides.checked" day=guide.last_reviewed|date:"j F Y" %}{% endif %}</p>
+  <p class="checklist__actions"><button class="button" type="button" data-print hidden>{% copy "guides.checklist.print" %}</button> <a class="button button--quiet" href="{{ guide.get_absolute_url }}">{% copy "guides.checklist.back" %}</a></p>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/checker.js' %}" defer></script>{% endblock %}

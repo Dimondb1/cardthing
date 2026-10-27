@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "catalogue",
     "web",
     "inbox",
+    "guides",
 ]
 
 MIDDLEWARE = [

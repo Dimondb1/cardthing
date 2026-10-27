@@ -226,6 +226,16 @@
   --fair-rex: 1.75rem;              /* Rip off Rex (img/rex-small.svg) beside "High price": on the product page's chip, */
   --fair-rex-small: 1.25rem;        /* on a product card's, */
   --fair-rex-sheet: 3rem;           /* and the full drawing (img/rex.svg) on the Price check sheet, 48px and over as drawn */
+  --flag-mark: 1.25rem;             /* the tick and cross before a guide's good and warning signs */
+  --checklist-box: 1.25rem;         /* the empty box before each item of a printable checklist */
+  --checklist-box-line: 2px;
+  --focus-ring: 2px;                /* the outline round a focused box */
+  --focus-gap: 1px;
+  --checklist-box-radius: 3px;      /* square enough to read as a box to tick, not a radio button */
+  --checker-price-width: 12rem;     /* the Fair Price Checker's price box */
+  --checker-pound: 1ch;             /* room for the pound sign inside it */
+  --checker-thumb: 4.5rem;          /* the product being checked */
+  --checker-choice-thumb: 3.5rem;   /* each product offered to choose from */
   --fair-bar-gap: 2px;
   --fair-dim: 0.28;                 /* a bar that is not lit */
   --fair-word: 4.75em;              /* the verdict wraps onto two lines beside the icon */

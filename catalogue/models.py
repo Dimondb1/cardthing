@@ -1653,6 +1653,7 @@ class DailyPageView(models.Model):
         INSTALL = "install", "Home screen"     # keyed by event: shown, added, dismissed, opened
         ALERTS = "alerts", "Stock alerts"     # keyed by event: asked, confirmed, sent, stopped
         TAPS = "taps", "Compare taps"         # keyed "where:page": a Compare prices link pressed (catalogue/clicks.py)
+        GUIDE = "guide", "Guides"             # keyed by guide address; "" the Guides page (guides/views.py)
         OTHER = "other", "Other"
 
     date = models.DateField(db_index=True)

@@ -13,4 +13,5 @@
   {% if fair.days %}<p class="fair-sheet__basis">{% copy "product.fair.basis" since=fair.since|short_date %}</p>{% endif %}
   {% if fair.market %}<p class="fair-sheet__basis">{% copy "product.fair.market_basis" %}</p>{% endif %}
   {% if fair.rrp %}<p class="fair-sheet__basis">{% copy "product.fair.rrp_basis" %}</p>{% endif %}
+  {% if fair.key == "high" and scams_door %}<p class="fair-sheet__guide"><a href="{{ scams_door.url }}">{{ scams_door.title|default:scams_door.line }}</a></p>{% endif %}
 </dialog>

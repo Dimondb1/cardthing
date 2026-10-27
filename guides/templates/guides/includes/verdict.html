@@ -1,0 +1,42 @@
+{% load sitecopy ripraptor %}{# The checker's verdict (guides/checker.Check): the Price check's own chip and words, then the facts it rests on and one next step. Rex for a high or scalper price, as everywhere. #}
+<section class="verdict" aria-labelledby="verdict-title" id="verdict">
+  <h2 class="visually-hidden" id="verdict-title">{% copy "guides.checker.title" %}</h2>
+  <p class="verdict__offered">{% copy "guides.checker.offered" price=result.offered|gbp %}</p>
+  {% if result.verdict %}
+  {% with key=result.verdict.key %}
+  <p class="verdict__chip"><span class="fair fair--{{ key }}"><span class="fair__bars" aria-hidden="true">{% for lit in result.verdict.signal %}<span class="fair__bar{% if lit %} is-on{% endif %}"></span>{% endfor %}</span><span class="fair__icon" aria-hidden="true">{% if key == "high" %}<span class="fair__rex"></span>{% else %}{% include "web/includes/fair/"|add:key|add:".svg" %}{% endif %}</span><span class="fair__word">{% if result.scalper %}{% copy "guides.checker.scalper" %}{% elif key == "lowest" %}{% copy "product.fair.verdict_lowest" %}{% elif key == "good" %}{% copy "product.fair.verdict_good" %}{% elif key == "fair" %}{% copy "product.fair.verdict_fair" %}{% elif key == "above" %}{% copy "product.fair.verdict_above" %}{% else %}{% copy "product.fair.verdict_high" %}{% endif %}</span></span></p>
+  {% endwith %}
+  {% if result.scalper %}<p class="verdict__times">{% copy "guides.checker.times" times=result.times %}</p>{% endif %}
+  {% else %}
+  <p class="verdict__unknown">{% copy "guides.checker.unknown" %}</p>
+  {% endif %}
+  <ul class="verdict__facts">
+    {% if result.cheapest_preorder %}<li>{% copy "guides.checker.preorder" price=result.cheapest|gbp %}</li>
+    {% elif result.at_or_under %}<li>{% copy "guides.checker.under" price=result.cheapest|gbp %}</li>
+    {% elif result.more %}<li>{% copy "guides.checker.more" price=result.cheapest|gbp more=result.more|gbp %}</li>{% endif %}
+    {% if result.sold_out %}<li>{% copy "guides.checker.sold_out" %}</li>
+    {% elif result.in_stock %}<li>{% if result.in_stock == 1 %}{% copy "guides.checker.stock.one" count=1 %}{% else %}{% copy "guides.checker.stock.other" count=result.in_stock %}{% endif %}</li>{% endif %}
+    {% if result.usual_from == "record" %}<li>{% copy "guides.checker.usual.record" price=result.usual|gbp days=result.verdict.days %}</li>
+    {% elif result.usual_from == "market" %}<li>{% copy "guides.checker.usual.market" price=result.usual|gbp %}</li>
+    {% elif result.usual_from == "rrp" %}<li>{% copy "guides.checker.usual.rrp" price=result.usual|gbp %}</li>{% endif %}
+  </ul>
+  {% with url=result.product.get_absolute_url %}
+  <div class="verdict__next">
+    {% if result.sold_out %}<p>{% copy "guides.checker.next.sold_out" %}</p>
+      <p class="verdict__buttons"><a class="button" href="{{ url }}#alert" data-compare="checker">{% copy "guides.checker.watch" %}</a> <a class="button button--quiet" href="{% url 'web:drops' %}">{% copy "guides.checker.drops" %}</a></p>
+    {% elif result.scalper %}<p>{% copy "guides.checker.next.walk_away" %}</p>
+      <p class="verdict__buttons"><a class="button" href="{{ url }}#track" data-compare="checker">{% copy "guides.checker.watch" %}</a> <a class="button button--quiet" href="{% url 'web:drops' %}">{% copy "guides.checker.drops" %}</a></p>
+    {% elif not result.verdict %}<p>{% copy "guides.checker.next.unknown" %}</p>
+      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.compare" %}</a></p>
+    {% elif result.verdict.key == "high" or result.verdict.key == "above" %}<p>{% copy "guides.checker.next.shop_around" %}</p>
+      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.compare" %}</a> <a class="button button--quiet" href="{{ url }}#track" data-compare="checker">{% copy "guides.checker.watch" %}</a></p>
+    {% elif result.verdict.key == "fair" and not result.at_or_under %}<p>{% copy "guides.checker.next.compare" %}</p>
+      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.compare" %}</a></p>
+    {% else %}<p>{% copy "guides.checker.next.buy" %}</p>
+      <p class="verdict__buttons"><a class="button" href="{{ url }}" data-compare="checker">{% copy "guides.checker.see" %}</a></p>
+    {% endif %}
+    {% if scams_door and not result.sold_out %}<p class="verdict__guide"><a href="{{ scams_door.url }}">{{ scams_door.title|default:scams_door.line }}</a></p>{% endif %}
+  </div>
+  {% endwith %}
+  {% if result.checked %}<p class="verdict__checked">{% copy "guides.checker.checked" clock=result.checked|ago %}</p>{% endif %}
+</section>

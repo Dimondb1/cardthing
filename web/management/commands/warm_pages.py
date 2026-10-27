@@ -26,6 +26,9 @@ class Command(BaseCommand):
         which.add_argument("--missing", action="store_true", help="Build only the lists missing from the cache.")
 
     def handle(self, *args, due=False, missing=False, **options):
+        from guides import state as guides
+
+        guides.remember()   # the Guides link is read from the cache: put back within five minutes of a deploy
         if missing:
             took = warm_pages(only=missing_keys())
         else:

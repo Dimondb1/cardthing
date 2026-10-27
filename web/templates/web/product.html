@@ -84,6 +84,7 @@
       <a class="button button--quiet button--panel button--share" href="#share" aria-controls="share" data-panel-open>{% include "web/includes/share/icon.svg" %}{% copy "product.share.button" %}<span class="visually-hidden"> {{ product.name }}</span></a></div>
     {% if track_on %}{% include "web/includes/track_form.html" %}{% endif %}
     {% include "web/includes/share_box.html" %}
+    {% if guide_door %}<p class="buybox__guide"><a href="{{ guide_door.url }}">{{ guide_door.line }}</a></p>{% endif %}
     {% if amazon_search and cheapest %}
       <div class="buybox__amazon">
         <a class="button button--small buybox__amazon-button" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>

@@ -1432,6 +1432,11 @@ admin.
 | `catalogue` | Games, sets, products, retailers, listings (one retailer's offer for one product), daily lowest prices and click counts. Price queries live in `catalogue/pricing.py`, search in `catalogue/search.py`. |
 | `content`   | Editable site wording (`SiteContent`), its defaults in `content/registry.py`, and the `{% copy %}` template tag. |
 | `web`       | Public views, templates, CSS, the font and the favicon, the owner's dashboard, and the admin pages Things to check, Crawl health, Insights and Your data in Excel. |
+| `inbox`     | Message us, shop enquiries and shop outreach. |
+| `guides`    | Guides and the Fair Price Checker: guides written in Admin, their checks, pages and counts. |
+
+Checks before a commit: `python manage.py test` and
+`python -m pyflakes ripraptor catalogue content web inbox guides`.
 
 ## Editing site wording
 
@@ -3488,6 +3493,92 @@ Price check), never shown beside the UK shops' prices or as a price you
 can buy at. Cardmarket states no licence for the files beyond publishing
 them for everyone, so the site uses them to judge prices and does not
 republish the price list.
+
+## Guides and the Fair Price Checker
+
+Plain advice for parents and new collectors, wired to the site's live prices
+(marketing's build spec, 27 Oct 2026). Nothing is public until a guide is
+published in Admin: before that every Guides page is a 404 for visitors, and
+staff see each page as it will look, a draft saying what still stops it.
+
+**Pages.** `/guides/` lists the published guides and holds the checker.
+`/guides/<address>/` is a guide. `/guides/<address>/checklist/` is its
+printable checklist, laid out for one A4 page (a dozen items fit) with the
+site's header and footer left off when printed. `/guides/fair-price/` is the Fair Price Checker. The addresses
+`fair-price`, `gift-finder`, `scalper-watch` and the game names are kept for
+pages of their own. Once a guide is published, Guides joins the header after
+Drops and the footer; the flag is read from the shared cache
+(`guides/state.py`), refreshed on every guide save and by `warm_pages`, so no
+page gains a query.
+
+**Writing a guide** (Admin, Guides). A guide is a list of questions in the
+reader's words. Each has a short answer, shown first in a quiet panel, then
+optional detail, green and red flags (one per line, each with a tick or a
+cross and its words), live price cards for chosen products, a "What is in the
+box" card (the product type's own ⓘ explainer), the checker, and its sources,
+one per line as `title | address | date read`. Detail is plain text: a blank
+line starts a paragraph, lines starting `- ` or `1. ` are lists, and
+`[words](address)` is a link to a RipRaptor page or an https page that is not
+a shop or a marketplace (a shop's price goes in as a price card, so every
+price is live and dated and shop links stay marked as sponsored).
+
+**Checks** (`guides/text.py`). Any save is refused with an em dash, an
+exclamation mark, HTML, a stock phrase the site never uses, "guaranteed",
+"the best price" or "every shop in the UK", or ETB before Elite Trainer Box
+has been written out. Publishing is refused while a question marked as
+stating facts has no source, while a "linked from" place has no link words,
+or while the next review is missing, not after the last check, or more than
+92 days after it. A published guide whose review date has passed stays up:
+staff see a note on the page, the Guides list filters it, the admin home
+counts it, and the dashboard marks it.
+
+**Live price cards** name no shop and have no buy button: the cheapest
+delivered price now at a UK shop we track (in stock first, eBay, Amazon and
+doubtful prices left out), how many have it in stock, when the prices were
+checked, the stored Price check chip (never High price beside a shop that
+pays a commission, as everywhere) and Compare prices to the product page.
+All the cards on a guide cost two queries, however many.
+
+**The Fair Price Checker** (`guides/checker.py`) uses the product pages' own
+Price check (`catalogue/fair_price.py`) on the price someone was offered, so
+the two never disagree. It shows the cheapest delivered price today at a UK
+shop we track and how many have it in stock, the usual price with where it
+comes from (our record's average, Cardmarket's European price or the RRP),
+and one next step: buy, compare, shop around and watch the price, or, at
+twice the usual price or more (`SCALPER_TIMES`), "Scalper price" with Rip
+off Rex and walk away. Sold out at every UK shop we track points to Watch the
+price and Drops, never to a marketplace. Without script it is a GET form:
+words list products to choose from, then the price is checked; with script
+(`checker.js`) the products are offered as you type. Each check is counted by
+product and verdict (Admin, Fair Price Checker uses), never the price or
+anything about who checked; a robot's or the browser's prefetch is not
+counted, and the speculation rules never render it ahead of a tap.
+
+**Doors in.** A guide's "linked from" puts its link words under the price on
+every product page with a price (the parent's guide) or on sold-out product
+pages (the scams guide), and the scams guide's title in the High price check
+sheet and under the checker's verdict. One guide per place, the first
+published.
+
+**Readers.** "Was this useful?" counts Yes and No by guide and day, once per
+connection a day (a one-way hash of the address in the cache for 24 hours,
+never stored), and files an optional note in Message us as "Guide feedback",
+at most 20 an hour. No name or email is asked for. "Spotted a mistake?" links
+to Message us. Views of the Guides pages are counted (kind Guides), and taps
+from a price card or the checker to a product page are Compare taps
+(`guide_card`, `checker`).
+
+**Search and sharing.** Each guide has its own title for search results, an
+Article and BreadcrumbList block, a canonical address and a 1200 by 630 share
+image (the site's own if none is uploaded). The Guides page, the checker and
+each published guide are in the sitemap; checklists and checker results are
+not (results carry noindex). Share links: WhatsApp, Copy link (with script)
+and the checklist.
+
+**Dashboard.** Once a guide is published, a Guides part shows the last 7
+days' guide visits, taps to a product page and prices checked with their
+verdicts, Yes and No for the last 30 days, and each guide's visits, votes and
+whether its review is due.
 
 ## Discord
 

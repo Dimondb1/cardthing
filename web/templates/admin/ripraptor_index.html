@@ -1,11 +1,12 @@
 {% extends "admin/index.html" %}
-{% load inbox ripraptor %}
+{% load inbox ripraptor guides %}
 {% block content %}
 {% inbox_unread as unread %}
 {% shops_waiting as shops %}
 {% outreach_due as follow_ups %}
 {% worker_stopped as stopped %}
 {% refer_waiting as refer %}
+{% guides_due as due_guides %}
 <div class="module" style="margin-bottom: 20px;">
   <table>
     <caption><a href="{% url 'web:dashboard' %}" class="section">Dashboard</a></caption>
@@ -18,6 +19,13 @@
     <tr><th scope="row"><a href="{% url 'admin:inbox_conversation_changelist' %}?unread__exact=1">{% if unread %}<strong>{{ unread }} new message{{ unread|pluralize }}</strong>{% else %}No new messages{% endif %}</a></th><td></td></tr>
     <tr><th scope="row"><a href="{% url 'admin:inbox_shopenquiry_changelist' %}?handled=no">{% if shops %}<strong>{{ shops }} shop{{ shops|pluralize }} asking to be listed</strong>{% else %}No shops waiting to be listed{% endif %}</a></th><td></td></tr>
     <tr><th scope="row"><a href="{% url 'admin:inbox_shopcontact_changelist' %}{% if follow_ups %}?follow_up=due{% endif %}">{% if follow_ups %}<strong>{{ follow_ups }} shop{{ follow_ups|pluralize }} to follow up</strong>{% else %}Shop outreach: write to shops with their own figures{% endif %}</a></th><td></td></tr>
+  </table>
+</div>
+<div class="module" style="margin-bottom: 20px;">
+  <table>
+    <caption><a href="{% url 'admin:guides_guide_changelist' %}" class="section">Guides</a></caption>
+    <tr><th scope="row"><a href="{% url 'admin:guides_guide_changelist' %}{% if due_guides %}?review=due{% endif %}">{% if due_guides %}<strong>{{ due_guides }} guide{{ due_guides|pluralize }} due for review</strong>{% else %}Guides: advice pages with live prices, and the Fair Price Checker{% endif %}</a></th><td></td></tr>
+    <tr><th scope="row"><a href="{% url 'admin:guides_pricecheck_changelist' %}">What people check on the Fair Price Checker</a></th><td></td></tr>
   </table>
 </div>
 <div class="module" style="margin-bottom: 20px;">

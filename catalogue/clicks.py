@@ -49,11 +49,15 @@ REDIRECTORS = {
 
 # The pages a click can come from: the name of the page's address (web/urls.py), and the word kept for it.
 PAGES = {"home": "home", "product": "product", "game": "game", "set": "set", "search": "search", "deals": "deals",
-         "new": "new", "drops": "drops", "watchlist": "watchlist", "deck": "swipe", "games": "games"}
+         "new": "new", "drops": "drops", "watchlist": "watchlist", "deck": "swipe", "games": "games",
+         "guides": "guides", "guide": "guide", "fair_price": "checker"}
 
 
 # The links to a product's prices a Compare tap can name (data-compare, counted by /api/note/?what=compare).
-COMPARE_PLACES = ("buy_box", "card", "featured", "picks", "recent", "trending", "out_now", "instead", "hub_cheapest")
+COMPARE_PLACES = ("buy_box", "card", "featured", "picks", "recent", "trending", "out_now", "instead", "hub_cheapest",
+                  "guide_card", "checker")
+# The Compare taps that are a guide or the Fair Price Checker sending someone to a product page (dashboard Guides).
+GUIDE_PLACES = ("guide_card", "checker")
 
 
 def page_of(request):

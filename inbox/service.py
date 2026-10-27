@@ -129,6 +129,27 @@ def report(listing, reason, note="", now=None):
     return start(body, name=REPORT_NAME, now=now)
 
 
+GUIDE_NAME = "Guide feedback"
+GUIDE_NOTES_PER_HOUR = 20
+GUIDE_NOTE_LENGTH = 600
+
+
+def guide_note(guide, useful, note, now=None):
+    """File what a reader wrote under a guide's "Was this useful?" as a message, for the owner and marketing to
+    read in Admin. The same words for the same guide within the hour add nothing. Raises Refused past
+    GUIDE_NOTES_PER_HOUR. No name or email is asked for."""
+    now = now or timezone.now()
+    note = " ".join(note.split())[:GUIDE_NOTE_LENGTH]
+    first_line = f"{GUIDE_NAME}: {guide.title} ({'useful' if useful else 'not useful'})"
+    hour = now - timedelta(hours=1)
+    body = "\n".join([first_line, f"Guide: {settings.RIPRAPTOR_SITE_URL}{guide.get_absolute_url()}", f"Note: {note}"])
+    if Message.objects.filter(created_at__gte=hour, body=body).exists():
+        return None
+    if Conversation.objects.filter(name=GUIDE_NAME, created_at__gte=hour).count() >= GUIDE_NOTES_PER_HOUR:
+        raise Refused
+    return start(body, name=GUIDE_NAME, now=now)
+
+
 def forget_email(conversation):
     Conversation.objects.filter(pk=conversation.pk).update(email="")
 

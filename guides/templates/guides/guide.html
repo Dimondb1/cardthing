@@ -1,0 +1,84 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor static %}
+{% block page_class %}page--guide{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol><li><a href="{% url 'web:guides' %}">{% copy "guides.title" %}</a></li></ol>
+</nav>
+
+{% if staff_notes %}
+<div class="guide-staff" role="note">
+  <p>{{ staff_notes.0 }}</p>
+  {% if staff_notes|length > 1 %}<ul>{% for note in staff_notes|slice:"1:" %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endif %}
+
+<article class="guide" aria-labelledby="guide-title">
+  <header class="guide-head">
+    <h1 id="guide-title" class="page-title">{{ guide.title }}</h1>
+    <p class="prose--lead guide-head__answer">{{ guide.one_line_answer }}</p>
+    <p class="guide-head__meta">{% copy "guides.minutes" minutes=minutes %}{% if guide.last_reviewed %}<span aria-hidden="true"> · </span><span class="visually-hidden">. </span>{% copy "guides.checked" day=guide.last_reviewed|date:"j F Y" %}{% endif %}</p>
+  </header>
+
+  {% if sections|length > 1 %}
+  <nav class="guide-jump" aria-labelledby="jump-title">
+    <h2 id="jump-title" class="guide-jump__title">{% copy "guides.jump" %}</h2>
+    <ol class="guide-jump__list">{% for section in sections %}<li><a href="#{{ section.anchor }}">{{ section.question }}</a></li>{% endfor %}</ol>
+    {% if guide.checklist_items %}<p class="guide-jump__checklist"><a class="button button--quiet button--small" href="{% url 'web:guide_checklist' guide.slug %}">{% copy "guides.checklist.link" %}</a></p>{% endif %}
+  </nav>
+  {% endif %}
+
+  {% for section in sections %}
+  <section class="guide-section" id="{{ section.anchor }}" aria-labelledby="{{ section.anchor }}-title">
+    <h2 id="{{ section.anchor }}-title" class="guide-section__title">{{ section.question }}</h2>
+    <div class="guide-short">
+      <p class="eyebrow">{% copy "guides.short" %}</p>
+      <div class="guide-short__text">{{ section.short_html }}</div>
+    </div>
+    {% if section.body %}<div class="prose guide-body">{{ section.body_html }}</div>{% endif %}
+    {% if section.green or section.red %}{% include "guides/includes/flags.html" %}{% endif %}
+    {% if section.box %}
+    <div class="guide-box">
+      <h3 class="guide-box__title">{% copy "guides.box" thing=section.box.0 %}</h3>
+      {% for line in section.box.1 %}<p>{{ line }}</p>{% endfor %}
+    </div>
+    {% endif %}
+    {% if section.cards %}
+    <div class="guide-prices">
+      <h3 class="guide-prices__title">{% copy "guides.cards" %}</h3>
+      <ul class="guide-cards">{% for product in section.cards %}{% include "guides/includes/price_card.html" %}{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if section.show_checker %}
+    <div class="checker-panel checker-panel--inline">
+      <h3 class="checker-panel__title">{% copy "guides.checker.title" %}</h3>
+      <p class="checker-panel__intro">{% copy "guides.checker.intro" %}</p>
+      {% include "guides/includes/checker_form.html" with prefix=section.anchor %}
+    </div>
+    {% endif %}
+    {% if section.source_list %}<p class="guide-source">{% copy "guides.source_note" %}: {% for source in section.source_list %}<a href="{{ source.url }}" rel="noopener">{{ source.title }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+  </section>
+  {% endfor %}
+
+  <footer class="guide-foot">
+    {% if sources %}
+    <section class="guide-sources" aria-labelledby="sources-title">
+      <h2 id="sources-title" class="guide-foot__title">{% copy "guides.sources" %}</h2>
+      <ol class="guide-sources__list">{% for source in sources %}<li><a href="{{ source.url }}" rel="noopener">{{ source.title }}</a>, {% copy "guides.source_read" day=source.read|date:"j M Y" %}</li>{% endfor %}</ol>
+    </section>
+    {% endif %}
+    <p class="small-print">{% copy "guides.commission" %}</p>
+    <section class="guide-share" aria-labelledby="share-title" data-guide-share data-share-url="{{ share_url }}" data-share-title="{{ guide.title }}">
+      <h2 id="share-title" class="guide-foot__title">{% copy "guides.share" %}</h2>
+      <p class="guide-share__buttons">
+        <a class="button button--quiet button--small" href="https://wa.me/?text={{ guide.title|urlencode }}%20{{ share_url|urlencode }}" target="_blank" rel="noopener">{% copy "guides.share.whatsapp" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+        <button class="button button--quiet button--small" type="button" data-copy-link hidden>{% copy "guides.share.copy" %}</button>
+        {% if guide.checklist_items %}<a class="button button--quiet button--small" href="{% url 'web:guide_checklist' guide.slug %}">{% copy "guides.checklist.link" %}</a>{% endif %}
+      </p>
+      <p class="guide-share__status" role="status" data-copy-status data-copied="{% copy 'guides.share.copied' %}"></p>
+    </section>
+    {% include "guides/includes/feedback.html" %}
+  </footer>
+</article>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/checker.js' %}" defer></script>{% endblock %}

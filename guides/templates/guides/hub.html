@@ -1,0 +1,29 @@
+{% extends "web/base.html" %}
+{% load sitecopy static %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "guides.title" %}</h1>
+  <p class="page-intro">{% copy "guides.intro" %}</p>
+</div>
+
+{% if guides %}
+<ul class="guide-list">
+  {% for item in guides %}
+  <li class="guide-tile">
+    <h2 class="guide-tile__title"><a href="{{ item.get_absolute_url }}">{{ item.title }}</a></h2>
+    <p class="guide-tile__answer">{{ item.one_line_answer }}</p>
+    <p class="guide-tile__meta">{% copy "guides.minutes" minutes=item.minutes %}{% if not item.is_published %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>Draft{% endif %}</p>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="guide-empty">{% copy "guides.empty" %}</p>
+{% endif %}
+
+<section class="block checker-panel" aria-labelledby="checker-title">
+  <h2 id="checker-title" class="section-title">{% copy "guides.checker.title" %}</h2>
+  <p class="checker-panel__intro">{% copy "guides.checker.intro" %}</p>
+  {% include "guides/includes/checker_form.html" with prefix="hub" %}
+</section>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/checker.js' %}" defer></script>{% endblock %}

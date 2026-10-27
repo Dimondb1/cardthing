@@ -61,6 +61,8 @@ class SiteContent(models.Model):
             return reverse("web:search")
         if self.section == "about":
             return reverse("web:about")
+        if self.section == "guides":
+            return reverse("web:fair_price") if self.key.startswith("guides.checker") else reverse("web:guides")
         if self.section == "listshop":
             return reverse("web:list_shop")
         if self.section == "product":

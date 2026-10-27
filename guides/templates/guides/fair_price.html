@@ -1,0 +1,52 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor static %}
+{% block page_class %}page--checker{% endblock %}
+{% block content %}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol><li><a href="{% url 'web:guides' %}">{% copy "guides.title" %}</a></li></ol>
+</nav>
+<div class="checker-page">
+  <div class="page-head">
+    <h1 class="page-title">{% copy "guides.checker.title" %}</h1>
+    <p class="page-intro">{% copy "guides.checker.intro" %}</p>
+  </div>
+
+  {% if product %}
+  <div class="checker-product">
+    {% product_image product "row" %}
+    <div class="checker-product__body">
+      <p class="checker-product__name"><a href="{{ product.get_absolute_url }}">{{ product.name }}</a></p>
+      <p class="checker-product__meta">{{ product.game.display_short }} · {{ product.type_name }} · {{ product.language_name|default:"English" }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if result %}{% include "guides/includes/verdict.html" %}{% endif %}
+
+  {% if not product and searched %}
+  <section class="checker-choices" aria-labelledby="choose-title">
+    {% if choices %}
+    <h2 id="choose-title" class="section-title">{% copy "guides.checker.choose" %}</h2>
+    <p class="section-note">{% copy "guides.checker.choose_note" %}</p>
+    <ul class="checker-choices__list">
+      {% for choice in choices %}
+      <li><a class="checker-choice" href="?product={{ choice.slug|urlencode }}{% if price_text %}&amp;price={{ price_text|urlencode }}{% endif %}#verdict">
+        {% product_image choice "row" %}
+        <span class="checker-choice__body"><span class="checker-choice__name">{{ choice.name }}</span>
+        <span class="checker-choice__meta">{{ choice.game.display_short }} · {{ choice.type_name }} · {{ choice.language_name|default:"English" }}</span></span>
+      </a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <h2 id="choose-title" class="visually-hidden">{% copy "guides.checker.choose" %}</h2>
+    <p class="checker__error">{% copy "guides.checker.none" %}</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="checker-panel" aria-label="{% copy 'guides.checker.title' %}">
+    {% include "guides/includes/checker_form.html" with prefix="page" %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/checker.js' %}" defer></script>{% endblock %}

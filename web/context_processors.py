@@ -3,6 +3,7 @@ import re
 from django.conf import settings
 
 from catalogue import referrals
+from guides import state as guides
 
 # Addresses that are private links: a message thread, the links in stock alert and refer a friend emails (and the
 # Your alerts page they and the watchlist page link to), and the owner's dashboard. analytics.js holds the same pattern.
@@ -11,6 +12,8 @@ PRIVATE_LINK = re.compile(r"^/(?:contact/c|alerts/(?:confirm|stop|manage)|refer/
 # and admin. Error pages leave it off in their templates.
 # Product pages too: on a phone the card would sit over the buy box, and the buy box comes first.
 NO_REFER_CARD = re.compile(r"^/(?:refer|r|products|swipe|admin|alerts|drops/remind|contact|list-your-shop|dashboard)/")
+
+GUIDE_PAGES = ("guides", "guide", "guide_checklist", "fair_price")
 
 
 def site(request):
@@ -30,4 +33,7 @@ def site(request):
         "refer_advertised": advertised,
         # The card that now and then invites a visitor to refer a friend (web/static/js/refer-card.js decides when).
         "refer_card": advertised and not private and not NO_REFER_CARD.match(request.path),
+        # The Guides link, once a guide is published: read from the cache alone, like the refer link.
+        "guides_live": guides.current()["live"],
+        "guide_pages": GUIDE_PAGES,
     }

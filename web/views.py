@@ -35,6 +35,8 @@ from content import service as copy
 from inbox import service as inbox
 from inbox.models import Conversation
 
+from guides import state as guide_doors
+
 from . import hubs, listcache
 from .pagecache import cached_page
 from .charts import price_chart
@@ -1313,6 +1315,10 @@ def product_detail(request, slug):
             "preorder_count": preorder_count,
             "last_checked": last_checked,
             "has_listings": bool(listings),
+            # The guides linked from here (guides.state, from the cache): the parent's guide beside a price, the
+            # scams guide on a sold-out page and in a High price check.
+            "guide_door": guide_doors.door("buying" if cheapest else "sold_out") if listings else None,
+            "scams_door": guide_doors.door("sold_out"),
             "chart": chart,
             "fair": fair,
             "fair_word": text(request, f"product.fair.verdict_{fair.key}") if fair else "",
@@ -2101,14 +2107,14 @@ def note_api(request):
         # fetched (web.middleware): the page's script counts it here once it is shown, as the view it is.
         from django.urls import Resolver404, resolve
 
-        from .middleware import KEYS, KINDS
+        from .middleware import KINDS, view_key
 
         try:
             match = resolve(urlsplit(request.GET.get("path", ""))[2])
         except Resolver404:
             match = None
         if match is not None and match.namespace == "web" and match.url_name in KINDS:
-            insights.record_view(request, KINDS[match.url_name], match.kwargs.get(KEYS.get(match.url_name, ""), ""))
+            insights.record_view(request, KINDS[match.url_name], view_key(match))
     response = HttpResponse(status=204)
     response["Cache-Control"] = "no-store"
     return response

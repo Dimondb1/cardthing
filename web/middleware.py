@@ -24,8 +24,19 @@ KINDS = {
     "about": DailyPageView.Kind.OTHER,
     "terms": DailyPageView.Kind.OTHER,
     "list_shop": DailyPageView.Kind.OTHER,
+    "guides": DailyPageView.Kind.GUIDE,
+    "guide": DailyPageView.Kind.GUIDE,
+    "guide_checklist": DailyPageView.Kind.GUIDE,
+    "fair_price": DailyPageView.Kind.GUIDE,
 }
-KEYS = {"product": "slug", "game": "game_slug", "set": "set_slug"}
+KEYS = {"product": "slug", "game": "game_slug", "set": "set_slug", "guide": "slug", "guide_checklist": "slug"}
+# Guides pages are one kind, keyed by guide; the checklist and the checker each under their own key.
+PREFIXES = {"guide_checklist": "checklist/", "fair_price": "fair-price"}
+
+
+def view_key(match):
+    """The key a page view is counted under: the product, game, set or guide it shows."""
+    return PREFIXES.get(match.url_name, "") + match.kwargs.get(KEYS.get(match.url_name, ""), "")
 
 
 class PageViewMiddleware:
@@ -40,8 +51,7 @@ class PageViewMiddleware:
         fetched_ahead = prefetching(request) or bool(request.GET.get("pane"))
         if (response.status_code == 200 and match and match.namespace == "web" and match.url_name in KINDS
                 and not fetched_ahead):
-            key = match.kwargs.get(KEYS.get(match.url_name, ""), "")
-            record_view(request, KINDS[match.url_name], key)
+            record_view(request, KINDS[match.url_name], view_key(match))
             if request.method == "GET" and not is_bot(request) and RETURN_COOKIE not in request.COOKIES:
                 response.set_cookie(
                     RETURN_COOKIE, "1", max_age=RETURN_COOKIE_DAYS * 24 * 3600,

@@ -1,0 +1,20 @@
+{% load sitecopy %}{# Was this useful? (guides/views.feedback): Yes or No, counted by day, and an optional note filed in Message us. No name or email is asked for. Works without JavaScript. #}
+<section class="guide-feedback" id="feedback" tabindex="-1" aria-labelledby="feedback-title">
+  <h2 id="feedback-title" class="guide-feedback__title">{% copy "guides.useful" %}</h2>
+  {% if feedback == "thanks" %}<p class="guide-feedback__done" role="status">{% copy "guides.useful.thanks" %}</p>
+  {% elif feedback == "busy" %}<p class="guide-feedback__done" role="status">{% copy "guides.useful.busy" %}</p>
+  {% elif guide.is_published %}
+  <form class="guide-feedback__form" method="post" action="{% url 'web:guide_feedback' guide.slug %}">
+    {% csrf_token %}
+    <label class="guide-feedback__label" for="feedback-note">{% copy "guides.useful.note" %}</label>
+    <textarea class="contact-form__input contact-form__text" id="feedback-note" name="note" rows="3" maxlength="600" aria-describedby="feedback-hint"></textarea>
+    <p class="contact-form__note" id="feedback-hint">{% copy "guides.useful.hint" %}</p>
+    <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <div class="guide-feedback__buttons">
+      <button class="button button--quiet" type="submit" name="useful" value="yes">{% copy "guides.useful.yes" %}</button>
+      <button class="button button--quiet" type="submit" name="useful" value="no">{% copy "guides.useful.no" %}</button>
+    </div>
+  </form>
+  {% endif %}
+  <p class="guide-feedback__mistake">{% copy "guides.mistake" %} <a href="{% url 'web:contact' %}">{% copy "guides.mistake.link" %}</a></p>
+</section>

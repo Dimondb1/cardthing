@@ -115,9 +115,30 @@ class PageSitemap(Sitemap):
         return reverse(name) + (f"?{query}" if query else "")
 
 
+class GuideSitemap(Sitemap):
+    """The Guides page, the Fair Price Checker and each published guide, once one is published (before that they
+    are not public). A guide's checklist is a printout of it, so it is left out."""
+
+    def items(self):
+        from guides import state
+        from guides.models import Guide
+
+        if not state.current()["live"]:
+            return []   # read from the cache: no query before a guide is published
+        guides = list(Guide.objects.filter(is_published=True).only("slug", "updated_at"))
+        return ["web:guides", "web:fair_price", *guides] if guides else []
+
+    def location(self, item):
+        return reverse(item) if isinstance(item, str) else item.get_absolute_url()
+
+    def lastmod(self, item):
+        return None if isinstance(item, str) else item.updated_at
+
+
 SITEMAPS = {
     "products": ProductSitemap,
     "games": GameSitemap,
     "sets": SetSitemap,
     "pages": PageSitemap,
+    "guides": GuideSitemap,
 }

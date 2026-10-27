@@ -287,6 +287,25 @@
     <p class="dash-card__more"><a href="{{ links.insights_searches }}">{% copy "dashboard.gaps.more" %}</a></p>
   </section>
 
+  {% if guides %}
+  <section class="dash-card" id="guides" aria-labelledby="guides-title">
+    <h2 id="guides-title" class="dash-card__title">{% copy "dashboard.guides.title" %}</h2>
+    <p class="dash-card__intro">{% copy "dashboard.guides.intro" %}</p>
+    <ul class="dash-tiles">
+      <li><span class="dash-tile"><span class="dash-tile__value">{{ guides.views|number }}</span><span class="dash-tile__label">{% copy "dashboard.guides.views" %}</span></span></li>
+      <li><span class="dash-tile"><span class="dash-tile__value">{{ guides.taps|number }}</span><span class="dash-tile__label">{% copy "dashboard.guides.taps" %}</span></span></li>
+      <li><a class="dash-tile" href="{{ guides.checks_admin }}"><span class="dash-tile__value">{{ guides.checks|number }}</span><span class="dash-tile__label">{% copy "dashboard.guides.checks" %}</span></a></li>
+      <li><span class="dash-tile"><span class="dash-tile__value">{{ guides.yes|number }} / {{ guides.no|number }}</span><span class="dash-tile__label">{% copy "dashboard.guides.useful" %}</span></span></li>
+    </ul>
+    {% if guides.mix %}<p class="dash-card__line">{% copy "dashboard.guides.mix" %} {% for item in guides.mix %}{{ item.label }} {{ item.count|number }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+    <ul class="dash-rows">{% for row in guides.rows %}
+      <li class="dash-rows__row"><a class="dash-rows__name" href="{{ row.url }}">{{ row.title }}</a><span class="dash-rows__count">{{ row.views|number }}</span>
+        <span class="dash-rows__detail">{% copy "dashboard.guides.row" yes=row.yes|number no=row.no|number %}{% if row.due %} {% copy "dashboard.guides.due" %}{% endif %}</span></li>
+    {% endfor %}</ul>
+    <p class="dash-card__more"><a href="{{ guides.admin }}">{% copy "dashboard.guides.more" %}</a></p>
+  </section>
+  {% endif %}
+
   <section class="dash-card dash-card--wide" id="claude" aria-labelledby="claude-title">
     <h2 id="claude-title" class="dash-card__title">{% copy "dashboard.claude.title" %}</h2>
     <p class="dash-card__lead{% if claude.at_limit or claude.kind == "stopped" %} dash-card__line--bad{% endif %}">{{ claude.status }}</p>

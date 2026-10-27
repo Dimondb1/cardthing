@@ -551,6 +551,46 @@ def claude_section(now, store):
     }
 
 
+def guides_section(now, store):
+    """How the guides are doing (marketing's measures): visits to each guide in the last week, taps from a guide
+    or the Fair Price Checker to a product page, checker uses by verdict, and Yes and No in the last 30 days.
+    None before a guide is published, read from the cached flag (guides.state) so it costs nothing until then.
+    Five queries."""
+    from guides import state
+    from guides.models import Guide, PriceCheck, Vote
+
+    if not state.current()["live"]:
+        return None
+    guides = list(Guide.objects.filter(is_published=True).values_list("pk", "slug", "title", "next_review"))
+    if not guides:
+        return None
+    today = timezone.localtime(now).date()
+    first, month = today - timedelta(days=WEEK_DAYS - 1), today - timedelta(days=29)
+    views = dict(DailyPageView.objects.filter(kind=DailyPageView.Kind.GUIDE, date__gte=first).order_by()
+                 .values_list("key").annotate(n=Sum("hits")))
+    taps = (DailyPageView.objects.filter(kind=DailyPageView.Kind.TAPS, date__gte=first)
+            .filter(Q(key__startswith="guide_card:") | Q(key__startswith="checker:")).aggregate(n=Sum("hits"))["n"] or 0)
+    verdicts = dict(PriceCheck.objects.filter(date__gte=first).order_by().values_list("verdict").annotate(n=Sum("hits")))
+    votes = {}
+    for guide_id, useful, n in (Vote.objects.filter(date__gte=month).order_by().values_list("guide", "useful")
+                                .annotate(n=Sum("hits"))):
+        votes.setdefault(guide_id, {True: 0, False: 0})[useful] = n
+    rows = [{"title": title, "url": reverse("web:guide", args=[slug]), "views": views.get(slug, 0),
+             "yes": votes.get(pk, {}).get(True, 0), "no": votes.get(pk, {}).get(False, 0),
+             "due": bool(due and due < today)} for pk, slug, title, due in guides]
+    rows.sort(key=lambda row: (-row["views"], row["title"]))
+    order = ["scalper", "high", "above", "fair", "good", "lowest", "unknown"]
+    mix = [{"key": key, "label": say(store, f"dashboard.guides.verdict.{key}"), "count": verdicts[key]}
+           for key in order if verdicts.get(key)]
+    return {
+        "views": sum(row["views"] for row in rows), "taps": taps, "checks": sum(verdicts.values()), "mix": mix,
+        "yes": sum(row["yes"] for row in rows), "no": sum(row["no"] for row in rows), "rows": rows,
+        "due": sum(1 for row in rows if row["due"]),
+        "admin": reverse("admin:guides_guide_changelist"),
+        "checks_admin": reverse("admin:guides_pricecheck_changelist"),
+    }
+
+
 SECTIONS = [
     ("money", money_section),
     ("traffic", traffic_section),
@@ -560,6 +600,7 @@ SECTIONS = [
     ("customers", customers_section),
     ("gaps", gaps_section),
     ("claude", claude_section),
+    ("guides", guides_section),
 ]
 
 

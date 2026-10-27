@@ -1,0 +1,23 @@
+{% load sitecopy ripraptor %}{# A guide's live price card (guides/views.price_cards): the cheapest delivered price now at every UK shop we track, how many have it in stock and when the prices were checked. It names no shop and links to the product page, where the shops are compared. #}
+<li class="card guide-card">
+  <div class="guide-card__top">
+    <a class="card__image" href="{{ product.get_absolute_url }}" tabindex="-1" aria-hidden="true">{% product_image product "card" %}</a>
+    <div class="card__body">
+      <span class="card__lang">{{ product.language_name|default:"English" }}</span>
+      <h3 class="card__name"><a href="{{ product.get_absolute_url }}" data-compare="guide_card">{{ product.name }}</a></h3>
+      <p class="card__meta">{{ product.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ product.type_name }}</p>
+      {% if product.guide_check %}<div class="card__checks">{% include "web/includes/fair_card.html" with check=product.guide_check %}</div>{% endif %}
+    </div>
+  </div>
+  <div class="guide-card__offer">
+    {% if product.guide_cheapest is not None %}
+    <p class="guide-card__label">{% if product.guide_preorder %}{% copy "guides.card.preorder" %}{% else %}{% copy "guides.card.cheapest" %}{% endif %}</p>
+    <p class="card__price">{% price product.guide_cheapest size="card" %}</p>
+    {% if product.guide_in_stock %}<p class="guide-card__stock">{% if product.guide_in_stock == 1 %}{% copy "guides.card.stock.one" count=1 %}{% else %}{% copy "guides.card.stock.other" count=product.guide_in_stock %}{% endif %}</p>{% endif %}
+    {% else %}
+    <p class="guide-card__stock">{% copy "guides.card.sold_out" %}</p>
+    {% endif %}
+    {% if product.guide_checked %}<p class="guide-card__checked">{% copy "guides.card.checked" clock=product.guide_checked|ago %}</p>{% endif %}
+    <a class="button button--small guide-card__button" href="{{ product.get_absolute_url }}" data-compare="guide_card">{% copy "guides.card.button" %}<span class="visually-hidden"> {{ product.name }}</span></a>
+  </div>
+</li>

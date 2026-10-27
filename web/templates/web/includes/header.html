@@ -10,6 +10,7 @@
       <a class="masthead__watch" href="{% url 'web:watchlist' %}" data-watch-link="{% url 'web:watchlist' %}"{% if request.resolver_match.url_name == "watchlist" %} aria-current="page"{% endif %}><svg class="masthead__watch-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 3.5h12v17l-6-4.5-6 4.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span>{% copy "site.nav.watchlist" %} <span data-watch-count></span></span></a>
       <a href="{% url 'web:deals' %}"{% if request.resolver_match.url_name == "deals" %} aria-current="page"{% endif %}>{% copy "site.nav.deals" %}</a>
       <a href="{% url 'web:drops' %}"{% if request.resolver_match.url_name == "drops" %} aria-current="page"{% endif %}>{% copy "site.nav.drops" %}</a>
+      {% if guides_live %}<a href="{% url 'web:guides' %}"{% if request.resolver_match.url_name in guide_pages %} aria-current="page"{% endif %}>{% copy "site.nav.guides" %}</a>{% endif %}
       <a href="{% url 'web:games' %}"{% if request.resolver_match.url_name == "games" %} aria-current="page"{% endif %}>{% copy "site.nav.games" %}</a>
     </nav>
   </div>

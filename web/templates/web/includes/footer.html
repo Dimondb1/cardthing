@@ -17,6 +17,7 @@
       <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a>
       <a href="{% url 'web:deals' %}">{% copy "site.nav.deals" %}</a>
       <a href="{% url 'web:drops' %}">{% copy "site.nav.drops" %}</a>
+      {% if guides_live %}<a href="{% url 'web:guides' %}">{% copy "site.nav.guides" %}</a>{% endif %}
       <a href="{% url 'web:watchlist' %}" data-watch-link="{% url 'web:watchlist' %}">{% copy "site.nav.watchlist" %}</a>
       <a href="{% url 'web:games' %}">{% copy "site.nav.games" %}</a>
       <a href="{% url 'web:contact' %}">{% copy "site.nav.contact" %}</a>

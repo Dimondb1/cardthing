@@ -1,0 +1,17 @@
+{% load sitecopy %}{# The Fair Price Checker's form (guides/views.fair_price), on its own page, the Guides page and in a guide. A GET form, so it works with JavaScript off: words find products to choose from, then the price is checked. checker.js offers the products as you type. #}
+<form class="checker" method="get" action="{% url 'web:fair_price' %}" data-checker>
+  {% if product %}
+  <input type="hidden" name="product" value="{{ product.slug }}">
+  <p class="checker__chosen">{% copy "guides.checker.chosen" product=product.name %} <a class="checker__change" href="{% url 'web:fair_price' %}{% if price_text %}?price={{ price_text|urlencode }}{% endif %}">{% copy "guides.checker.change" %}</a></p>
+  {% else %}
+  <label class="checker__label" for="{{ prefix|default:'checker' }}-q">{% copy "guides.checker.product" %}</label>
+  <input class="checker__input" id="{{ prefix|default:'checker' }}-q" type="search" name="q" value="{{ query }}" maxlength="100" autocomplete="off" placeholder="{% copy 'guides.checker.product_hint' %}" data-checker-q aria-describedby="{{ prefix|default:'checker' }}-q-hint">
+  <span class="visually-hidden" id="{{ prefix|default:'checker' }}-q-hint">{% copy "guides.checker.choose_note" %}</span>
+  <input type="hidden" name="product" value="" data-checker-product disabled>
+  <ul class="checker__suggest" data-checker-list hidden></ul>
+  {% endif %}
+  <label class="checker__label" for="{{ prefix|default:'checker' }}-price">{% copy "guides.checker.price" %}</label>
+  <span class="checker__money"><span class="checker__pound" aria-hidden="true">£</span><input class="checker__input checker__input--price" id="{{ prefix|default:'checker' }}-price" type="text" name="price" value="{{ price_text }}" inputmode="decimal" maxlength="12" autocomplete="off"{% if price_wrong %} aria-invalid="true" aria-describedby="{{ prefix|default:'checker' }}-price-error"{% endif %}></span>
+  {% if price_wrong %}<p class="checker__error" id="{{ prefix|default:'checker' }}-price-error">{% copy "guides.checker.price_wrong" %}</p>{% endif %}
+  <button class="button checker__button" type="submit">{% copy "guides.checker.button" %}</button>
+</form>

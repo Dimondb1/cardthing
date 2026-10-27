@@ -1,0 +1,11 @@
+{% load sitecopy %}{# Green and red flags: a tick or a cross and the words, never colour alone. #}
+<div class="flags">
+  {% if section.green %}<div class="flags__group">
+    <h3 class="flags__title">{% copy "guides.green" %}</h3>
+    <ul class="flags__list">{% for line in section.green %}<li class="flags__item"><svg class="flags__mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>{{ line }}</span></li>{% endfor %}</ul>
+  </div>{% endif %}
+  {% if section.red %}<div class="flags__group">
+    <h3 class="flags__title">{% copy "guides.red" %}</h3>
+    <ul class="flags__list">{% for line in section.red %}<li class="flags__item"><svg class="flags__mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><span>{{ line }}</span></li>{% endfor %}</ul>
+  </div>{% endif %}
+</div>

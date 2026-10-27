@@ -36,6 +36,7 @@ from inbox import service as inbox
 from inbox.models import Conversation
 
 from guides import state as guide_doors
+from guides.access import not_for_editors
 
 from . import hubs, listcache
 from .pagecache import cached_page
@@ -2753,6 +2754,7 @@ def llms_txt(request):
 
 
 @staff_member_required
+@not_for_editors
 def insights_page(request):
     """What visitors look at, search for and click. Staff only, under admin."""
     try:
@@ -2917,6 +2919,7 @@ def duplicate_sections(groups):
 
 
 @staff_member_required
+@not_for_editors
 @sensitive_post_parameters("claude_key")
 def checks_page(request):
     """Things to check: what the autopilot answered, with Undo, then doubtful and excluded prices, wrong
@@ -3230,6 +3233,7 @@ def release_tap(request, action):
 
 
 @staff_member_required
+@not_for_editors
 def crawl_page(request):
     """Crawl health: whether shops are being read, with one-tap buttons to read a shop now or pause reading."""
     from django.contrib import messages

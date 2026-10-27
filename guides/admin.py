@@ -117,10 +117,17 @@ class DueFilter(admin.SimpleListFilter):
         return queryset
 
 
+class ImportForm(forms.Form):
+    file = forms.FileField(label="The guide as a file", required=False,
+                           help_text="A Word file (.docx) or a text file (.txt). From Google Docs: File, Download, Microsoft Word.")
+    text = forms.CharField(label="Or paste the guide here", required=False, widget=forms.Textarea(attrs={"rows": 12}))
+
+
 @admin.register(Guide)
 class GuideAdmin(admin.ModelAdmin):
     form = GuideForm
     inlines = [SectionInline]
+    change_list_template = "admin/guides_change_list.html"
     list_display = ("title", "is_published", "door", "next_review", "review_due", "useful_30")
     list_filter = ("is_published", DueFilter, "audience")
     search_fields = ("title", "sections__question")
@@ -178,6 +185,90 @@ class GuideAdmin(admin.ModelAdmin):
         if obj.is_published and obj.published_at is None:
             obj.published_at = timezone.now()
         super().save_model(request, obj, form, change)
+
+    # Import a guide: the way marketing adds and updates guides (guides/importer.py) ---------------------------
+
+    def get_urls(self):
+        from django.urls import path
+
+        view = self.admin_site.admin_view
+        return [
+            path("import/", view(self.import_view), name="guides_guide_import"),
+            path("import/template.docx", view(self.template_view), {"kind": "docx"}, name="guides_guide_template_docx"),
+            path("import/template.txt", view(self.template_view), {"kind": "txt"}, name="guides_guide_template_txt"),
+        ] + super().get_urls()
+
+    def template_view(self, request, kind):
+        from django.http import HttpResponse
+
+        from . import template
+
+        if kind == "docx":
+            response = HttpResponse(template.docx(), content_type=(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+            response["Content-Disposition"] = 'attachment; filename="RipRaptor guide template.docx"'
+        else:
+            response = HttpResponse(template.TEXT, content_type="text/plain; charset=utf-8")
+            response["Content-Disposition"] = 'attachment; filename="RipRaptor guide template.txt"'
+        return response
+
+    def import_view(self, request):
+        """Choose or paste a guide, see what parents will see and what is missing, then save it as a draft or
+        publish it. Nothing is saved until a Save button is pressed."""
+        from django.core.exceptions import PermissionDenied
+        from django.http import HttpResponseRedirect
+        from django.shortcuts import render
+        from django.urls import reverse
+
+        from . import importer, text as guide_text
+
+        if not (self.has_add_permission(request) and self.has_change_permission(request)):
+            raise PermissionDenied
+        here = reverse("admin:guides_guide_import")
+        context = {**self.admin_site.each_context(request), "opts": self.model._meta, "title": "Import a guide",
+                   "form": ImportForm(), "checked": None, "saved": None}
+        if request.method == "GET" and request.GET.get("saved", "").isdigit():
+            saved = Guide.objects.filter(pk=request.GET["saved"]).first()
+            if saved is not None:
+                found = guide_text.problems(saved, list(saved.sections.all()), shop_hosts(), timezone.localdate())
+                context.update(saved=saved, saved_problems=found["style"] + found["publish"])
+            return render(request, "admin/guides_import.html", context)
+        if request.method == "POST" and request.POST.get("action") == "publish":
+            saved = Guide.objects.filter(pk=request.POST.get("guide", "0") or 0).first()
+            if saved is not None:
+                found = guide_text.problems(saved, list(saved.sections.all()), shop_hosts(), timezone.localdate())
+                if not found["style"] and not found["publish"]:
+                    saved.is_published = True
+                    saved.published_at = saved.published_at or timezone.now()
+                    saved.save()
+                return HttpResponseRedirect(f"{here}?saved={saved.pk}")
+            return HttpResponseRedirect(here)
+        if request.method == "POST":
+            form = ImportForm(request.POST, request.FILES)
+            context["form"] = form
+            lines, problem = None, ""
+            if request.POST.get("action") in ("draft", "publish_now") and request.POST.get("checked_text"):
+                lines = importer.text_lines(request.POST["checked_text"])
+            elif form.is_valid():
+                upload = form.cleaned_data.get("file")
+                try:
+                    if upload:
+                        lines = importer.lines_from_upload(upload.name, upload.read())
+                    elif form.cleaned_data.get("text", "").strip():
+                        lines = importer.text_lines(form.cleaned_data["text"])
+                    else:
+                        problem = "Choose a file or paste the guide first."
+                except ValueError as exc:
+                    problem = str(exc)
+            if lines is not None:
+                checked = importer.check(lines)
+                if request.POST.get("action") in ("draft", "publish_now") and checked.can_save:
+                    saved = importer.save(checked, publish=request.POST["action"] == "publish_now")
+                    return HttpResponseRedirect(f"{here}?saved={saved.pk}")
+                context.update(checked=checked, checked_text="\n\n".join(lines),
+                               rows=list(zip(checked.sections, checked.read.sections)))
+            context["problem"] = problem
+        return render(request, "admin/guides_import.html", context)
 
 
 @admin.register(PriceCheck)

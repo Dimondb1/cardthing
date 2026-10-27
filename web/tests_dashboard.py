@@ -521,12 +521,15 @@ class CacheTests(DashboardCase):
         self.assertEqual(len(few), len(many))
         # What clicks earn reads seven of them (dashboard.money_section), however many clicks, sales and offers,
         # and the Price check coverage seven, with Claude's Cardmarket matching (prices_section).
-        self.assertLessEqual(len(many), 60)
+        # One more for a staff login that is not the owner: its groups are read, so a Guide editor is kept out
+        # (guides.access). The owner's own login is a superuser and skips it.
+        self.assertLessEqual(len(many), 61)
         # Within the minute the page reads its parts from the cache: the session, the user and the wording, and the
-        # sign-in renews itself (SESSION_SAVE_EVERY_REQUEST: a transaction round one update).
+        # sign-in renews itself (SESSION_SAVE_EVERY_REQUEST: a transaction round one update), and this staff login's
+        # groups (guides.access, above).
         with CaptureQueriesContext(connection) as warm:
             self.page()
-        self.assertLessEqual(len(warm), 6)
+        self.assertLessEqual(len(warm), 7)
         self.assertFalse([q for q in warm.captured_queries if "catalogue_" in q["sql"]])
 
 

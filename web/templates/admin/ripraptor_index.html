@@ -7,6 +7,8 @@
 {% worker_stopped as stopped %}
 {% refer_waiting as refer %}
 {% guides_due as due_guides %}
+{% guide_editor_only as editor_only %}
+{% if not editor_only %}
 <div class="module" style="margin-bottom: 20px;">
   <table>
     <caption><a href="{% url 'web:dashboard' %}" class="section">Dashboard</a></caption>
@@ -21,6 +23,7 @@
     <tr><th scope="row"><a href="{% url 'admin:inbox_shopcontact_changelist' %}{% if follow_ups %}?follow_up=due{% endif %}">{% if follow_ups %}<strong>{{ follow_ups }} shop{{ follow_ups|pluralize }} to follow up</strong>{% else %}Shop outreach: write to shops with their own figures{% endif %}</a></th><td></td></tr>
   </table>
 </div>
+{% endif %}
 <div class="module" style="margin-bottom: 20px;">
   <table>
     <caption><a href="{% url 'admin:guides_guide_changelist' %}" class="section">Guides</a></caption>
@@ -28,6 +31,7 @@
     <tr><th scope="row"><a href="{% url 'admin:guides_pricecheck_changelist' %}">What people check on the Fair Price Checker</a></th><td></td></tr>
   </table>
 </div>
+{% if not editor_only %}
 <div class="module" style="margin-bottom: 20px;">
   <table>
     <caption><a href="{% url 'checks' %}" class="section">Things to check</a></caption>
@@ -64,12 +68,13 @@
     <tr><th scope="row"><a href="{% url 'insights' %}">What visitors look at, search for and click</a></th><td></td></tr>
   </table>
 </div>
+{% endif %}
 {# Hidden once the admin is opened from its home screen icon. #}
 <div class="module" style="margin-bottom: 20px;" data-admin-app>
   <table>
     <caption>Admin app</caption>
     <tr><th scope="row">
-      <p style="margin: 0 0 8px;">Put the admin on your phone's home screen. It opens here, stays signed in while you use it at least once a fortnight, and a long press on its icon goes straight to Things to check, Messages, Crawl health or Insights.</p>
+      <p style="margin: 0 0 8px;">Put the admin on your phone's home screen. It opens here and stays signed in while you use it at least once a fortnight{% if not editor_only %}, and a long press on its icon goes straight to Things to check, Messages, Crawl health or Insights{% endif %}.</p>
       <p style="margin: 0;" data-admin-app-how>Android: open Chrome's menu and tap Add to home screen. iPhone: tap Share in Safari, then Add to Home Screen.</p>
       <p style="margin: 8px 0 0;"><button type="button" class="button" data-admin-app-add hidden>Add to home screen</button></p>
     </th><td></td></tr>

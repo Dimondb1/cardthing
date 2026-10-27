@@ -17,6 +17,8 @@ from decimal import Decimal
 from urllib.parse import urlsplit
 
 from django.contrib.admin.views.decorators import staff_member_required
+
+from guides.access import not_for_editors
 from django.core.cache import cache
 from django.db.models import Count, Exists, Max, Min, OuterRef, Q, Sum
 from django.shortcuts import render
@@ -644,6 +646,7 @@ def admin_links():
 
 
 @staff_member_required
+@not_for_editors
 @require_GET
 def dashboard(request):
     """The owner's dashboard. Staff only, never indexed or cached by a browser or proxy, no third-party script."""

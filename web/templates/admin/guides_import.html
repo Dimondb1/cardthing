@@ -1,0 +1,106 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .gi-steps { max-width: 46rem; }
+  .gi-steps li { margin-bottom: 0.6em; }
+  .gi-box { max-width: 46rem; margin: 1.2em 0; padding: 0.8em 1em; border: 1px solid var(--hairline-color); border-radius: 6px; }
+  .gi-stop { border-color: var(--error-fg); }
+  .gi-stop h2, .gi-stop li { color: var(--error-fg); }
+  .gi-ok { border-color: var(--message-success-bg); }
+  .gi-box h2 { margin: 0 0 0.5em; font-size: 1rem; }
+  .gi-box ul { margin: 0; padding-left: 1.2em; }
+  .gi-table td, .gi-table th { vertical-align: top; }
+  .gi-buttons { display: flex; flex-wrap: wrap; gap: 0.6em; margin-top: 1em; }
+  .gi-buttons button { padding: 0.6em 1.1em; font-size: 0.95rem; cursor: pointer; }
+  .gi-textarea { width: 100%; max-width: 46rem; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; <a href="{% url 'admin:guides_guide_changelist' %}">Guides</a> &rsaquo; Import a guide</div>{% endblock %}
+{% block content %}
+{% if saved %}
+<div class="gi-box gi-ok">
+  <h2>{{ saved.title }}: {% if saved.is_published %}published{% else %}saved as a draft{% endif %}</h2>
+  <p><a href="{{ saved.get_absolute_url }}" target="_blank" rel="noopener">See it as parents will see it</a>{% if not saved.is_published %}. Only staff can see a draft.{% endif %}</p>
+  {% if not saved.is_published %}
+    {% if saved_problems %}
+    <p>Before it can be published:</p>
+    <ul>{% for row in saved_problems %}<li>{{ row }}</li>{% endfor %}</ul>
+    <p>Fix them in your file and import it again: it replaces this draft.</p>
+    {% else %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="publish"><input type="hidden" name="guide" value="{{ saved.pk }}">
+      <div class="gi-buttons"><button type="submit" class="default">Publish it now</button></div></form>
+    {% endif %}
+  {% endif %}
+</div>
+<p><a href="{% url 'admin:guides_guide_import' %}">Import another guide, or a new version of this one</a></p>
+{% else %}
+{% if problem %}<div class="gi-box gi-stop"><h2>The guide could not be read</h2><p>{{ problem }}</p></div>{% endif %}
+
+{% if checked %}
+<div class="gi-box">
+  <h2>{{ checked.guide.title|default:"No title yet" }}</h2>
+  <p>Web address: <strong>/guides/{{ checked.guide.slug }}/</strong>.
+  {% if checked.existing %} This replaces the guide already there, which is {% if checked.existing.is_published %}live{% else %}a draft{% endif %}.{% else %} A new guide.{% endif %}</p>
+  <p>{{ checked.guide.one_line_answer }}</p>
+</div>
+
+{% if checked.style %}
+<div class="gi-box gi-stop"><h2>Fix these in your file, then check again</h2>
+  <ul>{% for row in checked.style %}<li>{{ row }}</li>{% endfor %}</ul></div>
+{% endif %}
+{% if checked.publish and not checked.style %}
+<div class="gi-box"><h2>It can be saved as a draft. Before it can be published:</h2>
+  <ul>{% for row in checked.publish %}<li>{{ row }}</li>{% endfor %}</ul></div>
+{% endif %}
+{% if checked.read.notes %}
+<div class="gi-box"><h2>Worth a look</h2>
+  <ul>{% for row in checked.read.notes %}<li>{{ row }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+<table class="gi-table">
+  <thead><tr><th>Question</th><th>Short answer</th><th>Also</th></tr></thead>
+  <tbody>
+  {% for section, found in rows %}
+    <tr>
+      <td><strong>{{ section.question }}</strong></td>
+      <td>{{ section.short_answer|truncatewords:30 }}</td>
+      <td>
+        {% if found.body %}Detail: {{ found.body|length }} part{{ found.body|length|pluralize }}<br>{% endif %}
+        {% if found.green %}{{ found.green|length }} good sign{{ found.green|length|pluralize }}<br>{% endif %}
+        {% if found.red %}{{ found.red|length }} warning sign{{ found.red|length|pluralize }}<br>{% endif %}
+        {% for product in found.products %}Price card: {{ product.name }}<br>{% endfor %}
+        {% if found.box_type %}What is in the box card<br>{% endif %}
+        {% if found.show_checker %}Fair Price Checker<br>{% endif %}
+        {% if found.sources %}{{ found.sources|length }} source{{ found.sources|length|pluralize }}{% elif not found.states_facts %}No facts, so no sources needed{% else %}No sources yet{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if checked.read.checklist %}<p>Printable checklist: {{ checked.read.checklist|length }} item{{ checked.read.checklist|length|pluralize }}.</p>{% endif %}
+
+{% if checked.can_save %}
+<form method="post">{% csrf_token %}
+  <textarea name="checked_text" hidden>{{ checked_text }}</textarea>
+  <div class="gi-buttons">
+    {% if checked.can_publish %}<button type="submit" name="action" value="publish_now" class="default">Save and publish</button>{% endif %}
+    <button type="submit" name="action" value="draft">Save as a draft{% if checked.existing.is_published %} (takes it off the site until it is published){% endif %}</button>
+  </div>
+</form>
+{% endif %}
+{% endif %}
+{% if checked or problem %}<h2 style="margin-top: 2em;">Check another file</h2>{% endif %}
+<ol class="gi-steps">
+  <li>Download the template: <a href="{% url 'admin:guides_guide_template_docx' %}">Word file</a> (opens in Word or Google Docs) or <a href="{% url 'admin:guides_guide_template_txt' %}">plain text</a>. It is a whole example guide.</li>
+  <li>Replace its words with yours. Keep the headings (Heading 1 for the title, Heading 2 for each question) and the labels such as <strong>Short answer:</strong> and <strong>Sources:</strong>.</li>
+  <li>Choose the file below, or paste the guide, and press Check. Nothing is saved yet.</li>
+  <li>Read what the check says, then save it as a draft or publish it. Importing the same web address again replaces that guide.</li>
+</ol>
+
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+  <p><label for="id_file"><strong>{{ form.file.label }}</strong></label><br>{{ form.file }}<br><span class="help">{{ form.file.help_text }}</span></p>
+  <p><label for="id_text"><strong>{{ form.text.label }}</strong></label><br><textarea name="text" id="id_text" rows="10" class="gi-textarea">{{ form.text.value|default:"" }}</textarea></p>
+  <div class="gi-buttons"><button type="submit" name="action" value="check" class="default">Check</button></div>
+</form>
+
+{% endif %}
+{% endblock %}

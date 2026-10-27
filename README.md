@@ -3511,6 +3511,34 @@ Drops and the footer; the flag is read from the shared cache
 (`guides/state.py`), refreshed on every guide save and by `warm_pages`, so no
 page gains a query.
 
+**Importing a guide** (Admin, Guides, Import a guide) is how marketing adds and
+updates guides, without the Admin form (`guides/importer.py`). They download
+the template, a whole example guide as a Word file or plain text
+(`guides/template.py`), replace its words, and upload the file: Word
+(.docx, which Google Docs downloads too), Markdown or text, or paste it. The
+title is Heading 1, each question Heading 2, and labels such as
+`Short answer:`, `Good signs:`, `Warning signs:`, `Prices:` (product page
+addresses), `What is in the box:`, `Price checker: yes` and `Sources:` (the
+page's name, its full https address and the date read, or `none` for advice)
+say what each part is; a `Checklist` heading holds the printable checklist.
+Check shows, before anything is saved, each question and what it carries,
+what stops it being saved (the house style below, a missing title, short
+answer or source date), what stops it being published, and what is worth a
+look (a product address not found, a type not known). Save as a draft or
+Save and publish; importing the same web address again replaces that guide,
+questions and all, and a published guide stays published only when the new
+version passes. A Word file is read paragraph by paragraph from its XML (no
+extra library): heading styles, lists and links are kept, deleted tracked
+changes left out, and it is refused over 5 MB.
+
+**Logins for marketing.** Every migrate keeps a `Guide editors` group with
+just what guides need (add and change guides and their questions, see the
+checker's uses, look up products for price cards). Give a login Staff status
+and that group, and Admin shows it Guides and nothing else to change. The
+owner's own pages (Dashboard, Insights, Things to check with its Claude key,
+Crawl health) stay closed to it although it has Staff status, and its admin
+home shows only Guides (`guides/access.py`); a superuser is never kept out.
+
 **Writing a guide** (Admin, Guides). A guide is a list of questions in the
 reader's words. Each has a short answer, shown first in a quiet panel, then
 optional detail, green and red flags (one per line, each with a tick or a

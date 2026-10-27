@@ -1831,7 +1831,10 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 
 .verdict { margin-bottom: var(--space-5); padding: var(--card-pad); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); display: grid; gap: var(--space-3); scroll-margin-top: var(--space-5); }
 .verdict__offered { font-size: var(--text-lg); font-weight: var(--weight-strong); }
-.verdict__chip .fair { font-size: var(--text-base); white-space: nowrap; }
+.verdict__chip .fair { font-size: var(--text-base); }
+/* "Scalper price" is longer than the product page's words: here the word box grows to fit them, and wraps inside
+   the chip only when a phone's text is set very large, never past its edge. */
+.verdict__chip .fair__word { max-width: none; }
 .verdict__times { font-weight: var(--weight-strong); }
 .verdict__unknown { color: var(--color-ink-muted); }
 .verdict__facts { padding-left: var(--space-5); display: grid; gap: var(--space-1); color: var(--color-ink-muted); }

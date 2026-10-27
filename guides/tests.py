@@ -489,6 +489,13 @@ class CheckerTests(PageCase):
         self.assertNotIn("ebay", html.lower().split("<main")[1].split("</main>")[0])   # never sends anyone to a marketplace
         self.assertEqual(PriceCheck.objects.get().verdict, "scalper")
 
+    def test_the_verdicts_words_stay_inside_their_chip(self):
+        from django.contrib.staticfiles import finders
+
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn(".verdict__chip .fair__word { max-width: none; }", css)
+        self.assertNotIn(".verdict__chip .fair { font-size: var(--text-base); white-space: nowrap; }", css)
+
     def test_a_good_price_and_a_wrong_one(self):
         record(self.etb, ["50.00"] * 20, timezone.localdate())
         url = reverse("web:fair_price") + f"?product={self.etb.slug}"

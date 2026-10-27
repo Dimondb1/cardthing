@@ -3521,7 +3521,8 @@ title is Heading 1, each question Heading 2, and labels such as
 addresses), `What is in the box:`, `Price checker: yes` and `Sources:` (the
 page's name, its full https address and the date read, or `none` for advice)
 say what each part is; a `Checklist` heading holds the printable checklist.
-Check shows, before anything is saved, each question and what it carries,
+A guide pasted from a chat with its code block fences (` ``` `) reads the
+same, the fences left out. Check shows, before anything is saved, each question and what it carries,
 what stops it being saved (the house style below, a missing title, short
 answer or source date), what stops it being published, and what is worth a
 look (a product address not found, a type not known). Save as a draft or

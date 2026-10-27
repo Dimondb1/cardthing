@@ -98,6 +98,10 @@ class ReadingTests(ImportCase):
         self.assertEqual(section.sources, ["Citizens Advice: scams | https://www.citizensadvice.org.uk/consumer/scams/ | 27 Oct 2026"])
         self.assertEqual((checked.guide.door, checked.guide.one_line_answer), ("sold_out", "Fakes, reseals and fake shops."))
 
+    def test_a_guide_copied_from_a_chat_with_its_code_block_fences(self):
+        pasted = "```text\n" + template.TEXT + "```\n"
+        self.assertEqual(importer.text_lines(pasted), importer.text_lines(template.TEXT))
+
     def test_a_word_file_keeps_its_links_and_numbered_lists(self):
         body = (para("Scams guide", "Title") + para("Web address: scams") + para("One-line answer: How to spot one.")
                 + para("Last checked: 27 Oct 2026") + para("Next review: 20 Jan 2027")

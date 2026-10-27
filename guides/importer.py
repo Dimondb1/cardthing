@@ -111,6 +111,8 @@ def text_lines(text):
     escapes and bold taken off."""
     out = []
     for raw in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        if raw.strip().startswith("```"):
+            continue        # a chat's code block fences, copied along with the guide
         line = clean_markdown(raw.rstrip())
         if not line.strip():
             out.append("")

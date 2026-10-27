@@ -92,6 +92,20 @@ top-5000-trading-card-games football`: a check of all of Zatu on 13 Oct 2026
 found 49 buyable card products outside `trading-card-games` alone, among
 them the Topps football tins, and none worth having outside these three.
 
+A shop that sells one game and leaves it out of its product names (Clifford
+TCG, a Pokémon shop: "Surging Sparks Booster Box", with no game in the
+name, type, vendor or tags either) has "game when the name does not say"
+set on the retailer. A product of that shop whose name, type and tags name
+no game is read as that game's; one that names a game keeps it (Clifford's
+few Lorcana boxes). Leave it blank for a shop that sells several games:
+there a name with no game is left unmatched, as before. `setup_shops` sets
+Clifford TCG's to Pokémon, and reads only its four sealed collections
+(`booster-boxes booster-blister-packs etbs special-collection-boxes`): they
+held all 188 of its sealed products on 27 Oct 2026, beside about 2,700
+single and graded cards. A product type of "Single" is never sealed, as
+"Single Card" and "Singles" were not, and a "Single Pack Blister" (one
+booster pack in a blister) is.
+
 A shop's feed is read page by page until an empty page. Some shops answer
 a request past their last page with an error instead, so a later page
 failing ends the read too; it is still not the whole shop, so the products

@@ -654,6 +654,49 @@ class AutoCatalogueTests(TestCase):
         self.assertEqual(product.listings.count(), 2)
         self.assertEqual(Listing.objects.filter(product=product).order_by("delivered_price").first().retailer, shop_b)
 
+    def test_a_shop_that_sells_one_game_has_names_without_it_read_as_that_game(self):
+        # Clifford TCG, 27 Oct 2026: "Surging Sparks Booster Box", with no game in the name, type, vendor or tags.
+        pokemon = make_game()
+        clifford = make_retailer("Clifford TCG", source_type=Retailer.Source.SHOPIFY, source_url="https://clifford.example/",
+                                 default_game=pokemon)
+        other = make_retailer("Shop B", source_type=Retailer.Source.SHOPIFY, source_url="https://b.example/")
+        box = {"handle": "surging-sparks-booster-box", "title": "Surging Sparks Booster Box", "product_type": "Booster Boxes",
+               "vendor": "Clifford TCG", "tags": ["Booster Boxes", "Sealed", "Surging Sparks"],
+               "variants": [{"price": "269.00", "available": True, "barcode": ""}]}
+        page = shopify_page([
+            box,
+            # A name that says its game keeps it.
+            {"handle": "inklands", "title": "Disney Lorcana Into the Inklands Booster Box", "product_type": "Booster Boxes",
+             "vendor": "Clifford TCG", "tags": ["Sealed"], "variants": [{"price": "120.00", "available": True, "barcode": ""}]},
+            {"handle": "vaporeon", "title": "Vaporeon Ex Surprise Box Exclusive Pokemon Pre En-Prismatic Evolutions 023 NM PS",
+             "product_type": "Single", "vendor": "Clifford TCG", "tags": ["PSA"],
+             "variants": [{"price": "25.00", "available": True, "barcode": ""}]},
+        ])
+        run_import(clifford, fetch=lambda url: page if "page=1" in url else shopify_page([]))
+        games = dict(Listing.objects.filter(retailer=clifford).values_list("title", "product__game__slug"))
+        self.assertEqual(games, {"Surging Sparks Booster Box": "pokemon", "Disney Lorcana Into the Inklands Booster Box": "lorcana"})
+        # A shop that sells several games gets no such guess: the same name, with no game, is left unmatched.
+        run_import(other, fetch=lambda url: shopify_page([box]) if "page=1" in url else shopify_page([]))
+        self.assertFalse(Listing.objects.filter(retailer=other).exists())
+
+    def test_setup_gives_clifford_tcg_its_sealed_collections_and_its_game(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        pokemon = make_game()
+        call_command("setup_shops", stdout=StringIO())
+        clifford = Retailer.objects.get(slug="clifford-tcg")
+        self.assertEqual(clifford.collection, "booster-boxes booster-blister-packs etbs special-collection-boxes")
+        self.assertEqual(clifford.default_game, pokemon)
+        self.assertEqual(clifford.delivery_cost, Decimal("3.50"))
+        # A game changed in admin stays.
+        lorcana = make_game(name="Disney Lorcana", slug="lorcana")
+        Retailer.objects.filter(pk=clifford.pk).update(default_game=lorcana)
+        call_command("setup_shops", stdout=StringIO())
+        clifford.refresh_from_db()
+        self.assertEqual(clifford.default_game, lorcana)
+
     def test_a_new_product_is_born_in_the_set_its_name_names(self):
         game = make_game(name="Yu-Gi-Oh!", slug="yu-gi-oh")
         phoenix = make_set(game, name="Immortal Phoenix", slug="immortal-phoenix", code="")

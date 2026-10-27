@@ -76,10 +76,10 @@ TYPES = [
 NOT_SEALED = re.compile(
     r"(?<!\bwith )\bdon!* card\b|\bcards only\b|\bno box\b|^\s*(?:[A-Z]{1,4}\d{1,2}[- ]\d{3}|[A-Z]{2,4}-\d{3})\b(?!.*\b(?:booster|box|pack|deck|bundle|display|tin|collection)\b)|\b(?:super|ultra|secret|hyper|special|alternate|alt) ?(?:art )?rare\b|\brare foil\b|"
     r"\b(?:common|uncommon|rare)\s*:|\bpromo\s*:|\bfoil\s*:|"
-    r"\b\d{1,3}\s*/\s*\d{1,3}\b|\bsingle\b|holofoil|holo rare|reverse holo|\bfoil\b(?!.*booster)|"
+    r"\b\d{1,3}\s*/\s*\d{1,3}\b|\bsingle\b(?!\s+(?:booster\s+)?pack\s+blister)|holofoil|holo rare|reverse holo|\bfoil\b(?!.*booster)|"
     # Pokemon promo card numbers ("Iron Bundle SVP 066 - Holo"): set codes have one or two digits, promos three.
     r"\b(?:svp|swshp?|smp?|xyp?|bwp?)[ -]?\d{3}\b|\bholo\b(?!\s*(?:collection|box|tin|booster|pack))|\bplaymat\b|\bsleeves?\b|\bbinder\b|"
-    r"\bdeck box\b|\bportfolio\b|\btoploader|\bevent\b|\bpre[\s-]?release event\b|\bticket\b|\bcase\b(?! of)|\bcarton\b|"
+    r"\bdeck box\b|\bportfolio\b|\btop[- ]?loader|\bevent\b|\bpre[\s-]?release event\b|\bticket\b|\bcase\b(?! of)|\bcarton\b|"
     # A plush packed in a tin with booster packs is the tin ("Electric Plush Blind Box Tin", Solent Cards), also
     # in an address that glues the tin to the next word ("...-blind-box-tinsimplified-chinese"). Not "tiny".
     r"\bdamaged\b|\bopened\b|\bripped seals?\b|\bcut seals?\b|\bbroken seals?\b|\bseals? (?:ripped|cut|broken)\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b(?!.*\btins?(?![a-rt-z]))|\bkeyring\b|\bposter\b(?! box)|"
@@ -194,7 +194,7 @@ VARIANT_MENU = re.compile(
     r"\b(?:box|boxes)\b\s*(?:[/&,+-]|or|and)?\s*(?:booster\s*)?(?<![\d(])(?<!\d-)\bpacks?\b(?!\))",
     re.I,
 )
-NOT_SEALED_TYPES = {"single card", "singles", "pokemon single", "playmat", "deck box", "card sleeves", "sleeves", "binder",
+NOT_SEALED_TYPES = {"single", "single card", "singles", "pokemon single", "playmat", "deck box", "card sleeves", "sleeves", "binder",
                     "event", "events", "life counter", "zip binder", "oversized card", "accessory", "accessories", "dice",
                     "board games", "board game", "miniatures", "rpg", "books", "toys", "plush", "apparel", "supplies", "storage"}
 
@@ -229,6 +229,14 @@ def find_game(*texts):
         if any(w in blob for w in words):
             return slug
     return None
+
+
+def game_word(slug):
+    """A word find_game reads as the game ``slug``, or "" for one it does not know."""
+    for game, _name, _short, words in GAMES:
+        if game == slug:
+            return words[0]
+    return ""
 
 
 # A set's number is not a "box set": "Fabled Booster Box (Set 9)" is a booster box. Read on expand()ed text.

@@ -38,7 +38,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from . import languages, pricing, sports
-from .classify import GAMES, classify, find_game, variant_differs
+from .classify import GAMES, classify, find_game, game_word, variant_differs
 from .matching import (
     AUTO_LINK, SUGGEST, VARIANT_WORDS, best_match, chinese_code, code_key, contradiction, covers, match_key, names_something,
     naming_words, same_product, score, set_codes, shop_title,
@@ -1785,6 +1785,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
     from .releases import ShopSignals
 
     shop_signals = ShopSignals(retailer)
+    # The game a shop that sells only one leaves out of its product names (Retailer.default_game).
+    one_game = game_word(retailer.default_game.slug) if retailer.default_game_id else ""
 
     try:
         for offer in offers:
@@ -1794,6 +1796,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
                 if run is not None:
                     ImportRun.objects.filter(pk=run.pk).update(offers_found=found, listings_updated=updated)
             found += 1
+            if one_game and find_game(offer.title, offer.vendor, " ".join(offer.tags), offer.shop_type) is None:
+                # A shop that sells one game and leaves it out of its names ("Surging Sparks Booster Box").
+                offer.tags = (*offer.tags, one_game)
             notice_release(shop_signals, offer, checked_at)
             if listing_page(offer.url):
                 # A shop's list of products: whichever title came with it is not this page's product.

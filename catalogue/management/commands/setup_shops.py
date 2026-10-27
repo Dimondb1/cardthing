@@ -14,7 +14,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from catalogue import pricing
-from catalogue.models import RemovedShop, Retailer
+from catalogue.models import Game, RemovedShop, Retailer
 
 S = Retailer.Source
 SHOPS = [
@@ -234,6 +234,10 @@ SHOPS = [
      "Standard £3.95 (basket check), no free threshold published, read 25 Oct 2026"),
     ("tier-zero-games", "Tier Zero Games", "https://tierzerogames.com/", S.SHOPIFY, None, None,
      "Delivery charge not yet confirmed"),
+    # Added at the owner's request on 27 Oct 2026: a UK Pokémon shop on Shopify, mostly single and graded cards,
+    # so only its sealed collections are read (COLLECTIONS). Its sealed names leave the game out (ONE_GAME).
+    ("clifford-tcg", "Clifford TCG", "https://cliffordtcg.co.uk/", S.SHOPIFY, "3.50", None,
+     "Standard £3.50 (basket check), no free threshold published, read 27 Oct 2026"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's
@@ -287,7 +291,14 @@ COLLECTIONS = {
                                 "pokemon-battle-decks pokemon-booster-boxes pokemon-booster-packs "
                                 "pokemon-collection-boxes pokemon-elite-trainer-boxes pokemon-gift-tins "
                                 "pokemon-pre-order",
+    # Its four sealed collections held every sealed product on 27 Oct 2026; 2,700 single and graded cards sit
+    # in collections of their own.
+    "clifford-tcg": "booster-boxes booster-blister-packs etbs special-collection-boxes",
 }
+
+# Shops that sell one game and leave it out of their product names ("Surging Sparks Booster Box"): their
+# products that name no game are read as this game's (Retailer.default_game). Set only on a shop with none.
+ONE_GAME = {"clifford-tcg": "pokemon"}
 
 # Shops whose standard charge is only known up to an order value; above it the charge is not published.
 DELIVERY_UP_TO = {"card-empire": "20"}
@@ -334,6 +345,10 @@ class Command(BaseCommand):
                 ):
                     existing.collection = collection
                     changed.append("collection")
+                if ONE_GAME.get(slug) and existing.default_game_id is None:
+                    existing.default_game = Game.objects.filter(slug=ONE_GAME[slug]).first()
+                    if existing.default_game is not None:
+                        changed.append("default_game")
                 if AFFILIATE.get(slug) and not existing.affiliate_url_template:
                     existing.affiliate_url_template = AFFILIATE[slug]
                     changed.append("affiliate_url_template")
@@ -357,6 +372,7 @@ class Command(BaseCommand):
             Retailer.objects.create(
                 slug=slug, name=name, website=website, source_type=source, source_url=website, session_url=session_url,
                 collection=collection, affiliate_url_template=AFFILIATE.get(slug, ""),
+                default_game=Game.objects.filter(slug=ONE_GAME[slug]).first() if slug in ONE_GAME else None,
                 delivery_cost=Decimal(cost) if cost is not None else None,
                 delivery_cost_up_to=Decimal(DELIVERY_UP_TO[slug]) if slug in DELIVERY_UP_TO else None,
                 free_delivery_over=Decimal(free) if free else None, delivery_note=note,

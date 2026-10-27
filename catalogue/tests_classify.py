@@ -1,7 +1,7 @@
 from decimal import Decimal
 from django.test import TestCase
 
-from .classify import classify, clean_name, tidy_name
+from .classify import GAMES, classify, clean_name, find_game, game_word, tidy_name
 
 
 class ClassifyTests(TestCase):
@@ -54,6 +54,24 @@ class ClassifyTests(TestCase):
         sealed = classify("Surging Sparks Booster Box", vendor="Pokemon", price=100)
         self.assertEqual(sealed.game, "pokemon")
         self.assertEqual(clean_name("Pokemon - Surging Sparks - Elite Trainer Box (EN)"), "Surging Sparks Elite Trainer Box")
+
+    def test_each_game_has_a_word_that_names_it(self):
+        # A shop that sells one game and leaves it out of its names is read with this word added (apply_offers).
+        for slug, _name, _short, _words in GAMES:
+            self.assertEqual(find_game(game_word(slug)), slug)
+        self.assertEqual(game_word("no-such-game"), "")
+
+    def test_clifford_tcgs_singles_and_top_loaders_are_not_sealed(self):
+        # Clifford TCG, 27 Oct 2026: graded cards typed "Single" whose names, cut short by the shop, name a box.
+        self.assertIsNone(classify("Vaporeon Ex Surprise Box Exclusive Pokemon Pre En-Prismatic Evolutions 023 NM PS",
+                                   "Single", "Clifford TCG", ("PSA",), Decimal("25")))
+        self.assertIsNone(classify("Rocket'S Wobbuffet Destined Rivals Etb Pokemon Svp En-Sv Black Star Promo 203 NM",
+                                   "Single", "Clifford TCG", (), Decimal("25")))
+        self.assertIsNone(classify("English Defendit Top Loaders 100 Pack", "", "Clifford TCG", ("Pokemon Sleeve",), Decimal("12")))
+        # A blister holding one booster pack is sealed, whatever "single" says of a card elsewhere.
+        sealed = classify("Pitch Black Single Pack Blister (Slowpoke)", "Booster Packs", "Clifford TCG", ("Pokemon",), Decimal("7.25"))
+        self.assertEqual((sealed.game, sealed.name), ("pokemon", "Pitch Black Single Pack Blister (Slowpoke)"))
+        self.assertIsNone(classify("Pokemon Charizard single card", price=Decimal("10")))
 
 
 class ClassifyLeakTests(TestCase):

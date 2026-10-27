@@ -442,6 +442,17 @@ class Retailer(models.Model):
         "newest products are read too, and any of them that are our kind of product but sit outside these "
         "collections are kept below and read from then on.",
     )
+    default_game = models.ForeignKey(
+        Game,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name="game when the name does not say",
+        help_text="For a shop that sells one game and leaves it out of its product names, as Clifford TCG's "
+        "\"Surging Sparks Booster Box\" does: a product whose name, type and tags name no game is read as this "
+        "game's. Leave blank for a shop that sells more than one game.",
+    )
     extra_products = models.TextField(
         "products read one by one",
         blank=True,

@@ -3412,8 +3412,16 @@ JavaScript, by the link's `#share` without it; opening one panel closes
 the other):
 
 - Reddit: Reddit's own post form (`reddit.com/submit`) with the product's
-  link and a title ("<product>: UK prices compared",
-  `product.share.reddit_title`) filled in. A plain link, so it works
+  link, a title ("<product>: UK prices compared",
+  `product.share.reddit_title`) and the post's text filled in, so it reads
+  as a post rather than a bare link: "Cheapest UK price right now: £85.00
+  delivered, checked Tue 27 Oct, 07:05. The link compares every UK shop's
+  price with delivery included." It says plus delivery when the charge is
+  not known, pre-order when the cheapest is one, and that no shop has it
+  when none does (`product.share.reddit_text*`, `reddit_price*`, in
+  `web/share.py`). Like the Discord posts it never names the shop. The
+  visitor can change any of it before posting. Product cards' share sheets
+  fill in the same text for their own product. A plain link, so it works
   without JavaScript.
 - Instagram and TikTok: neither app takes a link from a web page, so their
   logos copy the link and say where to paste it (a story's link sticker, a

@@ -38,7 +38,7 @@ from inbox.models import Conversation
 from guides import state as guide_doors
 from guides.access import not_for_editors
 
-from . import hubs, listcache
+from . import hubs, listcache, share
 from .pagecache import cached_page
 from .charts import price_chart
 from .templatetags.ripraptor import gbp, short_date
@@ -1337,7 +1337,7 @@ def product_detail(request, slug):
             "track_days": alerts.TRACK_DAYS,
             "track_default": alerts.TRACK_DEFAULT_DAYS,
             "track_state": request.GET.get("track") if request.GET.get("track") in TRACK_STATES else "",
-            "share": share_links(request, product, page_url),
+            "share": share_links(request, product, page_url, cheapest),
             # Through /go/search/ so only a person's click carries our tag or campaign (go_search).
             "amazon_search": search_link(product, "amazon", amazon_search_url(product, listings)),
             "ebay_search": search_link(product, "ebay", ebay_search_url(product, listings)),
@@ -2125,10 +2125,11 @@ def note_api(request):
     return response
 
 
-def share_links(request, product, page_url):
+def share_links(request, product, page_url, cheapest=None):
     """The product page's Share panel. Each network's link names where it was shared (utm_source), so analytics
-    shows which one sends visitors; the link to copy by hand is the plain address. Reddit takes a link and a
-    title to post; Instagram and TikTok take no link from a web page, so their buttons copy one to paste."""
+    shows which one sends visitors; the link to copy by hand is the plain address. Reddit takes a link, a title
+    and the post's text (reddit_text); Instagram and TikTok take no link from a web page, so their buttons copy
+    one to paste."""
     def tagged(source):
         return f"{page_url}?{urlencode({'utm_source': source, 'utm_medium': 'social', 'utm_campaign': 'product_share'})}"
 
@@ -2136,6 +2137,7 @@ def share_links(request, product, page_url):
         "link": page_url,
         "reddit": "https://www.reddit.com/submit?" + urlencode({
             "url": tagged("reddit"), "title": text(request, "product.share.reddit_title", product=product.name),
+            "text": share.reddit_text(cheapest, copy.for_request(request)),
         }),
         "instagram": tagged("instagram"),
         "tiktok": tagged("tiktok"),

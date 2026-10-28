@@ -1266,6 +1266,24 @@ ENTRIES = [
           "Read out for the Reddit logo in the Share panel, which opens Reddit's post form with the link and title filled in."),
     Entry("product.share.reddit_title", T, "Reddit post title", "{product}: UK prices compared",
           "The title filled in on Reddit's post form, which the visitor can change.", placeholders=("product",)),
+    Entry("product.share.reddit_text", T, "Reddit post text",
+          "Cheapest UK price right now: {price}, checked {when}. The link compares every UK shop's price with "
+          "delivery included.",
+          "The text filled in under the title on Reddit's post form, which the visitor can change. {price} is the "
+          "Reddit price line below; {when} the day, date and time it was checked (Sat 24 Oct, 14:05).",
+          placeholders=("price", "when")),
+    Entry("product.share.reddit_text_preorder", T, "Reddit post text, pre-order",
+          "Cheapest UK pre-order price right now: {price}, checked {when}. The link compares every UK shop's price "
+          "with delivery included.",
+          "As the Reddit post text, when the cheapest price is a pre-order.", placeholders=("price", "when")),
+    Entry("product.share.reddit_text_none", T, "Reddit post text, none in stock",
+          "No UK shop we compare has it in stock right now. The link shows every UK shop's price and stock as it "
+          "changes.",
+          "As the Reddit post text, when no shop has it in stock or on pre-order."),
+    Entry("product.share.reddit_price", T, "Reddit price", "{price} delivered",
+          "The price in the Reddit post text when the delivery charge is known.", placeholders=("price",)),
+    Entry("product.share.reddit_price_plus", T, "Reddit price, delivery unknown", "{price} plus delivery",
+          "The price in the Reddit post text when the shop's delivery charge is not known.", placeholders=("price",)),
     Entry("product.share.instagram", B, "Instagram logo label", "Copy link for Instagram",
           "Read out for the Instagram logo in the Share panel. Instagram takes no link from a web page, so it copies one."),
     Entry("product.share.tiktok", B, "TikTok logo label", "Copy link for TikTok",

@@ -126,6 +126,14 @@ def copy_count(context, key, count, shown=None, **values):
 
 
 @register.simple_tag(takes_context=True)
+def reddit_text(context, cheapest):
+    """The text under a card's shared Reddit post title (web/share.py), for share.js to fill in."""
+    from web.share import reddit_text as words
+
+    return words(cheapest, store=context.get("site_content"))
+
+
+@register.simple_tag(takes_context=True)
 def page_key(context):
     """The word for this page that clicks and Compare taps are saved under (catalogue/clicks.PAGES), or ""."""
     from catalogue.clicks import PAGES

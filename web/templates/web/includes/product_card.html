@@ -10,7 +10,7 @@
       {% if summary.best %}<div class="card__checks">{% include "web/includes/badge.html" with gauge=product.card_check %}{% include "web/includes/fair_card.html" %}</div>{% endif %}
     </div>
     <div class="card__save">{% include "web/includes/save_link.html" with price=summary.best.shown_price icon_only=True %}
-      <a class="button button--quiet button--icon card__share" href="{{ product.get_absolute_url }}#share" data-card-share="{{ product.name }}">{% include "web/includes/share/icon.svg" %}<span class="visually-hidden">{% copy "product.share.button" %} {{ product.name }}</span></a></div>
+      <a class="button button--quiet button--icon card__share" href="{{ product.get_absolute_url }}#share" data-card-share="{{ product.name }}" data-card-reddit="{% reddit_text summary.best %}">{% include "web/includes/share/icon.svg" %}<span class="visually-hidden">{% copy "product.share.button" %} {{ product.name }}</span></a></div>
   </div>
   {% if summary.best %}
   <div class="card__offer">

@@ -52,9 +52,10 @@
     const name = open.dataset.cardShare;
     box.dataset.shareTitle = name;
     dialog.querySelector("[data-share-name]").textContent = name;
-    dialog.querySelector("[data-share-reddit]").href = "https://www.reddit.com/submit?" + new URLSearchParams({
-      url: tagged(page, "reddit"), title: dialog.dataset.redditTitle.replace("{product}", name),
-    }).toString();
+    // The post's text under its title, written for the card on the server (web/share.py).
+    const reddit = { url: tagged(page, "reddit"), title: dialog.dataset.redditTitle.replace("{product}", name) };
+    if (open.dataset.cardReddit) reddit.text = open.dataset.cardReddit;
+    dialog.querySelector("[data-share-reddit]").href = "https://www.reddit.com/submit?" + new URLSearchParams(reddit).toString();
     box.querySelectorAll("[data-share-network]").forEach((item) => { item.dataset.shareCopy = tagged(page, item.dataset.shareNetwork); });
     const native = box.querySelector("[data-share-native]");
     if (native) native.dataset.shareUrl = tagged(page, "share_sheet");

@@ -3751,6 +3751,9 @@ ENTRIES = [
     Entry("guides.checker.watch", B, "Watch the price", "Watch the price", "Opens the product page's price alert."),
     Entry("guides.checker.drops", B, "See upcoming drops", "See upcoming drops", "Opens the Drops page from the checker."),
     Entry("guides.checker.open", B, "Open the checker", "Check a price", "Link to the checker on the Guides page."),
+    Entry("product.guides.learn", B, "Product page guides link", "New to this? Want to learn more? Read our guides.",
+          "Under the price box on product pages, leading to the Guides page with every guide. Shown once a guide is "
+          "published. A sold-out page shows the scams guide's own link words instead when it is set to show there."),
     Entry("home.guides", B, "Home page guides link", "New to trading cards? Read our guides.",
           "Under the search box on phones, where the header has no room for Guides. Shown once a guide is published."),
     Entry("info.open", T, "Info button, read out", "What is {thing}?",

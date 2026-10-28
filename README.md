@@ -3633,11 +3633,16 @@ the price on every result.
 **Doors in.** On phones the header has room only for Swipe and Watchlist, so
 the home page carries "New to trading cards? Read our guides." under the
 search box there. llms.txt, the page AI assistants read, lists each published
-guide with its one-line answer, and the checker. A guide's "linked from" puts its link words under the price on
-every product page with a price (the parent's guide) or on sold-out product
-pages (the scams guide), and the scams guide's title in the High price check
-sheet and under the checker's verdict. One guide per place, the first
-published.
+guide with its one-line answer, and the checker. Under the price on every
+product page, once a guide is published, "New to this? Want to learn more?
+Read our guides." (`product.guides.learn`) leads to the Guides page and every
+guide on it: the owner asked for it to be for anyone new, not parents only,
+and to lead to all the guides as more are written. A guide's "linked from"
+can still put its own link words on sold-out product pages (the scams
+guide), which then show those instead, and the scams guide's title in the
+High price check sheet and under the checker's verdict. One guide per place,
+the first published. "Product pages with a price" is no longer a place a
+guide is linked from: those pages link to the Guides page.
 
 **Readers.** "Was this useful?" counts Yes and No by guide and day, once per
 connection a day (a one-way hash of the address in the cache for 24 hours,

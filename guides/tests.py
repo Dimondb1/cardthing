@@ -383,15 +383,19 @@ class GuidePageTests(PageCase):
 
 class DoorTests(PageCase):
     def test_a_line_under_the_price_and_on_a_sold_out_page(self):
+        # The owner, 28 Oct 2026: for everyone new to this, not parents only, and to every guide, as more come.
+        line = '<p class="buybox__guide"><a href="/guides/">New to this? Want to learn more? Read our guides.</a></p>'
         html = self.client.get(self.etb.get_absolute_url()).content.decode()
-        self.assertIn('<p class="buybox__guide"><a href="/guides/parents/">New to this? Read the parent&#x27;s guide.</a></p>', html)
+        self.assertIn(line, html)
+        self.assertNotIn("Read the parent", html)
+        Listing.objects.filter(product=self.etb).update(availability=Listing.Availability.OUT_OF_STOCK)
+        self.assertIn(line, self.client.get(self.etb.get_absolute_url()).content.decode())   # no scams guide yet
         scams = make_guide("scams-and-scalpers", title="How to avoid scams and scalpers", door="sold_out",
                            door_line="Sold out? Here is how to avoid scalpers.")
         add_section(scams)
-        Listing.objects.filter(product=self.etb).update(availability=Listing.Availability.OUT_OF_STOCK)
         html = self.client.get(self.etb.get_absolute_url()).content.decode()
         self.assertIn('href="/guides/scams-and-scalpers/">Sold out? Here is how to avoid scalpers.</a>', html)
-        self.assertNotIn("Read the parent", html)
+        self.assertNotIn(line, html)
 
     def test_and_from_the_high_price_check(self):
         scams = make_guide("scams-and-scalpers", title="How to avoid scams and scalpers", door="sold_out",

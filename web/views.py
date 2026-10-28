@@ -1353,9 +1353,9 @@ def product_detail(request, slug):
             "preorder_count": preorder_count,
             "last_checked": last_checked,
             "has_listings": bool(listings),
-            # The guides linked from here (guides.state, from the cache): the parent's guide beside a price, the
-            # scams guide on a sold-out page and in a High price check.
-            "guide_door": guide_doors.door("buying" if cheapest else "sold_out") if listings else None,
+            # The guides linked from here (guides.state, from the cache): the Guides page beside a price, the
+            # scams guide on a sold-out page (the Guides page when there is none) and in a High price check.
+            "guide_door": guides_line(request, cheapest) if listings else None,
             "scams_door": guide_doors.door("sold_out"),
             "chart": chart,
             "fair": fair,
@@ -2160,6 +2160,19 @@ def note_api(request):
     if match is not None and match.namespace == "web" and match.url_name in insights.GUIDE_READ_PAGES:
         insights.mark_guide_reader(request, response)
     return response
+
+
+def guides_line(request, cheapest):
+    """The line under the product page's price box leading to the guides, or None before any is published. The
+    owner, 28 Oct 2026: it named the parents' guide, and should be for everyone new to this, leading to every
+    guide, as more are written. A sold-out page leads to the scams guide when one is set to show there."""
+    if not cheapest:
+        door = guide_doors.door("sold_out")
+        if door:
+            return door
+    if not guide_doors.current()["live"]:
+        return None
+    return {"url": reverse("web:guides"), "line": text(request, "product.guides.learn")}
 
 
 def share_links(request, product, page_url, cheapest=None):

@@ -31,7 +31,7 @@ class Guide(models.Model):
 
     class Door(models.TextChoices):
         NONE = "", "Only the Guides page"
-        BUYING = "buying", "Product pages with a price"
+        BUYING = "buying", "Nowhere else: product pages with a price link to the Guides page"
         SOLD_OUT = "sold_out", "Sold-out product pages and the High price check"
 
     slug = models.SlugField(

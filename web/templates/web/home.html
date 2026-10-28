@@ -26,7 +26,8 @@
   {# Every game, in a row that swipes sideways; each is shown by the box art of one of its own products, so the tiles are recognisable without borrowing any logo. #}
   <ul class="tiles tiles--games">
     {% for game in games %}
-    <li class="tiles__item"><a class="tile tile--game" href="{{ game.get_absolute_url }}"><span class="tile__cover" aria-hidden="true">{% if game.cover %}{% product_image game.cover "cover" %}{% else %}<span class="product-image product-image--cover">{% include "web/includes/placeholder.svg" with type="booster_box" %}</span>{% endif %}</span><span class="tile__name">{{ game.display_short }}</span><span class="tile__meta">{% copy_count "browse.count" game.product_count shown=game.product_count|compact_count %}</span></a></li>
+    {# The whole tile opens the game (its link's area covers it); the ⓘ beside the name says what the game is. #}
+    <li class="tiles__item"><div class="tile tile--game"><span class="tile__cover" aria-hidden="true">{% if game.cover %}{% product_image game.cover "cover" %}{% else %}<span class="product-image product-image--cover">{% include "web/includes/placeholder.svg" with type="booster_box" %}</span>{% endif %}</span><span class="tile__line"><a class="tile__name tile__link" href="{{ game.get_absolute_url }}">{{ game.display_short }}</a>{% info "game" game.slug game.display_short %}</span><span class="tile__meta">{% copy_count "browse.count" game.product_count shown=game.product_count|compact_count %}</span></div></li>
     {% endfor %}
   </ul>
 </section>
@@ -133,8 +134,9 @@
 <section class="home-section" aria-labelledby="types-title">
   <div class="section-head"><h2 id="types-title" class="section-head__title">{% copy "home.types.title" %}</h2></div>
   <ul class="tiles tiles--types">
-    {% for code, label, count in product_types %}
-    <li class="tiles__item"><a class="tile tile--type" href="{% url 'web:search' %}?type={{ code }}"><span class="tile__art">{% include "web/includes/placeholder.svg" with type=code %}</span><span class="tile__name">{{ label }}</span><span class="tile__meta">{% copy_count "browse.count" count %}</span></a></li>
+    {# Every type, each pictured by a real product of its kind (views.type_covers), with its ⓘ card. #}
+    {% for code, label, count, cover in product_types %}
+    <li class="tiles__item"><div class="tile tile--type"><span class="tile__picture" aria-hidden="true">{% if cover %}{% product_image cover "type" %}{% else %}<span class="product-image product-image--type">{% include "web/includes/placeholder.svg" with type=code %}</span>{% endif %}</span><span class="tile__line"><a class="tile__name tile__link" href="{% url 'web:search' %}?type={{ code }}">{{ label }}</a>{% info "type" code label %}</span><span class="tile__meta">{% copy_count "browse.count" count %}</span></div></li>
     {% endfor %}
   </ul>
 </section>

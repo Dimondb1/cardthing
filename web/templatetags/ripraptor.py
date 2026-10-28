@@ -329,7 +329,7 @@ INFO_ICON = mark_safe(
     'stroke="currentColor" stroke-width="1.5"/><path d="M8 7.2v4" stroke="currentColor" stroke-width="1.6" '
     'stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.95" fill="currentColor"/></svg>'
 )
-INFO_KINDS = ("type", "lang", "badge")
+INFO_KINDS = ("type", "lang", "badge", "game")
 
 
 def info_keys(kind, value, game=""):
@@ -341,14 +341,18 @@ def info_keys(kind, value, game=""):
         value = "zh" if value in CHINESE_FAMILY else value if value in ("ja", "ko") else "other" if value else ""
     if not value or kind not in INFO_KINDS:
         return []
+    if kind == "game":
+        # What the game is, then a tip about it (a game's slug, as "yu-gi-oh", is "yu_gi_oh" in a key).
+        value = value.replace("-", "_")
+        return [f"info.game.{value}", f"info.game.{value}_tip"]
     return [f"info.{kind}.{value}", f"info.{kind}.{value}_{game.replace('-', '_')}" if game else ""]
 
 
 @register.simple_tag(takes_context=True)
 def info(context, kind, value, title="", game=""):
     """An ⓘ button after a label (``title``, as the page shows it) and its card. ``kind`` is "type" (a product
-    type code), "lang" (a language code: Japanese, Korean, Chinese, or any other but English) or "badge" (a
-    badge's code). Each card is written once per page, however many buttons open it; its id carries a short
+    type code), "lang" (a language code: Japanese, Korean, Chinese, or any other but English), "badge" (a
+    badge's code) or "game" (a game's slug: what the game is and a tip about it). Each card is written once per page, however many buttons open it; its id carries a short
     sum of the page's address, the same on every visit, so a list fetched into the page by script (another
     address) never repeats one."""
     import zlib

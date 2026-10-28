@@ -402,7 +402,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 /* Two product types side by side need about 19rem: a narrower screen, or very large text, stacks them instead. */
 @media (max-width: 18.99rem) { .tiles--types { grid-template-columns: minmax(0, 1fr); } }
 .tile {
-  display: grid; gap: 2px; height: 100%; padding: var(--card-pad); border: 1px solid var(--color-line); border-radius: var(--radius-card);
+  position: relative; display: grid; gap: 2px; height: 100%; padding: var(--card-pad); border: 1px solid var(--color-line); border-radius: var(--radius-card);
   background: var(--color-paper); text-decoration: none; color: inherit;
   transition: transform var(--motion-normal) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out), border-color var(--motion-normal);
 }
@@ -410,18 +410,34 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .tile:active { transform: scale(0.99); }
 .tile__name { font-size: var(--text-lg); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-snug); }
 .tile__meta { font-size: var(--text-xs); color: var(--color-ink-subtle); }
-.tile--type { grid-template-columns: 2.75rem minmax(0, 1fr); grid-template-areas: "art name" "art meta"; column-gap: var(--space-2); align-items: center; }
-.tile__art { grid-area: art; display: grid; place-items: center; aspect-ratio: 1; border-radius: var(--radius-sm); background: var(--color-shelf); color: var(--color-placeholder); }
-.tile__art .placeholder { width: 82%; height: 82%; }
-.tile--type .tile__name { grid-area: name; align-self: end; font-size: var(--text-base); }
-.tile--type .tile__meta { grid-area: meta; align-self: start; }
+/* The name is the tile's link, its area stretched over the whole tile; the ⓘ beside it sits above that area, so it
+   opens its card and not the page. */
+.tile__line { display: block; min-width: 0; }
+.tile__link { color: inherit; text-decoration: none; }
+/* In the tile's top corner, clear of the name however long it is: a type's over its picture's corner, a game's
+   beside its name, which keeps room for it. */
+.tile__line .info { position: absolute; z-index: 1; top: var(--space-1); right: var(--space-1); margin: 0; }
+.tile--type .tile__line .info { top: calc(var(--card-pad) + var(--space-1)); right: calc(var(--card-pad) + var(--space-1)); }
+.tile__link::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius-card); }
+.tile__link:focus-visible { outline: none; }
+.tile:has(.tile__link:focus-visible) { outline: var(--focus-ring) solid var(--color-focus); outline-offset: var(--focus-gap); }
+/* A product type: a real product of its kind (views.type_covers) in a well above its name and count. */
+.tile--type { align-content: start; gap: var(--space-1); }
+.tile__picture { display: block; margin-bottom: var(--space-2); }
+.product-image--type { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: var(--radius-sm); color: var(--color-placeholder); }
+.product-image--type img { position: absolute; inset: 0; padding: 8%; }
+.product-image--type .placeholder { width: 40%; height: 60%; }
+.tile--type .tile__name { font-size: var(--text-base); }
+@media (hover: hover) { .tile--type .product-image img { transition: opacity var(--motion-normal), transform var(--motion-normal) var(--ease-out); } .tile--type:hover .product-image img { transform: scale(1.03); } }
 /* A game: its box art small beside its name and count, so the row is one short line of tiles. */
 .tile--game {
   grid-template-columns: var(--tile-game-art) minmax(0, 1fr); grid-template-areas: "art name" "art meta";
-  column-gap: var(--space-2); align-items: center; padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  column-gap: var(--space-2); align-items: center;
+  padding: var(--space-2) calc(var(--info-icon) + var(--space-3)) var(--space-2) var(--space-2);
 }
 .tile--game .tile__cover { grid-area: art; }
-.tile--game .tile__name { grid-area: name; align-self: end; font-size: var(--text-base); line-height: var(--leading-tight); }
+.tile--game .tile__line { grid-area: name; align-self: end; }
+.tile--game .tile__name { font-size: var(--text-base); line-height: var(--leading-tight); }
 .tile--game .tile__meta { grid-area: meta; align-self: start; }
 .tile--game .product-image--cover { aspect-ratio: 1; }
 .product-image--cover { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-sm); }
@@ -429,10 +445,9 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .product-image--cover img { position: absolute; inset: 0; }
 .product-image--cover .placeholder { width: 40%; height: 70%; }
 @media (hover: hover) { .tile--game .product-image img { transition: opacity var(--motion-normal), transform var(--motion-normal) var(--ease-out); } .tile--game:hover .product-image img { transform: scale(1.03); } }
-@media (min-width: 40rem) {
-  .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .tile--type { grid-template-columns: 3.25rem minmax(0, 1fr); column-gap: var(--space-3); }
-}
+@media (min-width: 40rem) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* All the product types in two rows from tablets up. */
+@media (min-width: 48rem) { .tiles--types { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 /* The games: one row that swipes sideways, like the product rows, with the next tile peeking in so it is plain there
    is more. Scrolled by the browser, so it works without JavaScript. */
 .tiles--games {
@@ -659,6 +674,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .browse-head { padding: var(--rhythm-page-top) 0 0; margin-bottom: var(--rhythm-control); }
 .browse-head .breadcrumbs { margin: 0 0 var(--space-2); }
 .browse-head__title { font-size: var(--text-page-title); overflow-wrap: anywhere; }
+.browse-head__title-row { display: flex; align-items: center; gap: var(--space-1); }
 .browse-head__intro { margin-top: var(--space-2); color: var(--color-ink-muted); max-width: var(--form-width); }
 /* The set's code and dates, then the link to its game: small print, one line where it fits. */
 .browse-head__meta { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink-subtle); }
@@ -1376,6 +1392,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @media (min-width: 48rem) { .game-index { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--rhythm-section) var(--split-gap); } }
 /* One line of name for every game, so the lists beside each other start on the same line. */
 .game-index__head { display: grid; justify-items: start; gap: var(--space-1); padding-bottom: var(--space-3); border-bottom: 2px solid var(--color-brand); }
+.game-index__title { display: flex; align-items: center; gap: var(--space-1); }
 .game-index__head h2 { font-size: var(--text-section); }
 .game-index__head h2 a { text-decoration: none; }
 /* Every game ends with its way in: all its products, and all its sets when more are listed than shown. */
@@ -1383,7 +1400,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .game-index__more a { display: inline-block; padding-block: var(--space-1); }
 .game-index__sets { list-style: none; }
 .game-index__sets a { display: inline-block; padding-block: var(--space-1); }
-.game-index__sets li { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line); }
+/* The set's code and count wrap under its name when very large text leaves no room beside it. */
+.game-index__sets li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line); }
 .game-index__set-meta { font-size: var(--text-sm); color: var(--color-ink-subtle); white-space: nowrap; }
 /* A game's older sets show once its All sets link (here or on its game page) names it in the address. */
 .game-index__game:not(:has(:target)) .game-index__later, .game-index__game:has(:target) .game-index__all { display: none; }

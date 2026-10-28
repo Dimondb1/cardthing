@@ -340,7 +340,13 @@ class PicturesOnPagesTests(TestCase):
     def test_home_page_pictures_are_sized(self):
         body = html.unescape(self.client.get(reverse("web:home")).content.decode())
         self.assertNotIn(f'src="{SHOPIFY}"', body)
-        self.assertNotIn(f'"{BIGCOMMERCE}"', body)
+        self.assertNotIn(f'src="{BIGCOMMERCE}"', body)
+        # The Browse by product tiles picture each type at its own size; the full picture is only the fallback.
+        types = [tag for tag in img_tags(body, "type") if "srcset" in tag]   # a picture a CDN can resize
+        self.assertEqual(len(types), 2)
+        for tag in types:
+            self.assertIn(f'sizes="{SLOTS["type"][1]}"', tag)
+            self.assertNotIn(f'src="{BIGCOMMERCE}"', tag)
 
     def test_swipe_deck_cards_carry_the_sized_picture(self):
         cards = {card["id"]: card for card in self.client.get(reverse("web:deck_api")).json()["cards"]}

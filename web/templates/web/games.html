@@ -7,7 +7,7 @@
   {% for game in games %}
   <section class="game-index__game" aria-labelledby="game-{{ game.slug }}">
     <div class="game-index__head">
-      <h2 id="game-{{ game.slug }}"><a href="{{ game.get_absolute_url }}">{{ game.name }}</a></h2>
+      <div class="game-index__title"><h2 id="game-{{ game.slug }}"><a href="{{ game.get_absolute_url }}">{{ game.name }}</a></h2>{% info "game" game.slug game.display_short %}</div>
     </div>
     {% with sets=game.sets.all %}
     {% if sets %}

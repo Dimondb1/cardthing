@@ -2048,15 +2048,16 @@ class RedesignTests(PageTestCase):
         # The line under it says every price is delivered.
         self.assertIn("delivery included. Not just the basket price.", html)
         self.assertIn('<span class="search__button-text">Find best price</span>', html)
-        self.assertIn('<a class="tile tile--game" href="/games/pokemon/"><span class="tile__cover" aria-hidden="true">', html)
-        self.assertIn('<span class="tile__name">Pokémon</span><span class="tile__meta">3 products</span></a>', html)
+        self.assertIn('<div class="tile tile--game"><span class="tile__cover" aria-hidden="true">', html)
+        self.assertIn('<a class="tile__name tile__link" href="/games/pokemon/">Pokémon</a>', html)
+        self.assertIn('<span class="tile__meta">3 products</span></div>', html)
         # No product has a picture here, so the tile shows the booster box outline instead.
         self.assertIn('<span class="product-image product-image--cover"><svg', html)
         # Browse by product: a tile per type the search page can filter to, with the type's outline drawing.
         types = html[html.index('class="tiles tiles--types"'):html.index("</ul>", html.index('class="tiles tiles--types"'))]
-        self.assertIn('href="/search/?type=elite_trainer_box"', types)
-        self.assertIn('<span class="tile__name">Elite Trainer Box</span><span class="tile__meta">1 product</span>', types)
-        self.assertIn('<span class="tile__name">Collection box</span>', types)
+        self.assertIn('<a class="tile__name tile__link" href="/search/?type=elite_trainer_box">Elite Trainer Box</a>', types)
+        self.assertIn('<span class="tile__meta">1 product</span>', types)
+        self.assertIn('href="/search/?type=collection_box">Collection box</a>', types)
         self.assertIn('class="placeholder"', types)
         self.assertNotIn("type=tin", types)   # a product of a hidden game is not listed, so it is not counted
         self.assertIn('<a class="poster poster--watch" href="/watchlist/">', html)
@@ -2070,6 +2071,68 @@ class RedesignTests(PageTestCase):
         # Every row card ends with the same button.
         featured = html[html.index('id="featured-title"'):]
         self.assertIn('<span class="trending__cta">Compare prices<span aria-hidden="true"> →</span></span>', featured)
+
+    def test_browse_by_product_shows_every_type_pictured_by_a_real_product_with_its_info(self):
+        # The owner, 28 Oct 2026: the tiles looked boring; show real products, every type, and an ⓘ on each.
+        from django.core.cache import cache
+
+        from catalogue.models import Retailer
+
+        ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY, website="https://www.ebay.co.uk/")
+        kinds = ["booster_box", "booster_pack", "deck", "tin", "gift_set", "collector_booster_box", "collector_booster_pack"]
+        for n, kind in enumerate(kinds):
+            product = make_product(self.pre, name=f"Pictured {kind}", slug=f"pictured-{n}", product_type=kind,
+                                   image_url=f"https://img.example/{kind}.png")
+            make_listing(product, self.harbour, price="20.00")
+        # Two booster boxes: the one more UK shops list now pictures the type, whatever eBay lists.
+        wider = make_product(self.pre, name="Widely Stocked Booster Box", slug="widely-stocked", product_type="booster_box",
+                             image_url="https://img.example/widely.png")
+        for shop in (self.harbour, self.north):
+            make_listing(wider, shop, price="100.00")
+        lonely = Product.objects.get(slug="pictured-0")
+        for n in range(3):
+            make_listing(lonely, make_retailer(f"Old Shop {n}"), price="90.00", hours_ago=24 * 30)   # not checked lately
+        make_listing(lonely, ebay, price="80.00")
+        cache.clear()
+        html = self.client.get(reverse("web:home")).content.decode()
+        types = html[html.index('class="tiles tiles--types"'):html.index("</ul>", html.index('class="tiles tiles--types"'))]
+        # Every type with products, not the first six, each with its ⓘ card.
+        self.assertEqual(types.count('class="tile tile--type"'), 10)
+        for code in kinds + ["elite_trainer_box", "collection_box", "bundle"]:
+            with self.subTest(code):
+                self.assertIn(f'href="/search/?type={code}"', types)
+                self.assertIn(f'-type-{code.replace("_", "-")}"', types)
+        self.assertIn('aria-label="What is Gift set?"', types)
+        self.assertIn('src="https://img.example/widely.png"', types)
+        self.assertNotIn("https://img.example/booster_box.png", types)
+        self.assertIn('src="https://img.example/tin.png"', types)
+        # A type with no picture anywhere keeps its outline drawing.
+        bundle = types[types.index("type=bundle") - 1500:types.index("type=bundle")]
+        self.assertIn('class="placeholder"', bundle)
+
+    def test_every_game_has_an_info_card_saying_what_it_is_and_a_tip(self):
+        from catalogue.classify import GAMES
+        from content.registry import REGISTRY
+
+        for slug, *_rest in GAMES:
+            key = slug.replace("-", "_")
+            with self.subTest(slug):
+                what, tip = REGISTRY[f"info.game.{key}"].default, REGISTRY[f"info.game.{key}_tip"].default
+                self.assertTrue(what)
+                self.assertTrue(tip.startswith("Tip: "))
+                for text in (what, tip):
+                    self.assertNotIn("!", text)
+                    self.assertNotIn("\u2014", text)
+        what = REGISTRY["info.game.pokemon"].default
+        tip = REGISTRY["info.game.pokemon_tip"].default
+        # On the home page's game tile, the Games page and the game's own page; not on a set's page.
+        for url in (reverse("web:home"), reverse("web:games"), self.game.get_absolute_url()):
+            with self.subTest(url):
+                html = self.client.get(url).content.decode()
+                self.assertIn('aria-label="What is Pokémon?"', html)
+                self.assertIn(what, html)
+                self.assertIn(tip, html)
+        self.assertNotIn('aria-label="What is Pokémon?"', self.client.get(self.pre.get_absolute_url()).content.decode())
 
     def test_a_game_tile_writes_a_big_count_short_never_rounding_up(self):
         from .templatetags.ripraptor import compact_count

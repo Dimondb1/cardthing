@@ -101,6 +101,8 @@ def warm_pages(fresh=False, only=None):
     from catalogue.pricing import shops_compared
 
     shops_compared()
+    # The product the home page's Browse by product tiles picture each type with (one query when due).
+    views.type_covers()
     # Each game's own page, built whole and kept (web.pagecache), so the tap from the home page never waits.
     from web import pagecache
 

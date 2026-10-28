@@ -718,13 +718,50 @@ def latest_drops(request):
     return HttpResponsePermanentRedirect(target)
 
 
-def home_types(limit=6):
-    """The product types with the most listed products, for the Browse by product tiles: (code, label, count)."""
+def home_types():
+    """Every product type with products, most first, for the Browse by product tiles: (code, label, count, cover),
+    the cover being a real product of that type to picture it (type_covers), or None. Two queries, and one more
+    at most hourly. The owner, 28 Oct 2026: the tiles looked boring, and should show all the types."""
     rows = (
         Product.objects.active().exclude(product_type=Product.Type.OTHER)
-        .values("product_type").annotate(n=Count("id")).order_by("-n", "product_type")[:limit]
+        .values("product_type").annotate(n=Count("id")).order_by("-n", "product_type")
     )
-    return [(row["product_type"], type_label(None, row["product_type"]), row["n"]) for row in rows]
+    picks = type_covers()
+    covers = Product.objects.active().in_bulk(list(picks.values())) if picks else {}
+    if len(covers) < len(set(picks.values())):
+        # A product chosen within the hour has gone (merged, switched off): choose again rather than show a gap.
+        picks = type_covers(fresh=True)
+        covers = Product.objects.active().in_bulk(list(picks.values())) if picks else {}
+    return [(row["product_type"], type_label(None, row["product_type"]), row["n"],
+             covers.get(picks.get(row["product_type"]))) for row in rows]
+
+
+TYPE_COVERS_KEY = "web:home-type-covers:v1"
+TYPE_COVERS_SECONDS = 60 * 60
+
+
+def type_covers(fresh=False):
+    """{product type: the product of that type with a picture that the most UK shops list now}, as pks: the
+    product a shopper is likeliest to know, so its tile looks like what it leads to. Chosen at most hourly, or
+    now when ``fresh``."""
+    from django.core.cache import cache
+    from django.db.models import Window
+    from django.db.models.functions import RowNumber
+
+    picks = None if fresh else cache.get(TYPE_COVERS_KEY)
+    if not picks:   # none chosen yet, or none had a picture: look again rather than keep an empty choice
+        shops = (Listing.objects.current().exclude(sanity=Listing.Sanity.EXCLUDED)
+                 .exclude(retailer__source_type__in=pricing.MARKETPLACES).filter(product=OuterRef("pk")).order_by()
+                 .values("product").annotate(n=Count("retailer", distinct=True)).values("n"))
+        rows = (
+            Product.objects.active().exclude(product_type=Product.Type.OTHER).exclude(image="", image_url="")
+            .annotate(shops=Coalesce(Subquery(shops), 0))
+            .annotate(rank=Window(RowNumber(), partition_by=[F("product_type")], order_by=[F("shops").desc(), F("pk").desc()]))
+            .filter(rank=1).values_list("product_type", "pk")
+        )
+        picks = dict(rows)
+        cache.set(TYPE_COVERS_KEY, picks, TYPE_COVERS_SECONDS)
+    return picks
 
 
 # The kinds of product whose box art says most about a game, best first, for its tile on the home page.

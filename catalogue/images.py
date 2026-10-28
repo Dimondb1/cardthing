@@ -66,6 +66,8 @@ def steps(low, high):
 #            11.4rem once the page stops growing.
 #   cover    .product-image--cover is a 16:9 box, so a square picture is as wide as the box is tall: two tiles
 #            across, three from 48rem, more from 60rem.
+#   type     .product-image--type fills its tile's picture well: half a phone's width less the gaps, a fifth of
+#            the page from 48rem, 11rem once the page stops growing.
 #   large    the product page's picture well: 17rem on a phone; from 60rem as tall as the name and price box
 #            beside it, 22 to 35rem by how many shops it lists. 33rem takes the 540 copy on a 1x screen, sharp for all of them.
 #   swipe    .swipe__image: as tall as the screen allows on a phone, up to 27.5rem inside the 30rem deck, and
@@ -82,6 +84,8 @@ SLOTS = {
                    "calc(55.6vw - 3.6rem)", steps(120, 1106)),
     "cover": (200, "(min-width: 74rem) 5.65rem, (min-width: 60rem) calc(10.23vw - 1.93rem), "
                    "(min-width: 48rem) calc(16.07vw - 2.14rem), calc(23.4vw - 1.95rem)", steps(44, 445)),
+    "type": (200, "(min-width: 74rem) 11rem, (min-width: 48rem) calc(20vw - 3.5rem), calc(50vw - 3.5rem)",
+             steps(96, 600)),
     "large": (540, "(min-width: 60rem) 33rem, 17rem", steps(272, 1440)),
     "swipe": (420, "(min-width: 48rem) 20.5rem, (min-width: 30rem) 27.5rem, 85vw", steps(245, 1362)),
 }

@@ -2903,8 +2903,13 @@ so on (`game_covers` in `web/views.py`), so no game logo is borrowed; a
 game with no pictures yet shows the booster box outline. After that come
 Picked for you and Pick up where you left off (for a browser with history),
 Featured deals, Drops and Coming soon, a card leading to the
-watchlist, and "Browse by product": a tile per product type, drawn with
-the type's outline, linking to the search page filtered to it. That is all:
+watchlist, and "Browse by product": a tile for every product type with
+products, most first, linking to the search page filtered to it. Each is
+pictured by a real product of its kind, the one with a picture that the
+most UK shops list now (`type_covers` in `web/views.py`, chosen at most
+hourly), so a tile looks like what it leads to; a type with no picture
+anywhere keeps its outline drawing. Each tile has its ⓘ card in its top
+corner, and so does each game tile. That is all:
 savings, price drops, trending and restocks are on the Deals page and every
 set is on the Games page. Every product card in a row ends with the same
 "Compare prices" button.
@@ -3393,6 +3398,14 @@ Where they are, and only there:
 - **The badge** beside the cheapest price (Lowest in 30 days, Best in 7
   days, Dropping soon): what it means.
 - **The price check sheet** says how to read the gauge.
+- **Product types on the home page**, on each Browse by product tile, with
+  the same words as on the product page.
+- **Games**, on each game tile on the home page, beside each game on the
+  Games page and beside the game's name on its own page: what the game is,
+  then a tip worth remembering about it (`info.game.<game>` and
+  `info.game.<game>_tip`, with the game's address in place of `<game>` and
+  dashes as underscores). Every game the site knows has both; a test fails
+  for a new game without them.
 
 The words are under "Info cards (the ⓘ buttons)" in Site wording
 (`info.*`, and `product.fair.how`). Blank one and its ⓘ goes. A game whose

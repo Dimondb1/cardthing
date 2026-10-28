@@ -1269,7 +1269,14 @@ only in brackets straight after the box ("Booster Box (36x Packs)"); any other
 box holds ("| 5 Cards Per Pack", "(5 Cards)", "Booster Box | 30 Packs") is
 not part of the name, so the shop's pack joins everyone else's product
 instead of becoming a second one (Titan Cards, Oct 2026); the hourly tidy
-takes the note off names already in the catalogue. eBay and Amazon
+takes the note off names already in the catalogue. So with a shop's word that
+it picks the design ("(Random)", "(One at Random)", "(Assorted Designs)",
+"(Random Design)") and an "English" after a comma, a dash or in brackets,
+English being every name's default: "Ascended Heroes Mini Tin (Random),
+English" was a second page beside "Ascended Heroes Mini Tin" (the owner, 28
+Oct 2026), and the hourly tidy renames such a page and joins it to the one
+of that name. "random" and "assorted" are also words matching ignores. A
+design the shop names ("Mini Tin (Pikachu)") is still another product. eBay and Amazon
 listings are never checked this way, and nor are feed shops: their prices
 come from the feed agreed with them, and their links are affiliate clicks
 a server must never follow.

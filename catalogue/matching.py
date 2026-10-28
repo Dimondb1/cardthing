@@ -119,6 +119,8 @@ def words(text):
 # at one shop and a box at another is one product.
 LOOSE = STOP | {"blind", "bag", "edition", "reprint", "reprinted", "sealed", "new", "official", "version", "ver", "release",
                 "structure", "starter", "theme", "preconstructed", "precon", "box", "boxes", "set", "sets",
+                # The shop chooses the design: "Mini Tin (Random)" is the "Mini Tin" other shops list.
+                "random", "assorted",
                 "pack", "packs", "yugioh", "yu", "gi", "oh", "digimon", "riftbound",
                 "star", "wars", "flesh", "blood", "tm", "vol", "volume", "simplified",
                 # The game's name as shops shorten it: "Dragon Ball Super CG", "DBS", "SWU".

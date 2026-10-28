@@ -296,6 +296,49 @@ class TidyCatalogueTests(TestCase):
         self.assertEqual(Product.objects.get(pk=mine.pk).product_type, "booster_box")
         self.assertEqual(Product.objects.get(pk=other.pk).product_type, "collector_booster_box")
 
+    def test_a_shops_random_design_and_english_notes_make_no_second_page(self):
+        # The owner, 28 Oct 2026: "Ascended Heroes Mini Tin" and "Ascended Heroes Mini Tin (Random), English" were
+        # two pages for one product.
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from catalogue.importers import Offer, apply_offers
+        from catalogue.matching import match_key
+        from catalogue.models import Listing, Product
+        from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        for title, name in (("Ascended Heroes Mini Tin (Random), English", "Ascended Heroes Mini Tin"),
+                            ("Poke Ball Tin (One at Random)", "Poke Ball Tin"),
+                            ("Mega Moonlit Tin (Random Design)", "Mega Moonlit Tin"),
+                            ("Booster Pack (Assorted Designs)", "Booster Pack"),
+                            ("Prismatic Evolutions Elite Trainer Box (English)", "Prismatic Evolutions Elite Trainer Box"),
+                            ("Surging Sparks Booster Box - English", "Surging Sparks Booster Box"),
+                            # A design the shop names is another product; English inside a name is left alone.
+                            ("Ascended Heroes Mini Tin (Pikachu)", "Ascended Heroes Mini Tin (Pikachu)"),
+                            ("Paldean Fates English Booster Bundle", "Paldean Fates English Booster Bundle")):
+            with self.subTest(title):
+                self.assertEqual(tidy_name(title), name)
+        self.assertEqual(match_key("Ascended Heroes Mini Tin Random", "pokemon"), match_key("Ascended Heroes Mini Tin", "pokemon"))
+        self.assertNotEqual(match_key("Ascended Heroes Mini Tin Pikachu", "pokemon"), match_key("Ascended Heroes Mini Tin", "pokemon"))
+        # The page made before this joins the other at the next hourly tidy, with its shop's listing.
+        pset = make_set(make_game())
+        plain = make_product(pset, name="Ascended Heroes Mini Tin", slug="mini-tin", product_type="tin")
+        noisy = make_product(pset, name="Ascended Heroes Mini Tin (Random), English", slug="mini-tin-random", product_type="tin")
+        hoc, winstons = make_retailer("HOC TCG"), make_retailer("Winston's Emporium")
+        make_listing(plain, hoc, price="31.00")
+        make_listing(noisy, winstons, price="27.00")
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=noisy.pk, is_active=True).exists())
+        self.assertEqual(set(Listing.objects.filter(product=plain).values_list("retailer__name", flat=True)),
+                         {"HOC TCG", "Winston's Emporium"})
+        # And a shop's title with the notes finds the product rather than making a new one.
+        other = make_retailer("Third Shop")
+        apply_offers(other, [Offer(title="Pokemon Ascended Heroes Mini Tin (Random), English",
+                                   url="https://third.example/products/mini-tin", price=Decimal("29.99"))])
+        self.assertEqual(Listing.objects.get(retailer=other).product, plain)
+        self.assertEqual(Product.objects.filter(is_active=True, name__icontains="Mini Tin").count(), 1)
+
     def test_tidy_removes_renames_and_merges(self):
         from decimal import Decimal
         from io import StringIO

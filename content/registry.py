@@ -1983,6 +1983,30 @@ ENTRIES = [
         "We have had a lot of requests just now. Try again in an hour.",
         "Shown when this connection or the whole site has sent too many.",
     ),
+    # The badge a listed shop can put on its own site, linking to RipRaptor (web/badge.py). The email offering it
+    # (outreach.badge.*) links to this part of the page.
+    Entry("listshop.badge.title", H, "Badge heading", "Add the RipRaptor badge to your shop",
+          "Heading of the part of the List your shop page with the badge a listed shop can show."),
+    Entry(
+        "listshop.badge.intro", T, "Badge introduction",
+        "Already listed? The badge shows your customers that your prices are compared on RipRaptor, and links "
+        "to the site. Adding it is up to you: your listing stays the same either way.",
+        "Under the badge heading.",
+    ),
+    Entry("listshop.badge.light", T, "Light badge label", "For a light background", "Above the light badge."),
+    Entry("listshop.badge.dark", T, "Dark badge label", "For a dark background", "Above the dark badge."),
+    Entry("listshop.badge.code", T, "Code label", "Code to paste", "Label above each badge's code box."),
+    Entry("listshop.badge.copy", B, "Copy button", "Copy code", "Under each code box, shown with JavaScript."),
+    Entry("listshop.badge.copied", T, "Copied note", "Code copied", "After the Copy code button is pressed."),
+    Entry(
+        "listshop.badge.how", T, "How to add it",
+        "Paste the code where you want the badge to show, such as your footer. On Shopify, use a Custom Liquid "
+        "block; on WordPress or WooCommerce, a Custom HTML block.",
+        "Under the badges.",
+    ),
+    Entry("listshop.badge.alt", T, "Badge description", "Listed on RipRaptor",
+          "What a screen reader says for the badge, here and in the code shops paste. Code already on a shop's "
+          "site keeps the words it was copied with."),
     Entry("listshop.thanks.title", H, "Thanks heading", "Thanks for asking", "Top of the page after the form is sent."),
     Entry(
         "listshop.thanks.body", T, "Thanks text",
@@ -3807,6 +3831,26 @@ ENTRIES = [
           "barcode? It keeps your prices and stock on RipRaptor right, and new products show within the hour.",
           "The email asking a shop for a product feed. Edit it in your mail app before sending to ask for something "
           "else. The sign-off and the line about not emailing again are added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+    Entry("outreach.badge.subject", T, "Badge offer: subject",
+          "A RipRaptor badge for the {shop} website",
+          "Subject of the email offering a shop the Listed on RipRaptor badge.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent")),
+    Entry("outreach.badge.body", P, "Badge offer: email",
+          "Hello {shop} team,\n\n"
+          "I run RipRaptor ({site_url}), a UK site that compares delivered prices for sealed trading card products. "
+          "We list {listed} of your products and link every one straight to your shop. {sent}\n\n"
+          "We have made a small badge that says your shop is listed on RipRaptor, in a light and a dark version. If "
+          "you would like it on your site, the code to paste is here: {badge_url}\n\n"
+          "Adding it is up to you. Your listing stays the same either way.",
+          "The email offering a shop the badge. {badge_url} is the badge part of the List your shop page, and "
+          "{sent} the line saying how many shoppers we sent them, left out when we sent none. The sign-off and the "
+          "line about not emailing again are added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent")),
+    Entry("outreach.sent.one", T, "Shoppers sent: one",
+          "In the last 3 months we sent you {count} shopper.",
+          "In the badge offer when one person clicked through to the shop in 3 months.", placeholders=("count",)),
+    Entry("outreach.sent.other", T, "Shoppers sent: more than one",
+          "In the last 3 months we sent you {count} shoppers.",
+          "In the badge offer when two or more people clicked through to the shop in 3 months. Left out when none did.",
+          placeholders=("count",)),
     Entry("outreach.signoff", P, "Sign-off",
           "Thanks,\nRipRaptor\n{site_url}",
           "Added to the end of every outreach email, before the line about not emailing again.",

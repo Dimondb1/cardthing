@@ -81,6 +81,7 @@
 
   /* Typefaces ------------------------------------------------------------ */
   --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;   /* code a shop copies, such as the badge's */
   --stretch-display: 96%;
   --stretch-price: 92%;
 

@@ -3897,11 +3897,36 @@ page never says what it knows. `tidy_all` (hourly) deletes enquiries a
 year after they are marked handled, or two years after they arrived if
 they never are. The Terms page's data section says so.
 
+## The RipRaptor badge
+
+Listed shops can show a "Listed on RipRaptor" badge on their own sites, so
+their sites link to RipRaptor: links from other sites are how search
+engines judge a new site. The List your shop page has it at
+`/list-your-shop/#badge`, in a light and a dark version, each with the
+code to paste and a Copy code button (with JavaScript off the code sits in
+a box to select). The code is one plain link to the home page around the
+image, which is served at its own lasting address
+(`/static/img/badge/listed-on-ripraptor.png` and `-dark.png`, not the
+hashed copy), so a badge redrawn later reaches every shop that pasted it.
+Taking it is up to the shop and never changes its listing: a link given in
+exchange for a listing is one search engines discount, and the page and
+the email both say so.
+
+The Offer the RipRaptor badge draft in Shop outreach links to that part of
+the page. It gives the number of shoppers sent in the last 3 months only
+when there were some (`outreach.sent.*`), so a new shop is not told nought.
+Badge visits show on the Insights page under Other sites, by the shop's
+address. The wording is under List your shop (`listshop.badge.*`); the
+words on the images themselves are drawn in. To redraw the images after
+the logo or brand colours change, run `python scripts/make_badges.py`
+(needs `pip install playwright`).
+
 ## Shop outreach
 
 Admin -> Messages -> Shop outreach is where you write to the shops
 RipRaptor lists: to ask for an affiliate link, to tell them how many
-shoppers you sent them, or to ask for a product feed. Nothing is sent from
+shoppers you sent them, to ask for a product feed, or to offer the
+RipRaptor badge (below). Nothing is sent from
 the site. Each draft opens in your own mail app (a `mailto:` link), so it
 goes from your Zoho address and the replies come back there. ZeptoMail is
 for the automatic alert emails only and is never used for this.
@@ -3914,7 +3939,7 @@ to follow up and when you last wrote. The admin home says how many shops
 are due a follow-up: emailed, no reply marked, and the follow-up date
 reached.
 
-Open a shop to see its figures and three drafts filled in with them:
+Open a shop to see its figures and four drafts filled in with them:
 shoppers sent in the last 30 days, the last 3 months and in all (people's
 clicks only, never robots or direct hits), the products they clicked most,
 and how many of the shop's products show on the site now and how many are

@@ -2615,9 +2615,12 @@ def list_shop(request):
             return thanks
     elif request.method != "GET":
         return HttpResponse(status=405)
+    from . import badge
+
     return render(request, "web/list_shop.html", {
         "values": values, "error": error, "limits": {"name": shops.MAX_NAME, "url": shops.MAX_URL,
                                                      "message": shops.MAX_MESSAGE},
+        "badges": badge.badges(text(request, "listshop.badge.alt")),
         "meta_title": text(request, "listshop.title"),
         "meta_description": text(request, "meta.listshop.description"),
         "canonical_url": request.build_absolute_uri(reverse("web:list_shop")),

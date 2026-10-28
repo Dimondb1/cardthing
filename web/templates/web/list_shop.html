@@ -1,5 +1,6 @@
 {% extends "web/base.html" %}
-{% load sitecopy %}
+{% load sitecopy static %}
+{% block scripts %}<script src="{% static 'js/badge.js' %}" defer></script>{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1 class="page-title">{% copy "listshop.title" %}</h1>
@@ -21,4 +22,20 @@
   <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
   <p><button class="button" type="submit">{% copy "listshop.form.button" %}</button></p>
 </form>
+<section class="block badge-offer" id="badge" aria-labelledby="badge-title">
+  <h2 class="section-title" id="badge-title">{% copy "listshop.badge.title" %}</h2>
+  <p class="badge-offer__intro">{% copy "listshop.badge.intro" %}</p>
+  <ul class="badge-offer__list">
+    {% for item in badges %}
+    <li class="badge-offer__item" data-badge>
+      <p class="badge-offer__label">{% copy item.label %}</p>
+      <div class="badge-offer__preview badge-offer__preview--{{ item.theme }}"><img src="{{ item.src }}" alt="{% copy 'listshop.badge.alt' %}" width="{{ item.width }}" height="{{ item.height }}"></div>
+      <label class="contact-form__label" for="badge-code-{{ item.theme }}">{% copy "listshop.badge.code" %}</label>
+      <textarea id="badge-code-{{ item.theme }}" class="contact-form__input contact-form__text badge-offer__code" rows="6" readonly spellcheck="false" data-badge-code>{{ item.code }}</textarea>
+      <p class="badge-offer__copy" hidden data-badge-copy><button class="button button--quiet" type="button">{% copy "listshop.badge.copy" %}</button> <span class="badge-offer__done" role="status" hidden data-badge-copied>{% copy "listshop.badge.copied" %}</span></p>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="contact-form__note">{% copy "listshop.badge.how" %}</p>
+</section>
 {% endblock %}

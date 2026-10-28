@@ -13,6 +13,7 @@ email" gets no draft at all. The figures are RipRaptor's own: shoppers sent are 
 (OutboundClick.people(), never a robot or a direct hit), and the listings are the shop's on the site now.
 """
 
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import quote
@@ -23,6 +24,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from content import service as copy
+from web import badge
 
 from .models import OutreachEmail, ShopContact
 
@@ -32,7 +34,7 @@ TOP_PRODUCTS = 3
 FOLLOW_UP = timedelta(days=14)
 # The drafts, in the order the page shows them: (kind, its name on the page).
 DRAFTS = [("affiliate", "Ask for an affiliate link"), ("report", "Tell them what we sent them"),
-          ("listing", "Ask for a product feed")]
+          ("listing", "Ask for a product feed"), ("badge", "Offer the RipRaptor badge")]
 KINDS = {kind for kind, _ in DRAFTS}
 
 
@@ -118,7 +120,16 @@ def values(retailer, found, store=None):
         "listed": f"{found.listed:,}",
         "in_stock": f"{found.in_stock:,}",
         "site_url": settings.RIPRAPTOR_SITE_URL,
+        "badge_url": badge.page_url(),
+        "sent": sent_line(found.visitors_quarter, store),
     }
+
+
+def sent_line(count, store=None):
+    """"In the last 3 months we sent you 12 shoppers.", or "" when we sent none: a new shop is not told nought."""
+    if not count:
+        return ""
+    return copy.get(f"outreach.sent.{'one' if count == 1 else 'other'}", store=store, count=f"{count:,}")
 
 
 def draft(retailer, kind, found, store=None):
@@ -131,7 +142,8 @@ def draft(retailer, kind, found, store=None):
         copy.get("outreach.signoff", store=store, **filled),
         copy.get("outreach.optout", store=store),
     ) if part)
-    return subject, body
+    # A placeholder left empty (sent_line) leaves no space at the end of its line.
+    return subject, re.sub(r"[ \t]+\n", "\n", body)
 
 
 def mailto(email, subject, body):

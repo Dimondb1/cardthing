@@ -36,6 +36,31 @@ class ListShopTests(TestCase):
 
     # The page ------------------------------------------------------------------------------------------
 
+    def test_page_offers_listed_shops_the_badge_and_its_code(self):
+        from django.conf import settings
+        from django.contrib.staticfiles import finders
+        from django.utils.html import escape
+
+        from web import badge
+
+        response = self.client.get(reverse("web:list_shop"))
+        html = response.content.decode()
+        self.assertIn('id="badge"', html)
+        self.assertIn("Adding it is up to you: your listing stays the same either way.", html)
+        site = settings.RIPRAPTOR_SITE_URL
+        for name in ("listed-on-ripraptor.png", "listed-on-ripraptor-dark.png"):
+            with self.subTest(name):
+                self.assertTrue(finders.find(f"img/badge/{name}"))
+                # One plain link to the home page round the image, at the image's own lasting address.
+                code = (f'<a href="{site}/"><img src="{site}/static/img/badge/{name}" alt="Listed on RipRaptor" '
+                        f'width="180" height="52"></a>')
+                self.assertEqual(badge.code(name, "Listed on RipRaptor"), code)
+                self.assertIn(escape(code), html)
+        # The code is in a box to select without JavaScript; Copy code waits for it.
+        self.assertEqual(html.count("readonly spellcheck=\"false\" data-badge-code"), 2)
+        self.assertEqual(html.count("hidden data-badge-copy"), 2)
+        self.assertIn("js/badge", html)
+
     def test_page_is_indexable_and_linked(self):
         response = self.client.get(reverse("web:list_shop"))
         self.assertContains(response, "List your shop")

@@ -108,6 +108,20 @@ class DraftTests(OutreachTestCase):
         _subject, body = outreach.draft(self.shop, "report", found)
         self.assertIn("We list 2 of your products, 1 of them in stock when we last checked.", body)
 
+    def test_the_badge_offer_links_to_the_code_and_says_nothing_of_shoppers_never_sent(self):
+        subject, body = outreach.draft(self.shop, "badge", outreach.figures(self.shop))
+        self.assertEqual(subject, "A RipRaptor badge for the Harbour Games website")
+        self.assertIn("the code to paste is here: https://ripraptor.example/list-your-shop/#badge", body)
+        self.assertIn("Adding it is up to you. Your listing stays the same either way.", body)
+        # Nobody clicked through: the shop is not told nought, and no line ends in a space.
+        self.assertIn("link every one straight to your shop.\n\n", body)
+        self.assertNotIn("we sent you", body)
+        self.assertNotIn(" \n", body)
+        self.click(self.etb, 1)
+        self.assertIn("In the last 3 months we sent you 1 shopper.", outreach.draft(self.shop, "badge", outreach.figures(self.shop))[1])
+        self.click(self.booster, 2)
+        self.assertIn("In the last 3 months we sent you 2 shoppers.", outreach.draft(self.shop, "badge", outreach.figures(self.shop))[1])
+
     def test_the_owners_wording_is_used(self):
         for key, kind, content in (("outreach.listing.subject", "text", "Feed for {shop}"),
                                    ("outreach.optout", "text", "Reply STOP for no more.")):

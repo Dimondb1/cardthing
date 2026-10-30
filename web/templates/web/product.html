@@ -31,6 +31,7 @@
         </div>
         <p class="buybox__price"><span class="buybox__amount"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span></span>{% if fair %}{% include "web/includes/fair_price.html" %}{% endif %}</p>
         <p class="buybox__delivered"><span class="money" data-note-for="{{ cheapest.pk }}">{% include "web/includes/price_note.html" with listing=cheapest %}</span>{% if not cheapest.delivery_known %} {% copy "product.delivery.unknown_check" %}{% endif %}</p>
+        {% if per_pack %}<p class="buybox__packs">{% copy "product.packs.each" packs=product.packs_inside each=per_pack|gbp %}</p>{% endif %}
       </div>
       {# The cheapest offer a visitor can buy now, through /go/ so the click is counted and the shop's tracking applies. #}
       <a class="buy-now" {% go_link cheapest "buy_now" product %} target="_blank" rel="sponsored nofollow noopener" data-buy-now>
@@ -176,6 +177,7 @@
       <div><dt>{% copy "product.details.game" %}</dt><dd><a href="{{ product.game.get_absolute_url }}">{{ product.game.name }}</a></dd></div>
       {% if product.product_set %}<div><dt>{% copy "product.details.set" %}</dt><dd><a href="{{ product.product_set.get_absolute_url }}">{{ product.product_set.name }}</a>{% if product.product_set.code %} <span class="muted">({{ product.product_set.code }})</span>{% endif %}</dd></div>{% endif %}
       <div><dt>{% copy "product.details.type" %}</dt><dd>{{ product.type_name }}</dd></div>
+      {% if product.packs_inside or product.cards_inside %}<div><dt>{% copy "product.details.inside" %}</dt><dd>{% include "web/includes/inside.html" %}{% if product.contents_from_shops %} <span class="muted">{% copy "product.details.inside_source" %}</span>{% endif %}</dd></div>{% endif %}
       <div><dt>{% copy "product.details.language" %}</dt><dd>{{ product.language_name|default:"English" }}</dd></div>
       {% if product.effective_release_date %}<div><dt>{% copy "product.details.release_date" %}</dt><dd>{{ product.effective_release_date|short_date }}</dd></div>{% endif %}
       {% if product.ean %}<div><dt>{% copy "product.details.barcode" %}</dt><dd class="num">{{ product.ean }}</dd></div>{% endif %}

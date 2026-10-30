@@ -513,6 +513,8 @@ ENTRIES = [
         "Under ‘No luck. Yet.’ when a search finds nothing, and the message in the quick results as you type.",
         placeholders=("query",),
     ),
+    Entry("browse.no_results.raptor", T, "No results: the raptor's line", "Not a scrap on my shelves by that name.",
+          "Beside the raptor head on the no results card, in its own words. Empty hides it.", optional=True),
     Entry(
         "browse.no_results.body", P, "No results help",
         "Try the set name or a shorter search.",
@@ -1038,6 +1040,8 @@ ENTRIES = [
     ),
     Entry(
         "deck.saved.clear", B, "Clear saved", "Clear saved", "Removes every saved product."),
+    Entry("deck.raptor", T, "End of deck: the raptor's line", "Back tomorrow with fresh prices.",
+          "Beside the raptor head at the end of the swipe deck, in its own words. Empty hides it.", optional=True),
     Entry(
         "deck.finished", T, "End of deck",
         "That's every product with a price today.",
@@ -1095,6 +1099,11 @@ ENTRIES = [
         "product.delivery.unknown_check", T, "Delivery not known, check",
         "Check the total at the shop before you buy.",
         "Under the main price on a product page when its delivery charge is not known.",
+    ),
+    Entry(
+        "product.packs.each", T, "Price per pack", "{packs} packs inside, {each} a pack",
+        "Under the cheapest price on a product page, when it holds two or more packs and the number is known: the "
+        "cheapest price shared over the packs.", placeholders=("packs", "each"),
     ),
     Entry(
         "product.badge.low_30", T, "Badge: lowest in 30 days",
@@ -1669,6 +1678,18 @@ ENTRIES = [
     Entry("product.details.set", T, "Detail: set", "Set", "Label in product details."),
     Entry("product.details.type", T, "Detail: product type", "Product type",
           "Label in product details."),
+    Entry("product.details.inside", T, "Detail: what is inside", "Inside",
+          "Label in product details, when the number of packs or of cards a pack is known."),
+    Entry("product.details.packs", T, "Inside: packs", "{packs} packs", "Product details.", placeholders=("packs",)),
+    Entry("product.details.pack_one", T, "Inside: one pack", "1 pack", "Product details."),
+    Entry("product.details.packs_cards", T, "Inside: packs and cards", "{packs} packs of {cards} cards",
+          "Product details.", placeholders=("packs", "cards")),
+    Entry("product.details.pack_one_cards", T, "Inside: one pack and cards", "1 pack of {cards} cards",
+          "Product details.", placeholders=("cards",)),
+    Entry("product.details.cards", T, "Inside: cards a pack", "{cards} cards a pack", "Product details.",
+          placeholders=("cards",)),
+    Entry("product.details.inside_source", T, "Inside: where it comes from", "(from the shops' descriptions)",
+          "After what is inside, when it rests on the shops' descriptions rather than figures set in admin."),
     Entry("product.details.language", T, "Detail: language", "Language",
           "Label in product details. The language is worked out from the product's name and set."),
     Entry("product.details.release_date", T, "Detail: release date", "Release date",
@@ -2157,6 +2178,8 @@ ENTRIES = [
         "Small print on the watchlist page.",
     ),
     Entry("watchlist.empty.title", H, "Empty watchlist heading", "Nothing saved yet", "Heading when the watchlist is empty."),
+    Entry("watchlist.empty.raptor", T, "Empty watchlist: the raptor's line", "Save one and I'll watch its price.",
+          "Beside the raptor head on the empty watchlist, in its own words. Empty hides it.", optional=True),
     Entry(
         "watchlist.empty.body", T, "Empty watchlist text",
         "Press Save on any product and it will show here with its current price. The list stays in this browser only.",
@@ -2752,6 +2775,9 @@ ENTRIES = [
         "Page not found",
         "Heading on the page shown for a broken link.",
     ),
+    Entry("errors.404.raptor", T, "Page not found: the raptor's line", "Sniffed every shelf. This page is not here.",
+          "Beside the raptor head on the page shown for a broken link, in its own words. Empty hides it.",
+          optional=True),
     Entry(
         "errors.404.body", P, "Page not found text",
         "The link may be wrong, or the product may no longer be listed. Try searching "

@@ -1,7 +1,7 @@
 import json
 import time
 from datetime import timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from functools import wraps
 from urllib.parse import urlencode, urlsplit
 
@@ -1349,6 +1349,8 @@ def product_detail(request, slug):
             "report_listing": next((listing for listing in listings if str(listing.pk) == request.GET.get("report")), None),
             "report_state": request.GET.get("report_state") if request.GET.get("report_state") in REPORT_STATES else "",
             "cheapest": cheapest,
+            # What one pack costs at the cheapest price, for a product holding two or more (catalogue/contents.py).
+            "per_pack": per_pack(cheapest, product),
             "shop_count": shop_count,
             "summary": summary,
             "in_stock_count": in_stock_count,
@@ -2162,6 +2164,15 @@ def note_api(request):
     if match is not None and match.namespace == "web" and match.url_name in insights.GUIDE_READ_PAGES:
         insights.mark_guide_reader(request, response)
     return response
+
+
+def per_pack(cheapest, product):
+    """The cheapest price shared over the packs the product holds, to the penny, or None when it holds fewer than two
+    or the number is not known."""
+    packs = product.packs_inside
+    if cheapest is None or not packs or packs < 2:
+        return None
+    return (cheapest.shown_price / packs).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def guides_line(request, cheapest):

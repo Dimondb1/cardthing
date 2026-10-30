@@ -7,7 +7,7 @@
 {% block content %}
 <div class="deck-page" data-deck="{% url 'web:deck_api' %}"
      data-save="{% copy 'deck.save' %}" data-skip="{% copy 'deck.skip' %}"
-     data-finished="{% copy 'deck.finished' %}" data-loading="{% copy 'deck.loading' %}"
+     data-finished="{% copy 'deck.finished' %}" data-raptor="{% copy 'deck.raptor' %}" data-loading="{% copy 'deck.loading' %}"
      data-low-month="{% copy 'product.badge.low_30' %}" data-best-week="{% copy 'product.badge.best_week' %}"
      data-buy="{% copy 'product.buy.button' %}" data-at="{% copy 'product.rank.at' retailer='{retailer}' %}"
      data-save-amount="{% copy 'home.savings.save' amount='{amount}' %}" data-percent="{% copy 'home.savings.percent' percent='{percent}' %}"

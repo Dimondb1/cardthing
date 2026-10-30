@@ -912,6 +912,18 @@ a, button, summary, select, input, label { touch-action: manipulation; }
    watchlist, end of the deck) the head is on its own. Added as an element, so the mid-page filtered-out state is untouched. */
 .empty-mark { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); color: var(--color-ink); }
 .empty-mark__ask { font-size: var(--mark-md); font-weight: var(--weight-heading); line-height: var(--leading-tight); color: var(--color-brand); }
+/* Beside the head, the raptor's own line (the owner, 30 Oct 2026: the site lacked character), from Site wording and
+   read by screen readers, though the head is not. It rises in once, just after the page, with motion allowed. */
+.raptor-says { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-3); }
+.raptor-says .empty-mark { margin: 0; }
+.raptor-says__line {
+  margin: 0; max-width: 100%; padding: var(--space-2) var(--space-3); border-radius: var(--radius); background: var(--color-shelf);
+  font-size: var(--text-sm); font-weight: var(--weight-medium); line-height: var(--leading-snug); color: var(--color-ink); text-align: left;
+}
+.no-luck .raptor-says, .deck__status .raptor-says { justify-content: center; margin: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .raptor-says__line { animation: rise var(--motion-normal) var(--ease-out) var(--motion-normal) backwards; }
+}
 
 /* Product page ------------------------------------------------------------- */
 
@@ -966,6 +978,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .buybox__price .price { font-size: var(--text-price-hero); }
 .buybox__price .delivered { font-weight: var(--weight-strong); color: var(--color-price); }
 .buybox__delivered { font-size: var(--text-sm); color: var(--color-ink-muted); }
+.buybox__packs { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
 .buybox__deal { font-size: var(--text-sm); color: var(--color-ink); }
 .buybox__summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__save { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-2); }
@@ -985,7 +998,16 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .buy-now__mark { display: flex; align-items: center; align-self: stretch; padding-right: var(--space-3); border-right: 1px solid var(--color-on-brand-line); }
 /* The logo's raptor head with a bag hooked on its lower jaw. The bag's place and size are shares of the head, so the
    pair scales together; the bag swings from the top of its handle. */
-.buy-mark { position: relative; display: block; width: var(--buy-mark); height: calc(var(--buy-mark) / (var(--mark-ratio))); }
+.buy-mark { position: relative; display: block; width: var(--buy-mark); height: calc(var(--buy-mark) / (var(--mark-ratio))); transform-origin: var(--buy-neck); transition: transform var(--motion-fast) var(--ease-standard); }
+/* The raptor on every buy button (the owner, 30 Oct 2026: show what to press): it lifts its head towards the shop on
+   hover, and a press snaps its jaws once (site.js adds .is-chomping), turning about its neck, bag and all. */
+@media (hover: hover) {
+  .buy-now:hover .buy-mark, .button--buy:hover .buy-mark, .buy-bar__buy:hover .buy-mark { transform: rotate(var(--buy-lift)); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .is-chomping .buy-mark { animation: chomp var(--motion-slow) var(--ease-standard); }
+}
+@keyframes chomp { 0%, 100% { transform: none; } 35% { transform: rotate(var(--buy-snap-up)); } 70% { transform: rotate(var(--buy-snap-down)); } }
 .buy-mark__head {
   display: block; width: var(--buy-mark-head); height: calc(var(--buy-mark-head) / (var(--mark-ratio))); background: currentColor;
   -webkit-mask: url("../img/raptor.png") center / contain no-repeat; mask: url("../img/raptor.png") center / contain no-repeat;
@@ -1481,8 +1503,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .retailer-list__domain, .retailer-list__note { font-size: var(--text-sm); color: var(--color-ink-subtle); }
 @media (min-width: 40rem) { .retailer-list li { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--space-4); align-items: baseline; } }
 .not-found .search { margin-top: var(--space-5); }
-.not-found .empty-mark { margin-top: var(--rhythm-page-top); }
-.not-found .empty-mark + .page-title { margin-top: 0; }
+.not-found .raptor-says { margin-top: var(--rhythm-page-top); }
+.not-found .raptor-says + .page-title { margin-top: 0; }
 /* A removed product's page: its set and game as plain rows */
 .gone-links { list-style: none; margin-top: var(--space-5); border-top: 1px solid var(--color-line); }
 .gone-links li { border-bottom: 1px solid var(--color-line); }
@@ -1527,7 +1549,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .deck__nojs { padding: var(--space-4); }
 .deck__status { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; text-align: center; color: var(--color-ink-subtle); padding: var(--space-4); }
 .deck__status .button { margin-top: var(--space-3); }
-.deck__status .empty-mark { margin-bottom: var(--space-2); }
+.deck__status .raptor-says { margin-bottom: var(--space-2); }
 
 .swipe {
   position: absolute; inset: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--space-3);

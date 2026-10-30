@@ -157,7 +157,11 @@
         const mark = el("div", "empty-mark");
         mark.setAttribute("aria-hidden", "true");
         mark.append(el("span", "mark mark--md"));
-        status.append(mark, el("p", "", words.finished));
+        // The head and, when the owner has given it one, its line beside it, as on the other empty states.
+        const says = el("div", "raptor-says");
+        says.append(mark);
+        if (words.raptor) says.append(el("p", "raptor-says__line", words.raptor));
+        status.append(says, el("p", "", words.finished));
         const again = el("button", "button button--quiet button--small", words.restartLabel || "Start again");
         again.type = "button";
         again.addEventListener("click", () => { seen = new Set(); store(SEEN, []); nextOffset = 0; finished = false; fetchMore(); });

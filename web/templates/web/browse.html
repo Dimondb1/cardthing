@@ -11,7 +11,7 @@
 {# A plain search found nothing: lead with that and offer a way forward. #}
 <div class="browse-head browse-head--empty">
   <div class="no-luck">
-    <div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span><span class="empty-mark__ask">?</span></div>
+    <div class="raptor-says"><div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span><span class="empty-mark__ask">?</span></div>{% copy "browse.no_results.raptor" as says %}{% if says %}<p class="raptor-says__line">{{ says }}</p>{% endif %}</div>
     <h1 class="no-luck__title">{% copy "browse.no_results.headline" %}</h1>
     <p class="no-luck__query">{% copy "browse.no_results.title" query=query %}</p>
     <div class="prose">{% copy "browse.no_results.body" %}</div>

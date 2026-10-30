@@ -129,11 +129,12 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ("name", "ean", "product_set__name", "product_set__code")
     autocomplete_fields = ("product_set",)
     prepopulated_fields = {"slug": ("name",)}
-    readonly_fields = ("image_preview", "created_at", "updated_at", "shops_rrp")
+    readonly_fields = ("image_preview", "created_at", "updated_at", "shops_rrp", "shops_contents")
     fieldsets = (
         (None, {"fields": ("name", "slug", "game", "product_set", "product_type", "is_active")}),
         ("Details", {"fields": ("image", "image_url", "image_preview", "ean", "amazon_asin", "release_date")}),
         ("RRP", {"fields": ("rrp", "shops_rrp")}),
+        ("What is inside", {"fields": ("packs", "cards_per_pack", "shops_contents")}),
         ("Record", {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
     inlines = [ListingInline]
@@ -159,6 +160,16 @@ class ProductAdmin(admin.ModelAdmin):
         if not obj.shop_rrp:
             return "None yet: fewer than two UK shops give the same RRP."
         return f"£{obj.shop_rrp:.2f}, given by {obj.shop_rrp_shops} UK shops"
+
+    @admin.display(description="what the shops say")
+    def shops_contents(self, obj):
+        """The packs and cards a pack the shops' descriptions agree on, as kept each hour; the figures above win."""
+        parts = []
+        if obj.packs_found:
+            parts.append(f"{obj.packs_found} pack{'s' if obj.packs_found != 1 else ''}")
+        if obj.cards_found:
+            parts.append(f"{obj.cards_found} cards a pack")
+        return ", ".join(parts) or "Nothing yet: the shops' descriptions do not agree on it, or do not say."
 
     @admin.display(description="Current image")
     def image_preview(self, obj):

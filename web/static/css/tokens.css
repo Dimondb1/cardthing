@@ -257,6 +257,10 @@
   --pulse-gap: 3px;                 /* how far outside Buy now its arrival ring starts */
   --color-on-brand-line: rgb(255 255 255 / 0.4);   /* the divider inside the Buy now button */
   --swing: 9deg;                    /* how far the bag swings once on arrival */
+  --buy-neck: 20% 85%;              /* where the raptor on a buy button turns: the back of its neck */
+  --buy-lift: -8deg;                /* how far it lifts its head on hover */
+  --buy-snap-up: -14deg;            /* and the snap of a press: up, then down past rest */
+  --buy-snap-down: 5deg;
 
   /* Owner's dashboard (dashboard.css) ------------------------------------------ */
   --chart-height: 8.5rem;           /* the plot of a dashboard chart; the day names sit below it */

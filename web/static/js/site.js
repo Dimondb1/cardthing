@@ -235,6 +235,16 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
   });
 });
 
+// A press on a buy button: its raptor snaps once (.is-chomping in site.css) as the shop opens in a new tab, so the tap
+// is felt. Only a class changes; a press during the snap leaves it to finish.
+document.addEventListener("click", (event) => {
+  const button = event.target.closest && event.target.closest(".buy-now, .button--buy, .buy-bar__buy");
+  if (button) button.classList.add("is-chomping");
+});
+document.addEventListener("animationend", (event) => {
+  if (event.animationName === "chomp") event.target.closest(".is-chomping")?.classList.remove("is-chomping");
+});
+
 // One-time reveals for lists below the fold. Nothing replays on scroll.
 if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
   // Not a list's cards: a list is there as soon as the page is, so a filter change or a scroll never waits on it.

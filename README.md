@@ -2991,7 +2991,18 @@ page it appears only inside the Buy now button, holding a shopping bag (see
   ink and an orange question mark, the search it tried, a Browse games button
   and a link to each game.
 - In ink above the heading on a broken link (with the question mark), the
-  empty watchlist and the end of the swipe deck.
+  empty watchlist and the end of the swipe deck, each with a short line of
+  its own in a grey bubble beside it (the owner, 30 Oct 2026: the site lacked
+  character): "Sniffed every shelf. This page is not here.", "Not a scrap on
+  my shelves by that name.", "Save one and I'll watch its price." and "Back
+  tomorrow with fresh prices." The lines are in Site wording
+  (`*.raptor`); empty one to hide it. The head stays hidden from screen
+  readers, the line is read.
+- On every buy button (Buy now, the cards' Buy and Pre-order, the buy bar)
+  the raptor lifts its head towards the shop on hover and snaps its jaws once
+  when pressed (`.is-chomping`, added by `site.js`), turning about its neck
+  with the bag: 340ms, transforms only, none with reduced motion. The ⓘ cards
+  have no raptor: most are on product pages, which keep the head to Buy now.
 
 The two panels use the owner's poster style: heavy capitals in lines of even
 length (`--text-poster`, `--weight-poster`, `text-wrap: balance`, which also
@@ -3067,6 +3078,31 @@ screens put the picture beside the name and the price box.
 The wording ("Compare prices", "{count} shops, cheapest delivered first",
 "{count} shops" on the bar, "at {retailer}") is under Product page in Site
 wording.
+
+### What is inside
+
+How many packs a product holds, and how many cards each pack has, so a box,
+a bundle and an Elite Trainer Box can be weighed against each other (the
+owner, 30 Oct 2026). Under the cheapest price the product page says "24 packs
+inside, £3.63 a pack" (the cheapest price shared over the packs, for a
+product holding two or more), and Product details has an Inside row ("24
+packs of 12 cards"), marked "(from the shops' descriptions)" unless the
+figures are your own.
+
+Nothing is guessed from the product type: counts differ by game, language
+and set (an English Pokémon box has 36 packs, a Japanese one 30, a Magic Play
+Booster box 30, One Piece 24). `catalogue/contents.py` reads each live UK
+shop listing's own description (kept by every read) for a count it states
+plainly: a number before a pack word in the same clause ("Contains 36
+booster packs", "9 Pokémon TCG: Scarlet & Violet, 151 booster packs" is 9),
+and "10 cards per pack" or "Each pack contains 10 cards". A count of cards,
+a share ("1 of 36 packs"), a description giving two different counts, or one
+describing several boxes (a case) gives nothing. The product's figure is the
+one most of the shops that give one agree on, more than all the others
+together. eBay and Amazon descriptions are sellers' words and are never
+read. `tidy_all` keeps the figures each hour (`refresh_contents`, also run
+once by each update); you can set your own under the product in admin
+(What is inside), which always wins, beside what the shops say.
 
 ### Price check
 

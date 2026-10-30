@@ -9,6 +9,7 @@ the rules), then files products without a set under the set their name or
 code names (catalogue/releases.py attach_sets) and puts the set codes in the names of products still without
 one, for games no release source lists, under Announced sets to check (raise_name_candidates), sets each product's language from its name and set
 (catalogue/languages.py), retypes products whose name plainly says another type (catalogue/types.py),
+reads how many packs and cards a pack each product holds from the shops' descriptions (catalogue/contents.py),
 forgets website shop pages
 no sitemap has listed for 30 days, clears old import records, removed product addresses after a year and the
 owner's old spreadsheets (catalogue/housekeeping.py) so the database stays small, deletes List your shop
@@ -159,6 +160,13 @@ class Command(BaseCommand):
         self.stdout.write("== types")
         changed = refresh_types(dry_run=dry_run)
         self.stdout.write(f"{changed} product types {'would change' if dry_run else 'set'}.")
+
+        from catalogue.contents import refresh_contents
+
+        self.stdout.write("== what is inside")
+        changed = refresh_contents(dry_run=dry_run)
+        self.stdout.write(f"{changed} products' packs and cards {'would change' if dry_run else 'set'} from shops' "
+                          "descriptions.")
 
         if not dry_run:
             self.stdout.write("== price checks")

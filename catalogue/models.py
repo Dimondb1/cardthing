@@ -274,6 +274,19 @@ class Product(models.Model):
     shop_rrp = models.DecimalField("RRP UK shops give", max_digits=8, decimal_places=2, null=True, blank=True,
                                    editable=False)
     shop_rrp_shops = models.PositiveSmallIntegerField("shops giving that RRP", null=True, blank=True, editable=False)
+    # What is inside (catalogue/contents.py): the owner's figures win over the ones the shops' descriptions agree on,
+    # which refresh_contents keeps each hour.
+    packs = models.PositiveSmallIntegerField(
+        "packs inside", null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(500)],
+        help_text="How many packs it holds, if you know it. It always wins over what the shops' descriptions say. "
+        "Leave empty to use theirs.",
+    )
+    cards_per_pack = models.PositiveSmallIntegerField(
+        "cards in each pack", null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="If you know it. It always wins over what the shops' descriptions say. Leave empty to use theirs.",
+    )
+    packs_found = models.PositiveSmallIntegerField("packs the shops give", null=True, blank=True, editable=False)
+    cards_found = models.PositiveSmallIntegerField("cards a pack the shops give", null=True, blank=True, editable=False)
 
     objects = ProductQuerySet.as_manager()
 
@@ -322,6 +335,21 @@ class Product(models.Model):
         from .fair_price import Verdict
 
         return Verdict(self.price_band, None)
+
+    @property
+    def packs_inside(self):
+        """How many packs it holds: the owner's figure, else the one the shops agree on, else None."""
+        return self.packs or self.packs_found
+
+    @property
+    def cards_inside(self):
+        """How many cards each pack holds: the owner's figure, else the one the shops agree on, else None."""
+        return self.cards_per_pack or self.cards_found
+
+    @property
+    def contents_from_shops(self):
+        """True when what the page says is inside rests on the shops' descriptions rather than the owner's figures."""
+        return bool((self.packs_inside and not self.packs) or (self.cards_inside and not self.cards_per_pack))
 
     @property
     def rrp_now(self):

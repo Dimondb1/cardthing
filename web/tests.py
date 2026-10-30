@@ -2541,6 +2541,31 @@ class RaptorMarkTests(PageTestCase):
         self.assertNotContains(self.client.get(reverse("web:deals")), 'class="mark ')
         self.assertNotContains(self.client.get(reverse("web:deals")), 'class="mark"')
 
+    def test_the_raptor_says_a_line_of_its_own_beside_its_head(self):
+        # The owner, 30 Oct 2026: the site lacked character. The line is read out; the head stays hidden.
+        for url, words, status in ((reverse("web:search") + "?q=nothing+matches+this", "Not a scrap on my shelves by that name.", 200),
+                                   ("/no-such-page/", "Sniffed every shelf. This page is not here.", 404),
+                                   (reverse("web:watchlist"), "Save one and I&#x27;ll watch its price.", 200)):
+            html = self.client.get(url).content.decode()
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, status)
+                start = html.index('<div class="raptor-says">')
+                block = html[start:html.index("</p></div>", start)]
+                self.assertIn('<div class="empty-mark" aria-hidden="true">', block)
+                self.assertIn(f'<p class="raptor-says__line">{words}', block)
+        deck = self.client.get(reverse("web:deck")).content.decode()
+        self.assertIn('data-raptor="Back tomorrow with fresh prices."', deck)
+
+    def test_an_emptied_line_leaves_the_head_alone(self):
+        from content.models import SiteContent
+        from django.core.cache import cache
+
+        SiteContent.objects.filter(key="watchlist.empty.raptor").update(content="")
+        cache.clear()
+        html = self.client.get(reverse("web:watchlist")).content.decode()
+        self.assertIn(self.PLAIN, html)
+        self.assertNotIn("raptor-says__line", html)
+
     def test_the_money_page_has_no_raptor(self):
         # Apart from the head on Buy now, which is the button's own drawing (buy-mark) and hidden from screen readers.
         for product in (self.etb, self.sold_out, self.unpriced):
@@ -2830,6 +2855,22 @@ class ProductPageRedesignTests(PageTestCase):
         for rule in (".button:active { transform: scale(0.97);", ".buy-now:active { transform: scale(0.97);",
                      ".compare-jump:active { transform: scale(0.97); }"):
             self.assertIn(rule, css)
+
+    def test_the_raptor_on_a_buy_button_lifts_on_hover_and_snaps_when_pressed(self):
+        from django.contrib.staticfiles import finders
+
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        tokens = open(finders.find("css/tokens.css"), encoding="utf-8").read()
+        self.assertIn("transform-origin: var(--buy-neck); transition: transform var(--motion-fast) var(--ease-standard); }", css)
+        self.assertIn(".buy-now:hover .buy-mark, .button--buy:hover .buy-mark, .buy-bar__buy:hover .buy-mark { transform: rotate(var(--buy-lift)); }", css)
+        self.assertIn("@media (prefers-reduced-motion: no-preference) {\n  .is-chomping .buy-mark { animation: chomp var(--motion-slow) var(--ease-standard); }\n}", css)
+        self.assertIn("@keyframes chomp { 0%, 100% { transform: none; } 35% { transform: rotate(var(--buy-snap-up)); } "
+                      "70% { transform: rotate(var(--buy-snap-down)); } }", css)
+        for token in ("--buy-neck: 20% 85%;", "--buy-lift: -8deg;", "--buy-snap-up: -14deg;", "--buy-snap-down: 5deg;"):
+            self.assertIn(token, tokens)
+        script = open(finders.find("js/site.js"), encoding="utf-8").read()
+        self.assertIn('event.target.closest(".buy-now, .button--buy, .buy-bar__buy")', script)
+        self.assertIn('if (event.animationName === "chomp") event.target.closest(".is-chomping")?.classList.remove("is-chomping");', script)
 
     def test_compare_prices_script_honours_reduced_motion_and_moves_focus(self):
         from django.contrib.staticfiles import finders

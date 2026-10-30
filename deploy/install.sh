@@ -160,6 +160,8 @@ sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/
 sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && .venv/bin/python manage.py shell -c 'from catalogue.models import CardmarketProduct; raise SystemExit(0 if CardmarketProduct.objects.exists() else 1)' || timeout -k 30 900 .venv/bin/python manage.py import_cardmarket" || true
 # Each product's Price check for lists (the Fairest price sort, the gauge on cards), now rather than at the hour.
 sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py refresh_price_checks" || true
+# How many packs, and cards a pack, each product holds, from the shops' descriptions: now rather than at the hour.
+sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py refresh_contents" || true
 
 # One address for the site: www. sends visitors and Google to the same page without it, permanently.
 # Serving both made Google index the whole site twice and split each page's standing between them.

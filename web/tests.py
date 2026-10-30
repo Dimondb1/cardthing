@@ -1958,6 +1958,86 @@ class PicksTests(TestCase):
         self.assertLess(page.index("data-picks"), page.index("data-resume"))
 
 
+class BuyBarTests(PageTestCase):
+    """The bar at the foot of a phone's product page (the owner, 30 Oct 2026: Compare prices was below the fold in an
+    app's browser): the cheapest price, Buy now and Compare prices, shown while the price box is off the screen."""
+
+    def page(self, product):
+        return self.client.get(product.get_absolute_url()).content.decode()
+
+    def css(self, name):
+        from django.contrib.staticfiles import finders
+
+        return open(finders.find(f"css/{name}"), encoding="utf-8").read()
+
+    def bar(self, html):
+        return html[html.index('<div class="buy-bar'):html.index("</div>", html.index('<div class="buy-bar'))]
+
+    def test_it_carries_the_price_buy_now_and_compare_prices_last_in_the_page(self):
+        html = self.page(self.etb)
+        bar = self.bar(html)
+        self.assertIn('<div class="buy-bar" data-buy-bar>', bar)
+        self.assertIn(f'<a class="buy-bar__buy" href="{self.cheap.get_outbound_url()}?b=buy_bar" data-click="buy_bar" '
+                      'data-click-shop="Harbour Games"', bar)
+        self.assertIn('rel="sponsored nofollow noopener"', bar)
+        self.assertIn('<span class="buy-mark" aria-hidden="true">', bar)
+        self.assertIn(f'<span class="money" data-price-for="{self.cheap.pk}"><span class="price">£54.99</span></span>', bar)
+        self.assertIn('<span class="buy-bar__shop">Buy now at Harbour Games</span>', bar)
+        self.assertIn('<a class="buy-bar__compare" href="#offers-title" data-jump data-compare="buy_bar">', bar)
+        self.assertIn('Compare prices<span class="buy-bar__arrow" aria-hidden="true">↓</span>', bar)
+        self.assertIn('<span class="buy-bar__note">2 shops</span>', bar)
+        # After everything else, so Tab goes from the price box to the list, not through a copy of them.
+        self.assertGreater(html.index('<div class="buy-bar'), html.index('id="offers-title"'))
+        self.assertGreater(html.index('<div class="buy-bar'), html.index('class="details"'))
+        # Without script it is always shown.
+        self.assertIn("<noscript><style>.buy-bar { visibility: visible; transform: none; }</style></noscript>", html)
+        self.assertNotIn("{#", html)
+        self.assertNotIn("{%", html)
+
+    def test_a_sold_out_product_keeps_compare_prices_alone_and_an_unpriced_one_has_no_bar(self):
+        sold = self.page(self.sold_out)
+        self.assertIn('<div class="buy-bar buy-bar--compare-only" data-buy-bar>', sold)
+        self.assertNotIn("buy-bar__buy", sold)
+        self.assertNotIn("buy-bar__note", sold)   # no shop has a price to count
+        self.assertNotIn("buy-bar", self.page(self.unpriced))
+
+    def test_the_bar_press_is_counted_like_the_buttons_it_copies(self):
+        from catalogue import clicks
+        from catalogue.models import OutboundClick
+
+        self.assertIn("buy_bar", OutboundClick.Button.values)
+        self.assertIn("buy_bar", clicks.COMPARE_PLACES)
+        self.client.get(f"{self.cheap.get_outbound_url()}?b=buy_bar", HTTP_REFERER="http://testserver" + self.etb.get_absolute_url(),
+                        HTTP_USER_AGENT="Mozilla/5.0 (iPhone) Safari/605.1")
+        self.assertEqual(OutboundClick.objects.filter(button="buy_bar", source="product").count(), 1)
+
+    def test_the_bar_keeps_to_the_foot_of_a_phone_and_off_wide_screens(self):
+        from django.contrib.staticfiles import finders
+
+        css = self.css("site.css")
+        tokens = self.css("tokens.css")
+        self.assertIn(".buy-bar {\n  position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;", css)
+        self.assertIn("padding: var(--space-2) var(--gutter) calc(var(--space-2) + env(safe-area-inset-bottom, 0px));", css)
+        # Off screen it is out of the Tab order; it slides up with motion, and simply appears without.
+        self.assertIn("visibility: hidden; transform: translateY(100%);", css)
+        self.assertIn(".buy-bar.is-shown { visibility: visible; transform: none; transition-delay: 0s; }", css)
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .buy-bar { transition: none; } }", css)
+        self.assertIn("@media (min-width: 60rem) { .buy-bar { display: none; } }", css)
+        # The footer and the cards that come up from the foot of the screen leave room for it.
+        self.assertIn("body:has(.buy-bar) .site-footer { padding-bottom: calc(var(--buy-bar-space) + env(safe-area-inset-bottom, 0px)); }", css)
+        self.assertIn("body:has(.buy-bar) { --card-bottom: calc(var(--gutter) + var(--buy-bar-space) + env(safe-area-inset-bottom, 0px)); }", css)
+        self.assertIn("bottom: var(--card-bottom, var(--gutter)); z-index: 20;", css)
+        self.assertIn("--buy-bar-space: calc(var(--tap) + 2 * var(--space-2) + var(--border-width));", tokens)
+        # Its arrow nods each time it comes up, with motion allowed.
+        self.assertIn(".buy-bar.is-shown .buy-bar__arrow { animation: nod-down var(--motion-slow) var(--ease-standard) var(--motion-normal) backwards; }", css)
+        script = open(finders.find("js/product.js"), encoding="utf-8").read()
+        self.assertIn('const watched = [".compare-jump", ".offers-section"]', script)
+        self.assertIn("rootMargin: `0px 0px -${bar.offsetHeight}px 0px`", script)
+        self.assertIn('bar.classList.toggle("is-shown", ![...onScreen.values()].some(Boolean));', script)
+        # Reload prices updates the bar's copy of the price too.
+        self.assertIn('document.querySelectorAll(`[data-price-for="${row.id}"]`).forEach((main) => swap(main, row.price));', script)
+
+
 class AnalyticsTests(PageTestCase):
     """Google Analytics loads only after the visitor allows it, and never on a private link."""
 
@@ -2725,12 +2805,31 @@ class ProductPageRedesignTests(PageTestCase):
         for rule in re.findall(r"animation: [^;]+;", block):
             self.assertRegex(rule, r"var\(--motion-(fast|normal|slow)\)")
         keyframes = re.findall(r"@keyframes [\w-]+ \{(.*?)\}\s*$", block, re.S | re.M)
-        self.assertEqual(len(keyframes), 4)   # media-in, sweep-down, sweep-across, bag-swing
+        self.assertEqual(len(keyframes), 6)   # media-in, ring-out, nod-down, sweep-down, sweep-across, bag-swing
         for frames in keyframes:
             for prop in re.findall(r"([a-z-]+):", frames):
                 self.assertIn(prop, ("opacity", "transform"))
         # The bag swings from the top of its handle, placed and sized by tokens.
         self.assertIn(".buy-mark__bag { position: absolute; left: var(--buy-bag-left); top: var(--buy-bag-top); width: var(--buy-bag-size); height: auto; overflow: visible; transform-origin: 50% 0; }", css)
+
+    def test_after_the_bag_swings_buy_now_rings_once_and_the_compare_arrow_nods(self):
+        # The owner, 30 Oct 2026: subtle motion so a visitor knows what to press. Each piece is one motion token long,
+        # in turn after the sweep and the swing, and ends as it began so hover and press still move the parts after.
+        from django.contrib.staticfiles import finders
+
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn(".buy-now::after { animation: ring-out var(--motion-slow) var(--ease-out) calc(var(--motion-normal) + 2 * var(--motion-slow)) backwards; }", css)
+        self.assertIn(".compare-jump__arrow { animation: nod-down var(--motion-slow) var(--ease-standard) calc(var(--motion-normal) + 3 * var(--motion-slow)) backwards; }", css)
+        self.assertIn("@keyframes ring-out { 0% { opacity: 0.7; transform: scale(0.985); } 100% { opacity: 0; transform: scale(1.05); } }", css)
+        self.assertIn("@keyframes nod-down { 0%, 100% { transform: none; } 50% { transform: translateY(3px); } }", css)
+        # The ring is drawn outside the button by a token and never catches a tap.
+        self.assertIn("inset: calc(-1 * var(--pulse-gap)); border: 2px solid var(--color-brand-action);", css)
+        self.assertIn("border-radius: calc(var(--radius) + var(--pulse-gap)); opacity: 0; pointer-events: none;", css)
+        # Hover nods the Compare arrow too, and every press is felt a little more than before.
+        self.assertIn("@media (hover: hover) { .compare-jump:hover .compare-jump__arrow { transform: translateY(2px); } }", css)
+        for rule in (".button:active { transform: scale(0.97);", ".buy-now:active { transform: scale(0.97);",
+                     ".compare-jump:active { transform: scale(0.97); }"):
+            self.assertIn(rule, css)
 
     def test_compare_prices_script_honours_reduced_motion_and_moves_focus(self):
         from django.contrib.staticfiles import finders

@@ -253,6 +253,8 @@
   --buy-bag-rim-svg: 3;             /* the same gap in the bag drawing's own units */
   --buy-arrow: 1.5rem;              /* the arrow at its right end */
   --compare-height: 3rem;           /* the outlined Compare prices button under it */
+  --buy-bar-space: calc(var(--tap) + 2 * var(--space-2) + var(--border-width));   /* the bar at the foot of a phone's product page: its height, which the footer leaves clear */
+  --pulse-gap: 3px;                 /* how far outside Buy now its arrival ring starts */
   --color-on-brand-line: rgb(255 255 255 / 0.4);   /* the divider inside the Buy now button */
   --swing: 9deg;                    /* how far the bag swings once on arrival */
 

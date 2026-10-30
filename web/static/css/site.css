@@ -132,7 +132,7 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 @media (hover: hover) {
   .button:hover { background: var(--color-brand-hover); border-color: var(--color-brand-hover); transform: translateY(-1px); box-shadow: var(--shadow-button-hover); }
 }
-.button:active { transform: scale(0.985); box-shadow: var(--shadow-button); transition-duration: 60ms; }
+.button:active { transform: scale(0.97); box-shadow: var(--shadow-button); transition-duration: 60ms; }
 /* A tap answers at once: no wait for a second tap that could mean a zoom. */
 a, button, summary, select, input, label { touch-action: manipulation; }
 .button[aria-disabled="true"], .button:disabled { opacity: 0.55; pointer-events: none; }
@@ -981,7 +981,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   transition: transform var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), background var(--motion-fast);
 }
 @media (hover: hover) { .buy-now:hover { --buy-surface: var(--color-brand-hover); transform: translateY(-1px); box-shadow: var(--shadow-button-hover); } }
-.buy-now:active { transform: scale(0.985); box-shadow: var(--shadow-button); transition-duration: 60ms; }
+.buy-now:active { transform: scale(0.97); box-shadow: var(--shadow-button); transition-duration: 60ms; }
 .buy-now__mark { display: flex; align-items: center; align-self: stretch; padding-right: var(--space-3); border-right: 1px solid var(--color-on-brand-line); }
 /* The logo's raptor head with a bag hooked on its lower jaw. The bag's place and size are shares of the head, so the
    pair scales together; the bag swings from the top of its handle. */
@@ -1009,10 +1009,62 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   transition: background var(--motion-fast), transform var(--motion-fast) var(--ease-standard);
 }
 @media (hover: hover) { .compare-jump:hover { background: var(--color-brand-soft); } }
-.compare-jump:active { transform: scale(0.985); }
+.compare-jump:active { transform: scale(0.97); }
 .compare-jump__label { font-size: var(--text-lg); font-weight: var(--weight-heading); line-height: var(--leading-tight); }
-.compare-jump__arrow { display: inline-block; margin-left: var(--space-1); }
+.compare-jump__arrow { display: inline-block; margin-left: var(--space-1); transition: transform var(--motion-fast) var(--ease-standard); }
+@media (hover: hover) { .compare-jump:hover .compare-jump__arrow { transform: translateY(2px); } }
 .compare-jump__note { font-size: var(--text-xs); color: var(--color-ink-muted); }
+
+/* The buy bar: on a phone, the cheapest price, Buy now and Compare prices at the foot of the screen while the price
+   box is off it (product.js shows and hides it; without script it is always there), so Compare prices is never below
+   the fold whatever the browser's own bars take (the owner, 30 Oct 2026). It slides up; hidden, it is out of the Tab
+   order too (visibility). Beside the picture on a wide screen the price box is always in view, so there is no bar. */
+.buy-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2);
+  padding: var(--space-2) var(--gutter) calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+  border-top: var(--border-width) solid var(--color-brand-line); background: var(--color-paper); box-shadow: var(--shadow-sheet);
+  visibility: hidden; transform: translateY(100%);
+  transition: transform var(--motion-normal) var(--ease-out), visibility 0s linear var(--motion-normal);
+}
+.buy-bar.is-shown { visibility: visible; transform: none; transition-delay: 0s; }
+.buy-bar--compare-only { grid-template-columns: minmax(0, 1fr); }
+.buy-bar__buy {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-2);
+  min-height: var(--tap); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
+  --buy-surface: var(--color-brand-action); border-radius: var(--radius); background: var(--buy-surface); color: var(--color-brand-ink);
+  text-decoration: none; box-shadow: var(--shadow-button);
+  transition: transform var(--motion-fast) var(--ease-standard), background var(--motion-fast);
+}
+.buy-bar__buy .buy-mark { --buy-mark: var(--buy-mark-card); --buy-mark-head: var(--buy-mark-head-card); flex: none; }
+.buy-bar__text { display: grid; gap: 0; min-width: 0; line-height: var(--leading-tight); }
+/* The one price not in green: it sits inside the orange buy button, where white is the only colour that reads. */
+.buy-bar__price .price { font-size: var(--text-lg); color: inherit; }
+.buy-bar__shop { font-size: var(--text-xs); font-weight: var(--weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.buy-bar__compare {
+  display: grid; justify-items: center; align-content: center; gap: 0; min-height: var(--tap); padding: var(--space-1) var(--space-3);
+  border: 1.5px solid var(--color-brand-action); border-radius: var(--radius); background: var(--color-paper); color: var(--color-ink);
+  text-align: center; text-decoration: none; transition: background var(--motion-fast), transform var(--motion-fast) var(--ease-standard);
+}
+.buy-bar__label { font-size: var(--text-base); font-weight: var(--weight-heading); line-height: var(--leading-tight); white-space: nowrap; }
+.buy-bar__arrow { display: inline-block; margin-left: var(--space-1); }
+.buy-bar__note { font-size: var(--text-xs); color: var(--color-ink-muted); }
+@media (hover: hover) {
+  .buy-bar__buy:hover { --buy-surface: var(--color-brand-hover); }
+  .buy-bar__compare:hover { background: var(--color-brand-soft); }
+}
+.buy-bar__buy:active, .buy-bar__compare:active { transform: scale(0.97); transition-duration: 60ms; }
+@media (prefers-reduced-motion: no-preference) {
+  /* Each time the bar comes up, its arrow nods once: the way to the prices. */
+  .buy-bar.is-shown .buy-bar__arrow { animation: nod-down var(--motion-slow) var(--ease-standard) var(--motion-normal) backwards; }
+}
+@media (prefers-reduced-motion: reduce) { .buy-bar { transition: none; } }
+@media (max-width: 59.99rem) {
+  /* The footer ends above the bar, and the cards that come up from the foot of the screen sit above it too. */
+  body:has(.buy-bar) .site-footer { padding-bottom: calc(var(--buy-bar-space) + env(safe-area-inset-bottom, 0px)); }
+  body:has(.buy-bar) { --card-bottom: calc(var(--gutter) + var(--buy-bar-space) + env(safe-area-inset-bottom, 0px)); }
+}
+@media (min-width: 60rem) { .buy-bar { display: none; } }
 
 /* The price list heading: where Compare prices lands, clear of anything stuck to the top of the screen. */
 #offers-title { scroll-margin-top: calc(var(--sticky-top, 0px) + var(--space-3)); }
@@ -1033,16 +1085,26 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @media (min-width: 60rem) {
   .buybox__sweep::before { inset: 0 auto 0 0; width: 50%; height: auto; background: linear-gradient(90deg, transparent, var(--color-brand-soft) 40%, var(--color-brand-line) 75%, transparent); }
 }
+/* Then, so a visitor knows what to press (the owner, 30 Oct 2026): a ring spreads once from Buy now, and the Compare
+   prices arrow nods once. Both end as they began (backwards fill), so hover and press still move them after. */
+.buy-now::after {
+  content: ""; position: absolute; inset: calc(-1 * var(--pulse-gap)); border: 2px solid var(--color-brand-action);
+  border-radius: calc(var(--radius) + var(--pulse-gap)); opacity: 0; pointer-events: none;
+}
 @media (prefers-reduced-motion: no-preference) {
   /* The whole well fades, so the picture blends into its own background throughout; once done nothing is left applied. */
   .product-media { animation: media-in var(--motion-slow) var(--ease-out) backwards; }
   .buybox__sweep::before { animation: sweep-down var(--motion-slow) var(--ease-standard) var(--motion-normal) both; }
   .buy-now .buy-mark__bag { animation: bag-swing var(--motion-slow) var(--ease-out) calc(var(--motion-normal) + var(--motion-slow)) both; }
+  .buy-now::after { animation: ring-out var(--motion-slow) var(--ease-out) calc(var(--motion-normal) + 2 * var(--motion-slow)) backwards; }
+  .compare-jump__arrow { animation: nod-down var(--motion-slow) var(--ease-standard) calc(var(--motion-normal) + 3 * var(--motion-slow)) backwards; }
 }
 @media (prefers-reduced-motion: no-preference) and (min-width: 60rem) {
   .buybox__sweep::before { animation-name: sweep-across; }
 }
 @keyframes media-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes ring-out { 0% { opacity: 0.7; transform: scale(0.985); } 100% { opacity: 0; transform: scale(1.05); } }
+@keyframes nod-down { 0%, 100% { transform: none; } 50% { transform: translateY(3px); } }
 @keyframes sweep-down { 0% { opacity: 0; transform: translateY(-100%); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(120%); } }
 @keyframes sweep-across { 0% { opacity: 0; transform: translateX(-100%); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateX(200%); } }
 @keyframes bag-swing {
@@ -1339,10 +1401,10 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 /* Add to home screen card ------------------------------------------------- */
 
 .install {
-  position: fixed; left: var(--gutter); right: var(--gutter); bottom: var(--gutter); z-index: 20;
+  position: fixed; left: var(--gutter); right: var(--gutter); bottom: var(--card-bottom, var(--gutter)); z-index: 20;
   display: grid; gap: var(--space-3); padding: var(--space-4);
   border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-lift);
-  transform: translateY(calc(100% + var(--gutter))); transition: transform var(--motion-slow) var(--ease-out);
+  transform: translateY(calc(100% + var(--card-bottom, var(--gutter)))); transition: transform var(--motion-slow) var(--ease-out);
 }
 .install[hidden] { display: none; }
 .install.is-shown { transform: none; }

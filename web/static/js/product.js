@@ -29,6 +29,25 @@
   });
 })();
 
+// The buy bar at the foot of a phone's screen: shown while neither the price box's Compare prices button nor the price
+// list is on screen (the part under the bar does not count), so the price and both buttons are always a tap away.
+// Without this file the bar is always shown (the noscript rule in the page).
+(() => {
+  const bar = document.querySelector("[data-buy-bar]");
+  if (!bar) return;
+  const watched = [".compare-jump", ".offers-section"].map((selector) => document.querySelector(selector)).filter(Boolean);
+  if (!watched.length || !("IntersectionObserver" in window)) {
+    bar.classList.add("is-shown");
+    return;
+  }
+  const onScreen = new Map();
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => onScreen.set(entry.target, entry.isIntersecting));
+    bar.classList.toggle("is-shown", ![...onScreen.values()].some(Boolean));
+  }, { rootMargin: `0px 0px -${bar.offsetHeight}px 0px` });
+  watched.forEach((el) => observer.observe(el));
+})();
+
 (() => {
   const button = document.querySelector("[data-refresh]");
   if (!button) return;
@@ -76,8 +95,8 @@
           const checked = item.querySelector("[data-checked]");
           if (checked) checked.textContent = row.checked;
         }
-        const main = document.querySelector(`[data-price-for="${row.id}"]`);
-        if (main) swap(main, row.price);
+        // The price box's price and the buy bar's copy of it.
+        document.querySelectorAll(`[data-price-for="${row.id}"]`).forEach((main) => swap(main, row.price));
         const note = document.querySelector(`[data-note-for="${row.id}"]`);
         if (note) swap(note, row.note);
         const line = document.querySelector(`[data-checked-for="${row.id}"]`);

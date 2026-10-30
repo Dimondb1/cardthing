@@ -1374,6 +1374,11 @@ ENTRIES = [
         "Outlined button under Buy now on a product page. Jumps down to the price list.",
     ),
     Entry(
+        "product.buy_bar.shops", T, "Buy bar, shop count", "{count} shops",
+        "Small line under Compare prices on the bar at the foot of a phone's product page, when two or more shops "
+        "have a price.", placeholders=("count",),
+    ),
+    Entry(
         "product.compare.jump_note", T, "Compare prices button, shop count",
         "{count} shops, cheapest delivered first",
         "Small line inside the Compare prices button when two or more shops have a price.",

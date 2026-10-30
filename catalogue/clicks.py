@@ -54,8 +54,8 @@ PAGES = {"home": "home", "product": "product", "game": "game", "set": "set", "se
 
 
 # The links to a product's prices a Compare tap can name (data-compare, counted by /api/note/?what=compare).
-COMPARE_PLACES = ("buy_box", "card", "featured", "picks", "recent", "trending", "out_now", "instead", "hub_cheapest",
-                  "guide_card", "checker")
+COMPARE_PLACES = ("buy_box", "buy_bar", "card", "featured", "picks", "recent", "trending", "out_now", "instead",
+                  "hub_cheapest", "guide_card", "checker")
 # The Compare taps that are a guide or the Fair Price Checker sending someone to a product page (dashboard Guides).
 GUIDE_PLACES = ("guide_card", "checker")
 

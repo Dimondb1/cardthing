@@ -193,4 +193,25 @@
   </ul>
 </section>
 {% endif %}
+{% if has_listings %}
+{% comment %}The buy bar: on a phone, the cheapest price, Buy now and Compare prices stay at the foot of the screen while
+the price box is off it (product.js), so Compare prices is never below the fold whatever the browser's own bars take.
+Without script it is always there. Last in the page, so it never breaks the Tab order between the price box and the
+list.{% endcomment %}
+<div class="buy-bar{% if not cheapest %} buy-bar--compare-only{% endif %}" data-buy-bar>
+  {% if cheapest %}<a class="buy-bar__buy" {% go_link cheapest "buy_bar" product %} target="_blank" rel="sponsored nofollow noopener">
+    <span class="buy-bar__mark">{% include "web/includes/buy_mark.svg" %}</span>
+    <span class="buy-bar__text">
+      <span class="buy-bar__price"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price %}</span></span>
+      <span class="buy-bar__shop">{% if cheapest.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %} {% copy "product.cheapest.retailer" retailer=cheapest.retailer.name %}</span>
+    </span>
+    <span class="visually-hidden"> (opens in a new tab)</span>
+  </a>{% endif %}
+  <a class="buy-bar__compare" href="#offers-title" data-jump data-compare="buy_bar">
+    <span class="buy-bar__label">{% copy "product.compare.jump" %}<span class="buy-bar__arrow" aria-hidden="true">↓</span></span>
+    {% if shop_count > 1 %}<span class="buy-bar__note">{% copy "product.buy_bar.shops" count=shop_count %}</span>{% elif shop_count %}<span class="buy-bar__note">{% copy "product.compare.one_shop" %}</span>{% endif %}
+  </a>
+</div>
+<noscript><style>.buy-bar { visibility: visible; transform: none; }</style></noscript>
+{% endif %}
 {% endblock %}

@@ -1096,6 +1096,7 @@ class OutboundClick(models.Model):
 
     class Button(models.TextChoices):
         BUY_NOW = "buy_now", "Buy now on a product page"
+        BUY_BAR = "buy_bar", "Buy now on the bar at the foot of a phone's product page"
         PRICE_LIST = "price_list", "A shop in a product's price list"
         LOTTERY = "lottery", "Enter lottery in a price list"
         CARD = "card", "Buy on a product card"

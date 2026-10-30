@@ -3040,13 +3040,33 @@ screens put the picture beside the name and the price box.
   less motion, lands the heading clear of anything stuck to the top of the
   screen, and moves keyboard focus to it.
 - On arrival, once per page view and only when motion is allowed, the
-  picture fades in, a soft orange sweep runs from it to Buy now, and the bag
-  swings once and settles: about a second in all, each step under 400ms,
-  opacity and transforms only. The price and button are readable and
-  pressable throughout; with reduced motion the page simply appears finished.
+  picture fades in, a soft orange sweep runs from it to Buy now, the bag
+  swings once and settles, then (the owner, 30 Oct 2026: subtle motion so a
+  visitor knows what to press) a thin orange ring spreads once from Buy now
+  and the Compare prices arrow nods once: about a second and a half in all,
+  each step under 400ms, opacity and transforms only. The price and button
+  are readable and pressable throughout; with reduced motion the page simply
+  appears finished. Hovering Compare prices nods its arrow too, and every
+  button on the site shrinks a touch (scale 0.97) while pressed.
+- **The buy bar.** On a phone (under 60rem wide) the cheapest price, Buy now
+  and Compare prices also sit in a bar fixed to the foot of the screen
+  (`.buy-bar`, last in the page so Tab order is untouched), because in some
+  apps' browsers the price box's own Compare prices button fell below the
+  fold (the owner, 30 Oct 2026). `js/product.js` shows the bar while neither
+  the price box's Compare prices button nor the price list is on screen (the
+  part under the bar does not count), and hides it otherwise; without script
+  it is always shown. It slides up (reduced motion: appears), its arrow nods
+  once each time, and off screen it is out of the Tab order. The footer and
+  the cards that come up from the foot of the screen (analytics, home
+  screen) leave room for it. Its presses are counted as `buy_bar`, beside
+  `buy_now` and `buy_box`, in Clicks to retailers and the dashboard's
+  Compare taps. Reload prices updates the bar's price too. Beside the
+  picture on a wide screen the price box is always in view, so there is no
+  bar.
 
 The wording ("Compare prices", "{count} shops, cheapest delivered first",
-"at {retailer}") is under Product page in Site wording.
+"{count} shops" on the bar, "at {retailer}") is under Product page in Site
+wording.
 
 ### Price check
 

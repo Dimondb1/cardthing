@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     "web",
     "inbox",
     "guides",
+    "twostep",
 ]
 
 MIDDLEWARE = [
@@ -78,6 +79,7 @@ MIDDLEWARE = [
     "web.middleware.SmallFormMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "twostep.middleware.TwoStepMiddleware",
     "web.middleware.OwnerEditsMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -205,8 +207,16 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+    # Browsers that have seen the site once use https for it for a year, even if a link or a typed address says
+    # http, so nobody between them and the site can serve a fake copy first. ripraptor.com only (no subdomains,
+    # no preload list): easy to undo while the site is young.
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 365
 
 # RipRaptor settings ---------------------------------------------------------
+
+# Admin and the dashboard take the password and a code from an authenticator app (twostep/). Off on a
+# development machine (DJANGO_DEBUG on) unless set, and in tests, which turn it on where they need it.
+RIPRAPTOR_TWO_STEP_REQUIRED = env_bool("RIPRAPTOR_TWO_STEP", default=not DEBUG) and not TESTING
 
 # Brand name used in page titles and the wordmark.
 RIPRAPTOR_SITE_NAME = "RipRaptor"

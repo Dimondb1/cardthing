@@ -1455,9 +1455,10 @@ admin.
 | `web`       | Public views, templates, CSS, the font and the favicon, the owner's dashboard, and the admin pages Things to check, Crawl health, Insights and Your data in Excel. |
 | `inbox`     | Message us, shop enquiries and shop outreach. |
 | `guides`    | Guides and the Fair Price Checker: guides written in Admin, their checks, pages and counts. |
+| `twostep`   | Admin sign-in security: two-step login with an authenticator app, and the block after 10 wrong tries. |
 
 Checks before a commit: `python manage.py test` and
-`python -m pyflakes ripraptor catalogue content web inbox guides`.
+`python -m pyflakes ripraptor catalogue content web inbox guides twostep`.
 
 ## Editing site wording
 
@@ -2591,6 +2592,7 @@ index.
 | `RIPRAPTOR_CLAUDE_PAGES`       | on      | Before Claude is asked about a row, read the shop page(s) it is about for evidence (see "The shop's own page"). `0` sends only what the site holds. |
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
+| `RIPRAPTOR_TWO_STEP`           | on on the server; off with `DJANGO_DEBUG` on | Admin and the dashboard take an authenticator app's code as well as the password (see "Admin sign-in security"). `0` switches it off. |
 | `RIPRAPTOR_GA_ID`              | `G-LGFBHYP6JC` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |
 
 ## Games
@@ -4256,6 +4258,54 @@ an iPhone; it hides once the app is opened from its icon.
 The sign-in renews each time the admin is used (`SESSION_SAVE_EVERY_REQUEST`),
 so the app stays signed in while it is opened at least once a fortnight.
 Public pages never start a session, so this writes nothing for visitors.
+
+## Admin sign-in security
+
+**Two-step login.** Admin and the dashboard take the password and a 6-digit
+code from an authenticator app (Google Authenticator, Microsoft
+Authenticator or any app that takes a setup key), so a stolen or guessed
+password is not enough on its own (`twostep/`). The codes are the standard
+kind (RFC 6238, 30 seconds each), worked out with Python's own library: no
+package and no paid service.
+
+- *Setting it up.* The first sign-in after this update goes to
+  Admin, Two-step login (`/admin/two-step/`). On the phone, tap **Add to
+  authenticator app**, or type the key shown into the app; then type the
+  app's code. Eight backup codes are shown once: write them down. Each gets
+  you in once if the phone is lost.
+- *Every staff login* sets it up the same way, a Guide editors login
+  included. Until it has, it gets no further than the set-up page, and on
+  public pages it is a visitor.
+- *Signed in before the update?* That sign-in counts once two-step is set up
+  only if it gave a code, so the admin app asks you to sign in again, with
+  the code. It then stays signed in as before.
+- *A new phone:* Two-step login, **Set up a new phone**. The old phone keeps
+  working until the new one gives its first code. **Make new backup codes**
+  replaces the old set.
+- *Lost phone and no backup codes:* on the server console,
+  ```sh
+  cd /srv/ripraptor && sudo -u ripraptor bash -c 'set -a; . ./.env; set +a; .venv/bin/python manage.py reset_two_step YOURNAME'
+  ```
+  The next sign-in takes the password alone and goes straight to setting up
+  a new app. A superuser can do the same for another staff login by
+  deleting its row under Admin, Two-step logins.
+- Each code works once. The secret and the backup codes (kept hashed) are in
+  the database, so a backup holds them; the password is still needed.
+- `RIPRAPTOR_TWO_STEP=0` switches it off; it is off on a development machine
+  (`DJANGO_DEBUG` on) unless set to 1.
+
+**Wrong tries.** Ten wrong sign-ins (password or code) from one address in
+15 minutes and that address is turned away for 15 minutes without its
+password being checked (`twostep/lockout.py`). A right sign-in clears the
+count. It counts addresses, not usernames, so nobody can lock you out by
+typing your name; the address is the one Caddy adds last to
+`X-Forwarded-For`.
+
+**HTTPS only.** On the server (`DJANGO_DEBUG=0`) every page tells browsers
+to use https for ripraptor.com for a year (HSTS, `SECURE_HSTS_SECONDS`),
+so nobody between a visitor and the site can serve a plain http copy
+first. Subdomains and the browsers' preload list are left out, so it is
+easy to undo while the site is young.
 
 ## Feeds
 

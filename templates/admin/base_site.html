@@ -21,3 +21,5 @@
 {% endblock %}
 
 {% block nav-global %}{% endblock %}
+
+{% block userlinks %}<a href="{% url 'twostep_setup' %}">Two-step login</a> / {{ block.super }}{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Two-step login | {{ site_title }}{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .twostep { max-width: 40rem; display: grid; gap: 16px; }
+  .twostep p, .twostep ol { margin: 0; }
+  .twostep ol { padding-left: 1.4em; display: grid; gap: 8px; }
+  .twostep__key { font-family: ui-monospace, monospace; font-size: 1.15rem; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+  .twostep__codes { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, max-content); gap: 8px 24px;
+                    font-family: ui-monospace, monospace; font-size: 1.15rem; }
+  .twostep__codes li { list-style: none; }
+  .twostep form { display: grid; gap: 8px; justify-items: start; }
+  .twostep input[type=text] { font-size: 1.2rem; max-width: 12rem; }
+  .twostep input[type=submit], .twostep .button { min-height: 40px; }
+  .twostep .quiet { color: var(--body-quiet-color); }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Two-step login</div>{% endblock %}
+{% block content %}
+<div class="twostep">
+{% if state == "new" %}
+  {% if two_step.is_on %}
+  <p>Set up the new phone. The old one keeps working until the new one gives its first code.</p>
+  {% else %}
+  <p>Admin now asks for a code from an authenticator app as well as your password, so a stolen password is not enough to get in. Set it up once, now.</p>
+  {% endif %}
+  <ol>
+    <li>Install an authenticator app on your phone, such as Google Authenticator or Microsoft Authenticator.</li>
+    <li>On that phone, tap <a href="{{ link }}">Add to authenticator app</a>. Or, in the app, choose to enter a setup key and type this one, with the account name {{ site_name }}:
+      <div class="twostep__key">{{ key }}</div></li>
+    <li>Type the 6 digits the app shows for {{ site_name }}.</li>
+  </ol>
+  <form method="post">{% csrf_token %}
+    {{ form.code.errors }}
+    {{ form.code.label_tag }} {{ form.code }}
+    <input type="hidden" name="next" value="{{ next }}">
+    <input type="hidden" name="action" value="confirm">
+    <input type="submit" value="{% if two_step.is_on %}Switch to the new phone{% else %}Turn on two-step login{% endif %}">
+  </form>
+  {% if two_step.is_on %}
+  <form method="post">{% csrf_token %}
+    <input type="hidden" name="action" value="cancel">
+    <input type="submit" class="button" value="Keep the old phone">
+  </form>
+  {% endif %}
+{% elif state == "done" or state == "codes" %}
+  <p>{% if state == "done" %}Two-step login is on. {% endif %}These are your backup codes. Each one gets you in once if your phone is lost or out of charge. Write them down or save them somewhere safe now: this page is the only time they are shown.</p>
+  <ul class="twostep__codes">{% for code in codes %}<li>{{ code }}</li>{% endfor %}</ul>
+  {% if state == "done" %}<p><a class="button" href="{{ next }}">Go to Admin</a></p>{% else %}<p><a class="button" href="{% url 'admin:index' %}">Back to Admin</a></p>{% endif %}
+{% else %}
+  <p>Two-step login is on. Signing in takes your password and the code from your authenticator app.</p>
+  <p class="quiet">{{ two_step.backup_codes|length }} backup code{{ two_step.backup_codes|length|pluralize }} left. Turned on {{ two_step.confirmed_at|date:"j M Y" }}.</p>
+  <form method="post">{% csrf_token %}
+    <input type="hidden" name="action" value="codes">
+    <input type="submit" value="Make new backup codes">
+    <span class="quiet">The old backup codes stop working.</span>
+  </form>
+  <form method="post">{% csrf_token %}
+    <input type="hidden" name="action" value="new">
+    <input type="submit" value="Set up a new phone">
+  </form>
+{% endif %}
+</div>
+{% endblock %}

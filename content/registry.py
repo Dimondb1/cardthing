@@ -440,11 +440,20 @@ ENTRIES = [
         "home.picks.note", T, "Picked for you note", "Like what you have looked at, best deals first.",
         "Small note under the Picked for you heading.",
     ),
+    # Each pick (and each In stock instead product) has one label, the first of these that is true. Lowest in 30
+    # days and Best in 7 days are the product badges' own wording (product.badge.*).
     Entry(
-        "home.picks.hot", T, "Too good to miss label", "Too good to miss",
-        "Green label on a pick with a saving of 15% or more on a next shop whose price is in line with the "
-        "market, or a verified 30-day low clearly under its average.",
+        "home.picks.under", T, "Pick label: saving", "{percent}% under the next shop",
+        "Green label on a pick whose cheapest delivered price is 15% or more under the next shop's, when that "
+        "shop's price is in line with the market and it has no 30-day or 7-day low.",
+        placeholders=("percent",),
     ),
+    Entry("home.picks.new", T, "Pick label: new release", "New release",
+          "Grey label on a pick released in the last 30 days, with no price label to show."),
+    Entry("home.picks.shops", T, "Pick label: shops", "In stock at {count} shops",
+          "Grey label on any other pick: how many shops have it in stock.", placeholders=("count",)),
+    Entry("home.picks.shops_one", T, "Pick label: one shop", "In stock at 1 shop",
+          "Grey label on any other pick that only one shop has in stock."),
     Entry("home.featured.title", H, "Featured deals heading", "Featured deals", "Home page row near the top."),
     Entry(
         "home.featured.disclosure", T, "Featured deals disclosure",
@@ -1794,6 +1803,22 @@ ENTRIES = [
     Entry("refer.keyring.alt", T, "Keyring picture description",
           "RipRaptor 3D keyring: the ripraptor logo in orange on a white base",
           "Read out by screen readers in place of the keyring picture."),
+    Entry("refer.photo.alt", T, "Keyring photo description",
+          "The RipRaptor keyring held in a hand: the ripraptor logo and raptor head in orange on a black base",
+          "Read out by screen readers in place of the keyring photo, on the home page's Win a keyring section and "
+          "the refer a friend pages."),
+    Entry("home.keyring.title", H, "Win a keyring heading", "Win a free RipRaptor keyring today",
+          "Home page section, shown while the refer a friend offer is open."),
+    Entry("home.keyring.winner", T, "Win a keyring winner line", "Matt from Portsmouth has already won one.",
+          "Under the heading. Name only people who have agreed to it. Empty hides the line.", optional=True),
+    Entry("home.keyring.left", T, "Win a keyring count", "Another {count} keyrings left to win.",
+          "Under the heading. The count is Keyrings left in Refer a friend settings, kept up to date as "
+          "keyrings are given.", placeholders=("count",)),
+    Entry("home.keyring.how", T, "Win a keyring how",
+          "Refer a friend and when they join, you both get one by post. UK only, whilst stocks last.",
+          "How to get one, under the count. Keep the conditions in it.", legal=True),
+    Entry("home.keyring.button", B, "Win a keyring button", "Get my link",
+          "Opens the refer a friend page, which shows the keyring photo."),
     Entry("refer.nudge.label", T, "Refer a friend card name", "Refer a friend",
           "Name of the refer a friend card for screen readers."),
     Entry("refer.nudge.text", T, "Refer a friend card text",

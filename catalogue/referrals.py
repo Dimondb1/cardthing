@@ -226,7 +226,7 @@ def refresh_flag(row=None):
     """Remember in the cache whether the offer is open, for the footer link on every page without a query."""
     row = row or ReferralSettings.current()
     cache.set(FLAG_KEY, {"on": bool(row.is_on and mail.enabled()), "stock": row.keyrings_left >= 2,
-                         "ends": row.ends_on.isoformat() if row.ends_on else ""}, None)
+                         "left": row.keyrings_left, "ends": row.ends_on.isoformat() if row.ends_on else ""}, None)
 
 
 def advertised(today=None):
@@ -237,6 +237,14 @@ def advertised(today=None):
         return False
     today = today or timezone.localdate()
     return not flag.get("ends") or today.isoformat() <= flag["ends"]
+
+
+def keyrings_left(today=None):
+    """Keyrings still to give, while the offer is advertised, for the home page's Win a keyring section; else None.
+    From the cache, like advertised: a flag written before it held the count gives None until it is next written."""
+    if not advertised(today):
+        return None
+    return cache.get(FLAG_KEY).get("left")
 
 
 def rewards(key):

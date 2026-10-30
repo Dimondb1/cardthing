@@ -3319,8 +3319,8 @@ gauge when the product has one, else one of these two badges. Which shop is
 cheapest today is the price list's own "Cheapest" mark; there is no "Lowest
 today" badge (it sat beside "Above average" and read as a contradiction). A product only one UK shop lists gets no badge at all, and is never a
 featured deal or on Lowest in 90 days: there is no other price to judge it
-against. "Too good to miss" on Picked for you
-needs a 15% saving on a shop in line with the market, or the 30-day low.
+against. A pick on Picked for you is labelled with a saving only when it
+is 15% on a shop in line with the market (see "Picked for you").
 The rules and their numbers are at the top of `catalogue/offers.py`.
 
 Six of the eight places go to deals whose cheapest shop pays a
@@ -3818,6 +3818,16 @@ still send their address. Under **Referrals**, **Approve** sends the address ema
 review and **Cancel** stops it (no email to anyone, keyrings back to stock, its links stop). The footer and
 the watchlist page show "Refer a friend, get a free keyring" only while new people can join.
 
+**Win a keyring (home page).** While the offer is advertised, the home page has a section under the orange Prices
+dropped panel: "Win a free RipRaptor keyring today", a line naming a winner ("Matt from Portsmouth has already won
+one.", at the owner's request, 30 Oct 2026; name only people who agreed, and empty the line in Site wording to hide
+it), "Another 9 keyrings left to win." and how to get one, with Get my link to `/refer/`. The count is **Keyrings
+left**, kept in the cached offer flag with the rest (`referrals.keyrings_left`), so it follows every keyring given
+or given back and the home page gains no query. Its wording is under Home page (`home.keyring.*`). The section and
+the refer a friend pages show the owner's photo of the real keyring (`web/static/img/keyring-photo.webp` and
+`.jpg`, 900 by 600, re-encoded without the phone's EXIF, which held its GPS position); the small card keeps the
+drawn one.
+
 **The refer a friend card.** While the offer is advertised, a small card ("Raptors save in packs.", the keyring
 picture, Get my link and No thanks) now and then invites visitors to refer a friend
 (`web/static/js/refer-card.js`, `web/templates/web/includes/refer_card.html`). It never shows on a browser's
@@ -4179,11 +4189,20 @@ slugs and up to three recent searches to `/api/picks/?p=slug,slug&s=a|b` as
 the page loads, and shows the row it gets back; with nothing known, or with
 JavaScript off, the row stays hidden. The server (`catalogue/picks.py`)
 ranks up to 8 in-stock products from the same set, or the same game and
-kind, never one already viewed or saved: deals "Too good to miss" first (a
-confirmed saving of at least 15% on the next shop, or the lowest price of
-the week), then the closest match (same set, same language), then the most
+kind, never one already viewed or saved: deals first (a confirmed saving of
+at least 15% on the next shop, or a verified 30-day low), then the closest match (same set, same language), then the most
 widely stocked. It keeps nothing about the visitor, and the request is never
 cached.
+
+Each pick has one label saying why it is worth a look, the first of these
+that is true (`picks.tag`, `web/templates/web/includes/pick_tag.html`): in
+green, price evidence, **Lowest in 30 days** or **Best in 7 days** (our own
+daily price record, as on product cards) or **23% under the next shop** (a
+saving of 15% or more on a next shop whose price is in line with the
+market); in grey, plain facts, **New release** (out in the last 30 days) or
+**In stock at 6 shops**. The owner, 30 Oct 2026: "Too good to miss" on
+every deal said nothing. The wording is under Home page in Site wording
+(`home.picks.*`). The In stock instead rows use the same labels.
 
 **In stock instead** (`picks.instead`). A product page nobody can sell now,
 and a released set page with nothing in stock or on pre-order, show up to 4

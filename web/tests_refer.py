@@ -671,6 +671,87 @@ class TidyTests(ReferTestCase):
         self.assertEqual(len(self.sent), before + 2)
 
 
+class WinKeyringSectionTests(ReferTestCase):
+    """The owner, 30 Oct 2026: a home page section to win a keyring, naming the first winner, with the keyrings left
+    and the photo of the real keyring on the page it leads to."""
+
+    def home(self):
+        return self.get(reverse("web:home")).content.decode()
+
+    def test_the_home_page_shows_it_with_the_keyrings_left_while_the_offer_is_open(self):
+        referrals.refresh_flag()
+        html = self.home()
+        section = html[html.index('aria-labelledby="keyring-title"'):html.index("</section>", html.index("keyring-title"))]
+        self.assertIn("Win a free RipRaptor keyring today", section)
+        self.assertIn("Matt from Portsmouth has already won one.", section)
+        self.assertIn("Another 10 keyrings left to win.", section)
+        self.assertIn("you both get one by post. UK only, whilst stocks last.", section)
+        self.assertIn('<a class="button" href="/refer/">Get my link', section)
+        self.assertIn('img/keyring-photo.webp', section)
+        self.assertIn('loading="lazy"', section)
+        self.assertNotIn("!", re.sub(r"<[^>]*>", " ", section))
+
+    def test_the_count_follows_the_keyrings_given(self):
+        referrer = self.referrer()
+        self.claim(referrer)
+        self.assertIn("Another 8 keyrings left to win.", self.home())
+
+    def test_it_goes_when_the_offer_closes_or_runs_out(self):
+        ReferralSettings.objects.filter(pk=1).update(keyrings_left=1)
+        referrals.refresh_flag()
+        self.assertNotIn("keyring-title", self.home())
+        ReferralSettings.objects.filter(pk=1).update(keyrings_left=9, is_on=False)
+        referrals.refresh_flag()
+        self.assertNotIn("keyring-title", self.home())
+
+    def test_a_flag_written_before_the_count_was_kept_shows_nothing(self):
+        cache.set(referrals.FLAG_KEY, {"on": True, "stock": True, "ends": ""}, None)
+        self.assertIsNone(referrals.keyrings_left())
+        self.assertNotIn("keyring-title", self.home())
+
+    def test_the_winner_line_can_be_emptied_in_admin(self):
+        from content.models import SiteContent
+
+        referrals.refresh_flag()
+        SiteContent.objects.filter(key="home.keyring.winner").update(content="")
+        cache.clear()
+        referrals.refresh_flag()
+        html = self.home()
+        self.assertIn("Another 10 keyrings left to win.", html)
+        self.assertNotIn("keyring-offer__winner", html)
+
+    def test_it_adds_no_query_to_the_home_page(self):
+        def count():
+            with CaptureQueriesContext(connection) as queries:
+                self.get(reverse("web:home"))
+            return len(queries)
+
+        count()
+        ReferralSettings.objects.filter(pk=1).update(is_on=False)
+        referrals.refresh_flag()
+        off = count()
+        ReferralSettings.objects.filter(pk=1).update(is_on=True)
+        referrals.refresh_flag()
+        self.assertEqual(count(), off)
+
+    def test_the_refer_pages_show_the_photo(self):
+        html = self.get(reverse("web:refer")).content.decode()
+        self.assertIn('class="refer-layout__art refer-layout__art--photo"', html)
+        self.assertIn('img/keyring-photo.jpg" alt="The RipRaptor keyring held in a hand', html)
+        self.assertIn('width="900" height="600"', html)
+
+    def test_the_photo_carries_no_location_or_camera_details(self):
+        # The phone's original had GPS in it: the copies on the site are re-encoded without any EXIF.
+        from django.contrib.staticfiles import finders
+        from PIL import Image
+
+        for name in ("img/keyring-photo.webp", "img/keyring-photo.jpg"):
+            with Image.open(finders.find(name)) as image:
+                self.assertEqual(image.size, (900, 600))
+                self.assertEqual(len(image.getexif()), 0, name)
+                self.assertNotIn("exif", image.info, name)
+
+
 class QueryCountTests(ReferTestCase):
     def test_pages_take_a_fixed_number_of_queries(self):
         referrer = self.referrer()
@@ -1037,11 +1118,15 @@ class ReferCardTests(ReferTestCase):
                     self.assertIn("A", image.getbands())
         referrer = self.referrer()
         alt = 'alt="RipRaptor 3D keyring: the ripraptor logo in orange on a white base"'
+        # The card keeps the drawn keyring; the refer a friend pages show the owner's photo (WinKeyringSectionTests).
         for url in (reverse("web:refer"), f"/r/{referrer.code}/", reverse("web:about")):
             html = self.get(url, ip="51.4.4.4").content.decode()
             with self.subTest(url=url):
-                self.assertIn('width="900" height="258"', html)
-                self.assertIn(alt, html)
+                if url == reverse("web:about"):
+                    self.assertIn('width="900" height="258"', html)
+                    self.assertIn(alt, html)
+                else:
+                    self.assertIn('width="900" height="600"', html)
                 self.assertIn('<span class="pack', html)
                 self.assertIn('aria-hidden="true"><span class="mark pack__friend">', html)
 

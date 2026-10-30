@@ -86,6 +86,21 @@
   </a>
 </section>
 
+{% if keyrings_left %}
+<section class="home-section" aria-labelledby="keyring-title">
+  <div class="keyring-offer">
+    {% include "web/includes/keyring_photo.html" with variant="home" %}
+    <div class="keyring-offer__body">
+      <h2 id="keyring-title" class="keyring-offer__title">{% copy "home.keyring.title" %}</h2>
+      {% copy "home.keyring.winner" as winner %}{% if winner %}<p class="keyring-offer__winner">{{ winner }}</p>{% endif %}
+      <p class="keyring-offer__left">{% copy "home.keyring.left" count=keyrings_left %}</p>
+      <p class="keyring-offer__how">{% copy "home.keyring.how" %}</p>
+      <a class="button" href="{% url 'web:refer' %}">{% copy "home.keyring.button" %} <span aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 {% if coming_soon or latest %}
 {# One Drops section, the drops page in small: its Coming soon rows (sets a visitor can pre-order now), then its Out now row (just out and in stock). Each sub-heading opens that tab, so every item shown is behind its link. #}
 <section class="home-section home-drops" aria-labelledby="latest-title">

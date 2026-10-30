@@ -1,0 +1,1 @@
+{% load static sitecopy %}<picture class="keyring-photo{% if variant %} keyring-photo--{{ variant }}{% endif %}"><source srcset="{% static 'img/keyring-photo.webp' %}" type="image/webp"><img src="{% static 'img/keyring-photo.jpg' %}" alt="{% copy 'refer.photo.alt' %}" width="900" height="600"{% if variant == "home" %} loading="lazy"{% endif %} decoding="async"></picture>

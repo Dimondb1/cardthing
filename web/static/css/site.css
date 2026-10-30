@@ -190,7 +190,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 }
 .badge svg { width: 1em; height: 1em; }
 .badge--good { background: var(--color-price-soft); color: var(--color-price); }
-.badge--soon { background: var(--color-shelf); color: var(--color-ink-subtle); }
+.badge--soon, .badge--fact { background: var(--color-shelf); color: var(--color-ink-subtle); }
 /* Pre-orders look the part: a quieter picture until the product is actually out. */
 .is-upcoming .product-image img { opacity: 0.6; filter: grayscale(0.35); }
 .trending__badge { align-self: flex-start; margin-top: var(--space-1); }
@@ -1715,6 +1715,17 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .keyring--page { max-width: var(--keyring-page); margin: 0 auto; }
 .keyring--card { width: var(--keyring-card); max-width: 100%; padding: var(--space-2) var(--space-3); border-radius: var(--radius); background: var(--color-brand-soft); }   /* the soft panel lets the white base read on the white card */
 @media (max-width: 22.5rem) { .keyring--card { display: none; } }   /* on the smallest phones the card keeps to its words and buttons */
+/* The owner's photo of the real keyring: on the refer a friend pages, and on the home page's Win a keyring section. */
+.keyring-photo { display: block; overflow: hidden; border-radius: var(--radius); }
+.keyring-photo img { display: block; width: 100%; height: auto; aspect-ratio: var(--keyring-photo-ratio); object-fit: cover; }
+.keyring-offer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); padding: var(--card-pad); border: var(--border-width) solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-paper); }
+.keyring-offer__body { display: grid; justify-items: start; align-content: center; gap: var(--space-2); min-width: 0; }
+.keyring-offer__title { font-size: var(--text-section); text-wrap: balance; }
+.keyring-offer__winner, .keyring-offer__left { margin: 0; font-weight: var(--weight-strong); }
+.keyring-offer__how { margin: 0 0 var(--space-2); color: var(--color-ink-muted); }
+@media (min-width: 48rem) {
+  .keyring-offer { grid-template-columns: minmax(0, var(--split-minor)) minmax(0, var(--split-major)); align-items: center; gap: var(--space-5); }
+}
 .refer-layout { display: grid; grid-template-areas: "head" "art" "body"; }
 .refer-layout__head { grid-area: head; }
 .refer-layout__art { grid-area: art; margin-bottom: var(--space-5); padding: var(--space-3) var(--space-4); border-radius: var(--radius-card); background: var(--color-brand-soft); }
@@ -1723,6 +1734,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   .refer-layout { grid-template-columns: minmax(0, var(--split-major)) minmax(0, var(--split-minor)); grid-template-areas: "head art" "body art"; column-gap: var(--split-gap); align-items: start; }
   .refer-layout__art { margin: var(--rhythm-page-top) 0 0; padding: var(--space-4); }
 }
+.refer-layout__art.refer-layout__art--photo { padding: 0; background: none; }   /* the photo is its own panel */
 
 /* The refer a friend card: the home screen card's shape and entrance, pinned to the right corner on wide screens. */
 .refer-card { gap: var(--space-3); }

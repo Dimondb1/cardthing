@@ -23,7 +23,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_http_methods, require_POST, require_safe
 
 from catalogue import (alerts, clicks, fair_price, images, insights, languages, mail, offers, picks, popularity, pricing,
-                       sports, traffic)
+                       referrals, sports, traffic)
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, FeaturedSettings, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
@@ -816,6 +816,8 @@ def home(request):
             "coming_soon": home_coming_soon(),
             "coming_soon_shown": COMING_SOON_ON_HOME,
             "interest_games": interest_lexicon(games),
+            # Win a keyring: shown while the refer a friend offer is open, read from the cache with no query.
+            "keyrings_left": referrals.keyrings_left(),
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
@@ -2112,7 +2114,7 @@ def recent_api(request):
 @require_GET
 def picks_api(request):
     """The home page's Picked for you row: in-stock products like those named in ``p`` (viewed and saved)
-    and found by the searches in ``s``, deals too good to miss first.
+    and found by the searches in ``s``, the best deals first, each labelled with why it is worth a look.
 
     What a visitor looked at lives in their browser; the server only ranks and prices, and keeps nothing.
     """

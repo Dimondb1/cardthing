@@ -199,6 +199,7 @@
   --keyring-page: 22rem;         /* the keyring picture on the refer a friend pages */
   --keyring-card: 11rem;         /* and on the refer a friend card */
   --keyring-ratio: 900 / 258;    /* keyring.png's own proportions */
+  --keyring-photo-ratio: 3 / 2;  /* the owner's photo of the keyring (keyring-photo.webp and .jpg) */
 
   /* Product page ---------------------------------------------------------- */
   /* On a phone the picture takes what the first screen leaves after the header, title, price and Buy now, so all four

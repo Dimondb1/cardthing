@@ -1866,7 +1866,7 @@ class ComingSoonTests(PageTestCase):
 
 class PicksTests(TestCase):
     """Picked for you: in-stock products like the ones a visitor viewed, saved or searched for, real deals
-    first and labelled too good to miss, never the ones they already looked at."""
+    first, each labelled with why it is worth a look, never the ones they already looked at."""
 
     def setUp(self):
         from decimal import Decimal
@@ -1894,10 +1894,47 @@ class PicksTests(TestCase):
         self.assertNotIn(self.viewed.name, body)
         self.assertNotIn(self.sold_out.name, body)
         self.assertNotIn(self.unrelated.name, body)
-        # A 23% saving on the next shop is too good to miss and comes first; the same set's bundle follows.
+        # A 23% saving on the next shop comes first, labelled with it in green; the same set's bundle follows,
+        # labelled with how many shops have it.
         self.assertLess(body.index(self.deal.name), body.index(self.same_set.name))
-        self.assertEqual(body.count("Too good to miss"), 1)
+        self.assertIn('<span class="badge badge--good trending__badge">23% under the next shop</span>', body)
+        self.assertIn('<span class="badge badge--fact trending__badge">In stock at 2 shops</span>', body)
+        self.assertEqual(body.count("trending__badge"), body.count("trending__item"))
+        self.assertNotIn("Too good to miss", body)
         self.assertIn("Save £12.00", body)
+
+    def test_each_pick_says_the_strongest_true_thing_about_it(self):
+        from datetime import date, timedelta
+        from types import SimpleNamespace
+
+        from catalogue import picks
+
+        today = date(2026, 10, 30)
+
+        def tag(badge=None, percent=None, release=None, shops=4):
+            product = SimpleNamespace(release=release, in_stock_count=shops)
+            return picks.tag(product, SimpleNamespace(badge=badge, percent=percent), today)
+
+        self.assertEqual(tag("low_30", 40, today), ("low_30", None))
+        self.assertEqual(tag("best_week", 40), ("best_week", None))
+        self.assertEqual(tag(None, 15, today), ("under", 15))
+        self.assertEqual(tag(None, 14, today), ("new", None))
+        self.assertEqual(tag(release=today - timedelta(days=picks.NEW_DAYS)), ("new", None))
+        self.assertEqual(tag(release=today - timedelta(days=picks.NEW_DAYS + 1)), ("shops", 4))
+        self.assertEqual(tag(release=today + timedelta(days=1)), ("shops", 4))   # not out yet
+        self.assertEqual(tag(shops=1), ("shops", 1))
+        self.assertTrue(tag("low_30").good and tag(None, 20).good)
+        self.assertFalse(tag().good or tag(release=today).good)
+
+    def test_the_labels_read_well(self):
+        from django.template.loader import render_to_string
+
+        from catalogue.picks import Tag
+
+        for tag, words in ((Tag("shops", 1), "In stock at 1 shop<"), (Tag("shops", 6), "In stock at 6 shops<"),
+                           (Tag("new", None), "New release<"), (Tag("low_30", None), "Lowest in 30 days<"),
+                           (Tag("best_week", None), "Best in 7 days<")):
+            self.assertIn(words, render_to_string("web/includes/pick_tag.html", {"tag": tag}))
 
     def test_searches_count_too_and_nothing_known_gives_nothing(self):
         self.assertIn(self.same_set.name, self.picks("?s=surging+sparks+elite"))

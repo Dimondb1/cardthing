@@ -3,4 +3,5 @@
   <h1 class="page-title">{% copy title %}</h1>
   <p class="page-intro">{% copy intro %}</p>
 </div>
-<div class="refer-layout__art">{% include "web/includes/keyring.html" with variant="page" %}</div>
+{# The owner's photo of the real keyring (30 Oct 2026); the drawn one stays on the small refer a friend card. #}
+<div class="refer-layout__art refer-layout__art--photo">{% include "web/includes/keyring_photo.html" with variant="page" %}</div>

@@ -28,7 +28,7 @@ body {
 }
 
 h1, h2, h3 {
-  font-stretch: var(--stretch-display);
+ 
   font-weight: var(--weight-heading);
   line-height: var(--leading-tight);
   letter-spacing: -0.01em;
@@ -160,7 +160,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 
 /* Price */
 .price {
-  display: inline-block; font-stretch: var(--stretch-price); font-weight: var(--weight-price);
+  display: inline-block; font-weight: var(--weight-price);
   font-variant-numeric: tabular-nums lining-nums; letter-spacing: -0.01em; line-height: 1;
   white-space: nowrap; color: var(--color-price);
 }
@@ -375,7 +375,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .reveal { opacity: 0; transform: translateY(6px); transition: opacity var(--motion-slow) var(--ease-out), transform var(--motion-slow) var(--ease-out); }
 .reveal.is-visible, .no-js .reveal { opacity: 1; transform: none; }
 .hero__eyebrow { margin-bottom: var(--space-1); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.09em; text-transform: uppercase; color: var(--color-brand-text); }
-.hero__title { font-size: var(--text-headline); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-tight); letter-spacing: -0.02em; max-width: 22ch; margin: 0; }
+.hero__title { font-size: var(--text-headline); font-weight: var(--weight-heading); line-height: var(--leading-tight); letter-spacing: -0.02em; max-width: 22ch; margin: 0; }
 .hero__accent { color: var(--color-brand); white-space: nowrap; }
 .hero__subtitle { margin: var(--space-2) 0 0; max-width: 40ch; color: var(--color-ink-muted); font-size: var(--text-base); line-height: var(--leading-snug); }
 .hero__search { margin: var(--space-3) 0 0; max-width: 44rem; text-align: left; }
@@ -408,7 +408,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 }
 @media (hover: hover) { .tile:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); border-color: var(--color-brand-line); } }
 .tile:active { transform: scale(0.99); }
-.tile__name { font-size: var(--text-lg); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-snug); }
+.tile__name { font-size: var(--text-lg); font-weight: var(--weight-heading); line-height: var(--leading-snug); }
 .tile__meta { font-size: var(--text-xs); color: var(--color-ink-subtle); }
 /* The name is the tile's link, its area stretched over the whole tile; the ⓘ beside it sits above that area, so it
    opens its card and not the page. */
@@ -475,9 +475,10 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @media (hover: hover) { .poster:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); } }
 .poster:active { transform: scale(0.99); }
 .poster__body { position: relative; z-index: 1; display: grid; justify-items: start; gap: var(--space-3); max-width: var(--golden-major); }
-.poster__title { font-size: var(--text-poster); font-weight: var(--weight-poster); font-stretch: var(--stretch-poster); line-height: var(--leading-poster); text-transform: uppercase; }
+.poster__title { font-size: var(--text-poster); font-weight: var(--weight-poster); line-height: var(--leading-poster); text-transform: uppercase; text-wrap: balance; }
 .poster__line { display: block; }
-.poster__text { font-size: var(--text-xl); font-weight: var(--weight-heading); line-height: var(--leading-snug); }
+/* Even lines keep the words to the left of the head, whose paper colour they share on the orange panel. */
+.poster__text { font-size: var(--text-xl); font-weight: var(--weight-heading); line-height: var(--leading-snug); text-wrap: balance; }
 .poster__button {
   display: inline-flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-3) var(--space-4);
   border: 1.5px solid currentColor; border-radius: var(--radius-sm); font-weight: var(--weight-heading); line-height: var(--leading-tight);
@@ -701,7 +702,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   border: 1.5px solid var(--color-ink); border-radius: var(--radius-card); background: var(--color-paper); text-align: center;
 }
 .no-luck .empty-mark { margin: 0; }
-.no-luck__title { font-size: var(--text-poster-sm); font-weight: var(--weight-poster); font-stretch: var(--stretch-poster); line-height: var(--leading-poster); text-transform: uppercase; }
+.no-luck__title { font-size: var(--text-poster-sm); font-weight: var(--weight-poster); line-height: var(--leading-poster); text-transform: uppercase; text-wrap: balance; }
 .no-luck__query { color: var(--color-ink-muted); overflow-wrap: anywhere; }
 .no-luck .game-links { justify-content: center; margin-top: var(--space-2); }
 
@@ -826,7 +827,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .card__image { display: block; }
 .card__body { display: grid; gap: var(--space-1); justify-items: start; align-content: start; min-width: 0; }
 .card__lang { padding: 0.2em 0.6em; border-radius: var(--radius-pill); background: var(--color-shelf); color: var(--color-ink-muted); font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.4; }
-.card__name { font-size: var(--text-lg); font-stretch: 100%; line-height: var(--leading-snug); letter-spacing: 0; }
+.card__name { font-size: var(--text-lg); line-height: var(--leading-snug); letter-spacing: 0; }
 .card__name a { display: inline-block; padding-block: 2px; text-decoration: none; }
 .card__name a::after { content: ""; position: absolute; inset: 0; border-radius: var(--radius-card); }
 .card:hover .card__name a { text-decoration: underline; }
@@ -868,7 +869,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 /* Ranked retailers */
 .rank { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-line); border-radius: var(--radius); font-size: var(--text-sm); }
 .rank__item { display: inline-flex; align-items: baseline; gap: var(--space-2); }
-.rank__pos { font-weight: var(--weight-price); font-stretch: var(--stretch-price); }
+.rank__pos { font-weight: var(--weight-price); }
 .rank__pos--1 { color: var(--color-price); }
 .rank__pos--2 { color: var(--color-more); }
 .rank__name { font-weight: var(--weight-strong); }
@@ -884,7 +885,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .result { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "image body" "image offer"; column-gap: var(--space-4); row-gap: var(--space-2); padding: var(--space-4) 0; border-bottom: 1px solid var(--color-line); }
 .result .product-image { grid-area: image; align-self: start; }
 .result__body { grid-area: body; min-width: 0; }
-.result__name { margin-top: 2px; font-size: var(--text-base); font-stretch: 100%; font-weight: var(--weight-strong); line-height: var(--leading-snug); letter-spacing: 0; }
+.result__name { margin-top: 2px; font-size: var(--text-base); font-weight: var(--weight-strong); line-height: var(--leading-snug); letter-spacing: 0; }
 .result__name a { display: inline-block; padding-block: 2px; text-decoration: none; }
 .result__name a::after { content: ""; position: absolute; inset: 0; }
 .result:hover .result__name a { text-decoration: underline; }
@@ -910,7 +911,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
    went wrong (no results, page not found) an orange question mark stands beside it; where nothing is wrong (empty
    watchlist, end of the deck) the head is on its own. Added as an element, so the mid-page filtered-out state is untouched. */
 .empty-mark { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); color: var(--color-ink); }
-.empty-mark__ask { font-size: var(--mark-md); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-tight); color: var(--color-brand); }
+.empty-mark__ask { font-size: var(--mark-md); font-weight: var(--weight-heading); line-height: var(--leading-tight); color: var(--color-brand); }
 
 /* Product page ------------------------------------------------------------- */
 
@@ -995,7 +996,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .buy-mark__handle { filter: drop-shadow(0 0 var(--buy-bag-rim) var(--buy-surface)); }
 .buy-mark__hole { fill: var(--buy-surface); }
 .buy-now__text { display: grid; justify-items: center; gap: calc(var(--space-1) / 2); min-width: 0; text-align: center; }
-.buy-now__label { font-size: var(--text-xl); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); line-height: var(--leading-tight); }
+.buy-now__label { font-size: var(--text-xl); font-weight: var(--weight-heading); line-height: var(--leading-tight); }
 .buy-now__shop { font-size: var(--text-sm); font-weight: var(--weight-medium); line-height: var(--leading-snug); overflow-wrap: anywhere; }
 .buy-now__arrow { width: var(--buy-arrow); height: var(--buy-arrow); transition: transform var(--motion-fast) var(--ease-standard); }
 @media (hover: hover) { .buy-now:hover .buy-now__arrow { transform: translateX(calc(-1 * var(--lift))); } }
@@ -1272,7 +1273,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .report__label { margin-top: var(--space-2); font-weight: var(--weight-strong); }
 .report__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
 .offer__price, .offer__delivery, .offer__checked { display: none; }
-.offer__total { grid-area: total; font-stretch: var(--stretch-price); font-weight: var(--weight-price); font-size: var(--text-price-md); line-height: 1.1; color: var(--color-price); }
+.offer__total { grid-area: total; font-weight: var(--weight-price); font-size: var(--text-price-md); line-height: 1.1; color: var(--color-price); }
 .offer__meta { grid-area: meta; font-size: var(--text-sm); color: var(--color-ink-subtle); }
 .offer__deal { grid-column: 1 / -1; font-size: var(--text-sm); color: var(--color-ink); }
 .offer__action { grid-area: action; justify-self: end; align-self: center; }
@@ -1485,7 +1486,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .swipe__image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; padding: 4%; box-sizing: border-box; mix-blend-mode: multiply; pointer-events: none; opacity: 0.85; transition: opacity var(--motion-normal); }
 .swipe__image img.is-loaded { opacity: 1; }
 .swipe__image .placeholder { width: 45%; height: 45%; color: var(--color-ink-subtle); }
-.swipe__name { font-size: var(--text-xl); font-weight: var(--weight-heading); font-stretch: var(--stretch-display); color: var(--color-brand); line-height: var(--leading-tight); text-align: center; }
+.swipe__name { font-size: var(--text-xl); font-weight: var(--weight-heading); color: var(--color-brand); line-height: var(--leading-tight); text-align: center; }
 .swipe__meta { font-size: var(--text-sm); color: var(--color-ink-subtle); text-align: center; }
 .swipe__bottom { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-auto-flow: row dense; align-items: center; gap: var(--space-1) var(--space-3); }
 /* As on product cards: the price and Buy now share one row and one centre line, the shop line runs under both. The
@@ -1629,7 +1630,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   line-height: 1;
 }
 .drop-card__tile-top { font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-brand-text); }
-.drop-card__tile-big { margin-top: var(--space-1); font-size: var(--text-xl); font-weight: var(--weight-price); font-stretch: var(--stretch-display); font-variant-numeric: tabular-nums lining-nums; color: var(--color-ink); }
+.drop-card__tile-big { margin-top: var(--space-1); font-size: var(--text-xl); font-weight: var(--weight-price); font-variant-numeric: tabular-nums lining-nums; color: var(--color-ink); }
 .drop-card__tile--month .drop-card__tile-big { font-size: var(--text-base); }   /* the year, under the month: no day yet */
 .drop-card__title { display: grid; gap: var(--space-1); min-width: 0; }
 .drop-card__game { font-size: var(--text-xs); font-weight: var(--weight-strong); letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-ink-subtle); line-height: var(--leading-snug); }
@@ -1639,11 +1640,13 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .drop-card__when { display: flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-1); row-gap: var(--space-1); font-size: var(--text-sm); color: var(--color-ink-muted); line-height: var(--leading-snug); }
 .drop-card__left { font-weight: var(--weight-strong); color: var(--color-ink); }
 /* The countdown, this week's drops only: added by web/static/js/drops.js, so only text changes as it ticks.
-   Tabular figures keep every digit the same width, so nothing beside it moves. */
+   Each two-digit part is as wide as two of the widest digit (DM Sans has no tabular figures), so nothing beside
+   it moves as it ticks. */
 .countdown { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); margin-left: var(--space-1); font-variant-numeric: tabular-nums lining-nums; }
 .countdown[hidden] { display: none; }
 .countdown__part { display: inline-flex; align-items: baseline; gap: 1px; padding: 1px var(--space-2); border-radius: var(--radius-sm); background: var(--color-shelf); }
-.countdown__n { font-size: var(--text-sm); font-weight: var(--weight-price); font-stretch: var(--stretch-price); color: var(--color-ink); line-height: var(--leading-snug); }
+.countdown__n { min-width: var(--countdown-digits); font-size: var(--text-sm); font-weight: var(--weight-price); color: var(--color-ink); line-height: var(--leading-snug); text-align: end; }
+.countdown__n[data-unit="d"] { min-width: 0; }
 .countdown__u { font-size: var(--text-xs); font-weight: var(--weight-strong); color: var(--color-ink-subtle); }
 .drop-card__offer { display: grid; gap: 2px; min-width: 0; }
 .drop-card__best { font-size: var(--text-base); color: var(--color-ink); line-height: var(--leading-snug); }
@@ -1677,7 +1680,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .drop-offer__name { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); text-decoration: none; overflow-wrap: anywhere; }
 .drop-offer__name:hover { color: var(--color-brand-text); text-decoration: underline; }
 .drop-offer__meta { font-size: var(--text-sm); color: var(--color-ink-muted); line-height: var(--leading-snug); }
-.drop-offer__price { font-size: var(--text-base); font-weight: var(--weight-price); font-stretch: var(--stretch-price); color: var(--color-price); font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
+.drop-offer__price { font-size: var(--text-base); font-weight: var(--weight-price); color: var(--color-price); font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
 .drop-offer__checked { color: var(--color-ink-subtle); white-space: nowrap; }
 
 /* Refer a friend (/refer/, /r/<code>/ and the private links) ------------------------------------------- */

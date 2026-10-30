@@ -3,7 +3,7 @@
   reminder form posts to a page of its own.
 
   - Countdowns: each [data-countdown] holds the drop's start (midnight UK time on its day). Only the digits
-    change as it ticks, in tabular figures, so nothing beside them moves. With reduced motion the seconds are
+    change as it ticks, each in a box two digits wide, so nothing beside them moves. With reduced motion the seconds are
     left out and it changes once a minute. It pauses while the tab is hidden.
   - Reminder forms: Remind me opens the form (a plain details element, so it opens without script too) and
     the email box takes the focus, as it does when another page's Remind me link opens it. The form is sent

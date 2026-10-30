@@ -2747,6 +2747,28 @@ class GoldenLayoutTests(PageTestCase):
         self.assertIn(".resume__chips li { min-width: 0; max-width: 100%; }", css)
         self.assertIn(".resume__chips .chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere;", css)
 
+    def test_the_typeface_is_dm_sans_self_hosted(self):
+        # 30 Oct 2026: the owner chose DM Sans over Archivo.
+        from django.contrib.staticfiles import finders
+
+        tokens, css = self.css("tokens.css"), self.css("site.css") + self.css("dashboard.css")
+        self.assertIn('--font-sans: "DM Sans", ui-sans-serif,', tokens)
+        self.assertIn('src: url("../fonts/dmsans-variable-latin.woff2") format("woff2-variations")', tokens)
+        self.assertTrue(finders.find("fonts/dmsans-variable-latin.woff2"))
+        self.assertTrue(finders.find("fonts/DMSans-OFL.txt"))
+        html = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn('<link rel="preload" href="/static/fonts/dmsans-variable-latin.woff2" as="font"', html)
+        self.assertNotIn("rchivo", tokens + css + html)
+        # DM Sans has one width: asking for a narrower one does nothing, so nothing asks.
+        self.assertNotIn("font-stretch", tokens + css)
+        # Nor tabular figures: the countdown's parts keep their width as the digits change.
+        self.assertIn("--countdown-digits: 2ch;", tokens)
+        self.assertIn(".countdown__n { min-width: var(--countdown-digits);", css)
+        # The raptor panels' lines are balanced, keeping the words on the orange panel clear of the paper head.
+        for rule in (".poster__title {", ".poster__text {", ".no-luck__title {"):
+            line = css[css.index(rule):css.index("}", css.index(rule))]
+            self.assertIn("text-wrap: balance;", line, rule)
+
     def test_large_text_stays_inside_a_phone_screen(self):
         # 27 Oct 2026: with a phone's text set large, the header's search box and menu ran off the right of the screen.
         css, tokens = self.css("site.css"), self.css("tokens.css")

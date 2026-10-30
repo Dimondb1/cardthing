@@ -3,7 +3,7 @@
 Needs: pip install playwright, and Chromium. Run: python scripts/make_badges.py [path-to-chromium].
 Writes web/static/img/badge/listed-on-ripraptor.png and listed-on-ripraptor-dark.png at twice their shown size,
 from the logo and the site's own font and colours (web/static/css/tokens.css), with transparent corners. Run it
-again after the logo or the brand colours change; the addresses stay the same, so shops' badges follow.
+again after the logo, the font or the brand colours change; the addresses stay the same, so shops' badges follow.
 """
 import sys
 import tempfile

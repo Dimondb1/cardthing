@@ -13,12 +13,14 @@
     Every gap on the site    --space-1 to --space-8 and the --rhythm-* tokens (a golden-ratio scale)
 */
 
+/* DM Sans (SIL Open Font License, web/static/fonts/DMSans-OFL.txt): Google Fonts' Latin file, weights 100 to
+   1000 and optical sizes, so small text is drawn a little wider and looser and headings tighter, by itself.
+   It has one width (no condensed capitals) and no tabular figures. */
 @font-face {
-  font-family: "Archivo";
-  src: url("../fonts/archivo-variable-latin.woff2") format("woff2-variations"),
-       url("../fonts/archivo-variable-latin.woff2") format("woff2");
-  font-weight: 100 900;
-  font-stretch: 62% 125%;
+  font-family: "DM Sans";
+  src: url("../fonts/dmsans-variable-latin.woff2") format("woff2-variations"),
+       url("../fonts/dmsans-variable-latin.woff2") format("woff2");
+  font-weight: 100 1000;
   font-style: normal;
   font-display: swap;
 }
@@ -80,10 +82,8 @@
   --radius-pill: 999px;      /* filters, badges, search box */
 
   /* Typefaces ------------------------------------------------------------ */
-  --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;   /* code a shop copies, such as the badge's */
-  --stretch-display: 96%;
-  --stretch-price: 92%;
 
   /* Type sizes ----------------------------------------------------------- */
   --text-xs: 0.75rem;
@@ -270,11 +270,11 @@
 
   /* Drop tracker ------------------------------------------------------------ */
   --drop-tile: 3.75rem;             /* the calendar tile beside each drop's name: month over day */
+  --countdown-digits: 2ch;          /* two of the font's widest digit: DM Sans has no tabular figures, so a ticking clock keeps its width this way */
 
   /* Raptor panels: the owner's poster style, on the home page panels and the no-results card only ---- */
   --text-poster: clamp(2.75rem, 1.5rem + 5.4vw, 5.75rem);
   --text-poster-sm: clamp(2.25rem, 1.4rem + 3.4vw, 3.75rem);
-  --stretch-poster: 70%;        /* Archivo narrowed: the condensed capitals of the owner's design */
   --weight-poster: 900;
   --leading-poster: 0.9;
   --poster-pad: clamp(1.5rem, 1rem + 2.5vw, 3rem);

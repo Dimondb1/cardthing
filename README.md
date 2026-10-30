@@ -1544,8 +1544,16 @@ The header puts the logo at the content's left edge on every page and at
 every width, with the menu on the right. There is no back arrow: browsers
 have their own. Under 60rem the search box has its own row under them.
 
-The typeface is Archivo, self-hosted from `web/static/fonts/` (SIL Open Font
-License), so there are no requests to Google Fonts.
+The typeface is DM Sans (the owner's choice, 30 Oct 2026; Archivo before),
+self-hosted from `web/static/fonts/` (SIL Open Font License), so there are no
+requests to Google Fonts. The file is Google Fonts' Latin one, with every
+weight and optical size: small text is drawn a little wider and looser,
+headings tighter. DM Sans has one width, so nothing on the site is condensed,
+and no tabular figures, so the drop countdown keeps each two-digit part two of
+the widest digit wide (`--countdown-digits`) to stop the line moving as it
+ticks. Change it in `tokens.css` (`@font-face` and `--font-sans`), the font
+preload in `web/templates/web/base.html` and the emails' fallback list in
+`web/templates/web/email/base.html`, then redraw the badge ("The RipRaptor badge").
 
 The logo is `web/static/img/logo.png`, served as `logo.webp` (the same
 pixels, lossless, half the bytes) to browsers that take WebP, through
@@ -2985,8 +2993,9 @@ page it appears only inside the Buy now button, holding a shopping bag (see
 - In ink above the heading on a broken link (with the question mark), the
   empty watchlist and the end of the swipe deck.
 
-The two panels use the owner's poster style: Archivo's condensed heavy
-capitals (`--text-poster`, `--stretch-poster`, `--weight-poster`) and the head
+The two panels use the owner's poster style: heavy capitals in lines of even
+length (`--text-poster`, `--weight-poster`, `text-wrap: balance`, which also
+keeps the line under the heading clear of the head) and the head
 cropped by the panel's edge, hung from the top on wider screens so its eye
 always shows. Their wording is under Home page in Site wording; the last
 sentence of each heading goes on its own line. The orange panel is the one
@@ -3957,7 +3966,7 @@ when there were some (`outreach.sent.*`), so a new shop is not told nought.
 Badge visits show on the Insights page under Other sites, by the shop's
 address. The wording is under List your shop (`listshop.badge.*`); the
 words on the images themselves are drawn in. To redraw the images after
-the logo or brand colours change, run `python scripts/make_badges.py`
+the logo, the font or the brand colours change, run `python scripts/make_badges.py`
 (needs `pip install playwright`).
 
 ## Shop outreach

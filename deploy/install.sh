@@ -137,6 +137,9 @@ grep -q RIPRAPTOR_PREORDER_ALERTS_FROM .env || echo "RIPRAPTOR_PREORDER_ALERTS_F
 # since loses the 2 written for it, so its reader runs three jobs at the next update.
 [ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 1500000 ] || sed -i '/^RIPRAPTOR_WORKER_THREADS=2$/d' .env
 grep -q RIPRAPTOR_WORKER_THREADS .env || { [ "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)" -lt 1500000 ] && echo "RIPRAPTOR_WORKER_THREADS=2" >> .env || true; }
+# The Google Analytics id the site used until 30 Oct 2026 reached no stream of the owner's: a copy of it in .env
+# would keep sending there, so it goes and the site's default (settings.py) applies.
+sed -i '/^RIPRAPTOR_GA_ID=G-LGFBHYP6JC$/d' .env
 set -a; . ./.env; set +a
 [ -f /var/lib/ripraptor/dbip-country.mmdb ] || .venv/bin/python manage.py fetch_geoip || true
 chown -R ripraptor:ripraptor "$DIR" /var/lib/ripraptor

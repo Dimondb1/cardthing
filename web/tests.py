@@ -1942,6 +1942,31 @@ class AnalyticsTests(PageTestCase):
                     for phrase in CopyStyleTests.BANNED:
                         self.assertNotIn(phrase, html.lower())
 
+    def test_the_server_sends_to_the_owners_stream(self):
+        # The id on the owner's web stream in Google Analytics (Admin, Data streams). Until 30 Oct 2026 the site
+        # sent to another id, and their reports stayed empty.
+        import json
+        import os
+        import subprocess
+        import sys
+
+        from django.conf import settings
+
+        code = ("import json, django; django.setup(); from django.conf import settings as s; "
+                "print(json.dumps(s.RIPRAPTOR_GA_ID))")
+        env = {key: value for key, value in os.environ.items() if not key.startswith(("DJANGO_", "RIPRAPTOR_"))}
+        with tempfile.TemporaryDirectory() as folder:
+            env.update(DJANGO_SETTINGS_MODULE="ripraptor.settings", DJANGO_DEBUG="0", DJANGO_SECRET_KEY="x" * 50,
+                       RIPRAPTOR_CACHE_DIR=folder)
+            done = subprocess.run([sys.executable, "-c", code], cwd=settings.BASE_DIR, env=env, capture_output=True,
+                                  text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout), "G-TZW5ZVM9H8")
+        # A copy of the old id in the server's .env would win, so the update takes it out.
+        install = (settings.BASE_DIR / "deploy" / "install.sh").read_text()
+        self.assertIn("sed -i '/^RIPRAPTOR_GA_ID=G-LGFBHYP6JC$/d' .env", install)
+        self.assertLess(install.index("RIPRAPTOR_GA_ID=G-LGFBHYP6JC"), install.index("systemctl restart ripraptor\n"))
+
     def test_the_terms_page_explains_it_while_it_is_set_up(self):
         with self.settings(**self.GA):
             self.assertContains(self.client.get(reverse("web:terms")), "We use Google Analytics only if you allow it")

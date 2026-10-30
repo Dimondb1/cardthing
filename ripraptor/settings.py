@@ -267,8 +267,10 @@ RIPRAPTOR_AWIN_PUBLISHER_ID = os.environ.get("RIPRAPTOR_AWIN_PUBLISHER_ID", "311
 
 # Google Analytics 4 measurement id (G-...). Google's tag loads only after a visitor allows analytics on the
 # card, and never on pages whose address is a private link. Empty means no card and no Google script. Off
-# on a development machine (DJANGO_DEBUG on) unless set, so testing never counts as a visit.
-RIPRAPTOR_GA_ID = os.environ.get("RIPRAPTOR_GA_ID", "" if DEBUG else "G-LGFBHYP6JC").strip()
+# on a development machine (DJANGO_DEBUG on) unless set, so testing never counts as a visit. The owner's
+# property's web stream (Admin, Data streams); until 30 Oct 2026 the site sent to an id no stream of theirs had,
+# so their reports stayed empty.
+RIPRAPTOR_GA_ID = os.environ.get("RIPRAPTOR_GA_ID", "" if DEBUG else "G-TZW5ZVM9H8").strip()
 
 # Amazon Associates: Product Advertising API keys and the tracking tag
 # (ripraptor-21). All three empty means Amazon is not read.

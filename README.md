@@ -2593,7 +2593,7 @@ index.
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 | `RIPRAPTOR_TWO_STEP`           | on on the server; off with `DJANGO_DEBUG` on | Admin and the dashboard take an authenticator app's code as well as the password (see "Admin sign-in security"). `0` switches it off. |
-| `RIPRAPTOR_GA_ID`              | `G-LGFBHYP6JC` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |
+| `RIPRAPTOR_GA_ID`              | `G-TZW5ZVM9H8` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |
 
 ## Games
 

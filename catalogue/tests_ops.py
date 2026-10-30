@@ -102,6 +102,24 @@ class InstallStepTests(TestCase):
         self.assertGreater(loaded, shops)
         self.assertLess(loaded, text.index("systemctl restart ripraptor"))
 
+    def test_it_parses(self):
+        subprocess.run(["bash", "-n", str(DEPLOY / "install.sh")], check=True)
+
+    def test_security_updates_install_themselves(self):
+        text = (DEPLOY / "install.sh").read_text()
+        self.assertIn("apt-get install -y -qq unattended-upgrades", text)
+        self.assertIn('APT::Periodic::Unattended-Upgrade "1";', text)
+        self.assertNotIn("Automatic-Reboot", text)
+
+    def test_the_firewall_lets_ssh_in_before_it_goes_on(self):
+        text = (DEPLOY / "install.sh").read_text()
+        enable = text.index("ufw --force enable")
+        for rule in ('for port in 22 $(sshd -T', 'ufw allow "$port/tcp"', "ufw allow 80/tcp", "ufw allow 443/tcp",
+                     "ufw allow 443/udp"):
+            self.assertLess(text.index(rule), enable, rule)
+        # A server that cannot run a firewall still gets the update.
+        self.assertIn("} || echo \"Could not turn on the firewall; carrying on without it.\"", text[enable:])
+
 
 class WhyDownTests(TestCase):
     """deploy/why_down.sh, the owner's report for when the site was down, is valid and only reads."""

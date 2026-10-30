@@ -1704,7 +1704,11 @@ background reader as services, configures HTTPS for the domain (with
 site rather than two copies; `http://www.` goes there in one hop, not two;
 and request bodies over 25 MB refused before
 they reach the site, which reads a whole upload before it can refuse one)
-and schedules the cron jobs. The reader reads every shop on its first start. Run the same command again to update. The repository must be
+and schedules the cron jobs. The reader reads every shop on its first start. It also turns on Ubuntu's
+automatic security updates (`unattended-upgrades`: security fixes only, installed daily, never a restart)
+and a firewall (`ufw`) that lets in only the web (80, and 443 over TCP and UDP) and SSH (22 and any port
+`sshd` is set to, allowed before the firewall goes on); a server that cannot run a firewall is told so and
+the update carries on. Run the same command again to update. The repository must be
 public (or the server needs a token) for the clone to work.
 
 **Memory.** On a 1 GB server the site, the reader and the cron jobs share

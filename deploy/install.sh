@@ -20,6 +20,27 @@ rm -f /etc/apt/sources.list.d/caddy-stable.list
 apt-get update -qq
 apt-get install -y -qq git python3 python3-venv python3-pip curl caddy >/dev/null
 
+# Security fixes for Ubuntu's own software install themselves each day (unattended-upgrades, security
+# updates only), so a hole found in the system is closed without anyone logging in. It never restarts
+# the server: a kernel fix waits for the next reboot.
+apt-get install -y -qq unattended-upgrades >/dev/null
+cat > /etc/apt/apt.conf.d/20auto-upgrades <<'APT'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT
+systemctl enable -q --now unattended-upgrades 2>/dev/null || true
+
+# Firewall: from outside, only the web (80, and 443 over TCP and UDP for HTTP/3) and SSH answer. The site
+# listens on 127.0.0.1 alone already; this keeps it so for anything installed later. SSH is allowed before
+# the firewall goes on, on 22 and on any port its settings name, so the way in is never shut. A server
+# that cannot run one (some containers) is told so, and the update carries on.
+{
+  apt-get install -y -qq ufw >/dev/null &&
+  for port in 22 $(sshd -T 2>/dev/null | awk '$1 == "port" {print $2}'); do ufw allow "$port/tcp" >/dev/null; done &&
+  ufw allow 80/tcp >/dev/null && ufw allow 443/tcp >/dev/null && ufw allow 443/udp >/dev/null &&
+  ufw --force enable >/dev/null
+} || echo "Could not turn on the firewall; carrying on without it."
+
 # Swap: a 1 GB server with none has nowhere to go when memory runs out, so the kernel kills a
 # process outright. On 14 Oct 2026 it killed the site's gunicorn (the reader, both web workers and
 # cron jobs at once). With a 1 GB swap file it moves idle memory to disk instead. swappiness 10

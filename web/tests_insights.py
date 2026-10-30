@@ -71,6 +71,41 @@ class CountingTests(TestCase):
         self.assertEqual(len(data["by_day"]), 30)
 
 
+class ProbeSearchTests(TestCase):
+    """Scanners search for markup and code to see whether the site echoes it (Oct 2026: '"><svg onload=...>' and
+    the like filled the owner's top searches). They are left out of the lists."""
+
+    PROBES = ('"><svg/onload=alert(1)>', "<script>alert(1)</script>", "{{7*7}}", "${7*7}", "\' or 1=1--",
+              "%3cscript%3e", "&#x3c;img", "javascript:alert(1)", "../../etc/passwd", "a;b", "9f86d081884c7d659a2feaa0")
+    PEOPLE = ("pokemon 151 etb", "one piece op-09", "union arena", "yu-gi-oh! 25th", "magic: the gathering",
+              "booster box 100%", "dragon ball fusion world", "ascended heroes (random)", "lorcana & co")
+
+    def test_probes_are_spotted_and_searches_people_make_are_not(self):
+        import re
+
+        for query in self.PROBES:
+            self.assertTrue(re.search(insights.PROBE_SEARCH, query, re.I), query)
+        for query in self.PEOPLE:
+            self.assertFalse(re.search(insights.PROBE_SEARCH, query, re.I), query)
+
+    def test_the_lists_leave_probes_out(self):
+        today = timezone.localdate()
+        for query in self.PROBES:
+            DailySearch.objects.create(date=today, query=query, results=0, hits=2)
+        DailySearch.objects.create(date=today, query="pokemon 151 etb", results=0, hits=1)
+        data = insights.report(30)
+        self.assertEqual([row["query"] for row in data["top_searches"]], ["pokemon 151 etb"])
+        self.assertEqual([row["query"] for row in data["empty_searches"]], ["pokemon 151 etb"])
+
+    def test_the_dashboard_gaps_leave_probes_out(self):
+        from web import dashboard
+
+        DailySearch.objects.create(date=timezone.localdate(), query="<svg onload=1>", results=0, hits=9)
+        DailySearch.objects.create(date=timezone.localdate(), query="pokemon 151 etb", results=0, hits=1)
+        gaps = dashboard.gaps_section(timezone.now(), None)["searches"]
+        self.assertEqual([row["query"] for row in gaps], ["pokemon 151 etb"])
+
+
 class InsightsPageTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user("ben", password="pw", is_staff=True)

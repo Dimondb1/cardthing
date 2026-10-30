@@ -4307,6 +4307,13 @@ so nobody between a visitor and the site can serve a plain http copy
 first. Subdomains and the browsers' preload list are left out, so it is
 easy to undo while the site is young.
 
+**Hacking tools' searches.** Scanners search for markup and code
+(`"><svg onload=...>`, `{{7*7}}` and the like) to see whether the site
+prints it back as code. It never does: every page prints a search as
+plain text. These searches are still recorded but left out of the search
+lists on Insights and the dashboard (`PROBE_SEARCH` in
+`catalogue/insights.py`), where they pushed out the real ones.
+
 ## Feeds
 
 `/feeds/deals.xml` is an RSS feed of restocks, pre-order openings and price drops across the

@@ -524,7 +524,7 @@ def gaps_section(now, store):
     """The searches this week that found FEW_RESULTS products or fewer, most made first: what to add."""
     first = timezone.localtime(now).date() - timedelta(days=WEEK_DAYS - 1)
     rows = (
-        DailySearch.objects.filter(date__gte=first).values("query")
+        insights.people_searches(DailySearch.objects.filter(date__gte=first)).values("query")
         .annotate(hits=Sum("hits"), most=Max("results")).filter(most__lte=FEW_RESULTS)
         .order_by("-hits", "query")[:TOP_GAPS]
     )

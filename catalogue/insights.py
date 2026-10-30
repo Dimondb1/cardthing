@@ -195,6 +195,18 @@ def record_view(request, kind, key=""):
                 bump(DailyPageView, kind=kind, key=key[:220])
 
 
+# Searches that are a scanner testing the site, not someone looking for cards: markup, script, template and
+# database syntax, escaped characters, paths and long hex strings, to see whether the site echoes them back
+# unescaped (it never does: every page prints them as plain text). They are still recorded, as typed, and left
+# out of the search lists on Insights and the dashboard, where they pushed out the real ones.
+PROBE_SEARCH = r"[<>{}\\`=;|]|\$\{|%[0-9a-f]{2}|&#|&[a-z]+;|javascript:|\.\./|/etc/|^[0-9a-f]{16,}$"
+
+
+def people_searches(rows):
+    """The DailySearch rows ``rows`` without the scanners' probes."""
+    return rows.exclude(query__iregex=PROBE_SEARCH)
+
+
 def record_search(request, query, results):
     query = " ".join(query.lower().split())[:100]
     if query and request.method == "GET" and not is_bot(request):
@@ -269,11 +281,12 @@ def report(days=30):
     hour_rows = dict(clicks.values_list("created_at__hour").annotate(n=Count("id")).values_list("created_at__hour", "n"))
     hours = [{"hour": h, "clicks": hour_rows.get(h, 0)} for h in range(24)]
 
+    people = people_searches(searches)
     top_searches = list(
-        searches.values("query").annotate(hits=Sum("hits"), results=Sum("results")).order_by("-hits")[:25]
+        people.values("query").annotate(hits=Sum("hits"), results=Sum("results")).order_by("-hits")[:25]
     )
     empty_searches = list(
-        searches.filter(results=0).values("query").annotate(hits=Sum("hits")).order_by("-hits")[:25]
+        people.filter(results=0).values("query").annotate(hits=Sum("hits")).order_by("-hits")[:25]
     )
     device_rows = dict(visitors.values_list("device").annotate(n=Count("id")).values_list("device", "n"))
     devices = [

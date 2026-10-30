@@ -157,6 +157,14 @@ def go_link(listing, button, product=None, game=None):
 
 
 @register.filter
+def per_pack(price, packs):
+    """A price shared over the packs a product holds (catalogue/contents.py), or None for fewer than two."""
+    from catalogue.contents import price_a_pack
+
+    return price_a_pack(price, packs)
+
+
+@register.filter
 def compact_count(value):
     """A count short enough for a small tile: 950, 1.2k, 12k. Rounded down, so it never claims more than there is."""
     try:

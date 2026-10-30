@@ -185,3 +185,43 @@ class ProductPageTests(TestCase):
         self.assertIn("36 packs, 10 cards a pack", html)
         self.assertIn('name="packs"', html)
         self.assertIn('name="cards_per_pack"', html)
+
+
+class CardTests(TestCase):
+    """Product cards in lists say how many packs and what one costs, so products can be weighed at a glance."""
+
+    def setUp(self):
+        self.game = make_game()
+        self.set = make_set(self.game)
+        self.box = make_product(self.set, name="Surging Sparks Booster Box", product_type="booster_box",
+                                packs_found=36)
+        make_listing(self.box, make_retailer("Harbour Games"), price="87.00")
+        self.single = make_product(self.set, name="Surging Sparks Mini Tin", product_type="tin", packs_found=1)
+        make_listing(self.single, make_retailer("Tollgate TCG"), price="4.50")
+
+    def card(self, product):
+        html = self.client.get(self.set.get_absolute_url()).content.decode()
+        start = html.index(f'class="card__name"><a href="{product.get_absolute_url()}"')
+        start = html.rindex('<li class="card', 0, start)
+        return html[start:html.index("</li>", html.index('class="card__foot"', start))]
+
+    def test_a_card_gives_the_packs_and_the_price_a_pack(self):
+        card = self.card(self.box)
+        self.assertIn('Booster box<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>36 packs</p>', card)
+        self.assertIn('<span class="card__each">£2.42 a pack</span>', card)
+
+    def test_one_pack_or_an_unknown_count_says_nothing(self):
+        card = self.card(self.single)
+        self.assertNotIn("card__each", card)
+        self.assertNotIn(" packs</p>", card)
+        Product.objects.filter(pk=self.box.pk).update(packs_found=None)
+        self.assertNotIn("card__each", self.card(self.box))
+
+    def test_the_price_a_pack_rounds_to_the_penny(self):
+        from decimal import Decimal
+
+        self.assertEqual(contents.price_a_pack(Decimal("87.00"), 24), Decimal("3.63"))
+        self.assertEqual(contents.price_a_pack(Decimal("49.48"), 9), Decimal("5.50"))
+        self.assertIsNone(contents.price_a_pack(Decimal("4.50"), 1))
+        self.assertIsNone(contents.price_a_pack(None, 36))
+        self.assertIsNone(contents.price_a_pack(Decimal("87.00"), None))

@@ -841,6 +841,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .card__offer--none { grid-template-columns: minmax(0, 1fr); grid-template-areas: "price" "at"; }
 .card__price { grid-area: price; }
 .card__at { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-muted); }
+.card__each { white-space: nowrap; color: var(--color-ink); font-weight: var(--weight-medium); }
 /* A shop's multi-buy that costs less per item: a note, not a rival price, so it stays uncoloured. */
 .card__deal { grid-column: 1 / -1; margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-ink); }
 .card__last { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
@@ -1688,6 +1689,31 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .filter-panel__chosen { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-body); color: var(--color-ink-muted); }
 .filter-panel__chosen::before { content: "·"; margin-right: var(--space-2); color: var(--color-ink-subtle); }
 .stock-tabs + .filter-panel { margin-top: 0; }   /* the tab row keeps its own room below it */
+/* Game, set and search pages on a phone: the products start on the first screen (the owner, 30 Oct 2026: "too much
+   wasted space, products are not centre stage"). The head, the set pills, the tabs and Sort and filter close up, each
+   tab gives its count beside its name, and the filters open as one sideways row, as on the swipe page, not a grid. */
+@media (max-width: 47.99rem) {
+  .browse-head { padding-top: var(--space-3); margin-bottom: var(--space-3); }
+  .browse-head .breadcrumbs { margin-bottom: var(--space-1); }
+  .browse-head__intro, .browse-head__meta { margin-top: var(--space-1); font-size: var(--text-sm); }
+  .cheapest-card { margin-top: var(--space-3); }
+  .set-nav { margin-bottom: var(--space-3); }
+  .stock-tabs { margin-bottom: 0; }
+  .stock-tabs a {
+    flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 var(--space-1);
+    padding: var(--space-3) var(--space-1) var(--space-2);
+  }
+  .filter-bar, .stock-tabs + .filter-panel { margin-bottom: var(--space-2); }
+  .filter-panel .filters:not(.filters--deck) {
+    display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin-inline: calc(-1 * var(--page-gutter)); padding: var(--space-2) var(--page-gutter) var(--space-1);
+  }
+  .filter-panel .filters:not(.filters--deck)::-webkit-scrollbar { display: none; }
+  .filter-panel .filters:not(.filters--deck) > * { flex: none; }
+  /* Each choice as wide as what it shows, where the browser can size it so; never wider than this. */
+  .filter-panel .filters:not(.filters--deck) .pill select { field-sizing: content; max-width: var(--filter-pill-max); }
+  .stock-panes.is-swipe > .stock-pane { padding-top: var(--space-1); }
+}
 .drop-waiting { margin-top: var(--rhythm-section); }
 .drop-group { margin-top: var(--space-5); }
 .drop-group + .drop-group { margin-top: var(--rhythm-section); }

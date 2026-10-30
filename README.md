@@ -3102,7 +3102,9 @@ one most of the shops that give one agree on, more than all the others
 together. eBay and Amazon descriptions are sellers' words and are never
 read. `tidy_all` keeps the figures each hour (`refresh_contents`, also run
 once by each update); you can set your own under the product in admin
-(What is inside), which always wins, beside what the shops say.
+(What is inside), which always wins, beside what the shops say. Product cards in lists say it
+too: "Booster box · 36 packs" under the name and "£2.42 a pack" after the
+shop under the price (`per_pack` filter, `contents.price_a_pack`).
 
 ### Price check
 
@@ -3272,6 +3274,16 @@ from a set chip opens on its list: the button names the choices ("Sort and
 filter · Booster box · Korean") and Clear filters sits beside it. The form
 carries the stock tab only when the address named one, so a filter that
 empties the tab in view opens on the first tab with products.
+
+On a phone (under 48rem) the space above the list closes up so the products
+start on the first screen (the owner, 30 Oct 2026: "too much wasted space,
+products are not centre stage"): less room above and below the heading, the
+line under it in small type, each stock tab's count beside its name rather
+than under it, and Sort and filter's choices in one sideways row, as on the
+swipe page, rather than a grid two wide. A choice there is as wide as what
+it shows where the browser can size it so (`field-sizing`), and never wider
+than `--filter-pill-max`. On a 375px screen the first product now starts
+about 110px higher, and with the filters open about 220px higher.
 
 A change in the filters, a quick filter chip or Clear filters changes the
 list in place (`js/browse.js`, on game, set and search pages): the page the

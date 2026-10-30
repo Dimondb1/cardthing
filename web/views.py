@@ -1,7 +1,7 @@
 import json
 import time
 from datetime import timedelta
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation
 from functools import wraps
 from urllib.parse import urlencode, urlsplit
 
@@ -2167,12 +2167,11 @@ def note_api(request):
 
 
 def per_pack(cheapest, product):
-    """The cheapest price shared over the packs the product holds, to the penny, or None when it holds fewer than two
-    or the number is not known."""
-    packs = product.packs_inside
-    if cheapest is None or not packs or packs < 2:
-        return None
-    return (cheapest.shown_price / packs).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    """The cheapest price shared over the packs the product holds, or None when it holds fewer than two or the number
+    is not known."""
+    from catalogue.contents import price_a_pack
+
+    return price_a_pack(cheapest.shown_price if cheapest else None, product.packs_inside)
 
 
 def guides_line(request, cheapest):

@@ -127,6 +127,15 @@ def found_for(descriptions):
     return agreed(packs_in(text) for text in descriptions), agreed(cards_in(text) for text in descriptions)
 
 
+def price_a_pack(price, packs):
+    """``price`` shared over ``packs``, to the penny, or None for fewer than two packs or an unknown count."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    if price is None or not packs or packs < 2:
+        return None
+    return (Decimal(price) / packs).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def refresh_contents(dry_run=False):
     """Keep each active product's packs_found and cards_found from its live UK shop listings' descriptions. One read
     of the descriptions, streamed, and one write for the products that changed. Returns how many changed."""

@@ -1100,6 +1100,11 @@ ENTRIES = [
         "Check the total at the shop before you buy.",
         "Under the main price on a product page when its delivery charge is not known.",
     ),
+    Entry("browse.card.packs", T, "Card: packs inside", "{packs} packs",
+          "After the product type on a product card, when it holds two or more packs and the number is known.",
+          placeholders=("packs",)),
+    Entry("browse.card.each", T, "Card: price per pack", "{each} a pack",
+          "After the shop under a product card's price: the price shared over the packs.", placeholders=("each",)),
     Entry(
         "product.packs.each", T, "Price per pack", "{packs} packs inside, {each} a pack",
         "Under the cheapest price on a product page, when it holds two or more packs and the number is known: the "

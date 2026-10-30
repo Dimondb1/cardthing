@@ -1958,6 +1958,32 @@ class PicksTests(TestCase):
         self.assertLess(page.index("data-picks"), page.index("data-resume"))
 
 
+class PhoneListLayoutTests(TestCase):
+    """The owner, 30 Oct 2026: on a phone a game page had "too much wasted space, products are not centre stage". Under
+    48rem the head, the set pills, the tabs and Sort and filter close up, and the filters open as one sideways row."""
+
+    def css(self):
+        from django.contrib.staticfiles import finders
+
+        return open(finders.find("css/site.css"), encoding="utf-8").read()
+
+    def test_the_phone_rules_close_the_space_above_the_list(self):
+        css = self.css()
+        block = css[css.index("@media (max-width: 47.99rem) {\n  .browse-head {"):]
+        block = block[:block.index("\n}\n")]
+        for rule in (".browse-head { padding-top: var(--space-3); margin-bottom: var(--space-3); }",
+                     ".browse-head__intro, .browse-head__meta { margin-top: var(--space-1); font-size: var(--text-sm); }",
+                     ".set-nav { margin-bottom: var(--space-3); }",
+                     "flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: baseline;",
+                     "display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;",
+                     ".filter-panel .filters:not(.filters--deck) .pill select { field-sizing: content; max-width: var(--filter-pill-max); }"):
+            self.assertIn(rule, block)
+        # Only tokens: no new raw sizes.
+        self.assertNotRegex(block.replace("47.99rem", ""), r"(?<![\w-])\d+(\.\d+)?(px|rem)\b")
+        tokens = open(__import__("django.contrib.staticfiles.finders", fromlist=["find"]).find("css/tokens.css"), encoding="utf-8").read()
+        self.assertIn("--filter-pill-max: 11rem;", tokens)
+
+
 class BuyBarTests(PageTestCase):
     """The bar at the foot of a phone's product page (the owner, 30 Oct 2026: Compare prices was below the fold in an
     app's browser): the cheapest price, Buy now and Compare prices, shown while the price box is off the screen."""

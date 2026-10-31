@@ -114,3 +114,41 @@ class SummaryTests(TestCase):
         self.assertIn('<p class="details__summary">The cheapest Surging Sparks Booster Box we found right now is £87.00 '
                       'delivered at Harbour Games. 2 UK shops have it in stock. It holds 36 packs, £2.42 a pack.</p>', html)
         self.assertLess(html.index('id="details-title"'), html.index("details__summary"))
+
+
+class HubAboutTests(TestCase):
+    """Game and set pages end with their facts as sentences (the owner, 31 Oct 2026: searches for a whole game or set
+    found RipRaptor on page 2), while the top keeps its one short line."""
+
+    def setUp(self):
+        self.game = make_game()
+        self.set = make_set(self.game, name="Surging Sparks", slug="surging-sparks")
+        self.box = make_product(self.set, name="Surging Sparks Booster Box", product_type="booster_box")
+        self.etb = make_product(self.set, name="Surging Sparks Elite Trainer Box")
+        make_listing(self.box, make_retailer("Harbour Games"), price="87.00")
+        make_listing(self.etb, make_retailer("Tollgate TCG"), price="45.00")
+
+    def about(self, url):
+        html = self.client.get(url).content.decode()
+        start = html.index('<section class="block hub-about"')
+        return html, html[start:html.index("</section>", start)]
+
+    def test_a_game_page_says_what_it_compares_and_its_numbers(self):
+        html, about = self.about(self.game.get_absolute_url())
+        self.assertIn(f'<h2 id="about-title" class="section-title">About {self.game.name}</h2>', about)
+        self.assertIn(f"RipRaptor compares UK prices for sealed {self.game.name} products: booster boxes and ETBs.", about)
+        self.assertIn("2 sealed products compared across 2 UK shops, 2 in stock now.", about)
+        self.assertIn(f'Cheapest in stock: <a href="{self.etb.get_absolute_url()}">Surging Sparks Elite Trainer Box</a>, '
+                      "£45.00 delivered at Tollgate TCG.", about)
+        # At the foot: after the list, not under the heading.
+        self.assertGreater(html.index("hub-about"), html.index("stock-pane"))
+
+    def test_a_set_page_names_its_game_and_keeps_its_date_up_top(self):
+        _html, about = self.about(self.set.get_absolute_url())
+        self.assertIn("Surging Sparks is a ", about)
+        self.assertIn(" set. 2 sealed products compared across 2 UK shops, 2 in stock now.", about)
+        self.assertNotIn("released", about.lower())
+
+    def test_a_tab_fetched_by_script_has_no_about(self):
+        html = self.client.get(self.game.get_absolute_url() + "?pane=1&tab=preorder").content.decode()
+        self.assertNotIn("hub-about", html)

@@ -4701,6 +4701,14 @@ the AI search crawlers in by name were already in place. Added 31 Oct 2026
   from. The key is a hash of the secret key, served at `/<key>.txt`; nothing
   needs setting up. A refused submission is sent again the next hour.
   `RIPRAPTOR_INDEXNOW=0` stops it; it is off on a development machine.
+- **About, on game and set pages.** At the foot of each, under "About
+  Pokémon": what the hub compares ("RipRaptor compares UK prices for sealed
+  Pokémon products: booster boxes, ETBs, ..."; a set page "Surging Sparks is a
+  Pokémon set.") and its numbers in full, with the cheapest in stock linked
+  (`hubs.about`, `browse.hub.about.*`). Search Console showed whole-game and
+  whole-set searches ("cardfight vanguard booster boxes") finding the site on
+  page 2. The top keeps its one short line, and a set's date stays there
+  alone, said once on the page as you asked.
 - **The facts as sentences.** Product details opens with a plain summary:
   "The cheapest Surging Sparks Booster Box we found right now is £87.00
   delivered at Harbour Games. 2 UK shops have it in stock. It holds 36 packs,

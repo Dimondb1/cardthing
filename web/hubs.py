@@ -395,6 +395,23 @@ def intro(words, stats, date="", undated=False, brief=False):
     return mark_safe(f"{escape(first)} {second.replace(escape(marker), link)}")
 
 
+def about(words, stats, game, product_set=None):
+    """The About paragraph at the foot of a game or set page, as safe HTML, or "" for a hub with no products: what
+    the hub is, then its numbers in full (intro's long form, with the cheapest in stock linked). Search engines and
+    AI answers quote sentences like these (the owner, 31 Oct 2026: whole-game and whole-set searches such as
+    "cardfight vanguard booster boxes" were finding RipRaptor on page 2). The top of the page keeps its one short
+    line, and a set's date stays there alone, as the owner asked: said once on the page. No queries of its own."""
+    if not stats.products:
+        return ""
+    if product_set is None:
+        types = words.types(game.slug, stats.all_types)[:4]
+        first = (words("browse.hub.about.game", game=game.name, types=words.join(types)) if types
+                 else words("browse.hub.about.game_plain", game=game.name))
+    else:
+        first = words("browse.hub.about.set", set=product_set.name, game=game.display_short)
+    return mark_safe(f"{escape(tidy_stops(first))} {intro(words, stats)}")
+
+
 def waiting_line(words, stats, products):
     """The line for a hub with nothing in stock: on pre-order at how many shops (all of its products, or how
     many of them), else how many shops compare it, else that no shop lists it or has a current price."""

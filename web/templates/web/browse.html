@@ -159,6 +159,13 @@
 {% endif %}
 {% if alert_url %}<p class="browse-alert"><a href="{{ alert_url }}">{% copy "browse.alert_link" %}</a></p>{% endif %}
 {% endif %}
+{% if about %}
+{# The hub's facts in full, at the foot so the top stays one short line (hubs.about). #}
+<section class="block hub-about" aria-labelledby="about-title">
+  <h2 id="about-title" class="section-title">{% copy "browse.hub.about.title" name=heading %}</h2>
+  <p class="hub-about__text">{{ about }}</p>
+</section>
+{% endif %}
 </div>
 {% endblock %}
 

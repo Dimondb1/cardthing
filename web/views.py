@@ -918,6 +918,7 @@ def game_detail(request, game_slug):
             "sets": sets[:GAME_PAGE_SETS],
             "more_sets": len(sets) > GAME_PAGE_SETS,
             "intro": hubs.intro(words, stats, brief=True),
+            "about": hubs.about(words, stats, game),
             "meta_title": meta_title,
             "meta_description": meta_description,
             "canonical_url": page_url,
@@ -979,6 +980,7 @@ def set_detail(request, game_slug, set_slug):
             "instead": instead,
             # One short line, and the cheapest in stock as a small card of its own rather than a second sentence.
             "intro": hubs.intro(words, stats, date=intro_date, undated=undated, brief=True),
+            "about": hubs.about(words, stats, game, product_set),
             "cheapest_card": stats.cheapest if stats.in_stock else None,
             "meta_title": meta_title,
             "meta_description": meta_description,

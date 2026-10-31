@@ -696,6 +696,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .cheapest-card__price { font-size: var(--text-lg); font-weight: var(--weight-heading); color: var(--color-price); font-variant-numeric: tabular-nums; }
 .cheapest-card__go { color: var(--color-brand-text); font-weight: var(--weight-strong); }
 .browse-head__count { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink-subtle); }
+.hub-about__text { margin-top: var(--rhythm-title); max-width: var(--form-width); color: var(--color-ink-muted); }
 /* No luck. Yet.: the raptor in ink with an orange question mark, on a card of its own, as the owner drew it. */
 .no-luck {
   display: grid; justify-items: center; gap: var(--space-3); max-width: 38rem; margin: 0 auto; padding: var(--poster-pad);

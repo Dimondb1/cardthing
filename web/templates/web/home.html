@@ -10,17 +10,16 @@
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
   </div>
-  {% if last_checked %}
-  <p class="hero__meta">
-    <span class="hero__checked"><svg class="hero__icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.6 1.8v3.2h-3.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>{% copy "home.search.checked" time=last_checked|ago %}</span>
-  </p>
-  {% endif %}
   {% if guides_live %}<p class="hero__guides"><a href="{% url 'web:guides' %}">{% copy "home.guides" %}</a></p>{% endif %}
-  {# One tap to each section further down, for a first visit: the drop spotlight below can fill a phone's screen. #}
+  {% comment %}One tap to each section further down, in the page's order and on one line that swipes sideways on a phone,
+    for a first visit: the drop spotlight below can fill a phone's screen. Hunted for you and Your tracks show only once
+    their sections have something (jump.js).{% endcomment %}
   {% if games or featured or coming_soon or latest or product_types %}
-  <nav class="jump" aria-label="{% copy 'home.jump.label' %}">
-    <ul class="jump__list">
+  <nav class="jump chips" aria-label="{% copy 'home.jump.label' %}">
+    <ul class="chips__list">
       {% if games %}<li><a class="chip" href="#games-title">{% copy "home.jump.games" %}</a></li>{% endif %}
+      <li data-jump-for="data-picks" hidden><a class="chip" href="#picks-title">{% copy "home.jump.picks" %}</a></li>
+      <li data-jump-for="data-resume" hidden><a class="chip" href="#resume-title">{% copy "home.jump.resume" %}</a></li>
       {% if featured %}<li><a class="chip" href="#featured-title">{% copy "home.jump.deals" %}</a></li>{% endif %}
       {% if coming_soon or latest %}<li><a class="chip" href="#latest-title">{% copy "home.jump.drops" %}</a></li>{% endif %}
       {% if product_types %}<li><a class="chip" href="#types-title">{% copy "home.jump.types" %}</a></li>{% endif %}
@@ -74,7 +73,7 @@
 {% if featured %}
 <section class="home-section" aria-labelledby="featured-title">
   <div class="section-head">
-    <h2 id="featured-title" class="section-head__title">{% copy "home.featured.title" %}</h2>
+    <h2 id="featured-title" class="section-head__title section-head__title--mascot"><span class="mark section-head__mascot" aria-hidden="true"></span>{% copy "home.featured.title" %}</h2>
     <a class="section-head__all" href="{% url 'web:deals' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
   </div>
   {# Said beside the row it is about, not only in the footer: commission shapes which deals are picked, never a comparison's order. #}
@@ -171,4 +170,5 @@
 </section>
 {% endif %}
 
+<script>{% inline_static "js/jump.js" %}</script>
 {% endblock %}

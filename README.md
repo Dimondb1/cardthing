@@ -2971,8 +2971,14 @@ The home page opens with a compact hero: a short line above the headline
 many UK shops the site compares and that every price includes delivery,
 not just the basket price ("Sealed TCG prices from 87 UK shops, ..."), then
 the large search
-box and the latest shop price check, all close together so the games and
-Picked for you start on the first screen. The number of shops
+box (its corners the cards' 16px, not a pill) and a row of jump buttons,
+all close together so the games and Hunted for you start on the first
+screen. The line saying when a shop's price was last checked went on 31 Oct
+2026 at the owner's request; each product page still says when its own
+prices were. The **jump buttons** (Games, Deals, Drops, Products, and For
+you and Your tracks once those sections have something, `jump.js`) are one
+tap to each section further down, in the page's order, on one line that
+swipes sideways on a phone. The number of shops
 (`pricing.shops_compared`) counts the UK shops with a current price on the
 site, so it moves as shops are added, stop being read or come back: eBay
 and Amazon are searches and never count, nor a price kept out of the
@@ -2990,9 +2996,11 @@ home and Deals pages' sections sit 20px apart on a phone and 24px wider
 newest booster box with a picture, or else an elite trainer box, bundle and
 so on (`game_covers` in `web/views.py`), so no game logo is borrowed; a
 game with no pictures yet shows the booster box outline. After that come
-Picked for you and Pick up where you left off (for a browser with history),
-Featured deals, Drops and Coming soon, a card leading to the
-watchlist, and "Browse by product": a tile for every product type with
+Hunted for you and Follow your tracks (for a browser with history; until 31
+Oct 2026 Picked for you and Pick up where you left off), Rip's Deals (until
+then Featured deals, with the raptor beside its name as the section's
+mascot), Drops and Coming soon, a card leading to the
+watchlist, and "Hunt by product" (until then Browse by product): a tile for every product type with
 products, most first, linking to the search page filtered to it. Each is
 pictured by a real product of its kind, the one with a picture that the
 most UK shops list now (`type_covers` in `web/views.py`, chosen at most

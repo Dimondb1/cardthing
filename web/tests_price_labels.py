@@ -77,7 +77,7 @@ class FeaturedDisclosureTests(TestCase):
         self.assertIn('id="featured-title"', html)
         section = html[html.index('id="featured-title"'):]
         section = section[:section.index("</section>")]
-        self.assertIn('<p class="section-head__note">Featured deals favour shops that pay us a commission. Price '
+        self.assertIn('<p class="section-head__note">Rip&#x27;s Deals favour shops that pay us a commission. Price '
                       'comparisons are always cheapest delivered first, and no shop can pay to move up. '
                       '<a href="/about/">How it works</a></p>', section)
         # True to the product page: its shops are listed cheapest delivered first.

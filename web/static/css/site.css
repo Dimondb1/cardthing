@@ -100,6 +100,9 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 }
 .section-head__title { font-size: var(--text-section); font-weight: var(--weight-heading); }   /* a block, so its box can start at its capitals */
 .section-head__icon { display: inline-block; vertical-align: text-bottom; width: 1em; height: 1em; margin-right: var(--space-2); color: var(--color-brand); }
+/* Rip's Deals: the raptor beside its name, the section's mascot. The head's own size floor, in the brand orange. */
+.section-head__title--mascot { display: flex; align-items: center; gap: var(--space-2); text-box: none; }
+.section-head__mascot { --mark-size: var(--mark-sm); color: var(--color-brand); }
 @media (max-width: 40rem) { .section-head__title { font-size: var(--text-section-sm); } }
 .section-head__all {
   flex: none; color: var(--color-ink-muted); font-weight: var(--weight-medium); font-size: var(--text-sm);
@@ -277,7 +280,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .search:focus-within .search__icon { color: var(--color-brand); transform: scale(1.06); }
 .search input {
   flex: 1; min-width: 0; height: 3rem; padding: 0 var(--space-3) 0 3rem;
-  border: 1.5px solid var(--color-line); border-radius: var(--radius-pill);
+  border: 1.5px solid var(--color-line); border-radius: var(--radius-card);   /* the cards' corners, at the owner's request */
   background: var(--color-paper); color: var(--color-ink); font: inherit; -webkit-appearance: none; appearance: none;
   box-shadow: var(--shadow-input);
   transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
@@ -287,7 +290,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .search input:focus-visible { outline: none; border-color: var(--color-brand); box-shadow: var(--shadow-input), 0 0 0 3px var(--color-brand-soft); }
 .search__button {
   position: absolute; right: 0.3rem; height: calc(100% - 0.6rem); padding: 0 var(--space-4);
-  border: 0; border-radius: var(--radius-pill); background: var(--color-brand-action); color: var(--color-brand-ink);
+  border: 0; border-radius: var(--radius); background: var(--color-brand-action); color: var(--color-brand-ink);
   font: inherit; font-weight: var(--weight-strong); cursor: pointer;
 }
 .search__button { transition: background var(--motion-fast), transform var(--motion-fast) var(--ease-standard); }
@@ -380,8 +383,6 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .hero__subtitle { margin: var(--space-2) 0 0; max-width: 40ch; color: var(--color-ink-muted); font-size: var(--text-base); line-height: var(--leading-snug); }
 .hero__search { margin: var(--space-3) 0 0; max-width: 44rem; text-align: left; }
 .hero .live { text-align: left; max-width: 44rem; }
-.hero__meta { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink-subtle); }
-.hero__icon { display: inline-block; vertical-align: text-bottom; width: 1em; height: 1em; margin-right: 0.4em; color: var(--color-brand-text); }   /* inline, so the line trims to its text */
 .hero__retailers { color: var(--color-ink-muted); font-weight: var(--weight-medium); }
 .hero__sep { color: var(--color-line-strong); }
 /* Phones have no room for Guides in the header: the home page carries the link under the search box instead. */
@@ -393,7 +394,6 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @media (min-width: 48rem) {
   .hero { padding: var(--space-4) 0 0; text-align: center; }
   .hero__title, .hero__subtitle, .hero__search, .hero .live { margin-inline: auto; }
-  .jump__list { justify-content: center; }
   .hero__subtitle { font-size: var(--text-lg); }
   .masthead--home .wordmark__img { height: var(--masthead-logo-home-wide); }
 }
@@ -500,10 +500,10 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .poster--watch .poster__text { font-size: var(--text-base); }
 .poster--watch .poster__mark { --mark-size: var(--mark-poster-sm); left: -20%; color: var(--color-brand); }
 /* Jump buttons under the home page's search: one tap to each section further down, for a first visit that would not
-   know they are there. Plain links to the sections' headings. */
-.jump { margin-top: var(--space-4); }
-.jump__list { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.jump .chip { scroll-snap-align: none; }
+   know they are there. Plain links to the sections' headings, on one line that swipes sideways on a phone (.chips). */
+.jump .chips__list { justify-content: flex-start; }
+@media (min-width: 40rem) { .jump .chips__list { flex-wrap: wrap; } }   /* one row in practice; never wider than the page */
+@media (min-width: 48rem) { .jump .chips__list { justify-content: center; } }   /* under the centred hero */
 .home-section .section-head__title { scroll-margin-top: var(--space-5); }   /* a jump lands with room above the heading */
 
 /* The drop spotlight (home page, views.drop_spotlight), the owner's poster style for the next big drop: the set's

@@ -222,15 +222,22 @@ class FoldAndJumpTests(TestCase):
 
     def test_jump_buttons_lead_to_the_sections_on_the_page(self):
         page = self.client.get(HOME).content.decode()
-        jump = page[page.index('<nav class="jump"'):page.index("</nav>", page.index('<nav class="jump"'))]
+        start = page.index('<nav class="jump chips"')
+        jump = page[start:page.index("</nav>", start)]
         self.assertIn('aria-label="Jump to"', jump)
         targets = re.findall(r'href="#([a-z-]+)"', jump)
-        self.assertIn("games-title", targets)
-        self.assertIn("latest-title", targets)
+        # In the page's order; Hunted for you and Your tracks wait hidden until their sections show (jump.js).
+        self.assertEqual(targets, ["games-title", "picks-title", "resume-title", "latest-title", "types-title"])
+        self.assertIn('<li data-jump-for="data-picks" hidden>', jump)
+        self.assertIn('<li data-jump-for="data-resume" hidden>', jump)
+        self.assertIn(">Products</a>", jump)
         for target in targets:
             self.assertIn(f'id="{target}"', page)
+        self.assertIn("MutationObserver", page)
+        # On one line: the chips' own row, which swipes sideways on a phone.
+        self.assertIn('<ul class="chips__list">', jump)
         # Before the spotlight, so a first visit sees them first.
-        self.assertLess(page.index('<nav class="jump"'), page.index('id="drop-spotlight"'))
+        self.assertLess(start, page.index('id="drop-spotlight"'))
 
 
 class SpotlightAdminTests(TestCase):

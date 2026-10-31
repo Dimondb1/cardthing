@@ -82,8 +82,12 @@ class PageTests(PageTestCase):
 
     def test_home_shows_every_section(self):
         response = self.client.get(reverse("web:home"))
-        for heading in ("Find your game", "Featured deals", "Save £3.01 vs Northgate Cards", "Browse by product"):
+        for heading in ("Find your game", "Rip&#x27;s Deals", "Save £3.01 vs Northgate Cards", "Hunt by product"):
             self.assertContains(response, heading)
+        # The raptor is Rip's Deals' mascot, beside its name.
+        self.assertContains(response, '<h2 id="featured-title" class="section-head__title section-head__title--mascot">'
+                                      '<span class="mark section-head__mascot" aria-hidden="true"></span>Rip&#x27;s Deals</h2>')
+        self.assertContains(response, 'href="#featured-title">Deals</a>')
         # The deeper lists live on the Deals and Games pages so the home page stays short.
         for moved in ("Trending now", "Biggest savings", "Biggest price drop", "Recently released", "Browse by game", "Back in stock"):
             self.assertNotContains(response, moved)
@@ -286,8 +290,9 @@ class SearchApiTests(PageTestCase):
     def test_empty_query_returns_nothing(self):
         self.assertEqual(self.client.get(reverse("web:search_api")).json()["results"], [])
 
-    def test_home_shows_when_prices_were_last_checked(self):
-        self.assertContains(self.client.get(reverse("web:home")), "Latest shop price check 1 hour ago")
+    def test_home_no_longer_says_when_prices_were_last_checked(self):
+        # The owner, 31 Oct 2026: "Remove that line". Each product page still says when its prices were checked.
+        self.assertNotContains(self.client.get(reverse("web:home")), "Latest shop price check")
 
 
 class DeckTests(PageTestCase):
@@ -779,7 +784,7 @@ class PickUpTests(PageTestCase):
         self.assertIn('<span data-search-query="etb" hidden></span>', results)
         home = self.client.get(reverse("web:home")).content.decode()
         self.assertIn('data-resume hidden', home)
-        self.assertIn("Pick up where you left off", home)
+        self.assertIn("Follow your tracks", home)
         self.assertIn("Clear history", home)
         self.assertIn('data-endpoint="/api/recent/"', home)
         self.assertIn('data-recent="Recent searches"', home)
@@ -836,8 +841,8 @@ class FeaturedAndMarketplaceTests(TestCase):
         self.assertNotIn(no_saving.pk, [p.pk for p, _ in featured])
         self.assertEqual([earns(s.best) for _, s in featured][:4], [True, True, True, False])
         body = self.client.get(reverse("web:home")).content.decode()
-        self.assertIn("Featured deals", body)
-        self.assertIn("featured deals favour shops that pay one", body)
+        self.assertIn("Rip&#x27;s Deals", body)
+        self.assertIn("Rip&#x27;s Deals favour shops that pay one", body)
         self.assertContains(self.client.get(reverse("web:terms")), "We favour shops that pay us a commission")
 
     def test_featured_fills_from_the_other_side_when_one_is_short(self):

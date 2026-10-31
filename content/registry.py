@@ -281,13 +281,6 @@ ENTRIES = [
         "Grey hint text inside the large search box on the home page.",
     ),
     Entry(
-        "home.search.checked", T, "Latest price check",
-        "Latest shop price check {time}",
-        "Under the home page search box. The most recent time any shop's price was checked; each product "
-        "page says when its own prices were. Hidden until a price has been checked.",
-        placeholders=("time",),
-    ),
-    Entry(
         "home.search.checking", T, "Searching message",
         "Checking lowest prices",
         "Shown for a moment while search results load as you type.",
@@ -339,8 +332,8 @@ ENTRIES = [
     ),
     Entry("home.dropped.button", B, "Deals panel button", "Explore deals", "The button on the deals panel."),
     Entry(
-        "home.types.title", H, "Browse by product heading",
-        "Browse by product",
+        "home.types.title", H, "Hunt by product heading",
+        "Hunt by product",
         "Heading for the product type tiles on the home page.",
     ),
     Entry(
@@ -419,8 +412,8 @@ ENTRIES = [
         placeholders=("price",),
     ),
     Entry(
-        "home.resume.title", H, "Pick up heading",
-        "Pick up where you left off",
+        "home.resume.title", H, "Follow your tracks heading",
+        "Follow your tracks",
         "Home page section with this browser's recent searches and viewed products. Hidden until there are some.",
     ),
     Entry("home.resume.searches", T, "Recent searches label", "Recent searches", "Label in the pick up section."),
@@ -432,13 +425,13 @@ ENTRIES = [
         "Small note under the pick up section.",
     ),
     Entry(
-        "home.picks.title", H, "Picked for you heading", "Picked for you",
+        "home.picks.title", H, "Hunted for you heading", "Hunted for you",
         "Top home page row of in-stock products like the ones this browser viewed, saved or searched for. Hidden "
         "until there are some.",
     ),
     Entry(
         "home.picks.note", T, "Picked for you note", "Like what you have looked at, best deals first.",
-        "Small note under the Picked for you heading.",
+        "Small note under the Hunted for you heading.",
     ),
     # Each pick (and each In stock instead product) has one label, the first of these that is true. Lowest in 30
     # days and Best in 7 days are the product badges' own wording (product.badge.*).
@@ -454,31 +447,32 @@ ENTRIES = [
           "Grey label on any other pick: how many shops have it in stock.", placeholders=("count",)),
     Entry("home.picks.shops_one", T, "Pick label: one shop", "In stock at 1 shop",
           "Grey label on any other pick that only one shop has in stock."),
-    Entry("home.featured.title", H, "Featured deals heading", "Featured deals", "Home page row near the top."),
+    Entry("home.featured.title", H, "Rip's Deals heading", "Rip's Deals",
+          "Home page row of deals near the top, with the raptor beside it."),
     Entry(
         "home.featured.disclosure", T, "Featured deals disclosure",
-        "Featured deals favour shops that pay us a commission. Price comparisons are always cheapest delivered "
+        "Rip's Deals favour shops that pay us a commission. Price comparisons are always cheapest delivered "
         "first, and no shop can pay to move up.",
-        "Under the Featured deals heading on the home page, followed by a How it works link. Keep it true to how "
+        "Under the Rip's Deals heading on the home page, followed by a How it works link. Keep it true to how "
         "the row is chosen (web/views.py featured_pick).",
         legal=True,
     ),
     Entry(
         "home.featured.disclosure_paying", T, "Featured deals disclosure, paying shops only",
-        "Featured deals come only from shops that pay us a commission. Price comparisons are always cheapest "
+        "Rip's Deals come only from shops that pay us a commission. Price comparisons are always cheapest "
         "delivered first, and no shop can pay to move up.",
         "Replaces the Featured deals disclosure while Featured deals settings has Only shops that pay ticked.",
         legal=True,
     ),
     Entry(
         "home.featured.note", T, "Featured deals note",
-        "Every featured deal has evidence behind it: its lowest delivered price in 30 days by our own daily record and clearly under its average, or a saving of at least 5% on the next shop when that shop's price is in line with the market. One unusually dear listing never makes a saving. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
+        "Every deal in Rip's Deals has evidence behind it: its lowest delivered price in 30 days by our own daily record and clearly under its average, or a saving of at least 5% on the next shop when that shop's price is in line with the market. One unusually dear listing never makes a saving. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
         "On the terms page, under Independence. Says how the home page's featured deals row is chosen.",
         legal=True,
     ),
     Entry(
         "home.featured.note_paying", T, "Featured deals note, paying shops only",
-        "Every featured deal has evidence behind it: its lowest delivered price in 30 days by our own daily record and clearly under its average, or a saving of at least 5% on the next shop when that shop's price is in line with the market. One unusually dear listing never makes a saving. Featured deals come only from shops that pay us a commission, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
+        "Every deal in Rip's Deals has evidence behind it: its lowest delivered price in 30 days by our own daily record and clearly under its average, or a saving of at least 5% on the next shop when that shop's price is in line with the market. One unusually dear listing never makes a saving. Rip's Deals come only from shops that pay us a commission, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
         "Replaces the Featured deals note on the terms page while Featured deals settings has Only shops that "
         "pay ticked.",
         legal=True,
@@ -1831,8 +1825,8 @@ ENTRIES = [
         "price either way.\n\n"
         "Price comparisons are always sorted by delivered price, cheapest first. "
         "Retailers cannot pay to change that order.\n\n"
-        "The featured deals row on the home page is different: it favours deals at "
-        "retailers that pay us a commission. Every featured deal is still a genuine low "
+        "The Rip's Deals row on the home page is different: it favours deals at "
+        "retailers that pay us a commission. Every deal in it is still a genuine low "
         "price or saving.\n\n"
         "The Price check's High price warning is not shown when the cheapest price is at a "
         "retailer that pays us a commission. Every shop's price is still listed, cheapest first.",
@@ -1921,10 +1915,15 @@ ENTRIES = [
     Entry("home.jump.label", T, "Jump buttons label", "Jump to",
           "Read out by screen readers before the jump buttons under the home page search."),
     Entry("home.jump.games", B, "Jump to games", "Games", "Jump button under the home page search, to Find your game."),
-    Entry("home.jump.deals", B, "Jump to deals", "Deals", "Jump button under the home page search, to Featured deals."),
+    Entry("home.jump.deals", B, "Jump to deals", "Deals",
+          "Jump button under the home page search, to Rip's Deals. Short, so the buttons fit one line on a phone."),
     Entry("home.jump.drops", B, "Jump to drops", "Drops", "Jump button under the home page search, to Drops."),
-    Entry("home.jump.types", B, "Jump to product types", "Product types",
-          "Jump button under the home page search, to Browse by product."),
+    Entry("home.jump.types", B, "Jump to product types", "Products",
+          "Jump button under the home page search, to Hunt by product."),
+    Entry("home.jump.picks", B, "Jump to hunted for you", "For you",
+          "Jump button under the home page search, to Hunted for you, shown once that row has products."),
+    Entry("home.jump.resume", B, "Jump to your tracks", "Your tracks",
+          "Jump button under the home page search, to Follow your tracks, shown once it has something."),
     Entry("home.spotlight.hide", B, "Drop spotlight hide button", "Hide",
           "At the top of the drop spotlight: folds it to a slim bar, remembered on this device."),
     Entry("home.spotlight.show", B, "Drop spotlight show button", "Show", "On the drop spotlight's folded bar."),
@@ -2261,7 +2260,7 @@ ENTRIES = [
     Entry("footer.follow", T, "Footer follow heading", "Follow us", "Above the social media icons in the footer."),
     Entry(
         "footer.line", T, "Footer line",
-        "Prices include UK delivery. RipRaptor may earn a commission when you buy, and featured deals favour shops that pay one.",
+        "Prices include UK delivery. RipRaptor may earn a commission when you buy, and Rip's Deals favour shops that pay one.",
         "The one line in the footer of every page, followed by the Terms link.",
         legal=True,
     ),

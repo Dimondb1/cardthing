@@ -42,17 +42,17 @@ class FeaturedSettingsTests(TestCase):
         section, _ = self.featured()
         self.assertIn(self.paid_deal.name, section)
         self.assertIn(self.plain_deal.name, section)
-        self.assertIn("Featured deals favour shops that pay us a commission.", section)
+        self.assertIn("Rip&#x27;s Deals favour shops that pay us a commission.", section)
 
     def test_ticked_only_paying_shops_and_both_pages_say_so(self):
         FeaturedSettings.objects.create(pk=1, paying_only=True)
         section, _ = self.featured()
         self.assertIn(self.paid_deal.name, section)
         self.assertNotIn(self.plain_deal.name, section)
-        self.assertIn("Featured deals come only from shops that pay us a commission. Price comparisons are always "
+        self.assertIn("Rip&#x27;s Deals come only from shops that pay us a commission. Price comparisons are always "
                       "cheapest delivered first, and no shop can pay to move up.", section)
         terms = self.client.get("/terms/").content.decode()
-        self.assertIn("Featured deals come only from shops that pay us a commission, and each product page", terms)
+        self.assertIn("Rip&#x27;s Deals come only from shops that pay us a commission, and each product page", terms)
         # The product page still lists every shop, cheapest delivered first.
         page = self.client.get(self.plain_deal.get_absolute_url()).content.decode()
         self.assertIn("Northgate Cards", page)
@@ -63,7 +63,7 @@ class FeaturedSettingsTests(TestCase):
         self.paying.save()
         section, html = self.featured()
         self.assertEqual(section, "")
-        self.assertNotIn("Featured deals favour", html)
+        self.assertNotIn('<p class="section-head__note">Rip&#x27;s Deals favour', html)
 
     def test_admin_opens_the_one_row_names_the_paying_shops_and_the_home_page_follows_at_once(self):
         owner = get_user_model().objects.create_superuser("owner", "owner@example.com", "pw-123456")

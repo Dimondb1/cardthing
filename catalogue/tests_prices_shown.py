@@ -192,7 +192,7 @@ class ShownPriceTests(TestCase):
     def test_about_page_separates_featured_deals_from_the_price_order(self):
         page = self.client.get(reverse("web:about"))
         self.assertContains(page, "Retailers cannot pay to change that order")
-        self.assertContains(page, "featured deals row on the home page is different")
+        self.assertContains(page, "Rip&#x27;s Deals row on the home page is different")
 
 
 class MergeTests(TestCase):

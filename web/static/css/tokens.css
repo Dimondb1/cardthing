@@ -79,7 +79,7 @@
   --radius-sm: 8px;          /* thumbnails, small controls */
   --radius: 12px;            /* buttons, inputs, images */
   --radius-card: 16px;       /* product cards and panels */
-  --radius-pill: 999px;      /* filters, badges, search box */
+  --radius-pill: 999px;      /* filters, badges */
 
   /* Typefaces ------------------------------------------------------------ */
   --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;

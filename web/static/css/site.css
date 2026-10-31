@@ -498,6 +498,80 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .poster--watch .poster__title { font-size: var(--text-poster-sm); }
 .poster--watch .poster__text { font-size: var(--text-base); }
 .poster--watch .poster__mark { --mark-size: var(--mark-poster-sm); left: -20%; color: var(--color-brand); }
+/* The drop spotlight (home page, views.drop_spotlight), the owner's poster style for the next big drop: the set's
+   boxes fanned out over its name, day and countdown, in paper capitals on ink, and beside them the steps to be ready,
+   each on a paper card so its form and buttons are the site's own. */
+.spotlight__panel {
+  display: grid; gap: var(--space-5); padding: var(--poster-pad); border-radius: var(--radius-card);
+  background: var(--color-ink); color: var(--color-paper);
+}
+.spotlight__head { display: grid; gap: var(--space-3); justify-items: center; align-content: start; text-align: center; min-width: 0; }
+.spotlight__intro { display: grid; gap: var(--space-2); justify-items: center; min-width: 0; }
+.spotlight__art { display: flex; justify-content: center; padding: var(--space-2) var(--spotlight-overlap) var(--space-4); text-decoration: none; }
+.spotlight__pic {
+  display: block; flex: none; width: var(--spotlight-pic); margin-inline: calc(var(--spotlight-overlap) / -2);
+  padding: var(--space-1); border-radius: var(--radius); background: var(--color-paper); box-shadow: var(--shadow-lift);
+  transform: translateY(var(--arc, 0px)) rotate(var(--tilt, 0deg));
+  transition: transform var(--motion-normal) var(--ease-out);
+}
+.spotlight__pic .product-image { display: block; position: relative; width: 100%; aspect-ratio: 1; }
+.spotlight__pic .product-image img { position: absolute; inset: 0; }
+.spotlight__pic:nth-child(1) { --tilt: calc(var(--spotlight-tilt) * -2); --arc: var(--space-2); }
+.spotlight__pic:nth-child(2) { --tilt: calc(var(--spotlight-tilt) * -0.5); }
+.spotlight__pic:nth-child(3) { --tilt: calc(var(--spotlight-tilt) * 0.5); }
+.spotlight__pic:nth-child(4) { --tilt: calc(var(--spotlight-tilt) * 2); --arc: var(--space-2); }
+.spotlight__eyebrow { font-size: var(--text-sm); font-weight: var(--weight-heading); text-transform: uppercase; color: var(--color-brand); }
+.spotlight__title { font-size: var(--text-poster-sm); font-weight: var(--weight-poster); line-height: var(--leading-poster); text-transform: uppercase; text-wrap: balance; }
+.spotlight__accent { display: block; color: var(--color-brand); }
+.spotlight__when { font-weight: var(--weight-strong); }
+.spotlight__when .countdown { vertical-align: baseline; }
+.spotlight .countdown__part { background: var(--color-on-ink-soft); }
+.spotlight .countdown__n { color: var(--color-paper); }
+.spotlight .countdown__u { color: var(--color-on-ink-muted); }
+.spotlight__lead { max-width: var(--measure); color: var(--color-on-ink-muted); text-wrap: pretty; }
+.spotlight__progress { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-on-ink-muted); }
+.spotlight__progress.is-ready { color: var(--color-paper); }
+/* The steps: numbered, and ticked once done on this device (spotlight.js). */
+.prep { list-style: none; counter-reset: prep; display: grid; gap: var(--space-3); align-content: start; min-width: 0; }
+.prep__step {
+  counter-increment: prep; display: grid; grid-template-columns: var(--prep-mark) minmax(0, 1fr); gap: var(--space-3);
+  padding: var(--card-pad); border-radius: var(--radius); background: var(--color-paper); color: var(--color-ink);
+}
+.prep__mark {
+  display: grid; place-items: center; width: var(--prep-mark); height: var(--prep-mark);
+  border: 1.5px solid var(--color-brand-line); border-radius: var(--radius-pill);
+  font-size: var(--text-sm); font-weight: var(--weight-heading); line-height: 1;
+}
+.prep__number::before { content: counter(prep); }
+.prep__tick { display: none; width: 60%; height: 60%; }
+.prep__step.is-done .prep__mark { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-paper); }
+.prep__step.is-done .prep__number { display: none; }
+.prep__step.is-done .prep__tick { display: block; }
+.prep__body { display: grid; gap: var(--space-2); justify-items: start; min-width: 0; }
+.prep__title { font-size: var(--text-base); font-weight: var(--weight-heading); line-height: var(--leading-snug); }
+.prep__text { font-size: var(--text-sm); color: var(--color-ink-muted); }
+.prep__form { justify-self: stretch; margin-top: var(--space-1); }
+@media (min-width: 48rem) {
+  .spotlight__pic { width: var(--spotlight-pic-wide); }
+}
+/* Side by side once there is room: the drop on the left, its steps on the right. */
+@media (min-width: 60rem) {
+  .spotlight__panel { grid-template-columns: minmax(0, var(--split-minor)) minmax(0, var(--split-minor)); align-items: start; gap: var(--space-6); }
+  .spotlight__head, .spotlight__intro { justify-items: start; text-align: left; }
+  .spotlight__art { justify-content: flex-start; padding-left: calc(var(--spotlight-overlap) / 2); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* Hierarchy: the drop's boxes rise into place one after another as the page opens, and spread a little under
+     the pointer, which opens the set. Feedback: a step's tick grows in when it is done. */
+  .spotlight__pic { animation: spotlight-rise var(--motion-slow) var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+  .prep__step.is-fresh .prep__tick { animation: prep-tick var(--motion-normal) var(--ease-out) backwards; }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .spotlight__art:hover .spotlight__pic { transform: translateY(calc(var(--arc, 0px) + var(--lift))) rotate(calc(var(--tilt, 0deg) * 1.25)); }
+}
+@keyframes spotlight-rise { from { opacity: 0; transform: translateY(var(--space-5)) rotate(0deg); } }
+@keyframes prep-tick { from { opacity: 0; transform: scale(0.6); } }
+
 /* Wider panels are shorter for their width: hang the head from the top so its eye always shows, and let the edge
    crop its neck. */
 @media (min-width: 48rem) {

@@ -70,7 +70,7 @@ NETWORK_HOSTS = {
 }
 # The alert emails counted when sent (DailyPageView kind ALERTS): back in stock, the drop reminders' three and
 # the search alerts'.
-SENT_KEYS = ["sent", *(f"drop_sent_{stage}" for stage in SENT_FIELD), "search_sent"]
+SENT_KEYS = ["sent", *(f"drop_sent_{stage}" for stage in SENT_FIELD), "drop_sent_restock", "search_sent"]
 
 
 def network_of(source_type, template):

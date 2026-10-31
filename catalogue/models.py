@@ -1612,6 +1612,21 @@ class DropAlert(models.Model):
         help_text="The drop day the day-before email named. When the set's date moves, it is sent again for the new day.",
     )
     day_sent_at = models.DateTimeField("drop-day email sent", null=True, blank=True)
+    restocks_asked = models.BooleanField(
+        "restock emails asked for", default=False,
+        help_text="Asked for every alert (the home page's drop spotlight): restock emails after the drop too. They "
+                  "start when the confirm link is pressed.",
+    )
+    restocks = models.BooleanField(
+        "restock emails", default=False,
+        help_text="For 30 days after the drop, an email when one of its products comes into stock at a UK shop at a "
+                  "fair price (catalogue/drop_alerts.py). Kept after the drop-day email while on.",
+    )
+    restock_seen = models.JSONField(
+        "in stock when last looked", null=True, blank=True, editable=False,
+        help_text="The drop's products in stock at a fair price when last emailed or looked at: only others are new.",
+    )
+    restock_sent_at = models.DateTimeField("last restock email", null=True, blank=True)
 
     class Meta:
         unique_together = [("product_set", "email")]
@@ -2313,6 +2328,46 @@ class FeaturedSettings(models.Model):
     def current(cls):
         """The row, or the defaults unsaved: a page that only reads it never writes."""
         return cls.objects.filter(pk=1).first() or cls(pk=1)
+
+
+class DropSpotlight(models.Model):
+    """The one row of owner controls for the home page's drop spotlight (web/views.py drop_spotlight): the drop the
+    home page gets people ready for, with its prep list, and the invite to its Discord channel."""
+
+    product_set = models.ForeignKey(
+        ProductSet, on_delete=models.SET_NULL, null=True, blank=True, related_name="+", verbose_name="drop",
+        help_text="The set to get people ready for, for example Delta Reign. It shows at the top of the home page "
+                  "until 14 days after its release day. Empty: nothing shows.",
+    )
+    discord_invite = models.URLField(
+        "Discord invite link", blank=True,
+        help_text="The invite to the Discord channel RipRaptor posts this set's restocks to (Discord channels), "
+                  "for example https://discord.gg/abc123. Empty: no Discord step.",
+    )
+
+    class Meta:
+        verbose_name = "drop spotlight"
+        verbose_name_plural = "drop spotlight"
+
+    def __str__(self):
+        return "Drop spotlight"
+
+    def clean(self):
+        from urllib.parse import urlsplit
+
+        host = (urlsplit(self.discord_invite).hostname or "").lower() if self.discord_invite else ""
+        if self.discord_invite and (not self.discord_invite.startswith("https://")
+                                    or host not in ("discord.gg", "discord.com", "www.discord.com")):
+            raise ValidationError({"discord_invite": "Use a Discord invite link: https://discord.gg/ followed by its code."})
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    @classmethod
+    def current(cls):
+        """The row with its set and game, or the defaults unsaved: a page that only reads it never writes."""
+        return cls.objects.select_related("product_set__game").filter(pk=1).first() or cls(pk=1)
 
 
 class Referrer(models.Model):

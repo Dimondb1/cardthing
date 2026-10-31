@@ -26,7 +26,7 @@ from catalogue import (alerts, clicks, fair_price, images, insights, languages, 
                        referrals, sports, traffic)
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
-    DailyPageView, FeaturedSettings, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
+    DailyPageView, DropSpotlight, FeaturedSettings, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
     Retailer, StockAlert, stale_cutoff,
 )
 from catalogue.search import apply_search
@@ -818,6 +818,7 @@ def home(request):
             "interest_games": interest_lexicon(games),
             # Win a keyring: shown while the refer a friend offer is open, read from the cache with no query.
             "keyrings_left": referrals.keyrings_left(),
+            "spotlight": drop_spotlight(request),
             "hide_header_search": True,
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
@@ -826,6 +827,53 @@ def home(request):
             "structured_json": ld_json(site_json(request)),
         },
     )
+
+
+# The drop spotlight's pictures: the set's products a shop's picture is known for, the boxes first.
+SPOTLIGHT_PICTURES = 4
+SPOTLIGHT_TYPES = ["elite_trainer_box", "booster_box", "bundle", "collection_box", "collector_booster_box", "tin",
+                   "gift_set", "deck", "booster_pack"]
+
+
+def drop_spotlight(request, today=None):
+    """The home page's drop spotlight (DropSpotlight, chosen in admin; the owner, 31 Oct 2026: "advertise a feature
+    for the upcoming Delta Reign drop ... so they can be ready in one tap"): the set's drop with its day and
+    countdown, up to SPOTLIGHT_PICTURES of its products' pictures, and the steps to be ready: every alert, the
+    Discord, pre-order or buy at a fair price, and the set's prices. None when no set is chosen or its drop is
+    more than RECENT_DAYS past (drops.drop_queryset). A query for the row, and the drop's three."""
+    from catalogue import drop_alerts
+    from catalogue.drops import build, drop_queryset, in_drop
+
+    today = today or timezone.localdate()
+    row = DropSpotlight.current()
+    if row.product_set_id is None:
+        return None
+    loaded = drop_queryset(today).filter(pk=row.product_set_id).first()
+    if loaded is None:
+        return None
+    drop = drop_words(request, build(loaded, today), today)
+    rank = {code: index for index, code in enumerate(SPOTLIGHT_TYPES)}
+    products = [product for product in loaded.drop_products if in_drop(product, drop.day, drop.month)]
+    pictured = sorted((product for product in products if product.image_src),
+                      key=lambda product: (rank.get(product.product_type, len(rank)), product.name))
+    stocked = [listing for product in products for listing in product.shop_offers
+               if listing.availability == Listing.Availability.IN_STOCK]
+    cheapest = min(stocked, key=lambda listing: (not listing.delivery_known, listing.shown_price), default=None)
+    restocks = drop.day is not None
+    return {
+        "drop": drop,
+        "set": loaded,
+        "out": drop.day is not None and drop.day <= today,
+        "pictures": pictured[:SPOTLIGHT_PICTURES],
+        "discord": row.discord_invite,
+        # Every alert can be asked for while the drop is to come or, with a day, while its restocks run.
+        "can_ask": mail.enabled() and not drop.undated and drop_alerts.can_ask(loaded, restocks=restocks),
+        "restocks": restocks,
+        "restock_days": drop_alerts.RESTOCK_DAYS,
+        "stock_shops": len({listing.retailer_id for listing in stocked}),
+        "stock_from": cheapest,
+        "stock_product": next((p for p in products if cheapest is not None and p.pk == cheapest.product_id), None),
+    }
 
 
 @require_GET
@@ -2503,8 +2551,9 @@ def drops(request):
     return render(request, "web/drops.html", context)
 
 
-def ask_for_drop(request, product_set):
-    """Take the form's address for this set's reminder. Returns a state from DROP_STATES."""
+def ask_for_drop(request, product_set, restocks=False):
+    """Take the form's address for this set's reminder, with restock emails after it when ``restocks`` (every
+    alert, from the home page's drop spotlight). Returns a state from DROP_STATES."""
     from django.core.exceptions import ValidationError
     from django.core.validators import validate_email
 
@@ -2518,7 +2567,7 @@ def ask_for_drop(request, product_set):
     if not drop_alerts.address_allowed(insights.client_ip(request)):
         return "busy"
     try:
-        return drop_alerts.ask(product_set, email)
+        return drop_alerts.ask(product_set, email, restocks=restocks)
     except mail.MailError:
         return "failed"
 
@@ -2531,17 +2580,22 @@ def drop_ask(request, set_id):
     from catalogue.drops import upcoming_drop
 
     product_set = get_object_or_404(ProductSet.objects.select_related("game"), pk=set_id, game__is_active=True)
-    back = reverse("web:drops") + f"#drop-{product_set.pk}"
+    # Every alert is asked for from the home page's drop spotlight, and its pages lead back there.
+    home = (request.POST if request.method == "POST" else request.GET).get("from") == "home"
+    back = reverse("web:home") + "#drop-spotlight" if home else reverse("web:drops") + f"#drop-{product_set.pk}"
     if request.method == "POST":
         if request.POST.get("website") or not mail.enabled():
             return HttpResponseRedirect(back)   # the hidden field is only ever filled by robots
-        if upcoming_drop(product_set) is None or not drop_alerts.can_send(product_set.release_date):
+        restocks = request.POST.get("every") == "1"
+        upcoming = upcoming_drop(product_set) is not None and drop_alerts.can_send(product_set.release_date)
+        if not upcoming and not (restocks and drop_alerts.can_ask(product_set, restocks=True)):
             raise Http404("That drop has passed.")
-        state = ask_for_drop(request, product_set)
+        state = ask_for_drop(request, product_set, restocks)
         if "application/json" in request.headers.get("Accept", ""):
             title, body = DROP_STATE_COPY[state]
             return JsonResponse({"state": state, "message": text(request, body, set=product_set.name)})
-        return HttpResponseRedirect(f"{reverse('web:drop_ask', args=[product_set.pk])}?state={state}")
+        return HttpResponseRedirect(f"{reverse('web:drop_ask', args=[product_set.pk])}?state={state}"
+                                    + ("&from=home" if home else ""))
     if request.method != "GET":
         return HttpResponse(status=405)
     state = request.GET.get("state")
@@ -2564,7 +2618,12 @@ def drop_confirm(request, token):
         heading, message, back = text(request, "alerts.gone.title"), text(request, "drops.gone.body"), reverse("web:drops")
     else:
         heading = text(request, "drops.confirmed.title")
-        message = text(request, "drops.confirmed.body", set=alert.product_set.name)
+        if alert.restocks:
+            out = not drop_alerts.can_send(alert.product_set.release_date)
+            key = "drops.confirmed.body_out" if out else "drops.confirmed.body_all"
+            message = text(request, key, set=alert.product_set.name, days=drop_alerts.RESTOCK_DAYS)
+        else:
+            message = text(request, "drops.confirmed.body", set=alert.product_set.name)
         back = reverse("web:drops") + f"#drop-{alert.product_set_id}"
     return render(request, "web/drop_done.html", {"heading": heading, "message": message, "back_url": back,
                                                   "meta_title": heading, "noindex": True})

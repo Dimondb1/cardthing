@@ -1,4 +1,5 @@
 import re
+from datetime import timedelta
 
 from django import forms
 from django.contrib import admin, messages
@@ -9,7 +10,7 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, DropSpotlight, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, RemovedShop, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -529,12 +530,13 @@ class StockAlertAdmin(admin.ModelAdmin):
 
 @admin.register(DropAlert)
 class DropAlertAdmin(admin.ModelAdmin):
-    list_display = ("product_set", "email", "created_at", "confirmed_at", "preorder_sent_at", "eve_sent_at")
-    list_filter = ("confirmed_at",)
+    list_display = ("product_set", "email", "created_at", "confirmed_at", "preorder_sent_at", "eve_sent_at", "restocks")
+    list_filter = ("confirmed_at", "restocks")
     search_fields = ("product_set__name", "email")
     list_select_related = ("product_set",)
     readonly_fields = ("product_set", "email", "token", "created_at", "confirmed_at", "confirm_sent_at",
-                       "preorder_sent_at", "eve_sent_at", "eve_for", "day_sent_at")
+                       "preorder_sent_at", "eve_sent_at", "eve_for", "day_sent_at", "restocks_asked", "restocks",
+                       "restock_sent_at")
 
     def has_add_permission(self, request):
         return False
@@ -660,6 +662,46 @@ class ReferralSettingsAdmin(admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
         referrals.refresh_flag(obj)
+
+
+@admin.register(DropSpotlight)
+class DropSpotlightAdmin(admin.ModelAdmin):
+    """The one row for the home page's drop spotlight. The list goes straight to it."""
+
+    fields = ("product_set", "discord_invite", "now")
+    readonly_fields = ("now",)
+    autocomplete_fields = ("product_set",)
+
+    def has_add_permission(self, request):
+        return False   # the list opens the one row, made on first use
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        row = DropSpotlight.load()
+        return HttpResponseRedirect(reverse("admin:catalogue_dropspotlight_change", args=[row.pk]))
+
+    @admin.display(description="Now")
+    def now(self, obj):
+        from . import drop_alerts
+        from .drops import RECENT_DAYS
+
+        if obj.product_set_id is None:
+            return "Nothing shows. Choose a drop to put it at the top of the home page."
+        day = obj.product_set.release_date
+        alerts = DropAlert.objects.filter(product_set=obj.product_set, confirmed_at__isnull=False)
+        counts = alerts.aggregate(all=Count("pk"), every=Count("pk", filter=models.Q(restocks=True)))
+        when = f"out {day:%a %-d %b %Y}" if day else "no release day yet, so no restock emails"
+        until = drop_alerts.restocks_until(day)
+        shown = ("showing on the home page" if day is None or timezone.localdate() <= day + timedelta(days=RECENT_DAYS)
+                 else "no longer showing: its release day was over 14 days ago")
+        tail = f" Restock emails run until {until:%-d %b}." if until else ""
+        return (f"{obj.product_set.name}, {when}, {shown}. Confirmed reminders: {counts['all']}, of them with every "
+                f"alert: {counts['every']}.{tail}")
 
 
 @admin.register(FeaturedSettings)

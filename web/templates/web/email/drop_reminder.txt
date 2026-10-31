@@ -1,6 +1,6 @@
 {% load sitecopy %}{% autoescape off %}{{ subject }}
 
-{% if stage == "preorder" %}{% copy "drops.email.preorder.body" set=values.set names=values.names %}{% elif stage == "eve" %}{% copy "drops.email.eve.body" set=values.set date=values.date %}{% else %}{% copy "drops.email.day.body" set=values.set %}{% endif %}
+{% if stage == "preorder" %}{% copy "drops.email.preorder.body" set=values.set names=values.names %}{% elif stage == "eve" %}{% copy "drops.email.eve.body" set=values.set date=values.date %}{% elif stage == "restock" %}{% copy "drops.email.restock.body" set=values.set names=values.names %}{% else %}{% copy "drops.email.day.body" set=values.set %}{% endif %}
 {% if offers %}
 {% copy "drops.email.offers" %}:
 {% for offer in offers %}
@@ -12,7 +12,7 @@
 {% endif %}
 {% copy "drops.email.button" %}: {{ drop_url }}
 
-{% if last %}{% copy "drops.email.last" set=values.set %}{% else %}{% copy "drops.email.more" %}{% endif %}
+{% if last %}{% copy "drops.email.last" set=values.set %}{% elif restocks %}{% copy "drops.email.more_all" days=values.days %}{% else %}{% copy "drops.email.more" %}{% endif %}
 
 Unsubscribe and delete your email address: {{ stop_url }}{% if manage_url %}
 {% copy "watchlist.manage.email.link" %}: {{ manage_url }}{% endif %}

@@ -669,6 +669,18 @@ ENTRIES = [
         "Page after the confirm link in a reminder email.",
         placeholders=("set",),
     ),
+    Entry(
+        "drops.confirmed.body_all", T, "Every alert confirmed text",
+        "We will email you about {set} when a UK shop opens pre-orders, the day before it comes out, on the day, and "
+        "for {days} days after whenever a UK shop has one of its products in stock again at a fair price.",
+        "Page after the confirm link in an every alert email, before the drop.", placeholders=("set", "days"),
+    ),
+    Entry(
+        "drops.confirmed.body_out", T, "Every alert confirmed text, out",
+        "We will email you for {days} days whenever a UK shop has a {set} product in stock again at a fair price. "
+        "Then your address is deleted.",
+        "Page after the confirm link in an every alert email, once the drop is out.", placeholders=("set", "days"),
+    ),
     Entry("drops.stopped.title", H, "Reminder stopped heading", "Reminder stopped", "Page after the unsubscribe link in a reminder email."),
     Entry(
         "drops.gone.body", T, "Reminder link expired text",
@@ -706,6 +718,46 @@ ENTRIES = [
         "Nothing is sent until you confirm. If this was not you, ignore this email and the request is deleted within a week.",
         "In the confirmation email.",
         legal=True,
+    ),
+    Entry("drops.email.confirm.subject_all", T, "Every alert confirmation subject", "Confirm every alert for {set}",
+          "Subject of the email that confirms every alert for a drop (the home page's drop spotlight).",
+          placeholders=("set",)),
+    Entry("drops.email.confirm.preheader_all", T, "Every alert confirmation preview",
+          "One click and we will email you about {set} and its restocks.",
+          "Preview line of the every alert confirmation email.", placeholders=("set",)),
+    Entry(
+        "drops.email.confirm.body_all", T, "Every alert confirmation text",
+        "You asked {site_name} for every {set} alert: when a UK shop opens pre-orders, the day before it comes out, "
+        "on the day, and for {days} days after, whenever a UK shop has one of its products in stock again at a fair "
+        "price.",
+        "In the every alert confirmation email, before the drop.",
+        placeholders=("set", "site_name", "days"), legal=True,
+    ),
+    Entry(
+        "drops.email.confirm.body_out", T, "Every alert confirmation text, out",
+        "You asked {site_name} to email you for {days} days after {set} came out, whenever a UK shop has one of its "
+        "products in stock again at a fair price.",
+        "In the every alert confirmation email, once the drop is out.",
+        placeholders=("set", "site_name", "days"), legal=True,
+    ),
+    Entry("drops.email.confirm.button_all", B, "Every alert confirmation button", "Confirm my alerts",
+          "In the every alert confirmation email."),
+    Entry("drops.email.restock.subject", T, "Restock subject", "Back in stock: {set}",
+          "Subject of the email when a drop's product is in stock again at a UK shop at a fair price.",
+          placeholders=("set",)),
+    Entry("drops.email.restock.preheader", T, "Restock preview", "In stock at {names} at a fair price.",
+          "Preview line of the restock email.", placeholders=("names",)),
+    Entry(
+        "drops.email.restock.body", T, "Restock text",
+        "{set} is back in stock at {names} at a fair price, no more than a quarter over its RRP where we know it. "
+        "Restocks sell out fast, so here it is, cheapest first.",
+        "In the restock email.", placeholders=("set", "names"),
+    ),
+    Entry(
+        "drops.email.more_all", T, "Email more to come, every alert",
+        "We email you about this drop: when pre-orders open, the day before, on the day, and for {days} days after "
+        "when a UK shop has it in stock again at a fair price. Each email has a link that deletes your address.",
+        "Footer of every email to someone with every alert for a drop.", placeholders=("days",), legal=True,
     ),
     Entry("drops.email.preorder.subject", T, "Pre-orders open subject", "Pre-orders open: {set}", "Subject of the email sent when a shop opens pre-orders before a drop.", placeholders=("set",)),
     Entry("drops.email.preorder.preheader", T, "Pre-orders open preview", "{names} now take pre-orders.", "Preview line of the pre-orders email.", placeholders=("names",)),
@@ -1863,6 +1915,75 @@ ENTRIES = [
           "The RipRaptor keyring held in a hand: the ripraptor logo and raptor head in orange on a black base",
           "Read out by screen readers in place of the keyring photo, on the home page's Win a keyring section and "
           "the refer a friend pages."),
+    Entry("home.spotlight.eyebrow", T, "Drop spotlight eyebrow", "The next big drop",
+          "Above the drop spotlight's heading at the top of the home page, after the game's name, before the drop."),
+    Entry("home.spotlight.eyebrow_out", T, "Drop spotlight eyebrow, out", "Out now",
+          "Above the drop spotlight's heading once the drop is out (it shows for 14 days after)."),
+    Entry("home.spotlight.title", H, "Drop spotlight heading", "{set} is coming. Be ready.",
+          "The drop spotlight's big heading, chosen in Drop spotlight. Its last sentence is in orange on a line of its "
+          "own.", placeholders=("set",)),
+    Entry("home.spotlight.title_out", H, "Drop spotlight heading, out", "{set} is out. Beat the scalpers.",
+          "The drop spotlight's heading once the drop is out. Its last sentence is in orange on a line of its own.",
+          placeholders=("set",)),
+    Entry("home.spotlight.lead", T, "Drop spotlight text",
+          "Scalpers buy fast. Be ready first and buy at a fair price, not theirs.",
+          "Under the drop spotlight's day and countdown.", placeholders=("set",)),
+    Entry("home.spotlight.lead_out", T, "Drop spotlight text, out",
+          "Shops restock after release. Be ready for the next restock and never pay a scalper price.",
+          "Under the drop spotlight's day once the drop is out.", placeholders=("set",)),
+    Entry("home.spotlight.progress", T, "Drop spotlight progress", "{done} of {total} done",
+          "Under the drop spotlight's text: how many of the steps this visitor has done on this device. Shown by the "
+          "page's script only.", placeholders=("done", "total")),
+    Entry("home.spotlight.ready", T, "Drop spotlight all done", "You are ready for {set}.",
+          "In place of the progress once every step is done on this device.", placeholders=("set",)),
+    Entry("home.spotlight.done", T, "Drop spotlight step done", "done",
+          "Read out by screen readers after a step's heading once it is done."),
+    Entry("home.spotlight.alerts.title", H, "Drop spotlight alerts step", "Get every {set} alert",
+          "The first step in the drop spotlight: one email address for every alert about the drop.",
+          placeholders=("set",)),
+    Entry("home.spotlight.alerts.text", T, "Drop spotlight alerts text",
+          "When pre-orders open, the day before, on the day, then every restock at a fair price for {days} days. "
+          "One email to confirm.",
+          "Under the alerts step before the drop.", placeholders=("days",), legal=True),
+    Entry("home.spotlight.alerts.text_out", T, "Drop spotlight alerts text, out",
+          "Every restock at a UK shop at a fair price, for {days} days after release. One email to confirm.",
+          "Under the alerts step once the drop is out.", placeholders=("days",), legal=True),
+    Entry("home.spotlight.alerts.text_month", T, "Drop spotlight alerts text, no day yet",
+          "When pre-orders open, then the day before and on the day once the day is known. One email to confirm.",
+          "Under the alerts step for a drop with no day announced yet, which cannot have restock emails.",
+          legal=True),
+    Entry("home.spotlight.alerts.button", B, "Drop spotlight alerts button", "Alert me",
+          "Sends the email to confirm every alert for the drop."),
+    Entry("home.spotlight.alerts.note", T, "Drop spotlight alerts note",
+          "Only about {set}. Every email has a link that deletes your address.",
+          "Under the email box in the alerts step, before the privacy link.", placeholders=("set",), legal=True),
+    Entry("home.spotlight.discord.title", H, "Drop spotlight Discord step", "Join the {set} Discord",
+          "A step in the drop spotlight, shown when Drop spotlight has a Discord invite link.", placeholders=("set",)),
+    Entry("home.spotlight.discord.text", T, "Drop spotlight Discord text",
+          "Pre-orders and restocks are posted in the channel as we see them.",
+          "Under the Discord step.", placeholders=("set",)),
+    Entry("home.spotlight.discord.button", B, "Drop spotlight Discord button", "Join the Discord",
+          "Opens the Discord invite in a new tab."),
+    Entry("home.spotlight.preorder.title", H, "Drop spotlight pre-order step", "Pre-order at a fair price",
+          "A step in the drop spotlight while UK shops take pre-orders. Its line is the drops page's pre-order price."),
+    Entry("home.spotlight.preorder.button", B, "Drop spotlight pre-order button", "See pre-orders",
+          "Opens the drop on the drops page."),
+    Entry("home.spotlight.stock.title", H, "Drop spotlight in stock step", "Buy at a fair price",
+          "A step in the drop spotlight once the drop is out and UK shops have it in stock."),
+    Entry("home.spotlight.stock.one", T, "Drop spotlight in stock (one shop)", "In stock at 1 UK shop from {price}",
+          "Under the in stock step. {price} is the cheapest.", placeholders=("price", "count")),
+    Entry("home.spotlight.stock.other", T, "Drop spotlight in stock (more than one shop)",
+          "In stock at {count} UK shops from {price}",
+          "Under the in stock step. {price} is the cheapest.", placeholders=("price", "count")),
+    Entry("home.spotlight.stock.button", B, "Drop spotlight in stock button", "See where",
+          "Opens the set's page."),
+    Entry("home.spotlight.prices.title", H, "Drop spotlight prices step", "Know the fair price",
+          "The last step in the drop spotlight."),
+    Entry("home.spotlight.prices.text", T, "Drop spotlight prices text",
+          "Every {set} product with today's UK prices, so you can spot a scalper price.",
+          "Under the prices step.", placeholders=("set",)),
+    Entry("home.spotlight.prices.button", B, "Drop spotlight prices button", "See {set} prices",
+          "Opens the set's page.", placeholders=("set",)),
     Entry("home.keyring.title", H, "Win a keyring heading", "Win a free RipRaptor keyring today",
           "Home page section, shown while the refer a friend offer is open."),
     Entry("home.keyring.winner", T, "Win a keyring winner line", "Matt from Portsmouth has already won one.",
@@ -2703,7 +2824,10 @@ ENTRIES = [
         "address with that set for that alone. Nothing is sent until you confirm by the link "
         "we email you. You then hear from us only about that set: when a UK shop opens "
         "pre-orders, the day before it comes out (again if its date moves) and on the day. "
-        "Your address is deleted after the last one, or once the drop has passed. Unconfirmed requests are deleted after a week and "
+        "Your address is deleted after the last one, or once the drop has passed. If you ask for every alert "
+        "for a drop on our home page, you also hear from us for 30 days after it comes out, whenever a UK shop has "
+        "one of its products in stock again at a fair price, at most once an hour, and your address is deleted "
+        "when those 30 days are up. Unconfirmed requests are deleted after a week and "
         "any still waiting after a year are deleted too. Every email has a link that deletes "
         "your request at once. These emails go through Zoho ZeptoMail too.\n\n"
         "If you message us, we keep your message, and your name and email address if you "

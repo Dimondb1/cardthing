@@ -286,6 +286,16 @@
   --weight-poster: 900;
   --leading-poster: 0.9;
   --poster-pad: clamp(1.5rem, 1rem + 2.5vw, 3rem);
+
+  /* Drop spotlight: the home page's panel for the next big drop, in the poster style -------------------- */
+  --spotlight-pic: 5.5rem;          /* each box in the fan on a phone */
+  --spotlight-pic-wide: 8rem;       /* and from 48rem */
+  --spotlight-overlap: 1.25rem;     /* how far the boxes tuck behind each other */
+  --spotlight-tilt: 4deg;           /* the fan's spread: the outer boxes lean twice this */
+  --stagger: 60ms;                  /* between one box rising into place and the next */
+  --prep-mark: 2rem;                /* the numbered circle beside each step, a tick once it is done */
+  --color-on-ink-muted: rgb(255 255 255 / 0.78);   /* quieter words on the ink panel: 9.6:1 */
+  --color-on-ink-soft: rgb(255 255 255 / 0.12);    /* a well on the ink panel, such as the countdown's boxes */
 }
 
 /* Sections sit a phi step further apart once there is room. */

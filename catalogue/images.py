@@ -70,6 +70,7 @@ def steps(low, high):
 #            the page from 48rem, 11rem once the page stops growing.
 #   large    the product page's picture well: 17rem on a phone; from 60rem as tall as the name and price box
 #            beside it, 22 to 35rem by how many shops it lists. 33rem takes the 540 copy on a 1x screen, sharp for all of them.
+#   spotlight the home page's drop spotlight: a fan of the set's boxes, 5.5rem a picture on a phone, 8rem from 48rem.
 #   swipe    .swipe__image: as tall as the screen allows on a phone, up to 27.5rem inside the 30rem deck, and
 #            about 20.5rem from 48rem where the card has a fixed height.
 # Each slot offers the steps from its smallest picture on a 1x screen to its largest on a 3x phone, so a sharp
@@ -88,6 +89,7 @@ SLOTS = {
              steps(96, 600)),
     "large": (540, "(min-width: 60rem) 33rem, 17rem", steps(272, 1440)),
     "swipe": (420, "(min-width: 48rem) 20.5rem, (min-width: 30rem) 27.5rem, 85vw", steps(245, 1362)),
+    "spotlight": (200, "(min-width: 48rem) 8rem, 5.5rem", steps(88, 384)),
 }
 
 # Social previews and search engines want a large picture: about 1200 pixels wide.

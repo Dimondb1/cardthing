@@ -1,5 +1,6 @@
 {% extends "web/base.html" %}
-{% load sitecopy ripraptor %}
+{% load sitecopy ripraptor static %}
+{% block scripts %}{% if spotlight %}<script src="{% static 'js/drops.js' %}" defer></script><script src="{% static 'js/spotlight.js' %}" defer></script>{% endif %}{% endblock %}
 
 {% block content %}
 <section class="hero" aria-labelledby="hero-title">
@@ -16,6 +17,8 @@
   {% endif %}
   {% if guides_live %}<p class="hero__guides"><a href="{% url 'web:guides' %}">{% copy "home.guides" %}</a></p>{% endif %}
 </section>
+
+{% if spotlight %}{% include "web/includes/spotlight.html" %}{% endif %}
 
 {% if games %}
 <section class="home-section home-section--games" aria-labelledby="games-title">

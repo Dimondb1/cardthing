@@ -1,9 +1,9 @@
 {% extends "web/email/base.html" %}{% load sitecopy %}
 {% block body %}
 <h1 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:#1f2430;">{% copy "drops.email.confirm.title" %}</h1>
-<p style="margin:0 0 16px;">{% copy "drops.email.confirm.body" set=values.set site_name=values.site_name %}</p>
+<p style="margin:0 0 16px;">{% if kind == "restocks" %}{% copy "drops.email.confirm.body_all" set=values.set site_name=values.site_name days=values.days %}{% elif kind == "restocks_out" %}{% copy "drops.email.confirm.body_out" set=values.set site_name=values.site_name days=values.days %}{% else %}{% copy "drops.email.confirm.body" set=values.set site_name=values.site_name %}{% endif %}</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>
-  <td style="border-radius:12px;background:#e5470e;"><a href="{{ confirm_url }}" style="display:inline-block;padding:14px 24px;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;">{% copy "drops.email.confirm.button" %}</a></td>
+  <td style="border-radius:12px;background:#e5470e;"><a href="{{ confirm_url }}" style="display:inline-block;padding:14px 24px;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;">{% if kind == "reminder" %}{% copy "drops.email.confirm.button" %}{% else %}{% copy "drops.email.confirm.button_all" %}{% endif %}</a></td>
 </tr></table>
 <p style="margin:0;color:#545b68;">{% copy "drops.email.confirm.note" %}</p>
 {% endblock %}

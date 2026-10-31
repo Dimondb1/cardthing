@@ -2864,6 +2864,53 @@ not yet shown on Insights; drops page views count with Latest drops.
 `seed_demo` adds five fictional "(demo)" sets dated from today so the page
 has something to show locally.
 
+### Drop spotlight and every alert
+
+For a big release (the owner, 31 Oct 2026, for Delta Reign: "so they can be
+ready in one tap"), Admin, Drop spotlight puts one set at the top of the
+home page, under the search box, until 14 days after its release day. Pick
+the set, and add the invite link of the Discord channel RipRaptor posts its
+restocks to (Admin, Discord channels; choose the set there under Sets), and
+save. Empty the set to take it down. The row's Now line says whether it is
+showing and how many people have every alert.
+
+The panel is in the poster style: up to four of the set's boxes with a
+picture, fanned out, the set's name in capitals ("Delta Reign is coming.
+Be ready."), its day with a live countdown in its last week, and a list of
+numbered steps to be ready:
+
+1. **Get every alert** (when email is set up and the drop has a date): one
+   email address and one confirm link for the drop reminder's emails
+   (pre-orders open, the day before, release day) and then **restock
+   emails** for 30 days after the day (`drop_alerts.RESTOCK_DAYS`): when one
+   of the set's products comes into stock at a UK shop, never eBay or
+   Amazon, at a fair price, no more than a quarter over its RRP when the RRP
+   is known (`FAIR_MARKUP`). Only products not in stock when it last looked
+   are news, so a product that sells out and comes back is news again. At
+   most one email an hour, between 7am and 11pm UK time, listing the
+   products that came back, cheapest first, with links to their pages. Once
+   the drop is out the step offers restocks alone, and it can still be
+   asked for while they run.
+2. **Join the Discord**, when an invite link is set.
+3. **Pre-order at a fair price** while UK shops take pre-orders (to the
+   drop on the drops page), or **Buy at a fair price** once it is out and in
+   stock (to the set's page).
+4. **Know the fair price**: the set's page with every product's price.
+
+Every step works without JavaScript. With it (`web/static/js/spotlight.js`)
+the steps done on this device are ticked and counted ("2 of 4 done", then
+"You are ready for Delta Reign."), kept in that browser's storage as step
+names only. The boxes rise into place one after another as the page opens
+and spread a little under the pointer; neither moves with reduced motion.
+
+Every alert is a drop reminder with restocks (`DropAlert.restocks_asked`,
+turned on as `restocks` by the confirm link), so the drops page's own Remind
+me is unchanged, every email has the same link that deletes the address,
+and asking for every alert with an address that already has a reminder
+sends a confirmation again: only its link turns restocks on. The reminder
+is deleted when its restock days are up. The wording is in Site wording
+under the home page ("Drop spotlight") and the drop reminder emails.
+
 ## Deals page
 
 `/deals/` is the page to link from social posts: the biggest savings

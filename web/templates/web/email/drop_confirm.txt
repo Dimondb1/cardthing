@@ -1,6 +1,6 @@
-{% load sitecopy %}{% autoescape off %}{% copy "drops.email.confirm.body" set=values.set site_name=values.site_name %}
+{% load sitecopy %}{% autoescape off %}{% if kind == "restocks" %}{% copy "drops.email.confirm.body_all" set=values.set site_name=values.site_name days=values.days %}{% elif kind == "restocks_out" %}{% copy "drops.email.confirm.body_out" set=values.set site_name=values.site_name days=values.days %}{% else %}{% copy "drops.email.confirm.body" set=values.set site_name=values.site_name %}{% endif %}
 
-{% copy "drops.email.confirm.button" %}:
+{% if kind == "reminder" %}{% copy "drops.email.confirm.button" %}{% else %}{% copy "drops.email.confirm.button_all" %}{% endif %}:
 {{ confirm_url }}
 
 {% copy "drops.email.confirm.note" %}

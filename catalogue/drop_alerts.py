@@ -11,7 +11,14 @@ after the last email. The stages, each sent at most once and only when its data 
 - the day before: on the morning before a drop with a full date, from EMAIL_FROM_HOUR UK time. If the
   set's day moves after it went, it is sent again the day before the new day, so nobody is left with a
   wrong "out tomorrow";
-- drop day: on the drop's own morning, from the same hour. The address is deleted once it has gone.
+- drop day: on the drop's own morning, from the same hour. The address is deleted once it has gone, unless
+  it asked for restocks;
+- restocks: asked for with every alert (the home page's drop spotlight, the owner on 31 Oct 2026: "set alerts
+  for all Delta Reign products"), and on from the confirm link. For RESTOCK_DAYS after a dated drop, an email
+  when one of its products comes into stock at a UK shop (never eBay or Amazon) at a fair price: no more than
+  FAIR_MARKUP times its RRP when the RRP is known. Only products not in stock when it last looked are news, so
+  a product that sells out and comes back is news again; at most one email every RESTOCK_GAP, from
+  RESTOCK_FROM_HOUR to RESTOCK_UNTIL_HOUR. The address is deleted when the time is up.
 
 A month-only drop hears only about pre-orders until its date is published, and nothing once a shop sells
 it from stock. A product with its own later release date is not part of the drop (drops.in_drop). A stage whose window has
@@ -31,6 +38,7 @@ update that only one process can win before it is sent, and handed back if the s
 
 import hashlib
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.cache import cache
@@ -63,6 +71,12 @@ PREORDER_UNTIL_HOUR = 22
 
 PREORDER, EVE, DAY = "preorder", "eve", "day"
 SENT_FIELD = {PREORDER: "preorder_sent_at", EVE: "eve_sent_at", DAY: "day_sent_at"}
+RESTOCK = "restock"
+RESTOCK_DAYS = 30             # restock emails go for this many days after the drop's day
+RESTOCK_GAP = timedelta(minutes=60)   # and at most one an hour to an address
+RESTOCK_FROM_HOUR = 7         # a restock sells out fast, so the window is wide: 7am
+RESTOCK_UNTIL_HOUR = 23       # to 11pm UK time
+FAIR_MARKUP = Decimal("1.25")  # a shop price above this many times the RRP is not news
 
 
 def note(event):
@@ -81,6 +95,20 @@ def can_send(day, now=None):
         return True
     local = timezone.localtime(now or timezone.now())
     return day > local.date() or (day == local.date() and local.hour < EMAIL_UNTIL_HOUR)
+
+
+def restocks_until(day):
+    """The last day restock emails go for a drop on ``day``, or None for a drop with no day yet."""
+    return day + timedelta(days=RESTOCK_DAYS) if day else None
+
+
+def can_ask(product_set, restocks=False, now=None):
+    """True when a sign-up for this set can still be sent something: its drop is still to come (can_send), or,
+    for every alert, its restock emails have days left."""
+    if can_send(product_set.release_date, now):
+        return True
+    today = timezone.localtime(now or timezone.now()).date()
+    return restocks and product_set.release_date is not None and today <= restocks_until(product_set.release_date)
 
 
 def drop_url(product_set):
@@ -129,14 +157,18 @@ def render_mail(template, context, store=None):
     )
 
 
-def ask(product_set, email, now=None):
+def ask(product_set, email, now=None, restocks=False):
     """Record a request and send the confirmation. Always returns "sent", whatever is known about the
     address: an address that already has this reminder, is at MAX_PER_EMAIL or has had its confirmations
-    for the day is sent nothing more, and the visitor is not told which, since they may not own it."""
+    for the day is sent nothing more, and the visitor is not told which, since they may not own it.
+    ``restocks`` asks for every alert: restock emails after the drop too. Asked for an address that already has
+    a confirmed reminder without them, it sends a confirmation again, and only its link turns them on."""
     now = now or timezone.now()
     email = email.strip().lower()
     alert = DropAlert.objects.filter(product_set=product_set, email=email).first()
-    if product_set.not_in_shops or (alert is not None and alert.confirmed_at):
+    if product_set.not_in_shops:
+        return "sent"
+    if alert is not None and alert.confirmed_at and (not restocks or alert.restocks):
         return "sent"
     if alert is not None and alert.confirm_sent_at and alert.confirm_sent_at > now - timedelta(minutes=RESEND_MINUTES):
         # Asked again moments later: the confirmation already on its way stands, so a form pressed over and
@@ -149,17 +181,28 @@ def ask(product_set, email, now=None):
     if alert is None:
         try:
             with transaction.atomic():
-                alert = DropAlert.objects.create(product_set=product_set, email=email, created_at=now)
+                alert = DropAlert.objects.create(product_set=product_set, email=email, created_at=now,
+                                                 restocks_asked=restocks)
         except IntegrityError:
             # The same address asked twice at once: the first one's confirmation stands.
             return "sent"
+    elif restocks and not alert.restocks_asked:
+        DropAlert.objects.filter(pk=alert.pk).update(restocks_asked=True)
     store = copy.load_all()
-    values = {"set": product_set.name, "site_name": settings.RIPRAPTOR_SITE_NAME}
-    subject = copy.get("drops.email.confirm.subject", store=store, **values)
+    values = {"set": product_set.name, "site_name": settings.RIPRAPTOR_SITE_NAME, "days": RESTOCK_DAYS}
+    if restocks:
+        out = not can_send(product_set.release_date, now)
+        kind = "restocks_out" if out else "restocks"
+    else:
+        kind = "reminder"
+    subject = copy.get("drops.email.confirm.subject" if kind == "reminder" else "drops.email.confirm.subject_all",
+                       store=store, **values)
     stop_url = link("web:drop_stop", alert.token)
     text, html = render_mail("drop_confirm", {
         "subject": subject,
-        "preheader": copy.get("drops.email.confirm.preheader", store=store, **values),
+        "preheader": copy.get("drops.email.confirm.preheader" if kind == "reminder"
+                              else "drops.email.confirm.preheader_all", store=store, **values),
+        "kind": kind,
         "product_set": product_set,
         "values": values,
         "confirm_url": link("web:drop_confirm", alert.token),
@@ -173,11 +216,20 @@ def ask(product_set, email, now=None):
 
 
 def confirm(token, now=None):
+    """Confirm the reminder, and turn on the restock emails it asked for. Returns it, or None."""
     alert = DropAlert.objects.select_related("product_set__game").filter(token=token).first()
-    if alert is not None and alert.confirmed_at is None:
+    if alert is None:
+        return None
+    changed = []
+    if alert.confirmed_at is None:
         alert.confirmed_at = now or timezone.now()
-        alert.save(update_fields=["confirmed_at"])
+        changed.append("confirmed_at")
         note("confirmed")
+    if alert.restocks_asked and not alert.restocks:
+        alert.restocks = True
+        changed.append("restocks")
+    if changed:
+        alert.save(update_fields=changed)
     return alert
 
 
@@ -201,12 +253,14 @@ def with_set_month(alerts):
 
 def tidy(now):
     """Delete reminders never confirmed within a week, kept over a year, whose drop has passed (a dated one
-    after its day, a month-only one after its month) or whose set is not sold in UK shops. None is emailed."""
+    after its day, or RESTOCK_DAYS after it when restocks were asked for; a month-only one after its month) or
+    whose set is not sold in UK shops. None is emailed."""
     today = timezone.localdate(now)
     DropAlert.objects.filter(
         Q(confirmed_at__isnull=True, created_at__lt=now - timedelta(days=UNCONFIRMED_DAYS))
         | Q(created_at__lt=now - timedelta(days=KEEP_DAYS))
-        | Q(product_set__release_date__lt=today)
+        | Q(product_set__release_date__lt=today, restocks_asked=False)
+        | Q(product_set__release_date__lt=today - timedelta(days=RESTOCK_DAYS))
         | Q(product_set__not_in_shops=True)
     ).delete()
     ended = with_set_month(DropAlert.objects.filter(product_set__release_date__isnull=True)).filter(
@@ -306,9 +360,12 @@ def stage_mail(alert, stage, listings, store, opened=()):
         "date": date_format(day, "l j F") if day else "",
         "site_name": settings.RIPRAPTOR_SITE_NAME,
     }
+    values["days"] = RESTOCK_DAYS
     if stage == PREORDER:
         shops = sorted({o.listing.retailer.name for o in opened})
         values["names"] = ", ".join(shops[:3])
+    elif stage == RESTOCK:
+        values["names"] = ", ".join(sorted({listing.retailer.name for listing in listings})[:3])
     subject = copy.get(f"drops.email.{stage}.subject", store=store, **values)
     stop_url = link("web:drop_stop", alert.token)
     text, html = render_mail("drop_reminder", {
@@ -321,7 +378,8 @@ def stage_mail(alert, stage, listings, store, opened=()):
         "drop_url": drop_url(product_set),
         "stop_url": stop_url,
         "manage_url": mail_link(alert.email),
-        "last": stage == DAY,
+        "last": stage == DAY and not alert.restocks,
+        "restocks": alert.restocks,
     }, store)
     return subject, text, html, stop_url
 
@@ -360,9 +418,77 @@ def opened_for(alert, rows):
     ]
 
 
+def fair_in_stock(product_set):
+    """{product id: listing}: for each of the drop's products, its cheapest listing in stock at a UK shop (never
+    eBay or Amazon) at a fair price, no more than FAIR_MARKUP times its RRP when the RRP is known. One query."""
+    listings = (
+        Listing.objects.buyable().filter(product__product_set=product_set, product__is_active=True,
+                                         availability=Listing.Availability.IN_STOCK)
+        .exclude(retailer__source_type__in=MARKETPLACES)
+        .select_related("retailer", "product")
+        .order_by("-delivery_known", "delivered_price", "retailer__name")
+    )
+    found = {}
+    for listing in listings:
+        product = listing.product
+        rrp = product.rrp_now
+        if not in_drop(product, product_set.release_date, None) or (rrp and listing.price > rrp[0] * FAIR_MARKUP):
+            continue
+        found.setdefault(product.pk, listing)
+    return found
+
+
+def restock_due(alert, local):
+    """True while this reminder's restock emails run: it asked for them and confirmed, its drop has a day that has
+    come and its drop-day email has gone (or the day has passed), and its RESTOCK_DAYS are not up."""
+    day = alert.product_set.release_date
+    if not alert.restocks or day is None:
+        return False
+    today = local.date()
+    if today < day or today > restocks_until(day):
+        return False
+    return today > day or alert.day_sent_at is not None
+
+
+def send_restock(alert, now, local, in_stock, store, stdout=None):
+    """Email this reminder the drop's products newly in stock at a fair price, when there are some, an hour has
+    passed since the last and it is within the hours. Returns "sent", "failed" or None. What it has seen is kept
+    either way: a product no longer in stock is dropped from it, so its return is news again."""
+    ids = sorted(in_stock)
+    if alert.restock_seen is None:
+        # Its first look: what is in stock now is not news to someone who signed up while it was.
+        DropAlert.objects.filter(pk=alert.pk).update(restock_seen=ids)
+        return None
+    seen = set(alert.restock_seen)
+    news = [pk for pk in ids if pk not in seen]
+    waited = alert.restock_sent_at is None or now - alert.restock_sent_at >= RESTOCK_GAP
+    if not news or not waited or not in_window(local, RESTOCK_FROM_HOUR, RESTOCK_UNTIL_HOUR):
+        kept = sorted(seen & set(ids))
+        if kept != sorted(seen):
+            DropAlert.objects.filter(pk=alert.pk).update(restock_seen=kept)
+        return None
+    # Claimed first, so a second run at the same moment cannot send it too.
+    claimed = DropAlert.objects.filter(pk=alert.pk, restock_sent_at=alert.restock_sent_at).update(
+        restock_sent_at=now, restock_seen=ids)
+    if not claimed:
+        return None
+    listings = sorted((in_stock[pk] for pk in news), key=lambda l: (not l.delivery_known, l.shown_price, l.retailer.name))
+    subject, text, html, stop_url = stage_mail(alert, RESTOCK, listings[:OFFERS_PER_EMAIL], store)
+    try:
+        mail.send(alert.email, subject, text, html, unsubscribe=stop_url)
+    except mail.MailError as exc:
+        DropAlert.objects.filter(pk=alert.pk).update(restock_sent_at=alert.restock_sent_at,
+                                                     restock_seen=alert.restock_seen)
+        if stdout:
+            stdout.write(f"not sent to drop reminder {alert.pk}: {exc}")
+        return "failed"
+    note(f"sent_{RESTOCK}")
+    return "sent"
+
+
 def send_due(now=None, stdout=None):
-    """Send every stage that is due, at most one per reminder per run, and delete each reminder whose
-    drop-day email has gone. Returns (sent, failed)."""
+    """Send every stage that is due, at most one per reminder per run, then the restocks, and delete each
+    reminder whose drop-day email has gone, unless restocks follow. Returns (sent, failed)."""
     now = now or timezone.now()
     tidy(now)
     local = timezone.localtime(now)
@@ -370,12 +496,19 @@ def send_due(now=None, stdout=None):
     if not waiting:
         return 0, 0
     opens = openings(waiting)
-    offers, store = {}, None
+    offers, fair, store = {}, {}, None
     sent = failed = 0
     for alert in waiting:
         opened = opened_for(alert, opens.get(alert.product_set_id, ()))
         stage = due_stage(alert, local, opened)
         if stage is None:
+            if restock_due(alert, local):
+                if alert.product_set_id not in fair:
+                    fair[alert.product_set_id] = fair_in_stock(alert.product_set)
+                store = copy.load_all() if store is None else store
+                result = send_restock(alert, now, local, fair[alert.product_set_id], store, stdout)
+                sent += result == "sent"
+                failed += result == "failed"
             continue
         if alert.product_set_id not in offers:
             offers[alert.product_set_id] = set_offers(alert.product_set, drop_month(alert))
@@ -410,7 +543,13 @@ def send_due(now=None, stdout=None):
             if stdout:
                 stdout.write(f"not sent to drop reminder {alert.pk}: {exc}")
             continue
-        if stage == DAY:
+        if stage == DAY and alert.restocks:
+            # Restocks follow: what is in stock at a fair price now is in this email, so it is not news after it.
+            if alert.product_set_id not in fair:
+                fair[alert.product_set_id] = fair_in_stock(alert.product_set)
+            DropAlert.objects.filter(pk=alert.pk).update(restock_seen=sorted(fair[alert.product_set_id]),
+                                                         restock_sent_at=now)
+        elif stage == DAY:
             alert.delete()
         note(f"sent_{stage}")
         sent += 1

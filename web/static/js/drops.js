@@ -108,7 +108,11 @@
         form.classList.remove("is-busy");
         status.textContent = data.message;
         status.hidden = false;
-        if (data.state === "sent") form.classList.add("is-done");
+        if (data.state === "sent") {
+          form.classList.add("is-done");
+          // The home page's drop spotlight ticks its alerts step (spotlight.js).
+          form.dispatchEvent(new CustomEvent("drop-remind:sent", { bubbles: true }));
+        }
       })
       .catch(function () {
         form.submit();

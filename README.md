@@ -3261,14 +3261,20 @@ The wording is under Product page in Site wording (`product.fair.*`).
 
 **The European market.** Once a product is matched to Cardmarket (see
 Cardmarket market prices), Cardmarket's trend price for it, in pounds at the
-day's ECB rate, is a second reference: at most 95% of it is a good price, up
-to 115% fair, up to 135% above average, more is high (Cardmarket's prices
-are before post to the UK and import costs, so a fair UK price sits a little
-over them). It works for a product only one UK shop lists, so the lone
-£1,199.99 Ultra Shiny GX box against Cardmarket's £577.70 is called a high
-price. With both references the verdict is the lower band of the two, and
-the market never makes a price "Lowest yet". The sheet then shows "European
-market £577.70, Cardmarket, 22 Oct" and says what that price is.
+day's ECB rate, is a second reference: at or under it is a good price (its
+prices are before post to the UK and import costs, so a UK price with
+delivery at or under them is good value), up to 115% fair, up to 135% above
+average, more is high. It works for a product only one UK shop lists, so the
+lone £1,199.99 Ultra Shiny GX box against Cardmarket's £577.70 is called a
+high price. With both references the verdict is the lower band of the two,
+so neither can make a dear price look good, except that the market never
+says "Lowest yet" by itself: when our record says lowest yet and the market
+says good, the verdict is Lowest yet. Until 31 Oct 2026 a good price had to
+be 5% under the market and the lower band always won, so no product with a
+market price could be the lowest yet (the owner's mini tin at the lowest we
+had recorded, 21% under its average, was called fair for being 4p over). The
+sheet shows "European market £577.70, Cardmarket, 22 Oct" and says what that
+price is.
 
 ### When a price was checked
 

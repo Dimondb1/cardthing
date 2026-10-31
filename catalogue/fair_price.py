@@ -21,9 +21,12 @@ The market: when Claude matched the product to Cardmarket's surely, or the owner
 (catalogue/cardmarket_match.py), Cardmarket's trend price for it in the last MARKET_FRESH_DAYS, in pounds at
 the day's ECB rate, is a second reference, and the price is banded against it too (market_band): at most
 MARKET_GOOD of it is good, up to MARKET_FAIR fair, up to MARKET_ABOVE above, more is high. Cardmarket's prices
-are before post to the UK and import costs, which is why a fair UK price may sit a little over them. The market
-never makes a price "Lowest yet" (that is our own record's word), and with both references the verdict is the
-lower band of the two, so neither can make a dear price look good.
+are before post to the UK and import costs, so a UK price with delivery at or under them is good, and a fair UK
+price may sit a little over them. The market never makes a price "Lowest yet" by itself (that is our own record's
+word). With both references the verdict is the lower band of the two, so neither can make a dear price look good,
+except that the market's good agrees with our record's lowest yet, which then stands (the owner, 31 Oct 2026, on
+a mini tin at the lowest we had recorded, 21% under its average, called fair for being 4p over 95% of Cardmarket's
+price: "why is this one fair price as it looks like it's at its lowest").
 
 The RRP (Product.rrp_now): the owner's, typed in Admin, or the one at least RRP_SHOPS UK shops give beside their
 price (shop_rrps). It is a ceiling, never a reason to praise a price: up to RRP_FAIR of it changes nothing (and
@@ -54,7 +57,7 @@ MIN_SHOPS = 2
 GOOD = Decimal("0.05")
 HIGH = Decimal("0.15")
 LOW_DAYS = 90       # at_lowest: the lowest of this many days back
-MARKET_GOOD, MARKET_FAIR, MARKET_ABOVE = Decimal("0.95"), Decimal("1.15"), Decimal("1.35")
+MARKET_GOOD, MARKET_FAIR, MARKET_ABOVE = Decimal("1.00"), Decimal("1.15"), Decimal("1.35")
 MARKET_FRESH_DAYS = 7
 RRP_SHOPS = 2
 RRP_FAIR, RRP_ABOVE = Decimal("1.15"), Decimal("1.35")
@@ -145,14 +148,19 @@ def rrp_cap(price, rrp):
 
 
 def settle(bands, price, rrp):
-    """The verdict's band from the record's and the market's bands and the RRP, or None without any of them."""
+    """The verdict's band from the record's and the market's bands and the RRP, or None without any of them: the
+    lowest of them, but a good price beside our record's lowest yet is the lowest yet, since only the record can say
+    lowest and the market's best is good."""
     if rrp:
         cap = rrp_cap(price, rrp)
         if cap is not None:
             bands = bands + [cap]
         elif not bands:
             bands = [FAIR]
-    return min(bands) if bands else None
+    if not bands:
+        return None
+    band = min(bands)
+    return LOWEST if band == GOOD_PRICE and LOWEST in bands else band
 
 
 def shop_rrps(product_ids=None):

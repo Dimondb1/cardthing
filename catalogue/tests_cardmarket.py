@@ -388,6 +388,52 @@ class MarketPriceCheckTests(TestCase):
         found = fair_price.verdict(self.box, Decimal("1199.99"), shops=2)
         self.assertEqual((band_key(fair_price.band_for(found.price, found.average, found.low)), found.key), ("lowest", "high"))
 
+    def test_the_lowest_yet_stands_when_the_market_calls_it_good(self):
+        from datetime import timedelta
+
+        from . import fair_price
+        from .models import DailyLowestPrice
+
+        CardmarketMatch.objects.create(product=self.box, cardmarket_id=550461, status=CardmarketMatch.Status.MATCHED)
+        DailyLowestPrice.objects.bulk_create([DailyLowestPrice(product=self.box, date=self.today - timedelta(days=n),
+                                                               price=Decimal("700.00")) for n in range(1, 21)])
+        # Under the market (£577.70) and the lowest we have recorded: the lowest yet, not just good.
+        self.assertEqual(fair_price.verdict(self.box, Decimal("560.00"), shops=2).key, "lowest")
+        # At the market price exactly: good by the market, so the record's lowest yet stands.
+        self.assertEqual(fair_price.verdict(self.box, Decimal("577.70"), shops=2).key, "lowest")
+        # A little over the market: fair by it, and the lower band wins.
+        self.assertEqual(fair_price.verdict(self.box, Decimal("590.00"), shops=2).key, "fair")
+        # Good by our record (5% under its average) but not its lowest, and good by the market: good.
+        DailyLowestPrice.objects.filter(date=self.today - timedelta(days=3)).update(price=Decimal("500.00"))
+        self.assertEqual(fair_price.verdict(self.box, Decimal("560.00"), shops=2).key, "good")
+
+
+class SettleTests(TestCase):
+    """How the bands combine (fair_price.settle), from the owner's mini tin: £19.09 today, the lowest we had
+    recorded (£21.13) and 21% under its 26-day average (£24.19), against Cardmarket's £20.05."""
+
+    def test_the_owners_mini_tin_is_the_lowest_yet(self):
+        from . import fair_price
+
+        price = Decimal("19.09")
+        record = fair_price.band_for(price, Decimal("24.19"), Decimal("21.13"))
+        market = fair_price.market_band(price, Decimal("20.05"))
+        self.assertEqual((band_key(record), band_key(market)), ("lowest", "good"))
+        self.assertEqual(band_key(fair_price.settle([record, market], price, None)), "lowest")
+
+    def test_the_lower_band_still_wins_otherwise(self):
+        from . import fair_price as fp
+
+        self.assertEqual(fp.settle([fp.LOWEST, fp.FAIR], Decimal("10"), None), fp.FAIR)
+        self.assertEqual(fp.settle([fp.LOWEST, fp.HIGH_PRICE], Decimal("10"), None), fp.HIGH_PRICE)
+        self.assertEqual(fp.settle([fp.GOOD_PRICE, fp.GOOD_PRICE], Decimal("10"), None), fp.GOOD_PRICE)
+        self.assertEqual(fp.settle([fp.LOWEST], Decimal("10"), None), fp.LOWEST)
+        # The RRP still holds a dear price down, whatever the others say.
+        self.assertEqual(fp.settle([fp.LOWEST, fp.GOOD_PRICE], Decimal("20"), Decimal("10")), fp.HIGH_PRICE)
+        self.assertEqual(fp.settle([fp.LOWEST, fp.GOOD_PRICE], Decimal("12"), Decimal("10")), fp.ABOVE)
+        self.assertEqual(fp.settle([], Decimal("10"), Decimal("10")), fp.FAIR)
+        self.assertIsNone(fp.settle([], Decimal("10"), None))
+
 
 def band_key(band):
     from . import fair_price

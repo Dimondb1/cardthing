@@ -1,0 +1,8 @@
+{% load sitecopy ripraptor dashboard %}{# Who is on the site now (dashboard.now_section): built fresh on every load, never cached. #}
+  <p class="dash-card__intro">{% copy "dashboard.now.intro" minutes=now_on.minutes %}</p>
+  {% if now_on.people %}
+  <ul class="dash-rows">{% for page in now_on.pages %}
+    <li class="dash-rows__row"><span class="dash-rows__name">{% if page.url %}<a href="{{ page.url }}">{{ page.name }}</a>{% else %}{{ page.name }}{% endif %}</span><span class="dash-rows__count">{{ page.people|number }}</span>{% if page.kind %}<span class="dash-rows__detail">{{ page.kind }}</span>{% endif %}</li>{% endfor %}
+  </ul>
+  {% if now_on.more %}<p class="dash-card__line">{% copy "dashboard.now.more" %}</p>{% endif %}
+  {% else %}<p class="dash-card__line">{% copy "dashboard.now.none" minutes=now_on.minutes %}</p>{% endif %}

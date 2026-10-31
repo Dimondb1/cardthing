@@ -1,0 +1,22 @@
+{% load sitecopy ripraptor dashboard %}{# The searches this week that found nothing, then those that found very little (dashboard.gaps_section). #}
+<p class="dash-card__intro">{% copy "dashboard.gaps.nothing_intro" %}</p>
+{% if gaps.nothing or gaps.few %}
+{% if gaps.nothing %}
+<ol class="dash-rows">{% for search in gaps.nothing %}
+  <li class="dash-rows__row"><a class="dash-rows__name" href="{% url 'web:search' %}?q={{ search.query|urlencode }}">{{ search.query }}</a><span class="dash-rows__count">{{ search.hits|number }}</span>
+    <span class="dash-rows__detail">{% copy_count "dashboard.gaps.searched" search.hits shown=search.hits|number %}, {% copy "dashboard.gaps.found_none" %}</span></li>
+{% endfor %}</ol>
+{% else %}
+<p class="dash-card__line">{% copy "dashboard.gaps.none_empty" %}</p>
+{% endif %}
+{% if gaps.few %}
+<h3 class="dash-sub">{% copy "dashboard.gaps.few" count=few_results %}</h3>
+<ol class="dash-rows">{% for search in gaps.few %}
+  <li class="dash-rows__row"><a class="dash-rows__name" href="{% url 'web:search' %}?q={{ search.query|urlencode }}">{{ search.query }}</a><span class="dash-rows__count">{{ search.hits|number }}</span>
+    <span class="dash-rows__detail">{% copy_count "dashboard.gaps.searched" search.hits shown=search.hits|number %}, {% copy_count "dashboard.gaps.found" search.results %}</span></li>
+{% endfor %}</ol>
+{% endif %}
+{% else %}
+<p class="dash-empty">{% copy "dashboard.no_data" %}</p>
+{% endif %}
+<p class="dash-card__more"><a href="{{ links.insights_searches }}">{% copy "dashboard.gaps.more" %}</a></p>

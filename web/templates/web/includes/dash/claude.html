@@ -1,0 +1,9 @@
+{% load sitecopy ripraptor dashboard %}{# What Claude costs this month and what it settled (dashboard.claude_section). #}
+  <p class="dash-card__lead{% if claude.at_limit or claude.kind == "stopped" %} dash-card__line--bad{% endif %}">{{ claude.status }}</p>
+  <p class="dash-card__line">{% copy "dashboard.claude.spent" spent=claude.spent limit=claude.limit %}</p>
+  <span class="meter meter--wide{% if claude.at_limit %} meter--full{% endif %}" aria-hidden="true"><span class="meter__fill" style="--share: {{ claude.share }}%"></span></span>
+  <dl class="dash-stats">
+    <div><dt>{% copy "dashboard.claude.settled" %}</dt><dd>{{ claude.settled_month|number }}</dd></div>
+  </dl>
+  <p class="dash-card__line">{% if claude.last_run %}{% copy "dashboard.claude.last_run" clock=claude.last_run %}{% if claude.last_note %} {{ claude.last_note|capfirst }}.{% endif %}{% else %}{% copy "dashboard.claude.never" %}{% endif %}</p>
+  <p class="dash-card__more"><a href="{{ links.checks }}">{% copy "dashboard.claude.more" %}</a> <a href="{{ links.claude }}">{% copy "dashboard.claude.answers" %}</a></p>

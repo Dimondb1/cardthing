@@ -4795,8 +4795,13 @@ very few real people. The Terms page's data section says so.
 - **Clicks to shops, last 7 days:** clicks from people beside direct hits a
   day, clicks per person, clicks by how the shop pays (eBay Partner Network,
   Amazon Associates, Awin, CJ, Rakuten, another affiliate link, or none,
-  worked out from each shop's price source and affiliate link format), and
-  the five most clicked products.
+  worked out from each shop's price source and affiliate link format).
+- **Products people want, last 7 days** (`products_section`): the ten
+  products people clicked through to a shop for most, each with its page
+  views, and the ten product pages opened most, each with its clicks.
+- **Searched most, last 7 days** (`searched_section`): the ten searches
+  made most, what each found and how often it was made the week before, so
+  a search on the rise shows.
 - **Things to correct:** the count in each Things to check list, possible
   duplicate pairs by how sure the rules are, and how many rows Claude
   settled in the last day.
@@ -4806,10 +4811,32 @@ very few real people. The Terms page's data section says so.
 - **Customers:** confirmed drop reminders, search alerts and back in stock
   alerts, alert emails sent this week, unread messages, shops asking to be
   listed, and the refer a friend offer.
-- **Searches that found little:** this week's searches that found two
-  products or fewer, most made first.
+- **Searches that found nothing** (`gaps_section`): this week's searches
+  that found no products every time they were made, most made first, then
+  those that found two products or fewer.
+- **Games clicked at each shop, last 30 days** (`shop_games_section`): for
+  each shop people clicked through to, most clicked first, the game they
+  clicked through for most and the game for least. A game the shop has live
+  listings for that nobody clicked is its least, at no clicks. The first
+  twelve shops show; the rest are behind a Show more button.
 - **Claude:** what it is doing, spend against the monthly limit, rows
   settled this month and its last run.
+- **Arrange the dashboard:** always last. Up and Down buttons move each
+  card a place, and buttons show or hide every card at once or put back
+  the usual order.
+
+**Hiding and ordering the cards.** Every card has a Hide button by its
+heading (Show when hidden); a hidden card keeps only its heading. The order
+and the hidden cards are kept per staff login on the server
+(`DashboardLayout`, posted to `/dashboard/layout/`), so the dashboard opens
+the same way on a phone and a computer. Without JavaScript each button
+posts and the page comes back to the card; with it, the page changes at
+once and the change is saved in the background. Tapping a figure at the
+top whose card is hidden shows the card. On a wide screen two cards sit
+side by side; a card left alone before a wide one (What clicks earn,
+Claude) is widened too, so the grid has no gap whatever the order. A card
+added in a later update goes in after the card it follows in the usual
+order (`web/dashboard.py` `CARDS`).
 
 Every figure is read from the database by the functions the admin pages
 use (`catalogue/traffic.py` `explain()` for people, bursts and the same-time

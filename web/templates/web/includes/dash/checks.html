@@ -1,0 +1,9 @@
+{% load sitecopy ripraptor dashboard %}{# Things to correct: the rows waiting in each Things to check section (dashboard.checks_section). #}
+  <p class="dash-card__intro">{% copy "dashboard.checks.intro" %}</p>
+  <ul class="dash-rows">{% for row in checks.sections %}
+    <li class="dash-rows__row{% if not row.count %} dash-rows__row--none{% endif %}"><span class="dash-rows__name">{{ row.label }}</span><span class="dash-rows__count">{{ row.count|number }}</span>
+      {% if row.key == "duplicates" %}<span class="dash-rows__detail">{% for level in checks.levels %}{% if level.count %}{{ level.label }} {{ level.count|number }}, {% endif %}{% endfor %}{% copy "dashboard.checks.counted" clock=checks.duplicates_at|clock %}</span>{% endif %}</li>
+  {% endfor %}</ul>
+  {% if checks.excluded %}<p class="dash-card__line">{% copy "dashboard.checks.excluded" count=checks.excluded|number %}</p>{% endif %}
+  <p class="dash-card__line">{% copy_count "dashboard.checks.claude" claude.settled_day %}</p>
+  <p class="dash-card__more"><a href="{{ links.checks }}">{% copy "dashboard.checks.more" %}</a></p>

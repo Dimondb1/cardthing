@@ -1,0 +1,18 @@
+{% load sitecopy ripraptor dashboard %}{# For each shop clicked through to, the game it was clicked for most and least (dashboard.shop_games_section). #}
+<p class="dash-card__intro">{% copy "dashboard.shop_games.intro" %}</p>
+{% if shop_games.shops %}
+<ol class="dash-rows">{% for shop in shop_games.shops %}
+  {% include "web/includes/dash/shop_game.html" %}{% endfor %}
+</ol>
+{% if shop_games.more %}
+<details class="dash-table">
+  <summary>{% copy_count "dashboard.shop_games.more" shop_games.more|length %}</summary>
+  <ol class="dash-rows">{% for shop in shop_games.more %}
+    {% include "web/includes/dash/shop_game.html" %}{% endfor %}
+  </ol>
+</details>
+{% endif %}
+{% else %}
+<p class="dash-empty">{% copy "dashboard.no_data" %}</p>
+{% endif %}
+<p class="dash-card__more"><a href="{{ links.insights_clicks }}">{% copy "dashboard.clicks.more" %}</a></p>

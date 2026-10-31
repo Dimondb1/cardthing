@@ -21,27 +21,28 @@ from django.contrib.admin.views.decorators import staff_member_required
 from guides.access import not_for_editors
 from django.core.cache import cache
 from django.db.models import Count, Exists, Max, Min, OuterRef, Q, Sum
-from django.shortcuts import render
+from django.http import HttpResponse
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from catalogue import cardmarket, checks, crawl, insights, judge, referrals, traffic
 from catalogue.drop_alerts import SENT_FIELD
 from catalogue.models import (
     AffiliateSale, CardmarketMatch, CardmarketPrice, CardmarketProduct, ClaudeAsk, ClaudeJudge, DailyPageView, DailySearch,
-    DailyVisitor, DropAlert, Game, Listing, OutboundClick, Product, ProductSet, ReferralSettings, Retailer, SearchAlert,
-    StockAlert, WorkerState,
+    DailyVisitor, DashboardLayout, DropAlert, Game, Listing, OutboundClick, Product, ProductSet, ReferralSettings, Retailer,
+    SearchAlert, StockAlert, WorkerState,
 )
 from content import service as copy
 from inbox.service import unread_count
 from inbox.shops import open_count
 
 SECTION_SECONDS = 60
-SECTION_KEY = "dashboard:{name}:v1"
+SECTION_KEY = "dashboard:{name}:v2"
 WEEK_DAYS = 7
 TOP_SOURCES = 5
-TOP_PRODUCTS = 5
+TOP_ROWS = 10
 TOP_GAPS = 5
 # A search that found this many products or fewer is a gap worth a look.
 FEW_RESULTS = 2
@@ -179,7 +180,7 @@ def now_section(now, store):
 
 def traffic_section(now, store):
     """People, page views and clicks for the last seven days, today against the same time last week, where
-    people came from and which shops and products they clicked through to."""
+    people came from and which shops they clicked through to (the products are products_section's)."""
     why = traffic.explain(now, store=store)
     today = why["today"]
     first = today - timedelta(days=WEEK_DAYS - 1)
@@ -221,7 +222,7 @@ def traffic_section(now, store):
     sources = [{"name": name, "people": n, "share": share(n, sourced)}
                for name, n in sorted(grouped.items(), key=lambda item: (-item[1], item[0]))[:TOP_SOURCES]]
 
-    # Clicks from people this week by shop, grouped by how the shop earns, and the products clicked most.
+    # Clicks from people this week by shop, grouped by how the shop earns.
     week = OutboundClick.objects.people().filter(created_at__gte=start, created_at__lte=now).order_by()
     networks = {}
     for pk, name, source_type, template, n in (
@@ -238,11 +239,6 @@ def traffic_section(now, store):
         {"key": key, "name": names[key], "clicks": networks[key]["clicks"],
          "share": share(networks[key]["clicks"], week_clicks), "shops": networks[key]["shops"], "earns": key != DIRECT}
         for key in NETWORK_ORDER if key in networks
-    ]
-    products = [
-        {"name": name, "url": reverse("web:product", args=[slug]), "clicks": n}
-        for name, slug, n in week.values_list("product__name", "product__slug").annotate(n=Count("id"))
-        .order_by("-n", "product__name")[:TOP_PRODUCTS]
     ]
 
     # Today so far, against the same hours of the day the explainer compares it with.
@@ -268,7 +264,7 @@ def traffic_section(now, store):
         # From the first day pages reported in, people are browsers; what else visited is counted as automated.
         "browser_since": browser_since if browser_since and browser_since >= first else None,
         "automated": sum(day["automated"] for day in days if day["by_browser"]),
-        "sources": sources, "earning": earning, "products": products,
+        "sources": sources, "earning": earning,
         "headline": why["headline"] if why["enough"] else "",
         "today": {
             "people": today_people, "clicks": today_clicks, "burst": today_row["burst"], "until": f"{local_now:%H:%M}",
@@ -565,15 +561,113 @@ def customers_section(now, store):
     }
 
 
+def week_start(now):
+    """The first day of the last WEEK_DAYS days, today among them."""
+    return timezone.localtime(now).date() - timedelta(days=WEEK_DAYS - 1)
+
+
+def products_section(now, store):
+    """The products people want this week (the owner, 31 Oct 2026: "the most clicked on products"): the TOP_ROWS
+    people clicked through to a shop for most, each with its page views, and the TOP_ROWS whose pages were opened
+    most, each with its clicks. Clicks are people's (clicks.py), views are DailyPageView rows for product pages,
+    counted as Insights counts them. Five queries."""
+    first = week_start(now)
+    clicks = OutboundClick.objects.people().filter(created_at__gte=traffic.start_of(first), created_at__lte=now).order_by()
+    views = DailyPageView.objects.filter(kind=DailyPageView.Kind.PRODUCT, date__gte=first).order_by()
+    clicked = list(clicks.values_list("product__slug", "product__name").annotate(n=Count("id"))
+                   .order_by("-n", "product__name")[:TOP_ROWS])
+    viewed = list(views.values_list("key").annotate(n=Sum("hits")).order_by("-n", "key")[:TOP_ROWS])
+    viewed_slugs = [slug for slug, _n in viewed]
+    names = dict(Product.objects.filter(slug__in=viewed_slugs).values_list("slug", "name"))
+    views_of = dict(views.filter(key__in=[slug for slug, _name, _n in clicked]).values_list("key").annotate(n=Sum("hits")))
+    clicks_of = dict(clicks.filter(product__slug__in=viewed_slugs).values_list("product__slug").annotate(n=Count("id")))
+
+    def row(slug, name, clicks_n, views_n):
+        return {"name": name, "url": reverse("web:product", args=[slug]), "clicks": clicks_n, "views": views_n}
+
+    return {
+        "clicked": [row(slug, name, n, views_of.get(slug, 0)) for slug, name, n in clicked],
+        # A page counted for a product since removed has no name, and is left out.
+        "viewed": [row(slug, names[slug], clicks_of.get(slug, 0), n) for slug, n in viewed if slug in names],
+    }
+
+
+def searched_section(now, store):
+    """What people searched for most this week (the owner, 31 Oct 2026: "the hottest searched products"), the
+    TOP_ROWS made most, each with the most products it found and how often it was made the week before, so a
+    search on the rise shows. Scanners' probes are left out (insights.people_searches). Two queries."""
+    first = week_start(now)
+    searches = insights.people_searches(DailySearch.objects.all())
+    rows = list(searches.filter(date__gte=first).values("query").annotate(hits=Sum("hits"), found=Max("results"))
+                .order_by("-hits", "query")[:TOP_ROWS])
+    before = dict(searches.filter(date__gte=first - timedelta(days=WEEK_DAYS), date__lt=first,
+                                  query__in=[row["query"] for row in rows])
+                  .values_list("query").annotate(n=Sum("hits")).values_list("query", "n"))
+    return {"searches": [{"query": row["query"], "hits": row["hits"], "results": row["found"],
+                          "before": before.get(row["query"], 0)} for row in rows]}
+
+
 def gaps_section(now, store):
-    """The searches this week that found FEW_RESULTS products or fewer, most made first: what to add."""
-    first = timezone.localtime(now).date() - timedelta(days=WEEK_DAYS - 1)
-    rows = (
-        insights.people_searches(DailySearch.objects.filter(date__gte=first)).values("query")
-        .annotate(hits=Sum("hits"), most=Max("results")).filter(most__lte=FEW_RESULTS)
-        .order_by("-hits", "query")[:TOP_GAPS]
-    )
-    return {"searches": [{"query": row["query"], "hits": row["hits"], "results": row["most"]} for row in rows]}
+    """The searches this week that found nothing (the owner, 31 Oct 2026: "searches that didn't return
+    results"), most made first, then those that found FEW_RESULTS products or fewer: what to add. A search counts
+    as finding nothing when it found nothing every time it was made this week. Two queries."""
+    first = week_start(now)
+    rows = (insights.people_searches(DailySearch.objects.filter(date__gte=first)).values("query")
+            .annotate(hits=Sum("hits"), most=Max("results")).order_by("-hits", "query"))
+
+    def listed(found, limit):
+        return [{"query": row["query"], "hits": row["hits"], "results": row["most"]} for row in found[:limit]]
+
+    return {"nothing": listed(rows.filter(most=0), TOP_ROWS),
+            "few": listed(rows.filter(most__gt=0, most__lte=FEW_RESULTS), TOP_GAPS)}
+
+
+SHOP_GAMES_DAYS = 30
+SHOP_GAMES_SHOWN = 12
+# Games named for a shop's most or least clicked, when several share the count; the rest are counted.
+TIED_NAMES = 3
+
+
+def shop_games_section(now, store):
+    """For each shop people clicked through to in the last SHOP_GAMES_DAYS days, the game they clicked through to
+    it for most and least (the owner, 31 Oct 2026: "by shop what game do people buy the most and least"). A game
+    the shop has live listings for that nobody clicked is its least, at nought, so a shop's weak game shows even
+    when it had no clicks. Clicks are people's (clicks.py). Two queries."""
+    today = timezone.localtime(now).date()
+    first = today - timedelta(days=SHOP_GAMES_DAYS - 1)
+    shops = {}
+    for pk, shop_name, game, game_name, n in (
+        OutboundClick.objects.people().filter(created_at__gte=traffic.start_of(first), created_at__lte=now).order_by()
+        .values_list("retailer_id", "retailer__name", "product__game_id", "product__game__name").annotate(n=Count("id"))
+    ):
+        shop = shops.setdefault(pk, {"name": shop_name, "clicks": 0, "games": {}})
+        shop["clicks"] += n
+        shop["games"][game] = {"name": game_name, "clicks": n}
+    if shops:
+        for pk, game, game_name in (
+            Listing.objects.live().filter(retailer_id__in=list(shops), product__is_active=True, product__game__is_active=True)
+            .order_by().values_list("retailer_id", "product__game_id", "product__game__name").distinct()
+        ):
+            shops[pk]["games"].setdefault(game, {"name": game_name, "clicks": 0})
+
+    def named(games):
+        names = sorted(game["name"] for game in games)
+        shown = ", ".join(names[:TIED_NAMES])
+        if len(names) > TIED_NAMES:
+            shown = say(store, "dashboard.shop_games.and_more", names=shown, count=len(names) - TIED_NAMES)
+        return {"names": shown, "clicks": games[0]["clicks"]}
+
+    rows = []
+    for pk, shop in shops.items():
+        games = sorted(shop["games"].values(), key=lambda game: (-game["clicks"], game["name"]))
+        top, bottom = games[0]["clicks"], games[-1]["clicks"]
+        most = [game for game in games if game["clicks"] == top]
+        least = [game for game in games if game["clicks"] == bottom] if bottom < top else []
+        rows.append({"name": shop["name"], "url": reverse("admin:catalogue_retailer_change", args=[pk]),
+                     "clicks": shop["clicks"], "games": len(games), "most": named(most),
+                     "least": named(least) if least else None})
+    rows.sort(key=lambda row: (-row["clicks"], row["name"].lower()))
+    return {"days": SHOP_GAMES_DAYS, "shops": rows[:SHOP_GAMES_SHOWN], "more": rows[SHOP_GAMES_SHOWN:]}
 
 
 def claude_section(now, store):
@@ -643,6 +737,9 @@ def guides_section(now, store):
 SECTIONS = [
     ("money", money_section),
     ("traffic", traffic_section),
+    ("products", products_section),
+    ("searched", searched_section),
+    ("shop_games", shop_games_section),
     ("checks", checks_section),
     ("prices", prices_section),
     ("shops", shops_section),
@@ -651,6 +748,90 @@ SECTIONS = [
     ("claude", claude_section),
     ("guides", guides_section),
 ]
+
+
+# The dashboard's cards, in the order they open in until a login arranges its own (the owner, 31 Oct 2026: "I want
+# it to be customisable so I can order the sections"): (name, the context it shows, its title, whether it spans
+# both columns on a wide screen). The name is the card's id, its template's name (web/includes/dash/) and what
+# DashboardLayout keeps. A card whose context is None (the guides, before one is published) is left out.
+CARDS = [
+    ("now", "now_on", "dashboard.now.title", False),
+    ("money", "money", "dashboard.money.title", True),
+    ("visitors", "traffic", "dashboard.visitors.title", False),
+    ("clicks", "traffic", "dashboard.clicks.title", False),
+    ("products", "products", "dashboard.products.title", False),
+    ("searched", "searched", "dashboard.searched.title", False),
+    ("searches", "gaps", "dashboard.gaps.title", False),
+    ("shop_games", "shop_games", "dashboard.shop_games.title", False),
+    ("checks", "checks", "dashboard.checks.title", False),
+    ("prices", "prices", "dashboard.prices.title", False),
+    ("shops", "shops", "dashboard.shops.title", False),
+    ("customers", "customers", "dashboard.customers.title", False),
+    ("guides", "guides", "dashboard.guides.title", False),
+    ("claude", "claude", "dashboard.claude.title", True),
+]
+CARD_NAMES = [name for name, *_rest in CARDS]
+# The card that arranges the others: always last, and it can be hidden like any other.
+ARRANGE = "arrange"
+
+
+def arranged(saved):
+    """Every card's name once, in the ``saved`` order, names it does not know passed over. A card it does not hold
+    (one added since it was saved) goes in after the card it follows in CARDS, so a new card opens where it was
+    meant to be rather than at the foot."""
+    order = [name for name in dict.fromkeys(saved or []) if name in CARD_NAMES]
+    for index, name in enumerate(CARD_NAMES):
+        if name not in order:
+            before = next((earlier for earlier in reversed(CARD_NAMES[:index]) if earlier in order), None)
+            order.insert(order.index(before) + 1 if before else 0, name)
+    return order
+
+
+def moved(order, name, step, shown=None):
+    """``order`` with ``name`` moved above the card shown before it (``step`` -1) or below the one after it (1).
+    Cards not ``shown`` (the guides, before one is published) are passed over, so every press moves the card."""
+    order = list(order)
+    seen = [card for card in order if shown is None or card in shown or card == name]
+    if name not in seen or not 0 <= seen.index(name) + step < len(seen):
+        return order
+    target = seen[seen.index(name) + step]
+    order.remove(name)
+    order.insert(order.index(target) + (1 if step > 0 else 0), name)
+    return order
+
+
+def placed(cards):
+    """Two columns on a wide screen: a card left alone at the end of a row before a card that spans both is
+    widened to the row's end too, so the grid has no hole whatever the order."""
+    column = 0
+    for index, card in enumerate(cards):
+        if card["wide"]:
+            if column == 1:
+                cards[index - 1]["wide"] = True
+            column = 0
+        else:
+            column = 1 - column
+    return cards
+
+
+def layout_of(user):
+    """(order, hidden) for ``user``'s dashboard: the cards' names in their order and the set hidden. One query."""
+    saved = DashboardLayout.objects.filter(user=user).values_list("order", "hidden").first()
+    order, hidden = saved or ([], [])
+    return arranged(order), {name for name in hidden or [] if name in CARD_NAMES or name == ARRANGE}
+
+
+def cards_for(order, hidden, context, store):
+    titles = {"money": {"days": MONEY_DAYS}, "shop_games": {"days": SHOP_GAMES_DAYS}}
+    by_name = {name: (data, title, wide) for name, data, title, wide in CARDS}
+    cards = []
+    for name in order:
+        data, title, wide = by_name[name]
+        if context.get(data) is None:
+            continue
+        cards.append({"key": name, "title": say(store, title, **titles.get(name, {})), "wide": wide, "own_wide": wide,
+                      "hidden": name in hidden, "template": f"web/includes/dash/{name}.html"})
+    return placed(cards)
 
 
 def section(name, build, now, store, fresh=False):
@@ -700,9 +881,14 @@ def dashboard(request):
     fresh = request.GET.get("fresh") == "1"
     found = {name: section(name, build, now, store, fresh) for name, build in SECTIONS}
     data = {name: entry["data"] for name, entry in found.items()}
+    order, hidden = layout_of(request.user)
+    data["now_on"] = now_section(now, store)
+    cards = cards_for(order, hidden, data, store)
     context = {
         **data,
-        "now_on": now_section(now, store),
+        "cards": cards,
+        "card_keys": ",".join(card["key"] for card in cards),
+        "arrange_hidden": ARRANGE in hidden,
         "updated": timezone.localtime(min(entry["built_at"] for entry in found.values())),
         "links": admin_links(),
         "few_results": FEW_RESULTS,
@@ -714,3 +900,43 @@ def dashboard(request):
     response["Cache-Control"] = "private, no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
+
+
+# What the layout form may ask: move a card up or down, hide or show it, hide or show every card, or go back to the
+# usual order. The page's script sends the whole order at once instead of a move, and hides and shows as it goes.
+MOVES = {"up": -1, "down": 1}
+
+
+@staff_member_required
+@not_for_editors
+@require_POST
+def dashboard_layout(request):
+    """Keep how this login arranges its dashboard: the order of its cards and the ones hidden. Without the page's
+    script each button posts here and comes back to the card it moved or hid; with it, the page changes at once
+    and posts here in the background (204, nothing to read)."""
+    order, hidden = layout_of(request.user)
+    back = ""
+    how, _, name = request.POST.get("move", "").partition(":")
+    if how in MOVES and name in order:
+        shown = set(request.POST.get("shown", "").split(",")) & set(CARD_NAMES) or None
+        order, back = moved(order, name, MOVES[how], shown), "arrange"
+    if "order" in request.POST:
+        order = arranged(request.POST["order"].split(","))
+    how, _, name = request.POST.get("fold", "").partition(":")
+    if how in ("hide", "show") and (name in order or name == ARRANGE):
+        (hidden.add if how == "hide" else hidden.discard)(name)
+        back = name
+    every = request.POST.get("every")
+    if every == "hide":
+        hidden.update(order)
+        back = "arrange"
+    elif every == "show":
+        hidden.clear()
+        back = "arrange"
+    if request.POST.get("reset") == "order":
+        order, back = list(CARD_NAMES), "arrange"
+    DashboardLayout.objects.update_or_create(user=request.user, defaults={
+        "order": order, "hidden": sorted(hidden)})
+    if request.headers.get("X-Dashboard") == "1":
+        return HttpResponse(status=204)
+    return redirect(reverse("web:dashboard") + (f"#{back}" if back else ""))

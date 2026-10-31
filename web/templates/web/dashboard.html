@@ -17,6 +17,7 @@
   <p class="dash-head__meta">
     <span>{% copy "dashboard.updated" clock=updated|time:"H:i" %}</span>
     <a href="{% url 'web:dashboard' %}?fresh=1">{% copy "dashboard.refresh" %}</a>
+    <a href="#arrange">{% copy "dashboard.layout.link" %}</a>
     <a href="{{ links.admin }}">{% copy "dashboard.admin" %}</a>
   </p>
 </div>
@@ -52,287 +53,44 @@
   </ul>
 </section>
 
-<div class="dash-grid">
-  {# Who is on the site now (dashboard.now_section): built fresh on every load, never cached. #}
-  <section class="dash-card" id="now" aria-labelledby="now-title">
-    <h2 id="now-title" class="dash-card__title">{% copy "dashboard.now.title" %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.now.intro" minutes=now_on.minutes %}</p>
-    {% if now_on.people %}
-    <ul class="dash-rows">{% for page in now_on.pages %}
-      <li class="dash-rows__row"><span class="dash-rows__name">{% if page.url %}<a href="{{ page.url }}">{{ page.name }}</a>{% else %}{{ page.name }}{% endif %}</span><span class="dash-rows__count">{{ page.people|number }}</span>{% if page.kind %}<span class="dash-rows__detail">{{ page.kind }}</span>{% endif %}</li>{% endfor %}
-    </ul>
-    {% if now_on.more %}<p class="dash-card__line">{% copy "dashboard.now.more" %}</p>{% endif %}
-    {% else %}<p class="dash-card__line">{% copy "dashboard.now.none" minutes=now_on.minutes %}</p>{% endif %}
+{% comment %}The cards, in the order this login arranged them (dashboard.cards_for). Each hides behind its own button:
+  without the page's script the button posts the change and the page comes back to the card; with it, the card hides at
+  once and the change is kept in the background.{% endcomment %}
+<div class="dash-grid" data-dash-grid>
+  {% for card in cards %}
+  <section class="dash-card{% if card.wide %} dash-card--wide{% endif %}{% if card.hidden %} is-hidden{% endif %}" id="{{ card.key }}" aria-labelledby="{{ card.key }}-title" data-card="{{ card.key }}"{% if card.own_wide %} data-wide{% endif %}>
+    {% include "web/includes/dash_head.html" with key=card.key title=card.title hidden=card.hidden %}
+    <div class="dash-card__body" id="{{ card.key }}-body"{% if card.hidden %} hidden{% endif %}>
+      {% include card.template %}
+    </div>
   </section>
-  {# What clicks to shops earn (dashboard.money_section): five rates for the whole site, what people press, and each game and shop. #}
-  <section class="dash-card dash-card--wide" id="money" aria-labelledby="money-title">
-    <h2 id="money-title" class="dash-card__title">{% copy "dashboard.money.title" days=money.days %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.money.intro" %}</p>
-    <dl class="dash-stats dash-stats--notes">
-      <div><dt>{% copy "dashboard.money.ctr" %}</dt><dd>{{ money.ctr|percent }}<span class="dash-stats__note">{% if money.tracked_from %}{% copy "dashboard.money.ctr_note" clicked=money.clicked_visits|number visits=money.tracked_visits|number date=money.tracked_from|date:"j M" %}{% else %}{% copy "dashboard.money.not_tracked" %}{% endif %}</span></dd></div>
-      <div><dt>{% copy "dashboard.money.per_100" %}</dt><dd>{% if money.per_100 is not None %}{{ money.per_100|gbp }}{% else %}&ndash;{% endif %}<span class="dash-stats__note">{% copy "dashboard.money.per_100_note" commission=money.commission|gbp clicks=money.clicks|number %}</span></dd></div>
-      <div><dt>{% copy "dashboard.money.conversion" %}</dt><dd>{{ money.conversion|percent }}<span class="dash-stats__note">{% copy "dashboard.money.conversion_note" sales=money.sales|number clicks=money.clicks|number %}</span></dd></div>
-      <div><dt>{% copy "dashboard.money.per_1000" %}</dt><dd>{% if money.per_1000 is not None %}{{ money.per_1000|gbp }}{% else %}&ndash;{% endif %}<span class="dash-stats__note">{% copy "dashboard.money.per_1000_note" commission=money.commission|gbp visits=money.visits|number %}</span></dd></div>
-      <div><dt>{% copy "dashboard.money.coverage" %}</dt><dd>{{ money.coverage|percent }}<span class="dash-stats__note">{% copy "dashboard.money.coverage_note" earning=money.earning_offers|number offers=money.offers|number %}</span></dd></div>
-    </dl>
-    {% if not money.has_sales %}<p class="dash-card__line">{% copy "dashboard.money.no_sales" %}</p>
-    {% elif money.pending %}<p class="dash-card__line">{% copy "dashboard.money.pending" amount=money.pending|gbp %}</p>{% endif %}
-    {% if money.pressed %}
-    <h3 class="dash-sub">{% copy "dashboard.money.presses" %}</h3>
-    <ul class="dash-bars">{% for item in money.pressed %}
-      <li class="dash-bars__row"><span class="dash-bars__name">{{ item.name }}</span><span class="dash-bars__value">{{ item.share }}% <span class="muted">{{ item.count|number }}</span></span><span class="dash-bars__fill" style="--share: {{ item.share }}%" aria-hidden="true"></span></li>
-    {% endfor %}</ul>
-    {% endif %}
-    {% if money.games %}
-    <h3 class="dash-sub">{% copy "dashboard.money.games" %}</h3>
-    <ul class="dash-rows">{% for row in money.games %}
-      <li class="dash-rows__row"><span class="dash-rows__name">{{ row.name }}</span><span class="dash-rows__count">{{ row.commission|gbp }}</span>
-        <span class="dash-rows__detail">{% copy "dashboard.money.row" clicks=row.clicks|number sales=row.sales|number per_hundred=row.per_100|default_if_none:0|gbp conversion=row.conversion|percent coverage=row.coverage|percent %}</span></li>
-    {% endfor %}</ul>
-    {% if money.best_game %}<p class="dash-card__line">{% copy "dashboard.money.best_game" game=money.best_game.name amount=money.best_game.per_100|gbp %}</p>{% endif %}
-    {% endif %}
-    {% if money.shops %}
-    <h3 class="dash-sub">{% copy "dashboard.money.shops" %}</h3>
-    <ul class="dash-rows">{% for row in money.shops %}
-      <li class="dash-rows__row"><a class="dash-rows__name" href="{{ row.url }}">{{ row.name }}</a><span class="dash-rows__count">{{ row.commission|gbp }}</span>
-        <span class="dash-rows__detail">{% copy "dashboard.money.row" clicks=row.clicks|number sales=row.sales|number per_hundred=row.per_100|default_if_none:0|gbp conversion=row.conversion|percent coverage=row.coverage|percent %}</span></li>
-    {% endfor %}</ul>
-    {% if money.more_shops %}<p class="dash-card__line">{% copy "dashboard.money.more_shops" count=money.more_shops %}</p>{% endif %}
-    {% endif %}
-    <p class="dash-card__more"><a href="{{ links.sales_import }}">{% copy "dashboard.money.import" %}</a> <a href="{{ links.sales }}">{% copy "dashboard.money.sales" %}</a></p>
-  </section>
+  {% endfor %}
 
-  <section class="dash-card" id="visitors" aria-labelledby="visitors-title">
-    <h2 id="visitors-title" class="dash-card__title">{% copy "dashboard.visitors.title" %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.visitors.intro" %}</p>
-    {% if traffic.has_visitors %}
-    <dl class="dash-stats">
-      <div><dt>{{ people_label }}</dt><dd>{{ traffic.people|number }}</dd></div>
-      <div><dt>{{ returning_label }}</dt><dd>{{ traffic.returning_share }}%</dd></div>
-      <div><dt>{{ views_label }}</dt><dd>{{ traffic.views|number }}</dd></div>
-    </dl>
-    <figure class="dash-chart">
-      <svg class="dash-chart__plot" role="img" aria-labelledby="visitors-chart" focusable="false">
-        <title id="visitors-chart">{% copy "dashboard.visitors.chart" %}</title>
-        {% for day in traffic.days %}<rect class="dash-chart__hit" x="{{ day.band_x }}%" y="0" width="{{ day.band }}%" height="100%" data-tip="{{ day.date|date:'D j M' }}{% if day.today %} ({{ so_far }}){% elif day.burst %} ({{ burst_word }}){% endif %}|{{ people_label }} {{ day.people|number }}|{{ returning_label }} {{ day.returning|number }}|{{ views_label }} {{ day.views|number }}"/>
-        {% endfor %}
-        {% for day in traffic.days %}{% with bar=day.bars.0 %}
-        {% if bar.height %}<rect class="dash-bar{% if day.today %} dash-bar--today{% elif day.burst %} dash-bar--burst{% endif %}" x="{{ bar.x }}%" y="{{ bar.y }}%" width="{{ bar.width }}%" height="{{ bar.height }}%" rx="4"/>
-        <rect class="dash-bar dash-bar--base{% if day.today %} dash-bar--today{% elif day.burst %} dash-bar--burst{% endif %}" x="{{ bar.x }}%" y="100%" width="{{ bar.width }}%" height="4" transform="translate(0 -4)"/>{% endif %}
-        <text class="dash-chart__value" x="{{ bar.middle }}%" y="{{ bar.y }}%" dy="-0.5em" text-anchor="middle">{{ bar.value|number }}</text>
-        {% endwith %}{% endfor %}
-        <line class="dash-chart__base" x1="0" x2="100%" y1="100%" y2="100%"/>
-      </svg>
-      <ol class="dash-chart__days" aria-hidden="true">{% for day in traffic.days %}<li>{{ day.date|date:"D" }}{% if day.today %}<span class="dash-chart__tag">{{ so_far }}</span>{% elif day.burst %}<span class="dash-chart__tag">{{ burst_word }}</span>{% endif %}</li>{% endfor %}</ol>
-      <figcaption class="dash-chart__summary">{% if traffic.best %}{% copy "dashboard.visitors.best" day=traffic.best.date|date:"D j M" count=traffic.best.people|number %}{% endif %}{% if traffic.bursts %} {% copy "dashboard.visitors.bursts" names=traffic.bursts|join_dates %}{% endif %}{% if traffic.browser_since %} {% copy "dashboard.visitors.browsers" date=traffic.browser_since|date:"j M" automated=traffic.automated|number %}{% endif %}</figcaption>
-    </figure>
-    <details class="dash-table">
-      <summary>{% copy "dashboard.table" %}</summary>
-      <table>
-        <thead><tr><th scope="col">{% copy "dashboard.day" %}</th><th scope="col" class="num">{{ people_label }}</th><th scope="col" class="num">{{ returning_label }}</th><th scope="col" class="num">{{ views_label }}</th></tr></thead>
-        <tbody>{% for day in traffic.days reversed %}<tr><th scope="row">{{ day.date|date:"D j M" }}{% if day.today %} <span class="muted">{{ so_far }}</span>{% elif day.burst %} <span class="muted">{{ burst_word }}</span>{% endif %}</th><td class="num">{{ day.people|number }}</td><td class="num">{{ day.returning|number }}</td><td class="num">{{ day.views|number }}</td></tr>{% endfor %}</tbody>
-      </table>
-    </details>
-    {% if traffic.sources %}
-    <h3 class="dash-sub">{% copy "dashboard.visitors.sources" %}</h3>
-    <ul class="dash-bars">{% for source in traffic.sources %}
-      <li class="dash-bars__row"><span class="dash-bars__name">{{ source.name }}</span><span class="dash-bars__value">{{ source.share }}% <span class="muted">{{ source.people|number }}</span></span><span class="dash-bars__fill" style="--share: {{ source.share }}%" aria-hidden="true"></span></li>
-    {% endfor %}</ul>
-    {% endif %}
-    {% if traffic.headline %}<div class="dash-note"><h3 class="dash-note__title">{% copy "insights.why.heading" %}</h3><p>{{ traffic.headline }}</p></div>{% endif %}
-    {% else %}
-    <p class="dash-empty">{% copy "dashboard.no_data" %}</p>
-    {% endif %}
-    <p class="dash-card__more"><a href="{{ links.insights }}">{% copy "dashboard.visitors.more" %}</a></p>
-  </section>
-
-  <section class="dash-card" id="clicks" aria-labelledby="clicks-title">
-    <h2 id="clicks-title" class="dash-card__title">{% copy "dashboard.clicks.title" %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.clicks.intro" %}</p>
-    {% if traffic.has_clicks %}
-    <dl class="dash-stats">
-      <div><dt>{{ clicks_label }}</dt><dd>{{ traffic.clicks|number }}</dd></div>
-      <div><dt>{% copy "dashboard.clicks.per_person" %}</dt><dd>{% if traffic.per_person is not None %}{{ traffic.per_person|floatformat:2 }}{% else %}&ndash;{% endif %}</dd></div>
-      <div><dt>{{ direct_label }}</dt><dd>{{ traffic.direct|number }}</dd></div>
-    </dl>
-    <figure class="dash-chart">
-      <ul class="dash-legend">
-        <li><span class="dash-legend__key dash-legend__key--people" aria-hidden="true"></span>{{ clicks_label }}</li>
-        <li><span class="dash-legend__key dash-legend__key--direct" aria-hidden="true"></span>{{ direct_label }}</li>
-      </ul>
-      <svg class="dash-chart__plot" role="img" aria-labelledby="clicks-chart" focusable="false">
-        <title id="clicks-chart">{% copy "dashboard.clicks.chart" %}</title>
-        {% for day in traffic.click_days %}<rect class="dash-chart__hit" x="{{ day.band_x }}%" y="0" width="{{ day.band }}%" height="100%" data-tip="{{ day.date|date:'D j M' }}{% if day.today %} ({{ so_far }}){% endif %}|{{ clicks_label }} {{ day.clicks|number }}|{{ direct_label }} {{ day.direct|number }}"/>
-        {% endfor %}
-        {% for day in traffic.click_days %}
-        {% for bar in day.bars %}{% if bar.height %}<rect class="dash-bar dash-bar--{{ bar.key }}{% if day.today %} dash-bar--today{% endif %}" x="{{ bar.x }}%" y="{{ bar.y }}%" width="{{ bar.width }}%" height="{{ bar.height }}%" rx="4" transform="translate({{ bar.nudge }} 0)"/>
-        <rect class="dash-bar dash-bar--base dash-bar--{{ bar.key }}{% if day.today %} dash-bar--today{% endif %}" x="{{ bar.x }}%" y="100%" width="{{ bar.width }}%" height="4" transform="translate({{ bar.nudge }} -4)"/>{% endif %}{% endfor %}
-        {% with bar=day.bars.0 %}<text class="dash-chart__value" x="{{ bar.middle }}%" y="{{ bar.y }}%" dy="-0.5em" text-anchor="middle" transform="translate(-1 0)">{{ bar.value|number }}</text>{% endwith %}
-        {% endfor %}
-        <line class="dash-chart__base" x1="0" x2="100%" y1="100%" y2="100%"/>
-      </svg>
-      <ol class="dash-chart__days" aria-hidden="true">{% for day in traffic.click_days %}<li>{{ day.date|date:"D" }}{% if day.today %}<span class="dash-chart__tag">{{ so_far }}</span>{% endif %}</li>{% endfor %}</ol>
-      {% if traffic.most_clicks %}<figcaption class="dash-chart__summary">{% copy "dashboard.clicks.best" day=traffic.most_clicks.date|date:"D j M" count=traffic.most_clicks.clicks|number %}</figcaption>{% endif %}
-    </figure>
-    <details class="dash-table">
-      <summary>{% copy "dashboard.table" %}</summary>
-      <table>
-        <thead><tr><th scope="col">{% copy "dashboard.day" %}</th><th scope="col" class="num">{{ clicks_label }}</th><th scope="col" class="num">{{ direct_label }}</th></tr></thead>
-        <tbody>{% for day in traffic.click_days reversed %}<tr><th scope="row">{{ day.date|date:"D j M" }}{% if day.today %} <span class="muted">{{ so_far }}</span>{% endif %}</th><td class="num">{{ day.clicks|number }}</td><td class="num">{{ day.direct|number }}</td></tr>{% endfor %}</tbody>
-      </table>
-    </details>
-    {% if traffic.earning %}
-    <h3 class="dash-sub">{% copy "dashboard.clicks.networks" %}</h3>
-    <ul class="dash-bars">{% for network in traffic.earning %}
-      <li class="dash-bars__row{% if not network.earns %} dash-bars__row--quiet{% endif %}"><span class="dash-bars__name">{{ network.name }}</span><span class="dash-bars__value">{{ network.clicks|number }} <span class="muted">{{ network.share }}%</span></span><span class="dash-bars__fill" style="--share: {{ network.share }}%" aria-hidden="true"></span>
-        <span class="dash-bars__shops">{% for shop in network.shops|slice:":4" %}{{ shop.name }} {{ shop.clicks|number }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if network.shops|length > 4 %}, &hellip;{% endif %}</span></li>
-    {% endfor %}</ul>
-    {% endif %}
-    {% if traffic.products %}
-    <h3 class="dash-sub">{% copy "dashboard.clicks.products" %}</h3>
-    <ol class="dash-rows">{% for product in traffic.products %}
-      <li class="dash-rows__row"><a class="dash-rows__name" href="{{ product.url }}">{{ product.name }}</a><span class="dash-rows__count">{{ product.clicks|number }}</span></li>
-    {% endfor %}</ol>
-    {% endif %}
-    {% else %}
-    <p class="dash-empty">{% copy "dashboard.no_data" %}</p>
-    {% endif %}
-    <p class="dash-card__more"><a href="{{ links.insights_clicks }}">{% copy "dashboard.clicks.more" %}</a> <a href="{{ links.clicks }}">{% copy "dashboard.clicks.admin" %}</a></p>
-  </section>
-
-  <section class="dash-card" id="checks" aria-labelledby="checks-title">
-    <h2 id="checks-title" class="dash-card__title">{% copy "dashboard.checks.title" %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.checks.intro" %}</p>
-    <ul class="dash-rows">{% for row in checks.sections %}
-      <li class="dash-rows__row{% if not row.count %} dash-rows__row--none{% endif %}"><span class="dash-rows__name">{{ row.label }}</span><span class="dash-rows__count">{{ row.count|number }}</span>
-        {% if row.key == "duplicates" %}<span class="dash-rows__detail">{% for level in checks.levels %}{% if level.count %}{{ level.label }} {{ level.count|number }}, {% endif %}{% endfor %}{% copy "dashboard.checks.counted" clock=checks.duplicates_at|clock %}</span>{% endif %}</li>
-    {% endfor %}</ul>
-    {% if checks.excluded %}<p class="dash-card__line">{% copy "dashboard.checks.excluded" count=checks.excluded|number %}</p>{% endif %}
-    <p class="dash-card__line">{% copy_count "dashboard.checks.claude" claude.settled_day %}</p>
-    <p class="dash-card__more"><a href="{{ links.checks }}">{% copy "dashboard.checks.more" %}</a></p>
-  </section>
-
-  {# How many products show the Price check, and from what (dashboard.prices_section). #}
-  <section class="dash-card" id="prices" aria-labelledby="prices-title">
-    <h2 id="prices-title" class="dash-card__title">{% copy "dashboard.prices.title" %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.prices.intro" %}</p>
-    <dl class="dash-stats dash-stats--notes">
-      <div><dt>{% copy "dashboard.prices.checked" %}</dt><dd>{{ prices.share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.checked|number whole=prices.priced|number %}</span></dd></div>
-      <div><dt>{% copy "dashboard.prices.market" %}</dt><dd>{{ prices.market_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.market|number whole=prices.priced|number %}</span></dd></div>
-      <div><dt>{% copy "dashboard.prices.record" %}</dt><dd>{{ prices.record_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.record|number whole=prices.priced|number %}</span></dd></div>
-      <div><dt>{% copy "dashboard.prices.rrp" %}</dt><dd>{{ prices.rrp_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.rrp|number whole=prices.priced|number %}</span></dd></div>
-    </dl>
-    <ul class="dash-rows">{% for game in prices.games %}
-      <li class="dash-rows__row"><span class="dash-rows__name">{{ game.name }}</span><span class="dash-rows__count">{{ game.share|percent }}</span>
-        <span class="dash-rows__detail">{% copy "dashboard.prices.game_row" checked=game.checked|number priced=game.priced|number market=game.market|number %}
-          {% if not game.covered %}{% copy "dashboard.prices.game_not_listed" %}{% elif not game.listed %}{% copy "dashboard.prices.game_not_read" %}{% elif game.priced_on %}{% copy "dashboard.prices.game_market" looked=game.looked|number products=game.products|number matched=game.matched|number listed=game.listed|number day=game.priced_on|date:"j M" %}{% else %}{% copy "dashboard.prices.game_market_unpriced" looked=game.looked|number products=game.products|number matched=game.matched|number listed=game.listed|number %}{% endif %}</span></li>
-    {% endfor %}</ul>
-    {% with m=prices.matching %}
-    <h3 class="dash-sub">{% copy "dashboard.matching.title" %}</h3>
-    {% if not m.claude_on %}<p class="dash-card__line dash-card__line--bad">{% copy "dashboard.matching.off" %}</p>{% endif %}
-    <dl class="dash-stats dash-stats--notes">
-      <div><dt>{% copy "dashboard.matching.asked" %}</dt><dd>{{ m.share|percent }}<span class="dash-stats__note">{% copy "dashboard.matching.asked_note" asked=m.asked|number products=m.products|number left=m.left|number %}</span></dd></div>
-      <div><dt>{% copy "dashboard.matching.matched" %}</dt><dd>{{ m.matched|number }}</dd></div>
-      <div><dt>{% copy "dashboard.matching.waiting" %}</dt><dd>{{ m.waiting|number }}</dd></div>
-      <div><dt>{% copy "dashboard.matching.none" %}</dt><dd>{{ m.none|number }}</dd></div>
-    </dl>
-    <p class="dash-card__line">{% copy "dashboard.matching.spent" spent=m.spent count=m.asks_month|number %}{% if m.last %} {% copy "dashboard.matching.last" clock=m.last %}{% endif %}</p>
-    {% if m.last_run %}<p class="dash-card__line">{% copy "dashboard.matching.run" clock=m.last_run note=m.last_note %}</p>{% endif %}
-    <p class="dash-card__line">{% if m.history_days %}{% copy_count "dashboard.matching.history" m.history_days since=m.history_since|date:"j M Y" %}{% else %}{% copy "dashboard.matching.no_history" %}{% endif %}</p>
-    <p class="dash-card__more"><a href="{{ links.matches }}">{% copy_count "dashboard.prices.waiting" m.waiting %}</a></p>
-    {% endwith %}
-  </section>
-
-  <section class="dash-card" id="shops" aria-labelledby="shops-title">
-    <h2 id="shops-title" class="dash-card__title">{% copy "dashboard.shops.title" %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.shops.intro" %}</p>
-    {% if shops.total %}
-    <p class="dash-card__lead">{% copy "dashboard.shops.summary" count=shops.fresh total=shops.total %}</p>
-    <div class="health" aria-hidden="true">{% for segment in shops.segments %}{% if segment.count %}<span class="health__part health__part--{{ segment.key }}" style="--grow: {{ segment.count }}"></span>{% endif %}{% endfor %}</div>
-    <ul class="dash-legend dash-legend--counts">{% for segment in shops.segments %}
-      <li><span class="dash-legend__key health__part--{{ segment.key }}" aria-hidden="true"></span>{{ segment.label }} <b>{{ segment.count|number }}</b></li>
-    {% endfor %}</ul>
-    {% if shops.all_paused %}<p class="dash-card__line dash-card__line--bad">{% copy "dashboard.shops.all_paused" %}</p>{% endif %}
-    {% if shops.problems %}
-    <h3 class="dash-sub">{% copy "dashboard.shops.problems" %}</h3>
-    <ul class="dash-rows">{% for shop in shops.problems %}
-      <li class="dash-rows__row"><a class="dash-rows__name" href="{% url 'admin:catalogue_retailer_change' shop.pk %}">{{ shop.name }}</a>
-        <span class="dash-rows__detail">{% if shop.error %}{{ shop.error }}{% elif shop.last_ok %}{% copy "dashboard.shops.late_since" clock=shop.last_ok %}{% else %}{% copy "dashboard.shops.never" %}{% endif %}</span></li>
-    {% endfor %}</ul>
-    {% if shops.more_problems %}<p class="dash-card__line">{% copy "dashboard.shops.more_problems" count=shops.more_problems %}</p>{% endif %}
-    {% endif %}
-    {% else %}
-    <p class="dash-empty">{% copy "dashboard.no_data" %}</p>
-    {% endif %}
-    <p class="dash-card__line{% if shops.stopped_at %} dash-card__line--bad{% endif %}">{% if not shops.worker.known %}{% copy "dashboard.shops.worker_never" %}{% elif shops.worker.alive %}{% copy "dashboard.shops.worker_on" clock=shops.worker.heartbeat %}{% else %}{% copy "dashboard.shops.worker_off" clock=shops.stopped_at %}{% endif %}</p>
-    {% if shops.last_finished %}<p class="dash-card__line">{% copy "dashboard.shops.last_read" clock=shops.last_finished %}</p>{% endif %}
-    <p class="dash-card__more"><a href="{{ links.crawl }}">{% copy "dashboard.shops.more" %}</a> <a href="{{ links.runs }}">{% copy "dashboard.shops.runs" %}</a></p>
-  </section>
-
-  <section class="dash-card" id="customers" aria-labelledby="customers-title">
-    <h2 id="customers-title" class="dash-card__title">{% copy "dashboard.customers.title" %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.customers.intro" %}</p>
-    <ul class="dash-tiles">
-      <li><a class="dash-tile" href="{{ links.drops }}"><span class="dash-tile__value">{{ customers.drops|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.drops" %}</span></a></li>
-      <li><a class="dash-tile" href="{{ links.searches }}"><span class="dash-tile__value">{{ customers.searches|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.searches" %}</span></a></li>
-      <li><a class="dash-tile" href="{{ links.stock }}"><span class="dash-tile__value">{{ customers.stock|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.stock" %}</span></a></li>
-      <li><span class="dash-tile"><span class="dash-tile__value">{{ customers.sent|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.sent" %}</span></span></li>
-      <li><a class="dash-tile" href="{{ links.unread }}"><span class="dash-tile__value">{{ customers.unread|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.unread" %}</span></a></li>
-      <li><a class="dash-tile" href="{{ links.shops }}"><span class="dash-tile__value">{{ customers.shops|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.shops" %}</span></a></li>
-    </ul>
-    <h3 class="dash-sub">{% copy "dashboard.customers.refer" %}</h3>
-    <p class="dash-card__line">{{ customers.refer.line }}</p>
-    <ul class="dash-tiles">
-      <li><a class="dash-tile" href="{{ links.refer }}"><span class="dash-tile__value">{{ customers.refer.keyrings|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.keyrings" %}</span></a></li>
-      <li><a class="dash-tile" href="{{ links.to_post }}"><span class="dash-tile__value">{{ customers.refer.to_post|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.to_post" %}</span>{% if customers.refer.check %}<span class="dash-tile__note">{% copy "dashboard.customers.check" count=customers.refer.check %}</span>{% endif %}</a></li>
-      <li><a class="dash-tile" href="{{ links.review }}"><span class="dash-tile__value">{{ customers.refer.review|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.review" %}</span></a></li>
-    </ul>
-  </section>
-
-  <section class="dash-card" id="searches" aria-labelledby="searches-title">
-    <h2 id="searches-title" class="dash-card__title">{% copy "dashboard.gaps.title" %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.gaps.intro" count=few_results %}</p>
-    {% if gaps.searches %}
-    <ol class="dash-rows">{% for search in gaps.searches %}
-      <li class="dash-rows__row"><a class="dash-rows__name" href="{% url 'web:search' %}?q={{ search.query|urlencode }}">{{ search.query }}</a>
-        <span class="dash-rows__detail">{% copy_count "dashboard.gaps.searched" search.hits %}, {% if search.results %}{% copy_count "dashboard.gaps.found" search.results %}{% else %}{% copy "dashboard.gaps.found_none" %}{% endif %}</span></li>
-    {% endfor %}</ol>
-    {% else %}
-    <p class="dash-empty">{% copy "dashboard.no_data" %}</p>
-    {% endif %}
-    <p class="dash-card__more"><a href="{{ links.insights_searches }}">{% copy "dashboard.gaps.more" %}</a></p>
-  </section>
-
-  {% if guides %}
-  <section class="dash-card" id="guides" aria-labelledby="guides-title">
-    <h2 id="guides-title" class="dash-card__title">{% copy "dashboard.guides.title" %}</h2>
-    <p class="dash-card__intro">{% copy "dashboard.guides.intro" %}</p>
-    <ul class="dash-tiles">
-      <li><span class="dash-tile"><span class="dash-tile__value">{{ guides.views|number }}</span><span class="dash-tile__label">{% copy "dashboard.guides.views" %}</span></span></li>
-      <li><span class="dash-tile"><span class="dash-tile__value">{{ guides.taps|number }}</span><span class="dash-tile__label">{% copy "dashboard.guides.taps" %}</span></span></li>
-      <li><span class="dash-tile"><span class="dash-tile__value">{{ guides.back|number }}</span><span class="dash-tile__label">{% copy "dashboard.guides.back" %}</span></span></li>
-      <li><a class="dash-tile" href="{{ guides.checks_admin }}"><span class="dash-tile__value">{{ guides.checks|number }}</span><span class="dash-tile__label">{% copy "dashboard.guides.checks" %}</span></a></li>
-      <li><span class="dash-tile"><span class="dash-tile__value">{{ guides.yes|number }} / {{ guides.no|number }}</span><span class="dash-tile__label">{% copy "dashboard.guides.useful" %}</span></span></li>
-    </ul>
-    {% if guides.mix %}<p class="dash-card__line">{% copy "dashboard.guides.mix" %} {% for item in guides.mix %}{{ item.label }} {{ item.count|number }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
-    <ul class="dash-rows">{% for row in guides.rows %}
-      <li class="dash-rows__row"><a class="dash-rows__name" href="{{ row.url }}">{{ row.title }}</a><span class="dash-rows__count">{{ row.views|number }}</span>
-        <span class="dash-rows__detail">{% copy "dashboard.guides.row" yes=row.yes|number no=row.no|number %}{% if row.due %} {% copy "dashboard.guides.due" %}{% endif %}</span></li>
-    {% endfor %}</ul>
-    <p class="dash-card__more"><a href="{{ guides.admin }}">{% copy "dashboard.guides.more" %}</a></p>
-  </section>
-  {% endif %}
-
-  <section class="dash-card dash-card--wide" id="claude" aria-labelledby="claude-title">
-    <h2 id="claude-title" class="dash-card__title">{% copy "dashboard.claude.title" %}</h2>
-    <p class="dash-card__lead{% if claude.at_limit or claude.kind == "stopped" %} dash-card__line--bad{% endif %}">{{ claude.status }}</p>
-    <p class="dash-card__line">{% copy "dashboard.claude.spent" spent=claude.spent limit=claude.limit %}</p>
-    <span class="meter meter--wide{% if claude.at_limit %} meter--full{% endif %}" aria-hidden="true"><span class="meter__fill" style="--share: {{ claude.share }}%"></span></span>
-    <dl class="dash-stats">
-      <div><dt>{% copy "dashboard.claude.settled" %}</dt><dd>{{ claude.settled_month|number }}</dd></div>
-    </dl>
-    <p class="dash-card__line">{% if claude.last_run %}{% copy "dashboard.claude.last_run" clock=claude.last_run %}{% if claude.last_note %} {{ claude.last_note|capfirst }}.{% endif %}{% else %}{% copy "dashboard.claude.never" %}{% endif %}</p>
-    <p class="dash-card__more"><a href="{{ links.checks }}">{% copy "dashboard.claude.more" %}</a> <a href="{{ links.claude }}">{% copy "dashboard.claude.answers" %}</a></p>
+  {% comment %}Arrange the dashboard: each card's place, moved a step at a time; every card shown or hidden at once;
+    the usual order back. Always the last card.{% endcomment %}
+  {% copy "dashboard.layout.title" as arrange_title %}
+  <section class="dash-card dash-card--wide{% if arrange_hidden %} is-hidden{% endif %}" id="arrange" aria-labelledby="arrange-title" data-card="arrange">
+    {% include "web/includes/dash_head.html" with key="arrange" title=arrange_title hidden=arrange_hidden %}
+    <div class="dash-card__body" id="arrange-body"{% if arrange_hidden %} hidden{% endif %}>
+      <p class="dash-card__intro">{% copy "dashboard.layout.intro" %}</p>
+      <form class="dash-order" method="post" action="{% url 'web:dashboard_layout' %}" data-dash-arrange>{% csrf_token %}
+        <input type="hidden" name="shown" value="{{ card_keys }}">
+        <ol class="dash-order__list">{% for card in cards %}
+          <li class="dash-order__row" data-order="{{ card.key }}">
+            <span class="dash-order__name">{{ card.title }}<span class="dash-order__hidden"{% if not card.hidden %} hidden{% endif %}> {% copy "dashboard.layout.hidden" %}</span></span>
+            <span class="dash-order__moves">
+              <button class="button button--quiet button--small" type="submit" name="move" value="up:{{ card.key }}" data-move="-1"{% if forloop.first %} disabled{% endif %}>{% copy "dashboard.layout.up" %}<span class="visually-hidden"> {{ card.title }}</span></button>
+              <button class="button button--quiet button--small" type="submit" name="move" value="down:{{ card.key }}" data-move="1"{% if forloop.last %} disabled{% endif %}>{% copy "dashboard.layout.down" %}<span class="visually-hidden"> {{ card.title }}</span></button>
+            </span>
+          </li>{% endfor %}
+        </ol>
+        <p class="dash-order__all">
+          <button class="button button--quiet button--small" type="submit" name="every" value="show" data-every="show">{% copy "dashboard.layout.show_all" %}</button>
+          <button class="button button--quiet button--small" type="submit" name="every" value="hide" data-every="hide">{% copy "dashboard.layout.hide_all" %}</button>
+          <button class="button button--quiet button--small" type="submit" name="reset" value="order" data-reset>{% copy "dashboard.layout.reset" %}</button>
+        </p>
+      </form>
+    </div>
   </section>
 </div>
 {% endblock %}

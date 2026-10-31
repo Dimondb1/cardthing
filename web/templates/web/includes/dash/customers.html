@@ -1,0 +1,17 @@
+{% load sitecopy ripraptor dashboard %}{# Alerts, emails sent, the refer a friend offer and the inbox (dashboard.customers_section). #}
+  <p class="dash-card__intro">{% copy "dashboard.customers.intro" %}</p>
+  <ul class="dash-tiles">
+    <li><a class="dash-tile" href="{{ links.drops }}"><span class="dash-tile__value">{{ customers.drops|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.drops" %}</span></a></li>
+    <li><a class="dash-tile" href="{{ links.searches }}"><span class="dash-tile__value">{{ customers.searches|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.searches" %}</span></a></li>
+    <li><a class="dash-tile" href="{{ links.stock }}"><span class="dash-tile__value">{{ customers.stock|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.stock" %}</span></a></li>
+    <li><span class="dash-tile"><span class="dash-tile__value">{{ customers.sent|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.sent" %}</span></span></li>
+    <li><a class="dash-tile" href="{{ links.unread }}"><span class="dash-tile__value">{{ customers.unread|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.unread" %}</span></a></li>
+    <li><a class="dash-tile" href="{{ links.shops }}"><span class="dash-tile__value">{{ customers.shops|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.shops" %}</span></a></li>
+  </ul>
+  <h3 class="dash-sub">{% copy "dashboard.customers.refer" %}</h3>
+  <p class="dash-card__line">{{ customers.refer.line }}</p>
+  <ul class="dash-tiles">
+    <li><a class="dash-tile" href="{{ links.refer }}"><span class="dash-tile__value">{{ customers.refer.keyrings|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.keyrings" %}</span></a></li>
+    <li><a class="dash-tile" href="{{ links.to_post }}"><span class="dash-tile__value">{{ customers.refer.to_post|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.to_post" %}</span>{% if customers.refer.check %}<span class="dash-tile__note">{% copy "dashboard.customers.check" count=customers.refer.check %}</span>{% endif %}</a></li>
+    <li><a class="dash-tile" href="{{ links.review }}"><span class="dash-tile__value">{{ customers.refer.review|number }}</span><span class="dash-tile__label">{% copy "dashboard.customers.review" %}</span></a></li>
+  </ul>

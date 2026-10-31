@@ -62,6 +62,7 @@ urlpatterns = [
     path("guides/<slug:slug>/feedback/", guides.feedback, name="guide_feedback"),
     # The owner's dashboard: staff only, a private page like the alert links (no third-party script, not indexed).
     path("dashboard/", dashboard.dashboard, name="dashboard"),
+    path("dashboard/layout/", dashboard.dashboard_layout, name="dashboard_layout"),
     path("terms/", views.terms, name="terms"),
     path("api/products/<slug:slug>/prices/", views.product_prices_api, name="product_prices_api"),
     path("robots.txt", views.robots_txt, name="robots"),

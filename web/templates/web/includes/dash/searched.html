@@ -1,0 +1,11 @@
+{% load sitecopy ripraptor dashboard %}{# What people searched for most this week, with what it found and the week before (dashboard.searched_section). #}
+<p class="dash-card__intro">{% copy "dashboard.searched.intro" %}</p>
+{% if searched.searches %}
+<ol class="dash-rows">{% for search in searched.searches %}
+  <li class="dash-rows__row"><a class="dash-rows__name" href="{% url 'web:search' %}?q={{ search.query|urlencode }}">{{ search.query }}</a><span class="dash-rows__count">{{ search.hits|number }}</span>
+    <span class="dash-rows__detail">{% copy_count "dashboard.gaps.searched" search.hits shown=search.hits|number %}, {% if search.results %}{% copy_count "dashboard.gaps.found" search.results shown=search.results|number %}{% else %}{% copy "dashboard.gaps.found_none" %}{% endif %}. {% if search.before %}{% copy_count "dashboard.searched.before" search.before shown=search.before|number %}{% else %}{% copy "dashboard.searched.before_none" %}{% endif %}</span></li>
+{% endfor %}</ol>
+{% else %}
+<p class="dash-empty">{% copy "dashboard.no_data" %}</p>
+{% endif %}
+<p class="dash-card__more"><a href="{{ links.insights_searches }}">{% copy "dashboard.gaps.more" %}</a></p>

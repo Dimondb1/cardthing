@@ -1,0 +1,45 @@
+{% load sitecopy ripraptor dashboard %}{# Clicks to shops each day this week, people and direct hits apart, and how the shops clicked earn (dashboard.traffic_section). #}
+  <p class="dash-card__intro">{% copy "dashboard.clicks.intro" %}</p>
+  {% if traffic.has_clicks %}
+  <dl class="dash-stats">
+    <div><dt>{{ clicks_label }}</dt><dd>{{ traffic.clicks|number }}</dd></div>
+    <div><dt>{% copy "dashboard.clicks.per_person" %}</dt><dd>{% if traffic.per_person is not None %}{{ traffic.per_person|floatformat:2 }}{% else %}&ndash;{% endif %}</dd></div>
+    <div><dt>{{ direct_label }}</dt><dd>{{ traffic.direct|number }}</dd></div>
+  </dl>
+  <figure class="dash-chart">
+    <ul class="dash-legend">
+      <li><span class="dash-legend__key dash-legend__key--people" aria-hidden="true"></span>{{ clicks_label }}</li>
+      <li><span class="dash-legend__key dash-legend__key--direct" aria-hidden="true"></span>{{ direct_label }}</li>
+    </ul>
+    <svg class="dash-chart__plot" role="img" aria-labelledby="clicks-chart" focusable="false">
+      <title id="clicks-chart">{% copy "dashboard.clicks.chart" %}</title>
+      {% for day in traffic.click_days %}<rect class="dash-chart__hit" x="{{ day.band_x }}%" y="0" width="{{ day.band }}%" height="100%" data-tip="{{ day.date|date:'D j M' }}{% if day.today %} ({{ so_far }}){% endif %}|{{ clicks_label }} {{ day.clicks|number }}|{{ direct_label }} {{ day.direct|number }}"/>
+      {% endfor %}
+      {% for day in traffic.click_days %}
+      {% for bar in day.bars %}{% if bar.height %}<rect class="dash-bar dash-bar--{{ bar.key }}{% if day.today %} dash-bar--today{% endif %}" x="{{ bar.x }}%" y="{{ bar.y }}%" width="{{ bar.width }}%" height="{{ bar.height }}%" rx="4" transform="translate({{ bar.nudge }} 0)"/>
+      <rect class="dash-bar dash-bar--base dash-bar--{{ bar.key }}{% if day.today %} dash-bar--today{% endif %}" x="{{ bar.x }}%" y="100%" width="{{ bar.width }}%" height="4" transform="translate({{ bar.nudge }} -4)"/>{% endif %}{% endfor %}
+      {% with bar=day.bars.0 %}<text class="dash-chart__value" x="{{ bar.middle }}%" y="{{ bar.y }}%" dy="-0.5em" text-anchor="middle" transform="translate(-1 0)">{{ bar.value|number }}</text>{% endwith %}
+      {% endfor %}
+      <line class="dash-chart__base" x1="0" x2="100%" y1="100%" y2="100%"/>
+    </svg>
+    <ol class="dash-chart__days" aria-hidden="true">{% for day in traffic.click_days %}<li>{{ day.date|date:"D" }}{% if day.today %}<span class="dash-chart__tag">{{ so_far }}</span>{% endif %}</li>{% endfor %}</ol>
+    {% if traffic.most_clicks %}<figcaption class="dash-chart__summary">{% copy "dashboard.clicks.best" day=traffic.most_clicks.date|date:"D j M" count=traffic.most_clicks.clicks|number %}</figcaption>{% endif %}
+  </figure>
+  <details class="dash-table">
+    <summary>{% copy "dashboard.table" %}</summary>
+    <table>
+      <thead><tr><th scope="col">{% copy "dashboard.day" %}</th><th scope="col" class="num">{{ clicks_label }}</th><th scope="col" class="num">{{ direct_label }}</th></tr></thead>
+      <tbody>{% for day in traffic.click_days reversed %}<tr><th scope="row">{{ day.date|date:"D j M" }}{% if day.today %} <span class="muted">{{ so_far }}</span>{% endif %}</th><td class="num">{{ day.clicks|number }}</td><td class="num">{{ day.direct|number }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </details>
+  {% if traffic.earning %}
+  <h3 class="dash-sub">{% copy "dashboard.clicks.networks" %}</h3>
+  <ul class="dash-bars">{% for network in traffic.earning %}
+    <li class="dash-bars__row{% if not network.earns %} dash-bars__row--quiet{% endif %}"><span class="dash-bars__name">{{ network.name }}</span><span class="dash-bars__value">{{ network.clicks|number }} <span class="muted">{{ network.share }}%</span></span><span class="dash-bars__fill" style="--share: {{ network.share }}%" aria-hidden="true"></span>
+      <span class="dash-bars__shops">{% for shop in network.shops|slice:":4" %}{{ shop.name }} {{ shop.clicks|number }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if network.shops|length > 4 %}, &hellip;{% endif %}</span></li>
+  {% endfor %}</ul>
+  {% endif %}
+  {% else %}
+  <p class="dash-empty">{% copy "dashboard.no_data" %}</p>
+  {% endif %}
+  <p class="dash-card__more"><a href="{{ links.insights_clicks }}">{% copy "dashboard.clicks.more" %}</a> <a href="{{ links.clicks }}">{% copy "dashboard.clicks.admin" %}</a></p>

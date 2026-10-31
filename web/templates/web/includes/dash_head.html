@@ -1,0 +1,6 @@
+{% load sitecopy %}{# A dashboard card's heading and the button that hides or shows it (dashboard.dashboard_layout). #}
+<form class="dash-card__head" method="post" action="{% url 'web:dashboard_layout' %}">{% csrf_token %}
+  <h2 id="{{ key }}-title" class="dash-card__title">{{ title }}</h2>
+  {% copy "dashboard.layout.hide" as hide_word %}{% copy "dashboard.layout.show" as show_word %}
+  <button class="button button--quiet button--small dash-fold" type="submit" name="fold" value="{% if hidden %}show{% else %}hide{% endif %}:{{ key }}" aria-expanded="{% if hidden %}false{% else %}true{% endif %}" aria-controls="{{ key }}-body" data-fold="{{ key }}" data-hide="{{ hide_word }}" data-show="{{ show_word }}"><span data-fold-word>{% if hidden %}{{ show_word }}{% else %}{{ hide_word }}{% endif %}</span><span class="visually-hidden"> {{ title }}</span></button>
+</form>

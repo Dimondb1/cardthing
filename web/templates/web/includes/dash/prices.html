@@ -1,0 +1,27 @@
+{% load sitecopy ripraptor dashboard %}{# How many products show the Price check, and from what (dashboard.prices_section). #}
+  <p class="dash-card__intro">{% copy "dashboard.prices.intro" %}</p>
+  <dl class="dash-stats dash-stats--notes">
+    <div><dt>{% copy "dashboard.prices.checked" %}</dt><dd>{{ prices.share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.checked|number whole=prices.priced|number %}</span></dd></div>
+    <div><dt>{% copy "dashboard.prices.market" %}</dt><dd>{{ prices.market_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.market|number whole=prices.priced|number %}</span></dd></div>
+    <div><dt>{% copy "dashboard.prices.record" %}</dt><dd>{{ prices.record_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.record|number whole=prices.priced|number %}</span></dd></div>
+    <div><dt>{% copy "dashboard.prices.rrp" %}</dt><dd>{{ prices.rrp_share|percent }}<span class="dash-stats__note">{% copy "dashboard.prices.of" part=prices.rrp|number whole=prices.priced|number %}</span></dd></div>
+  </dl>
+  <ul class="dash-rows">{% for game in prices.games %}
+    <li class="dash-rows__row"><span class="dash-rows__name">{{ game.name }}</span><span class="dash-rows__count">{{ game.share|percent }}</span>
+      <span class="dash-rows__detail">{% copy "dashboard.prices.game_row" checked=game.checked|number priced=game.priced|number market=game.market|number %}
+        {% if not game.covered %}{% copy "dashboard.prices.game_not_listed" %}{% elif not game.listed %}{% copy "dashboard.prices.game_not_read" %}{% elif game.priced_on %}{% copy "dashboard.prices.game_market" looked=game.looked|number products=game.products|number matched=game.matched|number listed=game.listed|number day=game.priced_on|date:"j M" %}{% else %}{% copy "dashboard.prices.game_market_unpriced" looked=game.looked|number products=game.products|number matched=game.matched|number listed=game.listed|number %}{% endif %}</span></li>
+  {% endfor %}</ul>
+  {% with m=prices.matching %}
+  <h3 class="dash-sub">{% copy "dashboard.matching.title" %}</h3>
+  {% if not m.claude_on %}<p class="dash-card__line dash-card__line--bad">{% copy "dashboard.matching.off" %}</p>{% endif %}
+  <dl class="dash-stats dash-stats--notes">
+    <div><dt>{% copy "dashboard.matching.asked" %}</dt><dd>{{ m.share|percent }}<span class="dash-stats__note">{% copy "dashboard.matching.asked_note" asked=m.asked|number products=m.products|number left=m.left|number %}</span></dd></div>
+    <div><dt>{% copy "dashboard.matching.matched" %}</dt><dd>{{ m.matched|number }}</dd></div>
+    <div><dt>{% copy "dashboard.matching.waiting" %}</dt><dd>{{ m.waiting|number }}</dd></div>
+    <div><dt>{% copy "dashboard.matching.none" %}</dt><dd>{{ m.none|number }}</dd></div>
+  </dl>
+  <p class="dash-card__line">{% copy "dashboard.matching.spent" spent=m.spent count=m.asks_month|number %}{% if m.last %} {% copy "dashboard.matching.last" clock=m.last %}{% endif %}</p>
+  {% if m.last_run %}<p class="dash-card__line">{% copy "dashboard.matching.run" clock=m.last_run note=m.last_note %}</p>{% endif %}
+  <p class="dash-card__line">{% if m.history_days %}{% copy_count "dashboard.matching.history" m.history_days since=m.history_since|date:"j M Y" %}{% else %}{% copy "dashboard.matching.no_history" %}{% endif %}</p>
+  <p class="dash-card__more"><a href="{{ links.matches }}">{% copy_count "dashboard.prices.waiting" m.waiting %}</a></p>
+  {% endwith %}

@@ -214,12 +214,15 @@ class EmptyTests(DashboardCase):
     def test_every_part_shows_with_nothing_recorded(self):
         response = self.page()
         for heading in ("Today at a glance", "Visitors, last 7 days", "Clicks to shops, last 7 days", "Things to correct",
-                        "Shops health", "Customers", "Searches that found little", "Claude"):
+                        "Shops health", "Customers", "Searches that found nothing", "Searched most, last 7 days",
+                        "Products people want, last 7 days", "Games clicked at each shop, last 30 days", "Claude",
+                        "Arrange the dashboard"):
             with self.subTest(heading=heading):
                 self.assertContains(response, heading)
         html = response.content.decode()
-        # Visitors, clicks, shops and searches have no rows: each says so rather than drawing an empty chart.
-        self.assertEqual(html.count("No data yet."), 4)
+        # Visitors, clicks, shops, products, the searches made most and those that found nothing, and the games
+        # clicked at each shop have no rows: each says so rather than drawing an empty chart.
+        self.assertEqual(html.count("No data yet."), 7)
         self.assertNotIn("<svg class=\"dash-chart__plot\"", html)
         self.assertContains(response, "No earlier day to set it against yet.")
         self.assertContains(response, "Nothing waiting for you.")
@@ -234,7 +237,10 @@ class EmptyTests(DashboardCase):
         self.assertEqual(context["traffic"]["people"], 0)
         self.assertEqual(context["checks"]["total"], 0)
         self.assertEqual(context["customers"]["sent"], 0)
-        self.assertEqual(context["gaps"]["searches"], [])
+        self.assertEqual(context["gaps"], {"nothing": [], "few": []})
+        self.assertEqual(context["searched"]["searches"], [])
+        self.assertEqual(context["products"], {"clicked": [], "viewed": []})
+        self.assertEqual(context["shop_games"]["shops"], [])
         self.assertEqual(context["shops"]["total"], 0)
 
 
@@ -299,9 +305,8 @@ class FigureTests(DashboardCase):
             "direct": (7, ["Kestrel Collectables"]),
         })
         self.assertEqual([row["key"] for row in data["earning"]], ["ebay", "awin", "cj", "direct"])
-        # Direct hits on Kestrel's tin were nine a day: none of them count for the shop or the product.
-        products = [(row["name"], row["clicks"]) for row in data["products"]]
-        self.assertEqual(products, [(self.etb.name, 28), (self.box.name, 14), (self.tin.name, 14)])
+        # Direct hits on Kestrel's tin were nine a day: none of them count for the shop.
+        self.assertNotIn("products", data)
 
     def test_things_to_correct_match_things_to_check(self):
         checks.note_duplicate_counts([], NOW)
@@ -371,14 +376,91 @@ class FigureTests(DashboardCase):
         self.assertEqual((customers["refer"]["to_post"], customers["refer"]["check"], customers["refer"]["review"]),
                          (1, 1, 1))
 
-    def test_searches_that_found_little(self):
-        searches = self.page().context["gaps"]["searches"]
-        self.assertEqual([(row["query"], row["hits"], row["results"]) for row in searches],
-                         [("riftbound origins", 8, 0), ("ascended heroes", 4, 2)])
+    def test_searches_that_found_nothing_then_little(self):
+        gaps = self.page().context["gaps"]
+        self.assertEqual([(row["query"], row["hits"], row["results"]) for row in gaps["nothing"]],
+                         [("riftbound origins", 8, 0)])
+        self.assertEqual([(row["query"], row["hits"], row["results"]) for row in gaps["few"]],
+                         [("ascended heroes", 4, 2)])
         html = self.page().content.decode()
         self.assertIn("Searched 8 times, found nothing", html)
+        self.assertIn("Found 2 products or fewer", html)
         self.assertIn("Searched 4 times, found 2 products", html)
         self.assertIn(f"{reverse('web:search')}?q=riftbound%20origins", html)
+
+    def test_a_search_that_found_something_once_this_week_is_not_nothing(self):
+        DailySearch.objects.create(date=TODAY, query="ascended heroes box", hits=3, results=0)
+        DailySearch.objects.create(date=TODAY - timedelta(days=1), query="ascended heroes box", hits=1, results=1)
+        gaps = self.page().context["gaps"]
+        self.assertNotIn("ascended heroes box", [row["query"] for row in gaps["nothing"]])
+        self.assertIn("ascended heroes box", [row["query"] for row in gaps["few"]])
+
+    def test_searched_most_with_the_week_before(self):
+        DailySearch.objects.create(date=TODAY - timedelta(days=8), query="prismatic", hits=6, results=12)
+        DailySearch.objects.create(date=TODAY - timedelta(days=14), query="prismatic", hits=50, results=12)
+        DailySearch.objects.create(date=TODAY, query="<script>alert(1)</script>", hits=90, results=0)
+        rows = self.page().context["searched"]["searches"]
+        self.assertEqual([(row["query"], row["hits"], row["results"], row["before"]) for row in rows], [
+            ("prismatic", 20, 14, 6), ("riftbound origins", 8, 0, 0), ("ascended heroes", 4, 2, 0),
+        ])
+        html = self.page().content.decode()
+        self.assertIn("Searched 20 times, found 14 products. 6 times the week before.", html)
+        self.assertIn("Searched 8 times, found nothing. Not searched the week before.", html)
+
+    def test_products_clicked_and_opened_most(self):
+        for slug, hits in ((self.tin.slug, 40), (self.etb.slug, 12), ("gone-product", 99)):
+            DailyPageView.objects.create(date=TODAY - timedelta(days=1), kind=DailyPageView.Kind.PRODUCT, key=slug,
+                                         hits=hits)
+        DailyPageView.objects.create(date=TODAY - timedelta(days=9), kind=DailyPageView.Kind.PRODUCT, key=self.box.slug,
+                                     hits=500)
+        products = self.page().context["products"]
+        # Direct hits on Kestrel's tin were nine a day: none of them count for the product.
+        self.assertEqual([(row["name"], row["clicks"], row["views"]) for row in products["clicked"]], [
+            (self.etb.name, 28, 12), (self.box.name, 14, 0), (self.tin.name, 14, 40),
+        ])
+        # A product since removed has no page to name, and the box's views were before the week.
+        self.assertEqual([(row["name"], row["views"], row["clicks"]) for row in products["viewed"]], [
+            (self.tin.name, 40, 14), (self.etb.name, 12, 28),
+        ])
+        html = self.page().content.decode()
+        self.assertIn("28 clicks to shops, 12 views", html)
+        self.assertIn(reverse("web:product", args=[self.tin.slug]), html)
+
+    def test_games_clicked_most_and_least_at_each_shop(self):
+        other = make_game("Lorcana", "lorcana")
+        lorcana = make_product(make_set(other, slug="first-chapter"), name="The First Chapter Booster Box")
+        make_listing(lorcana, self.awin, price="90.00")
+        OutboundClick.objects.create(product=lorcana, retailer=self.cj, created_at=NOW - timedelta(days=20))
+        OutboundClick.objects.create(product=lorcana, retailer=self.cj, created_at=NOW - timedelta(days=40))
+        data = self.page().context["shop_games"]
+        rows = {row["name"]: row for row in data["shops"]}
+        self.assertEqual([row["name"] for row in data["shops"]],
+                         ["Harbour Games", "eBay", "Northgate Cards", "Kestrel Collectables"])
+        # Harbour sells Lorcana too, and nobody clicked it: its least, at nought.
+        harbour = rows["Harbour Games"]
+        self.assertEqual((harbour["clicks"], harbour["most"]["names"], harbour["most"]["clicks"]),
+                         (28, "Pokémon", 28))
+        self.assertEqual((harbour["least"]["names"], harbour["least"]["clicks"]), ("Lorcana", 0))
+        # Northgate's Lorcana click inside the 30 days counts, the one before does not.
+        northgate = rows["Northgate Cards"]
+        self.assertEqual((northgate["most"]["names"], northgate["most"]["clicks"]), ("Pokémon", 7))
+        self.assertEqual((northgate["least"]["names"], northgate["least"]["clicks"]), ("Lorcana", 1))
+        # eBay sells one game here: every click was for it.
+        self.assertIsNone(rows["eBay"]["least"])
+        html = self.page().content.decode()
+        self.assertIn("Most: Pokémon, 28 clicks.<br>Least: Lorcana, no clicks.", html)
+        self.assertIn("Least: Lorcana, 1 click.", html)
+        self.assertIn("Every click was for Pokémon.", html)
+
+    def test_shops_past_the_first_few_are_behind_a_button(self):
+        game = self.etb.game
+        shops = [make_retailer(f"Shop {n:02}", source_type=Retailer.Source.SHOPIFY) for n in range(14)]
+        OutboundClick.objects.bulk_create([OutboundClick(product=self.etb, retailer=shop, created_at=NOW) for shop in shops])
+        data = self.page().context["shop_games"]
+        self.assertEqual(len(data["shops"]), dashboard.SHOP_GAMES_SHOWN)
+        self.assertEqual(len(data["shops"]) + len(data["more"]), 14 + 4)
+        self.assertContains(self.page(), "Show 6 more shops")
+        self.assertTrue(game.name)
 
     def test_claude_spend_against_its_limit(self):
         state = ClaudeJudge.current()
@@ -523,16 +605,18 @@ class CacheTests(DashboardCase):
         # and the Price check coverage seven, with Claude's Cardmarket matching (prices_section).
         # One more for a staff login that is not the owner: its groups are read, so a Guide editor is kept out
         # (guides.access). The owner's own login is a superuser and skips it. One for On the site now.
-        self.assertLessEqual(len(many), 62)
+        # The products wanted read five, the searches made most two, those that found nothing two, the games at
+        # each shop two, and this login's layout one.
+        self.assertLessEqual(len(many), 72)
         # Within the minute the page reads its parts from the cache: the session, the user and the wording, and the
         # sign-in renews itself (SESSION_SAVE_EVERY_REQUEST: a transaction round one update), and this staff login's
-        # groups (guides.access, above). On the site now is read fresh each time, in one query with nobody on.
+        # groups (guides.access, above). On the site now is read fresh each time, in one query with nobody on, and
+        # this login's layout in one more.
         with CaptureQueriesContext(connection) as warm:
             self.page()
-        self.assertLessEqual(len(warm), 8)
+        self.assertLessEqual(len(warm), 9)
         fresh = [q["sql"] for q in warm.captured_queries if "catalogue_" in q["sql"]]
-        self.assertEqual(len(fresh), 1)
-        self.assertIn("catalogue_dailyvisitor", fresh[0])
+        self.assertEqual(sorted(sql.split('"')[1] for sql in fresh), ["catalogue_dailyvisitor", "catalogue_dashboardlayout"])
 
 
 class CopyTests(DashboardCase):
@@ -686,3 +770,124 @@ class MoneyTests(DashboardCase):
         html = visible(self.page(URL + "?fresh=1").content.decode())
         self.assertIn("No sales imported for these days", html)
         self.assertIn("Import a network report", html)
+
+
+class LayoutTests(DashboardCase):
+    """Each login hides cards and puts them in its own order (the owner, 31 Oct 2026), kept on the server so every
+    device that login uses opens the same way, and every button works without the page's script."""
+
+    LAYOUT = "/dashboard/layout/"
+
+    def order_shown(self, html=None):
+        html = html or self.page().content.decode()
+        return re.findall(r'<section class="dash-card[^"]*" id="([a-z_]+)"', html)
+
+    def post(self, **fields):
+        return self.client.post(self.LAYOUT, fields)
+
+    def test_the_usual_order_with_arrange_last(self):
+        names = [name for name in dashboard.CARD_NAMES if name != "guides"]
+        self.assertEqual(self.order_shown(), names + ["arrange"])
+
+    def test_moving_a_card_without_the_script(self):
+        response = self.post(move="up:shops", shown="checks,prices,shops")
+        self.assertRedirects(response, reverse("web:dashboard") + "#arrange", fetch_redirect_response=False)
+        order = self.order_shown()
+        self.assertLess(order.index("shops"), order.index("prices"))
+        self.post(move="down:now")
+        self.assertEqual(self.order_shown()[:2], ["money", "now"])
+        # The first card cannot go up nor the last down: the page draws those buttons switched off.
+        html = self.page().content.decode()
+        self.assertIn('value="up:money" data-move="-1" disabled', html)
+        self.assertIn('value="down:claude" data-move="1" disabled', html)
+
+    def test_a_move_passes_over_a_card_not_shown(self):
+        order = ["prices", "guides", "claude"]
+        self.assertEqual(dashboard.moved(order, "claude", -1, {"prices", "claude"}), ["claude", "prices", "guides"])
+        self.assertEqual(dashboard.moved(order, "prices", 1, {"prices", "claude"}), ["guides", "claude", "prices"])
+        self.assertEqual(dashboard.moved(order, "prices", -1), order)
+
+    def test_hiding_and_showing_a_card(self):
+        response = self.post(fold="hide:visitors")
+        self.assertRedirects(response, reverse("web:dashboard") + "#visitors", fetch_redirect_response=False)
+        html = self.page().content.decode()
+        self.assertIn('<div class="dash-card__body" id="visitors-body" hidden>', html)
+        self.assertIn('value="show:visitors" aria-expanded="false" aria-controls="visitors-body"', html)
+        self.assertIn('class="dash-card is-hidden" id="visitors"', html)
+        # The figures at the top still come from it, and its heading stays.
+        self.assertIn('id="visitors-title"', html)
+        self.post(fold="show:visitors")
+        self.assertIn('<div class="dash-card__body" id="visitors-body">', self.page().content.decode())
+
+    def test_the_script_sends_the_whole_order_and_gets_nothing_back(self):
+        order = list(reversed(dashboard.CARD_NAMES))
+        response = self.client.post(self.LAYOUT, {"order": ",".join(order + ["nonsense"])}, HTTP_X_DASHBOARD="1")
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(self.order_shown(), [name for name in order if name != "guides"] + ["arrange"])
+
+    def test_every_card_hidden_and_shown_and_the_usual_order_back(self):
+        self.post(move="down:now")
+        self.post(every="hide")
+        html = self.page().content.decode()
+        self.assertEqual(html.count('class="dash-card__body" id='), len(self.order_shown(html)))
+        self.assertEqual(html.count('-body" hidden>'), len(self.order_shown(html)) - 1)   # the arrange card stays open
+        self.post(every="show")
+        self.assertNotIn(" is-hidden", self.page().content.decode())
+        self.post(reset="order")
+        self.assertEqual(self.order_shown()[:2], ["now", "money"])
+
+    def test_each_login_keeps_its_own(self):
+        self.post(fold="hide:money", move="down:now")
+        other = get_user_model().objects.create_user("other", password="pw", is_staff=True)
+        self.client.force_login(other)
+        html = self.page().content.decode()
+        self.assertEqual(self.order_shown(html)[:2], ["now", "money"])
+        self.assertNotIn(" is-hidden", html)
+
+    def test_a_card_added_since_goes_where_it_belongs(self):
+        saved = [name for name in dashboard.CARD_NAMES if name != "searched"]
+        saved.remove("claude")
+        saved.insert(0, "claude")
+        order = dashboard.arranged(saved + ["gone"])
+        self.assertEqual(order.index("searched"), order.index("products") + 1)
+        self.assertEqual(order[0], "claude")
+        self.assertEqual(sorted(order), sorted(dashboard.CARD_NAMES))
+
+    def test_no_hole_in_the_grid_before_a_wide_card(self):
+        cards = [{"wide": wide} for wide in (False, True, False, False, False, True, False)]
+        self.assertEqual([card["wide"] for card in dashboard.placed(cards)],
+                         [True, True, False, False, True, True, False])
+        self.post(order="now,clicks,visitors,money")
+        html = self.page().content.decode()
+        self.assertIn('class="dash-card dash-card--wide" id="visitors"', html)
+        self.assertIn('class="dash-card dash-card--wide" id="money"', html)
+
+    def test_only_staff_may_change_it_and_only_by_post(self):
+        self.client.logout()
+        response = self.post(fold="hide:money")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response["Location"])
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get(self.LAYOUT).status_code, 405)
+        from catalogue.models import DashboardLayout
+
+        self.assertFalse(DashboardLayout.objects.exists())
+
+    def test_the_form_needs_its_token(self):
+        from django.test import Client
+
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.staff)
+        self.assertEqual(client.post(self.LAYOUT, {"fold": "hide:money"}).status_code, 403)
+        html = client.get(URL).content.decode()
+        token = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', html).group(1)
+        self.assertEqual(client.post(self.LAYOUT, {"fold": "hide:money", "csrfmiddlewaretoken": token}).status_code, 302)
+
+    def test_every_button_is_a_form_post_with_its_words(self):
+        html = self.page().content.decode()
+        heads = html.count('<form class="dash-card__head" method="post" action="/dashboard/layout/">')
+        self.assertEqual(heads, len(self.order_shown(html)))
+        for words in ("Hide", "Up", "Down", "Show every section", "Hide every section", "Put back the usual order",
+                      "Arrange sections"):
+            self.assertIn(words, visible(html))
+        self.assertIn('<a href="#arrange">Arrange sections</a>', html)

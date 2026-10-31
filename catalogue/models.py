@@ -2421,3 +2421,20 @@ class PromoMark(models.Model):
 
     def __str__(self):
         return f"{self.get_kind_display()} {self.digest[:8]}"
+
+
+class DashboardLayout(models.Model):
+    """How one staff login has arranged the owner's dashboard (/dashboard/): the order of its sections and the ones it
+    has hidden, so the page opens the same way on every device that login uses. Section names only, as
+    web/dashboard.py CARDS lists them; a name it no longer knows is passed over."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="dashboard_layout")
+    order = models.JSONField(default=list, blank=True)
+    hidden = models.JSONField(default=list, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "dashboard layout"
+
+    def __str__(self):
+        return f"Dashboard layout for {self.user}"

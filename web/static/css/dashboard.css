@@ -58,32 +58,56 @@
 
 /* Cards ------------------------------------------------------------------------ */
 
+/* Each card is its heading (with the button that hides it) and its body. */
 .dash-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); margin-top: var(--space-4); }
-/* Two cards side by side, as tall as each other, their links at the foot; Claude, the last, across both. */
+/* Two cards side by side, as tall as each other, their links at the foot; a wide card across both. A card left alone
+   before a wide one is widened too (dashboard.placed), so whatever the order the grid has no hole. A hidden card is
+   only as tall as its heading. */
 @media (min-width: 60rem) {
   .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); margin-top: var(--space-5); }
   .dash-card--wide { grid-column: 1 / -1; }
   .dash-grid > .dash-card { display: flex; flex-direction: column; }
-  .dash-grid > .dash-card > .dash-card__more { margin-top: auto; }
-  .dash-grid > .dash-card > :nth-last-child(2) { margin-bottom: var(--space-4); }
+  .dash-grid > .dash-card.is-hidden { align-self: start; }
+  .dash-card__body { display: flex; flex: 1; flex-direction: column; }
+  .dash-card__body > .dash-card__more { margin-top: auto; }
+  .dash-card__body > :nth-last-child(2) { margin-bottom: var(--space-4); }
 }
 .dash-card {
   min-width: 0; padding: var(--card-pad); border: var(--border-width) solid var(--color-brand-line); border-radius: var(--radius-card);
   background: var(--color-paper); box-shadow: var(--shadow-card); scroll-margin-top: var(--space-4); overflow-wrap: anywhere;
 }
-.dash-card > * + * { margin-top: var(--space-3); }
+.dash-card > * + *, .dash-card__body > * + * { margin-top: var(--space-3); }
+.dash-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.dash-card__head .dash-fold { flex: none; }
 .dash-card__title { font-size: var(--text-section-sm); }
 .dash-card__intro { font-size: var(--text-sm); color: var(--color-ink-subtle); }
-.dash-card > .dash-card__intro { margin-top: var(--space-1); }
+.dash-card > .dash-card__body:has(> .dash-card__intro:first-child) { margin-top: var(--space-1); }
 .dash-card__lead { font-weight: var(--weight-strong); line-height: var(--leading-snug); }
 .dash-card__line { font-size: var(--text-sm); color: var(--color-ink-muted); }
 .dash-card__line--bad { color: var(--color-more); font-weight: var(--weight-strong); }
 .dash-card__more { display: flex; flex-wrap: wrap; gap: 0 var(--space-4); padding-top: var(--space-2); border-top: var(--border-width) solid var(--color-line-soft); font-size: var(--text-sm); }
-.dash-card > .dash-card__more { margin-top: var(--space-4); }
+.dash-card__body > .dash-card__more { margin-top: var(--space-4); }
 .dash-sub { margin-top: var(--space-5); font-size: var(--text-base); font-weight: var(--weight-heading); }
-.dash-card > .dash-sub + * { margin-top: var(--space-2); }
-.dash-card > .dash-stats, .dash-card > .meter + * { margin-top: var(--space-4); }
+.dash-card__body > .dash-sub + * { margin-top: var(--space-2); }
+.dash-card__body > .dash-stats, .dash-card__body > .meter + * { margin-top: var(--space-4); }
 .dash-empty { padding-block: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-subtle); }
+
+/* Arrange the dashboard: each card's name and the buttons that move it, then the buttons for every card. */
+.dash-order__list { list-style: none; }
+.dash-order__row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
+  padding-block: var(--space-2); border-bottom: var(--border-width) solid var(--color-line-soft); font-size: var(--text-sm);
+}
+.dash-order__row:last-child { border-bottom: 0; }
+.dash-order__name { font-weight: var(--weight-strong); }
+.dash-order__hidden { font-weight: var(--weight-body); color: var(--color-ink-subtle); }
+.dash-order__moves { display: flex; gap: var(--space-2); }
+.dash-order__all { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.dash-order__all { margin-top: var(--space-4); padding-top: var(--space-4); border-top: var(--border-width) solid var(--color-line-soft); }
+/* Continuity: a row the page's script moves slides from where it was (dashboard.js), on transform alone. */
+@media (prefers-reduced-motion: no-preference) {
+  .dash-order__row.is-moving { transition: transform var(--motion-normal) var(--ease-out); }
+}
 
 /* Three figures in a row inside a card. */
 .dash-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(var(--stat-min), 100%), 1fr)); gap: var(--space-3); margin: 0; }
@@ -98,7 +122,7 @@
    its text; the day names are a row of their own under it. ------------------------------------------------ */
 
 .dash-chart { margin: 0; max-width: var(--chart-width); }
-.dash-card > .dash-chart { margin-top: var(--space-5); }
+.dash-card__body > .dash-chart { margin-top: var(--space-5); }
 .dash-chart__plot { display: block; width: 100%; height: var(--chart-height); overflow: visible; }
 .dash-bar { fill: var(--color-brand-action); rx: var(--chart-bar-radius); }
 .dash-bar--base { rx: 0; }   /* squares the bar's foot on the baseline */
@@ -173,7 +197,7 @@ a.dash-tile .dash-tile__label { color: var(--color-brand-text); }
 
 /* The traffic explainer's top finding. */
 .dash-note { padding: var(--space-3); border-radius: var(--radius); background: var(--color-shelf); font-size: var(--text-sm); }
-.dash-card > .dash-note { margin-top: var(--space-5); }
+.dash-card__body > .dash-note { margin-top: var(--space-5); }
 .dash-note__title { margin-bottom: var(--space-1); font-size: var(--text-xs); font-weight: var(--weight-strong); color: var(--color-ink-subtle); }
 
 /* The pointer's day, from dashboard.js. Values lead, labels follow. */

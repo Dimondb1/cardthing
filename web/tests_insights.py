@@ -102,8 +102,10 @@ class ProbeSearchTests(TestCase):
 
         DailySearch.objects.create(date=timezone.localdate(), query="<svg onload=1>", results=0, hits=9)
         DailySearch.objects.create(date=timezone.localdate(), query="pokemon 151 etb", results=0, hits=1)
-        gaps = dashboard.gaps_section(timezone.now(), None)["searches"]
+        gaps = dashboard.gaps_section(timezone.now(), None)["nothing"]
         self.assertEqual([row["query"] for row in gaps], ["pokemon 151 etb"])
+        searched = dashboard.searched_section(timezone.now(), None)["searches"]
+        self.assertEqual([row["query"] for row in searched], ["pokemon 151 etb"])
 
 
 class InsightsPageTests(TestCase):

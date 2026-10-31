@@ -1,0 +1,23 @@
+{% load sitecopy ripraptor dashboard %}{# Whether each shop is read on time (dashboard.shops_section). #}
+  <p class="dash-card__intro">{% copy "dashboard.shops.intro" %}</p>
+  {% if shops.total %}
+  <p class="dash-card__lead">{% copy "dashboard.shops.summary" count=shops.fresh total=shops.total %}</p>
+  <div class="health" aria-hidden="true">{% for segment in shops.segments %}{% if segment.count %}<span class="health__part health__part--{{ segment.key }}" style="--grow: {{ segment.count }}"></span>{% endif %}{% endfor %}</div>
+  <ul class="dash-legend dash-legend--counts">{% for segment in shops.segments %}
+    <li><span class="dash-legend__key health__part--{{ segment.key }}" aria-hidden="true"></span>{{ segment.label }} <b>{{ segment.count|number }}</b></li>
+  {% endfor %}</ul>
+  {% if shops.all_paused %}<p class="dash-card__line dash-card__line--bad">{% copy "dashboard.shops.all_paused" %}</p>{% endif %}
+  {% if shops.problems %}
+  <h3 class="dash-sub">{% copy "dashboard.shops.problems" %}</h3>
+  <ul class="dash-rows">{% for shop in shops.problems %}
+    <li class="dash-rows__row"><a class="dash-rows__name" href="{% url 'admin:catalogue_retailer_change' shop.pk %}">{{ shop.name }}</a>
+      <span class="dash-rows__detail">{% if shop.error %}{{ shop.error }}{% elif shop.last_ok %}{% copy "dashboard.shops.late_since" clock=shop.last_ok %}{% else %}{% copy "dashboard.shops.never" %}{% endif %}</span></li>
+  {% endfor %}</ul>
+  {% if shops.more_problems %}<p class="dash-card__line">{% copy "dashboard.shops.more_problems" count=shops.more_problems %}</p>{% endif %}
+  {% endif %}
+  {% else %}
+  <p class="dash-empty">{% copy "dashboard.no_data" %}</p>
+  {% endif %}
+  <p class="dash-card__line{% if shops.stopped_at %} dash-card__line--bad{% endif %}">{% if not shops.worker.known %}{% copy "dashboard.shops.worker_never" %}{% elif shops.worker.alive %}{% copy "dashboard.shops.worker_on" clock=shops.worker.heartbeat %}{% else %}{% copy "dashboard.shops.worker_off" clock=shops.stopped_at %}{% endif %}</p>
+  {% if shops.last_finished %}<p class="dash-card__line">{% copy "dashboard.shops.last_read" clock=shops.last_finished %}</p>{% endif %}
+  <p class="dash-card__more"><a href="{{ links.crawl }}">{% copy "dashboard.shops.more" %}</a> <a href="{{ links.runs }}">{% copy "dashboard.shops.runs" %}</a></p>

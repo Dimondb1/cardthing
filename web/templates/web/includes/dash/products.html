@@ -1,0 +1,21 @@
+{% load sitecopy ripraptor dashboard %}{# The products people clicked through to a shop for most this week, and those opened most (dashboard.products_section). #}
+<p class="dash-card__intro">{% copy "dashboard.products.intro" %}</p>
+{% if products.clicked or products.viewed %}
+{% if products.clicked %}
+<h3 class="dash-sub">{% copy "dashboard.products.clicked" %}</h3>
+<ol class="dash-rows">{% for row in products.clicked %}
+  <li class="dash-rows__row"><a class="dash-rows__name" href="{{ row.url }}">{{ row.name }}</a><span class="dash-rows__count">{{ row.clicks|number }}</span>
+    <span class="dash-rows__detail">{% copy_count "dashboard.products.clicks" row.clicks shown=row.clicks|number %}, {% copy_count "dashboard.products.views" row.views shown=row.views|number %}</span></li>
+{% endfor %}</ol>
+{% endif %}
+{% if products.viewed %}
+<h3 class="dash-sub">{% copy "dashboard.products.viewed" %}</h3>
+<ol class="dash-rows">{% for row in products.viewed %}
+  <li class="dash-rows__row"><a class="dash-rows__name" href="{{ row.url }}">{{ row.name }}</a><span class="dash-rows__count">{{ row.views|number }}</span>
+    <span class="dash-rows__detail">{% copy_count "dashboard.products.views" row.views shown=row.views|number %}, {% copy_count "dashboard.products.clicks" row.clicks shown=row.clicks|number %}</span></li>
+{% endfor %}</ol>
+{% endif %}
+{% else %}
+<p class="dash-empty">{% copy "dashboard.no_data" %}</p>
+{% endif %}
+<p class="dash-card__more"><a href="{{ links.insights }}">{% copy "dashboard.products.more" %}</a></p>

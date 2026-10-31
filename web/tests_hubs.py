@@ -132,9 +132,10 @@ class GameHubTests(PageTestCase):
                            ("Prismatic Evolutions Tin", Product.Type.TIN)):
             make_listing(make_product(self.pre, name=name, product_type=kind), self.harbour, price="30.00")
         title = title_of(self.client.get(self.game.get_absolute_url()).content.decode())
-        # In the game's own order (booster box before ETB), cut to what fits before the site name.
-        self.assertEqual(title, "Cheapest Pokémon booster boxes in stock: UK price comparison | RipRaptor")
-        self.assertLessEqual(len(title) - len(" | RipRaptor"), hubs.TITLE_LIMIT)
+        # In the game's own order (booster box before ETB), cut to what fits before the site name, which then does
+        # not go on: the whole would pass the 70 characters Bing warns at.
+        self.assertEqual(title, "Cheapest Pokémon booster boxes in stock: UK price comparison")
+        self.assertLessEqual(len(title), hubs.TITLE_LIMIT)
 
     def test_the_game_short_name_keeps_titles_free_of_exclamation_marks(self):
         game = make_game(name="Yu-Gi-Oh!", slug="yu-gi-oh", short_name="Yu-Gi-Oh")

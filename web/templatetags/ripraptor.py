@@ -156,6 +156,19 @@ def go_link(listing, button, product=None, game=None):
     )
 
 
+# Bing Webmaster Tools warns on a title over 70 characters (the owner, 31 Oct 2026: 23 pages). Titles are fitted to
+# hubs.TITLE_LIMIT before the site's name; the name goes after them only while the whole stays within this.
+TITLE_MAX = 70
+
+
+@register.filter
+def with_site_name(title, site_name):
+    """``title`` followed by " | <site name>" when the whole is TITLE_MAX characters or fewer, else ``title`` alone:
+    search results show the site's name beside the title anyway, and the words people search for count more."""
+    full = f"{title} | {site_name}"
+    return full if len(full) <= TITLE_MAX else title
+
+
 @register.filter
 def per_pack(price, packs):
     """A price shared over the packs a product holds (catalogue/contents.py), or None for fewer than two."""

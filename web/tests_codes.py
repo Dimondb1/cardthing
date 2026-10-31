@@ -20,6 +20,18 @@ from .tests_hubs import description_of, title_of
 SITE = " | RipRaptor"
 
 
+def site(title):
+    """``title`` as the page gives it: with the site's name after it while the whole is 70 characters or fewer."""
+    from .templatetags.ripraptor import with_site_name
+
+    return with_site_name(title, "RipRaptor")
+
+
+def bare(title):
+    """A page's title without the site's name, when it has one."""
+    return title[: -len(SITE)] if title.endswith(SITE) else title
+
+
 def words():
     return hubs.Words(views.text, SimpleNamespace())
 
@@ -157,7 +169,7 @@ class CodePageTests(TestCase):
     def test_product_title_and_description_carry_the_code(self):
         html, title, description = self.page(self.box)
         # 49 characters of name: only the bare price is left room, and the name is never cut.
-        self.assertEqual(title, "One Piece Heroines Edition Vol.2 EB05 Booster Box from £95.00" + SITE)
+        self.assertEqual(title, site("One Piece Heroines Edition Vol.2 EB05 Booster Box from £95.00"))
         self.assertIn("EB05", description)
         # The heading and breadcrumbs keep the product's own name.
         self.assertIn("<h1", html)
@@ -177,7 +189,7 @@ class CodePageTests(TestCase):
         box = make_product(op18, name="One Piece The Time Traveler Booster Box", product_type=Product.Type.BOOSTER_BOX)
         make_listing(box, self.shop, price="80.00", availability=Listing.Availability.PREORDER)
         _html, title, description = self.page(box)
-        self.assertEqual(title, "One Piece The Time Traveler OP-18 Booster Box pre-order from £80.00" + SITE)
+        self.assertEqual(title, site("One Piece The Time Traveler OP-18 Booster Box pre-order from £80.00"))
         self.assertTrue(description.startswith(
             f"One Piece The Time Traveler OP-18 Booster Box is due out on {short_date(out)}, on pre-order from "
             "£80.00 delivered at Harbour Games."
@@ -217,7 +229,7 @@ class CodePageTests(TestCase):
         later = make_set(self.game, name="Paradise Found", slug="paradise-found", code="OP19", release_date=out)
         box = make_product(later, name="One Piece Paradise Found Booster Box", product_type=Product.Type.BOOSTER_BOX)
         _html, title, description = self.page(box)
-        self.assertEqual(title, "One Piece Paradise Found OP19 Booster Box: UK prices" + SITE)
+        self.assertEqual(title, site("One Piece Paradise Found OP19 Booster Box: UK prices"))
         self.assertTrue(description.startswith(
             f"One Piece Paradise Found OP19 Booster Box is due out on {short_date(out)}."))
 
@@ -244,12 +256,12 @@ class CodePageTests(TestCase):
         box = make_product(self.eb05, name="One Piece Card Game Heroines Edition Vol.2 Booster Box Display",
                            product_type=Product.Type.BOOSTER_BOX)
         title = self.page(box)[1]
-        self.assertEqual(title, "One Piece Card Game Heroines Edition Vol.2 EB05 Booster Box Display UK" + SITE)
+        self.assertEqual(title, site("One Piece Card Game Heroines Edition Vol.2 EB05 Booster Box Display UK"))
 
     def test_set_page_in_stock(self):
         _html, title, description = self.page(self.eb05)
-        self.assertEqual(title, "Heroines Edition Vol.2 (EB05) booster boxes: UK prices" + SITE)
-        self.assertLessEqual(len(title) - len(SITE), hubs.TITLE_LIMIT)
+        self.assertEqual(title, site("Heroines Edition Vol.2 (EB05) booster boxes: UK prices"))
+        self.assertLessEqual(len(bare(title)), hubs.TITLE_LIMIT)
         self.assertTrue(description.startswith("Heroines Edition Vol.2 (EB05): 1 sealed One Piece product"))
 
     def test_set_page_taking_pre_orders(self):
@@ -259,7 +271,7 @@ class CodePageTests(TestCase):
         make_listing(box, self.shop, price="80.00", availability=Listing.Availability.PREORDER)
         make_listing(box, self.other, price="82.00", availability=Listing.Availability.PREORDER)
         html, title, description = self.page(op18)
-        self.assertEqual(title, "The Time Traveler (OP-18) pre-orders UK and release date" + SITE)
+        self.assertEqual(title, site("The Time Traveler (OP-18) pre-orders UK and release date"))
         self.assertIn(short_date(out), description)
         self.assertIn("on pre-order at 2 UK shops", description)
         self.assertIn(f"1 sealed product due out on {short_date(out)}, with 2 UK shops taking pre-orders now.", html)
@@ -271,7 +283,7 @@ class CodePageTests(TestCase):
                         name="Brightness of Hope", slug="brightness-of-hope", code="FB11", release_date=out)
         make_product(fb11, name="Fusion World Brightness of Hope Booster Box", product_type=Product.Type.BOOSTER_BOX)
         html, title, description = self.page(fb11)
-        self.assertEqual(title, "Brightness of Hope (FB11) release date" + SITE)
+        self.assertEqual(title, site("Brightness of Hope (FB11) release date"))
         self.assertNotIn("pre-order", description.lower())
         self.assertIn("not yet on pre-order at a UK shop we check", html)
         self.assertIn("once shops list them", description)
@@ -282,7 +294,7 @@ class CodePageTests(TestCase):
         pack = make_product(op18, name="One Piece The Long Watch Booster Pack", product_type=Product.Type.BOOSTER_PACK)
         make_listing(pack, self.shop, price="4.95", availability=Listing.Availability.OUT_OF_STOCK)
         html, title, description = self.page(op18)
-        self.assertEqual(title, "The Long Watch (OP-18) release date" + SITE)
+        self.assertEqual(title, site("The Long Watch (OP-18) release date"))
         self.assertIn(f"1 sealed product due out on {short_date(out)}, listed at 1 UK shop but not on pre-order yet.",
                       html)
         self.assertNotIn("not yet on pre-order at a UK shop we check", html)
@@ -366,7 +378,7 @@ class TitleUniquenessTests(TestCase):
         titles = []
         for product in self.products:
             html = self.client.get(product.get_absolute_url()).content.decode()
-            title = title_of(html)[: -len(SITE)]
+            title = bare(title_of(html))
             titles.append(title)
             with self.subTest(product=product.name):
                 codes = re.findall(r"OP-?18", title)

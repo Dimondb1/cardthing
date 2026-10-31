@@ -4709,6 +4709,12 @@ the AI search crawlers in by name were already in place. Added 31 Oct 2026
   whole-set searches ("cardfight vanguard booster boxes") finding the site on
   page 2. The top keeps its one short line, and a set's date stays there
   alone, said once on the page as you asked.
+- **Titles within 70 characters.** Bing Webmaster Tools warned on 23 pages
+  whose title ran past 70: titles are fitted to 60 characters (`hubs.TITLE_LIMIT`)
+  and " | RipRaptor" went on after. The site's name now goes on only while the
+  whole stays within 70 (`with_site_name`); search results show the site's
+  name beside a title anyway. A product or set whose name alone is very long
+  can still run over.
 - **The facts as sentences.** Product details opens with a plain summary:
   "The cheapest Surging Sparks Booster Box we found right now is £87.00
   delivered at Harbour Games. 2 UK shops have it in stock. It holds 36 packs,

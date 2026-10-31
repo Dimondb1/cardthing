@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
-  <title>{% block title %}{% if meta_full_title %}{{ meta_full_title }}{% elif meta_title %}{{ meta_title }} | {{ site_name }}{% else %}{{ site_name }}{% endif %}{% endblock %}</title>
+  <title>{% block title %}{% if meta_full_title %}{{ meta_full_title }}{% elif meta_title %}{{ meta_title|with_site_name:site_name }}{% else %}{{ site_name }}{% endif %}{% endblock %}</title>
   <meta name="description" content="{% if meta_description %}{{ meta_description }}{% else %}{% copy "meta.default.description" %}{% endif %}">
   {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
   {% if robots %}<meta name="robots" content="{{ robots }}">{% elif noindex %}<meta name="robots" content="noindex, follow">{% endif %}

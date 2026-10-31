@@ -152,3 +152,25 @@ class HubAboutTests(TestCase):
     def test_a_tab_fetched_by_script_has_no_about(self):
         html = self.client.get(self.game.get_absolute_url() + "?pane=1&tab=preorder").content.decode()
         self.assertNotIn("hub-about", html)
+
+
+class TitleLengthTests(TestCase):
+    """Bing Webmaster Tools warns on a title over 70 characters (the owner, 31 Oct 2026: 23 pages, most only over by the
+    " | RipRaptor" after a title fitted to 60). The site's name goes after a title only while the whole fits."""
+
+    def test_the_site_name_goes_on_only_while_the_whole_title_fits(self):
+        from web.templatetags.ripraptor import TITLE_MAX, with_site_name
+
+        self.assertEqual(with_site_name("Your watchlist", "RipRaptor"), "Your watchlist | RipRaptor")
+        fits = "x" * (TITLE_MAX - len(" | RipRaptor"))
+        self.assertEqual(with_site_name(fits, "RipRaptor"), fits + " | RipRaptor")
+        over = "Cheapest Pokémon booster boxes in stock: UK price comparison"
+        self.assertEqual(with_site_name(over, "RipRaptor"), over)
+
+    def test_pages_use_it(self):
+        game = make_game()
+        html = self.client.get(reverse("web:watchlist")).content.decode()
+        self.assertIn("<title>Your watchlist | RipRaptor</title>", html)
+        html = self.client.get(game.get_absolute_url()).content.decode()
+        title = html[html.index("<title>") + 7:html.index("</title>")]
+        self.assertLessEqual(len(title.replace("&#x27;", "'").replace("&amp;", "&")), 70)

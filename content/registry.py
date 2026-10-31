@@ -1760,6 +1760,9 @@ ENTRIES = [
     Entry("product.summary.packs", T, "Product summary: packs", "It holds {packs} packs, {each} a pack.",
           "After the stock sentence under Product details, when the number of packs is known.",
           placeholders=("packs", "each")),
+    Entry("product.facts.packs", T, "Product: packs inside, under the name", "{packs} packs",
+          "Under the product's name, after its type, when it holds two or more packs and the number is known, so a "
+          "set of four booster packs does not read as one.", placeholders=("packs",)),
     Entry("product.details.inside", T, "Detail: what is inside", "Inside",
           "Label in product details, when the number of packs or of cards a pack is known."),
     Entry("product.details.packs", T, "Inside: packs", "{packs} packs", "Product details.", placeholders=("packs",)),

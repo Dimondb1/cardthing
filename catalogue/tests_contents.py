@@ -45,6 +45,14 @@ DESCRIPTIONS = [
  ("Contents: 10 booster packs, 1 player's guide", 10, None),
  ("Booster Bundle: 6 booster packs", 6, None),
  ("Contains 8 booster packs, 1 Pokemon coin, 1 code card for the Pokemon TCG Live", 8, None),
+ # Collectors Kingdom's sleeved art set, 31 Oct 2026: it was read as one card a pack, and "per pack" as one pack.
+ ("An art set of four sealed Pitch Black sleeved booster packs, one of each sleeve artwork. It's an easy way to collect "
+  "every design from the set while still having packs to open.\nWhat's inside\n4 Mega Evolution Pitch Black sleeved "
+  "booster packs, 1 of each artwork\n10 cards, 1 Basic Energy and 1 Pokémon TCG Live code card per pack\nAbout Pitch "
+  "Black\nFrom the Mega Evolution era, Pitch Black is built around Mega Darkrai ex.", 4, 10),
+ ("Each pack has 1 code card", None, None),
+ ("1 Pokémon TCG Live code card per pack", None, None),
+ ("Sleeved booster pack: 10 cards and 1 code card per pack", None, 10),
  ("", None, None),
 ]
 
@@ -158,6 +166,8 @@ class ProductPageTests(TestCase):
         self.assertIn('<p class="buybox__packs">36 packs inside, £2.42 a pack</p>', html)
         self.assertIn("<dt>Inside</dt><dd>36 packs of 10 cards <span class=\"muted\">(from the shops&#x27; descriptions)</span></dd>", html)
         self.assertLess(html.index("buybox__packs"), html.index('class="buy-now"'))
+        # And under the name, so a set of several packs never reads as one.
+        self.assertRegex(html, r'<p class="product-facts">[^<]*<[^\n]*· 36 packs · English')
 
     def test_the_owners_figures_need_no_source(self):
         Product.objects.filter(pk=self.box.pk).update(packs=24, packs_found=36)

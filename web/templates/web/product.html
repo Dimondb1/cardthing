@@ -14,7 +14,7 @@
 <div class="product-head{% if product.name|length > 60 %} product-head--long{% endif %}{% if cheapest and not cheapest.delivery_known %} product-head--note{% endif %}" data-viewed-slug="{{ product.slug }}" data-viewed-name="{{ product.name }}" data-viewed-game="{{ product.game.slug }}">
   <div class="product-intro">
     <h1 class="product-title">{{ product.name }}</h1>
-    <p class="product-facts">{{ product.type_name }}{% info "type" product.product_type product.type_name %} · {{ product.language_name|default:"English" }}{% if product.language %}{% info "lang" product.language product.language_name game=product.game.slug %}{% endif %}</p>
+    <p class="product-facts">{{ product.type_name }}{% info "type" product.product_type product.type_name %}{% if product.packs_inside and product.packs_inside > 1 %} · {% copy "product.facts.packs" packs=product.packs_inside %}{% endif %} · {{ product.language_name|default:"English" }}{% if product.language %}{% info "lang" product.language product.language_name game=product.game.slug %}{% endif %}</p>
   </div>
 
   <div class="product-media">{% product_image product "large" %}</div>

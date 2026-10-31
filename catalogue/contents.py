@@ -19,9 +19,10 @@ import re
 from collections import Counter
 
 # Pack counts a sealed product can hold: a single pack up to the largest boxes. A number outside is something else
-# (a set's number, "151", or a count of cards).
+# (a set's number, "151", or a count of cards). No pack holds fewer than FEWEST_CARDS cards: "1 code card per pack" is
+# an extra, not the pack.
 MOST_PACKS = 60
-MOST_CARDS = 30
+FEWEST_CARDS, MOST_CARDS = 3, 30
 
 # One or two digits standing alone: never part of a price (£2.50), a larger number (a set's 151), a set code (OP-11,
 # SV10) or a percentage.
@@ -51,7 +52,16 @@ CARDS = (
                r"comes\s+with|features)\s+" + NUMBER + r"\s*" + WORDS + r"{0,4}?cards?\b", re.I),
     # "36 packs of 10 cards", "booster packs with 10 cards each".
     re.compile(r"\b(?:packs?|boosters?)\s+(?:of|with)\s+" + NUMBER + r"\s*" + WORDS + r"{0,2}?cards?\b", re.I),
+    # A list that ends in "per pack": "10 cards, 1 Basic Energy and 1 Pokémon TCG Live code card per pack".
+    re.compile(NUMBER + r"\s*" + WORDS + r"{0,2}?cards?\s*(?:,|\band\b|\bplus\b|\+)[^.;\n]{0,80}?\b(?:per|in\s+each|"
+               r"in\s+every|each)\s+(?:booster\s+)?pack\b", re.I),
 )
+# Cards that come with a pack but are not its cards: a code card, an Energy, a promo. "1 Pokémon TCG Live code card per
+# pack" is not a pack of one card.
+EXTRA_CARDS = re.compile(r"\b(?:code|energy|energies|promo|bonus|jumbo|oversized?|guide|rules?|tokens?|online|live)\b",
+                         re.I)
+# "per pack", "each pack": a rate, never a count of packs ("1 code card per pack").
+RATE = re.compile(r"\b(?:per|each|every)\s+$", re.I)
 # Several boxes in one product (a case, a display of displays): the pack count given is a box's, not the product's.
 BOXES = re.compile(NUMBER + r"\s*(?:x|×)?\s*(?:sealed\s+)?(?:booster\s+)?(?:boxes|box|displays?)\b", re.I)
 CASE = re.compile(r"\bcase\s+of\b|\bsealed\s+case\b|\bbooster\s+box\s+case\b", re.I)
@@ -97,6 +107,8 @@ def packs_in(text):
         begin = max(previous, word.start() - LOOK_BACK)
         window = text[begin:word.start()]
         previous = word.end()
+        if RATE.search(window):
+            continue
         clause = window[max((cut.end() for cut in BREAK.finditer(window)), default=0):]
         count = count_before(clause)
         if count is not None:
@@ -104,12 +116,20 @@ def packs_in(text):
     return one(found)
 
 
+def pack_cards(match):
+    """The count a CARDS match gives, or None when the cards it counts come with the pack rather than make it up (a
+    code card, an Energy, a promo)."""
+    between = match.string[match.end(1):match.end()]
+    counted = re.split(r"cards?\b", between, maxsplit=1, flags=re.I)[0]
+    return None if EXTRA_CARDS.search(counted) else int(match.group(1))
+
+
 def cards_in(text):
     """The number of cards in each pack a shop's description gives, or None."""
     if not text:
         return None
-    found = [int(match.group(1)) for pattern in CARDS for match in pattern.finditer(text)]
-    return one(count for count in found if 1 <= count <= MOST_CARDS)
+    found = [pack_cards(match) for pattern in CARDS for match in pattern.finditer(text)]
+    return one(count for count in found if count is not None and FEWEST_CARDS <= count <= MOST_CARDS)
 
 
 def agreed(values):

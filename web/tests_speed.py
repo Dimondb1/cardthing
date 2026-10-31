@@ -154,8 +154,10 @@ class AheadOfATapTests(TestCase):
     def test_the_scripts_wait_until_the_page_is_shown(self):
         site = static_text("js/site.js")
         self.assertIn('document.prerendering || (entry && entry.deliveryType === "navigational-prefetch")', site)
-        self.assertIn("what=view&path=", site)
-        self.assertIn('document.addEventListener("prerenderingchange", count, { once: true })', site)
+        # A page shown after rendering ahead reports in as a view, so it is counted then (what=view); any other as here.
+        self.assertIn('const what = ahead ? "view" : "here";', site)
+        self.assertIn("what=${what}&path=", site)
+        self.assertIn('document.addEventListener("prerenderingchange", report, { once: true })', site)
         for path, name in (("js/history.js", "remember"), ("js/install.js", "offer")):
             script = static_text(path)
             self.assertIn(f'if (document.prerendering) document.addEventListener("prerenderingchange", {name}, {{ once: true }});', script)

@@ -30,8 +30,8 @@ from catalogue import cardmarket, checks, crawl, insights, judge, referrals, tra
 from catalogue.drop_alerts import SENT_FIELD
 from catalogue.models import (
     AffiliateSale, CardmarketMatch, CardmarketPrice, CardmarketProduct, ClaudeAsk, ClaudeJudge, DailyPageView, DailySearch,
-    DailyVisitor, DropAlert, Listing, OutboundClick, Product, ReferralSettings, Retailer, SearchAlert, StockAlert,
-    WorkerState,
+    DailyVisitor, DropAlert, Game, Listing, OutboundClick, Product, ProductSet, ReferralSettings, Retailer, SearchAlert,
+    StockAlert, WorkerState,
 )
 from content import service as copy
 from inbox.service import unread_count
@@ -139,6 +139,44 @@ def rate(part, whole, scale=100):
 
 # Sections ------------------------------------------------------------------------------------------
 
+# On the site now: people whose browser opened a page in the last this many minutes, and the pages most are on.
+NOW_MINUTES = 5
+NOW_PAGES = 6
+
+
+def now_section(now, store):
+    """Who is on the site now (the owner, 31 Oct 2026: "I don't know who is currently using the site"): the people
+    whose browser opened a page in the last NOW_MINUTES minutes (DailyVisitor.browser and last_seen, kept when the
+    page's script reports in), and the pages they are on, most people first. A visitor whose browser never ran a
+    page (a scanner, a script) is never here. Built on every load, never cached: a query, and one for the names."""
+    rows = list(
+        DailyVisitor.objects.filter(browser=True, last_seen__gte=now - timedelta(minutes=NOW_MINUTES),
+                                    views__lt=insights.VIEWS_PER_VISITOR_CAP)
+        .order_by().values_list("last_page").annotate(n=Count("id")).order_by("-n", "last_page")
+    )
+    people = sum(n for _page, n in rows)
+    shown = rows[:NOW_PAGES]
+    wanted = {"product": set(), "game": set(), "set": set()}
+    for page, _n in shown:
+        kind, _, key = page.partition(":")
+        if kind in wanted and key:
+            wanted[kind].add(key)
+    names = {}
+    for kind, model in (("product", Product), ("game", Game), ("set", ProductSet)):
+        if wanted[kind]:
+            names.update({(kind, slug): name for slug, name in
+                          model.objects.filter(slug__in=wanted[kind]).values_list("slug", "name")})
+    kinds = dict(DailyPageView.Kind.choices)
+    pages = []
+    for page, n in shown:
+        kind, _, key = page.partition(":")
+        name = names.get((kind, key)) or (kinds.get(kind) if kind and kind != "other" else say(store, "dashboard.now.other"))
+        url = reverse("web:product", args=[key]) if kind == "product" and (kind, key) in names else ""
+        pages.append({"name": name, "kind": kinds.get(kind, "") if (kind, key) in names else "", "url": url,
+                      "people": n})
+    return {"people": people, "pages": pages, "more": len(rows) > NOW_PAGES, "minutes": NOW_MINUTES}
+
+
 def traffic_section(now, store):
     """People, page views and clicks for the last seven days, today against the same time last week, where
     people came from and which shops and products they clicked through to."""
@@ -159,6 +197,7 @@ def traffic_section(now, store):
             "date": day, "today": day == today, "burst": bool(row.get("burst")),
             "people": row.get("people", 0), "returning": row.get("returning", 0), "views": row.get("views", 0),
             "clicks": row.get("clicks", 0), "direct": direct.get(day, 0),
+            "by_browser": bool(row.get("by_browser")), "automated": row.get("automated", 0),
         })
     # Burst days are left out of the people, and of the clicks set against them; every click from people counts.
     counted = [day for day in days if not day["burst"]]
@@ -169,9 +208,11 @@ def traffic_section(now, store):
     bursts = [day["date"] for day in days if day["burst"]]
 
     # Where people came from, on the days counted: one query, grouped as Insights groups them.
+    browser_since = why["history"].get("browser_since")
     grouped = {}
     for host, n in (
-        DailyVisitor.objects.filter(date__gte=first, date__lte=today, views__lt=insights.VIEWS_PER_VISITOR_CAP)
+        DailyVisitor.objects.filter(traffic.people_q(browser_since), date__gte=first, date__lte=today,
+                                    views__lt=insights.VIEWS_PER_VISITOR_CAP)
         .exclude(date__in=bursts).order_by().values_list("source").annotate(n=Count("id")).values_list("source", "n")
     ):
         group = insights.source_group(host)
@@ -224,10 +265,14 @@ def traffic_section(now, store):
         "direct": sum(day["direct"] for day in days),
         "per_person": round(counted_clicks / people, 2) if people else None,
         "bursts": bursts, "best": best, "most_clicks": most_clicks,
+        # From the first day pages reported in, people are browsers; what else visited is counted as automated.
+        "browser_since": browser_since if browser_since and browser_since >= first else None,
+        "automated": sum(day["automated"] for day in days if day["by_browser"]),
         "sources": sources, "earning": earning, "products": products,
         "headline": why["headline"] if why["enough"] else "",
         "today": {
             "people": today_people, "clicks": today_clicks, "burst": today_row["burst"], "until": f"{local_now:%H:%M}",
+            "by_browser": today_row["by_browser"], "automated": today_row["automated"],
             "basis": reference["basis"] if reference else "",
             "then": reference["then"] if reference else None,
             "then_clicks": reference["then_clicks"] if reference else None,
@@ -657,6 +702,7 @@ def dashboard(request):
     data = {name: entry["data"] for name, entry in found.items()}
     context = {
         **data,
+        "now_on": now_section(now, store),
         "updated": timezone.localtime(min(entry["built_at"] for entry in found.values())),
         "links": admin_links(),
         "few_results": FEW_RESULTS,

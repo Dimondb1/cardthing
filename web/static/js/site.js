@@ -13,16 +13,20 @@ document.addEventListener("click", (event) => {
   try { fetch(`${note}?${query}`, { keepalive: true }).catch(() => {}); } catch (e) { /* nothing to do */ }
 });
 
-// A page the browser fetched or rendered ahead of a tap (the speculation rules in base.html) was not counted
-// when fetched: it is counted once it is shown, so the dashboard counts visits, not the browser's guesses.
+// Each page view reports in once, when it is shown, with only the page's address: the visitor's browser runs
+// pages, so the dashboard counts them as a person (scanners and scripts that only fetch pages never report in),
+// and can show which page people are on now. A page the browser fetched or rendered ahead of a tap (the speculation
+// rules in base.html) was not counted when fetched, so its report counts the view too: the dashboard counts visits,
+// not the browser's guesses.
 {
   const entry = performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
   const ahead = document.prerendering || (entry && entry.deliveryType === "navigational-prefetch");
   const { note } = document.body.dataset;
-  if (ahead && note) {
-    const count = () => { try { fetch(`${note}?what=view&path=${encodeURIComponent(location.pathname)}`, { keepalive: true }).catch(() => {}); } catch (e) { /* nothing to do */ } };
-    if (document.prerendering) document.addEventListener("prerenderingchange", count, { once: true });
-    else count();
+  if (note) {
+    const what = ahead ? "view" : "here";
+    const report = () => { try { fetch(`${note}?what=${what}&path=${encodeURIComponent(location.pathname)}`, { keepalive: true }).catch(() => {}); } catch (e) { /* nothing to do */ } };
+    if (document.prerendering) document.addEventListener("prerenderingchange", report, { once: true });
+    else report();
   }
 }
 

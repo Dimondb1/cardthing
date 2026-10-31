@@ -2134,7 +2134,9 @@ def picks_api(request):
 def note_api(request):
     """Count one home screen event (shown, added, dismissed, opened), or one press of a Compare prices link
     (what=compare, where it was and on which page), so the dashboard can set them beside Buy now and the
-    shops' rows. Nothing about the visitor is kept."""
+    shops' rows; or take a page's report that it was shown (what=here, or what=view for one rendered ahead),
+    which marks today's visitor as a browser on that page (insights.mark_browser). Nothing about the visitor is
+    kept beyond their row for the day."""
     event = request.GET.get("what", "")
     match = None
     if insights.is_bot(request):
@@ -2148,22 +2150,37 @@ def note_api(request):
     elif event == "view" and not clicks.prefetching(request):
         # A page the browser rendered ahead of a tap (the speculation rules in base.html) was not counted when
         # fetched (web.middleware): the page's script counts it here once it is shown, as the view it is.
-        from django.urls import Resolver404, resolve
-
         from .middleware import KINDS, view_key
 
-        try:
-            match = resolve(urlsplit(request.GET.get("path", ""))[2])
-        except Resolver404:
-            match = None
+        match = page_match(request.GET.get("path", ""))
         if match is not None and match.namespace == "web" and match.url_name in KINDS:
             insights.record_view(request, KINDS[match.url_name], view_key(match))
+            insights.mark_browser(request, KINDS[match.url_name], view_key(match))
+    elif event == "here" and not clicks.prefetching(request):
+        # The page's script reporting in once a page view (site.js): a browser, so a person, on this page now.
+        from .middleware import KINDS, view_key
+
+        found = page_match(request.GET.get("path", ""))
+        if found is not None and found.namespace == "web" and found.url_name in KINDS:
+            insights.mark_browser(request, KINDS[found.url_name], view_key(found))
+        else:
+            insights.mark_browser(request)
     response = HttpResponse(status=204)
     response["Cache-Control"] = "no-store"
     # A guide rendered ahead of a tap set no cookie when fetched: its reader is marked once it is shown.
     if match is not None and match.namespace == "web" and match.url_name in insights.GUIDE_READ_PAGES:
         insights.mark_guide_reader(request, response)
     return response
+
+
+def page_match(path):
+    """The resolved page an address on this site names, or None."""
+    from django.urls import Resolver404, resolve
+
+    try:
+        return resolve(urlsplit(path)[2])
+    except (Resolver404, ValueError):
+        return None
 
 
 def per_pack(cheapest, product):
@@ -2766,6 +2783,16 @@ def robots_txt(request):
         lines += [f"User-agent: {agent}", "Allow: /", *private, ""]
     lines += ["Sitemap: " + request.build_absolute_uri("/sitemap.xml")]
     return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")
+
+
+@require_GET
+def indexnow_key(request, key):
+    """The IndexNow key file (catalogue/indexnow.py): the search engines read it to check the pages sent are ours."""
+    from catalogue import indexnow
+
+    if key != indexnow.key():
+        raise Http404
+    return HttpResponse(key, content_type="text/plain; charset=utf-8")
 
 
 @require_GET

@@ -67,6 +67,8 @@ urlpatterns = [
     path("robots.txt", views.robots_txt, name="robots"),
     path("sitemap.xml", sitemap, {"sitemaps": SITEMAPS}, name="sitemap"),
     path("llms.txt", views.llms_txt, name="llms"),
+    # The IndexNow key file (catalogue/indexnow.py), after every other .txt address.
+    path("<str:key>.txt", views.indexnow_key, name="indexnow_key"),
     path("manifest.webmanifest", views.manifest, name="manifest"),
     path("feeds/deals.xml", DealsFeed(), name="feed_deals"),
     path("feeds/<slug:game_slug>.xml", DealsFeed(), name="feed_game"),

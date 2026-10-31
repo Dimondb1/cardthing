@@ -173,6 +173,8 @@
 
   <section class="details" aria-labelledby="details-title">
     <h2 id="details-title" class="section-title">{% copy "product.details.title" %}</h2>
+    {# The page's facts as plain sentences, which search engines and AI answers quote: only what the page already shows. #}
+    {% if cheapest %}<p class="details__summary">{% if cheapest.delivery_known %}{% copy "product.summary.cheapest" name=product.name price=cheapest.shown_price|gbp retailer=cheapest.retailer.name %}{% else %}{% copy "product.summary.cheapest_basket" name=product.name price=cheapest.shown_price|gbp retailer=cheapest.retailer.name %}{% endif %}{% if in_stock_count %} {% copy_count "product.summary.stock" in_stock_count %}{% endif %}{% if per_pack %} {% copy "product.summary.packs" packs=product.packs_inside each=per_pack|gbp %}{% endif %}</p>{% endif %}
     <dl class="details__list">
       <div><dt>{% copy "product.details.game" %}</dt><dd><a href="{{ product.game.get_absolute_url }}">{{ product.game.name }}</a></dd></div>
       {% if product.product_set %}<div><dt>{% copy "product.details.set" %}</dt><dd><a href="{{ product.product_set.get_absolute_url }}">{{ product.product_set.name }}</a>{% if product.product_set.code %} <span class="muted">({{ product.product_set.code }})</span>{% endif %}</dd></div>{% endif %}

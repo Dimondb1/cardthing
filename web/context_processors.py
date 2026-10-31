@@ -26,6 +26,8 @@ def site(request):
         # Amazon links carry our tag: Amazon's required statement goes on every page and beside its buttons.
         "amazon_associate": bool(settings.RIPRAPTOR_AMAZON_PARTNER_TAG),
         "ga_id": getattr(settings, "RIPRAPTOR_GA_ID", ""),
+        "google_verification": settings.RIPRAPTOR_GOOGLE_VERIFICATION,
+        "bing_verification": settings.RIPRAPTOR_BING_VERIFICATION,
         # No third-party script runs on these, even on a 404 for a mistyped one, and they pass on no address.
         "private_link": private,
         "trending_days": settings.RIPRAPTOR_TRENDING_DAYS,

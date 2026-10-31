@@ -192,6 +192,8 @@ systemctl reload caddy
 # at 4 past, on their own lock) never depend on the reader, the Claude judge looks every 5 minutes on its own lock and does nothing
 # until the owner saves a key and switches it on in Things to check, check_worker logs whether the reader is alive (and tells the owner,
 # at most once a day, when it has stopped or never starts), and backup_db keeps five nightly copies.
+# indexnow runs hourly at 25 past on its own lock: it sends the product pages that changed to Bing and the other
+# IndexNow search engines (catalogue/indexnow.py).
 # tidy_referrals runs hourly at 55 past on its own lock: it retries refer a friend address emails and deletes
 # details the offer no longer needs (see the Terms page).
 # warm_pages --due runs at 1 past the fives on its own lock: it builds the cached page lists again when an
@@ -227,6 +229,7 @@ echo "PYTHONUNBUFFERED=1
 40 0 * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd $DIR && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1
 55 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 flock -n /tmp/ripraptor-refer.lock .venv/bin/python manage.py tidy_referrals >> /var/log/ripraptor-import.log 2>&1
+25 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 300 flock -n /tmp/ripraptor-indexnow.lock .venv/bin/python manage.py indexnow >> /var/log/ripraptor-import.log 2>&1
 1-59/5 * * * * cd $DIR && set -a && . ./.env && set +a && timeout -k 30 240 flock -n /tmp/ripraptor-warm.lock .venv/bin/python manage.py warm_pages --due >> /var/log/ripraptor-import.log 2>&1" | crontab -u ripraptor -
 touch /var/log/ripraptor-import.log && chown ripraptor /var/log/ripraptor-import.log
 

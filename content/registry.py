@@ -1683,6 +1683,20 @@ ENTRIES = [
     Entry("product.details.set", T, "Detail: set", "Set", "Label in product details."),
     Entry("product.details.type", T, "Detail: product type", "Product type",
           "Label in product details."),
+    Entry("product.summary.cheapest", T, "Product summary: cheapest",
+          "The cheapest {name} we found right now is {price} delivered at {retailer}.",
+          "First sentence under Product details: the product's facts as plain sentences, which search engines and AI "
+          "answers quote. Only what the page already shows.", placeholders=("name", "price", "retailer")),
+    Entry("product.summary.cheapest_basket", T, "Product summary: cheapest, delivery not known",
+          "The cheapest {name} we found right now is {price} plus delivery at {retailer}.",
+          "The same, when the cheapest shop's delivery charge is not known.", placeholders=("name", "price", "retailer")),
+    Entry("product.summary.stock.one", T, "Product summary: one shop in stock", "1 UK shop has it in stock.",
+          "After the cheapest sentence under Product details."),
+    Entry("product.summary.stock.other", T, "Product summary: shops in stock", "{count} UK shops have it in stock.",
+          "After the cheapest sentence under Product details.", placeholders=("count",)),
+    Entry("product.summary.packs", T, "Product summary: packs", "It holds {packs} packs, {each} a pack.",
+          "After the stock sentence under Product details, when the number of packs is known.",
+          placeholders=("packs", "each")),
     Entry("product.details.inside", T, "Detail: what is inside", "Inside",
           "Label in product details, when the number of packs or of cards a pack is known."),
     Entry("product.details.packs", T, "Inside: packs", "{packs} packs", "Product details.", placeholders=("packs",)),
@@ -2660,7 +2674,10 @@ ENTRIES = [
         "products you view, games you browse and searches you make are kept in your browser, not "
         "by us, and you can clear them from the home page. Your browser uses them to put your games "
         "first on the home page, without telling us. Our own count of clicks to retailers "
-        "does not record who clicked. One small cookie of ours remembers only that your browser "
+        "does not record who clicked. We count visits to our pages under a code made from your connection and "
+        "browser that changes every day and cannot be traced back to you, with your country, the kind of device "
+        "and the site that sent you. Each page also tells our server once, with only its own address, that your "
+        "browser showed it, so we can tell people from automated visits. One small cookie of ours remembers only that your browser "
         "has visited before, so we can count returning visitors, and another only that it has read one of our "
         "guides, so we can count readers who come back. Each holds nothing about you.\n\n"
         "If you ask to be emailed when a product is back in stock, or with Track price when it is "
@@ -3327,7 +3344,27 @@ ENTRIES = [
     Entry("dashboard.kpi.so_far", T, "Dashboard nothing to compare", "So far, to {clock}. No earlier day to set it against yet.",
           "Under a figure for today when there is nothing to compare it with.", placeholders=("clock",)),
     Entry("dashboard.kpi.burst", T, "Dashboard automated today", "Today looks automated, so this is not all people.",
-          "Under the people figure when today is a burst."),
+          "Under the people figure when today is a burst. Only before pages reported in (31 Oct 2026): since then "
+          "people are counted by their browser and no day is a burst."),
+    Entry("dashboard.kpi.people_note", T, "Dashboard people today, counted by browser",
+          "So far, to {clock}. {automated} automated visits left out.",
+          "Under the people figure while there is no earlier day to set today against: people are visitors whose "
+          "browser opened a page; the rest (scanners, scripts) are counted apart.", placeholders=("clock", "automated")),
+    Entry("dashboard.kpi.now", T, "Dashboard on the site now", "On the site now",
+          "First figure on the dashboard: people whose browser opened a page in the last few minutes."),
+    Entry("dashboard.kpi.now_note", T, "Dashboard on the site now note", "Opened a page in the last {minutes} minutes.",
+          "Under the on the site now figure.", placeholders=("minutes",)),
+    Entry("dashboard.now.title", H, "Dashboard on the site now heading", "On the site now",
+          "Heading of the card listing the pages people are on now."),
+    Entry("dashboard.now.intro", T, "Dashboard on the site now text",
+          "People whose browser opened a page in the last {minutes} minutes, by the page they are on. Refresh to update.",
+          "Under the on the site now heading.", placeholders=("minutes",)),
+    Entry("dashboard.now.none", T, "Dashboard nobody on now", "Nobody in the last {minutes} minutes.",
+          "In the on the site now card when nobody has opened a page lately.", placeholders=("minutes",)),
+    Entry("dashboard.now.more", T, "Dashboard more pages now", "And others on other pages.",
+          "Under the list when people are on more pages than it shows."),
+    Entry("dashboard.now.other", T, "Dashboard other pages", "Other pages",
+          "For people on a page that is not counted by name (an alert link, the dashboard)."),
     Entry("dashboard.kpi.checks_none", T, "Dashboard nothing to check", "Nothing waiting for you.",
           "Under the things to check figure when it is nought."),
     Entry("dashboard.kpi.checks_lists.one", T, "Dashboard waiting in one list", "Waiting in 1 list.",
@@ -3351,6 +3388,9 @@ ENTRIES = [
           "Under the visitors chart.", placeholders=("day", "count")),
     Entry("dashboard.visitors.bursts", T, "Dashboard burst days", "Grey bars look automated and are left out of the totals: {names}.",
           "Under the visitors chart when the week has burst days.", placeholders=("names",)),
+    Entry("dashboard.visitors.browsers", T, "Dashboard people by browser",
+          "From {date}, people are visitors whose browser opened a page. {automated} automated visits this week are left out.",
+          "Under the visitors chart from the week pages started reporting in.", placeholders=("date", "automated")),
     Entry("dashboard.visitors.sources", H, "Dashboard where from heading", "Where people came from",
           "Heading of the list of sources in the visitors part."),
     Entry("dashboard.visitors.more", B, "Dashboard visitors link", "See more on Insights",

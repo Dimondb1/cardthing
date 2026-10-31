@@ -1750,6 +1750,12 @@ class DailyVisitor(models.Model):
     # example "product:prismatic-evolutions-etb", "game:pokemon" or "home". Neither says who they are.
     first_seen = models.DateTimeField(null=True, blank=True)
     landing = models.CharField(max_length=120, blank=True)
+    # Their browser ran the page's own script (site.js reports in once a page view, from 31 Oct 2026). Scanners and
+    # scripts that only fetch pages never do, so from then on these are the people the dashboard counts. With it,
+    # when they last opened a page and which (kind and slug, as ``landing``), for the dashboard's On the site now.
+    browser = models.BooleanField(default=False)
+    last_seen = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_page = models.CharField(max_length=120, blank=True)
 
     class Meta:
         unique_together = [("date", "token")]

@@ -186,6 +186,21 @@ def record_visitor(request, kind="", key=""):
         return False
 
 
+def mark_browser(request, kind="", key=""):
+    """The page's own script reported in (site.js): this visitor's browser runs pages, so they count as a person, and
+    the page they are on is kept for the dashboard's On the site now. Only today's row of a visitor already counted
+    is changed: a report never makes a visitor, and a bot's never makes one a person."""
+    if is_bot(request):
+        return
+    day = timezone.localdate()
+    seen = DailyVisitor.objects.filter(date=day, token=visitor_token(request, day))
+    changes = {"browser": True, "last_seen": timezone.now()}
+    if kind:
+        changes["last_page"] = landing_of(kind, key)
+    with drop_if_locked("Browser"):
+        retry_locked(lambda: seen.update(**changes))
+
+
 def record_view(request, kind, key=""):
     if request.method == "GET" and not is_bot(request):
         # The first count that finds the database locked ends counting for this page, so a visitor

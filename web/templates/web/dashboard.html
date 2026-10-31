@@ -24,10 +24,15 @@
 <section class="dash-kpis" aria-labelledby="kpi-title">
   <h2 id="kpi-title" class="visually-hidden">{% copy "dashboard.kpi.title" %}</h2>
   <ul class="dash-kpis__list">
+    <li><a class="kpi" href="#now">
+      <span class="kpi__label">{% copy "dashboard.kpi.now" %}</span>
+      <span class="kpi__row"><span class="kpi__value">{{ now_on.people|number }}</span></span>
+      <span class="kpi__note">{% copy "dashboard.kpi.now_note" minutes=now_on.minutes %}</span>
+    </a></li>
     <li><a class="kpi" href="#visitors">
       <span class="kpi__label">{% copy "dashboard.kpi.people" %}</span>
       <span class="kpi__row"><span class="kpi__value">{{ traffic.today.people|number }}</span>{% if not traffic.today.burst %}{% include "web/includes/dash_change.html" with change=traffic.today.people_change %}{% endif %}</span>
-      <span class="kpi__note">{% if traffic.today.burst %}{% copy "dashboard.kpi.burst" %}{% elif traffic.today.basis %}{% copy "dashboard.kpi.against" then=traffic.today.then|number basis=traffic.today.basis %}{% else %}{% copy "dashboard.kpi.so_far" clock=traffic.today.until %}{% endif %}</span>
+      <span class="kpi__note">{% if traffic.today.burst %}{% copy "dashboard.kpi.burst" %}{% elif traffic.today.basis %}{% copy "dashboard.kpi.against" then=traffic.today.then|number basis=traffic.today.basis %}{% elif traffic.today.by_browser %}{% copy "dashboard.kpi.people_note" clock=traffic.today.until automated=traffic.today.automated|number %}{% else %}{% copy "dashboard.kpi.so_far" clock=traffic.today.until %}{% endif %}</span>
     </a></li>
     <li><a class="kpi" href="#clicks">
       <span class="kpi__label">{% copy "dashboard.kpi.clicks" %}</span>
@@ -48,6 +53,17 @@
 </section>
 
 <div class="dash-grid">
+  {# Who is on the site now (dashboard.now_section): built fresh on every load, never cached. #}
+  <section class="dash-card" id="now" aria-labelledby="now-title">
+    <h2 id="now-title" class="dash-card__title">{% copy "dashboard.now.title" %}</h2>
+    <p class="dash-card__intro">{% copy "dashboard.now.intro" minutes=now_on.minutes %}</p>
+    {% if now_on.people %}
+    <ul class="dash-rows">{% for page in now_on.pages %}
+      <li class="dash-rows__row"><span class="dash-rows__name">{% if page.url %}<a href="{{ page.url }}">{{ page.name }}</a>{% else %}{{ page.name }}{% endif %}</span><span class="dash-rows__count">{{ page.people|number }}</span>{% if page.kind %}<span class="dash-rows__detail">{{ page.kind }}</span>{% endif %}</li>{% endfor %}
+    </ul>
+    {% if now_on.more %}<p class="dash-card__line">{% copy "dashboard.now.more" %}</p>{% endif %}
+    {% else %}<p class="dash-card__line">{% copy "dashboard.now.none" minutes=now_on.minutes %}</p>{% endif %}
+  </section>
   {# What clicks to shops earn (dashboard.money_section): five rates for the whole site, what people press, and each game and shop. #}
   <section class="dash-card dash-card--wide" id="money" aria-labelledby="money-title">
     <h2 id="money-title" class="dash-card__title">{% copy "dashboard.money.title" days=money.days %}</h2>
@@ -108,7 +124,7 @@
         <line class="dash-chart__base" x1="0" x2="100%" y1="100%" y2="100%"/>
       </svg>
       <ol class="dash-chart__days" aria-hidden="true">{% for day in traffic.days %}<li>{{ day.date|date:"D" }}{% if day.today %}<span class="dash-chart__tag">{{ so_far }}</span>{% elif day.burst %}<span class="dash-chart__tag">{{ burst_word }}</span>{% endif %}</li>{% endfor %}</ol>
-      <figcaption class="dash-chart__summary">{% if traffic.best %}{% copy "dashboard.visitors.best" day=traffic.best.date|date:"D j M" count=traffic.best.people|number %}{% endif %}{% if traffic.bursts %} {% copy "dashboard.visitors.bursts" names=traffic.bursts|join_dates %}{% endif %}</figcaption>
+      <figcaption class="dash-chart__summary">{% if traffic.best %}{% copy "dashboard.visitors.best" day=traffic.best.date|date:"D j M" count=traffic.best.people|number %}{% endif %}{% if traffic.bursts %} {% copy "dashboard.visitors.bursts" names=traffic.bursts|join_dates %}{% endif %}{% if traffic.browser_since %} {% copy "dashboard.visitors.browsers" date=traffic.browser_since|date:"j M" automated=traffic.automated|number %}{% endif %}</figcaption>
     </figure>
     <details class="dash-table">
       <summary>{% copy "dashboard.table" %}</summary>

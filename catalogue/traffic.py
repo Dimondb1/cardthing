@@ -10,9 +10,11 @@ thousand pages, or four thousand addresses that each open one page and never cli
   these comparisons, and the result says when the history starts.
 * Yesterday as a whole day against the average of the previous four of the same weekday, or, with fewer than
   two of those, the seven days before.
-* Burst days (pages per visitor or visitors per click far outside the normal range, or a few visitors opening
-  most of the pages) are flagged and left out of every average. Visitors at the daily views cap are scripts
-  and never counted as people.
+* From the first day a page's script reported in (site.js, 31 Oct 2026), people are the visitors whose browser ran
+  the page (DailyVisitor.browser): scanners and scripts that only fetch pages never do, so those days are never
+  bursts, and comparisons start that day. Before it, burst days (pages per visitor or visitors per click far
+  outside the normal range, or a few visitors opening most of the pages) are flagged and left out of every
+  average. Visitors at the daily views cap are scripts and never counted as people.
 * The change in people is broken down by source, landing page, device, country and new or returning, and a
   driver is named only when it is big and out of proportion to the rest.
 * Health: hours with no visitors, hours of visitors with no clicks, clicks per visitor falling, shop reads
@@ -154,6 +156,11 @@ def start_of(day):
     return timezone.make_aware(datetime.combine(day, datetime.min.time()))
 
 
+def people_q(browser_since):
+    """The visitors who count as people: from ``browser_since`` on, those whose browser ran the page; before it, all."""
+    return Q(date__lt=browser_since) | Q(browser=True) if browser_since else Q()
+
+
 def explain(now=None, store=None):
     """Why traffic is doing what it is doing, as data and plain sentences for the Insights page.
 
@@ -183,6 +190,9 @@ def explain(now=None, store=None):
             people_pages=Sum("views", filter=Q(views__lt=cap)),
             heavy=Count("id", filter=heavy_q), heavy_pages=Sum("views", filter=heavy_q),
             timed=Count("first_seen"), landed=Count("id", filter=~Q(landing="")),
+            # Before ``returning``, whose name then stands for the count rather than the field.
+            browsers_returning=Count("id", filter=Q(browser=True, returning=True, views__lt=cap)),
+            browsers=Count("id", filter=Q(browser=True, views__lt=cap)),
             returning=Count("id", filter=Q(returning=True, views__lt=cap)),
         ).order_by("date")
     ):
@@ -200,23 +210,36 @@ def explain(now=None, store=None):
         .values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n")
     )
     empty = {"visitors": 0, "scripts": 0, "own_pages": 0, "people_pages": 0, "heavy": 0, "heavy_views": 0,
-             "timed": 0, "landed": 0, "returning": 0}
+             "timed": 0, "landed": 0, "returning": 0, "browsers": 0, "browsers_returning": 0}
     for offset in range(WINDOW_DAYS + 1):
         day = since + timedelta(days=offset)
         row = days.setdefault(day, {"date": day, **empty})
         row["views"] = (row.pop("own_pages") or 0) if day == today else pages_by_day.get(day, 0)
         row["clicks"] = clicks_by_day.get(day, 0)
         row["people"] = row["visitors"] - row["scripts"]
+        row["by_browser"] = False
         row["timed_fully"] = row["visitors"] > 0 and row["timed"] == row["visitors"]
-        row["clicks_doubtful"] = row["people"] >= MIN_DAY_VISITORS and row["clicks"] > CLICKS_PER_PERSON_MAX * row["people"]
         row["burst"] = False
 
+    # From the first day a page's script reported in (site.js, from 31 Oct 2026), people are the visitors whose browser
+    # ran the page: scanners and scripts that only fetch pages never do, so those days need no guessing at bursts,
+    # and the rest of the day's visitors are automated. Comparisons start then too, so like is set against like.
+    browser_since = next((d for d in sorted(days) if days[d]["browsers"]), None)
+    for day, row in days.items():
+        if browser_since and day >= browser_since:
+            row["people"], row["returning"], row["by_browser"] = row["browsers"], row["browsers_returning"], True
+        row["automated"] = row["visitors"] - row["people"]
+        row["clicks_doubtful"] = row["people"] >= MIN_DAY_VISITORS and row["clicks"] > CLICKS_PER_PERSON_MAX * row["people"]
+
     counting_since = next((d for d in sorted(days) if days[d]["visitors"] >= MIN_DAY_VISITORS), None)
+    if counting_since and browser_since:
+        counting_since = max(counting_since, browser_since)
     timed_since = next((d for d in sorted(days) if days[d]["timed"]), None)
     if counting_since is None:
         return {"enough": False, "headline": say("insights.why.too_little"), "findings": [], "health": [],
                 "bursts": [], "burst_dates": set(), "comparisons": [], "today": today, "now": local_now,
-                "history": {"counting_since": None, "timed_since": timed_since}, "days": days}
+                "history": {"counting_since": None, "timed_since": timed_since, "browser_since": browser_since},
+                "days": days}
 
     # 2. Bursts, judged against the median and spread of the whole days counted so far.
     whole = [days[d] for d in sorted(days) if counting_since <= d < today and days[d]["visitors"] >= MIN_DAY_VISITORS]
@@ -229,7 +252,7 @@ def explain(now=None, store=None):
         )
     bursts = []
     for day in sorted(days):
-        reasons = burst_reasons(days[day], stats)
+        reasons = [] if days[day]["by_browser"] else burst_reasons(days[day], stats)
         days[day]["burst"] = bool(reasons)
         if reasons:
             bursts.append({
@@ -285,7 +308,7 @@ def explain(now=None, store=None):
     tday = days[today]
     last_week = today - timedelta(days=7)
     cut_week, cut_yesterday = at_same_time(last_week, local_now), at_same_time(yesterday, local_now)
-    so_far = DailyVisitor.objects.filter(date__in=[today, yesterday, last_week], views__lt=cap).aggregate(
+    so_far = DailyVisitor.objects.filter(people_q(browser_since), date__in=[today, yesterday, last_week], views__lt=cap).aggregate(
         today=Count("id", filter=Q(date=today, first_seen__lte=now)),
         week=Count("id", filter=Q(date=last_week, first_seen__lte=cut_week)),
         yesterday=Count("id", filter=Q(date=yesterday, first_seen__lte=cut_yesterday)),
@@ -339,7 +362,7 @@ def explain(now=None, store=None):
     for weight, cmp in ((70, today_cmp if references else None), (60, yesterday_cmp)):
         if cmp is None:
             continue
-        cmp["drivers"] = attribute(cmp)
+        cmp["drivers"] = attribute({**cmp, "browser_since": browser_since})
         now_n, then_n = cmp["now"], cmp["then"]
         if cmp["burst"]:
             reason = next(b["reasons"][0] for b in bursts if b["date"] == (today if cmp is today_cmp else yesterday))
@@ -418,7 +441,7 @@ def explain(now=None, store=None):
         "healthy": healthy if not health else "",
         "checked": checked,
         "history": {
-            "counting_since": counting_since, "timed_since": timed_since,
+            "counting_since": counting_since, "timed_since": timed_since, "browser_since": browser_since,
             "days_counted": (today - counting_since).days, "whole_days_judged": len(whole),
             "first_full_day": first_full, "same_time_from": same_time_from,
         },
@@ -454,7 +477,8 @@ def attribute(cmp):
     Two aggregate queries: one grouped by source, device, country and new or returning, one by landing page."""
     period_q, base_q, base_count = cmp["period_q"], cmp["base_q"], cmp["base_count"]
     # The period is one day and the baseline other days, so the date says which side a row is on.
-    people = DailyVisitor.objects.filter(period_q | base_q, views__lt=VIEWS_PER_VISITOR_CAP).order_by()
+    people = DailyVisitor.objects.filter(people_q(cmp.get("browser_since")), period_q | base_q,
+                                         views__lt=VIEWS_PER_VISITOR_CAP).order_by()
     period_day = cmp["period_day"]
     totals = {dim: {} for dim, _ in DIMENSIONS}
     hosts = {}

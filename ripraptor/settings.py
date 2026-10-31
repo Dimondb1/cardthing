@@ -265,6 +265,16 @@ RIPRAPTOR_GEOIP_DB = os.environ.get("RIPRAPTOR_GEOIP_DB", "").strip()
 # through Awin shops are tracked. Empty means no Awin script.
 RIPRAPTOR_AWIN_PUBLISHER_ID = os.environ.get("RIPRAPTOR_AWIN_PUBLISHER_ID", "3111686").strip()
 
+# Search engines' proof that the site is the owner's, as the meta tag each one gives: the content of Google Search
+# Console's "HTML tag" and Bing Webmaster Tools' one. Empty means no tag. Bing can also import the site from Search
+# Console, which needs no tag of its own.
+RIPRAPTOR_GOOGLE_VERIFICATION = os.environ.get("RIPRAPTOR_GOOGLE_VERIFICATION", "").strip()
+RIPRAPTOR_BING_VERIFICATION = os.environ.get("RIPRAPTOR_BING_VERIFICATION", "").strip()
+
+# Each hour, the product pages that changed are sent to IndexNow (Bing and the engines that share it), so they are
+# found within the hour (catalogue/indexnow.py). Off on a development machine unless set, and in tests.
+RIPRAPTOR_INDEXNOW = env_bool("RIPRAPTOR_INDEXNOW", default=not DEBUG) and not TESTING
+
 # Google Analytics 4 measurement id (G-...). Google's tag loads only after a visitor allows analytics on the
 # card, and never on pages whose address is a private link. Empty means no card and no Google script. Off
 # on a development machine (DJANGO_DEBUG on) unless set, so testing never counts as a visit. The owner's

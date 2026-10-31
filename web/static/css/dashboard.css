@@ -24,6 +24,7 @@
    on a row line up whatever wraps above them. */
 .dash-kpis__list { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .dash-kpis__list > li { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 0; }
+.dash-kpis__list > li:first-child { grid-column: 1 / -1; }   /* On the site now: its own row, above today's four */
 .kpi {
   display: grid; grid-row: span 3; grid-template-rows: subgrid; align-content: start; gap: var(--space-1); padding: var(--card-pad);
   border: var(--border-width) solid var(--color-brand-line); border-radius: var(--radius-card);

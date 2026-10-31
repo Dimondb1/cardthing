@@ -2601,6 +2601,9 @@ index.
 | `RIPRAPTOR_CRAWL_PUSHES`       | on      | Tell you about crawl problems by push and email: the background reader stopped, a shop has failed every read for a day, or more than 10 doubtful prices are waiting as the cheapest price of their product. Each at most once a day. `RIPRAPTOR_CRAWL_PUSHES=0` turns them off; new messages are still sent. |
 | `RIPRAPTOR_ADSENSE_CLIENT`     |         | Google AdSense publisher id (`ca-pub-...`). Empty means no adverts and no Google script. Pages marked noindex never carry it. |
 | `RIPRAPTOR_TWO_STEP`           | on on the server; off with `DJANGO_DEBUG` on | Admin and the dashboard take an authenticator app's code as well as the password (see "Admin sign-in security"). `0` switches it off. |
+| `RIPRAPTOR_GOOGLE_VERIFICATION` |       | The content of Google Search Console's HTML tag. Empty means no tag. |
+| `RIPRAPTOR_BING_VERIFICATION`  |         | The content of Bing Webmaster Tools' HTML tag (`msvalidate.01`). Empty means no tag. |
+| `RIPRAPTOR_INDEXNOW`           | on on the server; off with `DJANGO_DEBUG` on | Each hour, send the product pages that changed to IndexNow (Bing and others). `0` stops it. |
 | `RIPRAPTOR_GA_ID`              | `G-TZW5ZVM9H8` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |
 
 ## Games
@@ -4680,6 +4683,34 @@ after a year, when they go back to a plain 404. Changing a product's
 address in Django Admin keeps the old one as an old address, so it
 redirects.
 
+## Being found by search engines and AI answers
+
+The sitemap, Product structured data, `llms.txt` and a robots.txt that lets
+the AI search crawlers in by name were already in place. Added 31 Oct 2026
+(the owner: RipRaptor lists poorly in Google and ChatGPT):
+
+- **Proof of ownership.** `RIPRAPTOR_GOOGLE_VERIFICATION` and
+  `RIPRAPTOR_BING_VERIFICATION` put each engine's meta tag on every page, so
+  Google Search Console and Bing Webmaster Tools can be set up with their
+  "HTML tag" method. Bing can also import the site from Search Console.
+- **IndexNow** (`catalogue/indexnow.py`): each hour at 25 past
+  (`manage.py indexnow`, on its own lock) the product pages the sitemap lists
+  whose details, set or shops' prices, delivery or stock changed since the
+  last run are sent to IndexNow, which Bing, Yandex, Seznam and Naver share.
+  Bing's index is one of the main sources ChatGPT's search and Copilot answer
+  from. The key is a hash of the secret key, served at `/<key>.txt`; nothing
+  needs setting up. A refused submission is sent again the next hour.
+  `RIPRAPTOR_INDEXNOW=0` stops it; it is off on a development machine.
+- **The facts as sentences.** Product details opens with a plain summary:
+  "The cheapest Surging Sparks Booster Box we found right now is £87.00
+  delivered at Harbour Games. 2 UK shops have it in stock. It holds 36 packs,
+  £2.42 a pack." Search engines and AI answers quote sentences like these;
+  every figure is one the page already shows (`product.summary.*`).
+
+What moves a young site most is outside the code: links from other sites (the
+badge for shops, posts where collectors talk), Search Console and Bing
+Webmaster Tools with the sitemap submitted, and time.
+
 ## Dashboard
 
 `/dashboard/` is the owner's page for a phone: how the site is doing, in the
@@ -4687,9 +4718,30 @@ site's own look (header, cards with the soft orange border, green for good,
 red for bad). The admin home and Insights link to it. It is for staff only:
 anyone else is sent to the admin sign-in. Top to bottom:
 
+- **On the site now:** the people whose browser opened a page in the last
+  5 minutes, on a row of its own above the rest, and a card listing the
+  pages they are on (products by name, linked), most people first. Built
+  fresh on every load (`now_section`), never cached.
 - **Today at a glance:** people today so far against the same time last
   week (or yesterday), clicks to shops from people today, rows waiting on
   Things to check, and Claude's spend this month against its limit.
+
+**Who counts as a person.** Until 31 Oct 2026 every visitor the server saw
+counted, less those over the daily page cap, and days that looked automated
+were flagged as bursts; bots and scanners came every day, so most days said
+"Today looks automated, so this is not all people" (the owner: "every day it
+just says not accurate"). Now each page's script reports in once when the
+page is shown (`site.js`, `/api/note/?what=here` with only the page's
+address), which marks that day's visitor as a browser
+(`DailyVisitor.browser`) and keeps the page and time for On the site now
+(`last_page`, `last_seen`). Scanners and scripts that only fetch pages never
+run it. From the first day with reports, people are those visitors
+(`traffic.people_q`), no day is a burst, the rest are counted as automated
+("So far, to 13:13. 212 automated visits left out."), and comparisons with
+earlier days start then, so like is set against like; days before keep the
+old count. A report never creates a visitor, and a known bot's is ignored.
+Without JavaScript a visitor is not counted as a person, which leaves out
+very few real people. The Terms page's data section says so.
 - **Price check coverage** (`prices_section`): of the products with a
   price now, the share showing the Price check, the share whose check uses
   Cardmarket's price and the share using our own record, then each game,

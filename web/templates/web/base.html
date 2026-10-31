@@ -19,6 +19,8 @@
   <meta name="theme-color" content="#ffffff">
   <!-- Awin publisher verification: RipRaptor -->
   <meta name="impact-site-verification" value="fb2ca9a2-0f96-46ce-b287-b35517e23ca5">
+  {% if google_verification %}<meta name="google-site-verification" content="{{ google_verification }}">{% endif %}
+  {% if bing_verification %}<meta name="msvalidate.01" content="{{ bing_verification }}">{% endif %}
   <link rel="icon" href="{% static 'img/favicon.png' %}" type="image/png">
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
   <link rel="manifest" href="{% url 'web:manifest' %}">

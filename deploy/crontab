@@ -36,4 +36,5 @@ PYTHONUNBUFFERED=1
 40 0 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1
 55 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 600 flock -n /tmp/ripraptor-refer.lock .venv/bin/python manage.py tidy_referrals >> /var/log/ripraptor-import.log 2>&1
+25 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 300 flock -n /tmp/ripraptor-indexnow.lock .venv/bin/python manage.py indexnow >> /var/log/ripraptor-import.log 2>&1
 1-59/5 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 240 flock -n /tmp/ripraptor-warm.lock .venv/bin/python manage.py warm_pages --due >> /var/log/ripraptor-import.log 2>&1

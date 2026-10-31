@@ -2897,6 +2897,24 @@ numbered steps to be ready:
    stock (to the set's page).
 4. **Know the fair price**: the set's page with every product's price.
 
+The panel is a details element whose summary is its bar: the game and "The
+next big drop" beside Hide while open, and once folded a slim dark bar with
+the set's first box, its name, its day and Show. It folds without
+JavaScript too. With it, a panel hidden on a device stays folded there on
+every visit until it is shown again, and once every alert is asked for the
+panel folds by itself (after the form's "check your inbox" shows for a
+moment) and its bar says "Check your inbox to confirm", then "Alerts set"
+on later visits (`spotlight_state.js`, inlined after the panel so it folds
+before it is painted). The heading uses the set's own name without its
+series: "Mega Evolution—Delta Reign" is "Delta Reign" (`spotlight_name`),
+so it is short and carries no dash. The pictures take one box of each kind
+first, so three Elite Trainer Boxes do not crowd out the booster box.
+
+Under the home page's search, **jump buttons** (Games, Deals, Drops,
+Product types, each only when its section is on the page) take a first
+visit straight to the sections the spotlight can push below a phone's
+screen.
+
 Every step works without JavaScript. With it (`web/static/js/spotlight.js`)
 the steps done on this device are ticked and counted ("2 of 4 done", then
 "You are ready for Delta Reign."), kept in that browser's storage as step

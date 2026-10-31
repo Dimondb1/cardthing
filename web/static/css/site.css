@@ -393,6 +393,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @media (min-width: 48rem) {
   .hero { padding: var(--space-4) 0 0; text-align: center; }
   .hero__title, .hero__subtitle, .hero__search, .hero .live { margin-inline: auto; }
+  .jump__list { justify-content: center; }
   .hero__subtitle { font-size: var(--text-lg); }
   .masthead--home .wordmark__img { height: var(--masthead-logo-home-wide); }
 }
@@ -498,13 +499,40 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .poster--watch .poster__title { font-size: var(--text-poster-sm); }
 .poster--watch .poster__text { font-size: var(--text-base); }
 .poster--watch .poster__mark { --mark-size: var(--mark-poster-sm); left: -20%; color: var(--color-brand); }
+/* Jump buttons under the home page's search: one tap to each section further down, for a first visit that would not
+   know they are there. Plain links to the sections' headings. */
+.jump { margin-top: var(--space-4); }
+.jump__list { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.jump .chip { scroll-snap-align: none; }
+.home-section .section-head__title { scroll-margin-top: var(--space-5); }   /* a jump lands with room above the heading */
+
 /* The drop spotlight (home page, views.drop_spotlight), the owner's poster style for the next big drop: the set's
    boxes fanned out over its name, day and countdown, in paper capitals on ink, and beside them the steps to be ready,
    each on a paper card so its form and buttons are the site's own. */
-.spotlight__panel {
-  display: grid; gap: var(--space-5); padding: var(--poster-pad); border-radius: var(--radius-card);
-  background: var(--color-ink); color: var(--color-paper);
+.spotlight__panel { padding: var(--poster-pad); border-radius: var(--radius-card); background: var(--color-ink); color: var(--color-paper); }
+.spotlight__body { display: grid; gap: var(--space-5); margin-top: var(--space-3); }
+/* Its bar: the game and "The next big drop" beside Hide while open; folded, the set's first box, its name and day,
+   and Show. The whole bar is the button. */
+.spotlight__bar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--tap);
+  list-style: none; cursor: pointer;
 }
+.spotlight__bar::-webkit-details-marker { display: none; }
+.spotlight__bar:focus-visible { outline: var(--focus-ring) solid var(--color-paper); outline-offset: var(--focus-gap); border-radius: var(--radius-sm); }   /* paper: the ink focus colour is the panel's own */
+.spotlight__panel[open] .spotlight__closed-only, .spotlight__panel:not([open]) .spotlight__open-only { display: none; }
+.spotlight__panel:not([open]) { padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2); }
+.spotlight__toggle {
+  flex: none; display: inline-flex; align-items: center; padding: var(--space-1) var(--space-4);
+  border: 1.5px solid var(--color-on-ink-soft); border-radius: var(--radius-pill); font-size: var(--text-sm); font-weight: var(--weight-strong);
+}
+@media (hover: hover) { .spotlight__bar:hover .spotlight__toggle { border-color: var(--color-on-ink-muted); } }
+.spotlight__mini { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.spotlight__thumb { flex: none; width: var(--spotlight-thumb); padding: var(--space-1); border-radius: var(--radius-sm); background: var(--color-paper); }
+.spotlight__thumb .product-image { display: block; position: relative; width: 100%; aspect-ratio: 1; }
+.spotlight__thumb .product-image img { position: absolute; inset: 0; }
+.spotlight__mini-text { min-width: 0; font-size: var(--text-sm); line-height: var(--leading-snug); color: var(--color-on-ink-muted); }
+.spotlight__mini-name { color: var(--color-paper); font-weight: var(--weight-heading); }
+.spotlight__mini-done { color: var(--color-paper); }
 .spotlight__head { display: grid; gap: var(--space-3); justify-items: center; align-content: start; text-align: center; min-width: 0; }
 .spotlight__intro { display: grid; gap: var(--space-2); justify-items: center; min-width: 0; }
 .spotlight__art { display: flex; justify-content: center; padding: var(--space-2) var(--spotlight-overlap) var(--space-4); text-decoration: none; }
@@ -520,7 +548,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .spotlight__pic:nth-child(2) { --tilt: calc(var(--spotlight-tilt) * -0.5); }
 .spotlight__pic:nth-child(3) { --tilt: calc(var(--spotlight-tilt) * 0.5); }
 .spotlight__pic:nth-child(4) { --tilt: calc(var(--spotlight-tilt) * 2); --arc: var(--space-2); }
-.spotlight__eyebrow { font-size: var(--text-sm); font-weight: var(--weight-heading); text-transform: uppercase; color: var(--color-brand); }
+.spotlight__eyebrow { min-width: 0; font-size: var(--text-sm); font-weight: var(--weight-heading); text-transform: uppercase; color: var(--color-brand); }
 .spotlight__title { font-size: var(--text-poster-sm); font-weight: var(--weight-poster); line-height: var(--leading-poster); text-transform: uppercase; text-wrap: balance; }
 .spotlight__accent { display: block; color: var(--color-brand); }
 .spotlight__when { font-weight: var(--weight-strong); }
@@ -556,7 +584,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 }
 /* Side by side once there is room: the drop on the left, its steps on the right. */
 @media (min-width: 60rem) {
-  .spotlight__panel { grid-template-columns: minmax(0, var(--split-minor)) minmax(0, var(--split-minor)); align-items: start; gap: var(--space-6); }
+  .spotlight__body { grid-template-columns: minmax(0, var(--split-minor)) minmax(0, var(--split-minor)); align-items: start; gap: var(--space-6); }
   .spotlight__head, .spotlight__intro { justify-items: start; text-align: left; }
   .spotlight__art { justify-content: flex-start; padding-left: calc(var(--spotlight-overlap) / 2); }
 }

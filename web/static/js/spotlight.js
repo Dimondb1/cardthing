@@ -2,6 +2,7 @@
 // this file every step works and none is ticked. With it, each step done on this device is ticked and counted, kept
 // in this browser alone (the step names, nothing else), so a visitor who comes back sees what is left to do.
 (() => {
+  const FOLD_AFTER = 1800;   // ms the sign-up's own "check your inbox" shows before the panel folds
   const list = document.querySelector("[data-prep]");
   const progress = document.querySelector("[data-prep-progress]");
   if (!list || !progress) return;
@@ -46,6 +47,34 @@
     const link = event.target.closest("[data-prep-link]");
     if (link) mark(link.closest("[data-step]").dataset.step);
   });
-  list.addEventListener("drop-remind:sent", () => mark("alerts"));
+
+  // The panel folds to a slim bar with its own Hide and Show (a details element, so it folds without script too).
+  // Here the choice is kept for next time, and setting the alerts folds it: the visitor is done with it.
+  const panel = document.querySelector("[data-spotlight-panel]");
+  const remember = () => {
+    try {
+      localStorage.setItem(`rr-spotlight:${panel.dataset.set}`, panel.open ? "open" : "closed");
+    } catch {
+      // Kept for this visit only.
+    }
+  };
+  if (panel) panel.addEventListener("toggle", remember);
+
+  list.addEventListener("drop-remind:sent", () => {
+    mark("alerts");
+    if (!panel) return;
+    panel.querySelector("[data-spotlight-alerted]").hidden = true;
+    panel.querySelector("[data-spotlight-confirm]").hidden = false;
+    // State: the form's "check your inbox" shows for a moment, then the panel folds to its bar, which says the same,
+    // and the bar takes the focus so nobody is left on a form that has gone.
+    setTimeout(() => {
+      const inside = panel.contains(document.activeElement);
+      panel.open = false;
+      remember();
+      const bar = panel.querySelector("summary");
+      bar.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      if (inside) bar.focus({ preventScroll: true });
+    }, FOLD_AFTER);
+  });
   draw();
 })();

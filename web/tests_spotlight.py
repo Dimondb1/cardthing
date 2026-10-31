@@ -67,7 +67,8 @@ class SpotlightTests(TestCase):
         self.assertIn("Out in 6 days", html)
         self.assertIn('data-countdown="', html)
         # The boxes with a picture, the Elite Trainer Box first; the blister has none.
-        pictures = re.findall(r'alt="([^"]+)"', html)
+        art = html[html.index("spotlight__art"):html.index("spotlight__intro")]
+        pictures = re.findall(r'alt="([^"]+)"', art)
         self.assertEqual(pictures, ["Delta Reign Elite Trainer Box", "Delta Reign Booster Box"])
         self.assertIn(f'href="{self.set.get_absolute_url()}" tabindex="-1" aria-hidden="true"', html)
 
@@ -142,7 +143,8 @@ class SpotlightTests(TestCase):
         page = self.client.get(HOME).content.decode()
         html = section(page)
         self.assertNotIn("—", html)
-        self.assertNotIn("!", re.sub(r"<[^>]*>", " ", html))
+        words = re.sub(r"<[^>]*>", " ", re.sub(r"(?s)<script\b.*?</script>", " ", html))
+        self.assertNotIn("!", words)
         for phrase in CopyStyleTests.BANNED:
             self.assertNotIn(phrase, html.lower())
         # The scripts come only with the spotlight.
@@ -167,6 +169,68 @@ class SpotlightTests(TestCase):
         self.assertEqual(count(), before)
         DropSpotlight.objects.update(product_set=None)
         self.assertLessEqual(before - count(), 4)
+
+
+@override_settings(**MAIL_ON)
+class FoldAndJumpTests(TestCase):
+    """The owner, 31 Oct 2026: "you should be able to hide it. When you've set alerts it minimises", and a first
+    visit should still find the sections below it: jump buttons under the search."""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.today = timezone.localdate()
+        game = make_game()
+        self.set = make_set(game, name="Mega Evolution—Delta Reign", slug="delta-reign",
+                            release_date=self.today + timedelta(days=6))
+        for n, (kind, slug) in enumerate((("elite_trainer_box", "dri-etb"), ("elite_trainer_box", "dri-pc-etb"),
+                                          ("booster_box", "dri-box"))):
+            product = make_product(self.set, name=f"Delta Reign {slug}", slug=slug, product_type=kind,
+                                   image_url=f"https://cdn.example/{slug}.png")
+            make_listing(product, make_retailer(f"Shop {n}"), price="54.99", availability=Listing.Availability.PREORDER)
+        DropSpotlight.objects.create(pk=1, product_set=self.set)
+
+    def test_the_set_is_named_without_its_series_or_a_dash(self):
+        from web.views import spotlight_name
+
+        self.assertEqual(spotlight_name("Mega Evolution—Delta Reign"), "Delta Reign")
+        self.assertEqual(spotlight_name("Pokémon TCG: Mega Evolution - Delta Reign"), "Delta Reign")
+        self.assertEqual(spotlight_name("X-Y Evolutions"), "X-Y Evolutions")
+        html = section(self.client.get(HOME).content.decode())
+        self.assertIn("Delta Reign is coming.", html)
+        self.assertIn("Get every Delta Reign alert", html)
+        self.assertNotIn("—", html)
+        self.assertNotIn("Mega Evolution", html)
+
+    def test_one_box_of_each_kind_comes_first(self):
+        html = section(self.client.get(HOME).content.decode())
+        art = html[html.index("spotlight__art"):html.index("spotlight__intro")]
+        self.assertEqual(re.findall(r'alt="Delta Reign ([a-z-]+)"', art), ["dri-etb", "dri-box", "dri-pc-etb"])
+
+    def test_it_folds_to_a_bar_without_script_and_keeps_it_with(self):
+        html = section(self.client.get(HOME).content.decode())
+        # A details element, open: its summary is the bar, Hide while open and Show once folded.
+        self.assertIn('<details class="spotlight__panel" open data-spotlight-panel data-set="', html)
+        bar = html[html.index("<summary"):html.index("</summary>")]
+        self.assertIn("Hide", bar)
+        self.assertIn("Show", bar)
+        self.assertIn("Delta Reign", bar)
+        self.assertIn("Out in 6 days", bar)
+        self.assertIn("Check your inbox to confirm", bar)
+        # The choice made on this device is put back before the panel is painted: the script stands right after it.
+        self.assertRegex(html, r"(?s)</details>\s*<script>.*rr-spotlight:.*</script>\s*</section>")
+
+    def test_jump_buttons_lead_to_the_sections_on_the_page(self):
+        page = self.client.get(HOME).content.decode()
+        jump = page[page.index('<nav class="jump"'):page.index("</nav>", page.index('<nav class="jump"'))]
+        self.assertIn('aria-label="Jump to"', jump)
+        targets = re.findall(r'href="#([a-z-]+)"', jump)
+        self.assertIn("games-title", targets)
+        self.assertIn("latest-title", targets)
+        for target in targets:
+            self.assertIn(f'id="{target}"', page)
+        # Before the spotlight, so a first visit sees them first.
+        self.assertLess(page.index('<nav class="jump"'), page.index('id="drop-spotlight"'))
 
 
 class SpotlightAdminTests(TestCase):

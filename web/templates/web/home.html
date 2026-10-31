@@ -16,6 +16,17 @@
   </p>
   {% endif %}
   {% if guides_live %}<p class="hero__guides"><a href="{% url 'web:guides' %}">{% copy "home.guides" %}</a></p>{% endif %}
+  {# One tap to each section further down, for a first visit: the drop spotlight below can fill a phone's screen. #}
+  {% if games or featured or coming_soon or latest or product_types %}
+  <nav class="jump" aria-label="{% copy 'home.jump.label' %}">
+    <ul class="jump__list">
+      {% if games %}<li><a class="chip" href="#games-title">{% copy "home.jump.games" %}</a></li>{% endif %}
+      {% if featured %}<li><a class="chip" href="#featured-title">{% copy "home.jump.deals" %}</a></li>{% endif %}
+      {% if coming_soon or latest %}<li><a class="chip" href="#latest-title">{% copy "home.jump.drops" %}</a></li>{% endif %}
+      {% if product_types %}<li><a class="chip" href="#types-title">{% copy "home.jump.types" %}</a></li>{% endif %}
+    </ul>
+  </nav>
+  {% endif %}
 </section>
 
 {% if spotlight %}{% include "web/includes/spotlight.html" %}{% endif %}

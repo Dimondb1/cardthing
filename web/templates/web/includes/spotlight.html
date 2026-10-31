@@ -1,18 +1,27 @@
 {% load sitecopy ripraptor %}{% comment %}The home page's drop spotlight (views.drop_spotlight): the drop, a fan of its boxes and a list of steps to be
-ready for it. Every step works without script; web/static/js/spotlight.js ticks the ones done on this device.
-Takes spotlight.{% endcomment %}
-{% with drop=spotlight.drop set=spotlight.set %}
+ready for it, in a details element so it folds to a slim bar with its own button, without script too. Every step works
+without script; web/static/js/spotlight.js ticks the ones done on this device and keeps the panel folded once it is
+hidden or alerts are set, which spotlight_state.js puts back before the page shows. Takes spotlight.{% endcomment %}
+{% with drop=spotlight.drop set=spotlight.set name=spotlight.name %}
 <section class="home-section spotlight" id="drop-spotlight" aria-labelledby="spotlight-title" data-spotlight="{{ set.pk }}">
-  <div class="spotlight__panel">
+  <details class="spotlight__panel" open data-spotlight-panel data-set="{{ set.pk }}">
+    <summary class="spotlight__bar">
+      <span class="spotlight__eyebrow spotlight__open-only">{{ set.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% if spotlight.out %}{% copy "home.spotlight.eyebrow_out" %}{% else %}{% copy "home.spotlight.eyebrow" %}{% endif %}</span>
+      <span class="spotlight__mini spotlight__closed-only">
+        {% if spotlight.pictures %}<span class="spotlight__thumb" aria-hidden="true">{% product_image spotlight.pictures.0 "thumb" %}</span>{% endif %}
+        <span class="spotlight__mini-text"><strong class="spotlight__mini-name">{{ name }}</strong> <span class="spotlight__mini-when">{{ drop.when_text }}</span><span class="spotlight__mini-done" data-spotlight-alerted hidden> · {% copy "home.spotlight.bar.alerted" %}</span><span class="spotlight__mini-done" data-spotlight-confirm hidden> · {% copy "home.spotlight.bar.confirm" %}</span></span>
+      </span>
+      <span class="spotlight__toggle"><span class="spotlight__open-only">{% copy "home.spotlight.hide" %}</span><span class="spotlight__closed-only">{% copy "home.spotlight.show" %}</span><span class="visually-hidden"> {{ name }}</span></span>
+    </summary>
+    <div class="spotlight__body">
     <div class="spotlight__head">
       {% if spotlight.pictures %}<a class="spotlight__art" href="{{ set.get_absolute_url }}" tabindex="-1" aria-hidden="true">{% for product in spotlight.pictures %}<span class="spotlight__pic" style="--i: {{ forloop.counter0 }}">{% product_image product "spotlight" %}</span>{% endfor %}</a>{% endif %}
       <div class="spotlight__intro">
-        <p class="spotlight__eyebrow">{{ set.game.display_short }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% if spotlight.out %}{% copy "home.spotlight.eyebrow_out" %}{% else %}{% copy "home.spotlight.eyebrow" %}{% endif %}</p>
-        {% if spotlight.out %}{% copy "home.spotlight.title_out" set=set.name as title %}{% else %}{% copy "home.spotlight.title" set=set.name as title %}{% endif %}
+        {% if spotlight.out %}{% copy "home.spotlight.title_out" set=name as title %}{% else %}{% copy "home.spotlight.title" set=name as title %}{% endif %}
         <h2 id="spotlight-title" class="spotlight__title">{{ title|accent_last:"spotlight__accent" }}</h2>
         <p class="spotlight__when"><span class="spotlight__left">{{ drop.when_text }}</span>{% if drop.date_text %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span><span class="spotlight__date">{{ drop.date_text }}</span>{% endif %}{% if drop.countdown %} <span class="countdown" data-countdown="{{ drop.countdown }}" hidden aria-hidden="true"><span class="countdown__part"><span class="countdown__n" data-unit="d">0</span><span class="countdown__u">d</span></span><span class="countdown__part"><span class="countdown__n" data-unit="h">00</span><span class="countdown__u">h</span></span><span class="countdown__part"><span class="countdown__n" data-unit="m">00</span><span class="countdown__u">m</span></span><span class="countdown__part" data-seconds><span class="countdown__n" data-unit="s">00</span><span class="countdown__u">s</span></span></span>{% endif %}</p>
-        <p class="spotlight__lead">{% if spotlight.out %}{% copy "home.spotlight.lead_out" set=set.name %}{% else %}{% copy "home.spotlight.lead" set=set.name %}{% endif %}</p>
-        <p class="spotlight__progress" data-prep-progress data-progress="{% copy 'home.spotlight.progress' done='{done}' total='{total}' %}" data-ready="{% copy 'home.spotlight.ready' set=set.name %}" aria-live="polite" hidden></p>
+        <p class="spotlight__lead">{% if spotlight.out %}{% copy "home.spotlight.lead_out" set=name %}{% else %}{% copy "home.spotlight.lead" set=name %}{% endif %}</p>
+        <p class="spotlight__progress" data-prep-progress data-progress="{% copy 'home.spotlight.progress' done='{done}' total='{total}' %}" data-ready="{% copy 'home.spotlight.ready' set=name %}" aria-live="polite" hidden></p>
       </div>
     </div>
     <ol class="prep" data-prep>
@@ -20,7 +29,7 @@ Takes spotlight.{% endcomment %}
       <li class="prep__step" data-step="alerts">
         {% include "web/includes/prep_mark.html" %}
         <div class="prep__body">
-          <h3 class="prep__title">{% copy "home.spotlight.alerts.title" set=set.name %}<span class="visually-hidden" data-prep-done hidden>, {% copy "home.spotlight.done" %}</span></h3>
+          <h3 class="prep__title">{% copy "home.spotlight.alerts.title" set=name %}<span class="visually-hidden" data-prep-done hidden>, {% copy "home.spotlight.done" %}</span></h3>
           <p class="prep__text">{% if not spotlight.restocks %}{% copy "home.spotlight.alerts.text_month" %}{% elif spotlight.out %}{% copy "home.spotlight.alerts.text_out" days=spotlight.restock_days %}{% else %}{% copy "home.spotlight.alerts.text" days=spotlight.restock_days %}{% endif %}</p>
           <form class="drop-remind__form prep__form" method="post" action="{% url 'web:drop_ask' set.pk %}" data-drop-remind>
             {% csrf_token %}
@@ -32,7 +41,7 @@ Takes spotlight.{% endcomment %}
               <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
               <button class="button button--small drop-remind__button" type="submit">{% copy "home.spotlight.alerts.button" %}</button>
             </div>
-            <p class="drop-remind__note">{% copy "home.spotlight.alerts.note" set=set.name %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
+            <p class="drop-remind__note">{% copy "home.spotlight.alerts.note" set=name %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
             <p class="drop-remind__status" data-drop-status role="status" hidden></p>
           </form>
         </div>
@@ -42,8 +51,8 @@ Takes spotlight.{% endcomment %}
       <li class="prep__step" data-step="discord">
         {% include "web/includes/prep_mark.html" %}
         <div class="prep__body">
-          <h3 class="prep__title">{% copy "home.spotlight.discord.title" set=set.name %}<span class="visually-hidden" data-prep-done hidden>, {% copy "home.spotlight.done" %}</span></h3>
-          <p class="prep__text">{% copy "home.spotlight.discord.text" set=set.name %}</p>
+          <h3 class="prep__title">{% copy "home.spotlight.discord.title" set=name %}<span class="visually-hidden" data-prep-done hidden>, {% copy "home.spotlight.done" %}</span></h3>
+          <p class="prep__text">{% copy "home.spotlight.discord.text" set=name %}</p>
           <a class="button button--quiet button--small prep__go" href="{{ spotlight.discord }}" target="_blank" rel="noopener" data-prep-link>{% copy "home.spotlight.discord.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
         </div>
       </li>
@@ -71,11 +80,13 @@ Takes spotlight.{% endcomment %}
         {% include "web/includes/prep_mark.html" %}
         <div class="prep__body">
           <h3 class="prep__title">{% copy "home.spotlight.prices.title" %}<span class="visually-hidden" data-prep-done hidden>, {% copy "home.spotlight.done" %}</span></h3>
-          <p class="prep__text">{% copy "home.spotlight.prices.text" set=set.name %}</p>
-          <a class="button button--quiet button--small prep__go" href="{{ set.get_absolute_url }}" data-prep-link>{% copy "home.spotlight.prices.button" set=set.name %}</a>
+          <p class="prep__text">{% copy "home.spotlight.prices.text" set=name %}</p>
+          <a class="button button--quiet button--small prep__go" href="{{ set.get_absolute_url }}" data-prep-link>{% copy "home.spotlight.prices.button" set=name %}</a>
         </div>
       </li>
     </ol>
-  </div>
+    </div>
+  </details>
+  <script>{% inline_static "js/spotlight_state.js" %}</script>
 </section>
 {% endwith %}

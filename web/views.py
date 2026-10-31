@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
@@ -835,6 +836,17 @@ SPOTLIGHT_TYPES = ["elite_trainer_box", "booster_box", "bundle", "collection_box
                    "gift_set", "deck", "booster_pack"]
 
 
+# The series before a set's own name: "Mega Evolution—Delta Reign", "Pokémon TCG: Mega Evolution - Delta Reign".
+SERIES_BREAK = re.compile(r"\s*(?:[—–:]|\s-\s)\s*")
+
+
+def spotlight_name(name):
+    """The set's own name for the drop spotlight's big capitals: "Delta Reign" from "Mega Evolution—Delta Reign",
+    so the heading is short and carries no dash. A name with nothing after the break is kept whole."""
+    last = SERIES_BREAK.split(name.strip())[-1].strip()
+    return last or name
+
+
 def drop_spotlight(request, today=None):
     """The home page's drop spotlight (DropSpotlight, chosen in admin; the owner, 31 Oct 2026: "advertise a feature
     for the upcoming Delta Reign drop ... so they can be ready in one tap"): the set's drop with its day and
@@ -856,6 +868,10 @@ def drop_spotlight(request, today=None):
     products = [product for product in loaded.drop_products if in_drop(product, drop.day, drop.month)]
     pictured = sorted((product for product in products if product.image_src),
                       key=lambda product: (rank.get(product.product_type, len(rank)), product.name))
+    # One box of each kind first, so a set with three Elite Trainer Boxes still shows its booster box.
+    seen = set()
+    first = [p for p in pictured if p.product_type not in seen and not seen.add(p.product_type)]
+    pictured = first + [p for p in pictured if p not in first]
     stocked = [listing for product in products for listing in product.shop_offers
                if listing.availability == Listing.Availability.IN_STOCK]
     cheapest = min(stocked, key=lambda listing: (not listing.delivery_known, listing.shown_price), default=None)
@@ -863,6 +879,7 @@ def drop_spotlight(request, today=None):
     return {
         "drop": drop,
         "set": loaded,
+        "name": spotlight_name(loaded.name),
         "out": drop.day is not None and drop.day <= today,
         "pictures": pictured[:SPOTLIGHT_PICTURES],
         "discord": row.discord_invite,

@@ -294,6 +294,7 @@
   --spotlight-tilt: 4deg;           /* the fan's spread: the outer boxes lean twice this */
   --stagger: 60ms;                  /* between one box rising into place and the next */
   --prep-mark: 2rem;                /* the numbered circle beside each step, a tick once it is done */
+  --spotlight-thumb: 2.5rem;        /* the set's first box in the folded bar */
   --color-on-ink-muted: rgb(255 255 255 / 0.78);   /* quieter words on the ink panel: 9.6:1 */
   --color-on-ink-soft: rgb(255 255 255 / 0.12);    /* a well on the ink panel, such as the countdown's boxes */
 }

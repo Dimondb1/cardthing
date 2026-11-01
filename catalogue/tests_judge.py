@@ -2161,9 +2161,11 @@ class WhatClaudeSortsTests(Base):
 
         jobs = self.jobs()
         self.assertEqual(list(jobs), list(CLAUDE_JOBS))
+        from django.utils.html import escape
+
         for name, (_link, title, does) in CLAUDE_JOBS.items():
             self.assertIn(f"<b>{title}</b>", jobs[name])
-            self.assertIn(does, jobs[name])
+            self.assertIn(escape(does), jobs[name])
         self.assertIn("Nothing to sort yet.", jobs["pairs"])
 
     def test_sorted_left_and_needs_you_per_job(self):

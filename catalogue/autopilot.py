@@ -504,6 +504,10 @@ def undo(answer, now=None):
             message = set_judge.undo(answer)
         elif answer.kind == Kind.ADD_SET and answer.release is not None:
             message = undo_set(answer)
+        elif answer.kind in (Kind.PUBLISH, Kind.NOT_SEALED) and answer.product is not None:
+            from . import new_pages
+
+            message = new_pages.undo(answer, now)
         elif answer.kind == Kind.APART:
             message = "Undone: the two products may be suggested as duplicates again."
         elif answer.kind == Kind.HELD:
@@ -529,6 +533,8 @@ def undo(answer, now=None):
                 from .models import ClaudeAsk
 
                 opposite = "look" if answer.kind in SAFE_KINDS else "undone" if answer.kind in CLAUDE_SET_KINDS else (
+                    ("not_sealed" if answer.ask.verdict == "sealed" else "sealed")
+                    if answer.kind in (Kind.PUBLISH, Kind.NOT_SEALED) else
                     "different" if answer.ask.verdict == "same" else "same")
                 ClaudeAsk.objects.filter(pk=answer.ask_id).update(owner_answer=opposite)
     if message and answer.ask_id and answer.kind not in SAFE_KINDS:

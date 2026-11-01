@@ -107,3 +107,44 @@ class RemovalTests(TestCase):
                                         "card from Surging Sparks.")
         call_command("tidy_listings", stdout=StringIO())
         self.assertTrue(Listing.objects.filter(pk=kept.pk).exists())
+
+
+class FeedTests(TestCase):
+    """A shop read from its Shopify feed is never read page by page, so its description and tags are read for the
+    same signs (importers.feed_not_sealed). Winston's Emporium tags its single cards "type:single-card" (Nov 2026)."""
+
+    def setUp(self):
+        from .importers import product_offers
+
+        self.product_offers = product_offers
+        self.game = make_game()
+        self.shop = make_retailer("Winston's Emporium", source_type=Retailer.Source.SHOPIFY)
+
+    def shopify(self, title, tags=(), body="", handle="item"):
+        return {"title": title, "handle": handle, "product_type": "", "vendor": "Pokémon", "tags": list(tags),
+                "body_html": body, "variants": [{"id": 1, "title": "Default Title", "price": "40.00", "available": True}]}
+
+    def test_a_tagged_single_never_becomes_a_product(self):
+        offers = list(self.product_offers("https://winstons.example", self.shopify(
+            "Mewtwo, 30th Anniversary (FUR)", tags=("game:pokemon", "lang:zh-hans", "type:single-card"))))
+        self.assertEqual(offers[0].not_sealed, "the shop tags it as a single card")
+        _found, _updated, unmatched = apply_offers(self.shop, offers, complete=False)
+        self.assertFalse(Product.objects.filter(name__contains="Mewtwo").exists())
+        self.assertIn("[the shop tags it as a single card]", unmatched[0])
+
+    def test_a_description_that_calls_it_a_card_removes_a_listing_made_before(self):
+        card = make_product(make_set(self.game), name="Pikachu Illustration Rare", slug="pika-ir",
+                            product_type=Product.Type.COLLECTION_BOX)
+        listing = make_listing(card, self.shop, url="https://winstons.example/products/pika-ir")
+        offers = list(self.product_offers("https://winstons.example", self.shopify(
+            "Pikachu Illustration Rare", body="<p>Pikachu Illustration Rare is an Illustration Rare card from 151.</p>",
+            handle="pika-ir")))
+        apply_offers(self.shop, offers, complete=False)
+        self.assertFalse(Listing.objects.filter(pk=listing.pk).exists())
+
+    def test_tags_that_only_mention_singles_and_a_plain_sealed_item_are_left(self):
+        for tags in (("Pokemon Singles & Sealed",), ("game:pokemon", "set:30th")):
+            with self.subTest(tags=tags):
+                offer = next(self.product_offers("https://winstons.example", self.shopify(
+                    "Ascended Heroes Elite Trainer Box", tags=tags, body="Nine booster packs and sleeves.")))
+                self.assertEqual(offer.not_sealed, "")

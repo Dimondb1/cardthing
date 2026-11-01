@@ -1247,6 +1247,38 @@ class CardmarketPrice(models.Model):
         return f"{self.product} on {self.date}: €{self.trend}"
 
 
+class NewPage(models.Model):
+    """A page a shop read made (importers.create_from_offer), and Claude's check that it is a sealed product before
+    it goes live (catalogue/new_pages.py). While Claude may act a new page waits off the site (WAITING); otherwise it
+    goes up at once and Claude checks it once it can (UNCHECKED). A product made any other way has none."""
+
+    class Status(models.TextChoices):
+        WAITING = "waiting", "Waiting for Claude, off the site"
+        UNCHECKED = "unchecked", "On the site, not checked yet"
+        SEALED = "sealed", "Sealed: on the site"
+        NOT_SEALED = "not_sealed", "Not sealed: kept off"
+        UNSURE = "unsure", "Claude was not sure: waiting for you, off the site"
+
+    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="new_page")
+    status = models.CharField(max_length=10, choices=Status.choices)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    by_owner = models.BooleanField(default=False)
+    reason = models.CharField(max_length=200, blank=True)
+    # What Claude was last asked, so an unchanged page is not asked again, and answers that could not be read.
+    fingerprint = models.CharField(max_length=64, blank=True)
+    tries = models.PositiveSmallIntegerField(default=0)
+    # Anthropic would not take the shop's picture (it could not fetch it): asked again without it.
+    no_picture = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "new page check"
+
+    def __str__(self):
+        return f"{self.product}: {self.get_status_display()}"
+
+
 class CardmarketMatch(models.Model):
     """Which Cardmarket product one of ours is, as Claude matched it (catalogue/cardmarket_match.py) or the
     owner set it. ``cardmarket`` is empty when there is none. Only a MATCHED or CONFIRMED one is used."""
@@ -1853,6 +1885,9 @@ class CheckAnswer(models.Model):
         SAME_SET = "same_set", "Filed under a set the site has"
         NOT_SET = "not_set", "Not a set"
         SET_HELD = "set_held", "Set left unadded for now"
+        # Claude's check of a new page a shop read made (new_pages.act), each with Undo.
+        PUBLISH = "publish", "Published a new page"
+        NOT_SEALED = "not_sealed", "Kept a new page off: not sealed"
 
     kind = models.CharField(max_length=10, choices=Kind.choices)
     by_owner = models.BooleanField(default=False)
@@ -1954,6 +1989,7 @@ class ClaudeAsk(models.Model):
         SET = "set", "Announced set"
         RETAIL = "retail", "Set sold in shops"
         MARKET = "market", "Cardmarket match"
+        PAGE = "page", "New page"
 
     class Outcome(models.TextChoices):
         SENT = "sent", "Sent"
@@ -2036,6 +2072,9 @@ class ClaudeAsk(models.Model):
         if self.kind == self.Kind.RETAIL:
             return f"whether UK shops sell {e.get('set_name', '')} for {e.get('game', '')}"
         ours =(e.get("ours") or {}).get("name", "")
+        if self.kind == self.Kind.PAGE:
+            shops = ", ".join(shop.get("shop", "") for shop in e.get("shops") or [])
+            return f"the new page {ours} from {shops}" if shops else f"the new page {ours}"
         if self.kind == self.Kind.FOUND:
             return f'"{e.get("shop_title", "")}" at {e.get("shop", "")} for {ours}'
         return f"{ours} at {e.get('shop', '')}, £{e.get('price', '')}"
@@ -2046,6 +2085,9 @@ class ClaudeAsk(models.Model):
         if self.outcome == self.Outcome.ANSWERED:
             if self.kind == self.Kind.RETAIL and self.action == self.Action.ACTED:
                 return "acted, the set is marked as not sold in UK shops"
+            if self.kind == self.Kind.PAGE and self.action == self.Action.ACTED:
+                return ("acted, the page is on the site" if self.verdict == "sealed"
+                        else "acted, the page is kept off the site")
             return self.RESULT_WORDS.get(self.action, "answered")
         return self.RESULT_WORDS.get(self.outcome, self.get_outcome_display())
 
@@ -2061,7 +2103,8 @@ class ClaudeAsk(models.Model):
 
     VERDICT_WORDS = {"same": "same product", "different": "a different product", "unsure": "cannot tell",
                      "new": "a new set", "existing": "a set the site has", "not_a_set": "not a set",
-                     "shops": "sold in shops", "not_shops": "sold only at events or direct"}
+                     "shops": "sold in shops", "not_shops": "sold only at events or direct",
+                     "sealed": "a sealed product", "not_sealed": "not a sealed product"}
     CONFIDENCE_WORDS = {"high": "sure", "medium": "fairly sure", "low": "not sure"}
 
     @property

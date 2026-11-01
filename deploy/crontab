@@ -32,6 +32,7 @@ PYTHONUNBUFFERED=1
 51 6 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && flock -w 1200 /tmp/ripraptor-judge.lock timeout -k 30 1200 .venv/bin/python manage.py check_set_retail >> /var/log/ripraptor-import.log 2>&1
 44 6 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 900 .venv/bin/python manage.py import_cardmarket >> /var/log/ripraptor-import.log 2>&1
 7-59/15 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && flock -n /tmp/ripraptor-cardmarket.lock timeout -k 30 840 .venv/bin/python manage.py match_cardmarket >> /var/log/ripraptor-import.log 2>&1
+6-59/10 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 540 flock -n /tmp/ripraptor-pages.lock .venv/bin/python manage.py check_new_pages >> /var/log/ripraptor-import.log 2>&1
 20 * * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py check_worker >> /var/log/ripraptor-import.log 2>&1
 40 0 * * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py backup_db --keep 5 >> /var/log/ripraptor-import.log 2>&1
 45 4 5 * * cd /srv/ripraptor && set -a && . ./.env && set +a && timeout -k 60 1800 .venv/bin/python manage.py fetch_geoip >> /var/log/ripraptor-import.log 2>&1

@@ -47,6 +47,7 @@
   .chk .jobs { margin: 0 0 12px; }
   .chk .bar { display: block; height: 6px; margin: 8px 0 6px; border-radius: 3px; background: var(--hairline-color); overflow: hidden; }
   .chk .bar span { display: block; height: 100%; width: var(--done); background: var(--button-bg); }
+  .chk .page-photo { display: block; margin-top: 8px; width: 96px; height: 96px; object-fit: contain; border-radius: 4px; background: var(--darkened-bg); }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Things to check</div>{% endblock %}
 {% block content %}
@@ -135,6 +136,22 @@
         {% endfor %}
       </ul>
     </details>{% else %}<p class="none">Nothing yet.</p>{% endif %}
+  </section>
+
+  <section id="new-pages">
+    <h2>New pages to check ({{ new_pages|length }})</h2>
+    <p class="note">New pages Claude could not settle. Each is off the site until you choose. Open the shop's page and look at its photo: if it is one sealed product, put it on the site; if it is single cards, a used item or anything else, keep it off.</p>
+    {% if new_pages %}<ul>{% for page in new_pages %}
+      <li class="item"><b>{{ page.product.name }}</b>
+        {% if page.listing %}<span class="why">{{ page.listing.retailer.name }}{% if page.listing.title %}: "{{ page.listing.title }}"{% endif %}, £{{ page.listing.price }}. <a href="{{ page.listing.url }}" target="_blank" rel="noopener noreferrer">The shop's page</a></span>{% endif %}
+        <span class="why">{% if page.reason %}{{ page.reason|capfirst }}.{% elif page.claude %}Claude: {{ page.claude.summary }}. {{ page.claude.reason }}{% endif %}</span>
+        {% if page.product.image_url %}<img class="page-photo" src="{{ page.product.image_url }}" alt="" loading="lazy" width="96" height="96">{% endif %}
+        <div class="row">
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="page_up"><input type="hidden" name="page" value="{{ page.pk }}"><input type="submit" value="Put it on the site"></form>
+          <form method="post">{% csrf_token %}<input type="hidden" name="action" value="page_off"><input type="hidden" name="page" value="{{ page.pk }}"><input type="submit" value="Keep it off"></form>
+        </div>
+      </li>{% endfor %}
+    </ul>{% else %}<p class="none">Nothing waits for you.</p>{% endif %}
   </section>
 
   <section id="doubtful-prices">

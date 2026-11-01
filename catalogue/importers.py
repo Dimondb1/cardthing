@@ -99,6 +99,10 @@ class Offer:
         # An open draw is not stock, from whichever source the offer came.
         if self.availability in Listing.BUYABLE and says_lottery(self.title, self.tags):
             self.availability = Listing.Availability.LOTTERY
+        # A shop read from a feed (Shopify's products.json, a CSV or XML feed) is never read page by page, so its
+        # description and tags are read here for what a product page's own text is read for (not_sealed_reason).
+        if not self.not_sealed:
+            self.not_sealed = feed_not_sealed(self.title, self.description, self.tags)
 
 
 NO_DEAL = (None, None)
@@ -1182,6 +1186,22 @@ def calls_itself_a_card(title, description):
     return plain(description[:found.start()]) == plain(title)
 
 
+# A shop's own tag for a single card: "Single Card", "Singles", "type:single-card". The whole tag, so "Pokemon
+# Singles & Sealed" never counts.
+SINGLES_TAG = re.compile(r"^\s*(?:type\s*[:=]\s*)?singles?(?:[\s_-]+cards?)?\s*$", re.I)
+
+
+def feed_not_sealed(title="", description=None, tags=()):
+    """Why a shop's description or tags say an item is no sealed product, whatever its title, or "". Read for every
+    offer, so a shop read from a feed is held to the description rule a product page is (Winston's Emporium tags its
+    single cards "type:single-card", Nov 2026)."""
+    if any(SINGLES_TAG.match(str(tag)) for tag in tags or ()):
+        return "the shop tags it as a single card"
+    if description and calls_itself_a_card(title, description):
+        return "the shop calls it a single card"
+    return ""
+
+
 def not_sealed_reason(html, title="", description="", nodes=()):
     """Why a product page says it is no sealed product, whatever its title, or "": see USED_CONDITION."""
     if USED_CONDITION.search(html):
@@ -1650,7 +1670,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
     """
     checked_at = checked_at or timezone.now()
     marketplace = retailer.source_type in (Retailer.Source.AMAZON, Retailer.Source.EBAY)
-    catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
+    # A new page waiting for Claude (new_pages) is matched too, so a second shop's item joins it rather than making
+    # another page that waits beside it.
+    catalogue = Catalogue(Product.objects.filter(Q(is_active=True) | Q(new_page__status="waiting"))
+                          .values_list("pk", "name", "game__slug"))
     # Each listing's link, the variant it selects included, so one variant never takes over another's listing.
     links = LinkIndex(
         ((url, pk) for pk, url in Listing.objects.filter(retailer=retailer).values_list("product_id", "url")),
@@ -2205,10 +2228,16 @@ def create_from_offer(offer, catalogue, sealed=None, refused=()):
         if existing is not None:
             catalogue.append((existing.pk, existing.name, game.slug))
             return existing.pk
+    # While Claude can act, a new page waits off the site until it has checked the shop's words and photo say a
+    # sealed product (new_pages); otherwise it goes up at once and Claude checks it when it can.
+    from . import new_pages
+
+    held = new_pages.can_act()
     product = Product.objects.create(
         game=game, name=sealed.name, slug=slug, product_type=sealed.product_type,
-        ean=offer.ean or "", image_url=offer.image[:1000] if offer.image else "",
+        ean=offer.ean or "", image_url=offer.image[:1000] if offer.image else "", is_active=not held,
     )
+    new_pages.note_new(product, held)
     catalogue.append((product.pk, product.name, game.slug))
     # Born in its set when its name or code names one.
     from .releases import attach_sets

@@ -1070,6 +1070,27 @@ Ask Claude now, or after a day. A busy Anthropic only ends that run.
 `python manage.py judge_checks --dry-run` lists what would be sent and the
 most each request could cost, and sends nothing.
 
+**New pages.** A shop's title can look sealed when the item is not (Winston's
+Emporium listed 32 loose Chinese Pikachu cards as "Pikachu Collection 30th
+Anniversary"). While Claude can act (switched on, Let Claude act, a key, not
+paused, stopped or at its limit), a page a shop read makes waits off the site
+until Claude has read the shop's title, price, description and photo
+(`catalogue/new_pages.py`, `NewPage`). Cron runs `check_new_pages` every 10
+minutes on its own lock. A sealed product, sure or fairly sure, in the language
+the page says, goes up; anything sure not to be sealed stays off; anything else
+waits for you under **New pages to check** on Things to check, off the site,
+with Put it on the site and Keep it off. Claude's acts are under Sorted for you
+with Undo. While Claude cannot act, new pages go up at once as before and
+Claude checks them when it can (taking off any that are not sealed), and a page
+waiting longer than six hours goes up unchecked. Each question uses Sonnet at
+low effort, about a cent with the photo, within the same monthly limit.
+
+Shops read from a feed (Shopify's products.json, CSV and XML feeds) are never
+read page by page, so their tags and descriptions are read for the same signs
+as a product page: a tag such as "Single Card" or "type:single-card", or a
+description that calls the item "a ... card from" a set, keeps it off the site
+(`importers.feed_not_sealed`).
+
 **Seeing what it does.** The Claude box says what Claude is doing now ("Claude
 is looking now: 7 of 25 asked so far", "Claude starts within 5 minutes", "Next
 look about 15:05") and warns when a run you asked for has not started after 15

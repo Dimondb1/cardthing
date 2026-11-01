@@ -3092,6 +3092,9 @@ def duplicate_sections(groups):
 # what Claude does there). The owner, 1 Nov 2026: "It needs to be simpler for me to see what Claude is programmed
 # to sort and its progress".
 CLAUDE_JOBS = {
+    "pages": ("#new-pages", "New pages",
+              "Checks each new page a shop read makes, the shop's words and photo, before it goes live. Sealed "
+              "products go up, anything else stays off."),
     "prices": ("#doubtful-prices", "Doubtful prices and wrong matches",
                "Checks whether a price far from the other shops is for the same product. The right ones stay as "
                "shown, the others are hidden."),
@@ -3114,12 +3117,13 @@ def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_cou
     left on the list, and of those how many need the owner and how many wait for Claude, with the share done.
     ``counts`` and ``set_counts`` are what judge.attach_answers and attach_set_answers returned for the rows the
     page shows, so a long list's "needs you" counts the rows shown. A few queries."""
-    from catalogue import cardmarket_match, judge, set_judge, set_retail
+    from catalogue import cardmarket_match, judge, new_pages, set_judge, set_retail
     from catalogue.models import ClaudeAsk
 
     Kind = ClaudeAsk.Kind
     done = judge.sorted_counts()
     market = cardmarket_match.progress()
+    pages = new_pages.progress()
 
     def yours(*sections):
         return sum(counts.get(section, {}).get("needs_you", 0) for section in sections)
@@ -3127,6 +3131,7 @@ def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_cou
     # A set of a game with no trusted sites to search is never Claude's.
     unsearchable = sum(1 for row in releases if not set_judge.domains(row.game.slug))
     figures = {
+        "pages": (done.get(Kind.PAGE, 0), pages["waiting"] + pages["needs_you"], pages["needs_you"]),
         "prices": (done.get(Kind.OFFER, 0), doubtful_count + 2 * len(wrong), yours("doubtful", "wrong")),
         "pairs": (done.get(Kind.PAIR, 0), sum(len(others) for _, others in duplicates), yours("pairs")),
         "found": (done.get(Kind.FOUND, 0), found_count, yours("found")),
@@ -3161,7 +3166,7 @@ def checks_page(request):
     from django.contrib import messages
     from django.db import transaction
 
-    from catalogue import autopilot, checks, judge
+    from catalogue import autopilot, checks, judge, new_pages
     from catalogue.management.commands.merge_duplicates import merge_with_undo
     from catalogue.models import CheckAnswer
     from catalogue.signals import clear_list_caches
@@ -3232,6 +3237,17 @@ def checks_page(request):
                                           "then undo this merge.")
             else:
                 messages.warning(request, "That one can no longer be undone. Check it on its own page.")
+        elif action in ("page_up", "page_off"):
+            from catalogue.models import NewPage
+
+            page = NewPage.objects.filter(pk=request.POST.get("page", "") or 0, status=NewPage.Status.UNSURE) \
+                .select_related("product").first()
+            if page is None:
+                messages.warning(request, CHANGED.format("page"))
+            else:
+                new_pages.owner_answer(page, sealed=action == "page_up")
+                messages.success(request, f"{page.product.name} is on the site." if action == "page_up" else
+                                 f"{page.product.name} stays off the site.")
         elif action == "merge_sure":
             merge_sure(request)
         elif action.startswith("claude_"):
@@ -3280,6 +3296,7 @@ def checks_page(request):
         "claude": claude, "claude_counts": claude_counts,
         "claude_jobs": claude_jobs(claude_counts, set_counts, doubtful_count, wrong, duplicates, found_count,
                                    release_rows),
+        "new_pages": new_pages.for_owner(),
         "releases": release_rows, "disagreements": checks.release_disagreements(now),
         "stale_sources": checks.stale_release_sources(now),
     }

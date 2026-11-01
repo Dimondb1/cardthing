@@ -92,7 +92,7 @@ class PageTests(PageTestCase):
         # drawn as shapes in the token colours, hidden from screen readers.
         html = response.content.decode()
         picks = html[html.index('id="picks-title"'):html.index("</h2>", html.index('id="picks-title"'))]
-        self.assertIn('<svg class="hunt-mark" viewBox="0 0 540 400" aria-hidden="true" focusable="false">', picks)
+        self.assertIn('<svg class="hunt-mark" viewBox="0 -64 600 464" aria-hidden="true" focusable="false">', picks)
         self.assertIn('mask="url(#rr-hunt-head)"', picks)
         self.assertIn('/static/img/raptor-lg.png', picks)
         self.assertTrue(picks.endswith("</svg>Hunted for you"))

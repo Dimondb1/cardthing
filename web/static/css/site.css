@@ -105,29 +105,29 @@ main > :not(.small-print) + .small-print { margin-top: var(--space-5); }   /* an
 .section-head__mascot { --mark-size: var(--mark-sm); color: var(--color-brand); }
 /* The large head (the one the raptor panels use, so no extra download): sharp at any size. */
 .section-head__mascot { -webkit-mask-image: url("../img/raptor-lg.png"); mask-image: url("../img/raptor-lg.png"); }
-/* Hunted for you: the raptor holding a magnifying glass out in front of its snout, a find sparkling in the lens. Follow
-   your tracks: its three-toed footprints, a left foot then a right, the older fainter. Drawn as shapes in the brand's
-   orange, ink and soft orange (web/templates/web/includes/mark_hunt.html, mark_tracks.html), sharp at any size, the
-   raptor's head the same size as Rip's Deals' beside it. */
-.hunt-mark { flex: none; width: calc(var(--mark-sm) * var(--hunt-mark-wide)); height: calc(var(--mark-sm) / (var(--mark-ratio))); overflow: visible; }
+/* Hunted for you: the raptor in a deerstalker, a flat orange magnifying glass to its right. Follow your tracks: its
+   three-toed footprints, a left foot then a right, the older fainter. Drawn as shapes in the brand's orange, ink and
+   soft orange (web/templates/web/includes/mark_hunt.html, mark_tracks.html), sharp at any size, the raptor's head the
+   same size as Rip's Deals' beside it. */
+.hunt-mark { flex: none; width: calc(var(--mark-sm) / (var(--mark-ratio)) * var(--hunt-mark-wide)); height: calc(var(--mark-sm) / (var(--mark-ratio)) * var(--hunt-mark-tall)); overflow: visible; }
 .hunt-mark__brand { fill: var(--color-brand); }
-.hunt-mark__brand-line { fill: none; stroke: var(--color-brand); }
 .hunt-mark__ink { fill: var(--color-ink); }
-.hunt-mark__ink-line { fill: none; stroke: var(--color-ink); }
+.hunt-mark__check { fill: none; stroke: var(--color-brand-soft); opacity: var(--hat-check); }
+.hunt-mark__band { fill: none; stroke: var(--color-brand-soft); }
+.hunt-mark__glass { fill: none; stroke: var(--color-brand); }
 .hunt-mark__lens { fill: var(--color-lens); }
-.hunt-mark__spark--small { opacity: var(--spark-faint); }
 .hunt-mark__shine { fill: none; stroke: var(--color-paper); }
 .tracks-mark { flex: none; width: calc(var(--mark-sm) / (var(--mark-ratio)) * var(--tracks-wide)); height: calc(var(--mark-sm) / (var(--mark-ratio))); color: var(--color-brand); }
 .tracks-mark__print--1 { opacity: var(--tracks-faint); }
 @media (prefers-reduced-motion: no-preference) {
-  /* Personality, once, as each section first shows: the find in the glass sparkles, and the footprints step in one
-     after the other. */
-  .hunt-mark__sparks { transform-box: fill-box; transform-origin: center; animation: spark-in var(--motion-slow) var(--ease-out) backwards; animation-delay: calc(var(--stagger) * 2); }
+  /* Personality, once, as each section first shows: the raptor's hat drops onto its head, and the footprints step in
+     one after the other. */
+  .hunt-mark__hat { animation: hat-on var(--motion-slow) var(--ease-out) backwards; animation-delay: calc(var(--stagger) * 2); }
   .tracks-mark__print { animation: track-step var(--motion-normal) var(--ease-out) backwards; }
   .tracks-mark__print--2 { animation-delay: calc(var(--stagger) * 3); }
 }
 @keyframes track-step { from { opacity: 0; } }
-@keyframes spark-in { from { opacity: 0; transform: scale(var(--spark-from)) rotate(var(--glass-tilt)); } }
+@keyframes hat-on { from { opacity: 0; transform: translateY(var(--hat-drop)) rotate(var(--hat-tilt)); } }
 @media (max-width: 40rem) { .section-head__title { font-size: var(--text-section-sm); } }
 .section-head__all {
   flex: none; color: var(--color-ink-muted); font-weight: var(--weight-medium); font-size: var(--text-sm);

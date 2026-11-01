@@ -191,13 +191,14 @@
   --mark-poster: clamp(13rem, 6rem + 30vw, 30rem);  /* the head on a raptor panel, cropped by its edge (raptor-lg.png) */
   --mark-poster-sm: clamp(13rem, 7rem + 18vw, 24rem); /* the same on the shorter watchlist card */
   --mark-ratio: 417 / 400;       /* the image's own proportions, width to height */
-  --hunt-mark-wide: 1.295;       /* Hunted for you's raptor and glass: its 540 by 400 drawing, the head 417 of it */
-  --color-lens: rgb(255 241 234 / 0.7);   /* the glass: soft orange, the find showing through it */
-  --spark-from: 0.4;             /* the find's sparkle grows in from this size */
-  --glass-tilt: 20deg;           /* and turns this much as it does */
+  --hunt-mark-wide: 1.5;         /* Hunted for you's raptor, hat and glass: its 600 by 464 drawing against the head's 400 */
+  --hunt-mark-tall: 1.16;        /* the hat stands a little above the head */
+  --color-lens: rgb(255 241 234 / 0.7);   /* the glass: soft orange */
+  --hat-check: 0.32;             /* the deerstalker's tweed check */
+  --hat-drop: -40px;             /* the hat drops onto the head from this far up (in the drawing's own units) */
+  --hat-tilt: -8deg;             /* and turns this much as it does */
   --tracks-wide: 1.2;            /* Follow your tracks: the two prints' 48 by 40 drawing */
   --tracks-faint: 0.45;          /* the older footprint */
-  --spark-faint: 0.7;            /* the smaller sparkle in the glass */
 
   /* Refer a friend: the pack (two raptor heads) and the keyring picture ------------------------------------ */
   --pack-tuck: 0.45;             /* how far the leading orange head overlaps the ink friend behind it, as a share of a head */

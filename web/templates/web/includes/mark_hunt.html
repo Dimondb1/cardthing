@@ -1,16 +1,21 @@
-{% load static %}{% comment %}Hunted for you's mascot: the raptor holding a magnifying glass out in front of its snout, a find sparkling in the lens. The head is the large raptor image through a mask; the arm, its clawed hand, the glass and the sparkles are drawn here. Every colour is a token, set in site.css, so it is sharp at any size and in the brand's own palette.{% endcomment %}<svg class="hunt-mark" viewBox="0 0 540 400" aria-hidden="true" focusable="false">
-  <defs><mask id="rr-hunt-head" maskUnits="userSpaceOnUse" x="0" y="0" width="417" height="400" style="mask-type: alpha"><image href="{% static 'img/raptor-lg.png' %}" width="417" height="400"/></mask></defs>
-  <path class="hunt-mark__ink-line" d="M346.0 322.0 L434.0 202.0" stroke-width="20" stroke-linecap="round"/>
-  <path class="hunt-mark__ink-line" d="M425.7 213.3 L432.8 203.6" stroke-width="27" stroke-linecap="round"/>
+{% load static %}{% comment %}Hunted for you's mascot: the raptor in a deerstalker, Sherlock Holmes's hat (checked tweed, a peak front and back, the ear flaps tied in a bow on top), with a flat orange magnifying glass to its right. The head is the large raptor image through a mask; the hat and the glass are drawn here. Every colour is a token, set in site.css, so it is sharp at any size and in the brand's own palette. The ids are unique: it is on the home page once.{% endcomment %}<svg class="hunt-mark" viewBox="0 -64 600 464" aria-hidden="true" focusable="false">
+  <defs>
+    <mask id="rr-hunt-head" maskUnits="userSpaceOnUse" x="0" y="0" width="417" height="400" style="mask-type: alpha"><image href="{% static 'img/raptor-lg.png' %}" width="417" height="400"/></mask>
+    <clipPath id="rr-hunt-hat"><path d="M-70 8C-74-30-40-62 0-62 40-62 74-30 70 8Q0 20-70 8Z"/></clipPath>
+  </defs>
   <rect class="hunt-mark__brand" width="417" height="400" mask="url(#rr-hunt-head)"/>
-  <path class="hunt-mark__brand" d="M194 292 C 212 316, 230 332, 250 334 C 276 336, 302 314, 341.1 308.5 L 362.3 316.6 C 312 336, 284 364, 254 364 C 228 364, 212 352, 202 336 Z"/>
-  <circle class="hunt-mark__brand" cx="350.7" cy="304.8" r="18"/>
-  <path class="hunt-mark__brand-line" d="M343.8 308.0 Q339.8 300.1 348.5 291.6" stroke-width="12" stroke-linecap="round"/>
-  <path class="hunt-mark__brand-line" d="M344.8 300.0 Q361.8 303.8 369.8 318.3" stroke-width="12" stroke-linecap="round"/><path class="hunt-mark__brand-line" d="M352.5 289.5 Q369.5 293.3 377.4 307.9" stroke-width="12" stroke-linecap="round"/><path class="hunt-mark__brand-line" d="M360.1 279.0 Q377.2 282.9 385.1 297.4" stroke-width="12" stroke-linecap="round"/>
-  <path class="hunt-mark__ink" d="M373.7 316.3 Q380.6 323.8 365.7 334.0 Q370.2 326.1 373.6 324.9 Z"/><path class="hunt-mark__ink" d="M381.4 305.8 Q388.3 313.3 373.4 323.5 Q377.9 315.7 381.3 314.4 Z"/><path class="hunt-mark__ink" d="M389.1 295.3 Q396.0 302.9 381.1 313.0 Q385.6 305.2 389.0 303.9 Z"/>
-  <circle class="hunt-mark__lens" cx="470" cy="150" r="54"/>
-  <g class="hunt-mark__sparks"><path class="hunt-mark__brand" d="M482 124 Q485 139 500 142 Q485 145 482 160 Q479 145 464 142 Q479 139 482 124Z"/>
-  <path class="hunt-mark__brand hunt-mark__spark--small" d="M452 158 Q453.5 165 460 166.5 Q453.5 168 452 175 Q450.5 168 444 166.5 Q450.5 165 452 158Z"/></g>
-  <circle class="hunt-mark__ink-line" cx="470" cy="150" r="54" stroke-width="13"/>
-  <path class="hunt-mark__shine" d="M438 142 A 33 33 0 0 1 462 117" stroke-width="7" stroke-linecap="round"/>
+  <g transform="translate(176 31) rotate(11)"><g class="hunt-mark__hat">
+    <path class="hunt-mark__ink" d="M-46 2Q-96-2-132 26Q-90 32-44 16Z"/>
+    <path class="hunt-mark__ink" d="M46 2Q96-2 132 26Q90 32 44 16Z"/>
+    <path class="hunt-mark__ink" d="M-70 8C-74-30-40-62 0-62 40-62 74-30 70 8Q0 20-70 8Z"/>
+    <path class="hunt-mark__check" clip-path="url(#rr-hunt-hat)" d="M-80-50H80M-80-36H80M-80-22H80M-80-8H80M-80 6H80M-60-70V30M-44-70V30M-28-70V30M-12-70V30M4-70V30M20-70V30M36-70V30M52-70V30" stroke-width="2.6"/>
+    <path class="hunt-mark__band" d="M-70 3Q0 15 70 3" stroke-width="7" stroke-linecap="round"/>
+    <path class="hunt-mark__brand" d="M0-63C-6-78-28-80-28-69-28-60-10-59 0-63Z"/>
+    <path class="hunt-mark__brand" d="M0-63C6-78 28-80 28-69 28-60 10-59 0-63Z"/>
+    <circle class="hunt-mark__brand" cx="0" cy="-63" r="5.5"/>
+  </g></g>
+  <circle class="hunt-mark__lens" cx="488" cy="196" r="50"/>
+  <circle class="hunt-mark__glass" cx="488" cy="196" r="50" stroke-width="17"/>
+  <path class="hunt-mark__glass" d="M530 238 576 284" stroke-width="27" stroke-linecap="round"/>
+  <path class="hunt-mark__shine" d="M458 190A32 32 0 0 1 482 164" stroke-width="8" stroke-linecap="round"/>
 </svg>

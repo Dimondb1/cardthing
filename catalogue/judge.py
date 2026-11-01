@@ -1924,9 +1924,10 @@ def attach_answers(doubtful, wrong, found, duplicates, may_act=False):
     still what Claude was asked about and the owner has not answered it since, else None. While Claude may
     act, each answer also says why it has not acted: ``left_because`` when it needs the owner (a conflict
     the rules forbid Claude to settle, or a row he answered before), ``next_step`` when it waits for Claude.
-    Returns, for each section, how many rows Claude called the same, different or could not tell, and how
-    many it has not answered, and "needs_you": how many need the owner. A few queries, and one more while
-    Claude may act."""
+    Returns, for each section, how many rows Claude called the same, different or could not tell, how many it
+    has not answered, and how many need the owner (its "needs_you": while Claude may act, the rows it leaves to
+    him; in trial, every row it has answered, since its suggestions wait for him), and "needs_you": how many
+    need the owner while Claude may act. A few queries, and one more while Claude may act."""
     ids = ({listing.product_id for listing in doubtful} | {product.pk for product, _ in wrong}
            | {row.suggested_id for row in found} | {p.pk for keep, others in duplicates for p in [keep, *others]})
     build = Evidence(ids, listings=[*doubtful, *(o for _, summary in wrong for o in (summary.best, summary.second))])
@@ -1946,12 +1947,16 @@ def attach_answers(doubtful, wrong, found, duplicates, may_act=False):
     for row, item in rows:
         item.claude = current.get(row.key)
         section = "pairs" if row.kind == "pair" else "found" if row.kind == "found" else "wrong" if row.partner else "doubtful"
-        tally = counts.setdefault(section, {"same": 0, "different": 0, "unsure": 0, "none": 0, "total": 0})
+        tally = counts.setdefault(section, {"same": 0, "different": 0, "unsure": 0, "none": 0, "total": 0,
+                                            "needs_you": 0})
         if item.claude is not None and may_act:
             why, yours = left_reason(row, item.claude, current.get(row.partner), row.key in before)
             item.claude.left_because = why if yours else ""
             item.claude.next_step = "" if yours else why
             counts["needs_you"] = counts.get("needs_you", 0) + bool(yours)
+            tally["needs_you"] += bool(yours)
+        elif item.claude is not None:
+            tally["needs_you"] += 1
         tally[item.claude.verdict if item.claude is not None else "none"] += 1
         tally["total"] += 1
     return counts
@@ -1961,28 +1966,43 @@ def attach_set_answers(rows, may_act=False):
     """Give each announced set the page lists a ``claude`` attribute: Claude's latest answer about it (with its
     sources) while the row is still what Claude was asked about and the owner has not answered it, else None.
     While Claude may act, each answer says why it has not acted, as attach_answers does. Returns how many rows
-    Claude has answered. A few queries, whatever the number of rows."""
+    Claude has answered and how many of them need the owner (in trial, all of them), as {"answered",
+    "needs_you"}. A few queries, whatever the number of rows."""
     rows = list(rows)
     for row in rows:
         row.claude = None
+    counts = {"answered": 0, "needs_you": 0}
     if not rows:
-        return 0
+        return counts
     build = set_judge.Builder(rows)
     built = {f"set:{row.pk}": (build.row(row), row) for row in rows}
     latest = latest_answers(set(built))
     answered = set_judge.answered_rows([row.pk for row in rows]) if may_act else set()
-    shown = 0
     for key, (row, release) in built.items():
         ask = latest.get(key)
         if ask is None or ask.fingerprint != row.fingerprint or ask.owner_answer:
             continue
         release.claude = ask
-        shown += 1
+        counts["answered"] += 1
         if may_act:
             why, yours = left_reason(row, ask, answered=release.pk in answered)
             ask.left_because = why if yours else ""
             ask.next_step = "" if yours else why
-    return shown
+            counts["needs_you"] += bool(yours)
+        else:
+            counts["needs_you"] += 1
+    return counts
+
+
+def sorted_counts():
+    """{ClaudeAsk kind: how many rows Claude has settled itself and nobody has undone}, all time, for What
+    Claude sorts on Things to check. A set checked for whether shops sell it ("retail") counts once it has an
+    answer, since that answer changes nothing unless the set is sold only at events. Two queries."""
+    counts = dict(claudes_acts().filter(undone_at__isnull=True).order_by().values_list("ask__kind")
+                  .annotate(n=Count("pk")))
+    counts[Ask.Kind.RETAIL] = (Ask.objects.filter(kind=Ask.Kind.RETAIL, outcome=Ask.Outcome.ANSWERED)
+                               .values("row_key").distinct().count())
+    return counts
 
 
 def answered_before(rows):

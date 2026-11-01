@@ -2131,3 +2131,66 @@ class TickedTests(Base):
         self.assertIn("Hidden: Surging Sparks Mini Tin", one.json()["said"])
         # Nothing waits to be shown at the next page load.
         self.assertNotContains(self.client.get(self.url), "Hidden: Surging Sparks Mini Tin")
+
+
+class WhatClaudeSortsTests(Base):
+    """What Claude sorts on Things to check: each job Claude is set to sort, how many it has sorted, how many are
+    left for it and how many need the owner (the owner, 1 Nov 2026: "It needs to be simpler for me to see what
+    Claude is programmed to sort and its progress")."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.switch_on()
+
+    def act(self, kind, undone=False):
+        ask = ClaudeAsk.objects.create(kind=kind, row_key=f"{kind}:{ClaudeAsk.objects.count()}", fingerprint="f",
+                                       model_asked="m", effort="medium", outcome=ClaudeAsk.Outcome.ANSWERED,
+                                       action=ClaudeAsk.Action.ACTED)
+        return CheckAnswer.objects.create(kind=CheckAnswer.Kind.CHECKED, what="w", ask=ask,
+                                          undone_at=timezone.now() if undone else None)
+
+    def jobs(self):
+        html = self.client.get(reverse("checks")).content.decode()
+        start = html.index('<ul class="jobs">')
+        block = html[start:html.index("</ul>", start)]
+        return {part.split('"', 1)[0]: part for part in block.split('data-job="')[1:]}
+
+    def test_every_job_is_listed_with_what_it_does(self):
+        from web.views import CLAUDE_JOBS
+
+        jobs = self.jobs()
+        self.assertEqual(list(jobs), list(CLAUDE_JOBS))
+        for name, (_link, title, does) in CLAUDE_JOBS.items():
+            self.assertIn(f"<b>{title}</b>", jobs[name])
+            self.assertIn(does, jobs[name])
+        self.assertIn("Nothing to sort yet.", jobs["pairs"])
+
+    def test_sorted_left_and_needs_you_per_job(self):
+        from .models import CardmarketMatch
+
+        self.act(ClaudeAsk.Kind.OFFER)
+        self.act(ClaudeAsk.Kind.OFFER)
+        self.act(ClaudeAsk.Kind.OFFER, undone=True)   # undone: not sorted
+        self.act(ClaudeAsk.Kind.PAIR)
+        self.found()
+        unsure = make_product(self.set, name="Surging Sparks Elite Trainer Box", slug="ssp-etb")
+        make_product(self.set, name="Surging Sparks Booster Bundle", slug="ssp-bundle", product_type="bundle")
+        CardmarketMatch.objects.create(product=self.product, status=CardmarketMatch.Status.MATCHED)
+        CardmarketMatch.objects.create(product=unsure, status=CardmarketMatch.Status.CHECK)
+        jobs = self.jobs()
+        self.assertIn("All sorted: 2 so far.", jobs["prices"])
+        self.assertIn("All sorted: 1 so far.", jobs["pairs"])
+        self.assertIn("0% done. Sorted 0. Left 1: 1 for Claude.", jobs["found"])
+        # Of three Pokémon products: one matched, one Claude was not sure of, one it has not looked at.
+        self.assertIn("33% done. Sorted 1. Left 2: 1 for Claude and ", jobs["market"])
+        self.assertIn('/admin/catalogue/cardmarketmatch/?status__exact=check">1 needs you</a>.', jobs["market"])
+        self.assertIn("--done: 33%", jobs["market"])
+
+    def test_the_share_is_never_all_while_anything_is_left_nor_none_once_anything_is_sorted(self):
+        from web.views import claude_jobs
+
+        with mock.patch.object(judge, "sorted_counts", return_value={ClaudeAsk.Kind.OFFER: 999, ClaudeAsk.Kind.PAIR: 1}):
+            jobs = {job["name"]: job for job in claude_jobs({}, {"needs_you": 0}, 1, [], [(self.product, [object()] * 999)],
+                                                            0, [])}
+        self.assertEqual((jobs["prices"]["share"], jobs["pairs"]["share"]), (99, 1))

@@ -286,6 +286,20 @@ def save(product, status, cardmarket_id, evidence, print_, confidence="", reason
     })
 
 
+def progress():
+    """For What Claude sorts on Things to check: of our products shown in the games Cardmarket covers, how many
+    are settled ("sorted": matched, no Cardmarket product, or answered by the owner), how many wait for the
+    owner ("needs_you": Claude was not sure) and how many Claude has not looked at yet ("waiting"). Two
+    queries."""
+    products = Product.objects.active().filter(game__slug__in=ORDER)
+    total = products.count()
+    statuses = dict(CardmarketMatch.objects.filter(product__in=products).order_by().values_list("status")
+                    .annotate(n=Count("pk")))
+    check = statuses.get(CardmarketMatch.Status.CHECK, 0)
+    settled = sum(statuses.values()) - check
+    return {"sorted": settled, "needs_you": check, "waiting": max(0, total - settled - check)}
+
+
 def to_do(slugs, today=None):
     """Our products in these games still to match: game by game in the order given (Pokémon first), those a
     shop sells now first within each, and of those the most viewed in the last VIEW_DAYS first, so the pages

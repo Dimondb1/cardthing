@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load dashboard %}
 {% block title %}Things to check | {{ site_title }}{% endblock %}
 {% block extrastyle %}{{ block.super }}<style>
   .chk { display: grid; gap: 28px; max-width: 60rem; }
@@ -42,6 +43,10 @@
   .chk .tapped { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 3; margin: 0; padding: 12px 14px;
     border-radius: 8px; background: var(--body-fg); color: var(--body-bg); }
   .chk .tapped[hidden] { display: none; }
+  .chk .claude h3 { margin: 16px 0 8px; }
+  .chk .jobs { margin: 0 0 12px; }
+  .chk .bar { display: block; height: 6px; margin: 8px 0 6px; border-radius: 3px; background: var(--hairline-color); overflow: hidden; }
+  .chk .bar span { display: block; height: 100%; width: var(--done); background: var(--button-bg); }
 </style>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Things to check</div>{% endblock %}
 {% block content %}
@@ -52,6 +57,15 @@
     {% if claude.now %}<p class="now">{{ claude.now }}</p>{% endif %}
     {% if claude.state.last_run_note %}<p class="note">Last run {{ claude.state.last_run_at|date:"j M H:i" }}: {{ claude.state.last_run_note }}.</p>{% endif %}
     {% if claude.has_key %}<p class="note">This month: {{ claude.spent }} of {{ claude.limit }}.</p>{% endif %}
+    <h3>What Claude sorts</h3>
+    <ul class="jobs">{% for job in claude_jobs %}
+      <li class="item" data-job="{{ job.name }}"><b>{{ job.title }}</b>
+        <span class="why">{{ job.does }}</span>
+        <span class="bar" aria-hidden="true"><span style="--done: {{ job.share }}%"></span></span>
+        <span class="said">{% if not job.sorted and not job.left %}Nothing to sort yet.{% elif not job.left %}All sorted: {{ job.sorted|number }} so far.{% else %}{{ job.share }}% done. Sorted {{ job.sorted|number }}. Left {{ job.left|number }}: {{ job.waiting|number }} for Claude{% if job.needs_you %} and {% if job.link %}<a href="{{ job.link }}">{{ job.needs_you|number }} need{{ job.needs_you|pluralize:"s," }} you</a>{% else %}{{ job.needs_you|number }} need{{ job.needs_you|pluralize:"s," }} you{% endif %}{% endif %}.{% endif %}</span>
+      </li>{% endfor %}
+    </ul>
+    <p class="note">Claude never looks at release dates to confirm, release sources not answering or unknown delivery charges. Those are yours, further down.</p>
     {% if claude.has_key and claude.server_on %}<div class="row">
       {% if claude.state.enabled %}
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_now"><input type="submit" value="Ask Claude now"></form>
@@ -64,7 +78,9 @@
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_on"><input type="submit" value="Switch Claude on"></form>
       {% endif %}
     </div>
-    <p class="note">Claude settles every row itself. When it is sure or fairly sure and the site's rules agree, it acts. When it still cannot tell after a careful second look, it takes the safe choice: a doubtful price stays as shown with no saving claimed, a found page is not compared, the cheaper price of a wrong match is hidden, and a pair is kept apart for now and asked about again when anything about it changes. A pair is never merged on a doubt. Sort everything: it works through the whole list now, rather than {{ claude.per_run }} an hour, sending a long list to Anthropic in batches at half price (most come back within the hour). Everything it does is under Sorted for you with Undo.</p>{% endif %}
+    <details><summary>How Claude decides</summary>
+    <p class="note">Claude settles every row itself. When it is sure or fairly sure and the site's rules agree, it acts. When it still cannot tell after a careful second look, it takes the safe choice: a doubtful price stays as shown with no saving claimed, a found page is not compared, the cheaper price of a wrong match is hidden, and a pair is kept apart for now and asked about again when anything about it changes. A pair is never merged on a doubt. Sort everything: it works through the whole list now, rather than {{ claude.per_run }} an hour, sending a long list to Anthropic in batches at half price (most come back within the hour). Everything it does is under Sorted for you with Undo.</p>
+    </details>{% endif %}
     {% if claude_counts.needs_you %}<p class="note"><b>Needs you: {{ claude_counts.needs_you }}.</b> Claude's answer and one of the site's rules disagree on {{ claude_counts.needs_you|pluralize:"this row,these rows" }}, so Claude leaves {{ claude_counts.needs_you|pluralize:"it,them" }} to you. Each is marked Needs you below.</p>{% endif %}
     {% if claude.runs %}<details><summary>Recent runs</summary>
       <ul class="names">{% for run in claude.runs %}<li>{{ run.at|date:"j M H:i" }}: looked at {{ run.asked }}, sorted {{ run.sorted }}, {{ run.need_you }} need you, {{ run.spent }}{% if run.note %}. {{ run.note }}{% endif %}.</li>{% endfor %}</ul>
@@ -121,7 +137,7 @@
     </details>{% else %}<p class="none">Nothing yet.</p>{% endif %}
   </section>
 
-  <section>
+  <section id="doubtful-prices">
     <h2>Doubtful prices ({{ doubtful_count }})</h2>
     <p class="note">Cheapest prices far from the other shops. Open the link: if the price is right, tap This price is right; if it is another product, hide it. To answer several at once, tick them and tap a button at the top.{% if checked_count %} {{ checked_count }} more {{ checked_count|pluralize:"is,are" }} checked as the right product.{% endif %}</p>
     {% if doubtful %}<form method="post" id="ticked-doubtful" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
@@ -161,7 +177,7 @@
     </details>
   </section>
 
-  <section>
+  <section id="wrong-matches">
     <h2>Wrong matches ({{ wrong|length }})</h2>
     <p class="note">The cheapest price is over {{ max_percent }}% under the next, so one is probably another product. Hide the one that is wrong.</p>
     {% if wrong %}<form method="post" id="ticked-wrong" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
@@ -181,7 +197,7 @@
     </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
   </section>
 
-  <section>
+  <section id="duplicates">
     <h2>Possible duplicates ({{ duplicates|length }})</h2>
     {% if sure_pairs %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="merge_sure">{% for keep, other, ask in sure_pairs %}<input type="hidden" name="pair" value="{{ keep.pk }}:{{ other.pk }}">{% endfor %}<input type="submit" value="Merge the {{ sure_pairs|length }} pair{{ sure_pairs|pluralize }} Claude is sure are the same"></form>{% endif %}
     <p class="note">Merge only when they are the same product. Tap Not the same if not.</p>
@@ -207,7 +223,7 @@
     {% else %}<p class="none">Nothing to check.</p>{% endif %}
   </section>
 
-  <section>
+  <section id="found">
     <h2>Found at another shop ({{ found_count }})</h2>
     <p class="note">Is it the same product? Tap Yes to add the shop's price, or No. To answer several at once, tick them and tap a button at the top.</p>
     {% if found %}<form method="post" id="ticked-found" class="ticked">{% csrf_token %}<input type="hidden" name="action" value="ticked">
@@ -230,7 +246,7 @@
     </ul>{% else %}<p class="none">Nothing to check.</p>{% endif %}
   </section>
 
-  <section>
+  <section id="announced-sets">
     <h2>Announced sets to check ({{ releases|length }})</h2>
     <p class="note">New sets named by a source. Check the name and date, then tap Add set, or Not a set.{% if claude.state.enabled and claude.server_on %} Claude checks each one on the publisher's site and trusted references first, and the list shrinks as it settles them; each answer shows the pages it rests on.{% endif %}</p>
     {% if releases %}<ul>

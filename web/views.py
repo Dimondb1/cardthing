@@ -3088,6 +3088,68 @@ def duplicate_sections(groups):
             if (found := [row for row in rows if row[1].certainty == level])]
 
 
+# What Claude sorts on Things to check, one job each, in the order the page lists them: (anchor or admin link, title,
+# what Claude does there). The owner, 1 Nov 2026: "It needs to be simpler for me to see what Claude is programmed
+# to sort and its progress".
+CLAUDE_JOBS = {
+    "prices": ("#doubtful-prices", "Doubtful prices and wrong matches",
+               "Checks whether a price far from the other shops is for the same product. The right ones stay as "
+               "shown, the others are hidden."),
+    "pairs": ("#duplicates", "Possible duplicates",
+              "Checks whether two pages are one product. Sure ones are merged, the rest kept apart."),
+    "found": ("#found", "Found at another shop",
+              "Checks whether a page found at another shop is our product. Sure ones join the comparison."),
+    "sets": ("#announced-sets", "Announced sets",
+             "Checks new sets on trusted sites, then adds them or files them under a set the site has."),
+    "retail": ("", "Sets sold only at events",
+               "Checks whether a set due soon that no UK shop lists is sold only at events, so the drop tracker "
+               "never promises pre-orders for it."),
+    "market": ("", "Cardmarket matches",
+               "Picks the Cardmarket product that is ours, so the Price check can use its market price."),
+}
+
+
+def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_count, releases):
+    """What Claude sorts: for each of CLAUDE_JOBS, how many it has sorted so far (judge.sorted_counts), how many are
+    left on the list, and of those how many need the owner and how many wait for Claude, with the share done.
+    ``counts`` and ``set_counts`` are what judge.attach_answers and attach_set_answers returned for the rows the
+    page shows, so a long list's "needs you" counts the rows shown. A few queries."""
+    from catalogue import cardmarket_match, judge, set_judge, set_retail
+    from catalogue.models import ClaudeAsk
+
+    Kind = ClaudeAsk.Kind
+    done = judge.sorted_counts()
+    market = cardmarket_match.progress()
+
+    def yours(*sections):
+        return sum(counts.get(section, {}).get("needs_you", 0) for section in sections)
+
+    # A set of a game with no trusted sites to search is never Claude's.
+    unsearchable = sum(1 for row in releases if not set_judge.domains(row.game.slug))
+    figures = {
+        "prices": (done.get(Kind.OFFER, 0), doubtful_count + 2 * len(wrong), yours("doubtful", "wrong")),
+        "pairs": (done.get(Kind.PAIR, 0), sum(len(others) for _, others in duplicates), yours("pairs")),
+        "found": (done.get(Kind.FOUND, 0), found_count, yours("found")),
+        "sets": (done.get(Kind.SET, 0), len(releases), unsearchable + set_counts["needs_you"]),
+        "retail": (done.get(Kind.RETAIL, 0), len(set_retail.candidates()), 0),
+        "market": (market["sorted"], market["waiting"] + market["needs_you"], market["needs_you"]),
+    }
+    jobs = []
+    for name, (link, title, does) in CLAUDE_JOBS.items():
+        sorted_, left, needs_you = figures[name]
+        needs_you = min(needs_you, left)
+        share = 100 * sorted_ / (sorted_ + left) if sorted_ + left else 0
+        if name == "market":
+            link = reverse("admin:catalogue_cardmarketmatch_changelist") + "?status__exact=check"
+        jobs.append({
+            "name": name, "link": link, "title": title, "does": does, "sorted": sorted_, "left": left,
+            "needs_you": needs_you, "waiting": left - needs_you,
+            # Never 100 while anything is left, nor 0 once anything is sorted.
+            "share": min(99, max(1, round(share))) if sorted_ and left else round(share),
+        })
+    return jobs
+
+
 @staff_member_required
 @not_for_editors
 @sensitive_post_parameters("claude_key")
@@ -3201,7 +3263,8 @@ def checks_page(request):
     state = claude["state"]
     claude_counts = judge.attach_answers(doubtful, wrong, found, duplicates, may_act=bool(state and state.may_act))
     release_rows = checks.release_candidates(now)
-    judge.attach_set_answers(release_rows, may_act=bool(state and state.may_act))
+    set_counts = judge.attach_set_answers(release_rows, may_act=bool(state and state.may_act))
+    found_count = checks.found_waiting().count()
     context = {
         **admin.site.each_context(request), "title": "Things to check",
         "answers": checks.listed_answers(answers), "answers_count": len(answers), "answers_days": checks.ANSWERS_DAYS,
@@ -3213,8 +3276,10 @@ def checks_page(request):
         "duplicate_sections": duplicate_sections(duplicates),
         "shops": checks.unknown_delivery_shops(),
         "max_percent": offers.MAX_REAL_PERCENT,
-        "found": found, "found_count": checks.found_waiting().count(),
+        "found": found, "found_count": found_count,
         "claude": claude, "claude_counts": claude_counts,
+        "claude_jobs": claude_jobs(claude_counts, set_counts, doubtful_count, wrong, duplicates, found_count,
+                                   release_rows),
         "releases": release_rows, "disagreements": checks.release_disagreements(now),
         "stale_sources": checks.stale_release_sources(now),
     }

@@ -88,6 +88,16 @@ class PageTests(PageTestCase):
         self.assertContains(response, '<h2 id="featured-title" class="section-head__title section-head__title--mascot">'
                                       '<span class="mark section-head__mascot" aria-hidden="true"></span>Rip&#x27;s Deals</h2>')
         self.assertContains(response, 'href="#featured-title">Deals</a>')
+        # Hunted for you's raptor with its magnifying glass, and Follow your tracks' footprints, beside their names: drawn
+        # as shapes in the token colours, hidden from screen readers.
+        html = response.content.decode()
+        picks = html[html.index('id="picks-title"'):html.index("</h2>", html.index('id="picks-title"'))]
+        self.assertIn('<span class="hunt-mark" aria-hidden="true"><span class="mark hunt-mark__head" aria-hidden="true"></span><svg class="hunt-mark__glass"', picks)
+        self.assertTrue(picks.endswith("</svg></span>Hunted for you"))
+        tracks = html[html.index('id="resume-title"'):html.index("</h2>", html.index('id="resume-title"'))]
+        self.assertIn('<svg class="tracks-mark" viewBox="0 0 60 44" aria-hidden="true" focusable="false">', tracks)
+        self.assertEqual(tracks.count('class="tracks-mark__print '), 3)
+        self.assertTrue(tracks.endswith("</svg>Follow your tracks"))
         # The deeper lists live on the Deals and Games pages so the home page stays short.
         for moved in ("Trending now", "Biggest savings", "Biggest price drop", "Recently released", "Browse by game", "Back in stock"):
             self.assertNotContains(response, moved)

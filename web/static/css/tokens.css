@@ -191,6 +191,15 @@
   --mark-poster: clamp(13rem, 6rem + 30vw, 30rem);  /* the head on a raptor panel, cropped by its edge (raptor-lg.png) */
   --mark-poster-sm: clamp(13rem, 7rem + 18vw, 24rem); /* the same on the shorter watchlist card */
   --mark-ratio: 417 / 400;       /* the image's own proportions, width to height */
+  --hunt-mark-wide: 1.12;        /* Hunted for you's raptor and glass: a little wider than the head alone */
+  --hunt-glass-size: 52%;        /* the magnifying glass against that box */
+  --hunt-glass-left: 31%;        /* its lens over the raptor's eye */
+  --hunt-glass-top: -4%;
+  --glass-tilt: 12deg;           /* the glass's turn as it is raised to the eye */
+  --color-lens: rgb(255 255 255 / 0.5);   /* the glass: the raptor shows through it */
+  --tracks-wide: 1.36;           /* Follow your tracks: the trail is wider than it is tall (its 60 by 44 drawing) */
+  --tracks-faint: 0.35;          /* Follow your tracks: the oldest footprint */
+  --tracks-fading: 0.65;         /* and the one after it */
 
   /* Refer a friend: the pack (two raptor heads) and the keyring picture ------------------------------------ */
   --pack-tuck: 0.45;             /* how far the leading orange head overlaps the ink friend behind it, as a share of a head */

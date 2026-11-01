@@ -32,8 +32,10 @@ AUTO_LINK = 100
 SUGGEST = 60
 
 
+# "TGC" is shops' slip for "TCG": Pixel-Hub's "Pokémon (TGC): Mega Evolution Delta Reign Elite Trainer Box" kept
+# the word, so it never met "Delta Reign Elite Trainer Box" and became a second page (the owner, 1 Nov 2026).
 ABBREVIATIONS = {" etb ": " elite trainer box ", " bb ": " booster box ", " upc ": " ultra premium collection ",
-                 " centre ": " center "}
+                 " centre ": " center ", " tgc ": " tcg "}
 
 # A shop that sells several artworks on one page names the one chosen in brackets at the end: "30th Celebration
 # Sylveon / Greninja Ex Tin (Greninja)" is the Greninja tin, which other shops call "30th Celebration Greninja ex

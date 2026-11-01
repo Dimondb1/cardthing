@@ -674,3 +674,25 @@ class PackNotesTests(TestCase):
     def test_a_name_already_in_the_catalogue_is_tidied_the_same_way(self):
         self.assertEqual(tidy_name("Nihil Zero M3 Japanese Booster Pack 5 Cards Per Pack"), "Nihil Zero M3 Japanese Booster Pack")
         self.assertEqual(tidy_name("TCG Phantom Revenge Booster Box 24 Packs 7 Cards Per Pack"), "TCG Phantom Revenge Booster Box 24 Packs")
+
+
+class TcgNoteTests(TestCase):
+    """"TCG" in brackets or alone in front says only that it is a card game, and "TGC" is shops' slip for it
+    (Pixel-Hub, the owner, 1 Nov 2026)."""
+
+    def test_a_new_name_leaves_it_out(self):
+        cases = {
+            "Pokémon (TGC): Mega Evolution Delta Reign Elite Trainer Box": "Mega Evolution Delta Reign Elite Trainer Box",
+            "Pokemon TGC: Delta Reign Booster Bundle": "Delta Reign Booster Bundle",
+            "Pokémon (TCG) Prismatic Evolutions Booster Bundle": "Prismatic Evolutions Booster Bundle",
+        }
+        for title, expected in cases.items():
+            with self.subTest(title=title):
+                self.assertEqual(clean_name(title, "pokemon"), expected)
+
+    def test_a_name_already_in_the_catalogue_is_tidied(self):
+        self.assertEqual(tidy_name("(TGC): Mega Evolution Delta Reign Elite Trainer Box"),
+                         "Mega Evolution Delta Reign Elite Trainer Box")
+        self.assertEqual(tidy_name("TCG: Ascended Heroes Mini Tin"), "Ascended Heroes Mini Tin")
+        # "TCG" that runs into the name is left for clean_name's own rules.
+        self.assertEqual(tidy_name("TCG Phantom Revenge Booster Box"), "TCG Phantom Revenge Booster Box")

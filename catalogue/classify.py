@@ -376,9 +376,17 @@ PACK_NOTES = re.compile(
 )
 
 
+# "TCG" in brackets, or alone in front, says only that it is a card game, and "TGC" is shops' slip for it:
+# Pixel-Hub's "Pokémon (TGC): Mega Evolution Delta Reign Elite Trainer Box" became a page called "(TGC): Mega
+# Evolution Delta Reign Elite Trainer Box" (the owner, 1 Nov 2026).
+TGC = re.compile(r"\btgc\b", re.I)
+TCG_NOTE = re.compile(r"\s*[(\[]\s*tcg\s*[)\]]|^\s*tcg\s*[:\-–|]\s*", re.I)
+
+
 def tidy_name(title):
     """The light fixes safe to apply to a name that is already in the catalogue."""
     name = re.sub(r"\s+", " ", html.unescape(title)).strip()
+    name = TCG_NOTE.sub("", TGC.sub("TCG", name)).strip()
     # A long dash between words is a shop's separator ("Booster Box — Simplified Chinese"), and the site
     # never shows one: it becomes the plain " - " every other rule here already treats as a separator.
     name = re.sub(r"\s*[‒—―]\s*", " - ", name)

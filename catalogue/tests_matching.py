@@ -611,3 +611,56 @@ class CertaintyLevelTests(TestCase):
         self.assertEqual(self.level("Surging Sparks Booster Box", "Surging Sparks Booster Box Japanese"), DIFFERENT)
         self.assertEqual(self.level("Surging Sparks Booster Box", "Surging Sparks Booster Box", "booster_box", "bundle"),
                          POSSIBLE)
+
+
+class TgcSlipTests(TestCase):
+    """Pixel-Hub writes "Pokémon (TGC): ...", a slip for TCG. The word stayed in the key, so its Delta Reign Elite
+    Trainer Box never met ours and became a second page called "(TGC): Mega Evolution Delta Reign Elite Trainer
+    Box" (the owner, 1 Nov 2026)."""
+
+    TITLE = "Pokémon (TGC): Mega Evolution Delta Reign Elite Trainer Box"
+
+    def test_the_slip_is_read_as_tcg(self):
+        from .management.commands.merge_duplicates import merge_key, why_not_merge
+        from .models import Product
+
+        for title in (self.TITLE, "(TGC): Mega Evolution Delta Reign Elite Trainer Box"):
+            with self.subTest(title=title):
+                self.assertEqual(match_key(title, "pokemon"), match_key("Delta Reign Elite Trainer Box", "pokemon"))
+                self.assertEqual(merge_key(title, "pokemon"), merge_key("Delta Reign Elite Trainer Box", "pokemon"))
+        self.assertEqual(why_not_merge(Product(pk=1, name="Delta Reign Elite Trainer Box"),
+                                       Product(pk=2, name="(TGC): Mega Evolution Delta Reign Elite Trainer Box")), "")
+
+    def test_a_shop_title_with_the_slip_links_to_our_product(self):
+        from .importers import Catalogue
+        from .matching import AUTO_LINK
+
+        catalogue = Catalogue([(1, "Delta Reign Elite Trainer Box", "pokemon")])
+        match, value = catalogue.best_match(self.TITLE, game="pokemon")
+        self.assertEqual((match[0], value), (1, AUTO_LINK))
+        # The Pokémon Center box is still another product.
+        match, value = catalogue.best_match("Pokémon (TGC): Mega Evolution Delta Reign Pokémon Center Elite Trainer Box",
+                                            game="pokemon")
+        self.assertLess(value, AUTO_LINK)
+
+    def test_the_hourly_tidy_merges_the_two_pages_and_drops_the_slip_from_the_name(self):
+        game = make_game()
+        plain = Product.objects.create(game=game, name="Delta Reign Elite Trainer Box", product_type="elite_trainer_box")
+        slip = Product.objects.create(game=game, name="(TGC): Mega Evolution Delta Reign Elite Trainer Box",
+                                      product_type="elite_trainer_box")
+        center = Product.objects.create(game=game, name="Mega Evolution Delta Reign Pokémon Center Elite Trainer Box",
+                                        product_type="elite_trainer_box")
+        make_listing(plain, make_retailer("Harbour Games"))
+        # Two shops on the page with the slip, so it is the one kept and its name is the one tidied.
+        make_listing(slip, make_retailer("Pixel-Hub"))
+        make_listing(slip, make_retailer("Solent Cards"))
+        make_listing(center, make_retailer("Total Cards"))
+        Product.objects.update(image="")
+        call_command("tidy_all", stdout=StringIO())
+        shown = Product.objects.filter(is_active=True)
+        self.assertEqual(sorted(shown.values_list("name", flat=True)),
+                         ["Mega Evolution Delta Reign Elite Trainer Box",
+                          "Mega Evolution Delta Reign Pokémon Center Elite Trainer Box"])
+        kept = shown.get(pk=slip.pk)
+        self.assertEqual(set(kept.listings.values_list("retailer__name", flat=True)),
+                         {"Harbour Games", "Pixel-Hub", "Solent Cards"})

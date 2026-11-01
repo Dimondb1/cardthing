@@ -295,7 +295,7 @@ ENTRIES = [
         "home.games.label", T, "Game tiles heading",
         "Find your game",
         "Heading above the game tiles under the home page search box, and the label before the game links "
-        "when a search finds nothing.",
+        "when a search finds nothing. Also names its jump button under the search box.",
     ),
     Entry(
         "home.card.compare", B, "Card button",
@@ -334,7 +334,7 @@ ENTRIES = [
     Entry(
         "home.types.title", H, "Hunt by product heading",
         "Hunt by product",
-        "Heading for the product type tiles on the home page.",
+        "Heading for the product type tiles on the home page. Also names its jump button under the search box.",
     ),
     Entry(
         "home.games.more", B, "More games link",
@@ -364,7 +364,8 @@ ENTRIES = [
     Entry(
         "home.new.title", H, "Drops heading",
         "Drops",
-        "Home page heading above the Coming soon rows and the Out now row. Its See all link opens the drops page.",
+        "Home page heading above the Coming soon rows and the Out now row. Its See all link opens the drops page. "
+        "Also names its jump button under the search box.",
     ),
     Entry(
         "home.new.released", T, "Released date",
@@ -414,7 +415,8 @@ ENTRIES = [
     Entry(
         "home.resume.title", H, "Follow your tracks heading",
         "Follow your tracks",
-        "Home page section with this browser's recent searches and viewed products. Hidden until there are some.",
+        "Home page section with this browser's recent searches and viewed products. Hidden until there are some. "
+        "Also names its jump button under the search box.",
     ),
     Entry("home.resume.searches", T, "Recent searches label", "Recent searches", "Label in the pick up section."),
     Entry("home.resume.viewed", T, "Recently viewed label", "Recently viewed", "Label in the pick up section."),
@@ -427,7 +429,7 @@ ENTRIES = [
     Entry(
         "home.picks.title", H, "Hunted for you heading", "Hunted for you",
         "Top home page row of in-stock products like the ones this browser viewed, saved or searched for. Hidden "
-        "until there are some.",
+        "until there are some. Also names its jump button under the search box.",
     ),
     Entry(
         "home.picks.note", T, "Picked for you note", "Like what you have looked at, best deals first.",
@@ -448,7 +450,7 @@ ENTRIES = [
     Entry("home.picks.shops_one", T, "Pick label: one shop", "In stock at 1 shop",
           "Grey label on any other pick that only one shop has in stock."),
     Entry("home.featured.title", H, "Rip's Deals heading", "Rip's Deals",
-          "Home page row of deals near the top, with the raptor beside it."),
+          "Home page row of deals near the top, with the raptor beside it. Also names its jump button under the search box."),
     Entry(
         "home.featured.disclosure", T, "Featured deals disclosure",
         "Rip's Deals favour shops that pay us a commission. Price comparisons are always cheapest delivered "
@@ -1913,21 +1915,8 @@ ENTRIES = [
           "Read out by screen readers in place of the keyring photo, on the home page's Win a keyring section and "
           "the refer a friend pages."),
     Entry("home.jump.label", T, "Jump buttons label", "Jump to",
-          "Read out by screen readers before the jump buttons under the home page search."),
-    Entry("home.jump.games", B, "Jump to games", "Games",
-          "Jump button in the row under the home page search, which stays at the top of the screen as the page "
-          "scrolls, to Find your game. Short and plain, so the row fits a phone and says where each one goes."),
-    Entry("home.jump.deals", B, "Jump to deals", "Deals",
-          "Jump button under the home page search, to Rip's Deals. Short, so the buttons fit one line on a phone."),
-    Entry("home.jump.drops", B, "Jump to drops", "Drops", "Jump button under the home page search, to Drops."),
-    Entry("home.jump.types", B, "Jump to product types", "Products",
-          "Jump button under the home page search, to Hunt by product."),
-    Entry("home.jump.picks", B, "Jump to hunted for you", "Picked for you",
-          "Jump button under the home page search, to Hunted for you, shown once that row has products. Says plainly "
-          "what the row is, so it is not mistaken for Recently viewed or the Watchlist."),
-    Entry("home.jump.resume", B, "Jump to your tracks", "Recently viewed",
-          "Jump button under the home page search, to Follow your tracks, shown once it has something. Says plainly "
-          "what the row is, so it is not mistaken for Picked for you or the Watchlist."),
+          "Read out by screen readers before the jump buttons under the home page search. Each button is named by its "
+          "section's own heading, so editing a heading renames its button too."),
     Entry("home.spotlight.hide", B, "Drop spotlight hide button", "Hide",
           "At the top of the drop spotlight: folds it to a slim bar, remembered on this device."),
     Entry("home.spotlight.show", B, "Drop spotlight show button", "Show drop",

@@ -12,18 +12,20 @@
   </div>
 </section>
 
-{% comment %}One tap to each section further down, in the page's order. The row stays at the top of the screen while the page
-  scrolls, and the section in view is marked in orange (jump.js), so it reads as the page's tabs. Hunted for you and
-  Recently viewed show only once their sections have something (jump.js). Without script every button is a plain link.{% endcomment %}
+{% comment %}One tap to each section further down, in the page's order, each button named by its section's own heading
+  (the owner, 1 Nov 2026: "This doesn't match the headers I've set"), so editing a heading in admin renames its button
+  too. The row stays at the top of the screen while the page scrolls, and the section in view is marked in orange
+  (jump.js), so it reads as the page's tabs. Hunted for you and Follow your tracks show only once their sections have
+  something (jump.js). Without script every button is a plain link.{% endcomment %}
 {% if games or featured or coming_soon or latest or product_types %}
 <nav class="jump" aria-label="{% copy 'home.jump.label' %}" data-jump>
   <ul class="chips__list">
-    {% if featured %}<li><a class="chip" href="#featured-title">{% copy "home.jump.deals" %}</a></li>{% endif %}
-    {% if games %}<li><a class="chip" href="#games-title">{% copy "home.jump.games" %}</a></li>{% endif %}
-    <li data-jump-for="data-picks" hidden><a class="chip" href="#picks-title">{% copy "home.jump.picks" %}</a></li>
-    <li data-jump-for="data-resume" hidden><a class="chip" href="#resume-title">{% copy "home.jump.resume" %}</a></li>
-    {% if coming_soon or latest %}<li><a class="chip" href="#latest-title">{% copy "home.jump.drops" %}</a></li>{% endif %}
-    {% if product_types %}<li><a class="chip" href="#types-title">{% copy "home.jump.types" %}</a></li>{% endif %}
+    {% if featured %}<li><a class="chip" href="#featured-title">{% copy "home.featured.title" %}</a></li>{% endif %}
+    {% if games %}<li><a class="chip" href="#games-title">{% copy "home.games.label" %}</a></li>{% endif %}
+    <li data-jump-for="data-picks" hidden><a class="chip" href="#picks-title">{% copy "home.picks.title" %}</a></li>
+    <li data-jump-for="data-resume" hidden><a class="chip" href="#resume-title">{% copy "home.resume.title" %}</a></li>
+    {% if coming_soon or latest %}<li><a class="chip" href="#latest-title">{% copy "home.new.title" %}</a></li>{% endif %}
+    {% if product_types %}<li><a class="chip" href="#types-title">{% copy "home.types.title" %}</a></li>{% endif %}
   </ul>
 </nav>
 {% endif %}

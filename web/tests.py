@@ -89,7 +89,7 @@ class PageTests(PageTestCase):
         # The raptor is Rip's Deals' mascot, beside its name.
         self.assertContains(response, '<h2 id="featured-title" class="section-head__title section-head__title--mascot">'
                                       '<span class="mark section-head__mascot" aria-hidden="true"></span>Rip&#x27;s Deals</h2>')
-        self.assertContains(response, 'href="#featured-title">Deals</a>')
+        self.assertContains(response, 'href="#featured-title">Rip&#x27;s Deals</a>')
         # Hunted for you's raptor holding a magnifying glass, and Follow your tracks' footprints, beside their names:
         # drawn as shapes in the token colours, hidden from screen readers.
         html = response.content.decode()

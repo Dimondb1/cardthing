@@ -230,10 +230,9 @@ class FoldAndJumpTests(TestCase):
         self.assertEqual(targets, ["games-title", "picks-title", "resume-title", "latest-title", "types-title"])
         self.assertIn('<li data-jump-for="data-picks" hidden>', jump)
         self.assertIn('<li data-jump-for="data-resume" hidden>', jump)
-        self.assertIn(">Products</a>", jump)
-        # Plain words, so they are not mistaken for each other or for the Watchlist (Nov 2026).
-        self.assertIn(">Picked for you</a>", jump)
-        self.assertIn(">Recently viewed</a>", jump)
+        # Each button is named by its section's own heading, so they always match (the owner, 1 Nov 2026).
+        for heading in ("Find your game", "Hunted for you", "Follow your tracks", "Drops", "Hunt by product"):
+            self.assertIn(f">{heading}</a>", jump)
         # It stays at the top as the page scrolls and marks the section in view (jump.js), with script only.
         self.assertIn("data-jump", jump)
         self.assertIn('setAttribute("aria-current", "true")', page)
@@ -244,6 +243,21 @@ class FoldAndJumpTests(TestCase):
         self.assertIn('<ul class="chips__list">', jump)
         # Before the spotlight, so a first visit sees them first.
         self.assertLess(start, page.index('id="drop-spotlight"'))
+
+    def test_a_heading_edited_in_admin_renames_its_jump_button(self):
+        from django.core.cache import cache
+
+        from content import service
+        from content.models import SiteContent
+
+        service.sync_defaults()
+        SiteContent.objects.filter(key="home.games.label").update(content="Pick your game")
+        cache.clear()
+        page = self.client.get(HOME).content.decode()
+        jump = page[page.index('<nav class="jump"'):]
+        jump = jump[:jump.index("</nav>")]
+        self.assertIn('href="#games-title">Pick your game</a>', jump)
+        self.assertIn('<h2 id="games-title" class="section-head__title">Pick your game</h2>', page)
 
 
 class SpotlightAdminTests(TestCase):

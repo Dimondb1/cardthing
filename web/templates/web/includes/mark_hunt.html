@@ -1,18 +1,18 @@
-{% load static %}{% comment %}Hunted for you's mascot: the raptor in a deerstalker, Sherlock Holmes's hat (checked tweed, a peak front and back, the ear flaps tied in a bow on top), with a flat orange magnifying glass to its right. The head is the large raptor image through a mask; the hat and the glass are drawn here. Every colour is a token, set in site.css, so it is sharp at any size and in the brand's own palette. The ids are unique: it is on the home page once.{% endcomment %}<svg class="hunt-mark" viewBox="0 -64 600 464" aria-hidden="true" focusable="false">
+{% load static %}{% comment %}Hunted for you's mascot: the raptor in a deerstalker, Sherlock Holmes's hat (checked tweed, a peak front and back, the ear flaps tied in a bow on top), with a flat orange magnifying glass to its right. The hat is fitted to the head's outline: the crown sits down over the top of the skull and the peaks rest on the back of the head and the brow. The head is the large raptor image through a mask; the hat and the glass are drawn here. Every colour is a token, set in site.css, so it is sharp at any size and in the brand's own palette. The ids are unique: it is on the home page once.{% endcomment %}<svg class="hunt-mark" viewBox="0 -64 600 464" aria-hidden="true" focusable="false">
   <defs>
     <mask id="rr-hunt-head" maskUnits="userSpaceOnUse" x="0" y="0" width="417" height="400" style="mask-type: alpha"><image href="{% static 'img/raptor-lg.png' %}" width="417" height="400"/></mask>
-    <clipPath id="rr-hunt-hat"><path d="M-70 8C-74-30-40-62 0-62 40-62 74-30 70 8Q0 20-70 8Z"/></clipPath>
+    <clipPath id="rr-hunt-hat"><path d="M-81.0 -14.5C-87.0 -56.5 -51.0 -82.5 1.0 -82.5C53.0 -82.5 87.0 -51.5 81.0 -9.5Q0.0 12.0 -81.0 -14.5Z"/></clipPath>
   </defs>
   <rect class="hunt-mark__brand" width="417" height="400" mask="url(#rr-hunt-head)"/>
-  <g transform="translate(176 31) rotate(11)"><g class="hunt-mark__hat">
-    <path class="hunt-mark__ink" d="M-46 2Q-96-2-132 26Q-90 32-44 16Z"/>
-    <path class="hunt-mark__ink" d="M46 2Q96-2 132 26Q90 32 44 16Z"/>
-    <path class="hunt-mark__ink" d="M-70 8C-74-30-40-62 0-62 40-62 74-30 70 8Q0 20-70 8Z"/>
-    <path class="hunt-mark__check" clip-path="url(#rr-hunt-hat)" d="M-80-50H80M-80-36H80M-80-22H80M-80-8H80M-80 6H80M-60-70V30M-44-70V30M-28-70V30M-12-70V30M4-70V30M20-70V30M36-70V30M52-70V30" stroke-width="2.6"/>
-    <path class="hunt-mark__band" d="M-70 3Q0 15 70 3" stroke-width="7" stroke-linecap="round"/>
-    <path class="hunt-mark__brand" d="M0-63C-6-78-28-80-28-69-28-60-10-59 0-63Z"/>
-    <path class="hunt-mark__brand" d="M0-63C6-78 28-80 28-69 28-60 10-59 0-63Z"/>
-    <circle class="hunt-mark__brand" cx="0" cy="-63" r="5.5"/>
+  <g transform="translate(177 40.5)"><g class="hunt-mark__hat">
+    <path class="hunt-mark__ink" d="M-67.4 -40.5C-70.1 -43.4 -75.0 -37.9 -78.5 -36.6C-82.1 -35.2 -85.4 -33.8 -88.7 -32.4C-91.9 -31.1 -94.7 -30.1 -98.1 -28.5C-101.5 -27.0 -105.4 -25.0 -108.9 -23.0C-112.5 -21.0 -116.2 -18.5 -119.6 -16.4C-122.9 -14.3 -125.8 -12.7 -129.1 -10.5C-132.4 -8.3 -137.2 -4.8 -139.2 -3.1C-141.2 -1.4 -141.1 -2.0 -141.3 -0.5C-141.5 1.1 -141.6 4.5 -140.5 6.0C-139.4 7.5 -136.0 8.3 -134.5 8.6C-133.0 8.8 -133.6 8.5 -131.4 7.3C-129.2 6.1 -124.5 3.2 -121.2 1.4C-117.8 -0.4 -114.4 -1.8 -111.1 -3.4C-107.7 -5.0 -104.3 -6.7 -101.0 -8.1C-97.6 -9.6 -94.4 -10.8 -91.1 -11.8C-87.8 -12.9 -84.5 -13.6 -81.2 -14.5C-77.9 -15.4 -74.6 -16.3 -71.5 -17.1C-68.3 -17.9 -62.7 -15.2 -62.0 -19.1C-61.3 -23.0 -64.6 -37.6 -67.4 -40.5Z"/>
+    <path class="hunt-mark__ink" d="M73.0 -35.6C75.7 -38.4 77.0 -33.7 79.2 -32.5C81.4 -31.3 84.0 -30.0 86.3 -28.5C88.6 -27.0 90.8 -25.1 92.9 -23.5C95.1 -21.9 97.0 -20.6 99.2 -18.8C101.3 -17.1 103.7 -15.1 105.8 -13.1C108.0 -11.1 109.9 -9.0 112.0 -6.9C114.1 -4.9 116.9 -2.2 118.2 -0.7C119.5 0.8 119.9 0.7 119.9 2.2C119.9 3.7 119.4 7.0 118.0 8.3C116.7 9.6 113.2 9.8 111.6 9.8C110.0 9.8 110.3 9.2 108.7 8.1C107.1 7.0 104.2 4.8 101.9 3.2C99.7 1.5 97.4 -0.2 95.2 -1.7C93.0 -3.2 90.8 -4.5 88.6 -5.7C86.4 -7.0 84.2 -7.9 82.1 -9.0C79.9 -10.1 77.8 -11.4 75.6 -12.2C73.5 -13.1 71.5 -13.6 69.4 -14.3C67.4 -14.9 62.6 -12.4 63.2 -15.9C63.8 -19.5 70.4 -32.8 73.0 -35.6Z"/>
+    <path class="hunt-mark__ink" d="M-81.0 -14.5C-87.0 -56.5 -51.0 -82.5 1.0 -82.5C53.0 -82.5 87.0 -51.5 81.0 -9.5Q0.0 12.0 -81.0 -14.5Z"/>
+    <path class="hunt-mark__check" clip-path="url(#rr-hunt-hat)" d="M-91 16H91M-91 2H91M-91 -12H91M-91 -26H91M-91 -40H91M-91 -54H91M-91 -68H91M-91 -82H91M-8 -90V16M-24 -90V16M-40 -90V16M-56 -90V16M-72 -90V16M-88 -90V16M8 -90V16M24 -90V16M40 -90V16M56 -90V16M72 -90V16M88 -90V16" stroke-width="2.6"/>
+    <path class="hunt-mark__band" d="M-79.0 -19.0Q0.0 7.5 79.0 -14.0" stroke-width="7" stroke-linecap="round"/>
+    <path class="hunt-mark__brand" d="M1.0 -84.5C-5.0 -99.5 -27.0 -101.5 -27.0 -90.5 -27.0 -81.5 -9.0 -80.5 1.0 -84.5Z"/>
+    <path class="hunt-mark__brand" d="M1.0 -84.5C7.0 -99.5 29.0 -101.5 29.0 -90.5 29.0 -81.5 11.0 -80.5 1.0 -84.5Z"/>
+    <circle class="hunt-mark__brand" cx="1.0" cy="-84.5" r="5.5"/>
   </g></g>
   <circle class="hunt-mark__lens" cx="488" cy="196" r="50"/>
   <circle class="hunt-mark__glass" cx="488" cy="196" r="50" stroke-width="17"/>

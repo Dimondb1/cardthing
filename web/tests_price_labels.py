@@ -77,9 +77,12 @@ class FeaturedDisclosureTests(TestCase):
         self.assertIn('id="featured-title"', html)
         section = html[html.index('id="featured-title"'):]
         section = section[:section.index("</section>")]
-        self.assertIn('<p class="section-head__note">Rip&#x27;s Deals favour shops that pay us a commission. Price '
-                      'comparisons are always cheapest delivered first, and no shop can pay to move up. '
-                      '<a href="/about/">How it works</a></p>', section)
+        note = ('<p class="section-head__note section-head__note--after">Rip&#x27;s Deals favour shops that pay us a '
+                'commission. Price comparisons are always cheapest delivered first, and no shop can pay to move up. '
+                '<a href="/about/">How it works</a></p>')
+        self.assertIn(note, section)
+        # Straight under the row it is about, so the prices come first on a phone (Nov 2026).
+        self.assertGreater(section.index(note), section.index("</ul>"))
         # True to the product page: its shops are listed cheapest delivered first.
         page = self.client.get(box.get_absolute_url()).content.decode()
         self.assertLess(page.index("£50.00"), page.index("£70.00"))

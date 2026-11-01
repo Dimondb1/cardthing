@@ -131,8 +131,11 @@ ROOT_FONT = 16
 MEASURED = {
     "card": {320: 74, 375: 95, 412: 109, 480: 135, 600: 181, 700: 219, 767: 245,
              768: 96, 900: 121, 959: 132, 960: 132, 1024: 144, 1180: 174, 1280: 175, 1920: 175},
-    "cover": {320: 44, 375: 57, 412: 65, 480: 81, 600: 109, 700: 133, 767: 148,
-              768: 89, 900: 110, 959: 120, 960: 67, 1024: 74, 1180: 90, 1280: 90, 1920: 90},
+    # A game tile's picture well and a compact deal's (the home page, Nov 2026): the well less its padding.
+    "cover": {320: 84, 375: 105, 412: 119, 480: 145, 600: 191, 700: 229, 767: 255,
+              768: 144, 900: 175, 959: 189, 960: 111, 1024: 120, 1180: 144, 1280: 145, 1920: 145},
+    "deal": {320: 84, 375: 104, 412: 119, 480: 144, 600: 190, 700: 229, 767: 254,
+             768: 98, 900: 121, 959: 131, 960: 131, 1024: 143, 1180: 170, 1280: 171, 1920: 171},
     "trend": {375: 151, 412: 172, 480: 209, 600: 276, 700: 332, 767: 369,
               768: 141, 960: 141, 1024: 150, 1180: 181, 1280: 182, 1920: 182},
     "large": {320: 272, 375: 272, 767: 272, 959: 272, 960: (352, 528), 1280: (352, 549), 1920: (354, 557)},
@@ -222,7 +225,8 @@ class SizesFollowTheLayoutTests(SimpleTestCase):
         card, cover, trend, large, row = (SLOTS[name] for name in ("card", "cover", "trend", "large", "row"))
         # A 2x screen 700px wide: the card picture is 219px, so it needs a 540 copy, not 200.
         self.assertEqual(chosen(card[2], sizes_at(card[1], 700), 2), 540)
-        self.assertEqual(chosen(cover[2], sizes_at(cover[1], 767), 2), 330)
+        # The game tile's picture is 255px on a 767px phone (Nov 2026: large above the name), so a 2x one takes 540.
+        self.assertEqual(chosen(cover[2], sizes_at(cover[1], 767), 2), 540)
         self.assertEqual(chosen(trend[2], sizes_at(trend[1], 700), 2), 700)
         # A 1x desktop: the 352 to 557px hero takes the 540 copy, not the 1200 one.
         for viewport in (960, 1280, 1920):

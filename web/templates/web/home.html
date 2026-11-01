@@ -10,23 +10,40 @@
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
   </div>
-  {% if guides_live %}<p class="hero__guides"><a href="{% url 'web:guides' %}">{% copy "home.guides" %}</a></p>{% endif %}
-  {% comment %}One tap to each section further down, in the page's order and on one line that swipes sideways on a phone,
-    for a first visit: the drop spotlight below can fill a phone's screen. Hunted for you and Your tracks show only once
-    their sections have something (jump.js).{% endcomment %}
-  {% if games or featured or coming_soon or latest or product_types %}
-  <nav class="jump chips" aria-label="{% copy 'home.jump.label' %}">
-    <ul class="chips__list">
-      {% if games %}<li><a class="chip" href="#games-title">{% copy "home.jump.games" %}</a></li>{% endif %}
-      <li data-jump-for="data-picks" hidden><a class="chip" href="#picks-title">{% copy "home.jump.picks" %}</a></li>
-      <li data-jump-for="data-resume" hidden><a class="chip" href="#resume-title">{% copy "home.jump.resume" %}</a></li>
-      {% if featured %}<li><a class="chip" href="#featured-title">{% copy "home.jump.deals" %}</a></li>{% endif %}
-      {% if coming_soon or latest %}<li><a class="chip" href="#latest-title">{% copy "home.jump.drops" %}</a></li>{% endif %}
-      {% if product_types %}<li><a class="chip" href="#types-title">{% copy "home.jump.types" %}</a></li>{% endif %}
-    </ul>
-  </nav>
-  {% endif %}
 </section>
+
+{% comment %}One tap to each section further down, in the page's order. The row stays at the top of the screen while the page
+  scrolls, and the section in view is marked in orange (jump.js), so it reads as the page's tabs. Hunted for you and
+  Recently viewed show only once their sections have something (jump.js). Without script every button is a plain link.{% endcomment %}
+{% if games or featured or coming_soon or latest or product_types %}
+<nav class="jump" aria-label="{% copy 'home.jump.label' %}" data-jump>
+  <ul class="chips__list">
+    {% if featured %}<li><a class="chip" href="#featured-title">{% copy "home.jump.deals" %}</a></li>{% endif %}
+    {% if games %}<li><a class="chip" href="#games-title">{% copy "home.jump.games" %}</a></li>{% endif %}
+    <li data-jump-for="data-picks" hidden><a class="chip" href="#picks-title">{% copy "home.jump.picks" %}</a></li>
+    <li data-jump-for="data-resume" hidden><a class="chip" href="#resume-title">{% copy "home.jump.resume" %}</a></li>
+    {% if coming_soon or latest %}<li><a class="chip" href="#latest-title">{% copy "home.jump.drops" %}</a></li>{% endif %}
+    {% if product_types %}<li><a class="chip" href="#types-title">{% copy "home.jump.types" %}</a></li>{% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+{% if featured %}
+<section class="home-section" aria-labelledby="featured-title">
+  <div class="section-head">
+    <h2 id="featured-title" class="section-head__title section-head__title--mascot"><span class="mark section-head__mascot" aria-hidden="true"></span>{% copy "home.featured.title" %}</h2>
+    <a class="section-head__all" href="{% url 'web:deals' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  </div>
+  {# Every featured deal shows without script; the spares after them pass the same tests and wait hidden, so interest.js can put the visitor's own games first, a spare only ever taking the place of a deal from the same side. Compact, so the first screen reaches a price. #}
+  <ul class="trending trending--compact" data-scroll data-interest data-interest-show="{{ featured|length }}">
+    {% for product, summary in featured %}{% include "web/includes/featured_card.html" with compact=True %}{% endfor %}
+    {% for product, summary in featured_spares %}{% include "web/includes/featured_card.html" with spare=True compact=True %}{% endfor %}
+  </ul>
+  {# Said beside the row it is about, not only in the footer: commission shapes which deals are picked, never a comparison's order. Under the row, so the prices come first. #}
+  <p class="section-head__note section-head__note--after">{% if featured_paying_only %}{% copy "home.featured.disclosure_paying" %}{% else %}{% copy "home.featured.disclosure" %}{% endif %} <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a></p>
+</section>
+{{ interest_games|json_script:"interest-games" }}<script>{% inline_static "js/interest.js" %}</script>
+{% endif %}
 
 {% if spotlight %}{% include "web/includes/spotlight.html" %}{% endif %}
 
@@ -36,13 +53,14 @@
     <h2 id="games-title" class="section-head__title">{% copy "home.games.label" %}</h2>
     <a class="section-head__all" href="{% url 'web:games' %}">{% copy "home.games.more" %} <span aria-hidden="true">›</span></a>
   </div>
-  {# Every game, in a row that swipes sideways; each is shown by the box art of one of its own products, so the tiles are recognisable without borrowing any logo. #}
+  {# Every game, in a row that swipes sideways; each is shown large by the box art of one of its own products, so the tiles are recognisable without borrowing any logo, above its name on one line. #}
   <ul class="tiles tiles--games">
     {% for game in games %}
     {# The whole tile opens the game (its link's area covers it); the ⓘ beside the name says what the game is. #}
-    <li class="tiles__item"><div class="tile tile--game"><span class="tile__cover" aria-hidden="true">{% if game.cover %}{% product_image game.cover "cover" %}{% else %}<span class="product-image product-image--cover">{% include "web/includes/placeholder.svg" with type="booster_box" %}</span>{% endif %}</span><span class="tile__line"><a class="tile__name tile__link" href="{{ game.get_absolute_url }}">{{ game.display_short }}</a>{% info "game" game.slug game.display_short %}</span><span class="tile__meta">{% copy_count "browse.count" game.product_count shown=game.product_count|compact_count %}</span></div></li>
+    <li class="tiles__item"><div class="tile tile--game"><span class="tile__picture" aria-hidden="true">{% if game.cover %}{% product_image game.cover "cover" %}{% else %}<span class="product-image product-image--cover">{% include "web/includes/placeholder.svg" with type="booster_box" %}</span>{% endif %}</span><span class="tile__line"><a class="tile__name tile__link" href="{{ game.get_absolute_url }}">{{ game.display_short }}</a>{% info "game" game.slug game.display_short %}</span><span class="tile__meta">{% copy_count "browse.count" game.product_count shown=game.product_count|compact_count %}</span></div></li>
     {% endfor %}
   </ul>
+  {% if guides_live %}<p class="home-guides"><a href="{% url 'web:guides' %}">{% copy "home.guides" %}</a></p>{% endif %}
 </section>
 {% endif %}
 
@@ -70,21 +88,6 @@
   <p class="section-head__note">{% copy "home.resume.note" %}</p>
 </section>
 
-{% if featured %}
-<section class="home-section" aria-labelledby="featured-title">
-  <div class="section-head">
-    <h2 id="featured-title" class="section-head__title section-head__title--mascot"><span class="mark section-head__mascot" aria-hidden="true"></span>{% copy "home.featured.title" %}</h2>
-    <a class="section-head__all" href="{% url 'web:deals' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
-  </div>
-  {# Said beside the row it is about, not only in the footer: commission shapes which deals are picked, never a comparison's order. #}
-  <p class="section-head__note">{% if featured_paying_only %}{% copy "home.featured.disclosure_paying" %}{% else %}{% copy "home.featured.disclosure" %}{% endif %} <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a></p>
-  {# Every featured deal shows without script; the spares after them pass the same tests and wait hidden, so interest.js can put the visitor's own games first, a spare only ever taking the place of a deal from the same side. #}
-  <ul class="trending" data-scroll data-interest data-interest-show="{{ featured|length }}">
-    {% for product, summary in featured %}{% include "web/includes/featured_card.html" %}{% endfor %}
-    {% for product, summary in featured_spares %}{% include "web/includes/featured_card.html" with spare=True %}{% endfor %}
-  </ul>
-</section>
-{% endif %}
 
 {% comment %}The raptor panels follow the owner's design: big capitals, the head cropped by the panel's edge. The whole panel
    is the link, so it works with JavaScript off; the head is decoration, hidden from screen readers.{% endcomment %}
@@ -145,7 +148,7 @@
 </section>
 {% endif %}
 {# Runs as soon as the rows above are read, before they are painted: the visitor's own games first, from this browser's history only. #}
-{% if featured or coming_soon %}{{ interest_games|json_script:"interest-games" }}<script>{% inline_static "js/interest.js" %}</script>{% endif %}
+{% if coming_soon %}{% if not featured %}{{ interest_games|json_script:"interest-games" }}{% endif %}<script>{% inline_static "js/interest.js" %}</script>{% endif %}
 
 <section class="home-section" aria-labelledby="watch-title">
   <a class="poster poster--watch" href="{% url 'web:watchlist' %}">

@@ -217,7 +217,7 @@
   --product-media-phone-long: clamp(7rem, 100vh - 35.5rem, 15rem);
   --product-media-note: 1.25rem;
   --product-media-min: 22rem;       /* the picture well beside the price box on wide screens: at least this tall, and as tall as the box */
-  --tile-game-art: 2.75rem;         /* a game tile's box art, beside its name */
+  --jump-bar: 3rem;                 /* the home page's sticky jump row: its chips and padding, which a jump lands below */
   --masthead-search: 2.5rem;        /* the header search box: compact, still a full finger wide */
   --masthead-logo: 1.75rem;         /* the header logo's height on phones */
   --masthead-logo-wide: 2rem;       /* the same on tablets and desktops */

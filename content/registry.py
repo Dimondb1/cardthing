@@ -265,7 +265,7 @@ ENTRIES = [
     ),
     Entry(
         "home.hero.subtitle", T, "Line under the headline",
-        "Sealed TCG prices from {shops} UK shops, delivery included. Not just the basket price.",
+        "Compare sealed TCG prices from {shops} UK shops, including delivery.",
         "One sentence under the headline, above the search box. {shops} is how many UK shops the site has "
         "current prices from (not eBay or Amazon), counted every ten minutes. Leave empty to hide it.",
         optional=True, placeholders=("shops",),
@@ -1914,21 +1914,27 @@ ENTRIES = [
           "the refer a friend pages."),
     Entry("home.jump.label", T, "Jump buttons label", "Jump to",
           "Read out by screen readers before the jump buttons under the home page search."),
-    Entry("home.jump.games", B, "Jump to games", "Games", "Jump button under the home page search, to Find your game."),
+    Entry("home.jump.games", B, "Jump to games", "Games",
+          "Jump button in the row under the home page search, which stays at the top of the screen as the page "
+          "scrolls, to Find your game. Short and plain, so the row fits a phone and says where each one goes."),
     Entry("home.jump.deals", B, "Jump to deals", "Deals",
           "Jump button under the home page search, to Rip's Deals. Short, so the buttons fit one line on a phone."),
     Entry("home.jump.drops", B, "Jump to drops", "Drops", "Jump button under the home page search, to Drops."),
     Entry("home.jump.types", B, "Jump to product types", "Products",
           "Jump button under the home page search, to Hunt by product."),
-    Entry("home.jump.picks", B, "Jump to hunted for you", "For you",
-          "Jump button under the home page search, to Hunted for you, shown once that row has products."),
-    Entry("home.jump.resume", B, "Jump to your tracks", "Your tracks",
-          "Jump button under the home page search, to Follow your tracks, shown once it has something."),
+    Entry("home.jump.picks", B, "Jump to hunted for you", "Picked for you",
+          "Jump button under the home page search, to Hunted for you, shown once that row has products. Says plainly "
+          "what the row is, so it is not mistaken for Recently viewed or the Watchlist."),
+    Entry("home.jump.resume", B, "Jump to your tracks", "Recently viewed",
+          "Jump button under the home page search, to Follow your tracks, shown once it has something. Says plainly "
+          "what the row is, so it is not mistaken for Picked for you or the Watchlist."),
     Entry("home.spotlight.hide", B, "Drop spotlight hide button", "Hide",
           "At the top of the drop spotlight: folds it to a slim bar, remembered on this device."),
-    Entry("home.spotlight.show", B, "Drop spotlight show button", "Show", "On the drop spotlight's folded bar."),
-    Entry("home.spotlight.bar.alerted", T, "Drop spotlight bar, alerts set", "Alerts set",
-          "On the folded bar once every alert was asked for on this device."),
+    Entry("home.spotlight.show", B, "Drop spotlight show button", "Show drop",
+          "On the drop spotlight's folded bar: opens the drop, with its date and the steps to be ready. Says what it "
+          "opens, so it is not taken for a page of its own."),
+    Entry("home.spotlight.bar.alerted", T, "Drop spotlight bar, alerts set", "Your alerts are on",
+          "On the folded bar once every alert was asked for on this device, so it reads as the visitor's own."),
     Entry("home.spotlight.bar.confirm", T, "Drop spotlight bar, confirm", "Check your inbox to confirm",
           "On the folded bar just after asking for every alert, when the panel folds by itself."),
     Entry("home.spotlight.eyebrow", T, "Drop spotlight eyebrow", "The next big drop",
@@ -4085,7 +4091,8 @@ ENTRIES = [
           "Under the price box on product pages, leading to the Guides page with every guide. Shown once a guide is "
           "published. A sold-out page shows the scams guide's own link words instead when it is set to show there."),
     Entry("home.guides", B, "Home page guides link", "New to trading cards? Read our guides.",
-          "Under the search box on phones, where the header has no room for Guides. Shown once a guide is published."),
+          "Under the game tiles on phones, where the header has no room for Guides: small and below the shopping. "
+          "Shown once a guide is published."),
     Entry("info.open", T, "Info button, read out", "What is {thing}?",
           "What screen readers say for an ⓘ button. {thing} is the label beside it.", placeholders=("thing",)),
     Entry("info.type.booster_pack", T, "Info: booster pack",

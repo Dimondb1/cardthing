@@ -2,7 +2,9 @@ import re
 import shutil
 import tempfile
 from datetime import timedelta
+from pathlib import Path
 
+from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -106,6 +108,47 @@ class PageTests(PageTestCase):
         # The deeper lists live on the Deals and Games pages so the home page stays short.
         for moved in ("Trending now", "Biggest savings", "Biggest price drop", "Recently released", "Browse by game", "Back in stock"):
             self.assertNotContains(response, moved)
+
+    def test_the_first_screen_reaches_a_price(self):
+        # A review the owner shared (Nov 2026): the intro, search, guides, jump buttons, drop and games all came
+        # before any price. Rip's Deals now follows the search and its jump row, compact, and its note follows it.
+        html = self.client.get(reverse("web:home")).content.decode()
+        deals = html.index('id="featured-title"')
+        self.assertLess(html.index('class="hero__search"'), html.index('<nav class="jump"'))
+        self.assertLess(html.index('<nav class="jump"'), deals)
+        self.assertLess(deals, html.index('id="games-title"'))
+        row = html[deals:html.index("</section>", deals)]
+        self.assertIn('class="trending trending--compact"', row)
+        self.assertIn("product-image--deal", row)
+        # Each compact card is a link as a whole, with no button of its own.
+        self.assertNotIn("trending__cta", row)
+        self.assertLess(row.index("</ul>"), row.index("section-head__note--after"))
+        # The visitor's own games first, sorted straight after the row so nothing moves once it is drawn.
+        after = html[html.index("</section>", deals):]
+        self.assertTrue(after.startswith('</section>\n<script id="interest-games" type="application/json">'))
+        self.assertEqual(html.count('id="interest-games"'), 1)
+        # The shorter intro, in plain words, with the live count of shops.
+        self.assertIn("Compare sealed TCG prices from", html)
+        self.assertIn("UK shops, including delivery.", html)
+
+    def test_a_game_tile_shows_its_picture_large_above_one_line_of_name(self):
+        html = self.client.get(reverse("web:home")).content.decode()
+        tile = html[html.index('<div class="tile tile--game">'):]
+        tile = tile[:tile.index("</li>")]
+        self.assertLess(tile.index('class="tile__picture"'), tile.index('class="tile__line"'))
+        self.assertLess(tile.index('class="tile__line"'), tile.index('class="tile__meta"'))
+        css = (Path(settings.BASE_DIR) / "web" / "static" / "css" / "site.css").read_text()
+        # Never broken over two lines ("Yu-Gi-Oh" was).
+        self.assertIn(".tile--game .tile__name { display: block; overflow: hidden; text-overflow: ellipsis; "
+                      "white-space: nowrap;", css)
+
+    def test_the_header_marks_the_page_you_are_on(self):
+        response = self.client.get(reverse("web:watchlist"))
+        self.assertContains(response, 'class="masthead__watch" href="/watchlist/" data-watch-link="/watchlist/" '
+                                      'aria-current="page"')
+        css = (Path(settings.BASE_DIR) / "web" / "static" / "css" / "site.css").read_text()
+        # On a phone both icons are always orange, so the current one gets the soft orange well too.
+        self.assertIn('.masthead__watch[aria-current="page"] { background: var(--color-brand-soft);', css)
 
     def test_deals_page_carries_what_left_the_home_page(self):
         response = self.client.get(reverse("web:deals"))
@@ -2212,8 +2255,7 @@ class ShopsComparedTests(TestCase):
         stale = make_listing(box, make_retailer("Fenland Games"), price="98.00")
         Listing.objects.filter(pk=stale.pk).update(last_checked=timezone.now() - timedelta(days=5))
         make_listing(box, make_retailer("Kestrel Cards"), price="97.00", sanity=Listing.Sanity.EXCLUDED)
-        self.assertEqual(self.subtitle(),
-                         "Sealed TCG prices from 2 UK shops, delivery included. Not just the basket price.")
+        self.assertEqual(self.subtitle(), "Compare sealed TCG prices from 2 UK shops, including delivery.")
         # A shop's first read puts it in the count.
         make_listing(box, make_retailer("Marlow Card Co."), price="98.50")
         self.assertIn("from 3 UK shops", self.subtitle())
@@ -2234,9 +2276,9 @@ class RedesignTests(PageTestCase):
         self.assertIn('<p class="hero__eyebrow">UK price comparison</p>', html)
         self.assertIn('Bad prices. <span class="hero__accent">Binned.</span></h1>', html)
         # The line under it says every price is delivered.
-        self.assertIn("delivery included. Not just the basket price.", html)
+        self.assertIn("UK shops, including delivery.", html)
         self.assertIn('<span class="search__button-text">Find best price</span>', html)
-        self.assertIn('<div class="tile tile--game"><span class="tile__cover" aria-hidden="true">', html)
+        self.assertIn('<div class="tile tile--game"><span class="tile__picture" aria-hidden="true">', html)
         self.assertIn('<a class="tile__name tile__link" href="/games/pokemon/">Pokémon</a>', html)
         self.assertIn('<span class="tile__meta">3 products</span></div>', html)
         # No product has a picture here, so the tile shows the booster box outline instead.
@@ -2250,15 +2292,16 @@ class RedesignTests(PageTestCase):
         self.assertNotIn("type=tin", types)   # a product of a hidden game is not listed, so it is not counted
         self.assertIn('<a class="poster poster--watch" href="/watchlist/">', html)
         self.assertIn("Keep an eye on it.", html)
-        # The headline's orange sentence sits on the same line, and a game tile is one short row.
+        # The headline's orange sentence sits on the same line, and a game tile shows its picture large.
         from django.contrib.staticfiles import finders
 
         css = open(finders.find("css/site.css"), encoding="utf-8").read()
         self.assertIn(".hero__accent { color: var(--color-brand); white-space: nowrap; }", css)
-        self.assertIn('grid-template-columns: var(--tile-game-art) minmax(0, 1fr); grid-template-areas: "art name" "art meta";', css)
-        # Every row card ends with the same button.
+        self.assertIn(".tile--game .product-image--cover { aspect-ratio: 4 / 3; }", css)
+        # Rip's Deals' compact cards are links as a whole, with no button: the first row a phone reaches (Nov 2026).
         featured = html[html.index('id="featured-title"'):]
-        self.assertIn('<span class="trending__cta">Compare prices<span aria-hidden="true"> →</span></span>', featured)
+        featured = featured[:featured.index("</section>")]
+        self.assertNotIn("trending__cta", featured)
 
     def test_browse_by_product_shows_every_type_pictured_by_a_real_product_with_its_info(self):
         # The owner, 28 Oct 2026: the tiles looked boring; show real products, every type, and an ⓘ on each.
@@ -2957,7 +3000,7 @@ class GoldenLayoutTests(PageTestCase):
             self.assertIn(rule, css)
         # The home and deals pages' sections sit closer, 20px on a phone and 24px wider, so more shows on a screen.
         self.assertIn(".home-section { margin-top: var(--rhythm-home); }", css)
-        self.assertIn(".hero + .home-section { margin-top: var(--rhythm-home); }", css)
+        self.assertIn(".jump + .home-section { margin-top: var(--rhythm-home); }", css)
         tokens = self.css("tokens.css")
         self.assertIn("--rhythm-home: calc(1.25rem * var(--density));", tokens)
         self.assertIn("--rhythm-home: calc(1.5rem * var(--density));", tokens)

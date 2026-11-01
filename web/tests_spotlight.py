@@ -222,7 +222,7 @@ class FoldAndJumpTests(TestCase):
 
     def test_jump_buttons_lead_to_the_sections_on_the_page(self):
         page = self.client.get(HOME).content.decode()
-        start = page.index('<nav class="jump chips"')
+        start = page.index('<nav class="jump"')
         jump = page[start:page.index("</nav>", start)]
         self.assertIn('aria-label="Jump to"', jump)
         targets = re.findall(r'href="#([a-z-]+)"', jump)
@@ -231,6 +231,12 @@ class FoldAndJumpTests(TestCase):
         self.assertIn('<li data-jump-for="data-picks" hidden>', jump)
         self.assertIn('<li data-jump-for="data-resume" hidden>', jump)
         self.assertIn(">Products</a>", jump)
+        # Plain words, so they are not mistaken for each other or for the Watchlist (Nov 2026).
+        self.assertIn(">Picked for you</a>", jump)
+        self.assertIn(">Recently viewed</a>", jump)
+        # It stays at the top as the page scrolls and marks the section in view (jump.js), with script only.
+        self.assertIn("data-jump", jump)
+        self.assertIn('setAttribute("aria-current", "true")', page)
         for target in targets:
             self.assertIn(f'id="{target}"', page)
         self.assertIn("MutationObserver", page)

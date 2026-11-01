@@ -2,7 +2,7 @@
 // Read from this browser's own history only (recently viewed, saved, recent searches and game pages
 // visited, kept by history.js and watch.js). Nothing is sent anywhere and nothing new is kept.
 // No exclamation marks: the copy tests read inline script as page text.
-// The page includes this file inline straight after those rows, so it runs before they are painted:
+// The page includes this file inline straight after each of those rows, so it runs before they are painted:
 // nothing moves on screen and there is nothing to animate. Without it, or without history, the
 // server's order (most popular first, the same for everyone) stands.
 (() => {
@@ -42,7 +42,10 @@
   if (Object.keys(interest).length === 0) return;
   const like = (el) => interest[el.dataset.game] || 0;
 
-  document.querySelectorAll("[data-interest]").forEach((list) => {
+  // The home page runs this straight after each row it sorts (Rip's Deals near the top, Coming soon lower down), so a row
+  // sorted once is left as it is.
+  document.querySelectorAll("[data-interest]:not([data-interest-done])").forEach((list) => {
+    list.setAttribute("data-interest-done", "");
     const items = [...list.children];
     const place = new Map(items.map((el, i) => [el, i]));
     const show = parseInt(list.dataset.interestShow, 10) || items.length;

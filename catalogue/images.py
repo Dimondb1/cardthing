@@ -64,8 +64,10 @@ def steps(low, high):
 #   card     .card__top gives the picture 38.2% of the card: one card across on a phone, two from 48rem.
 #   trend    .trending__item is 1/1.8 of a phone's width; from 48rem a fifth of the page, at least 8.8rem, and
 #            11.4rem once the page stops growing.
-#   cover    .product-image--cover is a 16:9 box, so a square picture is as wide as the box is tall: two tiles
-#            across, three from 48rem, more from 60rem.
+#   deal     a card in .trending--compact (the home page's Rip's Deals), 2.3 across a phone and a fifth of the
+#            page from 48rem: the picture is its 4:3 well less the well's 6% padding.
+#   cover    a game tile's 4:3 picture well (.tile--game), 2.2 tiles across a phone, 3.5 from 48rem, 5.5 from 60rem:
+#            the picture is the well less its 8% padding, as wide as a wide box is drawn.
 #   type     .product-image--type fills its tile's picture well: half a phone's width less the gaps, a fifth of
 #            the page from 48rem, 11rem once the page stops growing.
 #   large    the product page's picture well: 17rem on a phone; from 60rem as tall as the name and price box
@@ -83,8 +85,10 @@ SLOTS = {
              steps(74, 735)),
     "trend": (200, "(min-width: 74rem) 11.4rem, (min-width: 60rem) calc(20vw - 3.4rem), (min-width: 48rem) 8.8rem, "
                    "calc(55.6vw - 3.6rem)", steps(120, 1106)),
-    "cover": (200, "(min-width: 74rem) 5.65rem, (min-width: 60rem) calc(10.23vw - 1.93rem), "
-                   "(min-width: 48rem) calc(16.07vw - 2.14rem), calc(23.4vw - 1.95rem)", steps(44, 445)),
+    "deal": (200, "(min-width: 74rem) 10.67rem, (min-width: 48rem) calc(17.5vw - 2.3rem), calc(38.2vw - 2.41rem)",
+             steps(84, 510)),
+    "cover": (200, "(min-width: 74rem) 9.1rem, (min-width: 60rem) calc(15vw - 2.06rem), "
+                   "(min-width: 48rem) calc(23.56vw - 2.31rem), calc(38.26vw - 2.4rem)", steps(84, 510)),
     "type": (200, "(min-width: 74rem) 11rem, (min-width: 48rem) calc(20vw - 3.5rem), calc(50vw - 3.5rem)",
              steps(96, 600)),
     "large": (540, "(min-width: 60rem) 33rem, 17rem", steps(272, 1440)),

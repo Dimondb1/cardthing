@@ -599,9 +599,12 @@ class FollowUpTests(PageCase):
 
     def test_phones_get_a_guides_link_on_the_home_page(self):
         html = self.client.get(reverse("web:home")).content.decode()
-        self.assertIn('<p class="hero__guides"><a href="/guides/">New to trading cards? Read our guides.</a></p>', html)
+        link = '<p class="home-guides"><a href="/guides/">New to trading cards? Read our guides.</a></p>'
+        self.assertIn(link, html)
+        # Small and under the game tiles, below the shopping rather than beside the search box (Nov 2026).
+        self.assertGreater(html.index(link), html.index('class="tiles tiles--games"'))
         Guide.objects.all().delete()
-        self.assertNotIn("hero__guides", self.client.get(reverse("web:home")).content.decode())
+        self.assertNotIn("home-guides", self.client.get(reverse("web:home")).content.decode())
 
     def test_ai_assistants_are_told_about_the_guides(self):
         text_ = self.client.get("/llms.txt").content.decode()

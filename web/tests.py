@@ -86,7 +86,8 @@ class PageTests(PageTestCase):
         response = self.client.get(reverse("web:home"))
         for heading in ("Find your game", "Best prices right now", "Save £3.01 vs Northgate Cards", "Hunt by product"):
             self.assertContains(response, heading)
-        self.assertContains(response, 'href="#best-title">Best prices right now</a>')
+        # No row of jump buttons under the search: the game tiles come first instead (the owner, 2 Nov 2026).
+        self.assertNotContains(response, '<nav class="jump"')
         # The raptor is Rip's Deals' mascot, beside its name: shown alone here, as the first row takes these UK
         # shops' deals.
         from unittest import mock
@@ -99,7 +100,6 @@ class PageTests(PageTestCase):
         cache.clear()
         self.assertContains(deals, '<h2 id="featured-title" class="section-head__title section-head__title--mascot">'
                                    '<span class="mark section-head__mascot" aria-hidden="true"></span>Rip&#x27;s Deals</h2>')
-        self.assertContains(deals, 'href="#featured-title">Rip&#x27;s Deals</a>')
         # Hunted for you's raptor holding a magnifying glass, and Follow your tracks' footprints, beside their names:
         # drawn as shapes in the token colours, hidden from screen readers.
         html = response.content.decode()
@@ -121,13 +121,14 @@ class PageTests(PageTestCase):
 
     def test_the_first_screen_reaches_a_price(self):
         # A review the owner shared (Nov 2026): the intro, search, guides, jump buttons, drop and games all came
-        # before any price. Best prices right now follows the search and its jump row (the owner, 2 Nov 2026: "you
-        # don't even see any deals"), compact, and its note follows it.
+        # before any price. Now the search, then the game tiles in one row (the owner, 2 Nov 2026: "i want the games
+        # back up the top again replacing the jump buttons"), then Best prices right now ("you don't even see any
+        # deals"), compact, and its note follows it.
         html = self.client.get(reverse("web:home")).content.decode()
         deals = html.index('id="best-title"')
-        self.assertLess(html.index('class="hero__search"'), html.index('<nav class="jump"'))
-        self.assertLess(html.index('<nav class="jump"'), deals)
-        self.assertLess(deals, html.index('id="games-title"'))
+        self.assertLess(html.index('class="hero__search"'), html.index('id="games-title"'))
+        self.assertLess(html.index('id="games-title"'), deals)
+        self.assertNotIn('<nav class="jump"', html)
         row = html[deals:html.index("</section>", deals)]
         self.assertIn('class="trending trending--compact"', row)
         self.assertIn("product-image--deal", row)
@@ -3011,7 +3012,7 @@ class GoldenLayoutTests(PageTestCase):
             self.assertIn(rule, css)
         # The home and deals pages' sections sit closer, 20px on a phone and 24px wider, so more shows on a screen.
         self.assertIn(".home-section { margin-top: var(--rhythm-home); }", css)
-        self.assertIn(".jump + .home-section { margin-top: var(--rhythm-home); }", css)
+        self.assertNotIn(".jump", css)
         tokens = self.css("tokens.css")
         self.assertIn("--rhythm-home: calc(1.25rem * var(--density));", tokens)
         self.assertIn("--rhythm-home: calc(1.5rem * var(--density));", tokens)

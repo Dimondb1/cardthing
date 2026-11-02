@@ -2953,11 +2953,6 @@ series: "Mega Evolution—Delta Reign" is "Delta Reign" (`spotlight_name`),
 so it is short and carries no dash. The pictures take one box of each kind
 first, so three Elite Trainer Boxes do not crowd out the booster box.
 
-Under the home page's search, **jump buttons** (Games, Deals, Drops,
-Product types, each only when its section is on the page) take a first
-visit straight to the sections the spotlight can push below a phone's
-screen.
-
 Every step works without JavaScript. With it (`web/static/js/spotlight.js`)
 the steps done on this device are ticked and counted ("2 of 4 done", then
 "You are ready for Delta Reign."), kept in that browser's storage as step
@@ -3014,14 +3009,12 @@ The home page opens with a compact hero: a short line above the headline
 many UK shops the site compares and that every price includes delivery,
 not just the basket price ("Sealed TCG prices from 87 UK shops, ..."), then
 the large search
-box (its corners the cards' 16px, not a pill) and a row of jump buttons,
-all close together so the games and Hunted for you start on the first
-screen. The line saying when a shop's price was last checked went on 31 Oct
-2026 at the owner's request; each product page still says when its own
-prices were. The **jump buttons** (Games, Deals, Drops, Products, and For
-you and Your tracks once those sections have something, `jump.js`) are one
-tap to each section further down, in the page's order, on one line that
-swipes sideways on a phone. The number of shops
+box (its corners the cards' 16px, not a pill), with the game tiles
+(Find your game) straight under it and Best prices right now after them.
+The game tiles took the place of the row of jump buttons on 2 Nov 2026 at
+the owner's request. The line saying when a shop's price was last checked
+went on 31 Oct 2026 at the owner's request; each product page still says
+when its own prices were. The number of shops
 (`pricing.shops_compared`) counts the UK shops with a current price on the
 site, so it moves as shops are added, stop being read or come back: eBay
 and Amazon are searches and never count, nor a price kept out of the
@@ -3488,15 +3481,16 @@ or the switches.
 
 ## Best prices right now, featured deals and sold-out pages
 
-**Best prices right now** is the home page's first row (since 2 Nov 2026, when
-the first screen showed mostly words and eBay imports): up to eight deals with
+**Best prices right now** is the home page's first row of deals, straight
+under the game tiles (since 2 Nov 2026, when the first screen showed mostly
+words and eBay imports): up to eight deals with
 the same evidence as below, whose cheapest shop is a UK shop, whether it pays a
 commission or not (eBay and Amazon are left to Rip's Deals). The games whose
 product pages were opened most in the last 30 days come first, the strongest
 evidence first within each (`web/views.py` `best_pick`, cached under
 `web:home-best:v1` and built by `warm_pages`). A deal shown there is not
-repeated in Rip's Deals. On a phone only the headline and the search box come
-above it, and the analytics question is a slim bar at the foot of the screen.
+repeated in Rip's Deals. On a phone only the headline, the search box and the
+game tiles come above it, and the analytics question is a slim bar at the foot of the screen.
 The dashboard's visitors part shows the share of people who landed on the home
 page and went on to open a product (`DailyVisitor.opened_product`, kept from
 2 Nov 2026).

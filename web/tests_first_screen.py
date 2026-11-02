@@ -60,10 +60,9 @@ class BestPricesTests(TestCase):
         self.assertIn("Cheapest delivered prices at UK shops that beat the next shop or sit at a 30-day low. Any shop, "
                       "whether it pays us or not.", best)
         self.assertIn(ebay.name, section(html, "featured-title"))
-        # It is the first row on the page, and the first jump button.
+        # It is the first row of deals, straight after the game tiles.
+        self.assertLess(html.index('id="games-title"'), html.index('id="best-title"'))
         self.assertLess(html.index('id="best-title"'), html.index('id="featured-title"'))
-        jump = html[html.index('<nav class="jump"'):html.index("</nav>", html.index('<nav class="jump"'))]
-        self.assertLess(jump.index('href="#best-title">Best prices right now</a>'), jump.index('href="#featured-title"'))
         # The visitor's own games first, sorted straight after the first row, its game list on the page once.
         self.assertTrue(html[html.index("</section>", html.index('id="best-title"')):].startswith(
             '</section>\n<script id="interest-games" type="application/json">'))

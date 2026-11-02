@@ -174,7 +174,7 @@ class SpotlightTests(TestCase):
 @override_settings(**MAIL_ON)
 class FoldAndJumpTests(TestCase):
     """The owner, 31 Oct 2026: "you should be able to hide it. When you've set alerts it minimises", and a first
-    visit should still find the sections below it: jump buttons under the search."""
+    visit should still find what is below it: the game tiles come first, under the search."""
 
     def setUp(self):
         cache.clear()
@@ -220,33 +220,16 @@ class FoldAndJumpTests(TestCase):
         # The choice made on this device is put back before the panel is painted: the script stands right after it.
         self.assertRegex(html, r"(?s)</details>\s*<script>.*rr-spotlight:.*</script>\s*</section>")
 
-    def test_jump_buttons_lead_to_the_sections_on_the_page(self):
+    def test_the_game_tiles_come_before_the_spotlight_and_no_jump_row(self):
+        # The game tiles took the jump buttons' place under the search (the owner, 2 Nov 2026: "i want the games back
+        # up the top again replacing the jump buttons"), so a first visit sees them before the drop.
         page = self.client.get(HOME).content.decode()
-        start = page.index('<nav class="jump"')
-        jump = page[start:page.index("</nav>", start)]
-        self.assertIn('aria-label="Jump to"', jump)
-        targets = re.findall(r'href="#([a-z-]+)"', jump)
-        # In the page's order; Hunted for you and Your tracks wait hidden until their sections show (jump.js).
-        self.assertEqual(targets, ["games-title", "picks-title", "resume-title", "latest-title", "types-title"])
-        self.assertIn('<li data-jump-for="data-picks" hidden>', jump)
-        self.assertIn('<li data-jump-for="data-resume" hidden>', jump)
-        # Each button is named by its section's own heading, so they always match (the owner, 1 Nov 2026).
-        for heading in ("Find your game", "Hunted for you", "Follow your tracks", "Drops", "Hunt by product"):
-            self.assertIn(f">{heading}</a>", jump)
-        # It stays at the top as the page scrolls and marks the section in view (jump.js), with script only.
-        self.assertIn("data-jump", jump)
-        self.assertIn('setAttribute("aria-current", "true")', page)
-        for target in targets:
-            self.assertIn(f'id="{target}"', page)
-        self.assertIn("MutationObserver", page)
-        # On one line: the chips' own row, which swipes sideways on a phone.
-        self.assertIn('<ul class="chips__list">', jump)
-        # Before the spotlight, so a first visit sees them first.
-        self.assertLess(start, page.index('id="drop-spotlight"'))
+        self.assertLess(page.index('class="hero__search"'), page.index('id="games-title"'))
+        self.assertLess(page.index('id="games-title"'), page.index('id="drop-spotlight"'))
+        self.assertNotIn('<nav class="jump"', page)
+        self.assertNotIn("data-jump-for", page)
 
-    def test_a_heading_edited_in_admin_renames_its_jump_button(self):
-        from django.core.cache import cache
-
+    def test_a_heading_edited_in_admin_shows_on_the_game_tiles(self):
         from content import service
         from content.models import SiteContent
 
@@ -254,9 +237,6 @@ class FoldAndJumpTests(TestCase):
         SiteContent.objects.filter(key="home.games.label").update(content="Pick your game")
         cache.clear()
         page = self.client.get(HOME).content.decode()
-        jump = page[page.index('<nav class="jump"'):]
-        jump = jump[:jump.index("</nav>")]
-        self.assertIn('href="#games-title">Pick your game</a>', jump)
         self.assertIn('<h2 id="games-title" class="section-head__title">Pick your game</h2>', page)
 
 

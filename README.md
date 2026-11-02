@@ -4745,7 +4745,9 @@ rendered pages with their own addresses, titles and descriptions, and all
 three are in the sitemap. `/robots.txt`
 names the AI crawlers and allows them the same pages as everyone else,
 and `/llms.txt` describes the site in plain Markdown with links to the
-games, the how it works page and the sitemap. Search, swipe and the
+games, the how it works page and the sitemap. Its shop count is the home
+page's (`pricing.shops_compared`: UK shops with a current price, never eBay
+or Amazon), since AI answers repeat it. Search, swipe and the
 click redirect stay out of the index.
 
 ## Sitemap and removed pages
@@ -5005,7 +5007,10 @@ is kept, looked up in the free DB-IP country database that `fetch_geoip`
 downloads (the installer fetches it and cron refreshes it monthly). Each visitor also
 records their device type and the domain of the site that sent them, so
 the page shows where visitors come from (search engines, AI assistants,
-Reddit, Facebook, Discord and so on) and what they browse on. Bots
+Reddit, Facebook, Discord and so on) and what they browse on. With no
+Referer, a site named in the link's `utm_source` counts instead (ChatGPT
+tags its links `utm_source=chatgpt.com` and its app sends no Referer); a
+tag that is not a site's name is ignored. Bots
 are left out, including scripts that say what they are (Python, curl,
 headless Chrome, Scrapy and the like). A visitor who opens more than 150
 pages in a day is taken for a script dressed as a browser: their pages

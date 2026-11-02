@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from catalogue import indexnow
-from catalogue.models import Listing, Product
+from catalogue.models import Listing, Product, Retailer
 from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
 
 
@@ -29,6 +29,22 @@ class VerificationTests(TestCase):
             html = self.client.get(reverse("web:home")).content.decode()
         self.assertIn('<meta name="google-site-verification" content="abc123">', html)
         self.assertIn('<meta name="msvalidate.01" content="DEF456">', html)
+
+
+class LlmsTxtTests(TestCase):
+    def test_it_gives_the_home_pages_shop_count_not_every_shop_ever_added(self):
+        # The owner, 2 Nov 2026: ChatGPT repeats the shop count it reads. Only UK shops with a current price
+        # count, as on the home page: not eBay, not a shop with nothing current.
+        cache.clear()
+        self.addCleanup(cache.clear)
+        product = make_product(make_set(make_game()), name="Surging Sparks Booster Box", product_type="booster_box")
+        make_listing(product, make_retailer("Harbour Games"), price="87.00")
+        make_listing(product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="80.00")
+        stale = make_listing(product, make_retailer("Tollgate TCG"), price="90.00")
+        Listing.objects.filter(pk=stale.pk).update(last_checked=timezone.now() - timedelta(days=30))
+        make_retailer("Northgate Cards")   # added, nothing read yet
+        body = self.client.get("/llms.txt").content.decode()
+        self.assertIn("come from 1 UK shops.", body)
 
 
 class IndexNowTests(TestCase):

@@ -352,6 +352,24 @@ class ImprovementTests(TestCase):
         self.assertEqual(groups, {"Search engines": 1, "Reddit": 1, "Typed or bookmarked": 1})
         self.assertEqual({d["name"]: d["visitors"] for d in data["devices"]}, {"Phone": 1, "Tablet": 1, "Computer": 1})
 
+    def test_a_link_from_chatgpt_counts_as_an_ai_assistant_without_a_referer(self):
+        from catalogue.models import DailyVisitor
+
+        url = self.product.get_absolute_url()
+        phone = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile Safari"
+        # ChatGPT's app sends no Referer, only its tag on the link.
+        self.client.get(url + "?utm_source=chatgpt.com", HTTP_USER_AGENT=phone, REMOTE_ADDR="203.0.113.1")
+        # A real Referer still wins over the tag.
+        self.client.get(url + "?utm_source=chatgpt.com", HTTP_USER_AGENT=phone, REMOTE_ADDR="203.0.113.2",
+                        HTTP_REFERER="https://www.google.co.uk/")
+        # A tag that is not a site's name, and our own share tags, are not kept.
+        self.client.get(url + "?utm_source=Hello%20there", HTTP_USER_AGENT=phone, REMOTE_ADDR="203.0.113.3")
+        self.client.get(url + "?utm_source=whatsapp", HTTP_USER_AGENT=phone, REMOTE_ADDR="203.0.113.4")
+        self.assertEqual(sorted(DailyVisitor.objects.values_list("source", flat=True)),
+                         ["", "", "chatgpt.com", "google.co.uk"])
+        groups = {s["name"]: s["visitors"] for s in insights.report(30)["sources"]}
+        self.assertEqual(groups, {"AI assistants": 1, "Search engines": 1, "Typed or bookmarked": 2})
+
     def test_unpaid_clicks_and_broken_shops_lead_the_improvements(self):
         from catalogue.models import ImportRun
 

@@ -3043,7 +3043,9 @@ def llms_txt(request):
         .filter(product_count__gt=0)
         .order_by("-product_count", "name")
     )
-    shops = Retailer.objects.filter(is_active=True).count()
+    # The home page's own count: UK shops with a current price, never eBay, Amazon or a shop not being read, so an
+    # AI answer repeating it repeats the truth.
+    shops = pricing.shops_compared()
     lines = [
         f"# {settings.RIPRAPTOR_SITE_NAME}",
         "",

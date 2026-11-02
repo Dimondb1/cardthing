@@ -104,14 +104,26 @@ def device_of(request):
     return "desktop"
 
 
+# A utm_source that names a site, such as chatgpt.com: letters, digits and hyphens with at least one dot.
+TAGGED_SITE = re.compile(r"[a-z0-9-]+(?:\.[a-z0-9-]+)+")
+
+
 def source_of(request):
-    """The domain of the site that sent the visitor, or "" for typed, bookmarked or our own pages."""
+    """The domain of the site that sent the visitor, or "" for typed, bookmarked or our own pages.
+
+    With no outside Referer, a site named in the link's utm_source counts instead: ChatGPT tags its links
+    utm_source=chatgpt.com and its app sends no Referer, so without this its visitors look typed (the owner, 2 Nov
+    2026, sharing ChatGPT naming RipRaptor its top pick for sealed prices). Only a site's name is kept, never other
+    text from the link."""
     host = urlsplit(request.headers.get("Referer", "")).hostname or ""
     host = host.lower().removeprefix("www.").removeprefix("m.").removeprefix("l.").removeprefix("lm.")
     own = request.get_host().split(":")[0].lower().removeprefix("www.")
-    if not host or host == own:
-        return ""
-    return host[:80]
+    if host and host != own:
+        return host[:80]
+    tagged = request.GET.get("utm_source", "").strip().lower().removeprefix("www.")
+    if TAGGED_SITE.fullmatch(tagged) and tagged != own:
+        return tagged[:80]
+    return ""
 
 
 # Sources grouped the way a site owner thinks about them.

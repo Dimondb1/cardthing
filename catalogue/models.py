@@ -274,6 +274,14 @@ class Product(models.Model):
     shop_rrp = models.DecimalField("RRP UK shops give", max_digits=8, decimal_places=2, null=True, blank=True,
                                    editable=False)
     shop_rrp_shops = models.PositiveSmallIntegerField("shops giving that RRP", null=True, blank=True, editable=False)
+    # The RRP Claude found on the web for it (catalogue/rrp_finder.py), only where neither of the two above is known:
+    # a page of the publisher or of a UK shop the owner added, whose quoted words give the price as the RRP. Used
+    # after the owner's and the shops'. Undo on Things to check clears it for good.
+    found_rrp = models.DecimalField("RRP Claude found", max_digits=8, decimal_places=2, null=True, blank=True,
+                                    editable=False)
+    found_rrp_source = models.CharField("where Claude found the RRP", max_length=120, blank=True, editable=False)
+    found_rrp_url = models.URLField("the page that gives it", max_length=500, blank=True, editable=False)
+    found_rrp_at = models.DateTimeField("when Claude found it", null=True, blank=True, editable=False)
     # What is inside (catalogue/contents.py): the owner's figures win over the ones the shops' descriptions agree on,
     # which refresh_contents keeps each hour.
     packs = models.PositiveSmallIntegerField(
@@ -354,11 +362,25 @@ class Product(models.Model):
     @property
     def rrp_now(self):
         """(RRP, how many UK shops give it) the Price check measures against: the owner's with no count, else the
-        one UK shops agree on as kept each hour, else None."""
+        one UK shops agree on as kept each hour, else the one Claude found with no count, else None."""
         if self.rrp:
             return self.rrp, None
         if self.shop_rrp:
             return self.shop_rrp, self.shop_rrp_shops
+        if self.found_rrp:
+            return self.found_rrp, None
+        return None
+
+    @property
+    def rrp_from(self):
+        """Where the RRP rrp_now gives comes from, for the line under the price: ("owner", ""), ("shops", count),
+        ("found", the site's name), or None without one."""
+        if self.rrp:
+            return "owner", ""
+        if self.shop_rrp:
+            return "shops", self.shop_rrp_shops
+        if self.found_rrp:
+            return "found", self.found_rrp_source
         return None
 
     @property
@@ -1888,6 +1910,8 @@ class CheckAnswer(models.Model):
         # Claude's check of a new page a shop read made (new_pages.act), each with Undo.
         PUBLISH = "publish", "Published a new page"
         NOT_SEALED = "not_sealed", "Kept a new page off: not sealed"
+        # An RRP Claude found on a cited page (rrp_finder.act), with Undo.
+        FOUND_RRP = "found_rrp", "Found an RRP"
 
     kind = models.CharField(max_length=10, choices=Kind.choices)
     by_owner = models.BooleanField(default=False)
@@ -1990,6 +2014,7 @@ class ClaudeAsk(models.Model):
         RETAIL = "retail", "Set sold in shops"
         MARKET = "market", "Cardmarket match"
         PAGE = "page", "New page"
+        RRP = "rrp", "RRP"
 
     class Outcome(models.TextChoices):
         SENT = "sent", "Sent"
@@ -2071,6 +2096,8 @@ class ClaudeAsk(models.Model):
             return f"the announced set {e.get('announced_name', '')} for {e.get('game', '')}"
         if self.kind == self.Kind.RETAIL:
             return f"whether UK shops sell {e.get('set_name', '')} for {e.get('game', '')}"
+        if self.kind == self.Kind.RRP:
+            return f"the RRP of {e.get('name', '')}"
         ours =(e.get("ours") or {}).get("name", "")
         if self.kind == self.Kind.PAGE:
             shops = ", ".join(shop.get("shop", "") for shop in e.get("shops") or [])
@@ -2085,6 +2112,8 @@ class ClaudeAsk(models.Model):
         if self.outcome == self.Outcome.ANSWERED:
             if self.kind == self.Kind.RETAIL and self.action == self.Action.ACTED:
                 return "acted, the set is marked as not sold in UK shops"
+            if self.kind == self.Kind.RRP and self.action == self.Action.ACTED:
+                return "acted, the RRP is on the product page"
             if self.kind == self.Kind.PAGE and self.action == self.Action.ACTED:
                 return ("acted, the page is on the site" if self.verdict == "sealed"
                         else "acted, the page is kept off the site")
@@ -2104,7 +2133,8 @@ class ClaudeAsk(models.Model):
     VERDICT_WORDS = {"same": "same product", "different": "a different product", "unsure": "cannot tell",
                      "new": "a new set", "existing": "a set the site has", "not_a_set": "not a set",
                      "shops": "sold in shops", "not_shops": "sold only at events or direct",
-                     "sealed": "a sealed product", "not_sealed": "not a sealed product"}
+                     "sealed": "a sealed product", "not_sealed": "not a sealed product",
+                     "found": "found an RRP", "not_found": "found no RRP"}
     CONFIDENCE_WORDS = {"high": "sure", "medium": "fairly sure", "low": "not sure"}
 
     @property

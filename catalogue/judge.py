@@ -828,6 +828,10 @@ def record_reply(ask, message, batch=False):
         from . import set_retail
 
         outcome, answer, category, sources, searches = set_retail.read(message, ask.row_key, ask.evidence)
+    elif ask.kind == Ask.Kind.RRP:
+        from . import rrp_finder
+
+        outcome, answer, category, sources, searches = rrp_finder.read(message, ask.row_key, ask.evidence)
     else:
         (outcome, answer, category), sources, searches = read_answer(message, ask.row_key), [], 0
     cost = cost_micros(message, ask.model_asked, batch=batch)
@@ -850,6 +854,10 @@ def record_reply(ask, message, batch=False):
             fields["set_answer"] = {key: answer[key] for key in set_judge.ANSWER_FIELDS}
         elif ask.kind == Ask.Kind.RETAIL:
             fields["set_answer"] = {"sold": answer["verdict"], "sold_backed": answer["sold_backed"]}
+        elif ask.kind == Ask.Kind.RRP:
+            from . import rrp_finder
+
+            fields["set_answer"] = {key: answer[key] for key in rrp_finder.ANSWER_FIELDS}
     Ask.objects.filter(pk=ask.pk).update(**fields)
     return answer, cost
 

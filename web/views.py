@@ -1481,6 +1481,9 @@ def product_detail(request, slug):
             "per_pack": per_pack(cheapest, product),
             "per_card": price_a_card(cheapest.shown_price if cheapest else None, product),
             "cards_total": cards_total(product),
+            # The RRP under the price, where one is known, and how far the cheapest price is from it.
+            "rrp_line": fair_price.rrp_line(product, cheapest.shown_price, cheapest.retailer.pays_commission)
+            if cheapest else None,
             "shop_count": shop_count,
             "summary": summary,
             "in_stock_count": in_stock_count,
@@ -3174,6 +3177,9 @@ CLAUDE_JOBS = {
                "never promises pre-orders for it."),
     "market": ("", "Cardmarket matches",
                "Picks the Cardmarket product that is ours, so the Price check can use its market price."),
+    "rrps": ("", "RRPs",
+             "Looks for the RRP of products that have none on the publisher's site and the UK shops' pages. It keeps "
+             "one only when a quoted page calls it the RRP of that product."),
 }
 
 
@@ -3182,13 +3188,14 @@ def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_cou
     left on the list, and of those how many need the owner and how many wait for Claude, with the share done.
     ``counts`` and ``set_counts`` are what judge.attach_answers and attach_set_answers returned for the rows the
     page shows, so a long list's "needs you" counts the rows shown. A few queries."""
-    from catalogue import cardmarket_match, judge, new_pages, set_judge, set_retail
+    from catalogue import cardmarket_match, judge, new_pages, rrp_finder, set_judge, set_retail
     from catalogue.models import ClaudeAsk
 
     Kind = ClaudeAsk.Kind
     done = judge.sorted_counts()
     market = cardmarket_match.progress()
     pages = new_pages.progress()
+    rrps = rrp_finder.progress()
 
     def yours(*sections):
         return sum(counts.get(section, {}).get("needs_you", 0) for section in sections)
@@ -3203,6 +3210,7 @@ def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_cou
         "sets": (done.get(Kind.SET, 0), len(releases), unsearchable + set_counts["needs_you"]),
         "retail": (done.get(Kind.RETAIL, 0), len(set_retail.candidates()), 0),
         "market": (market["sorted"], market["waiting"] + market["needs_you"], market["needs_you"]),
+        "rrps": (done.get(Kind.RRP, 0), rrps["waiting"], 0),
     }
     jobs = []
     for name, (link, title, does) in CLAUDE_JOBS.items():

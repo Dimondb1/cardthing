@@ -508,6 +508,10 @@ def undo(answer, now=None):
             from . import new_pages
 
             message = new_pages.undo(answer, now)
+        elif answer.kind == Kind.FOUND_RRP and answer.product is not None:
+            from . import rrp_finder
+
+            message = rrp_finder.undo(answer, now)
         elif answer.kind == Kind.APART:
             message = "Undone: the two products may be suggested as duplicates again."
         elif answer.kind == Kind.HELD:
@@ -532,7 +536,8 @@ def undo(answer, now=None):
                 # asks to look at the price himself.
                 from .models import ClaudeAsk
 
-                opposite = "look" if answer.kind in SAFE_KINDS else "undone" if answer.kind in CLAUDE_SET_KINDS else (
+                opposite = "look" if answer.kind in SAFE_KINDS else "undone" if answer.kind in (
+                    *CLAUDE_SET_KINDS, Kind.FOUND_RRP) else (
                     ("not_sealed" if answer.ask.verdict == "sealed" else "sealed")
                     if answer.kind in (Kind.PUBLISH, Kind.NOT_SEALED) else
                     "different" if answer.ask.verdict == "same" else "same")

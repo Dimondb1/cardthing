@@ -1128,6 +1128,11 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .buybox__price .delivered { font-weight: var(--weight-strong); color: var(--color-price); }
 .buybox__delivered { font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__packs, .buybox__cards { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
+/* The RRP and how far the price is from it: green under, red over, as every saving and dearer price on the site. */
+.buybox__rrp { display: flex; flex-wrap: wrap; gap: 0 var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
+.buybox__rrp-gap { font-weight: var(--weight-strong); color: var(--color-ink); }
+.buybox__rrp-gap--under { color: var(--color-price); }
+.buybox__rrp-gap--over { color: var(--color-more); }
 .buybox__deal { font-size: var(--text-sm); color: var(--color-ink); }
 .buybox__summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__save { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-2); }

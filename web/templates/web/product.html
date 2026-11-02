@@ -31,6 +31,7 @@
         </div>
         <p class="buybox__price"><span class="buybox__amount"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span></span>{% if fair %}{% include "web/includes/fair_price.html" %}{% endif %}</p>
         <p class="buybox__delivered"><span class="money" data-note-for="{{ cheapest.pk }}">{% include "web/includes/price_note.html" with listing=cheapest %}</span>{% if not cheapest.delivery_known %} {% copy "product.delivery.unknown_check" %}{% endif %}</p>
+        {% if rrp_line %}{% include "web/includes/rrp_line.html" with line=rrp_line %}{% endif %}
         {% if per_pack %}<p class="buybox__packs">{% copy "product.packs.each" packs=product.packs_inside each=per_pack|gbp %}</p>{% endif %}
         {% if per_card %}<p class="buybox__cards"><a href="{% url 'web:per_card' %}">{% copy "product.cards.each" cards=cards_total each=per_card|pence %}</a></p>{% endif %}
       </div>

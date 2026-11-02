@@ -1192,6 +1192,20 @@ ENTRIES = [
     Entry("product.cards.each", T, "Price per card", "{cards} cards inside, {each} a card",
           "Under the cheapest price on a product page, when the cards inside can be counted: the cheapest price shared "
           "over every card. Links to the Cheapest per card page.", placeholders=("cards", "each")),
+    Entry("product.rrp.owner", T, "RRP under the price", "RRP {rrp}",
+          "Under the cheapest price on a product page, when you have typed its RRP in Admin.", placeholders=("rrp",)),
+    Entry("product.rrp.shops", T, "RRP from shops under the price", "RRP {rrp} from {count} UK shops",
+          "Under the cheapest price on a product page, when the RRP is the one UK shops give beside their price.",
+          placeholders=("rrp", "count")),
+    Entry("product.rrp.found", T, "RRP Claude found under the price", "RRP {rrp} from {source}",
+          "Under the cheapest price on a product page, when the RRP is the one Claude found on the publisher's site "
+          "or a UK shop's page. {source} is that site's name.", placeholders=("rrp", "source")),
+    Entry("product.rrp.under", T, "Price under the RRP", "{amount} under RRP",
+          "In green beside the RRP, when the cheapest price is below it.", placeholders=("amount",)),
+    Entry("product.rrp.over", T, "Price over the RRP", "{amount} over RRP",
+          "In red beside the RRP, when the cheapest price is above it. Left off beside a shop that pays a commission.",
+          placeholders=("amount",)),
+    Entry("product.rrp.at", T, "Price at the RRP", "At RRP", "Beside the RRP, when the cheapest price is the RRP."),
     Entry(
         "product.badge.low_30", T, "Badge: lowest in 30 days",
         "Lowest in 30 days",
@@ -1725,6 +1739,9 @@ ENTRIES = [
     Entry("product.fair.rrp_shops", T, "Price check: RRP from shops", "Given by {count} UK shops",
           "Under the RRP in the price check sheet when it is the one UK shops give beside their price.",
           placeholders=("count",)),
+    Entry("product.fair.rrp_found", T, "Price check: RRP Claude found", "From {source}",
+          "Under the RRP in the price check sheet when it is the one Claude found on the publisher's site or a UK "
+          "shop's page.", placeholders=("source",)),
     Entry("product.fair.rrp_basis", T, "Price check: RRP basis",
           "A price more than 15% over the RRP is never called fair, whatever else it is measured against.",
           "At the foot of the price check sheet when the product has an RRP."),

@@ -4,5 +4,5 @@
   {% if fair.days %}<div><dt>{% copy "product.fair.average" days=fair.days %}</dt><dd>{{ fair.average|gbp }}</dd></div>
   <div><dt>{% copy "product.fair.lowest" %}</dt><dd>{{ fair.low|gbp }}<span class="fair-facts__when">{{ fair.low_date|short_date }}</span></dd></div>{% endif %}
   {% if fair.market %}<div><dt>{% copy "product.fair.market" %}</dt><dd>{{ fair.market.gbp|gbp }}<span class="fair-facts__when">{% copy "product.fair.market_when" date=fair.market.date|short_date %}</span></dd></div>{% endif %}
-  {% if fair.rrp %}<div><dt>{% copy "product.fair.rrp" %}</dt><dd>{{ fair.rrp|gbp }}{% if fair.rrp_shops %}<span class="fair-facts__when">{% copy "product.fair.rrp_shops" count=fair.rrp_shops %}</span>{% endif %}</dd></div>{% endif %}
+  {% if fair.rrp %}<div><dt>{% copy "product.fair.rrp" %}</dt><dd>{{ fair.rrp|gbp }}{% if fair.rrp_shops %}<span class="fair-facts__when">{% copy "product.fair.rrp_shops" count=fair.rrp_shops %}</span>{% elif fair.rrp_source %}<span class="fair-facts__when">{% copy "product.fair.rrp_found" source=fair.rrp_source %}</span>{% endif %}</dd></div>{% endif %}
 </dl>

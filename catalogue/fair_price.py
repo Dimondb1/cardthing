@@ -29,7 +29,7 @@ a mini tin at the lowest we had recorded, 21% under its average, called fair for
 price: "why is this one fair price as it looks like it's at its lowest").
 
 The RRP (Product.rrp_now): the owner's, typed in Admin, or the one at least RRP_SHOPS UK shops give beside their
-price (shop_rrps). It is a ceiling, never a reason to praise a price: up to RRP_FAIR of it changes nothing (and
+price (shop_rrps), or else the one Claude found on a cited page (rrp_finder). It is a ceiling, never a reason to praise a price: up to RRP_FAIR of it changes nothing (and
 is a fair price when nothing else measures it), up to RRP_ABOVE of it is above, more is high, whatever the other
 references say. The owner: "ensure that deals we share on Discord aren't massively overpriced, not just a
 pointless discount".
@@ -87,6 +87,7 @@ class Verdict:
     market: Market | None = None
     rrp: Decimal | None = None
     rrp_shops: int | None = None   # how many UK shops give the RRP; None when the owner set it
+    rrp_source: str = ""           # the site Claude found the RRP on, when it is that one
 
     @property
     def key(self):
@@ -218,6 +219,8 @@ def verdict(product, price, today=None, shops=MIN_SHOPS):
     rrp = product.rrp_now
     if rrp is not None:
         found.rrp, found.rrp_shops = rrp
+        source = product.rrp_from
+        found.rrp_source = source[1] if source and source[0] == "found" else ""
     band = settle(bands, price, found.rrp)
     if band is None:
         return None
@@ -226,6 +229,35 @@ def verdict(product, price, today=None, shops=MIN_SHOPS):
 
 
 RECORD, MARKET, BOTH, RRP = "record", "market", "both", "rrp"
+
+
+@dataclass
+class RRPLine:
+    """The line under the cheapest price on a product page: the RRP, where it comes from (Product.rrp_from:
+    "owner", "shops" with how many, "found" with the site's name), and how far ``price`` is under or over it."""
+    rrp: Decimal
+    kind: str
+    source: object
+    gap: Decimal | None = None   # how far under or over; None when not said
+    side: str = ""               # "under", "over", "at", or "" when not said
+
+
+def rrp_line(product, price, pays_commission=False):
+    """The RRPLine for ``product`` at ``price`` (the cheapest price the page shows), or None without an RRP. As with
+    the Price check, nothing calls a price over the RRP beside a shop that pays a commission: the RRP is shown
+    and the gap left off."""
+    source = product.rrp_from
+    if source is None:
+        return None
+    rrp = product.rrp_now[0]
+    line = RRPLine(rrp=rrp, kind=source[0], source=source[1])
+    if price is None:
+        return line
+    gap = (price - rrp).quantize(Decimal("0.01"))
+    if gap > 0 and pays_commission:
+        return line
+    line.gap, line.side = abs(gap), "over" if gap > 0 else "under" if gap < 0 else "at"
+    return line
 
 
 def refresh_bands(today=None):
@@ -291,10 +323,11 @@ def refresh_bands(today=None):
 
     changed = []
     fields = ["price_band", "price_basis", "shop_rrp", "shop_rrp_shops"]
-    for product in Product.objects.active().only("pk", "rrp", *fields):
+    for product in Product.objects.active().only("pk", "rrp", "found_rrp", *fields):
         rrp, shops_giving = agreed.get(product.pk, (None, None))
         price = prices.get(product.pk)
-        now = (checked(product.pk, price, product.rrp or rrp) if price is not None else (None, "")) + (rrp, shops_giving)
+        measured = product.rrp or rrp or product.found_rrp
+        now = (checked(product.pk, price, measured) if price is not None else (None, "")) + (rrp, shops_giving)
         if tuple(getattr(product, name) for name in fields) != now:
             for name, value in zip(fields, now):
                 setattr(product, name, value)

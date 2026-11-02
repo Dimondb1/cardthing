@@ -1085,6 +1085,22 @@ Claude checks them when it can (taking off any that are not sealed), and a page
 waiting longer than six hours goes up unchecked. Each question uses Sonnet at
 low effort, about a cent with the photo, within the same monthly limit.
 
+**RRPs.** A product page shows the RRP under the cheapest price, with how far
+the price is under it (green) or over it (red; left off beside a shop that pays
+a commission): yours from Django Admin first, then the one two UK shops agree
+on, then one Claude found (`catalogue/rrp_finder.py`, `Product.found_rrp`).
+Cron runs `find_rrps` daily at 7:15 on its own lock, only while Claude can act.
+It asks about up to 20 English products a UK shop sells now that have no RRP,
+most viewed first. Claude searches twice at most, only the publisher's own
+sites and the websites of the UK shops you added that sell the product (never
+eBay, Amazon or a shop you have not added), and the site keeps the figure only
+when a quote Claude cited calls it the RRP, names the product, and the cheapest
+price now is from half to four times it. Each find is under Sorted for you with
+Undo, which clears it and stops Claude looking again; typing an RRP in Admin
+always wins. A product with nothing found is asked again after 60 days. Each
+question uses Haiku, about 2 to 3 US cents with its searches, within the same
+monthly limit. `python manage.py find_rrps --dry-run` lists what it would ask.
+
 Shops read from a feed (Shopify's products.json, CSV and XML feeds) are never
 read page by page, so their tags and descriptions are read for the same signs
 as a product page: a tag such as "Single Card" or "type:single-card", or a

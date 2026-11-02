@@ -1092,10 +1092,13 @@ on, then one Claude found (`catalogue/rrp_finder.py`, `Product.found_rrp`).
 Cron runs `find_rrps` daily at 7:15 on its own lock, only while Claude can act.
 It asks about up to 20 English products a UK shop sells now that have no RRP,
 most viewed first. Claude searches twice at most, only the publisher's own
-sites and the websites of the UK shops you added that sell the product (never
-eBay, Amazon or a shop you have not added), and the site keeps the figure only
-when a quote Claude cited calls it the RRP, names the product, and the cheapest
-price now is from half to four times it. Each find is under Sorted for you with
+sites, the Pokémon Center (for Pokémon) and the websites of the UK shops you
+added that sell the product (never eBay, Amazon or a shop you have not added),
+and the site keeps the figure only when a quote Claude cited calls it the RRP,
+names the product, and the cheapest price now is from half to four times it.
+The Pokémon Center sells at the publisher's price, so its own price in pounds
+counts as the RRP when its page's title names the product and the quote gives
+that one price (never a sale, a dollar price or its own edition of a box). Each find is under Sorted for you with
 Undo, which clears it and stops Claude looking again; typing an RRP in Admin
 always wins. A product with nothing found is asked again after 60 days. Each
 question uses Haiku, about 2 to 3 US cents with its searches, within the same

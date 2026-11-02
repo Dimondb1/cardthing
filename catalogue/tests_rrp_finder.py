@@ -23,6 +23,8 @@ SHOP_TITLE = "Pokemon TCG Scarlet & Violet Surging Sparks Elite Trainer Box | Ha
 SHOP_SAYS = "RRP: £54.99 Our price: £49.99"
 PUBLISHER_PAGE = "https://www.pokemon.com/uk/pokemon-tcg/surging-sparks"
 PUBLISHER_SAYS = "The Surging Sparks Elite Trainer Box has a recommended retail price of £54.99."
+CENTER_PAGE = "https://www.pokemoncenter.com/en-gb/product/10-10037-118/surging-sparks-elite-trainer-box"
+CENTER_TITLE = "Pokémon TCG: Scarlet & Violet-Surging Sparks Elite Trainer Box | Pokémon Center Official Site"
 
 
 def rrp_reply(row, found="found", rrp="54.99", confidence="high", cited=((SHOP_PAGE, SHOP_TITLE, SHOP_SAYS),),
@@ -70,6 +72,7 @@ class FindingTests(RRPBase):
         # The publisher's sites and the shops that sell it, nothing else.
         self.assertIn("pokemon.com", search["allowed_domains"])
         self.assertIn("harbour-games.example", search["allowed_domains"])
+        self.assertIn("pokemoncenter.com", search["allowed_domains"])
         self.assertNotIn("bulbagarden.net", search["allowed_domains"])
         self.etb.refresh_from_db()
         self.assertEqual((self.etb.found_rrp, self.etb.found_rrp_source, self.etb.found_rrp_url),
@@ -90,6 +93,37 @@ class FindingTests(RRPBase):
         self.assertEqual(result.found, 1)
         self.etb.refresh_from_db()
         self.assertEqual(self.etb.found_rrp_source, "pokemon.com")
+
+    def test_the_pokemon_centers_own_price_is_the_rrp(self):
+        """The owner, 2 Nov 2026: "Include Pokémon center". It sells at the publisher's price, without saying RRP."""
+        self.switch_on()
+        _, result = self.finding(cited=((CENTER_PAGE, CENTER_TITLE, "£54.99"),), source=CENTER_PAGE)
+        self.assertEqual(result.found, 1)
+        self.etb.refresh_from_db()
+        self.assertEqual((self.etb.found_rrp, self.etb.found_rrp_source), (Decimal("54.99"), "Pokémon Center"))
+
+    def test_the_pokemon_center_never_gives_a_sale_its_own_edition_or_a_page_not_about_the_product(self):
+        self.switch_on()
+        own_edition = "Pokémon TCG: Surging Sparks Pokémon Center Elite Trainer Box | Pokémon Center Official Site"
+        for title, says, rrp in (
+            (CENTER_TITLE, "£54.99 £44.99", "44.99"),
+            (own_edition, "£59.99", "59.99"),
+            ("Elite Trainer Boxes | Pokémon Center Official Site", "£54.99", "54.99"),
+            (CENTER_TITLE, "$49.99", "49.99"),
+        ):
+            Ask.objects.all().delete()
+            _, result = self.finding(rrp=rrp, cited=((CENTER_PAGE, title, says),), source=CENTER_PAGE)
+            self.assertEqual(result.found, 0, (title, says))
+
+    def test_only_pokemon_searches_the_pokemon_center(self):
+        from .testing import make_game, make_set
+
+        magic = make_game("Magic: The Gathering", "magic-the-gathering")
+        box = make_product(make_set(magic, name="Foundations", slug="fdn", code="FDN"), name="Foundations Play Booster Box",
+                           slug="fdn-box", product_type="booster_box")
+        evidence = rrp_finder.evidence_for(box, [])
+        self.assertEqual(evidence["search_domains"], ["wizards.com"])
+        self.assertEqual(evidence["publisher_shops"], [])
 
     def test_a_figure_no_quote_calls_the_rrp_is_never_kept(self):
         self.switch_on()

@@ -4,6 +4,7 @@
 <div class="page-head">
   <h1 class="page-title">{% copy "deals.title" %}</h1>
   {% if last_checked %}<p class="page-intro">{% copy "deals.intro" time=last_checked|ago %}</p>{% endif %}
+  <p class="page-intro"><a href="{% url 'web:per_card' %}">{% copy "deals.percard" %}</a></p>
 </div>
 
 {% if savings %}

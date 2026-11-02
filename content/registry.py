@@ -239,6 +239,8 @@ ENTRIES = [
         "Drops",
         "Header and footer link to the drop tracker.",
     ),
+    Entry("site.nav.percard", B, "Cheapest per card link", "Cheapest per card",
+          "Footer link to the Cheapest per card page."),
     Entry(
         "site.nav.guides", B, "Guides link",
         "Guides",
@@ -449,6 +451,14 @@ ENTRIES = [
           "Grey label on any other pick: how many shops have it in stock.", placeholders=("count",)),
     Entry("home.picks.shops_one", T, "Pick label: one shop", "In stock at 1 shop",
           "Grey label on any other pick that only one shop has in stock."),
+    Entry("home.percard.title", H, "Cheapest per card heading", "Cheapest per card",
+          "Home page row of the products in stock with the cheapest price per card. Also names its jump button under "
+          "the search box."),
+    Entry("home.percard.note", T, "Cheapest per card note", "For rippers: what each card costs you, delivered.",
+          "Small note under the Cheapest per card heading on the home page."),
+    Entry("home.percard.cards.one", T, "Cards inside (one)", "1 card", "Under a product in the Cheapest per card row."),
+    Entry("home.percard.cards.other", T, "Cards inside (more than one)", "{count} cards",
+          "Under a product in the Cheapest per card row: every card inside.", placeholders=("count",)),
     Entry("home.featured.title", H, "Rip's Deals heading", "Rip's Deals",
           "Home page row of deals near the top, with the raptor beside it. Also names its jump button under the search box."),
     Entry(
@@ -492,6 +502,16 @@ ENTRIES = [
         "All products",
         "Heading on the search page when nothing has been typed.",
     ),
+    Entry("browse.card.per_card", T, "Card: price per card", "{each} a card",
+          "On a product card beside the price, and on the home page's Cheapest per card row: the cheapest delivered "
+          "price shared over every card inside, from the pack counts the shops give. {each} is written as people say "
+          "it (12p, £1.05).", placeholders=("each",)),
+    Entry("browse.percard.title", H, "Cheapest per card heading", "Cheapest per card",
+          "Heading of the Cheapest per card page, which ranks every sealed product in stock by what each card costs."),
+    Entry("browse.percard.intro", T, "Cheapest per card intro",
+          "Every sealed product in stock we can count the cards in, cheapest per card first. Price per card is the "
+          "delivered price shared over every card inside. It says nothing about the odds of a big pull.",
+          "Under the Cheapest per card heading."),
     Entry(
         "browse.count.one", T, "Product count (one)",
         "1 product",
@@ -1169,6 +1189,9 @@ ENTRIES = [
         "Under the cheapest price on a product page, when it holds two or more packs and the number is known: the "
         "cheapest price shared over the packs.", placeholders=("packs", "each"),
     ),
+    Entry("product.cards.each", T, "Price per card", "{cards} cards inside, {each} a card",
+          "Under the cheapest price on a product page, when the cards inside can be counted: the cheapest price shared "
+          "over every card. Links to the Cheapest per card page.", placeholders=("cards", "each")),
     Entry(
         "product.badge.low_30", T, "Badge: lowest in 30 days",
         "Lowest in 30 days",
@@ -2287,6 +2310,8 @@ ENTRIES = [
         "Under the deals page heading.",
         placeholders=("time",),
     ),
+    Entry("deals.percard", B, "Cheapest per card link", "Ripping packs? See the cheapest per card",
+          "Link under the Deals page intro to the Cheapest per card page."),
     Entry("deals.savings.title", H, "Deals savings heading", "Biggest savings right now", "Deals page section heading."),
     Entry("deals.drops.title", H, "Deals drops heading", "Biggest price drops", "Deals page section heading."),
     Entry("deals.lowest.title", H, "Deals lowest heading", "Lowest in 90 days", "Deals page section heading."),
@@ -2776,6 +2801,11 @@ ENTRIES = [
         "No deals to show yet. Prices are checked every hour, so try again soon.",
         "Shown when there is nothing on the deals page.",
     ),
+    Entry("meta.percard.title", T, "Cheapest per card page title", "Cheapest sealed TCG per card in the UK",
+          "Browser tab title for the Cheapest per card page. The site name is added after it."),
+    Entry("meta.percard.description", T, "Cheapest per card page description",
+          "Booster boxes, packs and bundles in stock at UK shops, ranked by the delivered price of each card inside.",
+          "Search engine description for the Cheapest per card page."),
     Entry(
         "meta.deals.title", T, "Deals page title",
         "Cheapest TCG booster box and ETB deals in the UK today",

@@ -156,6 +156,26 @@ def price_a_pack(price, packs):
     return (Decimal(price) / packs).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def cards_total(product):
+    """How many cards a product holds: its packs (one for a booster pack no shop gives a count for) times the cards in
+    each, or None when either is not known. The same rule as ordering.with_card_price."""
+    from .ordering import PACK_TYPES
+
+    packs = product.packs_inside or (1 if product.product_type in PACK_TYPES else None)
+    cards = product.cards_inside
+    return packs * cards if packs and cards else None
+
+
+def price_a_card(price, product):
+    """``price`` shared over the product's cards, to a tenth of a penny, or None when they cannot be counted."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    total = cards_total(product)
+    if price is None or not total:
+        return None
+    return (Decimal(price) / total).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+
+
 def refresh_contents(dry_run=False):
     """Keep each active product's packs_found and cards_found from its live UK shop listings' descriptions. One read
     of the descriptions, streamed, and one write for the products that changed. Returns how many changed."""

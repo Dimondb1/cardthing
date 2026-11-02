@@ -22,6 +22,7 @@ urlpatterns = [
     path("new/", views.latest_drops, name="new"),
     path("drops/", views.drops, name="drops"),
     path("drops/remind/<int:set_id>/", views.drop_ask, name="drop_ask"),
+    path("cheapest-per-card/", views.cheapest_per_card, name="per_card"),
     path("watchlist/", views.watchlist, name="watchlist"),
     path("watchlist/alert/", views.search_alert_ask, name="search_alert_ask"),
     path("watchlist/manage/", views.manage_ask, name="manage_ask"),

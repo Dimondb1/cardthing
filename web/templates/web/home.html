@@ -24,6 +24,7 @@
     {% if games %}<li><a class="chip" href="#games-title">{% copy "home.games.label" %}</a></li>{% endif %}
     <li data-jump-for="data-picks" hidden><a class="chip" href="#picks-title">{% copy "home.picks.title" %}</a></li>
     <li data-jump-for="data-resume" hidden><a class="chip" href="#resume-title">{% copy "home.resume.title" %}</a></li>
+    {% if per_card %}<li><a class="chip" href="#percard-title">{% copy "home.percard.title" %}</a></li>{% endif %}
     {% if coming_soon or latest %}<li><a class="chip" href="#latest-title">{% copy "home.new.title" %}</a></li>{% endif %}
     {% if product_types %}<li><a class="chip" href="#types-title">{% copy "home.types.title" %}</a></li>{% endif %}
   </ul>
@@ -63,6 +64,30 @@
     {% endfor %}
   </ul>
   {% if guides_live %}<p class="home-guides"><a href="{% url 'web:guides' %}">{% copy "home.guides" %}</a></p>{% endif %}
+</section>
+{% endif %}
+
+{% if per_card %}
+{# Cheapest per card (views.home_per_card): for people who rip packs, what each card costs delivered, from the counts shops give. #}
+<section class="home-section" aria-labelledby="percard-title">
+  <div class="section-head">
+    <h2 id="percard-title" class="section-head__title">{% copy "home.percard.title" %}</h2>
+    <a class="section-head__all" href="{% url 'web:per_card' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  </div>
+  <p class="section-head__note">{% copy "home.percard.note" %}</p>
+  <ul class="trending trending--compact" data-scroll>
+    {% for product, summary in per_card %}
+    <li class="trending__item">
+      <a class="trending__link" href="{{ product.get_absolute_url }}" data-compare="per_card">
+        {% product_image product "deal" %}
+        <span class="trending__name">{{ product.name }}</span>
+        <span class="trending__price"><span class="price">{% copy "browse.card.per_card" each=summary.best.shown_price|per_card:product %}</span></span>
+        <span class="trending__retailer">{{ summary.best.shown_price|gbp }} <span class="delivered">{% include "web/includes/price_basis.html" with listing=summary.best %}</span> · {{ summary.best.retailer.name }}</span>
+        <span class="trending__move">{% copy_count "home.percard.cards" product|cards_count %}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
 </section>
 {% endif %}
 

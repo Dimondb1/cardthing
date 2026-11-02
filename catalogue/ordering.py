@@ -5,7 +5,10 @@ swipe deck use the same ones so a choice means the same thing everywhere.
 
 from datetime import timedelta
 
-from django.db.models import Case, DecimalField, ExpressionWrapper, F, IntegerField, Min, OuterRef, Q, Subquery, Value, When
+from django.db.models import (
+    Case, DecimalField, ExpressionWrapper, F, FloatField, IntegerField, Min, OuterRef, Q, Subquery, Value, When,
+)
+from django.db.models.functions import Cast, Coalesce
 from django.utils import timezone
 
 from . import languages
@@ -21,8 +24,26 @@ SORTS = [
     ("saving", "Biggest saving"),
     ("low", "Lowest in 90 days"),
     ("fair", "Fairest price"),
+    ("card", "Cheapest per card"),
 ]
 LOW_DAYS = 90
+# A product of these types is one pack, when no shop says otherwise (a three-pack blister is a bundle).
+PACK_TYPES = ("booster_pack", "collector_booster_pack")
+# Products whose cards can be counted: cards a pack known, and packs known or the product is one pack
+# (catalogue/contents.py). Only these have a price per card.
+CARDS_KNOWN = ((Q(cards_per_pack__isnull=False) | Q(cards_found__isnull=False))
+               & (Q(packs__isnull=False) | Q(packs_found__isnull=False) | Q(product_type__in=PACK_TYPES)))
+
+
+def with_card_price(products):
+    """Annotate ``cards_total`` (packs times cards a pack, the owner's figures over the shops') and ``price_per_card``
+    (the cheapest price shared over them), each None where a count is not known. As a float: the database keeps
+    whole-pound prices as whole numbers, which would divide to nothing."""
+    one_pack = Case(When(product_type__in=PACK_TYPES, then=Value(1)), default=Value(None), output_field=IntegerField())
+    packs = Coalesce("packs", "packs_found", one_pack, output_field=IntegerField())
+    cards = Coalesce("cards_per_pack", "cards_found", output_field=IntegerField())
+    return products.annotate(cards_total=ExpressionWrapper(packs * cards, output_field=IntegerField())).annotate(
+        price_per_card=ExpressionWrapper(Cast("lowest_price", FloatField()) / F("cards_total"), output_field=FloatField()))
 
 
 def apply_languages(products, codes):
@@ -73,6 +94,12 @@ def order_products(products, sort, first=None):
         )
         products = products.annotate(at_low=at_low)
         ordering = ["has_price", "at_low", F("lowest_price").asc(nulls_last=True), "name"]
+    elif sort == "card":
+        # Cheapest per card (the owner, 2 Nov 2026: for people who just like ripping packs); products whose cards
+        # cannot be counted after those that can.
+        products = with_card_price(products)
+        ordering = ["has_price", F("price_per_card").asc(nulls_last=True), F("lowest_price").asc(nulls_last=True),
+                    "name"]
     elif sort == "fair":
         # The Price check's verdict as stored each hour (fair_price.refresh_bands): lowest yet first, then good,
         # fair, above average and high, then products with no verdict; the cheaper first within each.

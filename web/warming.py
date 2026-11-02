@@ -32,7 +32,9 @@ def cached_keys(games):
         COMING_SOON_CACHE_KEY, DEALS_CACHE_KEY, HOME_CACHE_KEY, HOME_DROPS_CACHE_KEY, NEW_CACHE_KEY,
     )
 
-    return [HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY, HOME_DROPS_CACHE_KEY,
+    from web.views import PER_CARD_KEY
+
+    return [HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY, HOME_DROPS_CACHE_KEY, PER_CARD_KEY,
             *(f"{COMING_SOON_CACHE_KEY}:{game.slug}" for game in games)]
 
 
@@ -89,6 +91,7 @@ def warm_pages(fresh=False, only=None):
         ("home deals", HOME_CACHE_KEY, lambda: views.home_lists(fresh=True, candidates=candidates)),
         ("out now", NEW_CACHE_KEY, lambda: views.home_drops_new(fresh=True)),
         ("deals", DEALS_CACHE_KEY, lambda: views.deals_lists(fresh=True, candidates=candidates)),
+        ("home per card", views.PER_CARD_KEY, lambda: views.home_per_card(fresh=True)),
     ]
     took = {}
     for name, key, build in steps:

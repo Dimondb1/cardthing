@@ -107,7 +107,7 @@ class PageSitemap(Sitemap):
     address, and lists different products, so it is a page of its own here too."""
 
     def items(self):
-        return ["web:home", "web:deals", "web:drops", "web:drops?show=out", "web:games", "web:about",
+        return ["web:home", "web:deals", "web:per_card", "web:drops", "web:drops?show=out", "web:games", "web:about",
                 "web:list_shop", "web:terms"]
 
     def location(self, name):

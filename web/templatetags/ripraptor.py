@@ -178,6 +178,36 @@ def per_pack(price, packs):
 
 
 @register.filter
+def pence(value):
+    """A small price as it is said: "12p" under a pound, to the penny (never "0p": "1p" is the least), else "£1.05"."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    amount = _money(value)
+    if amount is None:
+        return ""
+    if amount < 1:
+        return f"{max(1, int((amount * 100).quantize(Decimal('1'), rounding=ROUND_HALF_UP)))}p"
+    return f"£{amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):,.2f}"
+
+
+@register.filter
+def cards_count(product):
+    """How many cards a product holds (catalogue/contents.py), or None."""
+    from catalogue.contents import cards_total
+
+    return cards_total(product)
+
+
+@register.filter
+def per_card(price, product):
+    """A price shared over every card a product holds (catalogue/contents.py), as it is said ("12p"), or "" when the
+    cards cannot be counted."""
+    from catalogue.contents import price_a_card
+
+    return pence(price_a_card(price, product))
+
+
+@register.filter
 def compact_count(value):
     """A count short enough for a small tile: 950, 1.2k, 12k. Rounded down, so it never claims more than there is."""
     try:

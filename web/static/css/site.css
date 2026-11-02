@@ -988,6 +988,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .card__price { grid-area: price; }
 .card__at { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-muted); }
 .card__each { white-space: nowrap; color: var(--color-ink); font-weight: var(--weight-medium); }
+/* On the Cheapest per card page the price per card is what the list is ranked by: green, as every cheapest price is. */
+.card__each--lead { color: var(--color-price); font-weight: var(--weight-strong); }
 /* A shop's multi-buy that costs less per item: a note, not a rival price, so it stays uncoloured. */
 .card__deal { grid-column: 1 / -1; margin-top: var(--space-1); font-size: var(--text-sm); color: var(--color-ink); }
 .card__last { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-subtle); font-variant-numeric: tabular-nums; }
@@ -1125,7 +1127,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .buybox__price .price { font-size: var(--text-price-hero); }
 .buybox__price .delivered { font-weight: var(--weight-strong); color: var(--color-price); }
 .buybox__delivered { font-size: var(--text-sm); color: var(--color-ink-muted); }
-.buybox__packs { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
+.buybox__packs, .buybox__cards { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
 .buybox__deal { font-size: var(--text-sm); color: var(--color-ink); }
 .buybox__summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__save { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-2); }

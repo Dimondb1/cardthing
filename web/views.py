@@ -25,6 +25,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from catalogue import (alerts, clicks, fair_price, images, insights, languages, mail, offers, picks, popularity, pricing,
                        referrals, sports, traffic)
+from catalogue.contents import cards_total, price_a_card
 from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, DropSpotlight, FeaturedSettings, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
@@ -87,7 +88,7 @@ class FilterForm(forms.Form):
     price = forms.ChoiceField(label="Price", choices=PRICE_BANDS, required=False)
     lang = forms.ChoiceField(label="Language", choices=[("", "Language")] + LANGUAGES, required=False)
 
-    def __init__(self, *args, fixed_game=None, has_query=False, type_options=None, **kwargs):
+    def __init__(self, *args, fixed_game=None, has_query=False, type_options=None, default_sort=None, **kwargs):
         super().__init__(*args, **kwargs)
         if fixed_game is not None:
             del self.fields["game"]
@@ -95,7 +96,14 @@ class FilterForm(forms.Form):
             self.fields["type"].choices = [("", "Type")] + list(type_options)
         if not has_query:
             self.fields["sort"].choices = self.BROWSE_SORTS
-        self.default_sort = "best" if has_query else "newest"
+        self.default_sort = default_sort or ("best" if has_query else "newest")
+        if default_sort:
+            # A list with its own order (Cheapest per card) shows it chosen in the sort menu, whether or not the
+            # address names a sort.
+            self.fields["sort"].initial = default_sort
+            if self.is_bound and not self.data.get("sort"):
+                self.data = self.data.copy()
+                self.data["sort"] = default_sort
 
     def value(self, name, default=None):
         # cleaned_data holds every valid field even when another field is not.
@@ -138,7 +146,7 @@ def stock_tab(tab, compared=False):
 
 
 def _browse(request, template_context, *, base_queryset, fixed_game=None, default_ordering=None, tabs=False,
-            template="web/browse.html", structured=None, stock_now=False):
+            template="web/browse.html", structured=None, stock_now=False, default_sort=None):
     """Shared by search, game and set pages, and Out now on the drops page (``template``).
 
     ``structured``, when given, is called with the page of products shown and whether this is the canonical
@@ -159,7 +167,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     chosen_game = fixed_game or Game.objects.filter(slug=request.GET.get("game", "")).first()
     scope = base_queryset.filter(game=chosen_game) if chosen_game and fixed_game is None else base_queryset
     form = FilterForm(
-        request.GET or None, fixed_game=fixed_game, has_query=has_query, type_options=types_for(chosen_game, scope)
+        request.GET or None, fixed_game=fixed_game, has_query=has_query, type_options=types_for(chosen_game, scope),
+        default_sort=default_sort,
     )
     form.is_valid()
 
@@ -814,6 +823,7 @@ def home(request):
             "latest": home_drops_new(),
             "coming_soon": home_coming_soon(),
             "coming_soon_shown": COMING_SOON_ON_HOME,
+            "per_card": home_per_card(),
             "interest_games": interest_lexicon(games),
             # Win a keyring: shown while the refer a friend offer is open, read from the cache with no query.
             "keyrings_left": referrals.keyrings_left(),
@@ -826,6 +836,39 @@ def home(request):
             "structured_json": ld_json(site_json(request)),
         },
     )
+
+
+# Cheapest per card on the home page: how many. Ordering every priced product by its price per card reads them all, so
+# the choice is a cached list like the home page's others (web.listcache, warmed by web.warming); the prices shown
+# are always read fresh.
+PER_CARD_ON_HOME = 8
+PER_CARD_KEY = "home:per-card:v1"
+
+
+def per_card_ids():
+    """The products in stock with the cheapest price per card, cheapest first."""
+    from catalogue.ordering import CARDS_KNOWN, with_card_price
+
+    ranked = (with_card_price(Product.objects.for_lists().in_stock().filter(CARDS_KNOWN))
+              .filter(price_per_card__isnull=False).order_by("price_per_card", "pk"))
+    return list(ranked.values_list("pk", flat=True)[:PER_CARD_ON_HOME])
+
+
+def home_per_card(fresh=False):
+    """[(product, summary)] for the home page's Cheapest per card row: in stock, cards counted, cheapest per card
+    first. Two queries once the choice is cached. ``fresh`` chooses again in place (web.warming)."""
+    ids = listcache.get_or_build(PER_CARD_KEY, per_card_ids, fresh=fresh)
+    if not ids:
+        return []
+    found = {product.pk: product for product in
+             Product.objects.for_lists().filter(pk__in=ids).prefetch_related(offers.buyable_prefetch())}
+    rows = []
+    for pk in ids:
+        product = found.get(pk)
+        summary = offers.summarise(product) if product is not None else None
+        if summary is not None and summary.best and price_a_card(summary.best.shown_price, product) is not None:
+            rows.append((product, summary))
+    return rows
 
 
 # The drop spotlight's pictures: the set's products a shop's picture is known for, the boxes first.
@@ -902,6 +945,26 @@ def search(request):
         request,
         {"heading": heading, "meta_title": heading, "noindex": True, "is_search": True},
         base_queryset=Product.objects.for_lists(),
+    )
+
+
+@require_GET
+def cheapest_per_card(request):
+    """Cheapest per card: every sealed product in stock whose cards can be counted, ranked by its cheapest delivered
+    price shared over them (the owner, 2 Nov 2026: "for those who just like ripping packs"), with the usual filters.
+    The counts are the owner's figures or the ones shops' descriptions agree on (catalogue/contents.py)."""
+    from catalogue.ordering import CARDS_KNOWN
+
+    heading = text(request, "browse.percard.title")
+    return _browse(
+        request,
+        {"heading": heading, "intro": text(request, "browse.percard.intro"), "per_card_page": True,
+         "meta_title": text(request, "meta.percard.title"),
+         "meta_description": text(request, "meta.percard.description"),
+         "canonical_url": request.build_absolute_uri(reverse("web:per_card")),
+         "structured_json": ld_json(breadcrumbs_json(request, [(heading, reverse("web:per_card"))]))},
+        base_queryset=Product.objects.for_lists().in_stock().filter(CARDS_KNOWN),
+        default_sort="card",
     )
 
 
@@ -1416,6 +1479,8 @@ def product_detail(request, slug):
             "cheapest": cheapest,
             # What one pack costs at the cheapest price, for a product holding two or more (catalogue/contents.py).
             "per_pack": per_pack(cheapest, product),
+            "per_card": price_a_card(cheapest.shown_price if cheapest else None, product),
+            "cards_total": cards_total(product),
             "shop_count": shop_count,
             "summary": summary,
             "in_stock_count": in_stock_count,

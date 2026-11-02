@@ -3014,14 +3014,10 @@ The home page opens with a compact hero: a short line above the headline
 many UK shops the site compares and that every price includes delivery,
 not just the basket price ("Sealed TCG prices from 87 UK shops, ..."), then
 the large search
-box (its corners the cards' 16px, not a pill) and a row of jump buttons,
-all close together so the games and Hunted for you start on the first
-screen. The line saying when a shop's price was last checked went on 31 Oct
+box (its corners the cards' 16px, not a pill) and, since Nov 2026, the
+finder (below), all close together so prices start on the first screen. The line saying when a shop's price was last checked went on 31 Oct
 2026 at the owner's request; each product page still says when its own
-prices were. The **jump buttons** (Games, Deals, Drops, Products, and For
-you and Your tracks once those sections have something, `jump.js`) are one
-tap to each section further down, in the page's order, on one line that
-swipes sideways on a phone. The number of shops
+prices were. The number of shops
 (`pricing.shops_compared`) counts the UK shops with a current price on the
 site, so it moves as shops are added, stop being read or come back: eBay
 and Amazon are searches and never count, nor a price kept out of the

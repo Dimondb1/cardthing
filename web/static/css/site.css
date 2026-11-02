@@ -647,24 +647,6 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .poster--watch .poster__title { font-size: var(--text-poster-sm); }
 .poster--watch .poster__text { font-size: var(--text-base); }
 .poster--watch .poster__mark { --mark-size: var(--mark-poster-sm); left: -20%; color: var(--color-brand); }
-/* Jump buttons under the home page's search: one tap to each section further down, for a first visit that would not
-   know they are there. Plain links to the sections' headings, on one line that swipes sideways on a phone (.chips). */
-/* With script (jump.js, which adds .is-live) it stays at the top of the screen while the page scrolls, edge to edge on a
-   phone like the stock tabs, so it works as the page's tabs: the section in view is marked (.chip[aria-current]). It
-   is clear until it sticks, so the search box's shadow above it shows whole, then paper with a rule under it. Without
-   script it is a plain row of links. */
-.jump { margin: var(--space-3) calc(-1 * var(--page-gutter)) 0; padding-block: var(--space-2); }
-.jump.is-live { position: sticky; top: 0; z-index: 3; }
-.jump.is-stuck { background: var(--color-paper); box-shadow: 0 1px 0 var(--color-line); }
-.jump .chips__list { justify-content: flex-start; }
-@media (min-width: 40rem) { .jump .chips__list { flex-wrap: wrap; } }   /* one row in practice; never wider than the page */
-@media (min-width: 48rem) {
-  .jump { margin-inline: 0; }
-  .jump .chips__list { justify-content: center; }   /* under the centred hero */
-}
-/* A jump lands with the heading clear of the sticky row. */
-.home-section .section-head__title { scroll-margin-top: calc(var(--jump-bar) + var(--space-3)); }
-
 /* The drop spotlight (home page, views.drop_spotlight), the owner's poster style for the next big drop: the set's
    boxes fanned out over its name, day and countdown, in paper capitals on ink, and beside them the steps to be ready,
    each on a paper card so its form and buttons are the site's own. */

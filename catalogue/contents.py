@@ -11,7 +11,8 @@ Each live UK shop listing's description (kept by every read, importers.clean_des
 count of packs and one of cards a pack, and only when it states it plainly and once: a description giving two
 different counts, or describing a case of several boxes, gives none. The product's count is the one most of the
 shops that give one agree on, more than all the others together. Marketplaces' descriptions are sellers' own words
-and are never read. The owner's own figures (Product.packs, cards_per_pack) always win; refresh_contents keeps the
+and are never read. A booster pack is one pack unless its own name counts several ("3 Booster Packs"): a single pack's
+description often says what the box it comes from holds ("each display contains 30 packs"). The owner's own figures (Product.packs, cards_per_pack) always win; refresh_contents keeps the
 shops' (packs_found, cards_found) each hour from tidy_all.
 """
 
@@ -25,8 +26,9 @@ MOST_PACKS = 60
 FEWEST_CARDS, MOST_CARDS = 3, 30
 
 # One or two digits standing alone: never part of a price (£2.50), a larger number (a set's 151), a set code (OP-11,
-# SV10) or a percentage.
-NUMBER = r"(?<![\w£$€/-])(?<!\d[.,])(\d{1,2})(?![\d%]|[.,]\d)"
+# SV10), a percentage, or an ordinal ("30th Celebration Booster Pack" is one pack, not 30: the owner, 2 Nov 2026,
+# "This is not a 30 pack booster").
+NUMBER = r"(?<![\w£$€/-])(?<!\d[.,])(\d{1,2})(?![\d%]|[.,]\d|(?i:st|nd|rd|th)\b)"
 NUMBER_ALONE = re.compile(NUMBER)
 # What a pack is called: booster packs, packs, and Magic's and others' named boosters.
 PACK_WORD = re.compile(
@@ -176,6 +178,17 @@ def price_a_card(price, product):
     return (Decimal(price) / total).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
 
 
+def names_several_packs(name, packs):
+    """Whether a booster pack's own name counts ``packs`` packs: "Surging Sparks 3 Booster Packs" or "Booster Pack x3".
+    A name with no count ("30th Celebration Booster Pack") is one pack, whatever its shops' descriptions say."""
+    from .classify import MULTI_PACK
+
+    if not packs or packs < 2:
+        return False
+    counted = packs_in(name)
+    return counted == packs if counted is not None else bool(MULTI_PACK.search(name or ""))
+
+
 def refresh_contents(dry_run=False):
     """Keep each active product's packs_found and cards_found from its live UK shop listings' descriptions. One read
     of the descriptions, streamed, and one write for the products that changed. Returns how many changed."""
@@ -187,10 +200,14 @@ def refresh_contents(dry_run=False):
             .filter(product__is_active=True).order_by().values_list("product_id", "description"))
     for product_id, description in rows.iterator(chunk_size=2000):
         by_product.setdefault(product_id, []).append((packs_in(description), cards_in(description)))
+    from .ordering import PACK_TYPES
+
     changed = []
-    for product in Product.objects.active().only("pk", "packs_found", "cards_found"):
+    for product in Product.objects.active().only("pk", "name", "product_type", "packs_found", "cards_found"):
         given = by_product.get(product.pk, [])
         now = (agreed(packs for packs, _cards in given), agreed(cards for _packs, cards in given))
+        if product.product_type in PACK_TYPES and not names_several_packs(product.name, now[0]):
+            now = (None, now[1])
         if (product.packs_found, product.cards_found) != now:
             product.packs_found, product.cards_found = now
             changed.append(product)

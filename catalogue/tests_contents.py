@@ -53,6 +53,11 @@ DESCRIPTIONS = [
  ("Each pack has 1 code card", None, None),
  ("1 Pokémon TCG Live code card per pack", None, None),
  ("Sleeved booster pack: 10 cards and 1 code card per pack", None, 10),
+ # The owner, 2 Nov 2026: "This is not a 30 pack booster". An ordinal is never a count.
+ ("30th Celebration Booster Pack Simplified Chinese TCG. 6 cards per pack.", None, 6),
+ ("Pokemon 25th Anniversary Celebrations Booster Pack", None, None),
+ ("1st Edition booster pack", None, None),
+ ("The 2nd booster pack of the year", None, None),
  ("", None, None),
 ]
 
@@ -125,6 +130,23 @@ class RefreshTests(TestCase):
         self.box.refresh_from_db()
         self.assertEqual((self.box.packs_inside, self.box.cards_inside), (30, 5))
         self.assertFalse(self.box.contents_from_shops)
+
+    def test_a_booster_pack_is_one_pack_unless_its_name_counts_several(self):
+        pack = make_product(self.box.product_set, name="Surging Sparks Booster Pack", product_type="booster_pack")
+        three = make_product(self.box.product_set, name="Surging Sparks 3 Booster Packs", product_type="booster_pack")
+        for product in (pack, three):
+            for shop in self.shops[:2]:
+                listing = make_listing(product, shop)
+                type(listing).objects.filter(pk=listing.pk).update(
+                    description="Each display contains 3 booster packs. 10 cards per pack.")
+        contents.refresh_contents()
+        pack.refresh_from_db()
+        three.refresh_from_db()
+        self.assertEqual((pack.packs_found, pack.cards_found), (None, 10))
+        self.assertEqual((three.packs_found, three.cards_found), (3, 10))
+        for name, packs, several in (("Booster Pack x3", 3, True), ("30th Celebration Booster Pack", 30, False),
+                                     ("Surging Sparks 3 Booster Packs", 6, False), ("Booster Pack", 1, False)):
+            self.assertEqual(contents.names_several_packs(name, packs), several, name)
 
     def test_one_read_of_the_descriptions_and_one_write(self):
         for shop in self.shops:

@@ -1825,6 +1825,10 @@ class DailyVisitor(models.Model):
     browser = models.BooleanField(default=False)
     last_seen = models.DateTimeField(null=True, blank=True, db_index=True)
     last_page = models.CharField(max_length=120, blank=True)
+    # Whether they opened a product page that day, so the dashboard can say how many who land on the home page go on
+    # to a product (the owner, 2 Nov 2026: "Is that maybe a reason why people leave the site?"). Empty on rows from
+    # before it was kept, which the dashboard leaves out.
+    opened_product = models.BooleanField(null=True, blank=True, default=None)
 
     class Meta:
         unique_together = [("date", "token")]

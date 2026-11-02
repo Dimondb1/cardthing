@@ -222,6 +222,13 @@ def traffic_section(now, store):
     sources = [{"name": name, "people": n, "share": share(n, sourced)}
                for name, n in sorted(grouped.items(), key=lambda item: (-item[1], item[0]))[:TOP_SOURCES]]
 
+    # Of the people who landed on the home page, how many went on to open a product, from when that was kept
+    # (DailyVisitor.opened_product). The owner, 2 Nov 2026: "Is that maybe a reason why people leave the site?"
+    landed = (DailyVisitor.objects.filter(traffic.people_q(browser_since), date__gte=first, date__lte=today, landing="home",
+                                          opened_product__isnull=False, views__lt=insights.VIEWS_PER_VISITOR_CAP)
+              .exclude(date__in=bursts).aggregate(n=Count("id"), on=Count("id", filter=Q(opened_product=True))))
+    home = {"landed": landed["n"], "on": landed["on"], "share": share(landed["on"], landed["n"])}
+
     # Clicks from people this week by shop, grouped by how the shop earns.
     week = OutboundClick.objects.people().filter(created_at__gte=start, created_at__lte=now).order_by()
     networks = {}
@@ -264,7 +271,7 @@ def traffic_section(now, store):
         # From the first day pages reported in, people are browsers; what else visited is counted as automated.
         "browser_since": browser_since if browser_since and browser_since >= first else None,
         "automated": sum(day["automated"] for day in days if day["by_browser"]),
-        "sources": sources, "earning": earning,
+        "sources": sources, "earning": earning, "home": home,
         "headline": why["headline"] if why["enough"] else "",
         "today": {
             "people": today_people, "clicks": today_clicks, "burst": today_row["burst"], "until": f"{local_now:%H:%M}",

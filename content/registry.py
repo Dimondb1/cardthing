@@ -185,8 +185,9 @@ ENTRIES = [
     Entry("site.consent.label", T, "Analytics card name", "Analytics cookies", "Name of the analytics card for screen readers."),
     Entry(
         "site.consent.text", T, "Analytics question",
-        "Can we use Google Analytics cookies to see which pages help? The site works the same either way.",
-        "The card asking each visitor before Google Analytics loads. Shown until they answer, and again after six months.",
+        "Can we use Google Analytics cookies to see which pages help?",
+        "The slim bar at the foot of the screen asking each visitor before Google Analytics loads. Shown until they "
+        "answer, and again after six months. Keep it to one short question: the bar sits under the first row of prices.",
         legal=True,
     ),
     Entry("site.consent.more", B, "Analytics details link", "How we use it", "Link on the analytics card to the data section of the terms page."),
@@ -459,6 +460,14 @@ ENTRIES = [
     Entry("home.percard.cards.one", T, "Cards inside (one)", "1 card", "Under a product in the Cheapest per card row."),
     Entry("home.percard.cards.other", T, "Cards inside (more than one)", "{count} cards",
           "Under a product in the Cheapest per card row: every card inside.", placeholders=("count",)),
+    Entry("home.best.title", H, "Best prices heading", "Best prices right now",
+          "The home page's first row: real deals at UK shops, whether they pay us or not. Also names its jump button "
+          "under the search box."),
+    Entry("home.best.note", T, "Best prices note",
+          "Cheapest delivered prices at UK shops that beat the next shop or sit at a 30-day low. Any shop, whether "
+          "it pays us or not.",
+          "Under the Best prices right now row on the home page. Keep it true to how the row is chosen "
+          "(web/views.py best_pick)."),
     Entry("home.featured.title", H, "Rip's Deals heading", "Rip's Deals",
           "Home page row of deals near the top, with the raptor beside it. Also names its jump button under the search box."),
     Entry(
@@ -3575,6 +3584,11 @@ ENTRIES = [
     Entry("dashboard.visitors.returning", T, "Dashboard returning", "Returning",
           "Figure and column: people who had visited before."),
     Entry("dashboard.visitors.views", T, "Dashboard page views", "Page views", "Figure and column: pages opened."),
+    Entry("dashboard.visitors.home", T, "Dashboard home page to a product", "Home page to a product",
+          "Figure: of the people who landed on the home page this week, the share who went on to open a product page. "
+          "Counted from 2 Nov 2026."),
+    Entry("dashboard.visitors.home_of", T, "Dashboard home page to a product, of how many",
+          "{part} of {whole} who landed there", "Under the home page to a product figure.", placeholders=("part", "whole")),
     Entry("dashboard.visitors.chart", T, "Dashboard people chart", "People each day, last 7 days",
           "Read out by screen readers for the visitors chart."),
     Entry("dashboard.visitors.best", T, "Dashboard busiest day", "Most people on {day}: {count}.",

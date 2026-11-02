@@ -2,6 +2,8 @@
 "I have shops that are not affiliated in featured deals, where do I admin this". Ticked, the row holds only deals
 at shops that pay, and the home page and the Terms page say so."""
 
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
@@ -15,6 +17,11 @@ PAYS = "https://aff.example/click?u={url}"
 class FeaturedSettingsTests(TestCase):
     def setUp(self):
         cache.clear()
+        # Rip's Deals alone: the Best prices row above it, which would take these UK shops' deals, is left off.
+        patcher = mock.patch("web.views.BEST_ON_HOME", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(cache.clear)
         product_set = make_set(make_game())
         self.paying = make_retailer("Harbour Games", affiliate_url_template=PAYS)
         self.plain = make_retailer("Northgate Cards")

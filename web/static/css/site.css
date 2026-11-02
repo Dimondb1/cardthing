@@ -408,6 +408,9 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .hero__title { font-size: var(--text-headline); font-weight: var(--weight-heading); line-height: var(--leading-tight); letter-spacing: -0.02em; max-width: 22ch; margin: 0; }
 .hero__accent { color: var(--color-brand); white-space: nowrap; }
 .hero__subtitle { margin: var(--space-2) 0 0; max-width: 48ch; color: var(--color-ink-muted); font-size: var(--text-base); line-height: var(--leading-snug); }
+/* On a phone the first screen is the headline, the search box and a whole row of prices: the line above the headline
+   and the sentence under it wait for a wider screen (the owner, 2 Nov 2026: "you don't even see any deals"). */
+@media (max-width: 47.99rem) { .hero__eyebrow, .hero__subtitle { display: none; } }
 .hero__search { margin: var(--space-3) 0 0; max-width: 44rem; text-align: left; }
 .hero .live { text-align: left; max-width: 44rem; }
 .hero__retailers { color: var(--color-ink-muted); font-weight: var(--weight-medium); }
@@ -1587,7 +1590,15 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .install__text { font-size: var(--text-sm); line-height: var(--leading-body); }
 .install__actions { display: flex; gap: var(--space-2); }
 @media (prefers-reduced-motion: reduce) { .install { transition: none; transform: none; } }
-@media (min-width: 48rem) { .consent { right: auto; max-width: var(--panel-width); } }
+/* The analytics question is a slim bar along the foot of the screen, not a card over the first row of prices (the
+   owner, 2 Nov 2026): the question and its link, then the two answers, side by side wherever they fit. */
+.consent {
+  left: 0; right: 0; bottom: var(--card-bottom, 0); display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--gutter) calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+  border-width: 1px 0 0; border-radius: 0; transform: translateY(calc(100% + var(--card-bottom, 0px)));
+}
+.consent .install__text { flex: 1 1 14rem; font-size: var(--text-xs); line-height: var(--leading-snug); }
+.consent .install__actions { flex: none; }
 
 /* Watchlist ---------------------------------------------------------------- */
 

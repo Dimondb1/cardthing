@@ -84,12 +84,22 @@ class PageTests(PageTestCase):
 
     def test_home_shows_every_section(self):
         response = self.client.get(reverse("web:home"))
-        for heading in ("Find your game", "Rip&#x27;s Deals", "Save £3.01 vs Northgate Cards", "Hunt by product"):
+        for heading in ("Find your game", "Best prices right now", "Save £3.01 vs Northgate Cards", "Hunt by product"):
             self.assertContains(response, heading)
-        # The raptor is Rip's Deals' mascot, beside its name.
-        self.assertContains(response, '<h2 id="featured-title" class="section-head__title section-head__title--mascot">'
-                                      '<span class="mark section-head__mascot" aria-hidden="true"></span>Rip&#x27;s Deals</h2>')
-        self.assertContains(response, 'href="#featured-title">Rip&#x27;s Deals</a>')
+        self.assertContains(response, 'href="#best-title">Best prices right now</a>')
+        # The raptor is Rip's Deals' mascot, beside its name: shown alone here, as the first row takes these UK
+        # shops' deals.
+        from unittest import mock
+
+        from django.core.cache import cache
+
+        cache.clear()
+        with mock.patch("web.views.BEST_ON_HOME", 0):
+            deals = self.client.get(reverse("web:home"))
+        cache.clear()
+        self.assertContains(deals, '<h2 id="featured-title" class="section-head__title section-head__title--mascot">'
+                                   '<span class="mark section-head__mascot" aria-hidden="true"></span>Rip&#x27;s Deals</h2>')
+        self.assertContains(deals, 'href="#featured-title">Rip&#x27;s Deals</a>')
         # Hunted for you's raptor holding a magnifying glass, and Follow your tracks' footprints, beside their names:
         # drawn as shapes in the token colours, hidden from screen readers.
         html = response.content.decode()
@@ -111,9 +121,10 @@ class PageTests(PageTestCase):
 
     def test_the_first_screen_reaches_a_price(self):
         # A review the owner shared (Nov 2026): the intro, search, guides, jump buttons, drop and games all came
-        # before any price. Rip's Deals now follows the search and its jump row, compact, and its note follows it.
+        # before any price. Best prices right now follows the search and its jump row (the owner, 2 Nov 2026: "you
+        # don't even see any deals"), compact, and its note follows it.
         html = self.client.get(reverse("web:home")).content.decode()
-        deals = html.index('id="featured-title"')
+        deals = html.index('id="best-title"')
         self.assertLess(html.index('class="hero__search"'), html.index('<nav class="jump"'))
         self.assertLess(html.index('<nav class="jump"'), deals)
         self.assertLess(deals, html.index('id="games-title"'))
@@ -1266,7 +1277,7 @@ class LatestDropsTests(PageTestCase):
     def test_home_row_leads_with_the_newest_release_and_skips_old_stock(self):
         response = self.client.get(reverse("web:home"))
         html = response.content.decode()
-        self.assertLess(html.index('id="featured-title"'), html.index('id="latest-title"'))
+        self.assertLess(html.index('id="best-title"'), html.index('id="latest-title"'))
         row = html[html.index('id="latest-title"'):html.index("</section>", html.index('id="latest-title"'))]
         self.assertIn("Drops</h2>", row)
         self.assertIn('href="/drops/?show=out"', row)
@@ -2298,8 +2309,8 @@ class RedesignTests(PageTestCase):
         css = open(finders.find("css/site.css"), encoding="utf-8").read()
         self.assertIn(".hero__accent { color: var(--color-brand); white-space: nowrap; }", css)
         self.assertIn(".tile--game .product-image--cover { aspect-ratio: 4 / 3; }", css)
-        # Rip's Deals' compact cards are links as a whole, with no button: the first row a phone reaches (Nov 2026).
-        featured = html[html.index('id="featured-title"'):]
+        # The first row's compact cards are links as a whole, with no button: the row a phone reaches (Nov 2026).
+        featured = html[html.index('id="best-title"'):]
         featured = featured[:featured.index("</section>")]
         self.assertNotIn("trending__cta", featured)
 

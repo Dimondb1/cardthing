@@ -4,6 +4,7 @@ average", or "Lowest in 30 days" beside "Fair price": two judgements of the same
 
 from datetime import timedelta
 from decimal import Decimal
+from unittest import mock
 
 from django.core.cache import cache
 from django.test import TestCase
@@ -64,8 +65,11 @@ class LabelTests(TestCase):
 
 
 class FeaturedDisclosureTests(TestCase):
+    # Rip's Deals alone: the Best prices row above it, which would take this UK shop's deal, is left off.
+    @mock.patch("web.views.BEST_ON_HOME", 0)
     def test_the_line_sits_under_the_featured_deals_heading_with_how_it_works(self):
         cache.clear()
+        self.addCleanup(cache.clear)
         game = make_game()
         product_set = make_set(game)
         shops = [make_retailer(name) for name in ("Harbour Games", "Northgate Cards")]

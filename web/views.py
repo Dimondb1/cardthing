@@ -1,6 +1,5 @@
 import json
 import re
-import time
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from functools import wraps
@@ -394,7 +393,8 @@ def home_lists(fresh=False, candidates=None):
 
 
 def build_home_lists(candidates=None):
-    featured, spares = with_list_fields(*featured_pick((candidates or deal_candidates)()))
+    products = (candidates or deal_candidates)()
+    featured, spares = with_list_fields(*featured_pick(products, lows_for(candidates, products)))
     ids = [product.pk for product in pricing.popular(limit=8)] or list(
         Product.objects.active().in_stock().with_release()
         .order_by(F("release").desc(nulls_last=True)).values_list("pk", flat=True)[:8]
@@ -422,24 +422,39 @@ def deal_candidates():
     """Every product a shop has in stock, with its buyable offers (``product.offers``) and its name, for
     picking deals from. Only what picking needs: the prices of the few picked are loaded afterwards by
     with_list_fields, not worked out for every product in stock."""
-    return Product.objects.active().in_stock().only("pk", "name").prefetch_related(offers.buyable_prefetch())
+    return Product.objects.active().in_stock().only("pk", "name", "game_id").prefetch_related(offers.buyable_prefetch())
 
 
 class SharedCandidates:
     """deal_candidates, read once however many callers ask: the home lists and the Deals lists both pick from
-    them, so building both reads the offers once. ``read_at`` is when that read began (time.time()), or None
+    them, so building both reads the offers once. ``read_at`` is when that read began (listcache.now()), or None
     before it: a list built from them dates from then (web.listcache.store), not from when its own build
     began, so a price change saved between the two builds leaves the second list stale."""
 
     def __init__(self):
         self.rows = None
         self.read_at = None
+        self.lows = None
 
     def __call__(self):
         if self.rows is None:
-            self.read_at = time.time()
+            self.read_at = listcache.now()
             self.rows = list(deal_candidates())
         return self.rows
+
+    def week_lows(self):
+        """offers.week_low_map for the candidates, read once however many lists pick from them."""
+        if self.lows is None:
+            self.lows = offers.week_low_map([product.pk for product in self()])
+        return self.lows
+
+
+def lows_for(candidates, products):
+    """The recent daily lows ``products`` (read from ``candidates``) are judged against: the shared read's, when
+    the lists are built together, else read now."""
+    if isinstance(candidates, SharedCandidates):
+        return candidates.week_lows()
+    return offers.week_low_map([product.pk for product in products])
 
 
 def shared_candidates():
@@ -487,7 +502,7 @@ def featured_deals(products):
     return featured_pick(products)[0]
 
 
-def featured_pick(products):
+def featured_pick(products, week_lows=None):
     """(rows, spares): the featured deals, and the next qualifying deals on each side, for the home page.
 
     The rows are the featured deals:
@@ -499,9 +514,11 @@ def featured_pick(products):
     cheapest shop pays a commission take up to six of the eight places and
     the best of the rest take the others; if either side is short, the other
     fills in. The page says that featured deals favour those shops. With
-    FeaturedSettings.paying_only only those shops' deals are featured.
+    FeaturedSettings.paying_only only those shops' deals are featured. ``week_lows`` as offers.week_low_map gives
+    them, read here when not given.
     """
-    week_lows = offers.week_low_map([p.pk for p in products])
+    if week_lows is None:
+        week_lows = offers.week_low_map([p.pk for p in products])
     good = []
     for product in products:
         summary = offers.summarise(product, week_lows)
@@ -533,6 +550,76 @@ def featured_pick(products):
     # (earning for earning, other for other), so the three in four never changes and nothing is sent anywhere.
     spares = paying[len(picked_paying):][:FEATURED_SPARES] + other[len(picked_other):][:FEATURED_SPARES]
     return rows, spares
+
+
+# Best prices right now, the home page's first row (the owner, 2 Nov 2026, of the first screen: "you don't even see any
+# deals, it's just a load of information"): the strongest deals with evidence (offers.Summary.is_deal) whose cheapest
+# shop is a UK shop, whether it pays a commission or not. eBay and Amazon are left to Rip's Deals below it.
+BEST_ON_HOME = 8
+BEST_SPARES = 12         # qualifying deals rendered hidden, for the visitor's own games (interest.js)
+BEST_SPARES_A_GAME = 2
+BEST_VIEW_DAYS = 30
+
+
+def game_view_rank(today=None):
+    """{game id: place}: the game whose product pages were opened most in the last BEST_VIEW_DAYS first. A game
+    with none is not ranked. One query."""
+    from django.db.models import Sum
+
+    today = today or timezone.localdate()
+    game = Subquery(Product.objects.filter(slug=OuterRef("key")).values("game_id")[:1])
+    totals = (DailyPageView.objects.filter(kind=DailyPageView.Kind.PRODUCT,
+                                           date__gte=today - timedelta(days=BEST_VIEW_DAYS - 1))
+              .annotate(game=game).filter(game__isnull=False).order_by().values("game").annotate(n=Sum("hits"))
+              .values_list("game", "n"))
+    ranked = sorted(totals, key=lambda pair: (-pair[1], pair[0]))
+    return {game_id: place for place, (game_id, _) in enumerate(ranked)}
+
+
+def best_pick(products, ranks=None, week_lows=None):
+    """(rows, spares) for Best prices right now. A row is in stock at a UK shop (not eBay or Amazon) with a confirmed
+    delivered price, no sign of a wrong product link, and evidence that the price is good: a verified 30-day low under
+    the month's average, or a saving on the next shop in line with the market. The games people view most come first
+    (game_view_rank), the strongest evidence first within each. Spares are the next qualifying deals, at most
+    BEST_SPARES_A_GAME a game, so interest.js can bring the visitor's own games in. ``week_lows`` as for
+    featured_pick."""
+    from collections import Counter
+
+    from catalogue.pricing import MARKETPLACES
+
+    if week_lows is None:
+        week_lows = offers.week_low_map([p.pk for p in products])
+    good = []
+    for product in products:
+        summary = offers.summarise(product, week_lows)
+        best = summary.best
+        if best is None or best.availability != Listing.Availability.IN_STOCK or not best.delivery_known:
+            continue
+        if summary.suspect or not summary.is_deal or best.retailer.source_type in MARKETPLACES:
+            continue
+        good.append((product, summary))
+    if not good:
+        return [], []
+    ranks = game_view_rank() if ranks is None else ranks
+    good.sort(key=lambda row: (ranks.get(row[0].game_id, len(ranks)), -row[1].strength, row[0].name))
+    rows, spares, per_game = good[:BEST_ON_HOME], [], Counter()
+    for product, summary in good[BEST_ON_HOME:]:
+        if len(spares) < BEST_SPARES and per_game[product.game_id] < BEST_SPARES_A_GAME:
+            per_game[product.game_id] += 1
+            spares.append((product, summary))
+    return rows, spares
+
+
+def home_best(fresh=False, candidates=None):
+    """([(product, summary)], spares) for Best prices right now, cached like the home page's other lists (it reads
+    every product in stock). ``fresh`` and ``candidates`` as for home_lists."""
+    from catalogue.signals import BEST_CACHE_KEY
+
+    def build():
+        products = (candidates or deal_candidates)()
+        return tuple(with_list_fields(*best_pick(products, week_lows=lows_for(candidates, products))))
+
+    return listcache.get_or_build(BEST_CACHE_KEY, build, fresh=fresh, since=read_since(candidates))
 
 
 # Games shown first on the home page, in this order; the rest follow by size.
@@ -809,7 +896,13 @@ def home(request):
     rank = {slug: i for i, slug in enumerate(PINNED_GAMES)}
     games.sort(key=lambda g: (rank.get(g.slug, len(PINNED_GAMES)), -g.product_count, g.name))
     game_covers(games)
-    featured, _, featured_spares = home_lists()
+    candidates = shared_candidates()   # read only if a list has to be built, and then once for both
+    best, best_spares = home_best(candidates=candidates)
+    featured, _, featured_spares = home_lists(candidates=candidates)
+    # A deal shown in the first row is not repeated in Rip's Deals.
+    first = {product.pk for product, _ in best}
+    featured = [row for row in featured if row[0].pk not in first]
+    featured_spares = [row for row in featured_spares if row[0].pk not in first]
     return render(
         request,
         "web/home.html",
@@ -817,6 +910,8 @@ def home(request):
             "games": games,
             "product_types": home_types(),
             "shops_compared": pricing.shops_compared(),
+            "best": best,
+            "best_spares": best_spares,
             "featured": featured,
             "featured_spares": featured_spares,
             "featured_paying_only": FeaturedSettings.current().paying_only if featured else False,

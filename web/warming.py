@@ -29,12 +29,12 @@ logger = logging.getLogger("catalogue")
 def cached_keys(games):
     """The cache keys warm_pages fills, for ``games`` (the active games)."""
     from catalogue.signals import (
-        COMING_SOON_CACHE_KEY, DEALS_CACHE_KEY, HOME_CACHE_KEY, HOME_DROPS_CACHE_KEY, NEW_CACHE_KEY,
+        BEST_CACHE_KEY, COMING_SOON_CACHE_KEY, DEALS_CACHE_KEY, HOME_CACHE_KEY, HOME_DROPS_CACHE_KEY, NEW_CACHE_KEY,
     )
 
     from web.views import PER_CARD_KEY
 
-    return [HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY, HOME_DROPS_CACHE_KEY, PER_CARD_KEY,
+    return [BEST_CACHE_KEY, HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY, HOME_DROPS_CACHE_KEY, PER_CARD_KEY,
             *(f"{COMING_SOON_CACHE_KEY}:{game.slug}" for game in games)]
 
 
@@ -74,7 +74,7 @@ def warm_pages(fresh=False, only=None):
     building just then is left to it.
     """
     from catalogue.signals import (
-        COMING_SOON_CACHE_KEY, DEALS_CACHE_KEY, HOME_CACHE_KEY, HOME_DROPS_CACHE_KEY, NEW_CACHE_KEY,
+        BEST_CACHE_KEY, COMING_SOON_CACHE_KEY, DEALS_CACHE_KEY, HOME_CACHE_KEY, HOME_DROPS_CACHE_KEY, NEW_CACHE_KEY,
     )
     from web import views
 
@@ -88,6 +88,7 @@ def warm_pages(fresh=False, only=None):
                lambda game=game: views.coming_soon_sets(game, limit=None, fresh=True)) for game in games]
     steps += [
         ("home coming soon", HOME_DROPS_CACHE_KEY, lambda: views.home_coming_soon(fresh=True)),
+        ("home best prices", BEST_CACHE_KEY, lambda: views.home_best(fresh=True, candidates=candidates)),
         ("home deals", HOME_CACHE_KEY, lambda: views.home_lists(fresh=True, candidates=candidates)),
         ("out now", NEW_CACHE_KEY, lambda: views.home_drops_new(fresh=True)),
         ("deals", DEALS_CACHE_KEY, lambda: views.deals_lists(fresh=True, candidates=candidates)),

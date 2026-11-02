@@ -19,7 +19,10 @@ NEW_CACHE_KEY = "web:home-new:v3"
 COMING_SOON_CACHE_KEY = "web:coming-soon:v2"
 # The home page's Coming soon rows in popularity order (catalogue.popularity).
 HOME_DROPS_CACHE_KEY = "web:home-drops:v1"
-LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY, HOME_DROPS_CACHE_KEY)
+# The home page's first row, Best prices right now (web.views.home_best).
+BEST_CACHE_KEY = "web:home-best:v1"
+LIST_CACHE_KEYS = (HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY, HOME_DROPS_CACHE_KEY,
+                   BEST_CACHE_KEY)
 
 
 # When this process last cleared the feeds (time.monotonic), for the debounce.

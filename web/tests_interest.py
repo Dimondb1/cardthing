@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from datetime import timedelta
 from pathlib import Path
 
@@ -195,6 +196,10 @@ class FeaturedSparesTests(TestCase):
     def setUp(self):
         cache.clear()
         self.addCleanup(cache.clear)
+        # Rip's Deals alone: the Best prices row above it, which would take these UK shops' deals, is left off.
+        patcher = mock.patch("web.views.BEST_ON_HOME", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.game = make_game()
         self.magic = make_game("Magic: The Gathering", slug="magic-the-gathering", search_aliases="mtg, magic")
         self.set = make_set(self.game)

@@ -5,6 +5,7 @@
     <div><dt>{{ people_label }}</dt><dd>{{ traffic.people|number }}</dd></div>
     <div><dt>{{ returning_label }}</dt><dd>{{ traffic.returning_share }}%</dd></div>
     <div><dt>{{ views_label }}</dt><dd>{{ traffic.views|number }}</dd></div>
+    {% if traffic.home.landed %}<div><dt>{% copy "dashboard.visitors.home" %}</dt><dd>{{ traffic.home.share }}%<span class="dash-stats__note">{% copy "dashboard.visitors.home_of" part=traffic.home.on|number whole=traffic.home.landed|number %}</span></dd></div>{% endif %}
   </dl>
   <figure class="dash-chart">
     <svg class="dash-chart__plot" role="img" aria-labelledby="visitors-chart" focusable="false">

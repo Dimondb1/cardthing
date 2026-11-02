@@ -3486,9 +3486,22 @@ page scrolled past the top of the list goes back to it. The swipe page uses
 the same selects for game, type, sort and language, without the price select
 or the switches.
 
-## Featured deals and sold-out pages
+## Best prices right now, featured deals and sold-out pages
 
-"Featured deals" is the first deal row on the home page: up to eight in-stock products
+**Best prices right now** is the home page's first row (since 2 Nov 2026, when
+the first screen showed mostly words and eBay imports): up to eight deals with
+the same evidence as below, whose cheapest shop is a UK shop, whether it pays a
+commission or not (eBay and Amazon are left to Rip's Deals). The games whose
+product pages were opened most in the last 30 days come first, the strongest
+evidence first within each (`web/views.py` `best_pick`, cached under
+`web:home-best:v1` and built by `warm_pages`). A deal shown there is not
+repeated in Rip's Deals. On a phone only the headline and the search box come
+above it, and the analytics question is a slim bar at the foot of the screen.
+The dashboard's visitors part shows the share of people who landed on the home
+page and went on to open a product (`DailyVisitor.opened_product`, kept from
+2 Nov 2026).
+
+"Featured deals" (Rip's Deals) is the next deal row on the home page: up to eight in-stock products
 with evidence that today's price is a good one (`offers.Summary.is_deal`),
 strongest first, each card naming its evidence:
 

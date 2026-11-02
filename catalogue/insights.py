@@ -165,7 +165,9 @@ def record_visitor(request, kind="", key=""):
     day = timezone.localdate()
     token = visitor_token(request, day)
     seen = DailyVisitor.objects.filter(date=day, token=token, views__lt=VIEWS_PER_VISITOR_CAP)
-    if retry_locked(lambda: seen.update(views=F("views") + 1)):
+    product = kind == DailyPageView.Kind.PRODUCT
+    changes = {"views": F("views") + 1, **({"opened_product": True} if product else {})}
+    if retry_locked(lambda: seen.update(**changes)):
         return True
 
     def create():
@@ -175,7 +177,7 @@ def record_visitor(request, kind="", key=""):
                 device=device_of(request), source=source_of(request),
                 returning=request.COOKIES.get(RETURN_COOKIE) == "1", views=1,
                 guide_reader=request.COOKIES.get(GUIDE_COOKIE) == "1",
-                first_seen=timezone.now(), landing=landing_of(kind, key) if kind else "",
+                first_seen=timezone.now(), landing=landing_of(kind, key) if kind else "", opened_product=product,
             )
 
     try:

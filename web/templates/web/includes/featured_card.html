@@ -1,5 +1,5 @@
 {% load sitecopy ripraptor %}<li class="trending__item" data-game="{{ product.game.slug }}"{% if product.product_set_id %} data-set="{{ product.product_set.slug }}"{% endif %} data-side="{% if summary.best|earns %}earning{% else %}other{% endif %}"{% if spare %} data-spare hidden{% endif %}>
-      <a class="trending__link" href="{{ product.get_absolute_url }}" data-compare="featured">
+      <a class="trending__link" href="{{ product.get_absolute_url }}" data-compare="{{ place|default:'featured' }}">
         {% if compact %}{% product_image product "deal" %}{% else %}{% product_image product "trend" %}{% endif %}
         <span class="trending__name">{{ product.name }}</span>
         <span class="trending__price">{% price summary.best.shown_price %}</span>

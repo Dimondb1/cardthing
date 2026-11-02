@@ -157,6 +157,12 @@ class Entry:
     built_at: float   # time.time() when the build started, before it read anything
 
 
+def now():
+    """The clock lists are dated by (time.time()), for anything that dates rows a list is built from
+    (views.SharedCandidates), so both read the same clock."""
+    return time.time()
+
+
 def max_stale():
     return settings.RIPRAPTOR_LIST_MAX_STALE_SECONDS
 

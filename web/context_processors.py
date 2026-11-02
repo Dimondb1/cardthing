@@ -5,6 +5,8 @@ from django.conf import settings
 from catalogue import referrals
 from guides import state as guides
 
+from . import seasons
+
 # Addresses that are private links: a message thread, the links in stock alert and refer a friend emails (and the
 # Your alerts page they and the watchlist page link to), and the owner's dashboard. analytics.js holds the same pattern.
 PRIVATE_LINK = re.compile(r"^/(?:contact/c|alerts/(?:confirm|stop|manage)|refer/(?:confirm|claim|address|stop)|r|dashboard)/")
@@ -38,4 +40,6 @@ def site(request):
         # The Guides link, once a guide is published: read from the cache alone, like the refer link.
         "guides_live": guides.current()["live"],
         "guide_pages": GUIDE_PAGES,
+        # Today's seasonal theme (web/seasons.py), from the cache alone; staff can preview one with ?theme=.
+        "season": seasons.for_request(request),
     }

@@ -39,7 +39,7 @@
   {# Pages rendered ahead of a tap (Chrome): a link touched or hovered is rendered in the background, so the page is there the moment it is tapped. Never a shop link (/go/ counts a click), the admin, search (it records the search), the swipe page or a private page. Such a fetch is not counted as a view until the page is shown (web.middleware, site.js). #}
   {% if not private_link %}<script type="speculationrules">{"prerender": [{"where": {"and": [{"href_matches": "/*"}, {"not": {"href_matches": ["/go/*", "/admin/*", "/search/*", "/swipe/*", "/watchlist/*", "/alerts/*", "/contact/*", "/refer/*", "/r/*", "/list-your-shop/*", "/feeds/*", "/static/*", "/media/*", "/dashboard/*", "/api/*", "/guides/fair-price/*"]}}]}, "eagerness": "moderate"}]}</script>{% endif %}
 </head>
-<body class="{% block body_class %}{% endblock %}" data-page="{% page_key %}" data-note="{% url 'web:note_api' %}">
+<body class="{% block body_class %}{% endblock %}" data-page="{% page_key %}" data-note="{% url 'web:note_api' %}"{% if season %} data-season="{{ season.key }}"{% endif %}>
   <a class="skip-link" href="#main">Skip to main content</a>
   {% include "web/includes/header.html" %}
   <main id="main" class="page {% block page_class %}{% endblock %}">

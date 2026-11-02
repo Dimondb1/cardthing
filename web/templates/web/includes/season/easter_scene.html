@@ -1,0 +1,20 @@
+{% load static %}{# Easter: either side of the home page's headline on wide screens. Left, a nest of painted eggs. Right, the raptor hatching from its egg, the large raptor image through a mask in the brand orange. #}
+<svg class="season-scene season-scene--left" viewBox="0 0 200 180" aria-hidden="true" focusable="false">
+  <path class="s-mint" d="M14 170L20 150L26 170ZM170 170L178 146L184 170ZM186 170L190 156L196 170Z"/>
+  <path class="s-pink" d="M70 92C56 92 48 112 48 126C48 140 58 148 70 148C82 148 92 140 92 126C92 112 84 92 70 92Z"/>
+  <path class="s-stripe-wide" stroke-width="4" stroke-linejoin="round" d="M49 118L56 112L63 118L70 112L77 118L84 112L91 118"/>
+  <path class="s-butter" d="M130 90C116 90 108 110 108 124C108 138 118 146 130 146C142 146 152 138 152 124C152 110 144 90 130 90Z"/>
+  <path class="s-stripe-wide" stroke-width="4" stroke-linejoin="round" d="M109 128H151"/><circle class="s-dot-lg" cx="122" cy="110" r="3"/><circle class="s-dot-lg" cx="138" cy="110" r="3"/>
+  <path class="s-sky" d="M100 80C86 80 78 100 78 114C78 128 88 136 100 136C112 136 122 128 122 114C122 100 114 80 100 80Z"/>
+  <path class="s-stripe-wide" stroke-width="4" stroke-linejoin="round" d="M79 108L86 102L93 108L100 102L107 108L114 102L121 108"/>
+  <path class="s-nest" d="M28 128C40 124 160 124 172 128C176 150 150 170 100 170C50 170 24 150 28 128Z"/>
+  <path class="s-nest-line" stroke-width="2.5" stroke-linecap="round" d="M36 138C70 146 130 146 164 138M42 152C76 160 124 160 158 152M60 128L72 168M100 126V170M140 128L128 168"/>
+</svg>
+<svg class="season-scene season-scene--right" viewBox="0 0 200 180" aria-hidden="true" focusable="false">
+  <defs><mask id="season-hatch-head" maskUnits="userSpaceOnUse" x="0" y="0" width="1251" height="1200" style="mask-type: alpha"><image href="{% static 'img/raptor-lg.png' %}" width="1251" height="1200"/></mask></defs>
+  <path class="s-mint" d="M24 170L30 150L36 170ZM160 170L168 146L174 170Z"/>
+  <g transform="translate(58 24) scale(0.075)"><rect class="s-brand" width="1251" height="1200" mask="url(#season-hatch-head)"/></g>
+  <path class="s-shell" stroke-width="2" d="M50 112L62 100L74 114L86 98L98 114L110 98L122 114L134 100L146 112L150 118C152 150 130 172 100 172C70 172 48 150 50 118Z"/>
+  <ellipse class="s-shell-shade" cx="76" cy="140" rx="5" ry="4"/><ellipse class="s-shell-shade" cx="122" cy="150" rx="6" ry="4"/><ellipse class="s-shell-shade" cx="104" cy="132" rx="4" ry="3"/>
+  <path class="s-shell" stroke-width="2" d="M70 30L80 22L88 30L96 20L104 30L112 24L120 32C118 14 104 6 92 6C80 6 70 16 70 30Z" transform="rotate(-14 95 20)"/>
+</svg>

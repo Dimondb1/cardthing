@@ -527,6 +527,59 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .poster--watch .poster__text { font-size: var(--text-base); }
 .poster--watch .poster__mark { --mark-size: var(--mark-poster-sm); left: -20%; color: var(--color-brand); }
 
+/* Seasonal themes (web/seasons.py) ----------------------------------------------------------------------------
+   While a theme is on, its decorations hang along the top of every page, the raptor in the logo wears its hat, and
+   on wide screens its pictures stand either side of the home page's headline. All of it is still: decoration, so
+   nothing moves. Every colour is a --season-* token or the brand's own, and none of it is near a price. */
+[data-season] .masthead { position: relative; padding-top: var(--season-garland); }
+.season-garland { position: absolute; top: 0; left: 0; display: block; width: 100%; height: var(--season-garland); pointer-events: none; }
+[data-season] .wordmark { position: relative; }
+/* The hat is drawn in the logo's own units and sized with it, so it sits on the raptor's head at every size; it
+   rises above the logo into the room the decorations make, and leans with the logo on hover. */
+.season-hat { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; transition: transform var(--motion-normal) var(--ease-out); }
+@media (hover: hover) { .wordmark:hover .season-hat { transform: scale(1.03) rotate(-1deg); } }
+.season-scenes { display: none; }
+@media (min-width: 74rem) {   /* only where the space beside the search box holds them */
+  [data-season] .hero { position: relative; }
+  .season-scenes { display: block; }
+  .season-scene { position: absolute; bottom: 0; width: var(--season-scene); height: auto; }
+  .season-scene--left { left: 0; }
+  .season-scene--right { right: 0; }
+}
+.s-red { fill: var(--season-red); }
+.s-red-shade { fill: var(--season-red-shade); }
+.s-pine { fill: var(--season-pine); }
+.s-pine-shade { fill: var(--season-pine-shade); }
+.s-gold { fill: var(--season-gold); }
+.s-gold-shade { fill: var(--season-gold-shade); }
+.s-snow { fill: var(--season-snow); stroke: var(--season-snow-shade); }
+.s-flake { fill: var(--season-flake); }
+.s-night { fill: var(--season-night); }
+.s-violet { fill: var(--season-violet); }
+.s-shell { fill: var(--season-shell); stroke: var(--season-shell-shade); }
+.s-shell-shade { fill: var(--season-shell-shade); }
+.s-pink { fill: var(--season-pink); }
+.s-sky { fill: var(--season-sky); }
+.s-butter { fill: var(--season-butter); }
+.s-mint { fill: var(--season-mint); }
+.s-nest { fill: var(--season-nest); }
+.s-nest-line { fill: none; stroke: var(--season-nest-line); }
+.s-sea { fill: var(--season-sea); }
+.s-sand { fill: var(--season-sand); }
+.s-sand-deep { fill: var(--season-sand-deep); }
+.s-brand { fill: var(--color-brand); }
+.s-brand-deep { fill: var(--color-brand-action); }
+.s-ink { fill: var(--color-ink); }
+.s-trunk { fill: var(--color-ink-muted); }
+.s-glint { fill: var(--season-glint); }
+.s-wire { fill: none; stroke: var(--color-ink); }
+.s-thread { fill: none; stroke: var(--color-ink); }
+.s-stripe, .s-stripe-wide { fill: none; stroke: var(--season-snow); }
+.s-dot, .s-dot-lg { fill: var(--season-snow); }
+.s-card { fill: var(--season-pine); stroke: var(--season-pine-shade); }
+.s-ghost { fill: var(--season-snow); stroke: var(--season-snow-shade); }
+.s-ray { fill: none; stroke: var(--season-gold); }
+
 /* The drop spotlight (home page, views.drop_spotlight), the owner's poster style for the next big drop: the set's
    boxes fanned out over its name, day and countdown, in paper capitals on ink, and beside them the steps to be ready,
    each on a paper card so its form and buttons are the site's own. */

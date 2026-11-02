@@ -166,6 +166,33 @@
   --color-instagram: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%);
   --color-logo-ink: #ffffff;
 
+  /* Seasonal themes (web/seasons.py), only inside their own artwork: the raptor's hat, the decorations along the
+     top of the page and the pictures beside the home page's headline. Never on or beside a price, so green still
+     means cheapest and red dearer. Their reds and greens are deeper than the price colours for the same reason. */
+  --season-red: #c8213a;          /* Santa's hat, a present, a bulb */
+  --season-red-shade: #a01a2f;
+  --season-pine: #1e6b45;         /* the card tree, a present, a bulb */
+  --season-pine-shade: #144d31;
+  --season-gold: #f2b632;         /* ribbons, the star, the moon, the sun */
+  --season-gold-shade: #c98e12;
+  --season-snow: #ffffff;         /* fur, snow, a ghost: drawn with a soft line so it shows on the white page */
+  --season-snow-shade: #d9dee6;
+  --season-flake: #c7d3e3;        /* snowflakes in the air */
+  --season-night: #2a2438;        /* the witch's hat and the bats */
+  --season-violet: #6b3fa0;       /* the witch's hat band */
+  --season-shell: #fbf3dc;        /* eggshell */
+  --season-shell-shade: #e3cf9f;
+  --season-pink: #f6b6c8;         /* painted eggs */
+  --season-sky: #8fd0f0;
+  --season-butter: #f8e08e;
+  --season-mint: #8fd4ad;         /* grass */
+  --season-nest: #b98a4a;
+  --season-nest-line: #8a6330;
+  --season-sea: #2f9bd6;          /* summer */
+  --season-sand: #f3dfb0;
+  --season-sand-deep: #d9b878;
+  --season-glint: rgb(255 255 255 / 0.55);   /* the shine on a bulb, a lens, a foil pack */
+
   /* Shadows -------------------------------------------------------------- */
   --shadow-card: 0 1px 2px rgb(31 36 48 / 0.04), 0 2px 8px rgb(31 36 48 / 0.04);
   --shadow-input: 0 1px 2px rgb(31 36 48 / 0.05);
@@ -217,6 +244,8 @@
   --product-media-phone-long: clamp(7rem, 100vh - 35.5rem, 15rem);
   --product-media-note: 1.25rem;
   --product-media-min: 22rem;       /* the picture well beside the price box on wide screens: at least this tall, and as tall as the box */
+  --season-garland: 1.75rem;       /* the seasonal decorations along the top of every page (web/seasons.py) */
+  --season-scene: 12rem;            /* each seasonal picture beside the home page's headline on wide screens */
   --masthead-search: 2.5rem;        /* the header search box: compact, still a full finger wide */
   --masthead-logo: 1.75rem;         /* the header logo's height on phones */
   --masthead-logo-wide: 2rem;       /* the same on tablets and desktops */

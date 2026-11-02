@@ -3001,6 +3001,36 @@ restocks in 90 days the line adds the two-hour window most of them landed
 in. `backfill_restocks` turns the stamps listings already carried into
 rows; the installer runs it, and it is safe to run again.
 
+## Seasonal themes
+
+Admin, **Seasonal themes** (also on Admin's home page), has one switch, **On**.
+With it ticked, each theme switches itself on during its dates and off after,
+with nothing else to do:
+
+- **Easter**: the Friday before Palm Sunday to Easter Monday (it moves with
+  Easter Sunday each year, `web/seasons.py` `easter_sunday`).
+- **Summer holidays**: 20 July to 31 August.
+- **Halloween**: 17 to 31 October.
+- **Christmas**: 1 to 26 December.
+
+While a theme is on, the raptor in the logo wears its hat on every page (a
+Santa hat, a witch's hat, the top of its eggshell, sunglasses), its
+decorations hang along the top of every page (fairy lights, bats and
+pumpkins, painted eggs, bunting) and, on screens 74rem (1184px) and wider, its
+pictures stand either side of the home page's headline. The artwork is drawn
+as vector art in `web/templates/web/includes/season/` (one file each for the
+hat, the decorations and the pictures), every colour a `--season-*` token in
+`tokens.css`, kept away from prices so green still means cheapest and red
+dearer. None of it moves and none of it has words. Unticking On gives the usual
+look all year. The Admin page lists each theme's next dates, soonest first,
+with **See it now**: a link that shows that theme on any page, only to people
+signed in to Admin (`?theme=christmas`, `halloween`, `easter` or `summer`).
+
+The switch is read from the shared cache, so no page gains a query: it is put
+there when it is saved and by `warm_pages` every five minutes. Game and set
+pages kept whole (`web/pagecache.py`) are kept per theme, so a theme's art
+never outlives it, and a See it now page is never kept.
+
 ## Home page and product cards
 
 The home page opens with a compact hero: a short line above the headline

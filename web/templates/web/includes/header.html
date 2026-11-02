@@ -1,7 +1,8 @@
 {% load sitecopy %}
 <header class="masthead{% if hide_header_search %} masthead--home{% endif %}">
+  {% if season %}{% include season.garland %}{% endif %}
   <div class="masthead__inner">
-    <a class="wordmark" href="{% url 'web:home' %}">{% include "web/includes/wordmark.html" %}<span class="visually-hidden">{{ site_name }}, home</span></a>
+    <a class="wordmark" href="{% url 'web:home' %}">{% include "web/includes/wordmark.html" %}{% if season %}{% include season.hat %}{% endif %}<span class="visually-hidden">{{ site_name }}, home</span></a>
     {% if not hide_header_search %}
       <div class="masthead__search">{% include "web/includes/search_form.html" with variant="header" button_key="site.search.button" field_id="header-q" live=True %}</div>
     {% endif %}

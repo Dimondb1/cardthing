@@ -22,6 +22,8 @@ from django.http.request import validate_host
 from django.test import RequestFactory
 from django.urls import resolve
 
+from . import seasons
+
 HEADER = "X-RipRaptor-Page"   # "cached" on a copy from the cache, so a check can tell
 # Bumped by forget(): every page kept before it is then a miss, without a key to find and delete.
 GENERATION_KEY = "page-cache-generation"
@@ -36,7 +38,11 @@ def on():
 
 
 def key_for(path):
-    return "page:" + hashlib.sha256(f"{cache.get(GENERATION_KEY, 0)}|{path}".encode()).hexdigest()[:40]
+    # Today's seasonal theme is part of the key: its art is in every page's header, so a page kept under one
+    # theme is a miss once it ends or the owner switches themes off.
+    theme = seasons.current()
+    season = theme.key if theme else ""
+    return "page:" + hashlib.sha256(f"{cache.get(GENERATION_KEY, 0)}|{season}|{path}".encode()).hexdigest()[:40]
 
 
 def forget():
@@ -53,7 +59,8 @@ def cached_page(view):
     """Keep the view's answer to a GET in the shared cache for RIPRAPTOR_PAGE_CACHE_SECONDS, by its full
     address, and serve the copy to the next visitor. Only a 200 is kept, and never with cookies to set."""
     def wrapper(request, *args, **kwargs):
-        if request.method != "GET" or not on():
+        # A staff preview of a seasonal theme (?theme=, web.seasons) is never kept or served from the cache.
+        if request.method != "GET" or not on() or seasons.PREVIEW in request.GET:
             return view(request, *args, **kwargs)
         key = key_for(request.get_full_path())
         found = cache.get(key)

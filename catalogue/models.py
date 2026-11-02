@@ -2447,6 +2447,31 @@ class DropSpotlight(models.Model):
         return cls.objects.select_related("product_set__game").filter(pk=1).first() or cls(pk=1)
 
 
+class SeasonalThemes(models.Model):
+    """The one row of owner controls for the seasonal themes (web/seasons.py). With it on, each theme dresses the
+    site by itself during its dates and comes off after: the raptor in the logo wears the season's hat, its
+    decorations hang along the top of every page and its pictures stand either side of the home page's headline
+    on wide screens. The owner, 2 Nov 2026: "make sure that the themes automatically enable via an on on the
+    admin"."""
+
+    on = models.BooleanField(
+        "On", default=True,
+        help_text="Ticked: each theme below dresses the site by itself during its dates and comes off after. "
+                  "Unticked: the site keeps its usual look all year.",
+    )
+
+    class Meta:
+        verbose_name = "seasonal themes"
+        verbose_name_plural = "seasonal themes"
+
+    def __str__(self):
+        return "Seasonal themes"
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+
 class Referrer(models.Model):
     """Someone who asked for a link to share. Their own email address, given by them and confirmed."""
 

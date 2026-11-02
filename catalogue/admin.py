@@ -11,7 +11,7 @@ from django.utils.html import format_html
 from . import pricing, sanity
 from .models import (
     AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, DropSpotlight, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
-    RemovedProduct, RemovedShop, Restock, Retailer, ShopProduct, StockAlert, TypeBand,
+    RemovedProduct, RemovedShop, Restock, Retailer, SeasonalThemes, ShopProduct, StockAlert, TypeBand,
 )
 
 # A listing field the product page shows. Changing one here stamps the listing's changed_at, the sitemap's
@@ -712,6 +712,57 @@ class DropSpotlightAdmin(admin.ModelAdmin):
         tail = f" Restock emails run until {until:%-d %b}." if until else ""
         return (f"{obj.product_set.name}, {when}, {shown}. Confirmed reminders: {counts['all']}, of them with every "
                 f"alert: {counts['every']}.{tail}")
+
+
+@admin.register(SeasonalThemes)
+class SeasonalThemesAdmin(admin.ModelAdmin):
+    """The one row for the seasonal themes (web/seasons.py): the On switch, and each theme's dates with a link to
+    see it now. The list goes straight to it."""
+
+    fields = ("on", "themes")
+    readonly_fields = ("themes",)
+
+    def has_add_permission(self, request):
+        return False   # the list opens the one row, made on first use
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        row = SeasonalThemes.load()
+        return HttpResponseRedirect(reverse("admin:catalogue_seasonalthemes_change", args=[row.pk]))
+
+    @admin.display(description="Themes")
+    def themes(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html_join
+
+        from web import seasons
+
+        today = timezone.localdate()
+        showing = seasons.theme_for(today) if obj.on else None
+        rows = []
+        # Soonest first: the one showing now, then the next to come.
+        for theme in sorted(seasons.THEMES, key=lambda theme: theme.next_window(today)):
+            first, last = theme.next_window(today)
+            if theme.is_on(today):
+                state = "showing now" if obj.on else "would be showing now, but themes are off"
+            else:
+                state = f"next from {first:%a %-d %b %Y}"
+            rows.append((theme.name, f"{first:%-d %b} to {last:%-d %b}", state,
+                         f"{reverse('web:home')}?{seasons.PREVIEW}={theme.key}"))
+        lead = (f"Showing now: {showing.name}." if showing
+                else "Nothing showing today." if obj.on else "Themes are off: the site has its usual look.")
+        listed = format_html_join(
+            "", '<li><strong>{}</strong>, {}: {}. <a href="{}" target="_blank" rel="noopener">See it now</a></li>',
+            rows,
+        )
+        return format_html('<p>{}</p><ul style="margin-left: 1.5em">{}</ul><p>See it now shows a theme only to people '
+                           "signed in to Admin, on any page. Easter moves with Easter Sunday each year.</p>",
+                           lead, listed)
 
 
 @admin.register(FeaturedSettings)

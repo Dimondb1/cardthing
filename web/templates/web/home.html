@@ -10,6 +10,7 @@
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
   </div>
+  {% if season %}<div class="season-scenes">{% include season.scene %}</div>{% endif %}
 </section>
 
 {% if games %}

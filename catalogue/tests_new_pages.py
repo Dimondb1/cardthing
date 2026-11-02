@@ -24,9 +24,10 @@ PIKACHU = "Pikachu Collection 30th Anniversary"
 PHOTO = "https://cdn.shopify.com/s/files/1/1021/0934/8222/files/04279F46.jpg?v=1791294333"
 
 
-def answer(page, verdict="sealed", confidence="high", language="English", reason="The photo shows a sealed box."):
+def answer(page, verdict="sealed", confidence="high", language="English", reason="The photo shows a sealed box.",
+           photo_language=None):
     body = json.dumps({"page": page, "verdict": verdict, "confidence": confidence, "language": language,
-                       "reason": reason})
+                       "photo_language": language if photo_language is None else photo_language, "reason": reason})
     return SimpleNamespace(stop_reason="end_turn", stop_details=None, model=new_pages.PAGE_MODEL, id="msg_1",
                            content=[SimpleNamespace(type="text", text=body)], usage=usage(1200, 120))
 
@@ -132,7 +133,7 @@ class NewPageTests(Base):
                 self.assertFalse(product.is_active)
                 self.assertEqual(product.new_page.status, NewPage.Status.UNSURE)
         page = NewPage.objects.get(product__name="Pikachu Collection 2")
-        self.assertEqual(page.reason, "Claude reads the cards as Simplified Chinese, and the page says English")
+        self.assertEqual(page.reason, "Claude reads it as Simplified Chinese, and the page says English")
         # On Things to check, with a button each way.
         self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
         html = self.client.get(reverse("checks")).content.decode()
@@ -142,6 +143,45 @@ class NewPageTests(Base):
         self.assertContains(response, "Pikachu Collection 2 is on the site.")
         page.refresh_from_db()
         self.assertEqual((page.status, page.by_owner, page.product.is_active), (NewPage.Status.SEALED, True, True))
+
+    def test_a_stock_photo_in_another_language_never_holds_a_page_the_shops_words_name(self):
+        """The owner, 2 Nov 2026: "Why is Claude being silly with languages". Titan Cards' Korean Ancient Roar pack
+        showed the Japanese pack, and waited for him."""
+        self.switch_on()
+        title = "Ancient Roar SV4K Korean Booster Pack"
+        product = self.read(title=title, description="Korean booster pack, 5 cards.",
+                            url="https://titan.example/products/sv4k")
+        self.run_pages(lambda page, params: answer(page, language="Korean", photo_language="Japanese",
+                                                   reason="The title names a Korean sealed booster pack."))
+        product.refresh_from_db()
+        self.assertTrue(product.is_active)
+        self.assertEqual(product.new_page.status, NewPage.Status.SEALED)
+        done = CheckAnswer.objects.get(kind=CheckAnswer.Kind.PUBLISH)
+        self.assertEqual(done.why, "Claude: The title names a Korean sealed booster pack. The shop's photo shows the "
+                                   "Japanese edition, and its words say Korean.")
+        self.assertIn("The writing in the photo decides it only when the shop's words name no language",
+                      new_pages.SYSTEM_PROMPT)
+
+    def test_pages_held_for_a_photos_language_before_are_asked_again_once(self):
+        self.switch_on()
+        product = self.read(title="Snow Hazard Japanese Booster Pack", description="Japanese booster pack.",
+                            url="https://emporium.example/products/sv2p")
+        NewPage.objects.filter(product=product).update(
+            status=NewPage.Status.UNSURE, reason="Claude reads the cards as Traditional Chinese, and the page says Japanese")
+        Product.objects.filter(pk=product.pk).update(is_active=False)
+        self.run_pages(lambda page, params: answer(page, language="Traditional Chinese", photo_language="Traditional Chinese",
+                                                   reason="The description and the box both say Traditional Chinese."))
+        page = NewPage.objects.get(product=product)
+        self.assertEqual(page.status, NewPage.Status.UNSURE)
+        self.assertEqual(page.reason, "Claude reads it as Traditional Chinese, and the page says Japanese")
+        # Its reason is the new one, so it is not asked a third time.
+        client, _ = self.run_pages(lambda page, params: answer(page))
+        self.assertEqual(client.sent, [])
+        # The owner sees what decided it, as Claude put it.
+        self.client.force_login(get_user_model().objects.create_superuser("ben", "ben@example.com", "pw"))
+        self.assertContains(self.client.get(reverse("checks")),
+                            "Claude reads it as Traditional Chinese, and the page says Japanese. Claude: The description "
+                            "and the box both say Traditional Chinese.")
 
     def test_a_photo_anthropic_will_not_take_is_left_out_next_time(self):
         import anthropic

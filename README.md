@@ -1082,8 +1082,11 @@ waits for you under **New pages to check** on Things to check, off the site,
 with Put it on the site and Keep it off. Claude's acts are under Sorted for you
 with Undo. While Claude cannot act, new pages go up at once as before and
 Claude checks them when it can (taking off any that are not sealed), and a page
-waiting longer than six hours goes up unchecked. Each question uses Sonnet at
-low effort, about a cent with the photo, within the same monthly limit.
+waiting longer than six hours goes up unchecked. The language is the one the
+shop's title or description names: shops often show a stock photo of another
+language's box, so a photo alone never holds a page, it is only noted under
+Sorted for you. Each question uses Sonnet at low effort, about a cent with the
+photo, within the same monthly limit.
 
 **RRPs.** A product page shows the RRP under the cheapest price, with how far
 the price is under it (green) or over it (red; left off beside a shop that pays

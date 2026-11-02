@@ -185,6 +185,10 @@ class ProductQuerySet(models.QuerySet):
         """Products a shop has in stock now (in_stock_count >= 1)."""
         return self._with_offer(Listing.Availability.IN_STOCK)
 
+    def on_preorder(self):
+        """Products a shop takes pre-orders for now (preorder_count >= 1)."""
+        return self._with_offer(Listing.Availability.PREORDER)
+
     def priced(self):
         """Products with a current price, in stock or on pre-order (lowest_price is not null)."""
         return self._with_offer(*Listing.BUYABLE)

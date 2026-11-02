@@ -88,7 +88,6 @@ class PerCardTests(TestCase):
         self.assertIn('<span class="price">30p a card</span>', row)
         self.assertIn("360 cards", row)
         self.assertNotIn(self.tin.name, row)
-        self.assertIn('href="#percard-title">Cheapest per card</a>', html)
 
     def test_prices_are_said_as_people_say_them(self):
         self.assertEqual([pence(value) for value in ("0.123", "0.125", "0.004", "1.054", "12.5")],

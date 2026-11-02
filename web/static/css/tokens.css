@@ -27,7 +27,8 @@
 
 :root {
   /* Layout -------------------------------------------------------------- */
-  --page-width: 70rem;           /* 1120px: wide enough for six cards, narrow enough to feel dense */
+  --page-width: 80rem;           /* 1280px: four products a row in the home finder, little empty space on a laptop */
+  --finder-field-min: 9.5rem;    /* the narrowest a menu in the home finder's filter bar gets before the bar wraps */
   --gutter: 1rem;
   --gutter-wide: 2rem;
   --panel-width: 30rem;

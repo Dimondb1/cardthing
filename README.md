@@ -3486,9 +3486,27 @@ page scrolled past the top of the list goes back to it. The swipe page uses
 the same selects for game, type, sort and language, without the price select
 or the switches.
 
-## Best prices right now, featured deals and sold-out pages
+## The home page finder, best prices, featured deals and sold-out pages
 
-**Best prices right now** is the home page's first row (since 2 Nov 2026, when
+**The finder** (`web/views.py` `home_finder`, `web/static/js/finder.js`, since
+Nov 2026) sits under the home page search box: game tabs, the I'm looking to
+shortcuts (Open packs, Collect a set, Start playing, Find a gift), and menus for
+product type, set (once a game is chosen), language, budget delivered,
+availability (in stock unless changed) and sort, with up to eight products and
+how many match. Its choices are the search page's own filters (`apply_filters`:
+`game`, `want`, `type`, `set`, `lang`, `max`, `stock`, `sort`), so See all opens
+the same list on the search page, which keeps them when its own filters change.
+Open packs keeps products whose packs can be counted, cheapest per pack first
+(the new Cheapest per pack sort). Every tab, shortcut and chip is a plain link
+and the menus a form, so it works without script; with it, the products change
+as each choice does (`?pane=finder`, never counted as a page view, never
+indexed), and the address follows. A home page with choices in it is noindex.
+Once a game is chosen, Save this search opens the watchlist's alert form filled
+in. The jump buttons it replaced are gone; the sections below keep their
+headings. The page is 80rem wide on a desktop (it was 70rem), so the finder
+shows four products a row; the picture sizes were measured again for it.
+
+**Best prices right now** is what the finder shows until anything is chosen (since 2 Nov 2026, when
 the first screen showed mostly words and eBay imports): up to eight deals with
 the same evidence as below, whose cheapest shop is a UK shop, whether it pays a
 commission or not (eBay and Amazon are left to Rip's Deals). The games whose

@@ -61,6 +61,22 @@ PRICE_BANDS = [
 ]
 
 
+# What a visitor is shopping for, from the home page's finder (the owner, Nov 2026: "choose a game, narrow the details,
+# and immediately see relevant products"): each narrows the list and sets its order unless a sort is chosen. Open
+# packs keeps products whose packs can be counted, cheapest per pack first. The names are in the copy registry.
+WANTS = ("open", "collect", "play", "gift")
+WANT_SORTS = {"open": "pack", "collect": "newest", "play": "price", "gift": "fair"}
+WANT_TYPES = {
+    "play": ("deck",),
+    "gift": ("elite_trainer_box", "collection_box", "gift_set", "tin", "bundle"),
+}
+# The finder's most a visitor will pay, delivered. Any whole pound works in the address.
+BUDGETS = [("", "Any budget"), ("10", "Up to £10"), ("20", "Up to £20"), ("30", "Up to £30"), ("50", "Up to £50"),
+           ("75", "Up to £75"), ("100", "Up to £100"), ("150", "Up to £150"), ("200", "Up to £200"),
+           ("300", "Up to £300"), ("500", "Up to £500")]
+STOCK_CHOICES = [("", "Any"), ("in", "In stock"), ("pre", "Pre-order"), ("all", "Any")]
+
+
 class FilterForm(forms.Form):
     """Search and filters. Labels here are short functional labels."""
 
@@ -86,6 +102,11 @@ class FilterForm(forms.Form):
     compared = forms.BooleanField(label="2+ shops", required=False)
     price = forms.ChoiceField(label="Price", choices=PRICE_BANDS, required=False)
     lang = forms.ChoiceField(label="Language", choices=[("", "Language")] + LANGUAGES, required=False)
+    # The home page's finder adds these; the search page keeps them, so its See all opens the same list.
+    set = forms.SlugField(label="Set", max_length=120, required=False)
+    max = forms.IntegerField(label="Budget delivered", min_value=1, max_value=100000, required=False)
+    stock = forms.ChoiceField(label="Availability", choices=STOCK_CHOICES, required=False)
+    want = forms.ChoiceField(choices=[("", "")] + [(want, want) for want in WANTS], required=False)
 
     def __init__(self, *args, fixed_game=None, has_query=False, type_options=None, default_sort=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -109,6 +130,47 @@ class FilterForm(forms.Form):
         if not self.is_bound or not hasattr(self, "cleaned_data"):
             return default
         return self.cleaned_data.get(name) or default
+
+
+def apply_filters(products, form, tabs=False):
+    """``products`` narrowed by the filters chosen on ``form`` (a validated FilterForm), as the search, game and set
+    pages and the home page's finder all apply them. With ``tabs`` (game and set pages) the stock filters give way to
+    the stock tabs. Returns (products, type, price band, languages)."""
+    product_type = form.value("type")
+    if product_type:
+        products = products.filter(product_type=product_type)
+    stock = form.value("stock")
+    if (form.value("in_stock") or stock == "in") and not tabs:
+        products = products.in_stock()
+    elif stock == "pre" and not tabs:
+        products = products.on_preorder()
+    if form.value("compared") and not tabs:
+        products = products.filter(in_stock_count__gte=2)
+    band = form.value("price")
+    if band:
+        low, _, high = band.partition("-")
+        products = products.filter(lowest_price__gte=low)
+        if high:
+            products = products.filter(lowest_price__lt=high)
+    budget = form.value("max")
+    if budget:
+        products = products.filter(lowest_price__lte=budget)
+    if form.value("set"):
+        products = products.filter(product_set__slug=form.value("set"))
+    want = form.value("want")
+    if want == "open":
+        from catalogue.ordering import PACKS_KNOWN
+
+        products = products.filter(PACKS_KNOWN)
+    elif want in WANT_TYPES:
+        products = products.filter(product_type__in=WANT_TYPES[want])
+    languages = [form.value("lang")] if form.value("lang") else []
+    return apply_languages(products, languages), product_type, band, languages
+
+
+def chosen_sort(form):
+    """The order a list takes: the sort chosen, else the one what the visitor wants takes, else the list's own."""
+    return form.value("sort") or WANT_SORTS.get(form.value("want")) or form.default_sort
 
 
 def types_for(game, queryset):
@@ -181,21 +243,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     if game is not None:
         products = products.filter(game=game)
     pool = products   # a search's results before the filters below, for its quick filters
-    product_type = form.value("type")
-    if product_type:
-        products = products.filter(product_type=product_type)
-    if form.value("in_stock") and not tabs:
-        products = products.in_stock()
-    if form.value("compared") and not tabs:
-        products = products.filter(in_stock_count__gte=2)
-    band = form.value("price")
-    if band:
-        low, _, high = band.partition("-")
-        products = products.filter(lowest_price__gte=low)
-        if high:
-            products = products.filter(lowest_price__lt=high)
-    languages = [form.value("lang")] if form.value("lang") else []
-    products = apply_languages(products, languages)
+    products, product_type, band, languages = apply_filters(products, form, tabs=tabs)
 
     tab, tab_counts, opening, asked = "", {}, "", ""
     if tabs:
@@ -211,7 +259,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         tab = asked or opening
         products = products.filter(stock_tab(tab, compared))
 
-    sort = form.value("sort", form.default_sort)
+    sort = chosen_sort(form)
     if sort == "best" and not terms:
         sort = "newest"
     if tab == "pre-orders" and sort == "newest":
@@ -236,7 +284,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
 
     filters_active = bool(
         game or product_type or (form.value("in_stock") and not tabs) or form.value("compared") or band or languages
-        or sort not in (form.default_sort, "soonest")
+        or sort not in (form.default_sort, "soonest") or form.value("set") or form.value("max") or form.value("stock")
+        or form.value("want")
     )
     # The Alert me form on the watchlist page, filled in with this list's game, type, language and price band.
     alert_url = ""
@@ -246,7 +295,9 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
             params["type"] = product_type
         # No language filter is any language: lang= keeps the form from suggesting English.
         params["lang"] = languages[0] if languages else ""
-        if band in BAND_TOPS:
+        if form.value("max"):
+            params["max"] = form.value("max")
+        elif band in BAND_TOPS:
             params["max"] = BAND_TOPS[band]
         alert_url = reverse("web:watchlist") + "?" + urlencode(params) + "#alert"
     # The choices in force, named on the folded Sort and filter button so the list says what it holds.
@@ -272,6 +323,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     context = {
         "alert_url": alert_url,
         "form": form,
+        # The finder's choices the search page's own filters do not show, kept when they change.
+        "kept_finder": [(name, form.value(name)) for name in ("set", "max", "stock", "want") if form.value(name)],
         "query": query,
         "page": page,
         "cards": cards,
@@ -883,6 +936,123 @@ def game_covers(games):
     return games
 
 
+# The home page's finder (the owner, Nov 2026: "make the homepage a live product finder: choose a game, narrow the
+# details, and immediately see relevant products with their delivered prices"). Its choices are the search page's
+# own filters, so See all opens the same list there. With nothing chosen it shows Best prices right now.
+FINDER_PARAMS = ("game", "want", "type", "set", "lang", "max", "stock", "sort")
+FINDER_SHOWN = 8
+FINDER_SETS = 60           # a game's sets offered in the Set menu, newest first
+FINDER_GAME_TABS = 5       # games named as tabs; the rest sit under More
+FINDER_STOCK_DEFAULT = "in"
+# The finder's Availability menu: in stock unless the visitor asks otherwise.
+FINDER_STOCK = [("in", "In stock"), ("pre", "Pre-order"), ("all", "Any")]
+
+
+def finder_url(params, **changes):
+    """The home page with these finder choices, ``changes`` applied (an empty value drops one)."""
+    merged = {name: value for name, value in {**params, **changes}.items() if value}
+    return reverse("web:home") + ("?" + urlencode(merged) if merged else "")
+
+
+def home_finder(request, games):
+    """Everything the home page's finder shows: the game tabs, the I'm looking to shortcuts, the filter menus, the
+    choices in force as removable chips, and up to FINDER_SHOWN products, or Best prices right now while nothing is
+    chosen (``active`` false). A few queries: the sets of a chosen game, the products and their count."""
+    from catalogue.models import ProductSet
+
+    asked = {name: request.GET.get(name, "").strip() for name in FINDER_PARAMS}
+    game = next((item for item in games if item.slug == asked["game"]), None)
+    form = FilterForm({**{name: value for name, value in asked.items() if value}, **({"game": game.slug} if game else {})},
+                      has_query=False, type_options=type_choices(game.slug if game else None))
+    form.is_valid()
+    params = {}
+    for name in FINDER_PARAMS:
+        value = form.value(name)
+        if value:
+            params[name] = value.slug if name == "game" else str(value)
+    if params.get("stock") == FINDER_STOCK_DEFAULT:
+        params.pop("stock")
+    stock = params.get("stock", FINDER_STOCK_DEFAULT)
+    active = bool(params)
+    store = copy.for_request(request)
+
+    def say(key, **values):
+        return copy.get(key, store=store, **values)
+
+    sets = []
+    if game is not None:
+        sets = list(ProductSet.objects.filter(game=game, products__is_active=True).distinct()
+                    .order_by(F("release_date").desc(nulls_last=True), "name").values_list("slug", "name")[:FINDER_SETS])
+        if params.get("set") and params["set"] not in dict(sets):
+            params.pop("set")
+    want = params.get("want", "")
+    wants = [{"key": key, "label": say(f"home.finder.want.{key}"), "on": key == want,
+              "url": finder_url(params, want="" if key == want else key, type="", sort="")} for key in WANTS]
+    # Every game is a tab in a row that swipes on a phone; on a wide screen the first FINDER_GAME_TABS are, and More
+    # opens the rest (``extra``). A game chosen from More stays a tab, so the row says what the list holds.
+    tabs = [{"label": say("home.finder.all_games"), "on": game is None, "extra": False,
+             "url": finder_url(params, game="", type="", set="")}]
+    tabs += [{"label": item.display_short, "on": item == game, "extra": i >= FINDER_GAME_TABS and item != game,
+              "url": finder_url(params, game=item.slug, type="", set="")} for i, item in enumerate(games)]
+    more = [tab for tab in tabs if tab["extra"]]
+
+    # The choices in force, each a chip that takes it off.
+    type_names = dict(type_choices(game.slug if game else None))
+    names = {
+        "game": game.display_short if game else "", "want": say(f"home.finder.want.{want}") if want else "",
+        "type": type_names.get(params.get("type", ""), ""), "set": dict(sets).get(params.get("set", ""), ""),
+        "lang": dict(LANGUAGES).get(params.get("lang", ""), ""), "max": dict(BUDGETS).get(params.get("max", ""), ""),
+        "stock": dict(FINDER_STOCK).get(params.get("stock", ""), ""), "sort": dict(SORTS).get(params.get("sort", ""), ""),
+    }
+    if params.get("max") and not names["max"]:
+        names["max"] = say("home.finder.budget_any", amount=f"£{params['max']}")
+    chips = [{"label": names[name], "url": finder_url(params, **{name: "", **({"type": "", "set": ""} if name == "game"
+                                                                                   else {})})}
+             for name in FINDER_PARAMS if params.get(name) and names[name]]
+
+    cards, total = [], 0
+    if active:
+        products = Product.objects.for_lists()
+        # In stock unless the visitor asks otherwise (apply_filters reads "all" as no filter).
+        form.cleaned_data["stock"] = stock
+        products, _, _, _ = apply_filters(products, form)
+        if game is not None:
+            products = products.filter(game=game)
+        products = order_products(products, chosen_sort(form))
+        shown = list(products.prefetch_related(offers.buyable_prefetch())[:FINDER_SHOWN])
+        total = products.count()
+        if stock == "in":
+            in_stock_offers(shown)
+        week_lows = offers.week_low_map([product.pk for product in shown])
+        cards = [(product, offers.summarise(product, week_lows)) for product in shown]
+
+    if want:
+        title = say(f"home.finder.title.{want}")
+    elif game is not None and len(params) == 1:
+        title = say("home.finder.title.game", game=game.display_short)
+    else:
+        title = say("home.finder.title.any")
+    search = {name: value for name, value in params.items() if name in FINDER_PARAMS}
+    if "stock" not in search:
+        search["stock"] = FINDER_STOCK_DEFAULT
+    alert_url = ""
+    if game is not None and mail.enabled() and cards:
+        alert = {"game": game.slug, "lang": params.get("lang", "")}
+        if params.get("type"):
+            alert["type"] = params["type"]
+        if params.get("max"):
+            alert["max"] = params["max"]
+        alert_url = reverse("web:watchlist") + "?" + urlencode(alert) + "#alert"
+    return {
+        "active": active, "form": form, "params": params, "game": game, "tabs": tabs, "more": more, "wants": wants, "sets": sets, "chips": chips,
+        "budgets": BUDGETS, "stock_choices": FINDER_STOCK, "stock": stock, "languages": LANGUAGES,
+        "types": list(type_names.items()), "sorts": SORTS, "sort": params.get("sort", ""),
+        "cards": cards, "total": total, "title": title, "clear_url": reverse("web:home"),
+        "see_all": reverse("web:search") + "?" + urlencode(search), "alert_url": alert_url,
+        "chosen_count": len(chips),
+    }
+
+
 @require_GET
 def home(request):
     """The money page kept short: search, the games, the visitor's own picks, deals worth having and new
@@ -895,11 +1065,25 @@ def home(request):
     )
     rank = {slug: i for i, slug in enumerate(PINNED_GAMES)}
     games.sort(key=lambda g: (rank.get(g.slug, len(PINNED_GAMES)), -g.product_count, g.name))
+    finder = home_finder(request, games)
+    if request.GET.get("pane") == "finder":
+        # The finder's tabs, menus and products for its own script, which swaps them in as choices change. Never a
+        # page view (web.middleware) and never indexed.
+        candidates = shared_candidates()
+        best, best_spares = home_best(candidates=candidates) if not finder["active"] else ([], [])
+        response = render(request, "web/includes/finder_body.html",
+                          {"finder": finder, "best": best, "best_spares": best_spares})
+        response["X-Robots-Tag"] = "noindex"
+        response["Cache-Control"] = "no-store"
+        return response
     game_covers(games)
     candidates = shared_candidates()   # read only if a list has to be built, and then once for both
     best, best_spares = home_best(candidates=candidates)
     featured, _, featured_spares = home_lists(candidates=candidates)
-    # A deal shown in the first row is not repeated in Rip's Deals.
+    # A deal shown in the first row is not repeated in Rip's Deals; once the finder shows a list of its own, Best
+    # prices right now is not on the page.
+    if finder["active"]:
+        best, best_spares = [], []
     first = {product.pk for product, _ in best}
     featured = [row for row in featured if row[0].pk not in first]
     featured_spares = [row for row in featured_spares if row[0].pk not in first]
@@ -912,6 +1096,11 @@ def home(request):
             "shops_compared": pricing.shops_compared(),
             "best": best,
             "best_spares": best_spares,
+            "finder": finder,
+            # Best prices right now, with its spares for the visitor's own games, while nothing is chosen.
+            "interest_on_top": not finder["active"] and bool(best),
+            # A finder's choices are the home page with a list in it, not a page of its own to index.
+            "noindex": finder["active"],
             "featured": featured,
             "featured_spares": featured_spares,
             "featured_paying_only": FeaturedSettings.current().paying_only if featured else False,

@@ -1,52 +1,28 @@
 {% extends "web/base.html" %}
 {% load sitecopy ripraptor static %}
-{% block scripts %}{% if spotlight %}<script src="{% static 'js/drops.js' %}" defer></script><script src="{% static 'js/spotlight.js' %}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}<script src="{% static 'js/finder.js' %}" defer></script>{% if spotlight %}<script src="{% static 'js/drops.js' %}" defer></script><script src="{% static 'js/spotlight.js' %}" defer></script>{% endif %}{% endblock %}
 
 {% block content %}
-<section class="hero" aria-labelledby="hero-title">
-  {% copy "home.hero.eyebrow" as eyebrow %}{% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
-  {% copy "home.hero.title" as title %}<h1 id="hero-title" class="hero__title">{{ title|accent_last }}</h1>
-  {% copy "home.hero.subtitle" shops=shops_compared as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
+{% comment %}The finder (views.home_finder, the owner, Nov 2026: "make the homepage a live product finder"): the headline, the search box
+   for anyone who knows what they want, then the game tabs, the I'm looking to shortcuts, the filter menus and the
+   products they choose, Best prices right now until anything is chosen. finder.js swaps the products in as the
+   choices change; without it every choice is a plain link or a form.{% endcomment %}
+<section class="hero finder" aria-labelledby="hero-title" data-finder>
+  <div class="finder__intro">
+    {% copy "home.hero.eyebrow" as eyebrow %}{% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
+    {% copy "home.hero.title" as title %}<h1 id="hero-title" class="hero__title">{{ title|accent_last }}</h1>
+    {% copy "home.hero.subtitle" shops=shops_compared as subtitle %}{% if subtitle %}<p class="hero__subtitle">{{ subtitle }}</p>{% endif %}
+  </div>
   <div class="hero__search">
     {% include "web/includes/search_form.html" with variant="large" button_key="home.search.button" placeholder_key="home.search.placeholder" field_id="home-q" live=True %}
   </div>
-</section>
-
-{% comment %}One tap to each section further down, in the page's order, each button named by its section's own heading
-  (the owner, 1 Nov 2026: "This doesn't match the headers I've set"), so editing a heading in admin renames its button
-  too. The row stays at the top of the screen while the page scrolls, and the section in view is marked in orange
-  (jump.js), so it reads as the page's tabs. Hunted for you and Follow your tracks show only once their sections have
-  something (jump.js). Without script every button is a plain link.{% endcomment %}
-{% if games or best or featured or coming_soon or latest or product_types %}
-<nav class="jump" aria-label="{% copy 'home.jump.label' %}" data-jump>
-  <ul class="chips__list">
-    {% if best %}<li><a class="chip" href="#best-title">{% copy "home.best.title" %}</a></li>{% endif %}
-    {% if featured %}<li><a class="chip" href="#featured-title">{% copy "home.featured.title" %}</a></li>{% endif %}
-    {% if games %}<li><a class="chip" href="#games-title">{% copy "home.games.label" %}</a></li>{% endif %}
-    <li data-jump-for="data-picks" hidden><a class="chip" href="#picks-title">{% copy "home.picks.title" %}</a></li>
-    <li data-jump-for="data-resume" hidden><a class="chip" href="#resume-title">{% copy "home.resume.title" %}</a></li>
-    {% if per_card %}<li><a class="chip" href="#percard-title">{% copy "home.percard.title" %}</a></li>{% endif %}
-    {% if coming_soon or latest %}<li><a class="chip" href="#latest-title">{% copy "home.new.title" %}</a></li>{% endif %}
-    {% if product_types %}<li><a class="chip" href="#types-title">{% copy "home.types.title" %}</a></li>{% endif %}
-  </ul>
-</nav>
-{% endif %}
-
-{% if best %}
-{# Best prices right now (views.best_pick): the first row, real deals at UK shops whether they pay us or not, the games people view most first. Spares wait hidden for interest.js, as in Rip's Deals. #}
-<section class="home-section" aria-labelledby="best-title">
-  <div class="section-head">
-    <h2 id="best-title" class="section-head__title">{% copy "home.best.title" %}</h2>
-    <a class="section-head__all" href="{% url 'web:deals' %}">{% copy "site.see_all" %} <span aria-hidden="true">›</span></a>
+  <div class="finder__body" data-finder-body>
+    {% include "web/includes/finder_body.html" %}
   </div>
-  <ul class="trending trending--compact" data-scroll data-interest data-interest-show="{{ best|length }}">
-    {% for product, summary in best %}{% include "web/includes/featured_card.html" with compact=True place="best" %}{% endfor %}
-    {% for product, summary in best_spares %}{% include "web/includes/featured_card.html" with spare=True compact=True place="best" %}{% endfor %}
-  </ul>
-  <p class="section-head__note section-head__note--after">{% copy "home.best.note" %}</p>
+  {# Says the new count once products change without a reload (finder.js), for screen readers. #}
+  <p class="visually-hidden" aria-live="polite" data-finder-said></p>
 </section>
-{{ interest_games|json_script:"interest-games" }}<script>{% inline_static "js/interest.js" %}</script>
-{% endif %}
+{% if interest_on_top %}{{ interest_games|json_script:"interest-games" }}<script>{% inline_static "js/interest.js" %}</script>{% endif %}
 
 {% if featured %}
 <section class="home-section" aria-labelledby="featured-title">
@@ -62,7 +38,7 @@
   {# Said beside the row it is about, not only in the footer: commission shapes which deals are picked, never a comparison's order. Under the row, so the prices come first. #}
   <p class="section-head__note section-head__note--after">{% if featured_paying_only %}{% copy "home.featured.disclosure_paying" %}{% else %}{% copy "home.featured.disclosure" %}{% endif %} <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a></p>
 </section>
-{% if not best %}{{ interest_games|json_script:"interest-games" }}{% endif %}<script>{% inline_static "js/interest.js" %}</script>
+{% if not interest_on_top %}{{ interest_games|json_script:"interest-games" }}{% endif %}<script>{% inline_static "js/interest.js" %}</script>
 {% endif %}
 
 {% if spotlight %}{% include "web/includes/spotlight.html" %}{% endif %}
@@ -192,7 +168,7 @@
 </section>
 {% endif %}
 {# Runs as soon as the rows above are read, before they are painted: the visitor's own games first, from this browser's history only. #}
-{% if coming_soon %}{% if not featured and not best %}{{ interest_games|json_script:"interest-games" }}{% endif %}<script>{% inline_static "js/interest.js" %}</script>{% endif %}
+{% if coming_soon %}{% if not featured and not interest_on_top %}{{ interest_games|json_script:"interest-games" }}{% endif %}<script>{% inline_static "js/interest.js" %}</script>{% endif %}
 
 <section class="home-section" aria-labelledby="watch-title">
   <a class="poster poster--watch" href="{% url 'web:watchlist' %}">
@@ -217,5 +193,4 @@
 </section>
 {% endif %}
 
-<script>{% inline_static "js/jump.js" %}</script>
 {% endblock %}

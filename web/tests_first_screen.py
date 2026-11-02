@@ -52,7 +52,7 @@ class BestPricesTests(TestCase):
         box = self.deal(self.ssp, "Surging Sparks Booster Box", "ssp-box", self.harbour)
         ebay = self.deal(self.ssp, "Surging Sparks Elite Trainer Box", "ssp-etb", self.ebay)
         html = self.home()
-        best = section(html, "best-title")
+        best = section(html, "finder-title")
         self.assertIn("Best prices right now</h2>", best)
         self.assertIn(box.name, best)
         self.assertNotIn(ebay.name, best)
@@ -60,40 +60,38 @@ class BestPricesTests(TestCase):
         self.assertIn("Cheapest delivered prices at UK shops that beat the next shop or sit at a 30-day low. Any shop, "
                       "whether it pays us or not.", best)
         self.assertIn(ebay.name, section(html, "featured-title"))
-        # It is the first row on the page, and the first jump button.
-        self.assertLess(html.index('id="best-title"'), html.index('id="featured-title"'))
-        jump = html[html.index('<nav class="jump"'):html.index("</nav>", html.index('<nav class="jump"'))]
-        self.assertLess(jump.index('href="#best-title">Best prices right now</a>'), jump.index('href="#featured-title"'))
-        # The visitor's own games first, sorted straight after the first row, its game list on the page once.
-        self.assertTrue(html[html.index("</section>", html.index('id="best-title"')):].startswith(
-            '</section>\n<script id="interest-games" type="application/json">'))
+        # They are the finder's products until anything is chosen, the first on the page.
+        self.assertLess(html.index('id="finder-title"'), html.index('id="featured-title"'))
+        # The visitor's own games first, sorted straight after the finder, its game list on the page once.
+        end = html.index("data-finder-said></p>\n</section>\n") + len("data-finder-said></p>\n</section>\n")
+        self.assertTrue(html[end:].startswith('<script id="interest-games" type="application/json">'))
         self.assertEqual(html.count('id="interest-games"'), 1)
 
     def test_a_deal_at_a_shop_that_pays_shows_once_in_the_first_row(self):
         paid = self.deal(self.ssp, "Surging Sparks Booster Box", "ssp-box", self.affiliate)
         html = self.home()
-        self.assertIn(paid.name, section(html, "best-title"))
+        self.assertIn(paid.name, section(html, "finder-title"))
         self.assertNotIn('id="featured-title"', html)
 
     def test_no_deal_without_evidence_or_a_confirmed_delivered_price(self):
         small = self.deal(self.ssp, "Surging Sparks Booster Box", "ssp-box", self.harbour, next_price="51.00")
         html = self.home()
         self.assertNotIn(small.name, html[:html.index('id="games-title"')] if 'id="games-title"' in html else html)
-        self.assertNotIn('id="best-title"', html)
+        self.assertNotIn('id="finder-title" class="finder__title">Best prices right now', html)
 
     def test_the_games_people_view_most_come_first(self):
         # The Magic box is the bigger saving, but people open Pokémon pages more.
         pokemon = self.deal(self.ssp, "Surging Sparks Booster Box", "ssp-box", self.harbour, next_price="53.00")
         magic = self.deal(self.fdn, "Foundations Play Booster Box", "fdn-box", self.harbour, next_price="60.00")
-        best = section(self.home(), "best-title")
+        best = section(self.home(), "finder-title")
         self.assertLess(best.index(magic.name), best.index(pokemon.name))
         DailyPageView.objects.create(kind=DailyPageView.Kind.PRODUCT, key=pokemon.slug, date=timezone.localdate(),
                                      hits=30)
-        best = section(self.home(), "best-title")
+        best = section(self.home(), "finder-title")
         self.assertLess(best.index(pokemon.name), best.index(magic.name))
         # Views from before the window do not count.
         DailyPageView.objects.all().update(date=timezone.localdate() - timedelta(days=40))
-        best = section(self.home(), "best-title")
+        best = section(self.home(), "finder-title")
         self.assertLess(best.index(magic.name), best.index(pokemon.name))
 
 

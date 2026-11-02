@@ -86,7 +86,7 @@ class PageTests(PageTestCase):
         response = self.client.get(reverse("web:home"))
         for heading in ("Find your game", "Best prices right now", "Save £3.01 vs Northgate Cards", "Hunt by product"):
             self.assertContains(response, heading)
-        self.assertContains(response, 'href="#best-title">Best prices right now</a>')
+        self.assertContains(response, '<h2 id="finder-title" class="finder__title">Best prices right now</h2>')
         # The raptor is Rip's Deals' mascot, beside its name: shown alone here, as the first row takes these UK
         # shops' deals.
         from unittest import mock
@@ -99,7 +99,6 @@ class PageTests(PageTestCase):
         cache.clear()
         self.assertContains(deals, '<h2 id="featured-title" class="section-head__title section-head__title--mascot">'
                                    '<span class="mark section-head__mascot" aria-hidden="true"></span>Rip&#x27;s Deals</h2>')
-        self.assertContains(deals, 'href="#featured-title">Rip&#x27;s Deals</a>')
         # Hunted for you's raptor holding a magnifying glass, and Follow your tracks' footprints, beside their names:
         # drawn as shapes in the token colours, hidden from screen readers.
         html = response.content.decode()
@@ -121,22 +120,22 @@ class PageTests(PageTestCase):
 
     def test_the_first_screen_reaches_a_price(self):
         # A review the owner shared (Nov 2026): the intro, search, guides, jump buttons, drop and games all came
-        # before any price. Best prices right now follows the search and its jump row (the owner, 2 Nov 2026: "you
-        # don't even see any deals"), compact, and its note follows it.
+        # before any price. Now the finder follows the search (the owner, Nov 2026: "make the homepage a live product
+        # finder"), and until anything is chosen its products are Best prices right now, with the note after them.
         html = self.client.get(reverse("web:home")).content.decode()
-        deals = html.index('id="best-title"')
-        self.assertLess(html.index('class="hero__search"'), html.index('<nav class="jump"'))
-        self.assertLess(html.index('<nav class="jump"'), deals)
+        deals = html.index('id="finder-title"')
+        self.assertLess(html.index('class="hero__search"'), html.index('class="finder__games"'))
+        self.assertLess(html.index('class="finder__games"'), deals)
         self.assertLess(deals, html.index('id="games-title"'))
         row = html[deals:html.index("</section>", deals)]
-        self.assertIn('class="trending trending--compact"', row)
-        self.assertIn("product-image--deal", row)
-        # Each compact card is a link as a whole, with no button of its own.
+        self.assertIn('class="finder__grid"', row)
+        self.assertIn("product-image--finder", row)
+        # Each card is a link as a whole, with no button of its own.
         self.assertNotIn("trending__cta", row)
         self.assertLess(row.index("</ul>"), row.index("section-head__note--after"))
-        # The visitor's own games first, sorted straight after the row so nothing moves once it is drawn.
-        after = html[html.index("</section>", deals):]
-        self.assertTrue(after.startswith('</section>\n<script id="interest-games" type="application/json">'))
+        # The visitor's own games first, sorted straight after the finder so nothing moves once it is drawn.
+        end = html.index("data-finder-said></p>\n</section>\n") + len("data-finder-said></p>\n</section>\n")
+        self.assertTrue(html[end:].startswith('<script id="interest-games" type="application/json">'))
         self.assertEqual(html.count('id="interest-games"'), 1)
         # The shorter intro, in plain words, with the live count of shops.
         self.assertIn("Compare sealed TCG prices from", html)
@@ -1277,7 +1276,7 @@ class LatestDropsTests(PageTestCase):
     def test_home_row_leads_with_the_newest_release_and_skips_old_stock(self):
         response = self.client.get(reverse("web:home"))
         html = response.content.decode()
-        self.assertLess(html.index('id="best-title"'), html.index('id="latest-title"'))
+        self.assertLess(html.index('id="finder-title"'), html.index('id="latest-title"'))
         row = html[html.index('id="latest-title"'):html.index("</section>", html.index('id="latest-title"'))]
         self.assertIn("Drops</h2>", row)
         self.assertIn('href="/drops/?show=out"', row)
@@ -2309,8 +2308,8 @@ class RedesignTests(PageTestCase):
         css = open(finders.find("css/site.css"), encoding="utf-8").read()
         self.assertIn(".hero__accent { color: var(--color-brand); white-space: nowrap; }", css)
         self.assertIn(".tile--game .product-image--cover { aspect-ratio: 4 / 3; }", css)
-        # The first row's compact cards are links as a whole, with no button: the row a phone reaches (Nov 2026).
-        featured = html[html.index('id="best-title"'):]
+        # The finder's cards are links as a whole, with no button of their own: the row a phone reaches (Nov 2026).
+        featured = html[html.index('id="finder-title"'):]
         featured = featured[:featured.index("</section>")]
         self.assertNotIn("trending__cta", featured)
 
@@ -3011,7 +3010,7 @@ class GoldenLayoutTests(PageTestCase):
             self.assertIn(rule, css)
         # The home and deals pages' sections sit closer, 20px on a phone and 24px wider, so more shows on a screen.
         self.assertIn(".home-section { margin-top: var(--rhythm-home); }", css)
-        self.assertIn(".jump + .home-section { margin-top: var(--rhythm-home); }", css)
+        self.assertIn(".finder__results { margin-top: var(--rhythm-control);", css)
         tokens = self.css("tokens.css")
         self.assertIn("--rhythm-home: calc(1.25rem * var(--density));", tokens)
         self.assertIn("--rhythm-home: calc(1.5rem * var(--density));", tokens)

@@ -15,7 +15,8 @@ from django.conf import settings
 from django.templatetags.static import static
 from django.urls import reverse
 
-# The size the badge shows at, in CSS pixels; the files are twice this, for sharp screens.
+# The size the badge shows at, in CSS pixels; the files are three times this, for sharp screens. A shop's pasted code
+# carries this size, so a redrawn badge keeps it.
 WIDTH, HEIGHT = 180, 52
 # (theme, file, the wording key of its label on the page).
 BADGES = (

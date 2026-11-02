@@ -25,7 +25,6 @@ SORTS = [
     ("low", "Lowest in 90 days"),
     ("fair", "Fairest price"),
     ("card", "Cheapest per card"),
-    ("pack", "Cheapest per pack"),
 ]
 LOW_DAYS = 90
 # A product of these types is one pack, when no shop says otherwise (a three-pack blister is a bundle).
@@ -34,19 +33,6 @@ PACK_TYPES = ("booster_pack", "collector_booster_pack")
 # (catalogue/contents.py). Only these have a price per card.
 CARDS_KNOWN = ((Q(cards_per_pack__isnull=False) | Q(cards_found__isnull=False))
                & (Q(packs__isnull=False) | Q(packs_found__isnull=False) | Q(product_type__in=PACK_TYPES)))
-
-
-# Products whose packs can be counted: the owner's figure, the one the shops agree on, or one pack (catalogue/contents.py).
-PACKS_KNOWN = Q(packs__isnull=False) | Q(packs_found__isnull=False) | Q(product_type__in=PACK_TYPES)
-
-
-def with_pack_price(products):
-    """Annotate ``packs_total`` and ``price_per_pack`` (the cheapest delivered price shared over the packs), each None
-    where the packs are not known. As with_card_price, a float."""
-    one_pack = Case(When(product_type__in=PACK_TYPES, then=Value(1)), default=Value(None), output_field=IntegerField())
-    packs = Coalesce("packs", "packs_found", one_pack, output_field=IntegerField())
-    return products.annotate(packs_total=packs).annotate(
-        price_per_pack=ExpressionWrapper(Cast("lowest_price", FloatField()) / F("packs_total"), output_field=FloatField()))
 
 
 def with_card_price(products):
@@ -113,12 +99,6 @@ def order_products(products, sort, first=None):
         # cannot be counted after those that can.
         products = with_card_price(products)
         ordering = ["has_price", F("price_per_card").asc(nulls_last=True), F("lowest_price").asc(nulls_last=True),
-                    "name"]
-    elif sort == "pack":
-        # Cheapest per pack, for people buying packs to open (the owner's home page finder, Nov 2026); products whose
-        # packs cannot be counted after those that can.
-        products = with_pack_price(products)
-        ordering = ["has_price", F("price_per_pack").asc(nulls_last=True), F("lowest_price").asc(nulls_last=True),
                     "name"]
     elif sort == "fair":
         # The Price check's verdict as stored each hour (fair_price.refresh_bands): lowest yet first, then good,

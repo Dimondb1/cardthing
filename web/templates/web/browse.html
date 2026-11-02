@@ -97,7 +97,6 @@
   {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
   {# The tab only when the address named it (tabs.js: when one other than the opening tab is in view), so a filter that empties the tab in view opens on the first with products. #}
   {% if tab %}<input type="hidden" name="tab" value="{{ tab_asked }}" data-tab-input>{% endif %}
-  {% for name, value in kept_finder %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
   <div class="pill pill--sort">
     <label class="visually-hidden" for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
     {{ form.sort }}

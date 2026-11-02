@@ -56,7 +56,7 @@ def steps(low, high):
 # the home page redesign) and fitted to straight lines between the breakpoints site.css already uses;
 # web/tests_images.py keeps them in step.
 #   48rem, 60rem  the tablet and desktop breakpoints in site.css.
-#   84rem         --page-width (80rem since Nov 2026) plus two --gutter-wide (2rem): from here the page stops growing.
+#   74rem         --page-width (70rem) plus two --gutter-wide (2rem): from here the page stops growing.
 #   30rem         .deck-page's max-width.
 #   thumb    .product-image--thumb is 3rem.
 #   row      .product-image--row is 4rem, 5.5rem from 48rem.
@@ -81,18 +81,15 @@ SLOTS = {
     "thumb": (100, "3rem", steps(48, 144)),
     "row": (100, "(min-width: 48rem) 5.5rem, 4rem", steps(64, 264)),
     "compact": (100, "3.5rem", steps(56, 168)),
-    "card": (200, "(min-width: 84rem) 12.9rem, (min-width: 48rem) calc(19.1vw - 3.2rem), calc(38.2vw - 3rem)",
+    "card": (200, "(min-width: 74rem) 10.95rem, (min-width: 48rem) calc(19.1vw - 3.2rem), calc(38.2vw - 3rem)",
              steps(74, 735)),
-    "trend": (200, "(min-width: 84rem) 13.4rem, (min-width: 60rem) calc(20vw - 3.4rem), (min-width: 48rem) 8.8rem, "
+    "trend": (200, "(min-width: 74rem) 11.4rem, (min-width: 60rem) calc(20vw - 3.4rem), (min-width: 48rem) 8.8rem, "
                    "calc(55.6vw - 3.6rem)", steps(120, 1106)),
-    "deal": (200, "(min-width: 84rem) 12.5rem, (min-width: 48rem) calc(17.5vw - 2.3rem), calc(38.2vw - 2.41rem)",
+    "deal": (200, "(min-width: 74rem) 10.67rem, (min-width: 48rem) calc(17.5vw - 2.3rem), calc(38.2vw - 2.41rem)",
              steps(84, 510)),
-    # A product in the home page's finder: two a row on a phone, three from 48rem, four from 60rem.
-    "finder": (200, "(min-width: 84rem) 15.75rem, (min-width: 60rem) calc(22.14vw - 2.84rem), (min-width: 48rem) "
-               "calc(29.32vw - 2.95rem), calc(44.07vw - 2.37rem)", steps(100, 600)),
-    "cover": (200, "(min-width: 84rem) 10.6rem, (min-width: 60rem) calc(15vw - 2.06rem), "
+    "cover": (200, "(min-width: 74rem) 9.1rem, (min-width: 60rem) calc(15vw - 2.06rem), "
                    "(min-width: 48rem) calc(23.56vw - 2.31rem), calc(38.26vw - 2.4rem)", steps(84, 510)),
-    "type": (200, "(min-width: 84rem) 13.3rem, (min-width: 48rem) calc(20vw - 3.5rem), calc(50vw - 3.5rem)",
+    "type": (200, "(min-width: 74rem) 11rem, (min-width: 48rem) calc(20vw - 3.5rem), calc(50vw - 3.5rem)",
              steps(96, 600)),
     "large": (540, "(min-width: 60rem) 33rem, 17rem", steps(272, 1440)),
     "swipe": (420, "(min-width: 48rem) 20.5rem, (min-width: 30rem) 27.5rem, 85vw", steps(245, 1362)),

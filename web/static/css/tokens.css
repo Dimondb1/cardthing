@@ -27,8 +27,7 @@
 
 :root {
   /* Layout -------------------------------------------------------------- */
-  --page-width: 80rem;           /* 1280px: four products a row in the home finder, little empty space on a laptop */
-  --finder-field-min: 9.5rem;    /* the narrowest a menu in the home finder's filter bar gets before the bar wraps */
+  --page-width: 70rem;           /* 1120px: wide enough for six cards, narrow enough to feel dense */
   --gutter: 1rem;
   --gutter-wide: 2rem;
   --panel-width: 30rem;
@@ -218,6 +217,7 @@
   --product-media-phone-long: clamp(7rem, 100vh - 35.5rem, 15rem);
   --product-media-note: 1.25rem;
   --product-media-min: 22rem;       /* the picture well beside the price box on wide screens: at least this tall, and as tall as the box */
+  --jump-bar: 3rem;                 /* the home page's sticky jump row: its chips and padding, which a jump lands below */
   --masthead-search: 2.5rem;        /* the header search box: compact, still a full finger wide */
   --masthead-logo: 1.75rem;         /* the header logo's height on phones */
   --masthead-logo-wide: 2rem;       /* the same on tablets and desktops */

@@ -238,7 +238,6 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .product-image--card { width: 100%; }
 .product-image--trend { width: 100%; aspect-ratio: 5 / 4; }
 .product-image--deal { width: 100%; aspect-ratio: 4 / 3; }
-.product-image--finder { width: 100%; aspect-ratio: 3 / 2; }
 .product-image--large { width: 100%; background: transparent; }
 .product-image--large .placeholder { width: 46%; height: 46%; }
 @media (min-width: 48rem) { .product-image--row { width: 5.5rem; } }
@@ -401,6 +400,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
    the search box and when prices were checked, close together so the games and picks start on the first screen.
    Left aligned on a phone, centred on larger screens. */
 .hero { padding: var(--space-2) 0 0; }
+.jump + .home-section { margin-top: var(--rhythm-home); }
 /* The hero does not animate on load: text arriving in sequence is decoration, not information. */
 .reveal { opacity: 0; transform: translateY(6px); transition: opacity var(--motion-slow) var(--ease-out), transform var(--motion-slow) var(--ease-out); }
 .reveal.is-visible, .no-js .reveal { opacity: 1; transform: none; }
@@ -423,130 +423,10 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .masthead--home .wordmark__img { height: var(--masthead-logo-home); }
 .masthead--home .masthead__inner { padding-bottom: var(--space-2); }
 @media (min-width: 48rem) {
-  /* Left-aligned and the full width of the page, as the finder under it is (the owner, Nov 2026: "on desktop utilise
-     the space available, less wasted space"). */
-  .hero { padding: var(--space-4) 0 0; }
+  .hero { padding: var(--space-4) 0 0; text-align: center; }
+  .hero__title, .hero__subtitle, .hero__search, .hero .live { margin-inline: auto; }
   .hero__subtitle { font-size: var(--text-lg); }
   .masthead--home .wordmark__img { height: var(--masthead-logo-home-wide); }
-}
-
-/* The home page's finder (views.home_finder, finder.js) --------------------------------------------------------------
-   Under the search box: the game tabs, the I'm looking to shortcuts, the filter menus and the products they choose. On
-   a phone the tabs and shortcuts swipe sideways and the menus fold under Filters; from 48rem the menus stand in one
-   grey bar and the products fill a grid of up to four. */
-.finder .hero__search { max-width: none; }
-.finder .live { max-width: none; }
-.finder__body { margin-top: var(--space-4); }
-.finder__games { border-bottom: 1px solid var(--color-line); }
-.finder__tabs { list-style: none; display: flex; gap: var(--space-5); overflow-x: auto; margin: 0; padding: 0; scrollbar-width: none; }
-.finder__tabs::-webkit-scrollbar { display: none; }
-.finder__tab {
-  display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--tap); margin-bottom: -1px;
-  border-bottom: 3px solid transparent; color: var(--color-ink); font-weight: var(--weight-strong); text-decoration: none;
-  white-space: nowrap; cursor: pointer; transition: color var(--motion-fast), border-color var(--motion-fast);
-}
-.finder__tab[aria-current="page"] { border-bottom-color: var(--color-brand); color: var(--color-brand-text); }
-@media (hover: hover) { .finder__tab:hover { color: var(--color-brand-text); } }
-/* On a phone every game is a tab in the row that swipes; from 60rem the first few are, and More opens the rest. */
-.finder__more { display: none; }
-.finder__menu { position: relative; }
-.finder__menu > summary { list-style: none; }
-.finder__menu > summary::-webkit-details-marker { display: none; }
-.finder__chevron { width: 1em; height: 1em; transition: transform var(--motion-fast) var(--ease-standard); }
-.finder__menu[open] .finder__chevron { transform: rotate(180deg); }
-.finder__menu-list {
-  position: absolute; top: 100%; right: 0; z-index: 4; display: grid; min-width: var(--field-short); margin: 0;
-  padding: var(--space-2); list-style: none; border: 1px solid var(--color-line); border-radius: var(--radius);
-  background: var(--color-paper); box-shadow: var(--shadow-lift);
-}
-.finder__menu-list a { display: block; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); color: var(--color-ink); text-decoration: none; }
-@media (hover: hover) { .finder__menu-list a:hover { background: var(--color-brand-soft); color: var(--color-brand-text); } }
-.finder__wants { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-3); min-width: 0; }
-.finder__label { flex: none; color: var(--color-ink-muted); font-size: var(--text-sm); font-weight: var(--weight-strong); }
-.finder__want-list { list-style: none; display: flex; gap: var(--space-2); min-width: 0; margin: 0; padding: 2px; overflow-x: auto; scrollbar-width: none; }
-.finder__want-list::-webkit-scrollbar { display: none; }
-.finder__form { margin-top: var(--space-3); }
-.finder__panel { border-radius: var(--radius-card); background: var(--color-shelf); }
-.finder__toggle {
-  display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap); padding: 0 var(--space-4);
-  font-weight: var(--weight-strong); cursor: pointer; list-style: none;
-}
-.finder__toggle::-webkit-details-marker { display: none; }
-.finder__toggle-count {
-  display: inline-grid; place-items: center; min-width: 1.5em; height: 1.5em; padding: 0 0.4em; border-radius: var(--radius-pill);
-  background: var(--color-brand-action); color: var(--color-brand-ink); font-size: var(--text-xs);
-}
-.finder__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); padding: 0 var(--space-4) var(--space-4); }
-.finder__field { display: grid; gap: var(--space-1); min-width: 0; }
-.finder__field-label { color: var(--color-ink-muted); font-size: var(--text-xs); font-weight: var(--weight-strong); }
-.finder__field select {
-  width: 100%; min-height: var(--tap); padding: 0 var(--space-3); border: 1px solid var(--color-line-strong); border-radius: var(--radius);
-  background: var(--color-paper); color: var(--color-ink); font: inherit; font-size: var(--text-sm);
-}
-.finder__submit { align-self: end; }
-/* With finder.js the products follow each menu at once, so the button that sends the form is not needed. */
-.finder.is-live .finder__submit { display: none; }
-.finder__results { margin-top: var(--rhythm-control); transition: opacity var(--motion-fast) var(--ease-standard); }
-.finder__results[aria-busy="true"] { opacity: 0.55; }
-.finder__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
-.finder__title { font-size: var(--text-section-sm); font-weight: var(--weight-heading); letter-spacing: -0.01em; }
-.finder__count { color: var(--color-ink-subtle); font-size: var(--text-sm); }
-.finder__actions { display: flex; align-items: center; gap: var(--space-3); margin-left: auto; white-space: nowrap; }
-.finder__chips { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-3) 0 0; padding: 0; }
-.finder__chips .chip { display: inline-flex; align-items: center; gap: 0.4em; }
-.finder__clear { color: var(--color-brand-text); font-size: var(--text-sm); }
-.finder__grid { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin: var(--rhythm-title) 0 0; padding: 0; }
-.finder__grid > [hidden] { display: none; }
-.finder__all { margin-top: var(--space-4); text-align: center; }
-.finder__empty { margin-top: var(--space-4); color: var(--color-ink-muted); }
-.finder__empty a { color: var(--color-brand-text); }
-.finder__alert {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); margin-top: var(--space-4);
-  padding: var(--space-3) var(--space-4); border-radius: var(--radius-card); background: var(--color-shelf);
-}
-.finder__alert-title { font-weight: var(--weight-strong); }
-.finder__alert-text { flex: 1 1 16rem; color: var(--color-ink-muted); font-size: var(--text-sm); }
-/* A product in the finder: the whole card is its link, with the price, a pack's share and the stock under the name. */
-.finder-card__link {
-  display: flex; flex-direction: column; gap: var(--space-1); height: 100%; padding: var(--space-3);
-  border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); color: var(--color-ink);
-  text-decoration: none; transition: transform var(--motion-normal) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out), border-color var(--motion-normal);
-}
-@media (hover: hover) { .finder-card__link:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); border-color: var(--color-line-strong); } }
-.finder-card__link:active { transform: scale(0.99); }
-.finder-card__image .product-image { border-radius: var(--radius-sm); margin-bottom: var(--space-1); }
-.finder-card__name { font-weight: var(--weight-strong); font-size: var(--text-sm); line-height: var(--leading-snug); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: calc(2 * 1.3em); }
-.finder-card__meta { color: var(--color-ink-subtle); font-size: var(--text-xs); }
-.finder-card__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); margin-top: var(--space-1); }
-.finder-card__price .price { font-size: var(--text-price-md); }
-.finder-card__price .delivered { font-size: var(--text-xs); }
-.finder-card__each { color: var(--color-price); font-size: var(--text-sm); font-weight: var(--weight-strong); }
-.finder-card__deal { color: var(--color-price); font-size: var(--text-xs); font-weight: var(--weight-strong); }
-.finder-card__stock { color: var(--color-ink-subtle); font-size: var(--text-xs); }
-.finder-card__stock::before { content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em; border-radius: 50%; background: var(--color-out); vertical-align: 0.1em; }
-.finder-card__stock--in_stock::before { background: var(--color-in-stock); }
-.finder-card__stock--preorder::before { background: var(--color-preorder); }
-.finder-card__compare {
-  display: flex; align-items: center; justify-content: center; gap: 0.3em; min-height: 2.25rem; margin-top: auto; padding: 0 var(--space-3);
-  border-radius: var(--radius-pill); background: var(--color-brand-action); color: var(--color-brand-ink);
-  font-size: var(--text-sm); font-weight: var(--weight-strong); white-space: nowrap; transition: background var(--motion-fast);
-}
-.finder-card__stock { margin-bottom: var(--space-2); }
-@media (hover: hover) { .finder-card__link:hover .finder-card__compare { background: var(--color-brand-hover); } }
-@media (min-width: 48rem) {
-  .finder__toggle { display: none; }
-  .finder__fields { grid-template-columns: repeat(auto-fit, minmax(var(--finder-field-min), 1fr)); padding: var(--space-3) var(--space-4); align-items: end; }
-  .finder__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
-  .finder__title { font-size: var(--text-section); }
-}
-@media (min-width: 60rem) {
-  .finder__tabs { overflow: visible; }
-  .finder__tab-extra { display: none; }
-  .finder__more { display: block; }
-  .finder__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .finder__results, .finder-card__link, .finder__chevron { transition: none; }
 }
 
 /* Tiles: the games under the search box and the product types lower down */
@@ -647,6 +527,24 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .poster--watch .poster__title { font-size: var(--text-poster-sm); }
 .poster--watch .poster__text { font-size: var(--text-base); }
 .poster--watch .poster__mark { --mark-size: var(--mark-poster-sm); left: -20%; color: var(--color-brand); }
+/* Jump buttons under the home page's search: one tap to each section further down, for a first visit that would not
+   know they are there. Plain links to the sections' headings, on one line that swipes sideways on a phone (.chips). */
+/* With script (jump.js, which adds .is-live) it stays at the top of the screen while the page scrolls, edge to edge on a
+   phone like the stock tabs, so it works as the page's tabs: the section in view is marked (.chip[aria-current]). It
+   is clear until it sticks, so the search box's shadow above it shows whole, then paper with a rule under it. Without
+   script it is a plain row of links. */
+.jump { margin: var(--space-3) calc(-1 * var(--page-gutter)) 0; padding-block: var(--space-2); }
+.jump.is-live { position: sticky; top: 0; z-index: 3; }
+.jump.is-stuck { background: var(--color-paper); box-shadow: 0 1px 0 var(--color-line); }
+.jump .chips__list { justify-content: flex-start; }
+@media (min-width: 40rem) { .jump .chips__list { flex-wrap: wrap; } }   /* one row in practice; never wider than the page */
+@media (min-width: 48rem) {
+  .jump { margin-inline: 0; }
+  .jump .chips__list { justify-content: center; }   /* under the centred hero */
+}
+/* A jump lands with the heading clear of the sticky row. */
+.home-section .section-head__title { scroll-margin-top: calc(var(--jump-bar) + var(--space-3)); }
+
 /* The drop spotlight (home page, views.drop_spotlight), the owner's poster style for the next big drop: the set's
    boxes fanned out over its name, day and countdown, in paper capitals on ink, and beside them the steps to be ready,
    each on a paper card so its form and buttons are the site's own. */

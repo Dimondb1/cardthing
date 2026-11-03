@@ -150,15 +150,25 @@ class FollowUpFilter(admin.SimpleListFilter):
 class OutreachMailForm(forms.ModelForm):
     password = forms.CharField(
         label="App password", required=False, widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
-        help_text="Paste a new one to change it. It is kept in a file only the site can read and never shown again. "
-                  "Leave empty to keep the one saved.")
+        help_text="Only for sending through your Zoho mailbox. Paste a new one to change it. It is kept in a file only "
+                  "the site can read and never shown again. Leave empty to keep the one saved.")
+    token = forms.CharField(
+        label="Shop emails' own ZeptoMail token", required=False,
+        widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "off"}),
+        help_text="Optional. In ZeptoMail, add a Mail Agent called Shop emails, open its Send Mail token and paste it "
+                  "here, so shop emails are kept apart from the alert emails. Leave empty to keep the one saved, or "
+                  "to use the alert emails' token. Kept in a file only the site can read and never shown again.")
+    forget_token = forms.BooleanField(
+        label="Use the alert emails' token instead", required=False,
+        help_text="Forgets the token saved above.")
     send_test = forms.BooleanField(
         label="Send me a test email when I save", required=False,
-        help_text="Sends the first shop's email to your own mailbox, so you see how it arrives.")
+        help_text="Sends the first shop's email to the Replies go to address, so you see how it arrives.")
 
     class Meta:
         model = OutreachMail
-        fields = ("on", "host", "port", "username", "from_name", "from_address", "copy_to_me", "daily_limit")
+        fields = ("on", "service", "host", "port", "username", "from_name", "from_address", "reply_to", "copy_to_me",
+                  "daily_limit")
 
     def clean(self):
         from . import sending
@@ -166,7 +176,20 @@ class OutreachMailForm(forms.ModelForm):
         data = super().clean()
         if data.get("port") not in (465, 587):
             self.add_error("port", "Use 465 (Zoho's usual) or 587.")
-        if data.get("on"):
+        if not data.get("on"):
+            return data
+        if data.get("service") == OutreachMail.Service.ZEPTOMAIL:
+            sender = data.get("from_address") or ""
+            if not sender:
+                self.add_error("from_address", "Add the address shops see, such as info@ripraptor.com.")
+            elif not sending.on_mail_domain(sender):
+                self.add_error("from_address", f"Through ZeptoMail it must be an address on {sending.mail_domain()}, "
+                                               "the domain ZeptoMail sends the alert emails for.")
+            has_token = data.get("token") or (sending.own_token() and not data.get("forget_token")) or \
+                sending.alerts_token()
+            if not has_token:
+                self.add_error("token", "ZeptoMail has no token on the server. Paste one to switch sending on.")
+        else:
             if not data.get("username"):
                 self.add_error("username", "Add your mailbox address to switch sending on.")
             if not (data.get("password") or sending.password()):
@@ -176,8 +199,8 @@ class OutreachMailForm(forms.ModelForm):
 
 @admin.register(OutreachMail)
 class OutreachMailAdmin(admin.ModelAdmin):
-    """Sending shop emails from the app, through the owner's own Zoho mailbox (inbox/sending.py). The list goes
-    straight to the one row."""
+    """Sending shop emails from the app (inbox/sending.py): through ZeptoMail, as the alert emails, or the owner's own
+    Zoho mailbox. The list goes straight to the one row."""
 
     form = OutreachMailForm
     save_on_top = True
@@ -185,13 +208,25 @@ class OutreachMailAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {"fields": ("status",)}),
         ("Set up", {
-            "description": "In Zoho, open Accounts (accounts.zoho.com), then Security, then App passwords, and make "
-                           "one called RipRaptor. Paste it below with your mailbox address, tick Send from RipRaptor, "
-                           "tick Send me a test email and save. Your normal Zoho password is never needed.",
-            "fields": ("on", "username", "password", "from_name", "from_address"),
+            "description": "Tick Send from RipRaptor, give the address shops see and where replies go, tick Send me "
+                           "a test email and save.",
+            "fields": ("on", "service", "from_name", "from_address", "reply_to"),
+        }),
+        ("ZeptoMail", {
+            "description": "It uses the ZeptoMail the alert emails use, so it works without anything more. ZeptoMail's "
+                           "terms are for transactional email, and Zoho can close the account for too many bounces or "
+                           "complaints, which would stop the alert emails too. A Mail Agent just for shop emails keeps "
+                           "their figures apart.",
+            "fields": ("token", "forget_token"),
         }),
         ("Limits and copies", {"fields": ("daily_limit", "copy_to_me", "send_test")}),
-        ("Mail server", {"fields": ("host", "port")}),
+        ("Your Zoho mailbox", {
+            "description": "Only when Send through is your Zoho mailbox. In Zoho, open Accounts (accounts.zoho.com), "
+                           "then Security, then App passwords, and make one called RipRaptor. Your normal Zoho "
+                           "password is never needed. The server must be able to reach Zoho's mail server on port 465 "
+                           "or 587; many hosts block it.",
+            "fields": ("username", "password", "host", "port"),
+        }),
     )
 
     def has_add_permission(self, request):
@@ -213,25 +248,38 @@ class OutreachMailAdmin(admin.ModelAdmin):
         from . import sending
 
         why = sending.why_not(obj)
-        password = f"App password saved (ends {obj.password_hint})." if obj.password_hint else "No app password saved yet."
+        if obj.by_zeptomail:
+            if obj.token_hint and sending.own_token():
+                secret = f"Through ZeptoMail, with the shop emails' own token (ends {obj.token_hint})."
+            else:
+                secret = "Through ZeptoMail, with the alert emails' token."
+        else:
+            secret = (f"Through your Zoho mailbox. App password saved (ends {obj.password_hint})." if obj.password_hint
+                      else "Through your Zoho mailbox. No app password saved yet.")
         return format_html(
             "<p><strong>{}</strong></p><p>{} {} of {} sent today.</p>{}",
-            why or "Ready: Send now is on every shop email.", password, sending.sent_today(), obj.daily_limit,
+            why or "Ready: Send now is on every shop email.", secret, sending.sent_today(), obj.daily_limit,
             format_html("<p>Last problem: {}</p>", obj.problem) if obj.problem else "")
 
     def save_model(self, request, obj, form, change):
         from . import outreach, sending
 
         super().save_model(request, obj, form, change)
-        new = form.cleaned_data.get("password", "").strip()
-        if new:
-            try:
+        try:
+            new = form.cleaned_data.get("password", "").strip()
+            if new:
                 sending.save_password(new)
-            except OSError:
-                self.message_user(request, "The server could not save the password, so nothing was changed there.",
-                                  messages.ERROR)
-                return
-            self.message_user(request, "Password saved. It is not shown again.")
+                self.message_user(request, "Password saved. It is not shown again.")
+            new = form.cleaned_data.get("token", "").strip()
+            if new:
+                sending.save_token(new)
+                self.message_user(request, "Token saved. It is not shown again.")
+            elif form.cleaned_data.get("forget_token") and sending.own_token():
+                sending.forget_token()
+                self.message_user(request, "Token forgotten: shop emails use the alert emails' token.")
+        except OSError:
+            self.message_user(request, "The server could not save it, so nothing was changed there.", messages.ERROR)
+            return
         if form.cleaned_data.get("send_test"):
             contact = next(iter(outreach.update_queue()[:1]), None)
             if contact:

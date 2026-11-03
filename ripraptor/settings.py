@@ -363,6 +363,11 @@ RIPRAPTOR_CLAUDE_KEY_FILE = os.environ.get("RIPRAPTOR_CLAUDE_KEY_FILE", "").stri
 RIPRAPTOR_OUTREACH_PASSWORD_FILE = os.environ.get("RIPRAPTOR_OUTREACH_PASSWORD_FILE", "").strip() or str(
     Path(DATABASES["default"]["NAME"]).with_name("outreach-mail-password")
 )
+# A ZeptoMail token for shop emails alone (a Mail Agent of their own), saved from the same page into a file beside
+# the database. Without one, shop emails use RIPRAPTOR_ZEPTOMAIL_TOKEN, as the alert emails do.
+RIPRAPTOR_OUTREACH_TOKEN_FILE = os.environ.get("RIPRAPTOR_OUTREACH_TOKEN_FILE", "").strip() or str(
+    Path(DATABASES["default"]["NAME"]).with_name("outreach-zeptomail-token")
+)
 RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD = int(os.environ.get("RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD", "100") or 100)
 # Before Claude is asked about a row, the shop pages involved are read for evidence (catalogue/shop_pages.py),
 # politely and at most 60 a run. Off in tests, which give it recorded pages.

@@ -4,10 +4,9 @@ Shop outreach: emails the owner sends to shops from their own mailbox, filled in
 The owner asked for "a CRM type of place to send emails" to shops: what RipRaptor has sent them, and asks such as
 an affiliate link or a product feed, with replies handled in Zoho Mail. The Shop outreach page in admin keeps a
 ShopContact per shop (its business address, where things stand, notes and when to follow up) and fills in a draft from
-the wording in Site wording (``outreach.*``). It is sent one email at a time, when the owner presses Send now, through
-the owner's own Zoho mailbox (inbox/sending.py, send_now below), or opened in their mail app (a mailto: link), so the
-email goes from their own address and its replies come back there. The alert emails' service (ZeptoMail) is for
-automatic emails only, and outreach through it could cost the alerts their sender, so it is never used for this.
+the wording in Site wording (``outreach.*``). It is sent one email at a time, when the owner presses Send now, the way
+the Sending page says (inbox/sending.py: through ZeptoMail by default, or the owner's Zoho mailbox; send_now below), or
+opened in their mail app (a mailto: link). Either way it goes from the owner's address and replies come back to them.
 
 Every draft ends with the line saying how to ask for no more (``outreach.optout``), and a shop marked "Do not
 email" gets no draft at all. The figures are RipRaptor's own: shoppers sent are people's clicks to the shop
@@ -224,7 +223,7 @@ RESEND_AFTER = timedelta(days=7)
 
 
 def send_now(contact, kind, store=None, now=None):
-    """Send the ``kind`` email to the shop from the owner's own mailbox (inbox/sending.py), then record it as Mark as
+    """Send the ``kind`` email to the shop as the Sending page says (inbox/sending.py), then record it as Mark as
     sent does: Emailed, a follow-up in two weeks. Returns (subject, address). Raises SendError, worded for the owner,
     when it was not sent and nothing is recorded: not set up, the shop asked not to be emailed, no address, the same
     email sent lately, or the day's limit reached."""

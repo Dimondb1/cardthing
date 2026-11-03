@@ -2626,6 +2626,8 @@ index.
 | `RIPRAPTOR_ZEPTOMAIL_TOKEN`    |         | Send Mail token from a Zoho ZeptoMail Mail Agent. With `RIPRAPTOR_MAIL_FROM` set, turns on back-in-stock emails, drop reminders, search alerts and the Your alerts box. |
 | `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
 | `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
+| `RIPRAPTOR_OUTREACH_TOKEN_FILE` | `outreach-zeptomail-token` beside the database | Where a ZeptoMail token for shop emails alone is kept, saved from Admin, Sending shop emails. Without one, shop emails use `RIPRAPTOR_ZEPTOMAIL_TOKEN`. |
+| `RIPRAPTOR_OUTREACH_PASSWORD_FILE` | `outreach-mail-password` beside the database | Where the Zoho mailbox's app password is kept, saved from the same page, for sending shop emails through the mailbox. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
 | `RIPRAPTOR_DISCORD_WEBHOOK`    |         | Optional. A Discord channel's webhook address that gets every update until the first channel is added in admin (Discord channels). Keep it secret. |
 | `RIPRAPTOR_PREORDER_ALERTS_FROM` | written by install.sh | ISO date or date and time (UK time without a zone). Alerts asked for from then on are also emailed when a shop opens pre-orders. `deploy/install.sh` adds it with the install moment when it is missing and never moves it. Empty means no pre-order emails. A value that does not parse stops the site starting. |
@@ -4263,21 +4265,41 @@ them); pasting keeps them. With JavaScript off, or when the browser will not
 copy, the link is the full `mailto:` link, message included, as before.
 
 **Sending shop emails from the app** (Admin, **Sending shop emails**, also on
-Admin's home page; `inbox/sending.py`): the owner, 3 Nov 2026: "I want to send
-emails each time from the app, I have a mailserver ... zepto for mass mail
-and zoho is my normal emails". It sends through the owner's own Zoho Mail
-mailbox over SMTP (`smtp.zoho.com`, port 465, or 587; `smtp.zoho.eu` for an
-EU account), so each email goes out as them, with replies, and by default a
-copy, back to their inbox. **It never uses ZeptoMail**: that service is for
-the automatic alert emails only, its rules are for automatic emails, and
-shop outreach sent through it could cost the alerts their sender. Set it up
-once on that page: make an app password in Zoho (Accounts, Security, App
-passwords), paste it with your mailbox address, tick Send from RipRaptor and
-Send me a test email, and save. The password is saved to a file only the site
-can read (`RIPRAPTOR_OUTREACH_PASSWORD_FILE`, beside the database), never to
-the database and never shown again (the page keeps its last four characters),
-and your normal Zoho password is never needed. It can send as an address you
-have added to the mailbox in Zoho (an alias such as ben@ripraptor.com).
+Admin's home page; `inbox/sending.py`). The owner, 3 Nov 2026: "I want to
+send emails each time from the app, I have a mailserver ... zepto for mass
+mail and zoho is my normal emails". It first sent through their Zoho Mail
+mailbox over SMTP, and the test timed out: the server could not reach
+Zoho's mail server, as many hosts block mail ports. Then: "I want to use
+zepto to send out". So **Send through** has two choices:
+
+- **ZeptoMail, as the alert emails** (the default, and what a row saved
+  before moves to). It goes the way the alert emails already leave the
+  server, over the web, with the alert emails' token
+  (`RIPRAPTOR_ZEPTOMAIL_TOKEN`), so it needs nothing more on the server. It
+  is sent as plain text with no open or click tracking, from the **Sent
+  from** address, which must be on the alert emails' domain (the domain of
+  `RIPRAPTOR_MAIL_FROM`, ripraptor.com), with replies and the copy to
+  **Replies go to** (or the Sent from address). ZeptoMail's terms are for
+  transactional email, and Zoho can close the account for too many bounces
+  or complaints, which would stop the alert emails too. The page says so.
+  To keep shop emails' figures apart, add a Mail Agent in ZeptoMail just
+  for them and paste its Send Mail token on the page: it is saved to a file
+  only the site can read (`RIPRAPTOR_OUTREACH_TOKEN_FILE`, beside the
+  database) and never shown again; Use the alert emails' token instead
+  forgets it.
+- **Your Zoho mailbox**, over SMTP (`smtp.zoho.com`, port 465, or 587;
+  `smtp.zoho.eu` for an EU account), for a server that can reach it. Make
+  an app password in Zoho (Accounts, Security, App passwords) and paste it
+  with your mailbox address. It is saved to a file only the site can read
+  (`RIPRAPTOR_OUTREACH_PASSWORD_FILE`, beside the database), never to the
+  database and never shown again (the page keeps its last four characters),
+  and your normal Zoho password is never needed. It can send as an alias
+  you added to the mailbox in Zoho. A timed-out send says to choose
+  ZeptoMail.
+
+Either way, set it up once: tick Send from RipRaptor, fill in Sent from and
+Replies go to, tick Send me a test email and save. The test goes to Replies
+go to, marked [Test], and is never recorded against a shop.
 
 Send now appears on every draft, on each shop's page and on Update and badge
 emails, and asks first. It sends one plain text email, then records it as

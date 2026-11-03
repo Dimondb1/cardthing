@@ -126,30 +126,48 @@ class ShopContact(models.Model):
 
 
 class OutreachMail(models.Model):
-    """The one row of settings for sending shop outreach emails from the app (inbox/sending.py), through the owner's
-    own mailbox over SMTP, so each goes out as them and every reply comes back to their inbox. It is Zoho Mail, the
-    owner's normal email, and never ZeptoMail: that is for the automatic alert emails only, and sending someone's
-    own business emails through it could cost the alerts their sender. The mailbox's password (an app password) is
-    never kept here: it lives in a file only the site can read (RIPRAPTOR_OUTREACH_PASSWORD_FILE)."""
+    """The one row of settings for sending shop outreach emails from the app (inbox/sending.py). The owner, 3 Nov 2026,
+    after a test through their Zoho mailbox timed out on the server: "I want to use zepto to send out". So it sends
+    through ZeptoMail by default, the way the alert emails already leave the server (over the web, which the server can
+    reach), from an address on the site's domain with replies to the owner's inbox. Their own Zoho mailbox (over SMTP)
+    stays as the other choice, for a server that can reach Zoho's mail server. Its password (an app password), and a
+    separate ZeptoMail token if one is given, are never kept here: they live in files only the site can read
+    (RIPRAPTOR_OUTREACH_PASSWORD_FILE, RIPRAPTOR_OUTREACH_TOKEN_FILE)."""
+
+    class Service(models.TextChoices):
+        ZEPTOMAIL = "zeptomail", "ZeptoMail, as the alert emails"
+        MAILBOX = "mailbox", "Your Zoho mailbox"
 
     on = models.BooleanField("send from RipRaptor", default=False,
                              help_text="Ticked: Send now appears on every shop email. Unticked: only Open in your mail app.")
+    service = models.CharField(
+        "send through", max_length=10, choices=Service.choices, default=Service.ZEPTOMAIL,
+        help_text="ZeptoMail works from RipRaptor's server. Your Zoho mailbox needs the server to reach Zoho's mail "
+                  "server, which many hosts block.")
     host = models.CharField("mail server", max_length=100, default="smtp.zoho.com",
                             help_text="Zoho's: smtp.zoho.com. Use smtp.zoho.eu if your Zoho account is on the EU site.")
     port = models.PositiveIntegerField(default=465, help_text="465 for Zoho (the usual) or 587.")
-    username = models.EmailField("your mailbox", blank=True, help_text="Your Zoho mailbox address, which you sign in with.")
+    username = models.EmailField(
+        "your mailbox", blank=True,
+        help_text="Only for sending through your Zoho mailbox: its address, such as info@ripraptor.com.")
     from_name = models.CharField("sent as", max_length=80, default="Ben Dimond", help_text="The name shops see.")
     from_address = models.EmailField(
         "sent from", blank=True,
-        help_text="Leave empty to send from your mailbox. Or an address you have added to it in Zoho (an alias), "
-                  "such as ben@ripraptor.com: replies come back to it.")
+        help_text="The address shops see, such as info@ripraptor.com. Through ZeptoMail it must be on ripraptor.com. "
+                  "Through your mailbox, leave empty to send from the mailbox, or use an alias you added in Zoho.")
+    reply_to = models.EmailField(
+        "replies go to", blank=True,
+        help_text="Where shops' replies and your copies go. Leave empty for the Sent from address. Use an inbox you "
+                  "read.")
     copy_to_me = models.BooleanField("send me a copy", default=True,
-                                     help_text="Each email is also copied to you, so the full email is in your mailbox.")
+                                     help_text="Each email is also copied to the Replies go to address, so the full email is "
+                                               "in your inbox.")
     daily_limit = models.PositiveSmallIntegerField(
         "most a day", default=30,
-        help_text="No more than this many shop emails in a day, sent or marked as sent. It keeps your mailbox "
+        help_text="No more than this many shop emails in a day, sent or marked as sent. It keeps the sender "
                   "trusted and the emails personal.")
     password_hint = models.CharField(max_length=4, blank=True, editable=False)
+    token_hint = models.CharField(max_length=4, blank=True, editable=False)
     password_saved_at = models.DateTimeField(null=True, blank=True, editable=False)
     problem = models.CharField(max_length=300, blank=True, editable=False,
                                help_text="Why the last send or test failed.")
@@ -171,8 +189,18 @@ class OutreachMail(models.Model):
         return cls.objects.filter(pk=1).first() or cls(pk=1)
 
     @property
+    def by_zeptomail(self):
+        return self.service == self.Service.ZEPTOMAIL
+
+    @property
     def sender(self):
-        return self.from_address or self.username
+        """The address the email is from. Through ZeptoMail it is never the mailbox, which may not be on the domain."""
+        return self.from_address if self.by_zeptomail else (self.from_address or self.username)
+
+    @property
+    def inbox(self):
+        """Where replies, the copies and the tests go."""
+        return self.reply_to or self.sender
 
 
 class OutreachEmail(models.Model):

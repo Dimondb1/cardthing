@@ -2015,6 +2015,26 @@ class ClaudeJudge(models.Model):
         return cls.objects.filter(pk=1).first() or cls(pk=1)
 
 
+class ClaudeJob(models.Model):
+    """One of Claude's jobs (judge.JOBS) as the owner set it on the Claude page (web/views.py claude_page): switched
+    on or off, and with a monthly limit of its own within the judge's shared one. A job with no row is on, with no
+    limit of its own. The owner, 3 Nov 2026, with Sort everything through $67 in three days: "control and set what it
+    does in a settings menu"."""
+
+    name = models.CharField(max_length=10, unique=True)
+    on = models.BooleanField(default=True)
+    monthly_budget_usd = models.DecimalField(
+        "own monthly limit", max_digits=6, decimal_places=2, null=True, blank=True,
+        help_text="US dollars this job alone may spend in a month. Empty: only the shared monthly limit applies.")
+    changed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Claude job"
+
+    def __str__(self):
+        return self.name
+
+
 class ClaudeAsk(models.Model):
     """One question put to Claude about one Things to check row, and its answer, cost and use.
 

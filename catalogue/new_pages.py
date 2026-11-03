@@ -386,10 +386,12 @@ def run(client=None, now=None, limit=ROWS_PER_RUN):
     """Release what cannot wait, then ask about up to ``limit`` pages, one at a time. Returns Result."""
     result = Result()
     now = now or timezone.now()
-    acting = can_act(now)
+    off = judge.job_room(ClaudeAsk.Kind.PAGE, 0, now)   # switched off on the Claude page, or at its own limit
+    acting = can_act(now) and not off
     result.released = release(now, acting)
     if not acting:
-        result.note = "Claude cannot act now (Things to check), so new pages go up unchecked"
+        result.note = (f"{off}, so new pages go up unchecked" if off
+                       else "Claude cannot act now (Things to check), so new pages go up unchecked")
         return result
     recheck_language_holds()
     state = ClaudeJudge.current()
@@ -414,6 +416,10 @@ def run(client=None, now=None, limit=ROWS_PER_RUN):
         params = request_params(evidence, picture)
         worst = worst_micros(params)
         moment = timezone.now()
+        capped = judge.job_room(ClaudeAsk.Kind.PAGE, worst, moment)
+        if capped:
+            result.note = capped
+            break
         if judge.spent_this_month(moment) + worst > judge.monthly_limit_micros(state):
             result.note = "Reached Claude's monthly limit"
             break

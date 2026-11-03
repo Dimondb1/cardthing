@@ -129,7 +129,7 @@ def build(now, store):
     shops(out, data["shops"])
     customers(out, data["customers"], month)
     guides(out, data["guides"])
-    claude(out, data["claude"])
+    claude(out, data["claude"], now)
     return str(out)
 
 
@@ -392,13 +392,31 @@ def guides(out, data):
                ("Review due", "due", "<")], data["rows"])
 
 
-def claude(out, data):
+def claude(out, data, now):
     out.heading("Claude")
     out.fact("State", data["status"])
     out.fact("Spent this month", f"{data['spent']} of {data['limit']}")
     out.fact("Rows settled this month, last 24 hours", f"{data['settled_month']}, {data['settled_day']}")
     if data["last_run"]:
         out.fact("Last run", f"{data['last_run']} {data['last_note']}".strip())
+    out.sub("By job, this month")
+    out.table([("Job", "title", "<"), ("Asked", "asked", ">"), ("Spent", "spent", ">"), ("On", "on", "<"),
+               ("Own limit", "cap", ">")], claude_jobs(now))
+
+
+def claude_jobs(now):
+    """What each of Claude's jobs (judge.JOBS) asked and spent this month, and how the Claude page has it set."""
+    from django.db.models import Count
+
+    from catalogue import judge
+    from catalogue.models import ClaudeAsk
+
+    asked = dict(ClaudeAsk.objects.filter(asked_at__gte=judge.month_start(now)).order_by().values_list("kind")
+                 .annotate(n=Count("pk")).values_list("kind", "n"))
+    spent, jobs = judge.spent_by_job(now), judge.job_settings()
+    return [{"title": title, "asked": sum(asked.get(kind, 0) for kind in kinds), "spent": judge.dollars(spent[name]),
+             "on": jobs[name].on, "cap": "-" if jobs[name].monthly_budget_usd is None else f"${jobs[name].monthly_budget_usd}"}
+            for name, (title, kinds) in judge.JOBS.items()]
 
 
 # The download ----------------------------------------------------------------------------------------------------

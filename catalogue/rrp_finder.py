@@ -399,6 +399,9 @@ def run(client=None, now=None, limit=PER_RUN, dry_run=False):
     if not dry_run and not new_pages.can_act(now):
         result.note = "Claude cannot act now (Things to check), so no RRPs are looked for"
         return result
+    if not dry_run and judge.job_room(Ask.Kind.RRP, 0, now):
+        result.note = judge.job_room(Ask.Kind.RRP, 0, now)
+        return result
     products = list(candidates(now)[:limit])
     shops = shops_selling(products)
     if dry_run:
@@ -418,6 +421,10 @@ def run(client=None, now=None, limit=PER_RUN, dry_run=False):
         params = request_params(evidence)
         worst = judge.worst_case_micros(params, RRP_MODEL)
         moment = timezone.now()
+        capped = judge.job_room(Ask.Kind.RRP, worst, moment)
+        if capped:
+            result.note = capped
+            break
         if judge.spent_this_month(moment) + worst > judge.monthly_limit_micros(state):
             notify.owner(judge.AT_LIMIT, judge.AT_LIMIT, notify.CHECKS_PATH,
                          "Claude waits until next month, or until you raise its monthly limit.", now=moment)

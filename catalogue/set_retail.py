@@ -193,7 +193,7 @@ def run(client=None, now=None, dry_run=False):
             lines.append(f"{evidence['row']} {product_set.name}: worst case "
                          f"{judge.dollars(judge.worst_case_micros(params, state.model))}")
         return 0, 0, 0, f"Would ask about {min(len(found), RETAIL_PER_RUN)} sets", lines
-    note = why_not(state, now)
+    note = why_not(state, now) or judge.job_room(Ask.Kind.RETAIL, 0, now)
     if note or not found:
         return 0, 0, 0, note, lines
     client = client or judge.make_client(judge.key())
@@ -213,6 +213,9 @@ def run(client=None, now=None, dry_run=False):
         params = request_params(state, evidence, product_set.game.slug)
         worst = judge.worst_case_micros(params, state.model)
         moment = timezone.now()
+        note = judge.job_room(Ask.Kind.RETAIL, worst, moment)
+        if note:
+            break
         if judge.spent_this_month(moment) + worst > judge.monthly_limit_micros(state):
             notify.owner(judge.AT_LIMIT, judge.AT_LIMIT, notify.CHECKS_PATH,
                          "Claude waits until next month, or until you raise its monthly limit.", now=moment)

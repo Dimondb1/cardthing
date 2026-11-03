@@ -3329,6 +3329,89 @@ def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_cou
 
 @staff_member_required
 @not_for_editors
+def claude_page(request):
+    """Claude's jobs and spending (the owner, 3 Nov 2026: "control and set what it does in a settings menu"): what
+    each job asked and spent this month and today, a switch and a monthly limit of its own for each (judge.JOBS,
+    catalogue.ClaudeJob), and the Sort everything and on or off buttons the Claude box has. The model, effort,
+    shared limit and key stay under Claude settings and key on Things to check. A few queries, however many asks."""
+    from django.db.models import Count, Q, Sum
+    from django.shortcuts import redirect
+
+    from catalogue import judge
+    from catalogue.models import ClaudeAsk
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "claude_jobs":
+            save_claude_jobs(request)
+        elif action in ("claude_sort_on", "claude_sort_off", "claude_on", "claude_off"):
+            claude_tap(request, action)
+        return redirect("claude")
+    now = timezone.now()
+    claude = judge.page_status(now)
+    start_of_today = timezone.localtime(now).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def by_kind(since):
+        rows = (ClaudeAsk.objects.filter(asked_at__gte=since).order_by().values("kind")
+                .annotate(n=Count("pk"), cost=Sum("cost_micros"),
+                          held=Sum("reserved_micros", filter=Q(outcome=ClaudeAsk.Outcome.SENT))))
+        return {row["kind"]: (row["n"], (row["cost"] or 0) + (row["held"] or 0)) for row in rows}
+
+    month, today = by_kind(judge.month_start(now)), by_kind(start_of_today)
+    settings_ = judge.job_settings()
+    jobs = []
+    for name, (link, title, does) in CLAUDE_JOBS.items():
+        kinds = judge.JOBS[name][1]
+        asked_month = sum(month.get(kind, (0, 0))[0] for kind in kinds)
+        spent_month = sum(month.get(kind, (0, 0))[1] for kind in kinds)
+        asked_today = sum(today.get(kind, (0, 0))[0] for kind in kinds)
+        spent_today = sum(today.get(kind, (0, 0))[1] for kind in kinds)
+        job = settings_[name]
+        cap = judge.job_cap_micros(job)
+        jobs.append({
+            "name": name, "title": title, "does": does, "on": job.on, "cap": job.monthly_budget_usd,
+            "asked_month": asked_month, "spent_month": judge.dollars(spent_month),
+            "asked_today": asked_today, "spent_today": judge.dollars(spent_today),
+            "at_limit": cap is not None and spent_month >= cap,
+        })
+    context = {
+        **admin.site.each_context(request), "title": "Claude", "claude": claude, "jobs": jobs,
+        "asked_month": sum(job["asked_month"] for job in jobs), "asked_today": sum(job["asked_today"] for job in jobs),
+        "spent_today": judge.dollars(sum(n for _n, n in today.values())),
+    }
+    return render(request, "admin/claude.html", context)
+
+
+def save_claude_jobs(request):
+    """The Claude page's Save jobs: each job's switch and its own monthly limit, saved together or not at all."""
+    from django.contrib import messages
+
+    from catalogue import judge
+    from catalogue.models import ClaudeJob
+
+    most = settings.RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD
+    wanted = {}
+    for name in judge.JOBS:
+        raw = request.POST.get(f"cap_{name}", "").strip()
+        cap = None
+        if raw:
+            try:
+                cap = Decimal(raw).quantize(Decimal("0.01"))
+            except (InvalidOperation, ValueError):
+                cap = Decimal("-1")
+            if not cap.is_finite() or not 0 <= cap <= most:
+                messages.warning(request, f"{judge.JOBS[name][0]}: give a monthly limit from 0 to {most} dollars, or "
+                                          "leave it empty. Nothing was saved.")
+                return
+        wanted[name] = (f"on_{name}" in request.POST, cap)
+    for name, (on, cap) in wanted.items():
+        ClaudeJob.objects.update_or_create(name=name, defaults={"on": on, "monthly_budget_usd": cap})
+    off = [judge.JOBS[name][0] for name, (on, _cap) in wanted.items() if not on]
+    messages.success(request, "Claude's jobs are saved." + (f" Switched off: {', '.join(off)}." if off else ""))
+
+
+@staff_member_required
+@not_for_editors
 @sensitive_post_parameters("claude_key")
 def checks_page(request):
     """Things to check: what the autopilot answered, with Undo, then doubtful and excluded prices, wrong

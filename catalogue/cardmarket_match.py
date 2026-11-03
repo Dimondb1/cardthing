@@ -335,6 +335,10 @@ def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER
         result.note = "Claude is switched off or has no key (Things to check)"
         note_run(state, result, now)
         return result
+    if not dry_run and judge.job_room(ClaudeAsk.Kind.MARKET, 0, now):
+        result.note = judge.job_room(ClaudeAsk.Kind.MARKET, 0, now)
+        note_run(state, result, now)
+        return result
     rate = ExchangeRate.latest()
     pools = {}
     for item in CardmarketProduct.objects.filter(game__slug__in=slugs).select_related("game"):
@@ -376,6 +380,10 @@ def run(slugs=("pokemon",), client=None, now=None, dry_run=False, limit=ROWS_PER
             params = request_params(state, evidence)
             worst = judge.worst_case_micros(params, params["model"])
             moment = timezone.now()
+            capped = judge.job_room(ClaudeAsk.Kind.MARKET, worst, moment)
+            if capped:
+                result.note = capped
+                break
             month_spent, month_limit = judge.spent_this_month(moment), judge.monthly_limit_micros(state)
             if month_spent + worst > month_limit:
                 result.note = limit_note(month_spent, month_limit, moment)

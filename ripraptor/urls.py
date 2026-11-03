@@ -17,6 +17,7 @@ admin.site.login_template = "twostep/login.html"
 urlpatterns = [
     path("admin/insights/", web_views.insights_page, name="insights"),
     path("admin/checks/", web_views.checks_page, name="checks"),
+    path("admin/claude/", web_views.claude_page, name="claude"),
     path("admin/crawl/", web_views.crawl_page, name="crawl"),
     path("admin/data/", web_views.data_page, name="data"),
     path("admin/data/download/<int:pk>/", web_views.data_download, name="data_download"),

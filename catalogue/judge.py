@@ -408,6 +408,76 @@ def dollars(micros):
     return f"${Decimal(micros) / 1_000_000:.2f}"
 
 
+# Claude's jobs, each switched on or off and given a monthly limit of its own on the Claude page (web/views.py
+# claude_page; catalogue.ClaudeJob): the name the page knows each by, its title, and the kinds of question it asks.
+# The owner, 3 Nov 2026, with Sort everything through $67 in three days: "control and set what it does in a settings
+# menu".
+JOBS = {
+    "pages": ("New pages", (Ask.Kind.PAGE,)),
+    "prices": ("Doubtful prices and wrong matches", (Ask.Kind.OFFER,)),
+    "pairs": ("Possible duplicates", (Ask.Kind.PAIR,)),
+    "found": ("Found at another shop", (Ask.Kind.FOUND,)),
+    "sets": ("Announced sets", (Ask.Kind.SET,)),
+    "retail": ("Sets sold only at events", (Ask.Kind.RETAIL,)),
+    "market": ("Cardmarket matches", (Ask.Kind.MARKET,)),
+    "rrps": ("RRPs", (Ask.Kind.RRP,)),
+}
+JOB_OF_KIND = {kind: name for name, (_title, kinds) in JOBS.items() for kind in kinds}
+
+
+def job_of(kind):
+    return JOB_OF_KIND[kind]
+
+
+def job_title(kind):
+    return JOBS[job_of(kind)][0]
+
+
+def job_settings():
+    """{name: ClaudeJob} for every job: the saved row, or the defaults unsaved (on, no limit of its own). One query,
+    and never writes."""
+    from .models import ClaudeJob
+
+    saved = {row.name: row for row in ClaudeJob.objects.filter(name__in=list(JOBS))}
+    return {name: saved.get(name) or ClaudeJob(name=name) for name in JOBS}
+
+
+def job_on(kind, jobs=None):
+    return (jobs or job_settings())[job_of(kind)].on
+
+
+def spent_by_job(now=None):
+    """{job name: micro-dollars spent this UTC month, the reservations of questions not settled yet included}."""
+    rows = Ask.objects.filter(asked_at__gte=month_start(now or timezone.now())).order_by().values("kind").annotate(
+        cost=Sum("cost_micros"), held=Sum("reserved_micros", filter=Q(outcome=Ask.Outcome.SENT)))
+    spent = dict.fromkeys(JOBS, 0)
+    for row in rows:
+        name = JOB_OF_KIND.get(row["kind"])
+        if name:
+            spent[name] += (row["cost"] or 0) + (row["held"] or 0)
+    return spent
+
+
+def job_cap_micros(job):
+    """A job's own monthly limit in micro-dollars, or None when it has none."""
+    return None if job.monthly_budget_usd is None else int(job.monthly_budget_usd * 1_000_000)
+
+
+def job_room(kind, worst, now=None, jobs=None, spent=None):
+    """Why a question of ``kind`` that may cost ``worst`` cannot be sent now, or "": its job is switched off on the
+    Claude page, or would pass its own monthly limit. The shared monthly limit is each run's own check, as before.
+    ``jobs`` and ``spent`` (job_settings, spent_by_job) can be given once for a run."""
+    jobs = jobs or job_settings()
+    job = jobs[job_of(kind)]
+    title = JOBS[job.name][0]
+    if not job.on:
+        return f"{title} is switched off on the Claude page"
+    cap = job_cap_micros(job)
+    if cap is not None and (spent or spent_by_job(now)).get(job.name, 0) + worst > cap:
+        return f"{title} reached its own monthly limit of {dollars(cap)}, set on the Claude page"
+    return ""
+
+
 # Evidence ----------------------------------------------------------------------------------------
 
 def codes_in(text):
@@ -955,6 +1025,8 @@ def submit_batch(client, state, rows, reader, now):
     started = time.monotonic()
     requests, asks, reserved, note = [], [], 0, ""
     searches = 0
+    # Each job's own monthly limit (the Claude page), with this batch's reservations counted as it is made.
+    jobs, job_spent, capped = job_settings(), spent_by_job(now), ""
     for row in rows:
         if time.monotonic() - started > RUN_SECONDS:
             note = "Stopped for time"
@@ -969,6 +1041,10 @@ def submit_batch(client, state, rows, reader, now):
         params = request_params(state, row, cache=True)
         worst = worst_case_micros(params, state.model, batch=True)
         moment = timezone.now()
+        capped = job_room(row.kind, worst, moment, jobs, job_spent)
+        if capped:
+            continue   # this job's rows wait for next month; the other jobs' go on
+        job_spent[job_of(row.kind)] += worst
         # The reservations of the questions already made for this batch are counted in the month's spend.
         if spent_this_month(moment) + worst > monthly_limit_micros(state):
             notify.owner(AT_LIMIT, AT_LIMIT, notify.CHECKS_PATH,
@@ -987,7 +1063,7 @@ def submit_batch(client, state, rows, reader, now):
         asks.append(ask.pk)
         reserved += worst
     if not requests:
-        return 0, note
+        return 0, note or capped
     try:
         batch = client.messages.batches.create(requests=requests)
     except Exception as error:
@@ -1673,6 +1749,13 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
             result.earlier += more
             result.acted += more
     rows = waiting(now)
+    jobs = job_settings()
+    off = [row for row in rows if not job_on(row.kind, jobs)]
+    if off:
+        # A job switched off on the Claude page: its rows wait, unasked and unpaid for, until it is on again.
+        rows = [row for row in rows if job_on(row.kind, jobs)]
+        if not rows:
+            result.note = f"{len(off)} rows wait for jobs switched off on the Claude page"
     total = len(rows)
     batch = False
     if state.sort_all and (dry_run or not pending_batch_ids()) and len(rows) >= BATCH_MIN:
@@ -1739,6 +1822,10 @@ def run(client=None, now=None, dry_run=False, force=False, pages=None):
             params = request_params(state, row, cache=len(rows) > 1)
             worst = worst_case_micros(params, state.model)
             moment = timezone.now()
+            capped = job_room(row.kind, worst, moment, jobs)
+            if capped:
+                result.note = capped
+                continue   # this job's rows wait for next month; the other jobs' go on
             if spent_this_month(moment) + worst > monthly_limit_micros(state):
                 notify.owner(AT_LIMIT, AT_LIMIT, notify.CHECKS_PATH,
                              "Claude waits until next month, or until you raise its monthly limit.", now=moment)

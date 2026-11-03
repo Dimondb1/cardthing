@@ -57,7 +57,7 @@
     <p><b>{{ claude.status }}</b></p>
     {% if claude.now %}<p class="now">{{ claude.now }}</p>{% endif %}
     {% if claude.state.last_run_note %}<p class="note">Last run {{ claude.state.last_run_at|date:"j M H:i" }}: {{ claude.state.last_run_note }}.</p>{% endif %}
-    {% if claude.has_key %}<p class="note">This month: {{ claude.spent }} of {{ claude.limit }}.</p>{% endif %}
+    {% if claude.has_key %}<p class="note">This month: {{ claude.spent }} of {{ claude.limit }}. <a href="{% url 'claude' %}">Jobs and spending</a>: what each job costs, with a switch and a limit for each.</p>{% endif %}
     <h3>What Claude sorts</h3>
     <ul class="jobs">{% for job in claude_jobs %}
       <li class="item" data-job="{{ job.name }}"><b>{{ job.title }}</b>

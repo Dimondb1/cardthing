@@ -865,6 +865,21 @@ What the free checks leave, Claude can answer (`catalogue/judge.py`). It is
 a paid Anthropic service, so it does nothing until you save a key and
 switch it on in the **Claude** box at the top of Things to check.
 
+**Claude's jobs and spending** (Admin, **Claude**, `/admin/claude/`;
+`web/views.py claude_page`, `catalogue.ClaudeJob`, `judge.JOBS`): Claude has
+eight jobs: new pages, doubtful prices and wrong matches, possible
+duplicates, found at another shop, announced sets, sets sold only at events,
+Cardmarket matches and RRPs. The page shows what each asked and spent this
+month and today, and lets you switch each off or give it a monthly limit of
+its own within the shared one (empty means none of its own). Every run asks
+the same gate before each question (`judge.job_room`): a job switched off is
+skipped, and one at its own limit waits for next month, while the other jobs
+carry on. A batch already out at Anthropic still comes back and is acted on,
+free. Sort everything, and Claude itself, can be switched off from the same
+page; the model, effort, shared limit and key stay under Claude settings and
+key on Things to check. The owner, 3 Nov 2026, with Sort everything through
+$67 in three days: "control and set what it does in a settings menu".
+
 For prices, found pages and duplicates, Claude only says whether two things
 the site already holds are the same product: a found shop page and our
 product, a shop's price and our product, or two of our products. It never

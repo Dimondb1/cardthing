@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+{% load dashboard %}
+{% block title %}Claude | {{ site_title }}{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .cl { display: grid; gap: 24px; max-width: 60rem; }
+  .cl h2 { margin: 0 0 6px; }
+  .cl p { margin: 0 0 8px; }
+  .cl p.note { color: var(--body-quiet-color); }
+  .cl .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 6px; }
+  .cl form { margin: 0; }
+  .cl input[type=submit] { min-height: 40px; }
+  .cl table { width: 100%; border-collapse: collapse; }
+  .cl th, .cl td { padding: 8px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--hairline-color); }
+  .cl th.num, .cl td.num { text-align: right; white-space: nowrap; }
+  .cl td input[type=number] { width: 6.5rem; min-height: 36px; box-sizing: border-box; }
+  .cl td input[type=checkbox] { width: 22px; height: 22px; }
+  .cl .does { display: block; margin-top: 2px; color: var(--body-quiet-color); font-size: 0.92em; }
+  .cl .at { color: var(--error-fg); }
+  @media (max-width: 640px) {
+    .cl table, .cl tbody, .cl tr, .cl td { display: block; }
+    .cl thead { display: none; }
+    .cl tr { padding: 10px 0; border-bottom: 1px solid var(--hairline-color); }
+    .cl td { border: 0; padding: 2px 0; }
+    .cl td.num { text-align: left; }
+    .cl td[data-label]::before { content: attr(data-label) ": "; color: var(--body-quiet-color); }
+  }
+</style>{% endblock %}
+{% block content %}
+<div class="cl">
+  <section>
+    <h2>Claude</h2>
+    <p><b>{{ claude.status }}</b></p>
+    {% if claude.now %}<p class="note">{{ claude.now }}</p>{% endif %}
+    <p>This month: <b>{{ claude.spent }}</b> of {{ claude.limit }} across every job, {{ asked_month|number }} question{{ asked_month|pluralize }}. Today: {{ spent_today }}, {{ asked_today|number }} question{{ asked_today|pluralize }}.</p>
+    {% if claude.state.sort_all %}<p class="note">Sort everything is on: Claude works through the whole list run after run, sending up to 300 rows at a time to Anthropic at half price, up to $25 a batch and several batches a day. That is most of the spend. Stop it and Claude goes back to {{ claude.per_run }} rows an hour.</p>{% endif %}
+    {% if claude.has_key and claude.server_on %}<div class="row">
+      {% if claude.state.enabled %}
+      {% if claude.state.sort_all %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_sort_off"><input type="submit" value="Stop sorting everything"></form>
+      {% else %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_sort_on"><input type="submit" value="Sort everything"></form>{% endif %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_off"><input type="submit" value="Switch Claude off"></form>
+      {% else %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_on"><input type="submit" value="Switch Claude on"></form>
+      {% endif %}
+    </div>{% endif %}
+    <p class="note">The model, effort, the shared monthly limit and the key are under Claude settings and key on <a href="{% url 'checks' %}">Things to check</a>. <a href="{% url 'admin:catalogue_claudeask_changelist' %}">Every answer, with what each cost</a>.</p>
+  </section>
+
+  <section>
+    <h2>Jobs</h2>
+    <p class="note">Switch a job off and every run skips it. Give it a monthly limit of its own and it stops there while the other jobs carry on; empty means only the shared limit applies. A batch already out at Anthropic still comes back and is acted on, free.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_jobs">
+    <table>
+      <thead><tr><th>Job</th><th>On</th><th class="num">This month</th><th class="num">Today</th><th class="num">Own limit ($)</th></tr></thead>
+      <tbody>{% for job in jobs %}
+        <tr data-job="{{ job.name }}">
+          <td><label for="on_{{ job.name }}"><b>{{ job.title }}</b></label><span class="does">{{ job.does }}</span></td>
+          <td data-label="On"><input type="checkbox" id="on_{{ job.name }}" name="on_{{ job.name }}"{% if job.on %} checked{% endif %}></td>
+          <td class="num" data-label="This month">{{ job.spent_month }}, {{ job.asked_month|number }} asked{% if job.at_limit %} <span class="at">(at its limit)</span>{% endif %}</td>
+          <td class="num" data-label="Today">{{ job.spent_today }}, {{ job.asked_today|number }} asked</td>
+          <td class="num" data-label="Own limit ($)"><input type="number" name="cap_{{ job.name }}" min="0" max="{{ claude.max_monthly }}" step="0.01" inputmode="decimal" value="{% if job.cap is not None %}{{ job.cap }}{% endif %}" aria-label="{{ job.title }}: own monthly limit in dollars"></td>
+        </tr>{% endfor %}
+      </tbody>
+    </table>
+    <div class="row"><input type="submit" value="Save jobs"></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

@@ -4239,6 +4239,24 @@ shop not contacted yet to Emailed (Replied and Affiliate link live stay as
 they are) and sets the follow-up to two weeks on unless you set a later
 one. Change the status by hand when they reply.
 
+**Update and badge emails** (the button at the top of the Shop outreach
+list, `/admin/inbox/shopcontact/update-emails/`) writes one email to every
+shop in one place: what RipRaptor sent them, then the badge. It is the fifth
+draft, "Update and offer the badge" (`outreach.update.*`), signed with
+your name (`outreach.update.signoff`) rather than the shared sign-off. The
+page has a card per shop, the ones sending the most shoppers first, each
+with its own address box, the email filled in with that shop's figures,
+Open in your mail app and Mark as sent. Work down it: a shop marked as sent
+drops off the list (Show the ones already sent too brings them back, with the
+date). Shops with nothing listed now, switched off, or marked Do not email
+are left out, and so are eBay and Amazon. A shop we sent no shoppers is not
+told nought: its email leaves out the shoppers sentence and the line naming
+the products clicked most, and a shop whose shoppers all came before the
+last 30 days is given the 3 months alone. The page takes the same few
+queries however many shops there are (`outreach.bulk_figures`). It finds no
+addresses for you: press Their website to find a shop's contact address, type
+it in and press Save address. Nothing is sent from the site.
+
 The wording is in Site wording under Shop outreach emails
 (`outreach.*`). Every draft ends with the sign-off and a line saying to
 reply STOP for no more, which UK rules expect for sole traders. When a shop

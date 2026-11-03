@@ -162,6 +162,7 @@ class ShopContactAdmin(admin.ModelAdmin):
     readonly_fields = ("retailer", "figures", "drafts", "sent")
     # Save comes first in the form, so Enter in a box saves rather than pressing the first Mark as sent.
     save_on_top = True
+    change_list_template = "admin/shopcontact_change_list.html"
     fieldsets = (
         (None, {"fields": ("retailer", "email", "status", "follow_up_on", "notes")}),
         ("Their figures on RipRaptor", {"fields": ("figures",)}),
@@ -184,6 +185,88 @@ class ShopContactAdmin(admin.ModelAdmin):
 
         outreach.ensure_contacts()
         return super().changelist_view(request, extra_context)
+
+    # The update and badge email to every shop in one place ------------------------------------------------------
+
+    def get_urls(self):
+        from django.urls import path
+
+        return [path("update-emails/", self.admin_site.admin_view(self.update_emails_view),
+                     name="inbox_shopcontact_update_emails")] + super().get_urls()
+
+    def update_emails_view(self, request):
+        """One ready-to-send update and badge email for each shop worth writing to, the ones sending most shoppers
+        first. Each has its own address box, the draft, Open in your mail app and Mark as sent, so the owner works
+        down the page. Nothing is sent from the site."""
+        from django.core.exceptions import PermissionDenied
+        from django.template.response import TemplateResponse
+
+        from content import service as copy
+        from django.utils import timezone
+
+        from . import outreach
+        from .models import OutreachEmail
+
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        outreach.ensure_contacts()
+        if request.method == "POST":
+            return self._update_emails_post(request)
+        show_sent = request.GET.get("show") == "all"
+        contacts = list(outreach.update_queue(show_sent))
+        found = outreach.bulk_figures([contact.retailer_id for contact in contacts])
+        store = copy.load_all()
+        sent_on = {}
+        for contact_id, when in OutreachEmail.objects.filter(kind=outreach.UPDATE).order_by("sent_at").values_list(
+                "contact_id", "sent_at"):
+            sent_on[contact_id] = timezone.localtime(when)
+        rows = []
+        for contact in contacts:
+            subject, body = outreach.draft(contact.retailer, outreach.UPDATE, found[contact.retailer_id], store)
+            # Rows for the box to show the whole email: a long line wraps, so count it as the lines it takes.
+            lines = sum(max(1, -(-len(line) // 60)) for line in body.splitlines()) + 1
+            rows.append({"contact": contact, "subject": subject, "body": body, "lines": lines,
+                         "mailto": outreach.mailto(contact.email or "", subject, body),
+                         "sent_on": sent_on.get(contact.pk)})
+        context = dict(self.admin_site.each_context(request), title="Update and badge emails", opts=self.model._meta,
+                       rows=rows, show_sent=show_sent, no_address=sum(1 for row in rows if not row["contact"].email))
+        return TemplateResponse(request, "admin/shop_update_emails.html", context)
+
+    def _update_emails_post(self, request):
+        """Save the address typed under one shop and, for Mark as sent, record the email. Back to the page."""
+        from django.core.exceptions import ValidationError
+        from django.core.validators import validate_email
+        from django.http import Http404, HttpResponseRedirect
+
+        from . import outreach
+
+        try:
+            contact = ShopContact.objects.select_related("retailer").get(pk=int(request.POST.get("contact", "")))
+        except (ValueError, ShopContact.DoesNotExist):
+            raise Http404
+        back = request.get_full_path()
+        address = request.POST.get("email", "").strip()
+        try:
+            if address:
+                validate_email(address)
+        except ValidationError:
+            self.message_user(request, f"{contact}: that email address does not look right, so nothing was saved.",
+                              messages.ERROR)
+            return HttpResponseRedirect(f"{back}#shop-{contact.pk}")
+        if address != contact.email:
+            contact.email = address
+            contact.save(update_fields=["email"])
+        if "_sent" not in request.POST:
+            self.message_user(request, f"Saved the address for {contact}.")
+            return HttpResponseRedirect(f"{back}#shop-{contact.pk}")
+        if not outreach.can_email(contact):
+            self.message_user(request, f"{contact} asked not to be emailed, so nothing was recorded.", messages.ERROR)
+            return HttpResponseRedirect(back)
+        subject, _body = outreach.draft(contact.retailer, outreach.UPDATE, outreach.figures(contact.retailer))
+        outreach.mark_sent(contact, outreach.UPDATE, subject)
+        self.message_user(request, f"Marked as sent to {contact}. Follow up on {contact.follow_up_on:%-d %B %Y} if "
+                                   "they have not replied.")
+        return HttpResponseRedirect(back)
 
     def save_model(self, request, obj, form, change):
         """Saves the row, then, for Mark as sent under a draft, records the email and sets the follow-up. The button

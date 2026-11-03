@@ -19,11 +19,12 @@ from datetime import timedelta
 from urllib.parse import quote
 
 from django.conf import settings
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, Min, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from content import service as copy
+from content.registry import REGISTRY
 from web import badge
 
 from .models import OutreachEmail, ShopContact
@@ -34,7 +35,10 @@ TOP_PRODUCTS = 3
 FOLLOW_UP = timedelta(days=14)
 # The drafts, in the order the page shows them: (kind, its name on the page).
 DRAFTS = [("affiliate", "Ask for an affiliate link"), ("report", "Tell them what we sent them"),
-          ("listing", "Ask for a product feed"), ("badge", "Offer the RipRaptor badge")]
+          ("listing", "Ask for a product feed"), ("badge", "Offer the RipRaptor badge"),
+          ("update", "Update and offer the badge")]
+# The email sent to every shop in one go (the Update and badge emails page): what we sent them, then the badge.
+UPDATE = "update"
 KINDS = {kind for kind, _ in DRAFTS}
 
 
@@ -100,6 +104,35 @@ def figures(retailer, now=None):
                    in_stock=listings["in_stock"], top_products=tuple(top))
 
 
+def bulk_figures(retailer_ids, now=None):
+    """{retailer_id: Figures} for many shops in three queries: the same figures ``figures`` gives one shop at a time."""
+    from catalogue.models import Listing, OutboundClick
+
+    now = now or timezone.now()
+    ids = list(retailer_ids)
+    found = {pk: Figures() for pk in ids}
+    clicks = OutboundClick.objects.people().filter(retailer_id__in=ids)
+    for row in clicks.order_by().values("retailer_id").annotate(
+            month=Count("pk", filter=Q(created_at__gte=now - MONTH)),
+            quarter=Count("pk", filter=Q(created_at__gte=now - QUARTER)), total=Count("pk"),
+            first=Min("created_at")):
+        shop = found[row["retailer_id"]]
+        shop.visitors_month, shop.visitors_quarter, shop.visitors_total = row["month"], row["quarter"], row["total"]
+        shop.since = timezone.localdate(row["first"]) if row["first"] else None
+    ranked = {}
+    for row in (clicks.filter(created_at__gte=now - QUARTER).order_by().values("retailer_id", "product__name")
+                .annotate(n=Count("pk"))):
+        ranked.setdefault(row["retailer_id"], []).append((-row["n"], row["product__name"]))
+    for pk, rows in ranked.items():
+        found[pk].top_products = tuple(name for _n, name in sorted(rows)[:TOP_PRODUCTS])
+    listings = (Listing.objects.current().filter(retailer_id__in=ids).exclude(sanity=Listing.Sanity.EXCLUDED)
+                .order_by().values("retailer_id")
+                .annotate(listed=Count("pk"), in_stock=Count("pk", filter=Q(availability=Listing.Availability.IN_STOCK))))
+    for row in listings:
+        found[row["retailer_id"]].listed, found[row["retailer_id"]].in_stock = row["listed"], row["in_stock"]
+    return found
+
+
 def listed_names(names):
     """"A, B and C"."""
     names = list(names)
@@ -122,6 +155,8 @@ def values(retailer, found, store=None):
         "site_url": settings.RIPRAPTOR_SITE_URL,
         "badge_url": badge.page_url(),
         "sent": sent_line(found.visitors_quarter, store),
+        "shopper_update": shopper_update(found, store),
+        "top_line": top_line(found, store),
     }
 
 
@@ -132,14 +167,43 @@ def sent_line(count, store=None):
     return copy.get(f"outreach.sent.{'one' if count == 1 else 'other'}", store=store, count=f"{count:,}")
 
 
+def shoppers_phrase(count, store=None):
+    """"1 shopper" or "254 shoppers"."""
+    return copy.get(f"outreach.shoppers.{'one' if count == 1 else 'other'}", store=store, count=f"{count:,}")
+
+
+def shopper_update(found, store=None):
+    """The update email's sentence on shoppers sent, "" when we sent none: a new shop is not told nought. With
+    shoppers only before the last 30 days it gives the 3 months alone, and with all of them in the last 30 days
+    it gives the 30 days alone, rather than the same number twice."""
+    month, quarter = found.visitors_month, found.visitors_quarter
+    if not quarter:
+        return ""
+    if not month:
+        return sent_line(quarter, store)
+    phrase = shoppers_phrase(month, store)
+    if month == quarter:
+        return copy.get("outreach.update.month", store=store, month=phrase)
+    return copy.get("outreach.update.month_quarter", store=store, month=phrase, quarter=f"{quarter:,}")
+
+
+def top_line(found, store=None):
+    """The sentence naming the products clicked most, "" when nobody clicked through in 3 months."""
+    if not found.top_products:
+        return ""
+    return copy.get("outreach.update.top", store=store, top_products=listed_names(found.top_products))
+
+
 def draft(retailer, kind, found, store=None):
     """(subject, body) of the ``kind`` email to ``retailer``: the wording filled in, then the sign-off and the line
-    about not emailing again."""
+    about not emailing again. A draft may have a sign-off of its own (``outreach.<kind>.signoff``), as the update
+    email has: it is signed with the owner's name."""
     filled = values(retailer, found, store)
+    own = f"outreach.{kind}.signoff"
     subject = copy.get(f"outreach.{kind}.subject", store=store, **filled)
     body = "\n\n".join(part for part in (
         copy.get(f"outreach.{kind}.body", store=store, **filled),
-        copy.get("outreach.signoff", store=store, **filled),
+        copy.get(own if own in REGISTRY else "outreach.signoff", store=store, **filled),
         copy.get("outreach.optout", store=store),
     ) if part)
     # A placeholder left empty (sent_line) leaves no space at the end of its line.
@@ -151,6 +215,17 @@ def mailto(email, subject, body):
     standard asks."""
     query = f"subject={quote(subject)}&body={quote(body.replace(chr(13), '').replace(chr(10), chr(13) + chr(10)))}"
     return f"mailto:{quote(email, safe='@')}?{query}"
+
+
+def update_queue(show_sent=False):
+    """The shops to send the update email to, the ones sending most shoppers first: on the site and with something
+    listed now, not marked Do not email, and (unless ``show_sent``) not already sent this email. The counts
+    (``visitors_quarter``, ``listed``) are on each."""
+    contacts = (with_counts(ShopContact.objects.select_related("retailer").filter(retailer__is_active=True))
+                .filter(listed__gt=0).exclude(status=ShopContact.Status.DO_NOT_EMAIL))
+    if not show_sent:
+        contacts = contacts.exclude(emails__kind=UPDATE)
+    return contacts.order_by("-visitors_quarter", "retailer__name")
 
 
 def due(contacts, today=None):

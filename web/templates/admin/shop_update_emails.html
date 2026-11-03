@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; <a href="{% url 'admin:inbox_shopcontact_changelist' %}">Shop outreach</a> &rsaquo; {{ title }}</div>{% endblock %}
+{% block content %}
+{% comment %}One card per shop: its own address box, the email filled in with its figures, and the two buttons. Each card is its own form, so Save address (the first button, which Enter presses) never marks anything as sent. Nothing is sent from the site: the email opens in the owner's mail app.{% endcomment %}
+<div style="max-width: 46rem">
+  <p>One email for each shop, filled in with its own figures: what we sent them, then the badge. Add the shop's address, press <strong>Open in your mail app</strong>, send it, then press <strong>Mark as sent</strong>. A shop you have marked as sent drops off this list. The shops sending the most shoppers are first.</p>
+  <p style="color: var(--body-quiet-color)">
+    {{ rows|length }} shop{{ rows|length|pluralize }} here{% if no_address %}, {{ no_address }} with no address saved yet{% endif %}.
+    {% if show_sent %}<a href="{% url 'admin:inbox_shopcontact_update_emails' %}">Hide the ones already sent</a>{% else %}<a href="{% url 'admin:inbox_shopcontact_update_emails' %}?show=all">Show the ones already sent too</a>{% endif %}.
+    The wording is in Site wording, under Shop outreach emails.
+  </p>
+  {% for row in rows %}
+  <form method="post" id="shop-{{ row.contact.pk }}" style="margin: 0 0 28px; padding-top: 14px; border-top: 1px solid var(--hairline-color)">
+    {% csrf_token %}
+    <input type="hidden" name="contact" value="{{ row.contact.pk }}">
+    <h2 style="margin: 0 0 4px">{{ row.contact.retailer.name }}</h2>
+    <p style="margin: 0 0 8px; color: var(--body-quiet-color)">
+      {{ row.contact.visitors_quarter }} shopper{{ row.contact.visitors_quarter|pluralize }} in 3 months, {{ row.contact.listed }} listed.
+      {{ row.contact.get_status_display }}{% if row.sent_on %}, update sent {{ row.sent_on|date:"j M Y" }}{% endif %}.
+      <a href="{{ row.contact.retailer.website }}" target="_blank" rel="noopener noreferrer">Their website</a>, to find the address.
+    </p>
+    <p style="margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+      <label for="email-{{ row.contact.pk }}"><strong>Their address</strong></label>
+      <input type="email" id="email-{{ row.contact.pk }}" name="email" value="{{ row.contact.email }}" autocomplete="off" style="flex: 1 1 14rem; min-width: 0">
+      <button type="submit" class="button" name="_save" value="1" style="padding: 10px 15px">Save address</button>
+    </p>
+    <p style="margin: 0 0 6px"><strong>Subject:</strong> {{ row.subject }}</p>
+    <textarea readonly rows="{{ row.lines }}" style="width: 100%; box-sizing: border-box; height: auto; max-height: none; field-sizing: content">{{ row.body }}</textarea>
+    <p style="margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+      <a class="button" style="padding: 10px 15px" href="{{ row.mailto }}">Open in your mail app</a>
+      <button type="submit" class="button" style="padding: 10px 15px" name="_sent" value="update">Mark as sent</button>
+    </p>
+  </form>
+  {% empty %}
+  <p><strong>Nobody left to email.</strong> Every shop with something listed has been sent this email, or asked not to be emailed.</p>
+  {% endfor %}
+</div>
+{% endblock %}

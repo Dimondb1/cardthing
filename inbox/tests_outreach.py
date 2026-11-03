@@ -99,7 +99,9 @@ class DraftTests(OutreachTestCase):
                 subject, body = outreach.draft(self.shop, kind, found)
                 self.assertNotIn("{", subject + body)
                 self.assertTrue(body.startswith("Hello Harbour Games team,"))
-                self.assertTrue(body.endswith(f"Thanks,\nRipRaptor\nhttps://ripraptor.example\n\n{optout}"))
+                # The update email is signed with the owner's name; the others with the shared sign-off.
+                signoff = "Thanks,\nBen Dimond" if kind == "update" else "Thanks,\nRipRaptor\nhttps://ripraptor.example"
+                self.assertTrue(body.endswith(f"{signoff}\n\n{optout}"))
                 self.assertIn("We list 2 of your products", body)
         subject, body = outreach.draft(self.shop, "affiliate", found)
         self.assertEqual(subject, "RipRaptor sent 3 shoppers to Harbour Games in the last 3 months")
@@ -121,6 +123,58 @@ class DraftTests(OutreachTestCase):
         self.assertIn("In the last 3 months we sent you 1 shopper.", outreach.draft(self.shop, "badge", outreach.figures(self.shop))[1])
         self.click(self.booster, 2)
         self.assertIn("In the last 3 months we sent you 2 shoppers.", outreach.draft(self.shop, "badge", outreach.figures(self.shop))[1])
+
+    def test_the_update_email_is_the_owners_wording_and_never_tells_a_shop_nought(self):
+        for days in (1, 2):
+            self.click(self.etb, days)
+        self.click(self.booster, 50)
+        subject, body = outreach.draft(self.shop, "update", outreach.figures(self.shop))
+        self.assertEqual(subject, "A RipRaptor update and badge for Harbour Games")
+        self.assertEqual(body, (
+            "Hello Harbour Games team,\n\n"
+            "A short update from RipRaptor (https://ripraptor.example). In the last 30 days we sent 2 shoppers to your "
+            f"shop, and 3 in the last 3 months. The products they clicked most were {self.etb.name} and "
+            f"{self.booster.name}.\n\n"
+            "We list 2 of your products, 1 of them in stock when we last checked. If a price, stock level or link of "
+            "yours looks wrong on RipRaptor, reply and we will put it right.\n\n"
+            "We have made a small badge that says your shop is listed on RipRaptor, in a light and a dark version. If "
+            "you would like it on your site, the code to paste is here: https://ripraptor.example/list-your-shop/#badge"
+            "\n\nI would really appreciate the support if you can \U0001F60A\n\nThanks,\nBen Dimond\n\n"
+            "If you would rather we did not email you again, reply STOP and we will not."))
+        # Nobody clicked: no shoppers sentence at all, and no line ends in a space.
+        _subject, body = outreach.draft(self.other, "update", outreach.figures(self.other))
+        self.assertIn("A short update from RipRaptor (https://ripraptor.example).\n\nWe list 1 of your products", body)
+        self.assertNotIn("sent", body)
+        self.assertNotIn("clicked", body)
+        self.assertNotIn(" \n", body)
+
+    def test_the_update_says_what_is_true_when_the_shoppers_came_before_or_all_within_30_days(self):
+        def line(**counts):
+            found = outreach.Figures(**counts, top_products=("A",) if counts.get("visitors_quarter") else ())
+            return outreach.draft(self.shop, "update", found)[1].split("\n\n")[1]
+
+        short = "A short update from RipRaptor (https://ripraptor.example). "
+        self.assertEqual(line(visitors_month=1, visitors_quarter=1),
+                         short + "In the last 30 days we sent 1 shopper to your shop. The products they clicked most were A.")
+        self.assertEqual(line(visitors_month=0, visitors_quarter=7),
+                         short + "In the last 3 months we sent you 7 shoppers. The products they clicked most were A.")
+        self.assertEqual(line(visitors_month=1200, visitors_quarter=1500),
+                         short + "In the last 30 days we sent 1,200 shoppers to your shop, and 1,500 in the last 3 "
+                                 "months. The products they clicked most were A.")
+
+    def test_figures_for_many_shops_are_the_same_as_for_each_in_three_queries(self):
+        for days in (1, 2, 3):
+            self.click(self.etb, days)
+        self.click(self.booster, 10)
+        self.click(self.booster, 45)
+        self.click(self.tin, 60)
+        self.click(self.tin, 200)
+        self.click(self.spc, 1, suspect=True)
+        self.click(self.etb, 1, retailer=self.other)
+        with self.assertNumQueries(3):
+            many = outreach.bulk_figures([self.shop.pk, self.other.pk, self.ebay.pk])
+        for retailer in (self.shop, self.other, self.ebay):
+            self.assertEqual(many[retailer.pk], outreach.figures(retailer), retailer.name)
 
     def test_the_owners_wording_is_used(self):
         for key, kind, content in (("outreach.listing.subject", "text", "Feed for {shop}"),
@@ -311,3 +365,138 @@ class AdminTests(OutreachTestCase):
                                                           "notes": "", "_sent": "report"})
         send.assert_not_called()
         self.assertEqual(OutreachEmail.objects.count(), 1)
+
+
+@override_settings(RIPRAPTOR_SITE_URL="https://ripraptor.example")
+class UpdateEmailsPageTests(OutreachTestCase):
+    """The Update and badge emails page: one email per shop worth writing to, to send from the owner's own mailbox."""
+
+    def setUp(self):
+        self.owner = get_user_model().objects.create_superuser("owner", "owner@example.com", "pw")
+        self.client.force_login(self.owner)
+        self.url = reverse("admin:inbox_shopcontact_update_emails")
+
+    def contact(self, shop):
+        return ShopContact.objects.get(retailer=shop)
+
+    def test_the_shop_list_links_to_it(self):
+        response = self.client.get(reverse("admin:inbox_shopcontact_changelist"))
+        self.assertContains(response, f'<a href="{self.url}">Update and badge emails</a>')
+
+    def test_every_shop_with_something_listed_has_its_email_the_biggest_senders_first(self):
+        for days in (1, 2):
+            self.click(self.etb, days, retailer=self.other)
+        self.click(self.etb, 1)
+        response = self.client.get(self.url)
+        html = response.content.decode()
+        self.assertContains(response, "2 shops here, 2 with no address saved yet.")
+        self.assertContains(response, "A RipRaptor update and badge for Quay Cards")
+        self.assertContains(response, "Hello Harbour Games team,")
+        self.assertContains(response, "https://ripraptor.example/list-your-shop/#badge")
+        self.assertNotContains(response, "eBay")
+        self.assertLess(html.index("Quay Cards</h2>"), html.index("Harbour Games</h2>"))
+        # Each shop has its own form: Save address is the first button so Enter saves rather than marks as sent.
+        for shop in (self.shop, self.other):
+            form = html[html.index(f'id="shop-{self.contact(shop).pk}"'):]
+            form = form[:form.index("</form>")]
+            self.assertLess(form.index('name="_save"'), form.index('name="_sent"'))
+            self.assertIn("csrfmiddlewaretoken", form)
+            self.assertIn('href="mailto:?subject=A%20RipRaptor%20update%20and%20badge%20for%20', form)
+
+    def test_shops_with_nothing_listed_or_that_asked_not_to_be_emailed_are_left_out(self):
+        nothing = make_retailer("Empty Cards")
+        gone = make_retailer("Closed Cards", is_active=False)
+        make_listing(self.etb, gone)
+        outreach.ensure_contacts()
+        ShopContact.objects.filter(retailer=self.other).update(status=ShopContact.Status.DO_NOT_EMAIL)
+        response = self.client.get(self.url)
+        self.assertContains(response, "1 shop here")
+        self.assertContains(response, "Harbour Games</h2>")
+        for name in (nothing.name, gone.name, "Quay Cards"):
+            self.assertNotContains(response, f"{name}</h2>")
+
+    def test_a_saved_address_fills_in_the_mail_link(self):
+        outreach.ensure_contacts()
+        contact = self.contact(self.shop)
+        response = self.client.post(self.url, {"contact": contact.pk, "email": " hello@harbour.example ", "_save": "1"},
+                                    follow=True)
+        self.assertRedirects(response, f"{self.url}#shop-{contact.pk}", fetch_redirect_response=False)
+        self.assertEqual(self.contact(self.shop).email, "hello@harbour.example")
+        self.assertFalse(OutreachEmail.objects.exists())
+        self.assertContains(response, "Saved the address for Harbour Games.")
+        self.assertContains(response, 'href="mailto:hello@harbour.example?subject=A%20RipRaptor%20update')
+        self.assertContains(response, "1 with no address saved yet")
+
+    def test_a_bad_address_is_refused_and_kept_out(self):
+        outreach.ensure_contacts()
+        contact = self.contact(self.shop)
+        response = self.client.post(self.url, {"contact": contact.pk, "email": "not an address", "_sent": "update"},
+                                    follow=True)
+        self.assertContains(response, "that email address does not look right, so nothing was saved.")
+        self.assertEqual(self.contact(self.shop).email, "")
+        self.assertFalse(OutreachEmail.objects.exists())
+
+    def test_mark_as_sent_records_it_and_the_shop_drops_off_the_list(self):
+        outreach.ensure_contacts()
+        contact = self.contact(self.shop)
+        response = self.client.post(self.url, {"contact": contact.pk, "email": "hello@harbour.example",
+                                               "_sent": "update"}, follow=True)
+        self.assertRedirects(response, self.url)
+        self.assertContains(response, "Marked as sent to Harbour Games. Follow up on")
+        contact = self.contact(self.shop)
+        self.assertEqual((contact.email, contact.status, contact.follow_up_on),
+                         ("hello@harbour.example", ShopContact.Status.EMAILED, timezone.localdate() + timedelta(days=14)))
+        sent = OutreachEmail.objects.get()
+        self.assertEqual((sent.kind, sent.subject), ("update", "A RipRaptor update and badge for Harbour Games"))
+        self.assertNotContains(response, "Harbour Games</h2>")
+        self.assertContains(response, "Quay Cards</h2>")
+        # Show the ones already sent too, with when.
+        shown = self.client.get(self.url, {"show": "all"})
+        self.assertContains(shown, "Harbour Games</h2>")
+        self.assertContains(shown, f"update sent {timezone.localdate():%-d %b %Y}")
+        self.assertContains(shown, "Hide the ones already sent")
+        # Every shop done: it says so.
+        self.client.post(self.url, {"contact": self.contact(self.other).pk, "email": "", "_sent": "update"})
+        self.assertContains(self.client.get(self.url), "Nobody left to email.")
+
+    def test_a_shop_that_asked_not_to_be_emailed_records_nothing_even_if_posted(self):
+        outreach.ensure_contacts()
+        ShopContact.objects.filter(retailer=self.shop).update(status=ShopContact.Status.DO_NOT_EMAIL)
+        response = self.client.post(self.url, {"contact": self.contact(self.shop).pk, "email": "", "_sent": "update"},
+                                    follow=True)
+        self.assertContains(response, "asked not to be emailed, so nothing was recorded.")
+        self.assertFalse(OutreachEmail.objects.exists())
+
+    def test_an_unknown_shop_is_a_404_and_only_staff_get_in(self):
+        self.assertEqual(self.client.post(self.url, {"contact": "999999", "_save": "1"}).status_code, 404)
+        self.assertEqual(self.client.post(self.url, {"contact": "x", "_save": "1"}).status_code, 404)
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+        self.client.force_login(get_user_model().objects.create_user("clerk", password="pw", is_staff=True))
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_the_page_takes_the_same_queries_for_more_shops(self):
+        def count():
+            from django.db import connection
+            from django.test.utils import CaptureQueriesContext
+
+            with CaptureQueriesContext(connection) as queries:
+                self.assertEqual(self.client.get(self.url).status_code, 200)
+            return len(queries)
+
+        self.client.get(self.url)   # makes the rows
+        before = count()
+        for n in range(8):
+            shop = make_retailer(f"Extra Cards {n}")
+            make_listing(self.etb, shop)
+            self.click(self.etb, 1, retailer=shop)
+        self.client.get(self.url)
+        self.assertEqual(count(), before)
+
+    def test_nothing_is_sent_from_the_site(self):
+        from django.core import mail
+
+        outreach.ensure_contacts()
+        self.client.post(self.url, {"contact": self.contact(self.shop).pk, "email": "hello@harbour.example",
+                                    "_sent": "update"})
+        self.assertEqual(mail.outbox, [])

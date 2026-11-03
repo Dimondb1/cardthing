@@ -4345,6 +4345,42 @@ ENTRIES = [
           "The email offering a shop the badge. {badge_url} is the badge part of the List your shop page, and "
           "{sent} the line saying how many shoppers we sent them, left out when we sent none. The sign-off and the "
           "line about not emailing again are added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent")),
+    Entry("outreach.update.subject", T, "Update and badge: subject",
+          "A RipRaptor update and badge for {shop}",
+          "Subject of the email that tells a shop what RipRaptor sent them and offers the badge. The Update and badge "
+          "emails page in Shop outreach writes one to every shop.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent", "shopper_update", "top_line")),
+    Entry("outreach.update.body", P, "Update and badge: email",
+          "Hello {shop} team,\n\n"
+          "A short update from RipRaptor ({site_url}). {shopper_update} {top_line}\n\n"
+          "We list {listed} of your products, {in_stock} of them in stock when we last checked. If a price, stock "
+          "level or link of yours looks wrong on RipRaptor, reply and we will put it right.\n\n"
+          "We have made a small badge that says your shop is listed on RipRaptor, in a light and a dark version. If "
+          "you would like it on your site, the code to paste is here: {badge_url}\n\n"
+          "I would really appreciate the support if you can \U0001F60A",
+          "The email that tells a shop what RipRaptor sent them and offers the badge. {shopper_update} is the "
+          "sentence on shoppers sent and {top_line} the one naming the products clicked most; both are left out "
+          "when we sent the shop none, so a new shop is not told nought. The sign-off below and the line about not "
+          "emailing again are added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent", "shopper_update", "top_line")),
+    Entry("outreach.update.signoff", P, "Update and badge: sign-off",
+          "Thanks,\nBen Dimond",
+          "Added to the end of the update and badge email, in place of the shared sign-off, before the line about not "
+          "emailing again.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent", "shopper_update", "top_line")),
+    Entry("outreach.update.month", T, "Update: shoppers in 30 days",
+          "In the last 30 days we sent {month} to your shop.",
+          "In the update email when every shopper we sent the shop came in the last 30 days. {month} is, for "
+          "example, 254 shoppers.", placeholders=("month",)),
+    Entry("outreach.update.month_quarter", T, "Update: shoppers in 30 days and 3 months",
+          "In the last 30 days we sent {month} to your shop, and {quarter} in the last 3 months.",
+          "In the update email when some of the shoppers we sent the shop came before the last 30 days. {month} is, "
+          "for example, 254 shoppers and {quarter} a number.", placeholders=("month", "quarter")),
+    Entry("outreach.update.top", T, "Update: products clicked most",
+          "The products they clicked most were {top_products}.",
+          "In the update email, after the shoppers sent. Left out when nobody clicked through in 3 months.",
+          placeholders=("top_products",)),
+    Entry("outreach.shoppers.one", T, "Shoppers: one", "{count} shopper",
+          "A number of shoppers in the update email when it is one.", placeholders=("count",)),
+    Entry("outreach.shoppers.other", T, "Shoppers: more than one", "{count} shoppers",
+          "A number of shoppers in the update email when it is not one.", placeholders=("count",)),
     Entry("outreach.sent.one", T, "Shoppers sent: one",
           "In the last 3 months we sent you {count} shopper.",
           "In the badge offer when one person clicked through to the shop in 3 months.", placeholders=("count",)),

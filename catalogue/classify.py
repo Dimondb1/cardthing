@@ -210,8 +210,8 @@ KIND_FIRST = re.compile(r"^(Booster Box|Booster Pack|Trial Deck\+?|Start Deck|St
 # A bracketed code goes ("(OP-09)"), but not a Simplified Chinese one: "Chasing Glory Together Slim Booster Box
 # (csv10)" is the box other shops call "Pursue Glory Together csv10 C", and only the code says so.
 NOISE = re.compile(
-    r"\s*\((?:en|eng|english|uk|new|sealed|in stock|pre-?order|\d+ (?:sealed )?(?:booster )?packs?|\d+ boosters?|\d+ ct|(?!c(?:sv|sm|bb))[a-z]{2,3}-?\d{2,3}[a-z]?)\)"
-    r"|\s*\[[^\]]*\]|\s*[-–:|]\s*(?:english|en|sealed|new|pre-?order|in stock)\s*$|\s*[-–]\s*$|^\s*[-–:]\s*",
+    r"\s*\((?:en|eng|english|uk|new|sealed|in stock|pre[\s-]?orders?|\d+ (?:sealed )?(?:booster )?packs?|\d+ boosters?|\d+ ct|(?!c(?:sv|sm|bb))[a-z]{2,3}-?\d{2,3}[a-z]?)\)"
+    r"|\s*\[[^\]]*\]|\s*[-–:|]\s*(?:english|en|sealed|new|pre[\s-]?orders?|in stock)\s*$|\s*[-–]\s*$|^\s*[-–:]\s*",
     re.I,
 )
 

@@ -316,6 +316,68 @@ class GemPackTests(TestCase):
         self.assertEqual(Listing.objects.filter(product__is_active=True).values("product").distinct().count(), 1)
 
 
+class GemPackSevenTests(TestCase):
+    """Four pages for one box (the owner, 3 Nov 2026): "Gem Pack Vol 7 Booster Box CBBC7", "Gem Vol 7 Sealed Simplified
+    Chinese Booster Box (CBB7 C)", "Gem Pack Vol.7 Booster Box Psyduck" and "Gem Pack Vol.7 Booster Box (Pre Order)".
+    The codes known stopped at CBB6, one shop put the C first, one named the Pokémon on the cover and one said it was a
+    pre-order in the name."""
+
+    NAMES = {"Gem Pack Vol 7 Booster Box CBBC7": "Winstanley", "Gem Vol 7 Sealed Simplified Chinese Booster Box (CBB7 C)":
+             "Best Booster Boxes", "Gem Pack Vol.7 Booster Box Psyduck": "Mintside Cards",
+             "Gem Pack Vol.7 Booster Box (Pre Order)": "Hoke"}
+
+    def test_every_shops_name_is_one_key_in_simplified_chinese(self):
+        self.assertEqual({match_key(name, "pokemon") for name in self.NAMES}, {"7 booster gem #box"})
+        for name in self.NAMES:
+            self.assertEqual(language_of(name, "pokemon"), "zh-hans", name)
+        self.assertEqual(match_key("Pokemon Gem Pack Vol.7 CBB7C Booster Box (Simplified Chinese)", "pokemon"),
+                         "7 booster gem #box")
+
+    def test_other_volumes_kinds_and_different_things_stay_apart(self):
+        box = match_key("Gem Pack Vol.7 Booster Box Psyduck", "pokemon")
+        for other in ("Gem Pack Vol 6 Booster Box CBB6 C", "Gem Pack Vol 8 Booster Box CBB8 C",
+                      "Gem Pack Vol 7 Booster Pack", "Gem Pack Vol 7 Booster Box Case", "Gem Pack Vol 7 Empty Booster Box",
+                      "Gem Pack Vol 7 CBB6 C Booster Box"):   # a code that is not the volume's is kept
+            self.assertNotEqual(box, match_key(other, "pokemon"), other)
+        self.assertEqual(set_codes("Gem Pack Vol 7 CBB6 C Booster Box", "pokemon"), {"cbb6"})
+        # Only a Gem Pack's name drops its cover: a Pokémon names a collection or a tin.
+        self.assertNotEqual(match_key("Pikachu ex Box", "pokemon"), match_key("Charizard ex Box", "pokemon"))
+
+    def test_the_hourly_merge_joins_them(self):
+        game = make_game()
+        for name, shop in self.NAMES.items():
+            make_listing(Product.objects.create(game=game, name=name, product_type="booster_box"), make_retailer(shop))
+        call_command("set_languages", stdout=StringIO())
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        self.assertIn("3 products merged", out.getvalue())
+        self.assertEqual(Product.objects.filter(is_active=True).count(), 1)
+        self.assertEqual(Listing.objects.filter(product__is_active=True).values("product").distinct().count(), 1)
+
+
+class PreOrderNoteTests(TestCase):
+    """A shop's "(Pre Order)" in a name is a note, like "(Releases 27.03.26)": never part of which product it is."""
+
+    def test_the_note_is_not_part_of_the_key_however_it_is_written(self):
+        plain = match_key("Surging Sparks Booster Box", "pokemon")
+        for name in ("Surging Sparks Booster Box (Pre Order)", "Surging Sparks Booster Box (Pre-Order)",
+                     "Surging Sparks Booster Box - Preorder", "[PRE-ORDER] Surging Sparks Booster Box",
+                     "Surging Sparks Booster Box Pre-Orders"):
+            self.assertEqual(match_key(name, "pokemon"), plain, name)
+        self.assertNotEqual(match_key("Surging Sparks Prerelease Kit", "pokemon"),
+                            match_key("Surging Sparks Kit", "pokemon"))
+
+    def test_a_new_page_and_an_existing_name_lose_it_but_the_listing_is_still_a_pre_order(self):
+        from .classify import clean_name, tidy_name
+        from .importers import says_preorder
+
+        self.assertEqual(clean_name("Gem Pack Vol.7 Booster Box (Pre Order)", "pokemon"), "Gem Pack Vol.7 Booster Box")
+        self.assertEqual(tidy_name("Gem Pack Vol.7 Booster Box (Pre Order)"), "Gem Pack Vol.7 Booster Box")
+        self.assertEqual(clean_name("Ascended Heroes Elite Trainer Box (Pre-Orders)", "pokemon"),
+                         "Ascended Heroes Elite Trainer Box")
+        self.assertTrue(says_preorder({"title": "Gem Pack Vol.7 Booster Box (Pre Order)"}))
+
+
 class LegendaryDuelistsTests(TestCase):
     """"Legendary Duelists: Duels From The Deep Booster Pack" (£4.34 at Zatu) and "Legendary Duelists 9 Duels From The
     Deep Booster Pack" (out of stock) sat on two pages, and so did the boxes (3 Nov 2026). The 9 is the set's code,

@@ -158,7 +158,7 @@ OTHER_JAPANESE_CODE = re.compile(
 BARE_CODE_LETTER = re.compile(rf"{_B}(?:sv(?:[3-9]|10)|m[2-6]|s(?:[2-4]|[89]|1[12]))(?:-(?P<l>[ft])|(?P<g>f)){B_}")
 # Simplified Chinese, which never reuses the Japanese codes.
 SIMPLIFIED_CODE = re.compile(
-    rf"{_B}(?:csv(?:10|[1-9])(?:\.5)?|csm[12](?:\.5|[abc])|cs[1-6](?:\.5|[ab])|cbb[1-6]|csvl[12]|csvm2a|csvh5|"
+    rf"{_B}(?:csv(?:10|[1-9])(?:\.5)?|csm[12](?:\.5|[abc])|cs[1-6](?:\.5|[ab])|cbbc?\d{1,2}|csvl[12]|csvm2a|csvh5|"
     rf"cs[eqp]1)(?:\s?c)?{B_}|{_B}30th\s?c{B_}|{_B}151c{B_}|\bcollect 151\b|\bgem(?: pack)?\s*vol|\bgem pack\b|"
     r"\bgem(?: series)? \d\b")
 # Indonesian and Thai combined sets, and the codes Asian editions share.

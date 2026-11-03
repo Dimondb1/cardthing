@@ -47,7 +47,10 @@ CHOSEN = re.compile(r"^(?P<before>[^()]*/[^()]*?)\s*\((?P<chosen>[^()/]+)\)\s*$"
 DEFAULT_VARIANT = re.compile(r"\s*[\[(]\s*(?:default(?: title)?|normal)\s*[\])]\s*$|\s*[-–:|]\s*default title\s*$", re.I)
 # Notes a shop adds to a name that never say which product it is: how many each customer may buy ("*1pp limit*",
 # "WEBSTORE 1 PER CUSTOMER", "Limit 2"), and when it comes out or came back ("(Releases 27.03.26)", "February
-# Restock", "Final Drop", "Wave 2"). Read on the name as the shop wrote it, before any other rule.
+# Restock", "Final Drop", "Wave 2"), and that it is a pre-order ("(Pre Order)", "Pre-Order", "Preorder"): "Gem Pack
+# Vol.7 Booster Box (Pre Order)" became a page of its own (the owner, 3 Nov 2026). Whether a listing is a pre-order is
+# read from the shop's own title and tags (importers.PREORDER_WORDS), never from this. Read on the name as the shop
+# wrote it, before any other rule.
 SHOP_NOTES = re.compile(
     r"\b(?:webstore\s+)?(?:(?:strictly|max(?:imum)?|limit(?:ed)?(?:\s+to)?)\s+)?\d+\s*"
     r"(?:pp|per\s*(?:person|customer|household|order|address|account))\b(?:\s+limit(?:ed)?\b)?"
@@ -55,7 +58,8 @@ SHOP_NOTES = re.compile(
     r"|(?:\b(?:releases?|released|release\s+date|out|available|dispatch(?:es|ed|ing)?|ships?|shipping)"
     r"(?:\s+(?:on|from))?:?\s+)?\b\d{1,2}[./-]\d{1,2}[./-](?:\d{4}|\d{2})\b"
     r"|\b(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+)?re-?stock(?:ed)?\b"
-    r"|\bfinal\s+drop\b|\bwave\s*\d+\b",
+    r"|\bfinal\s+drop\b|\bwave\s*\d+\b"
+    r"|\bpre[\s-]?orders?\b",
     re.I,
 )
 # That one is sold ("(1 Box)"), and what a booster pack holds, in brackets ("Booster Packs (12 Cards)"). Only a
@@ -194,12 +198,18 @@ POKEMON_NAMED_KIND = re.compile(r"\bcollection\b|\btrove\b|\btins?\b|\bdecks?\b|
 # shops' titles for one box share a key. The code stays, because one name can cover two boxes that only
 # the code tells apart ("Storming Emergence csm1b" and "csm1c"); only the letter C goes.
 CHINESE_CODE = re.compile(
-    r"\b(csv(?:10|[1-9])(?: 5)?|csm[12](?: 5|[abc])|cs[1-6](?: 5|[ab])|cbb[1-6]|csvl[12]|csvm2a|csvh5|cs[eqp]1)"
+    r"\b(csv(?:10|[1-9])(?: 5)?|csm[12](?: 5|[abc])|cs[1-6](?: 5|[ab])|cbb\d{1,2}|csvl[12]|csvm2a|csvh5|cs[eqp]1)"
     r"(?: ?c)?\b")
+# A Gem Pack's code with its language letter put first, a shop's slip: "Gem Pack Vol 7 Booster Box CBBC7" is CBB7 C.
+GEM_CODE_SLIP = re.compile(r"\bcbbc(\d{1,2})\b")
+# A Gem Pack box or pack is named by its volume, and some shops add the Pokémon on its cover: "Gem Pack Vol.7 Booster
+# Box Psyduck" is the box others call "Gem Pack Vol 7 Booster Box" (the owner, 3 Nov 2026). Only words that say what
+# kind of thing it is, or that it is a different thing (a case, empty, damaged), are kept.
+GEM_NAME = re.compile(r"\bgem (?:pack )?(?:vol(?:ume)? )?\d{1,2}\b")
 # "151C" and "30th C" are codes many products share, so only the number is kept: it is in the name already.
 SHARED_CHINESE_CODE = re.compile(r"\b(30th|151) ?c\b")
 CHINESE_CODE_WORD = re.compile(
-    r"^(?:csv(?:10|[1-9])(?:\.5)?|csm[12](?:\.5|[abc])|cs[1-6](?:\.5|[ab])|cbb[1-6]|csvl[12]|csvm2a|csvh5|cs[eqp]1)$")
+    r"^(?:csv(?:10|[1-9])(?:\.5)?|csm[12](?:\.5|[abc])|cs[1-6](?:\.5|[ab])|cbb\d{1,2}|csvl[12]|csvm2a|csvh5|cs[eqp]1)$")
 BOX_PACKS = re.compile(r"\b((?:booster )?display(?: box)?|booster box|elite trainer box) +(\d{1,2}) ?x (?:sealed )?(?:booster )?packs?\b")
 # A word of a key that is a set or series code, as key_text spells them.
 SET_CODE = re.compile(r"^(?:(?:sv|swsh|sm|xy|bw|dp|hgss)(?:\d{1,2}(?:\.5)?)?|(?:sv|swsh|sm|xy)\d{1,3}[a-z]{1,2}|"
@@ -318,6 +328,7 @@ def key_text(text, game=""):
     expanded = SET_CODES.sub(lambda m: m.group(0) if game == POKEMON and m.group(1) == "ex" else _set_code(m), expanded)
     if game == POKEMON:
         expanded = POKEMON_CODES.sub(_pokemon_code, _spaced(expanded))
+    expanded = GEM_CODE_SLIP.sub(r"cbb\1", expanded)
     expanded = CHINESE_CODE.sub(lambda m: m.group(1).replace(" ", "."), _spaced(expanded))
     expanded = SHARED_CHINESE_CODE.sub(r"\1", expanded)
     # "Booster Box (36x Packs)" says what is inside the box, the same rule classify uses: only the count
@@ -328,7 +339,7 @@ def key_text(text, game=""):
     expanded = BOX_COUNT.sub(lambda m: m.group(1) if int(m.group(2)) in FULL_BOX else m.group(0), expanded)
     if game == POKEMON:
         # "Gem Pack Vol. 4 CBB4 C": the code says the volume again, and other shops leave it out.
-        gem = re.search(r"\bcbb([1-6])\b", expanded)
+        gem = re.search(r"\bcbb(\d{1,2})\b", expanded)
         if gem and re.search(r"\bgem\b", expanded) and re.search(rf"(?<![a-z.]){gem.group(1)}\b", expanded):
             expanded = expanded.replace(f" cbb{gem.group(1)} ", " ")
         if POKEMON_BOOSTER_KIND.search(expanded) and not POKEMON_NAMED_KIND.search(expanded):
@@ -399,6 +410,10 @@ def singular(word):
     return word[:-1]
 
 
+# What a Gem Pack's name keeps (GEM_NAME): the kind of thing it is, and any word saying it is a different thing.
+GEM_KEEP = GENERIC_WORDS | {"gem"} | {singular(w) for w in DIFFERENT if " " not in w}
+
+
 def is_code(word, game=""):
     """Whether a word of a key is a set or series code ("op9", "sv8.5", "prb1", Pokémon's "m2a")."""
     return bool(SET_CODE.match(word) or (game == POKEMON and POKEMON_SET_CODE.match(word)))
@@ -406,8 +421,11 @@ def is_code(word, game=""):
 
 @lru_cache(maxsize=65536)
 def _key_words(text, game=""):
-    words = {singular(w) for w in key_text(text, game).split()}
+    expanded = key_text(text, game)
+    words = {singular(w) for w in expanded.split()}
     words = {w for w in words if w not in LOOSE}
+    if game == POKEMON and GEM_NAME.search(expanded) and re.search(r"\bbooster\b|\bdisplay\b", expanded):
+        words = {w for w in words if w in GEM_KEEP or w.isdigit() or is_code(w, game) or chinese_code(w)}
     codes = {w for w in words if is_code(w, game)}
     # The code goes when something else names the product, and stays when nothing does: "OP-09 Booster Box"
     # and "OP09 Booster Box" share a key, which "OP-10 Booster Box" does not.

@@ -1,10 +1,9 @@
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 
 from twostep import views as twostep_views
 from twostep.forms import LoginForm
+from web import media as web_media
 from web import views as web_views
 
 admin.site.site_header = "RipRaptor admin"
@@ -25,8 +24,7 @@ urlpatterns = [
     path("admin/two-step/", twostep_views.setup, name="twostep_setup"),
     path("admin/manifest.webmanifest", web_views.admin_manifest, name="admin_manifest"),
     path("admin/", admin.site.urls),
+    # Uploaded pictures (web/media.py): served here because Caddy hands every request to Django.
+    re_path(r"^media/(?P<path>.+)$", web_media.serve_media, name="media"),
     path("", include("web.urls")),
 ]
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

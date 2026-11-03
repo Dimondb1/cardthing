@@ -3001,6 +3001,41 @@ restocks in 90 days the line adds the two-hour window most of them landed
 in. `backfill_restocks` turns the stamps listings already carried into
 rows; the installer runs it, and it is safe to run again.
 
+## Partners
+
+Admin, **Partners** (also on Admin's home page), is where a partner's logo is
+added to the foot of the home page (the owner, 3 Nov 2026, with Zatu Games'
+logo and brand rules: "add a partners section on the website so that we can
+ask the same back"). Each has a logo, a name and a website, or pick the shop
+RipRaptor lists and its name and website fill in; Position puts them in
+order and **Show on the home page** hides one without deleting it. **Nothing
+shows until one is added**, so the page claims no relationship that was not
+chosen: only add a partner who has agreed to be shown.
+
+The logo is drawn as such rules usually ask, and Zatu Games' own do: whole
+(never cropped), at its own proportions (never stretched), in full colour
+(never faded or tinted), never under 17 mm wide and with at least 5 mm of
+clear space round it. The logo is 120px wide (31.8 mm) in a tile with 20px
+(5.3 mm) of padding, set by `--partner-logo`, `--partner-logo-min` and
+`--partner-clear` in `tokens.css`; `web/tests_partners.py` fails if they fall
+under those sizes or the styles add opacity, a filter, a crop or a stretch.
+Upload the logo exactly as the partner supplied it, at least 240 pixels wide
+and under 2 MB (Admin refuses others); do not edit it. The link is as any
+shop link on the site, `rel="sponsored nofollow noopener"`, so a partner row
+is not a link exchange search engines would discount, and asking a partner
+to show the badge in return stays a request, never a condition.
+
+The row is read from the shared cache (`web/partners.py`), so the home page
+gains no query: it is built when a partner is saved or deleted and by
+`warm_pages` every five minutes.
+
+Uploaded pictures (these logos, product and guide images) live in `media/`
+and are served at `/media/` by `web/media.py`, with a week's browser cache.
+Caddy sends every request to Django and WhiteNoise only serves the static
+files, so until 3 Nov 2026 nothing served that folder outside development
+and an image uploaded in Admin did not show. A missing file, a folder or a
+path out of the folder answers 404. Back `media/` up with the database.
+
 ## Seasonal themes
 
 Admin, **Seasonal themes** (also on Admin's home page), has one switch, **On**.

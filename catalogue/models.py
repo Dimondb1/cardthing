@@ -2447,6 +2447,67 @@ class DropSpotlight(models.Model):
         return cls.objects.select_related("product_set__game").filter(pk=1).first() or cls(pk=1)
 
 
+LOGO_MAX_BYTES = 2 * 1024 * 1024
+LOGO_MIN_WIDTH = 240   # drawn at 120px: twice that stays sharp on a phone's screen
+
+
+def validate_logo(file):
+    """A partner's logo: at most 2 MB, and wide enough to stay sharp when it is drawn at its set size."""
+    from django.core.files.images import get_image_dimensions
+
+    if file.size > LOGO_MAX_BYTES:
+        raise ValidationError("The logo is over 2 MB. Use a smaller file.")
+    width, _height = get_image_dimensions(file)
+    if width and width < LOGO_MIN_WIDTH:
+        raise ValidationError(f"The logo is {width} pixels wide. Use one at least {LOGO_MIN_WIDTH} wide so it stays sharp.")
+
+
+class Partner(models.Model):
+    """A shop or brand RipRaptor works with, shown by its logo in a row on the home page (web/partners.py). The
+    owner, 3 Nov 2026, with Zatu Games' logo and brand rules: "add a partners section on the website so that we can
+    ask the same back". Nothing shows until the owner adds one, so no relationship is claimed that they did not
+    choose to show; each logo is drawn as its owner's rules ask (whole, undistorted, in full colour, with clear space
+    round it)."""
+
+    retailer = models.ForeignKey(
+        Retailer, on_delete=models.SET_NULL, null=True, blank=True, related_name="+", verbose_name="shop",
+        help_text="Pick the shop if RipRaptor lists it: its name and website then fill in, unless you give your own below.",
+    )
+    name = models.CharField(max_length=120, blank=True, help_text="Leave empty to use the shop's name.")
+    website = models.URLField(blank=True, help_text="Where the logo links to. Leave empty to use the shop's website.")
+    logo = models.ImageField(
+        upload_to="partners/", width_field="logo_width", height_field="logo_height", validators=[validate_logo],
+        help_text="The logo exactly as the partner gave it, at least 240 pixels wide and under 2 MB. It is shown whole, "
+                  "at its own proportions, in full colour and with clear space round it, as partners' rules usually "
+                  "ask (Zatu Games': do not stretch it, fade it, cut any of it off or show it under 17 mm). Do not edit it.",
+    )
+    logo_width = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    logo_height = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    position = models.PositiveSmallIntegerField(default=0, help_text="Lowest first. Partners with the same number go in the order added.")
+    is_shown = models.BooleanField("show on the home page", default=True,
+                                   help_text="Only add a partner who has agreed to be shown.")
+
+    class Meta:
+        ordering = ["position", "pk"]
+
+    def __str__(self):
+        return self.display_name or f"Partner {self.pk}"
+
+    @property
+    def display_name(self):
+        return self.name or (self.retailer.name if self.retailer_id else "")
+
+    @property
+    def link(self):
+        return self.website or (self.retailer.website if self.retailer_id else "")
+
+    def clean(self):
+        if not self.display_name:
+            raise ValidationError({"name": "Give a name, or pick the shop."})
+        if not self.link:
+            raise ValidationError({"website": "Give the website the logo links to, or pick a shop that has one."})
+
+
 class SeasonalThemes(models.Model):
     """The one row of owner controls for the seasonal themes (web/seasons.py). With it on, each theme dresses the
     site by itself during its dates and comes off after: the raptor in the logo wears the season's hat, its

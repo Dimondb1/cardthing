@@ -39,7 +39,7 @@ from inbox.models import Conversation
 from guides import state as guide_doors
 from guides.access import not_for_editors
 
-from . import hubs, listcache, share
+from . import hubs, listcache, partners, share
 from .pagecache import cached_page
 from .charts import price_chart
 from .templatetags.ripraptor import gbp, short_date
@@ -920,6 +920,8 @@ def home(request):
             "coming_soon_shown": COMING_SOON_ON_HOME,
             "per_card": home_per_card(),
             "interest_games": interest_lexicon(games),
+            # The partners' logos, read from the cache with no query (web/partners.py): no partners, no row.
+            "partners": partners.current(),
             # Win a keyring: shown while the refer a friend offer is open, read from the cache with no query.
             "keyrings_left": referrals.keyrings_left(),
             "spotlight": drop_spotlight(request),

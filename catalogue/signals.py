@@ -9,7 +9,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from .languages import product_language
-from .models import Game, Listing, Product, ProductSet, RemovedShop, Retailer, SeasonalThemes
+from .models import Game, Listing, Partner, Product, ProductSet, RemovedShop, Retailer, SeasonalThemes
 from .search import build_search_text
 
 HOME_CACHE_KEY = "web:home-lists:v6"
@@ -109,6 +109,15 @@ def game_saved(sender, instance, raw=False, **kwargs):
 def set_saved(sender, instance, raw=False, **kwargs):
     if not raw:
         _refresh(Product.objects.filter(product_set=instance))
+
+
+@receiver([post_save, post_delete], sender=Partner)
+def partner_changed(sender, raw=False, **kwargs):
+    # The home page reads the partners from the cache (web.partners): put the change there at once.
+    if not raw:
+        from web import partners
+
+        partners.remember()
 
 
 @receiver(post_save, sender=SeasonalThemes)

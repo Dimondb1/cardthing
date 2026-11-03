@@ -199,4 +199,17 @@
 </section>
 {% endif %}
 
+{% if partners %}
+{# The partners the owner added in Admin (web/partners.py), by their logos. Each logo is shown whole, at its own proportions, in full colour and with clear space round it, as a partner's brand rules ask; the link is as any shop link, sponsored and not followed. No partners, no row. #}
+<section class="home-section partners" aria-labelledby="partners-title">
+  <div class="section-head"><h2 id="partners-title" class="section-head__title">{% copy "home.partners.title" %}</h2></div>
+  <p class="section-head__note">{% copy "home.partners.note" %}</p>
+  <ul class="partners__list">
+    {% for partner in partners %}
+    <li><a class="partners__link" href="{{ partner.url }}" target="_blank" rel="sponsored nofollow noopener"><img class="partners__logo" src="{{ partner.logo }}" alt="{{ partner.name }}" {% if partner.width and partner.height %}width="{{ partner.width }}" height="{{ partner.height }}" {% endif %}loading="lazy" decoding="async"><span class="visually-hidden"> (opens in a new tab)</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% endblock %}

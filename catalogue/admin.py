@@ -10,7 +10,7 @@ from django.utils.html import format_html
 
 from . import pricing, sanity
 from .models import (
-    AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, DropSpotlight, KeyringClaim, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
+    AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, DropSpotlight, KeyringClaim, Partner, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
     RemovedProduct, RemovedShop, Restock, Retailer, SeasonalThemes, ShopProduct, StockAlert, TypeBand,
 )
 
@@ -712,6 +712,29 @@ class DropSpotlightAdmin(admin.ModelAdmin):
         tail = f" Restock emails run until {until:%-d %b}." if until else ""
         return (f"{obj.product_set.name}, {when}, {shown}. Confirmed reminders: {counts['all']}, of them with every "
                 f"alert: {counts['every']}.{tail}")
+
+
+@admin.register(Partner)
+class PartnerAdmin(admin.ModelAdmin):
+    """The partners shown by their logos on the home page (web/partners.py). Nothing shows until one is added."""
+
+    list_display = ("display_name", "retailer", "position", "is_shown")
+    list_editable = ("position", "is_shown")
+    autocomplete_fields = ("retailer",)
+    fields = ("retailer", "name", "website", "logo", "preview", "position", "is_shown")
+    readonly_fields = ("preview",)
+
+    @admin.display(description="Name")
+    def display_name(self, obj):
+        return obj.display_name or f"Partner {obj.pk}"
+
+    @admin.display(description="How it looks")
+    def preview(self, obj):
+        if not obj.pk or not obj.logo:
+            return "Save to see the logo as visitors do."
+        return format_html('<img src="{}" alt="" width="{}" height="{}" style="width:120px;height:auto;padding:20px;'
+                           'border:1px solid var(--hairline-color);background:#fff">',
+                           obj.logo.url, obj.logo_width or 120, obj.logo_height or 120)
 
 
 @admin.register(SeasonalThemes)

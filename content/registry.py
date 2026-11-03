@@ -1959,6 +1959,11 @@ ENTRIES = [
           "The RipRaptor keyring held in a hand: the ripraptor logo and raptor head in orange on a black base",
           "Read out by screen readers in place of the keyring photo, on the home page's Win a keyring section and "
           "the refer a friend pages."),
+    Entry("home.partners.title", H, "Partners heading", "Our partners",
+          "Heading above the partners' logos at the foot of the home page. The row only shows once a partner is added in "
+          "Partners."),
+    Entry("home.partners.note", T, "Partners note", "Shops and brands we work with.",
+          "Under the Our partners heading on the home page."),
     Entry("home.spotlight.hide", B, "Drop spotlight hide button", "Hide",
           "At the top of the drop spotlight: folds it to a slim bar, remembered on this device."),
     Entry("home.spotlight.show", B, "Drop spotlight show button", "Show drop",

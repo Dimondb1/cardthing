@@ -244,6 +244,9 @@
   --product-media-phone-long: clamp(7rem, 100vh - 35.5rem, 15rem);
   --product-media-note: 1.25rem;
   --product-media-min: 22rem;       /* the picture well beside the price box on wide screens: at least this tall, and as tall as the box */
+  --partner-logo: 7.5rem;           /* a partner's logo on the home page: 120px, over 31mm wide, past the 17mm brands usually ask for */
+  --partner-logo-min: 4.5rem;       /* never drawn smaller than this, 72px: over 19mm */
+  --partner-clear: 1.25rem;         /* the clear space round a logo, 20px: over the 5mm brands usually ask for */
   --season-garland: 1.75rem;       /* the seasonal decorations along the top of every page (web/seasons.py) */
   --season-scene: 12rem;            /* each seasonal picture beside the home page's headline on wide screens */
   --masthead-search: 2.5rem;        /* the header search box: compact, still a full finger wide */

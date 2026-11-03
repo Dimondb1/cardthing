@@ -580,6 +580,14 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .s-ghost { fill: var(--season-snow); stroke: var(--season-snow-shade); }
 .s-ray { fill: none; stroke: var(--season-gold); }
 
+/* Partners (home page, web/partners.py): each logo as its owner's brand rules ask. Whole (never cropped or cut off:
+   object-fit contain), at its own proportions (the width is set and the height follows), in full colour (no opacity,
+   filter or tint), never under --partner-logo-min wide, and with --partner-clear of room all round it. */
+.partners__list { list-style: none; display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.partners__link { display: grid; place-items: center; padding: var(--partner-clear); background: var(--color-paper); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); }
+.partners__logo { display: block; width: var(--partner-logo); min-width: var(--partner-logo-min); max-width: 100%; height: auto; object-fit: contain; }
+@media (hover: hover) { .partners__link:hover { border-color: var(--color-brand-line); } }
+
 /* The drop spotlight (home page, views.drop_spotlight), the owner's poster style for the next big drop: the set's
    boxes fanned out over its name, day and countdown, in paper capitals on ink, and beside them the steps to be ready,
    each on a paper card so its form and buttons are the site's own. */

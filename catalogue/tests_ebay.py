@@ -903,3 +903,76 @@ class WrongItemTests(TestCase):
         live = [o for o in offers if o.availability != Listing.Availability.OUT_OF_STOCK]
         self.assertEqual([o.product_pk for o in live], [self.scarlet.pk])
         self.assertEqual([o.product_pk for o in offers if o not in live], [self.violet.pk])
+
+
+@override_settings(**KEYS)
+class SellerTests(TestCase):
+    """What eBay says of an item and its seller (the owner, 3 Nov 2026: "Do we acknowledge verified sellers on ebay or
+    ones who authenticate?"): a seller needs enough ratings, and eBay's Authenticity Guarantee, Top Rated Plus or a
+    business seller shows on the eBay row in plain words. Nothing is said that eBay did not say."""
+
+    def setUp(self):
+        self.set = make_set(make_game())
+        self.product = make_product(self.set, name="Prismatic Evolutions Elite Trainer Box", slug="pev-etb",
+                                    ean="0820650853500")
+        self.retailer = Retailer.objects.create(
+            name="eBay", slug="ebay", website="https://www.ebay.co.uk/", source_type=Retailer.Source.EBAY)
+
+    def offer(self, **extra):
+        row = item("Pokemon Prismatic Evolutions Elite Trainer Box")
+        seller = extra.pop("seller", {})
+        row["seller"].update(seller)
+        row.update(extra)
+        return ebay.item_offer(row, self.product, Offer)
+
+    def test_a_seller_with_too_few_ratings_is_skipped_and_one_eBay_gives_no_count_for_is_not(self):
+        self.assertIsNone(self.offer(seller={"feedbackScore": 12, "feedbackPercentage": "100.0"}))
+        self.assertIsNone(self.offer(seller={"feedbackScore": ebay.MIN_RATINGS - 1}))
+        self.assertIsNotNone(self.offer(seller={"feedbackScore": ebay.MIN_RATINGS}))
+        self.assertIsNotNone(self.offer())   # no count given: the percentage alone decides, as before
+        self.assertIsNone(self.offer(seller={"feedbackScore": 5000, "feedbackPercentage": "90.0"}))
+
+    def test_the_note_is_eBays_own_word_the_strongest_first(self):
+        note = Listing.SellerNote
+        self.assertEqual(self.offer().seller_note, note.NONE)
+        self.assertEqual(self.offer(seller={"sellerAccountType": "INDIVIDUAL"}).seller_note, note.NONE)
+        self.assertEqual(self.offer(seller={"sellerAccountType": "BUSINESS"}).seller_note, note.BUSINESS)
+        self.assertEqual(self.offer(topRatedBuyingExperience=True, seller={"sellerAccountType": "BUSINESS"}).seller_note,
+                         note.TOP_RATED)
+        self.assertEqual(self.offer(topRatedBuyingExperience=False).seller_note, note.NONE)
+        self.assertEqual(self.offer(qualifiedPrograms=["EBAY_PLUS", "AUTHENTICITY_GUARANTEE"],
+                                    topRatedBuyingExperience=True).seller_note, note.AUTHENTICITY)
+        self.assertEqual(self.offer(qualifiedPrograms=["AUTHENTICITY_VERIFICATION"]).seller_note, note.NONE)
+
+    def test_the_read_saves_it_and_the_next_read_changes_or_clears_it(self):
+        found = item("Pokemon Prismatic Evolutions Elite Trainer Box", price="79.99", postage="3.49")
+        found["topRatedBuyingExperience"] = True
+        with mock.patch.object(ebay, "http", FakeApi([found])), mock.patch.object(ebay, "PAUSE", 0):
+            run_import(self.retailer)
+        listing = Listing.objects.get(retailer=self.retailer, product=self.product)
+        self.assertEqual(listing.seller_note, Listing.SellerNote.TOP_RATED)
+        from .importers import apply_offers
+
+        apply_offers(self.retailer, [Offer(title=listing.title, url=listing.url, price=Decimal("79.99"),
+                                           delivery=Decimal("3.49"), product_pk=self.product.pk, seller_note="")])
+        listing.refresh_from_db()
+        self.assertEqual(listing.seller_note, "")
+        apply_offers(self.retailer, [Offer(title=listing.title, url=listing.url, price=Decimal("79.99"),
+                                           delivery=Decimal("3.49"), product_pk=self.product.pk,
+                                           seller_note=Listing.SellerNote.BUSINESS)])
+        apply_offers(self.retailer, [Offer(title=listing.title, url=listing.url, price=Decimal("79.99"),
+                                           delivery=Decimal("3.49"), product_pk=self.product.pk)])   # not eBay's: left
+        listing.refresh_from_db()
+        self.assertEqual(listing.seller_note, Listing.SellerNote.BUSINESS)
+
+    def test_the_product_page_says_it_on_the_eBay_row_in_plain_words(self):
+        from .testing import make_retailer
+
+        listing = make_listing(self.product, self.retailer, price="70.00")
+        Listing.objects.filter(pk=listing.pk).update(seller_note=Listing.SellerNote.AUTHENTICITY)
+        make_listing(self.product, make_retailer("Harbour Games"), price="80.00")
+        cache.clear()
+        html = self.client.get(self.product.get_absolute_url()).content.decode()
+        self.assertIn('<span class="offer__name">eBay</span>\n    <span class="offer__seller">Authenticity Guarantee</span>',
+                      html)
+        self.assertEqual(html.count('class="offer__seller"'), 1)   # never on a shop's row

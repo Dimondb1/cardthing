@@ -2,6 +2,7 @@
 <li class="offer{% if cheapest_row %} offer--cheapest{% endif %}{% if muted %} offer--muted{% endif %}{% if lottery %} offer--lottery{% endif %}" data-listing="{{ listing.pk }}">
   <div class="offer__retailer">
     <span class="offer__name">{{ listing.retailer.name }}</span>
+    {% if listing.seller_note %}<span class="offer__seller">{{ listing.get_seller_note_display }}</span>{% endif %}
     {% if cheapest_row and listing.delivery_known %}<span class="offer__flag">{% copy "product.compare.cheapest" %}</span>{% endif %}
   </div>
   <div class="offer__stock">

@@ -535,8 +535,19 @@ those never tried or tried longest ago, then those most shops stock. The
 back to wanted products. For
 each product it asks for new, buy-it-now items in Britain delivered to a
 London postcode, cheapest first including postage, from sellers with at
-least 95 percent feedback, and keeps the cheapest whose title matches the
-product. Postage is stored as the delivery charge.
+least 95 percent feedback and at least 50 ratings (`MIN_RATINGS`; a seller
+eBay gives no count for is judged on the percentage alone), and keeps the
+cheapest whose title matches the product. Postage is stored as the delivery
+charge.
+
+What eBay says of the item or its seller is kept on the listing
+(`Listing.seller_note`) and shown in plain words beside eBay on the product
+page's price list, the strongest only: Authenticity Guarantee (eBay's
+`qualifiedPrograms`), Top Rated Plus (`topRatedBuyingExperience`: a 30 day
+return, posted within a day, a top rated seller) or Business seller
+(`seller.sellerAccountType`, given on eBay UK). Each eBay read sets or clears
+it, and nothing is shown that eBay did not say. It never changes which
+listing is kept: the cheapest delivered price still wins.
 
 eBay sellers pad titles with the game's name and selling words, so a
 result counts as our product when every word of our name is in its title,

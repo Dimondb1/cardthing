@@ -768,6 +768,15 @@ class Listing(models.Model):
     # (catalogue/sanity.py), so the product page can say why without claiming other shops were compared.
     BAND_KEPT_OUT = "far below every "
 
+    class SellerNote(models.TextChoices):
+        """What eBay itself says of an eBay listing's item or seller, the strongest first (ebay.seller_note). The
+        owner, 3 Nov 2026: "Do we acknowledge verified sellers on ebay or ones who authenticate?" Shown as a plain
+        label on the eBay row; never set for a shop, and never from anything but eBay's own answer."""
+        NONE = "", "None"
+        AUTHENTICITY = "authenticity", "Authenticity Guarantee"
+        TOP_RATED = "top_rated", "Top Rated Plus"
+        BUSINESS = "business", "Business seller"
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="listings")
     retailer = models.ForeignKey(Retailer, on_delete=models.CASCADE, related_name="listings")
     url = models.URLField("product link", max_length=1000)
@@ -794,6 +803,10 @@ class Listing(models.Model):
         output_field=models.DecimalField(max_digits=9, decimal_places=2),
         db_persist=True,
     )
+    seller_note = models.CharField(
+        max_length=12, blank=True, default="", choices=SellerNote.choices,
+        help_text="eBay listings only: what eBay says of the item or seller (Authenticity Guarantee, Top Rated Plus, a "
+                  "business seller). Set by each eBay read.")
     availability = models.CharField(
         max_length=20, choices=Availability.choices, default=Availability.IN_STOCK, db_index=True
     )

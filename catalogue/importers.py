@@ -94,6 +94,9 @@ class Offer:
     # The RRP or before-sale price the shop gives beside its price: NO_LIST_PRICE when the read looked and the
     # shop gives none, None when the read did not look, which leaves the listing's as it was.
     list_price: Decimal | None = None
+    # What eBay says of the item or its seller (Listing.SellerNote): "" when it says nothing, None when the read is
+    # not eBay's, which leaves the listing's as it was.
+    seller_note: str | None = None
 
     def __post_init__(self):
         # An open draw is not stock, from whichever source the offer came.
@@ -1758,8 +1761,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
         # The shop's RRP, set or cleared by a read that looked for it and left by one that did not. Not shown as a
         # change on the page: the Price check takes it up at the next hourly refresh.
         list_price = listing.list_price if offer.list_price is None else (offer.list_price or None)
+        seller_note = listing.seller_note if offer.seller_note is None else offer.seller_note
         if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
-                or deal != held or listing.description != description or listing.list_price != list_price):
+                or deal != held or listing.description != description or listing.list_price != list_price
+                or listing.seller_note != seller_note):
             # The page shows the multi-buy and links to the shop's page: a new one of either is a change. Another
             # variant of the same page is not.
             shown = not created and listing.is_active and (deal != held or page_key(listing.url) != page_key(offer.url))
@@ -1774,6 +1779,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
             if listing.list_price != list_price:
                 listing.list_price = list_price
                 fields.append("list_price")
+            if listing.seller_note != seller_note:
+                listing.seller_note = seller_note
+                fields.append("seller_note")
             if published:
                 listing.shop_published_at = published
                 fields.append("shop_published_at")

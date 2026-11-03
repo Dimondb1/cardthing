@@ -47,6 +47,9 @@ MARKETPLACE = "EBAY_GB"
 POSTCODE = "SW1A1AA"
 FILTER = "conditions:{NEW},buyingOptions:{FIXED_PRICE},itemLocationCountry:GB,deliveryCountry:GB,priceCurrency:GBP"
 MIN_FEEDBACK = 95.0
+# A seller needs this many ratings as well: 100% from three sales says little (the owner, 3 Nov 2026). A seller eBay
+# gives no count for is judged on the percentage alone.
+MIN_RATINGS = 50
 PAUSE = 0.2
 GIVE_UP_AFTER = 5  # failed lookups in a row before a run stops and keeps what it found
 # A run stops starting lookups after this and finishes normally with what it found, well inside the background
@@ -368,8 +371,12 @@ def item_offer(item, product, Offer):
     url = item.get("itemAffiliateWebUrl") or item.get("itemWebUrl", "")
     if amount is None or not title or not url:
         return None
-    feedback = (item.get("seller", {}) or {}).get("feedbackPercentage")
+    seller = item.get("seller", {}) or {}
+    feedback = seller.get("feedbackPercentage")
     if feedback is not None and money(feedback) is not None and money(feedback) < Decimal(MIN_FEEDBACK):
+        return None
+    ratings = money(seller.get("feedbackScore"))
+    if ratings is not None and ratings < MIN_RATINGS:
         return None
     options = item.get("shippingOptions") or []
     cost = money((options[0].get("shippingCost", {}) or {}).get("value")) if options else None
@@ -385,7 +392,23 @@ def item_offer(item, product, Offer):
         image=(item.get("image", {}) or {}).get("imageUrl", ""),
         product_pk=product.pk,
         description=item_description(item),
+        seller_note=seller_note(item),
     )
+
+
+def seller_note(item):
+    """What eBay says of the item or its seller, the strongest first: its Authenticity Guarantee, a Top Rated Plus
+    item (a 30 day return, posted in a day, a top rated seller), a seller registered as a business. Search results and
+    item lookups both carry them (qualifiedPrograms, topRatedBuyingExperience, seller.sellerAccountType on eBay UK)."""
+    from .models import Listing
+
+    if "AUTHENTICITY_GUARANTEE" in (item.get("qualifiedPrograms") or []):
+        return Listing.SellerNote.AUTHENTICITY
+    if item.get("topRatedBuyingExperience") is True:
+        return Listing.SellerNote.TOP_RATED
+    if ((item.get("seller") or {}).get("sellerAccountType") or "").upper() == "BUSINESS":
+        return Listing.SellerNote.BUSINESS
+    return Listing.SellerNote.NONE
 
 
 def item_description(item):
@@ -402,7 +425,7 @@ def verdict(product, item, Offer, catalogue, specifics, shops):
     """(offer, None) when one search result is this product at a believable price, else (offer, why not)."""
     offer = item_offer(item, product, Offer)
     if offer is None:
-        return None, "not a clean UK buy-it-now price (currency, seller feedback or no UK postage)"
+        return None, "not a clean UK buy-it-now price (currency, seller feedback or ratings, or no UK postage)"
     if product.pk in shops and offer.price + offer.delivery < shops[product.pk] * PRICE_FLOOR:
         return offer, f"too cheap to be the sealed product (under £{shops[product.pk] * PRICE_FLOOR:.2f})"
     if junk(product, offer.title):

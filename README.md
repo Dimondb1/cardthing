@@ -5051,6 +5051,18 @@ site's own look (header, cards with the soft orange border, green for good,
 red for bad). The admin home and Insights link to it. It is for staff only:
 anyone else is sent to the admin sign-in. Top to bottom:
 
+**Download a report** (`/dashboard/report.txt`, `web/report.py`; linked at
+the top of the dashboard and on the admin home): the dashboard's figures,
+built fresh, and the Insights page's for the last 28 days, as one plain
+text file named `ripraptor-report-<date>.txt` to attach to a message
+instead of screenshots (the owner, 3 Nov 2026). At a glance, by day, where
+people came from (sources, sites, devices, countries, the pages visits began
+on), products, searches, clicks to shops, what clicks are worth, the
+catalogue (with the pages the sitemap offers Google), shop health, alerts
+and messages, guides and Claude. It holds nothing personal: no email
+address, visitor token or message. Google's own figures are not in it; they
+live only in Search Console. Staff only, never cached or indexed.
+
 - **On the site now:** the people whose browser opened a page in the last
   5 minutes, on a row of its own above the rest, and a card listing the
   pages they are on (products by name, linked), most people first. Built

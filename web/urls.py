@@ -3,7 +3,7 @@ from django.urls import path
 
 from guides import views as guides
 
-from . import dashboard, refer_views, views
+from . import dashboard, refer_views, report, views
 from .feeds import DealsFeed
 from .sitemaps import SITEMAPS
 
@@ -64,6 +64,8 @@ urlpatterns = [
     # The owner's dashboard: staff only, a private page like the alert links (no third-party script, not indexed).
     path("dashboard/", dashboard.dashboard, name="dashboard"),
     path("dashboard/layout/", dashboard.dashboard_layout, name="dashboard_layout"),
+    # The dashboard as a text file to attach to a message (web/report.py).
+    path("dashboard/report.txt", report.download, name="dashboard_report"),
     path("terms/", views.terms, name="terms"),
     path("api/products/<slug:slug>/prices/", views.product_prices_api, name="product_prices_api"),
     path("robots.txt", views.robots_txt, name="robots"),

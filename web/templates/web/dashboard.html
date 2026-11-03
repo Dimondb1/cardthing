@@ -17,6 +17,7 @@
   <p class="dash-head__meta">
     <span>{% copy "dashboard.updated" clock=updated|time:"H:i" %}</span>
     <a href="{% url 'web:dashboard' %}?fresh=1">{% copy "dashboard.refresh" %}</a>
+    <a href="{% url 'web:dashboard_report' %}">{% copy "dashboard.report" %}</a>
     <a href="#arrange">{% copy "dashboard.layout.link" %}</a>
     <a href="{{ links.admin }}">{% copy "dashboard.admin" %}</a>
   </p>

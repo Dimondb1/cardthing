@@ -3519,6 +3519,9 @@ ENTRIES = [
     Entry("dashboard.refresh", B, "Dashboard refresh link", "Read them again now",
           "Link beside the updated time. It reads every figure again."),
     Entry("dashboard.admin", B, "Dashboard admin link", "Open admin", "Link at the top of the dashboard."),
+    Entry("dashboard.report", B, "Dashboard report download link", "Download a report",
+          "Link at the top of the dashboard. Downloads every figure here and on Insights as a plain text file, to "
+          "attach to a message."),
     Entry("dashboard.no_data", T, "Dashboard nothing recorded", "No data yet.",
           "Shown where a part of the dashboard has nothing recorded."),
     Entry("dashboard.table", B, "Dashboard show the numbers", "Show the numbers",

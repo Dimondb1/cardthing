@@ -24,7 +24,6 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from content import service as copy
-from content.registry import REGISTRY
 from web import badge
 
 from .models import OutreachEmail, ShopContact
@@ -196,14 +195,12 @@ def top_line(found, store=None):
 
 def draft(retailer, kind, found, store=None):
     """(subject, body) of the ``kind`` email to ``retailer``: the wording filled in, then the sign-off and the line
-    about not emailing again. A draft may have a sign-off of its own (``outreach.<kind>.signoff``), as the update
-    email has: it is signed with the owner's name."""
+    about not emailing again."""
     filled = values(retailer, found, store)
-    own = f"outreach.{kind}.signoff"
     subject = copy.get(f"outreach.{kind}.subject", store=store, **filled)
     body = "\n\n".join(part for part in (
         copy.get(f"outreach.{kind}.body", store=store, **filled),
-        copy.get(own if own in REGISTRY else "outreach.signoff", store=store, **filled),
+        copy.get("outreach.signoff", store=store, **filled),
         copy.get("outreach.optout", store=store),
     ) if part)
     # A placeholder left empty (sent_line) leaves no space at the end of its line.

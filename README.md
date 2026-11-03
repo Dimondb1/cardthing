@@ -4284,9 +4284,7 @@ one. Change the status by hand when they reply.
 **Update and badge emails** (the button at the top of the Shop outreach
 list, `/admin/inbox/shopcontact/update-emails/`) writes one email to every
 shop in one place: what RipRaptor sent them, then the badge. It is the fifth
-draft, "Update and offer the badge" (`outreach.update.*`), signed with
-your name (`outreach.update.signoff`) rather than the shared sign-off. The
-page has a card per shop, the ones sending the most shoppers first, each
+draft, "Update and offer the badge" (`outreach.update.*`). The page has a card per shop, the ones sending the most shoppers first, each
 with its own address box, the email filled in with that shop's figures,
 Open in your mail app and Mark as sent. Work down it: a shop marked as sent
 drops off the list (Show the ones already sent too brings them back, with the
@@ -4322,8 +4320,17 @@ page says how far it has got while it runs. A shop's address can still be
 typed in or changed by hand, and Their website opens the shop's own site.
 
 The wording is in Site wording under Shop outreach emails
-(`outreach.*`). Every draft ends with the sign-off and a line saying to
-reply STOP for no more, which UK rules expect for sole traders. When a shop
+(`outreach.*`). It is written the way you would write to a shop owner, in
+your own voice: "Hi all at Shop", a short intro, one point, no list of
+statistics and no subject line carrying a number (so a shop we sent none is
+never told "0 shoppers"). Every draft that offers the badge says it is
+completely up to the shop and their listing stays the same either way, so it
+is never a condition. Every draft ends with the shared sign-off ("Thanks, Ben
+Dimond, RipRaptor") and a plain line saying to reply to say no more ("If
+you'd rather I didn't email again, just reply and say so, and I won't"), which
+UK rules expect for sole traders. Wording you have edited yourself in Site
+wording is never replaced when the defaults change; untick "use this wording"
+on an entry to go back to the default. When a shop
 asks, set it to Do not email: the page then shows no drafts and Mark as
 sent records nothing. Rows cannot be deleted, so that answer is kept.
 Only a business address is stored, typed by you or found on the shop's own site (Update and badge emails, below), and only to write to them.

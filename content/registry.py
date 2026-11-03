@@ -152,6 +152,10 @@ class Entry:
 H, T, P, B = Kind.HEADING, Kind.TEXT, Kind.PARAGRAPHS, Kind.BUTTON
 
 
+# What every outreach email's wording may use (inbox/outreach.py values): the shop's own figures and the links.
+OUTREACH_FILL = ("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed",
+                 "in_stock", "site_url", "badge_url", "sent", "shopper_update", "top_line")
+
 ENTRIES = [
     # Header and search box ------------------------------------------------
     Entry(
@@ -4303,83 +4307,85 @@ ENTRIES = [
     # Shop outreach emails (owner only) -------------------------------------
     # Drafts the owner sends from their own mailbox (inbox/outreach.py), filled in with each shop's own figures.
     Entry("outreach.affiliate.subject", T, "Affiliate ask: subject",
-          "RipRaptor sent {visitors_quarter} shoppers to {shop} in the last 3 months",
-          "Subject of the email asking a shop for an affiliate link.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+          "Do you run an affiliate programme?",
+          "Subject of the email asking a shop for an affiliate link.", placeholders=OUTREACH_FILL),
     Entry("outreach.affiliate.body", P, "Affiliate ask: email",
-          "Hello {shop} team,\n\n"
-          "I run RipRaptor ({site_url}), a UK site that compares delivered prices for sealed trading card products. "
-          "We list {listed} of your products and link every one straight to your shop.\n\n"
-          "In the last 3 months we sent {visitors_quarter} shoppers to you, {visitors_month} of them in the last 30 days. "
-          "The products they clicked most were {top_products}.\n\n"
-          "Do you run an affiliate programme we could join, or would you consider one? If you use a network such as "
-          "Awin, or an app such as UpPromote or GoAffPro, we would add your link to every RipRaptor link to your shop.",
-          "The email asking a shop for an affiliate link. The sign-off and the line about not emailing again are added "
-          "after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+          "Hi all at {shop},\n\n"
+          "I'm Ben, and I run RipRaptor ({site_url}), a UK site that helps people find the best delivered price on "
+          "sealed trading card products. We've got {listed} of your products on there, each one linking straight to "
+          "your shop. {sent}\n\n"
+          "I wondered if you have an affiliate programme, or might think about one? If you use something like Awin, "
+          "UpPromote or GoAffPro, I'd be happy to add your link to everything we send your way.\n\n"
+          "No worries at all if not, and thanks for reading.",
+          "The email asking a shop for an affiliate link. {sent} is the line saying how many shoppers we sent them, "
+          "left out when we sent none. The sign-off and the line about not emailing again are added after it.",
+          placeholders=OUTREACH_FILL),
     Entry("outreach.report.subject", T, "Monthly report: subject",
-          "Shoppers RipRaptor sent to {shop}: {visitors_month} in the last 30 days",
-          "Subject of the email telling a shop what RipRaptor sent them.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+          "A quick update from RipRaptor",
+          "Subject of the email telling a shop what RipRaptor sent them.", placeholders=OUTREACH_FILL),
     Entry("outreach.report.body", P, "Monthly report: email",
-          "Hello {shop} team,\n\n"
-          "A short update from RipRaptor ({site_url}). In the last 30 days we sent {visitors_month} shoppers to your "
-          "shop, and {visitors_quarter} in the last 3 months. The products they clicked most were {top_products}.\n\n"
-          "We list {listed} of your products, {in_stock} of them in stock when we last checked. If a price, stock "
-          "level or link of yours looks wrong on RipRaptor, reply and we will put it right.",
-          "The email telling a shop what RipRaptor sent them. The sign-off and the line about not emailing again are "
-          "added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+          "Hi all at {shop},\n\n"
+          "Ben here from RipRaptor ({site_url}), the UK price comparison site for sealed trading card products. "
+          "{shopper_update} {top_line}\n\n"
+          "We've got {listed} of your products on the site, {in_stock} of them in stock when we last looked. If a "
+          "price, stock level or link ever looks wrong, just reply and I'll put it right.",
+          "The email telling a shop what RipRaptor sent them. {shopper_update} is the sentence on shoppers sent and "
+          "{top_line} the one naming what they clicked most; both are left out when we sent the shop none. The "
+          "sign-off and the line about not emailing again are added after it.", placeholders=OUTREACH_FILL),
     Entry("outreach.listing.subject", T, "Listings request: subject",
-          "Your products on RipRaptor",
-          "Subject of the email asking a shop for a product feed.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+          "Could you send us a product feed?",
+          "Subject of the email asking a shop for a product feed.", placeholders=OUTREACH_FILL),
     Entry("outreach.listing.body", P, "Listings request: email",
-          "Hello {shop} team,\n\n"
-          "I run RipRaptor ({site_url}), a UK site that compares delivered prices for sealed trading card products. "
-          "We list {listed} of your products and have sent you {visitors_quarter} shoppers in the last 3 months.\n\n"
-          "Could you send us a product feed, as a spreadsheet or a link to one, with each product's price, stock and "
-          "barcode? It keeps your prices and stock on RipRaptor right, and new products show within the hour.",
+          "Hi all at {shop},\n\n"
+          "I'm Ben from RipRaptor ({site_url}), a UK price comparison site for sealed trading card products. We've "
+          "got {listed} of your products on there. {sent}\n\n"
+          "Would you be able to send us a product feed, either a spreadsheet or a link to one, with each product's "
+          "price, stock and barcode? It would keep your prices and stock spot on, and new products would show up "
+          "within the hour.\n\n"
+          "Whatever format is easiest for you is fine with me.",
           "The email asking a shop for a product feed. Edit it in your mail app before sending to ask for something "
-          "else. The sign-off and the line about not emailing again are added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+          "else. The sign-off and the line about not emailing again are added after it.", placeholders=OUTREACH_FILL),
     Entry("outreach.badge.subject", T, "Badge offer: subject",
-          "A RipRaptor badge for the {shop} website",
-          "Subject of the email offering a shop the Listed on RipRaptor badge.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent")),
+          "A little RipRaptor badge for {shop}",
+          "Subject of the email offering a shop the Listed on RipRaptor badge.", placeholders=OUTREACH_FILL),
     Entry("outreach.badge.body", P, "Badge offer: email",
-          "Hello {shop} team,\n\n"
-          "I run RipRaptor ({site_url}), a UK site that compares delivered prices for sealed trading card products. "
-          "We list {listed} of your products and link every one straight to your shop. {sent}\n\n"
-          "We have made a small badge that says your shop is listed on RipRaptor, in a light and a dark version. If "
-          "you would like it on your site, the code to paste is here: {badge_url}\n\n"
-          "Adding it is up to you. Your listing stays the same either way.",
+          "Hi all at {shop},\n\n"
+          "I'm Ben, and I run RipRaptor ({site_url}), a UK site for comparing prices on sealed trading card "
+          "products. We've got {listed} of your products on there. {sent}\n\n"
+          "We've made a small badge that says you're listed with us, in a light and a dark version, in case you'd "
+          "like it on your site. You'll find it and the code here: {badge_url}\n\n"
+          "It's completely up to you, and your listing stays just the same either way.",
           "The email offering a shop the badge. {badge_url} is the badge part of the List your shop page, and "
           "{sent} the line saying how many shoppers we sent them, left out when we sent none. The sign-off and the "
-          "line about not emailing again are added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent")),
+          "line about not emailing again are added after it.", placeholders=OUTREACH_FILL),
     Entry("outreach.update.subject", T, "Update and badge: subject",
-          "A RipRaptor update and badge for {shop}",
+          "A quick hello from RipRaptor",
           "Subject of the email that tells a shop what RipRaptor sent them and offers the badge. The Update and badge "
-          "emails page in Shop outreach writes one to every shop.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent", "shopper_update", "top_line")),
+          "emails page in Shop outreach writes one to every shop.", placeholders=OUTREACH_FILL),
     Entry("outreach.update.body", P, "Update and badge: email",
-          "Hello {shop} team,\n\n"
-          "A short update from RipRaptor ({site_url}). {shopper_update} {top_line}\n\n"
-          "We list {listed} of your products, {in_stock} of them in stock when we last checked. If a price, stock "
-          "level or link of yours looks wrong on RipRaptor, reply and we will put it right.\n\n"
-          "We have made a small badge that says your shop is listed on RipRaptor, in a light and a dark version. If "
-          "you would like it on your site, the code to paste is here: {badge_url}\n\n"
-          "I would really appreciate the support if you can \U0001F60A",
+          "Hi all at {shop},\n\n"
+          "Ben here from RipRaptor ({site_url}), the UK site that compares prices on sealed trading card products. "
+          "{shopper_update} {top_line}\n\n"
+          "We've got {listed} of your products on there, {in_stock} of them in stock when we last looked. If a "
+          "price, stock level or link ever looks wrong, just reply and I'll put it right.\n\n"
+          "We've also made a small badge that says you're listed with us, in a light and a dark version. If you "
+          "fancy having it on your site, you'll find the code here: {badge_url}\n\n"
+          "It's completely up to you, and your listing stays just the same either way. It's lovely to have you on "
+          "RipRaptor \U0001F60A",
           "The email that tells a shop what RipRaptor sent them and offers the badge. {shopper_update} is the "
-          "sentence on shoppers sent and {top_line} the one naming the products clicked most; both are left out "
-          "when we sent the shop none, so a new shop is not told nought. The sign-off below and the line about not "
-          "emailing again are added after it.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent", "shopper_update", "top_line")),
-    Entry("outreach.update.signoff", P, "Update and badge: sign-off",
-          "Thanks,\nBen Dimond",
-          "Added to the end of the update and badge email, in place of the shared sign-off, before the line about not "
-          "emailing again.", placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url", "badge_url", "sent", "shopper_update", "top_line")),
+          "sentence on shoppers sent and {top_line} the one naming what they clicked most; both are left out when "
+          "we sent the shop none, so a new shop is not told nought. The sign-off and the line about not emailing "
+          "again are added after it.", placeholders=OUTREACH_FILL),
     Entry("outreach.update.month", T, "Update: shoppers in 30 days",
-          "In the last 30 days we sent {month} to your shop.",
+          "In the last 30 days we've sent {month} your way.",
           "In the update email when every shopper we sent the shop came in the last 30 days. {month} is, for "
           "example, 254 shoppers.", placeholders=("month",)),
     Entry("outreach.update.month_quarter", T, "Update: shoppers in 30 days and 3 months",
-          "In the last 30 days we sent {month} to your shop, and {quarter} in the last 3 months.",
+          "In the last 30 days we've sent {month} your way, and {quarter} over the last 3 months.",
           "In the update email when some of the shoppers we sent the shop came before the last 30 days. {month} is, "
           "for example, 254 shoppers and {quarter} a number.", placeholders=("month", "quarter")),
     Entry("outreach.update.top", T, "Update: products clicked most",
-          "The products they clicked most were {top_products}.",
+          "People have been clicking on {top_products} the most.",
           "In the update email, after the shoppers sent. Left out when nobody clicked through in 3 months.",
           placeholders=("top_products",)),
     Entry("outreach.shoppers.one", T, "Shoppers: one", "{count} shopper",
@@ -4387,18 +4393,18 @@ ENTRIES = [
     Entry("outreach.shoppers.other", T, "Shoppers: more than one", "{count} shoppers",
           "A number of shoppers in the update email when it is not one.", placeholders=("count",)),
     Entry("outreach.sent.one", T, "Shoppers sent: one",
-          "In the last 3 months we sent you {count} shopper.",
+          "In the last 3 months we've sent you {count} shopper.",
           "In the badge offer when one person clicked through to the shop in 3 months.", placeholders=("count",)),
     Entry("outreach.sent.other", T, "Shoppers sent: more than one",
-          "In the last 3 months we sent you {count} shoppers.",
+          "In the last 3 months we've sent you {count} shoppers.",
           "In the badge offer when two or more people clicked through to the shop in 3 months. Left out when none did.",
           placeholders=("count",)),
     Entry("outreach.signoff", P, "Sign-off",
-          "Thanks,\nRipRaptor\n{site_url}",
+          "Thanks,\nBen Dimond\nRipRaptor, {site_url}",
           "Added to the end of every outreach email, before the line about not emailing again.",
-          placeholders=("shop", "visitors_month", "visitors_quarter", "visitors_total", "since", "top_products", "listed", "in_stock", "site_url")),
+          placeholders=OUTREACH_FILL),
     Entry("outreach.optout", T, "Line about not emailing again",
-          "If you would rather we did not email you again, reply STOP and we will not.",
+          "If you'd rather I didn't email again, just reply and say so, and I won't.",
           "The last line of every outreach email. UK rules expect an easy way to say no more."),
     Entry("outreach.top_none", T, "No clicks yet",
           "none in particular yet",

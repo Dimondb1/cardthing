@@ -66,8 +66,11 @@ class FiguresTests(OutreachTestCase):
         found = outreach.figures(self.other)
         self.assertEqual((found.visitors_month, found.visitors_total, found.since, found.top_products), (0, 0, None, ()))
         subject, body = outreach.draft(self.other, "report", found)
-        self.assertIn("0 in the last 30 days", subject)
-        self.assertIn("The products they clicked most were none in particular yet.", body)
+        # No shoppers sent: no numbers in the subject, no sentence on shoppers or clicks, and nothing said of nought.
+        self.assertEqual(subject, "A quick update from RipRaptor")
+        for left_out in ("sent", "clicking", "none in particular"):
+            self.assertNotIn(left_out, body)
+        self.assertNotIn(" \n", body)
 
     def test_list_counts_match_the_figures_in_one_query(self):
         self.click(self.etb, 1)
@@ -93,59 +96,64 @@ class DraftTests(OutreachTestCase):
             self.click(self.etb, days)
         self.click(self.booster, 50)
         found = outreach.figures(self.shop)
-        optout = "If you would rather we did not email you again, reply STOP and we will not."
+        optout = "If you'd rather I didn't email again, just reply and say so, and I won't."
         for kind, _name in outreach.DRAFTS:
             with self.subTest(kind):
                 subject, body = outreach.draft(self.shop, kind, found)
                 self.assertNotIn("{", subject + body)
-                self.assertTrue(body.startswith("Hello Harbour Games team,"))
-                # The update email is signed with the owner's name; the others with the shared sign-off.
-                signoff = "Thanks,\nBen Dimond" if kind == "update" else "Thanks,\nRipRaptor\nhttps://ripraptor.example"
-                self.assertTrue(body.endswith(f"{signoff}\n\n{optout}"))
-                self.assertIn("We list 2 of your products", body)
+                self.assertTrue(body.startswith("Hi all at Harbour Games,\n\n"))
+                self.assertTrue(body.endswith(f"Thanks,\nBen Dimond\nRipRaptor, https://ripraptor.example\n\n{optout}"))
+                self.assertIn("got 2 of your products", body)
+                # Friendly, not shouting: no capital-letter STOP, no exclamation marks, no formal greeting.
+                self.assertNotIn("STOP", body + subject)
+                self.assertNotIn("!", body + subject)
+                self.assertNotIn("Hello", body)
         subject, body = outreach.draft(self.shop, "affiliate", found)
-        self.assertEqual(subject, "RipRaptor sent 3 shoppers to Harbour Games in the last 3 months")
-        self.assertIn("In the last 3 months we sent 3 shoppers to you, 2 of them in the last 30 days.", body)
-        self.assertIn(f"The products they clicked most were {self.etb.name} and {self.booster.name}.", body)
+        self.assertEqual(subject, "Do you run an affiliate programme?")
+        self.assertIn("In the last 3 months we've sent you 3 shoppers.", body)
         _subject, body = outreach.draft(self.shop, "report", found)
-        self.assertIn("We list 2 of your products, 1 of them in stock when we last checked.", body)
+        self.assertIn("In the last 30 days we've sent 2 shoppers your way, and 3 over the last 3 months.", body)
+        self.assertIn(f"People have been clicking on {self.etb.name} and {self.booster.name} the most.", body)
+        self.assertIn("We've got 2 of your products on the site, 1 of them in stock when we last looked.", body)
 
     def test_the_badge_offer_links_to_the_code_and_says_nothing_of_shoppers_never_sent(self):
         subject, body = outreach.draft(self.shop, "badge", outreach.figures(self.shop))
-        self.assertEqual(subject, "A RipRaptor badge for the Harbour Games website")
-        self.assertIn("the code to paste is here: https://ripraptor.example/list-your-shop/#badge", body)
-        self.assertIn("Adding it is up to you. Your listing stays the same either way.", body)
+        self.assertEqual(subject, "A little RipRaptor badge for Harbour Games")
+        self.assertIn("You'll find it and the code here: https://ripraptor.example/list-your-shop/#badge", body)
+        # Never a condition: said plainly in every email that offers the badge.
+        self.assertIn("It's completely up to you, and your listing stays just the same either way.", body)
         # Nobody clicked through: the shop is not told nought, and no line ends in a space.
-        self.assertIn("link every one straight to your shop.\n\n", body)
-        self.assertNotIn("we sent you", body)
+        self.assertIn("We've got 2 of your products on there.\n\n", body)
+        self.assertNotIn("we've sent you", body)
         self.assertNotIn(" \n", body)
         self.click(self.etb, 1)
-        self.assertIn("In the last 3 months we sent you 1 shopper.", outreach.draft(self.shop, "badge", outreach.figures(self.shop))[1])
+        self.assertIn("In the last 3 months we've sent you 1 shopper.", outreach.draft(self.shop, "badge", outreach.figures(self.shop))[1])
         self.click(self.booster, 2)
-        self.assertIn("In the last 3 months we sent you 2 shoppers.", outreach.draft(self.shop, "badge", outreach.figures(self.shop))[1])
+        self.assertIn("In the last 3 months we've sent you 2 shoppers.", outreach.draft(self.shop, "badge", outreach.figures(self.shop))[1])
 
     def test_the_update_email_is_the_owners_wording_and_never_tells_a_shop_nought(self):
         for days in (1, 2):
             self.click(self.etb, days)
         self.click(self.booster, 50)
         subject, body = outreach.draft(self.shop, "update", outreach.figures(self.shop))
-        self.assertEqual(subject, "A RipRaptor update and badge for Harbour Games")
+        self.assertEqual(subject, "A quick hello from RipRaptor")
         self.assertEqual(body, (
-            "Hello Harbour Games team,\n\n"
-            "A short update from RipRaptor (https://ripraptor.example). In the last 30 days we sent 2 shoppers to your "
-            f"shop, and 3 in the last 3 months. The products they clicked most were {self.etb.name} and "
-            f"{self.booster.name}.\n\n"
-            "We list 2 of your products, 1 of them in stock when we last checked. If a price, stock level or link of "
-            "yours looks wrong on RipRaptor, reply and we will put it right.\n\n"
-            "We have made a small badge that says your shop is listed on RipRaptor, in a light and a dark version. If "
-            "you would like it on your site, the code to paste is here: https://ripraptor.example/list-your-shop/#badge"
-            "\n\nI would really appreciate the support if you can \U0001F60A\n\nThanks,\nBen Dimond\n\n"
-            "If you would rather we did not email you again, reply STOP and we will not."))
+            "Hi all at Harbour Games,\n\n"
+            "Ben here from RipRaptor (https://ripraptor.example), the UK site that compares prices on sealed trading "
+            "card products. In the last 30 days we've sent 2 shoppers your way, and 3 over the last 3 months. People "
+            f"have been clicking on {self.etb.name} and {self.booster.name} the most.\n\n"
+            "We've got 2 of your products on there, 1 of them in stock when we last looked. If a price, stock level or "
+            "link ever looks wrong, just reply and I'll put it right.\n\n"
+            "We've also made a small badge that says you're listed with us, in a light and a dark version. If you "
+            "fancy having it on your site, you'll find the code here: https://ripraptor.example/list-your-shop/#badge"
+            "\n\nIt's completely up to you, and your listing stays just the same either way. It's lovely to have you "
+            "on RipRaptor \U0001F60A\n\nThanks,\nBen Dimond\nRipRaptor, https://ripraptor.example\n\n"
+            "If you'd rather I didn't email again, just reply and say so, and I won't."))
         # Nobody clicked: no shoppers sentence at all, and no line ends in a space.
         _subject, body = outreach.draft(self.other, "update", outreach.figures(self.other))
-        self.assertIn("A short update from RipRaptor (https://ripraptor.example).\n\nWe list 1 of your products", body)
+        self.assertIn("sealed trading card products.\n\nWe've got 1 of your products on there", body)
         self.assertNotIn("sent", body)
-        self.assertNotIn("clicked", body)
+        self.assertNotIn("clicking", body)
         self.assertNotIn(" \n", body)
 
     def test_the_update_says_what_is_true_when_the_shoppers_came_before_or_all_within_30_days(self):
@@ -153,14 +161,15 @@ class DraftTests(OutreachTestCase):
             found = outreach.Figures(**counts, top_products=("A",) if counts.get("visitors_quarter") else ())
             return outreach.draft(self.shop, "update", found)[1].split("\n\n")[1]
 
-        short = "A short update from RipRaptor (https://ripraptor.example). "
+        short = ("Ben here from RipRaptor (https://ripraptor.example), the UK site that compares prices on sealed "
+                 "trading card products. ")
         self.assertEqual(line(visitors_month=1, visitors_quarter=1),
-                         short + "In the last 30 days we sent 1 shopper to your shop. The products they clicked most were A.")
+                         short + "In the last 30 days we've sent 1 shopper your way. People have been clicking on A the most.")
         self.assertEqual(line(visitors_month=0, visitors_quarter=7),
-                         short + "In the last 3 months we sent you 7 shoppers. The products they clicked most were A.")
+                         short + "In the last 3 months we've sent you 7 shoppers. People have been clicking on A the most.")
         self.assertEqual(line(visitors_month=1200, visitors_quarter=1500),
-                         short + "In the last 30 days we sent 1,200 shoppers to your shop, and 1,500 in the last 3 "
-                                 "months. The products they clicked most were A.")
+                         short + "In the last 30 days we've sent 1,200 shoppers your way, and 1,500 over the last 3 "
+                                 "months. People have been clicking on A the most.")
 
     def test_figures_for_many_shops_are_the_same_as_for_each_in_three_queries(self):
         for days in (1, 2, 3):
@@ -301,11 +310,11 @@ class AdminTests(OutreachTestCase):
         response = self.client.get(self.change_url(self.shop))
         self.assertContains(response, "Shoppers sent: 1 in the last 30 days, 1 in the last 3 months")
         self.assertContains(response, "Listed now: 2 products, 1 in stock.")
-        self.assertContains(response, 'href="mailto:hello@harbour.example?subject=RipRaptor%20sent%201%20shoppers')
+        self.assertContains(response, 'href="mailto:hello@harbour.example?subject=Do%20you%20run%20an%20affiliate%20programme%3F')
         for kind, name in outreach.DRAFTS:
             self.assertContains(response, name)
             self.assertContains(response, f'name="_sent" value="{kind}"')
-        self.assertContains(response, "reply STOP and we will not.")
+        self.assertContains(response, "just reply and say so")
         self.assertNotContains(response, "No email address saved")
         # Save is the first button in the form, so Enter saves rather than marking a draft as sent.
         html = response.content.decode()
@@ -322,9 +331,9 @@ class AdminTests(OutreachTestCase):
                          ("hello@harbour.example", "Asked Sam", ShopContact.Status.EMAILED))
         self.assertEqual(contact.follow_up_on, timezone.localdate() + timedelta(days=14))
         self.assertEqual(OutreachEmail.objects.get().subject,
-                         "RipRaptor sent 0 shoppers to Harbour Games in the last 3 months")
+                         "Do you run an affiliate programme?")
         self.assertContains(response, "Marked as sent to Harbour Games. Follow up on")
-        self.assertContains(response, "Ask for an affiliate link. RipRaptor sent 0 shoppers")
+        self.assertContains(response, "Ask for an affiliate link. Do you run an affiliate programme?")
 
     def test_saving_without_the_button_records_nothing(self):
         outreach.ensure_contacts()
@@ -396,8 +405,8 @@ class UpdateEmailsPageTests(OutreachTestCase):
         response = self.client.get(self.url)
         html = response.content.decode()
         self.assertContains(response, "2 shops here, 2 with no address saved yet.")
-        self.assertContains(response, "A RipRaptor update and badge for Quay Cards")
-        self.assertContains(response, "Hello Harbour Games team,")
+        self.assertContains(response, "A quick hello from RipRaptor")
+        self.assertContains(response, "Hi all at Harbour Games,")
         self.assertContains(response, "https://ripraptor.example/list-your-shop/#badge")
         self.assertNotContains(response, "eBay")
         self.assertLess(html.index("Quay Cards</h2>"), html.index("Harbour Games</h2>"))
@@ -407,7 +416,7 @@ class UpdateEmailsPageTests(OutreachTestCase):
             form = form[:form.index("</form>")]
             self.assertLess(form.index('name="_save"'), form.index('name="_sent"'))
             self.assertIn("csrfmiddlewaretoken", form)
-            self.assertIn('href="mailto:?subject=A%20RipRaptor%20update%20and%20badge%20for%20', form)
+            self.assertIn('href="mailto:?subject=A%20quick%20hello%20from%20RipRaptor', form)
 
     def test_shops_with_nothing_listed_or_that_asked_not_to_be_emailed_are_left_out(self):
         nothing = make_retailer("Empty Cards")
@@ -430,7 +439,7 @@ class UpdateEmailsPageTests(OutreachTestCase):
         self.assertEqual(self.contact(self.shop).email, "hello@harbour.example")
         self.assertFalse(OutreachEmail.objects.exists())
         self.assertContains(response, "Saved the address for Harbour Games.")
-        self.assertContains(response, 'href="mailto:hello@harbour.example?subject=A%20RipRaptor%20update')
+        self.assertContains(response, 'href="mailto:hello@harbour.example?subject=A%20quick%20hello')
         self.assertContains(response, "1 with no address saved yet")
 
     def test_a_bad_address_is_refused_and_kept_out(self):
@@ -453,7 +462,7 @@ class UpdateEmailsPageTests(OutreachTestCase):
         self.assertEqual((contact.email, contact.status, contact.follow_up_on),
                          ("hello@harbour.example", ShopContact.Status.EMAILED, timezone.localdate() + timedelta(days=14)))
         sent = OutreachEmail.objects.get()
-        self.assertEqual((sent.kind, sent.subject), ("update", "A RipRaptor update and badge for Harbour Games"))
+        self.assertEqual((sent.kind, sent.subject), ("update", "A quick hello from RipRaptor"))
         self.assertNotContains(response, "Harbour Games</h2>")
         self.assertContains(response, "Quay Cards</h2>")
         # Show the ones already sent too, with when.
@@ -538,7 +547,7 @@ class CopyBeforeOpeningTests(OutreachTestCase):
         self.assertIn(f'<textarea readonly id="body-{contact.pk}"', html)
         link = html[html.index(f'data-copy-from="body-{contact.pk}"'):]
         link = link[:link.index(">")]
-        self.assertRegex(link, r'data-short="mailto:hello@harbour\.example\?subject=A%20RipRaptor%20update[^"&]*"')
+        self.assertRegex(link, r'data-short="mailto:hello@harbour\.example\?subject=A%20quick%20hello[^"&]*"')
         self.assertIn("press and hold in the empty message and choose <strong>Paste</strong>", html)
 
     def test_the_script_copies_then_opens_and_falls_back_to_the_full_link(self):

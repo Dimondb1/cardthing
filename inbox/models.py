@@ -102,6 +102,14 @@ class ShopContact(models.Model):
         max_length=254, blank=True,
         help_text="The shop's business address, as its website gives it (info@, hello@). Kept only to write to them.",
     )
+    email_found_on = models.URLField(
+        "address found on", blank=True,
+        help_text="The page of the shop's own site the address was found on (inbox/shop_emails.py). Empty for an "
+                  "address you typed; cleared when you change the address.",
+    )
+    email_looked_at = models.DateTimeField("looked for an address", null=True, blank=True, editable=False)
+    email_note = models.CharField(max_length=120, blank=True, editable=False,
+                                  help_text="Why the last look for an address found none.")
     status = models.CharField(max_length=14, choices=Status.choices, default=Status.NEW, db_index=True)
     notes = models.TextField(blank=True, help_text="Your own notes: who you spoke to, what they said. Never shown.")
     follow_up_on = models.DateField("follow up on", null=True, blank=True,

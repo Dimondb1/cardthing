@@ -198,13 +198,15 @@ class ShopContactAdmin(admin.ModelAdmin):
         """One ready-to-send update and badge email for each shop worth writing to, the ones sending most shoppers
         first. Each has its own address box, the draft, Open in your mail app and Mark as sent, so the owner works
         down the page. Nothing is sent from the site."""
+        from urllib.parse import urlsplit
+
         from django.core.exceptions import PermissionDenied
         from django.template.response import TemplateResponse
 
         from content import service as copy
         from django.utils import timezone
 
-        from . import outreach
+        from . import outreach, shop_emails
         from .models import OutreachEmail
 
         if not self.has_change_permission(request):
@@ -225,11 +227,15 @@ class ShopContactAdmin(admin.ModelAdmin):
             subject, body = outreach.draft(contact.retailer, outreach.UPDATE, found[contact.retailer_id], store)
             # Rows for the box to show the whole email: a long line wraps, so count it as the lines it takes.
             lines = sum(max(1, -(-len(line) // 60)) for line in body.splitlines()) + 1
+            found_on = urlsplit(contact.email_found_on)
             rows.append({"contact": contact, "subject": subject, "body": body, "lines": lines,
                          "mailto": outreach.mailto(contact.email or "", subject, body),
-                         "sent_on": sent_on.get(contact.pk)})
+                         "sent_on": sent_on.get(contact.pk),
+                         "found_label": f"{found_on.hostname or ''}{found_on.path}"[:60] if contact.email_found_on else "",
+                         "looked_at": timezone.localtime(contact.email_looked_at) if contact.email_looked_at else None})
         context = dict(self.admin_site.each_context(request), title="Update and badge emails", opts=self.model._meta,
-                       rows=rows, show_sent=show_sent, no_address=sum(1 for row in rows if not row["contact"].email))
+                       rows=rows, show_sent=show_sent, no_address=sum(1 for row in rows if not row["contact"].email),
+                       looking=shop_emails.running(), looked=sum(1 for row in rows if row["contact"].email_looked_at))
         return TemplateResponse(request, "admin/shop_update_emails.html", context)
 
     def _update_emails_post(self, request):
@@ -238,8 +244,17 @@ class ShopContactAdmin(admin.ModelAdmin):
         from django.core.validators import validate_email
         from django.http import Http404, HttpResponseRedirect
 
-        from . import outreach
+        from . import outreach, shop_emails
 
+        if "_find" in request.POST:
+            if shop_emails.start_now():
+                self.message_user(request, "Looking for the missing addresses now. It takes a few minutes: refresh "
+                                           "this page to see them appear, each with the page it was found on.")
+            elif shop_emails.running():
+                self.message_user(request, "Already looking for addresses. Refresh this page in a minute.")
+            else:
+                self.message_user(request, "Could not start looking for addresses.", messages.ERROR)
+            return HttpResponseRedirect(request.get_full_path())
         try:
             contact = ShopContact.objects.select_related("retailer").get(pk=int(request.POST.get("contact", "")))
         except (ValueError, ShopContact.DoesNotExist):
@@ -254,8 +269,9 @@ class ShopContactAdmin(admin.ModelAdmin):
                               messages.ERROR)
             return HttpResponseRedirect(f"{back}#shop-{contact.pk}")
         if address != contact.email:
-            contact.email = address
-            contact.save(update_fields=["email"])
+            # An address typed here is the owner's own: where one was found no longer applies.
+            contact.email, contact.email_found_on = address, ""
+            contact.save(update_fields=["email", "email_found_on"])
         if "_sent" not in request.POST:
             self.message_user(request, f"Saved the address for {contact}.")
             return HttpResponseRedirect(f"{back}#shop-{contact.pk}")
@@ -273,6 +289,8 @@ class ShopContactAdmin(admin.ModelAdmin):
         is part of this form, so an address typed in above is kept too."""
         from . import outreach
 
+        if "email" in form.changed_data:
+            obj.email_found_on = ""
         super().save_model(request, obj, form, change)
         kind = request.POST.get("_sent", "")
         if not kind:

@@ -4253,16 +4253,38 @@ are left out, and so are eBay and Amazon. A shop we sent no shoppers is not
 told nought: its email leaves out the shoppers sentence and the line naming
 the products clicked most, and a shop whose shoppers all came before the
 last 30 days is given the 3 months alone. The page takes the same few
-queries however many shops there are (`outreach.bulk_figures`). It finds no
-addresses for you: press Their website to find a shop's contact address, type
-it in and press Save address. Nothing is sent from the site.
+queries however many shops there are (`outreach.bulk_figures`). Nothing is
+sent from the site.
+
+**Find the missing addresses** (a button at the top of that page, or
+`python manage.py find_shop_emails`) fills the address boxes for you
+(`inbox/shop_emails.py`). It reads each shop's home page and, if that has no
+address, the contact page it links to (or the usual `/pages/contact`,
+`/contact`), four pages at most, the way a visitor would: through the same
+reader as the Claude judge (`catalogue/shop_pages.py`), so the shop's
+robots.txt is obeyed, only the shop's own site is followed, it asks one
+request at a time at the shop's own pace, and never while the shop is being
+read, paused, switched off or waiting after errors, or while Pause all is on.
+It keeps only a business address on the shop's own site (info, hello,
+contact, sales, support, orders and similar), with the page it was found on
+shown under the box ("Found automatically on ... Check it looks right before
+you send"). A Gmail or other free-mail address, one that looks like a
+person's and another site's address are never kept: the card says which was
+seen ("Looked 3 Nov and found none: only a free-mail address is on its
+pages. Add it by hand."). It never replaces an address you typed, and an
+address typed over a found one clears where it was found. A shop looked at
+is left alone for 30 days whether or not an address was found (`--force`
+looks again, `--dry-run` shows what would be kept and keeps nothing,
+`--shop slug` does one shop). It takes a few minutes for every shop; the
+page says how far it has got while it runs. A shop's address can still be
+typed in or changed by hand, and Their website opens the shop's own site.
 
 The wording is in Site wording under Shop outreach emails
 (`outreach.*`). Every draft ends with the sign-off and a line saying to
 reply STOP for no more, which UK rules expect for sole traders. When a shop
 asks, set it to Do not email: the page then shows no drafts and Mark as
 sent records nothing. Rows cannot be deleted, so that answer is kept.
-Only the address you type is stored, and only to write to them.
+Only a business address is stored, typed by you or found on the shop's own site (Update and badge emails, below), and only to write to them.
 
 ## Watchlist
 

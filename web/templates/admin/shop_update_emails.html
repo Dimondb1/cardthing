@@ -3,12 +3,21 @@
 {% block content %}
 {% comment %}One card per shop: its own address box, the email filled in with its figures, and the two buttons. Each card is its own form, so Save address (the first button, which Enter presses) never marks anything as sent. Nothing is sent from the site: the email opens in the owner's mail app.{% endcomment %}
 <div style="max-width: 46rem">
-  <p>One email for each shop, filled in with its own figures: what we sent them, then the badge. Add the shop's address, press <strong>Open in your mail app</strong>, send it, then press <strong>Mark as sent</strong>. A shop you have marked as sent drops off this list. The shops sending the most shoppers are first.</p>
+  <p>One email for each shop, filled in with its own figures: what we sent them, then the badge. Check the shop's address (press <strong>Find the missing addresses</strong> to fill them in, or type one), press <strong>Open in your mail app</strong>, send it, then press <strong>Mark as sent</strong>. A shop you have marked as sent drops off this list. The shops sending the most shoppers are first.</p>
   <p style="color: var(--body-quiet-color)">
     {{ rows|length }} shop{{ rows|length|pluralize }} here{% if no_address %}, {{ no_address }} with no address saved yet{% endif %}.
     {% if show_sent %}<a href="{% url 'admin:inbox_shopcontact_update_emails' %}">Hide the ones already sent</a>{% else %}<a href="{% url 'admin:inbox_shopcontact_update_emails' %}?show=all">Show the ones already sent too</a>{% endif %}.
     The wording is in Site wording, under Shop outreach emails.
   </p>
+  {% if looking %}
+  <p style="padding: 10px; background: var(--darkened-bg)"><strong>Looking for addresses now.</strong> {{ looked }} of {{ rows|length }} shop{{ rows|length|pluralize }} looked at so far. Refresh this page in a minute to see them appear.</p>
+  {% elif no_address %}
+  <form method="post" style="margin: 0 0 20px">
+    {% csrf_token %}
+    <p style="margin: 0 0 6px"><button type="submit" class="button" style="padding: 10px 15px" name="_find" value="1">Find the missing addresses</button></p>
+    <p style="margin: 0; color: var(--body-quiet-color)">Reads each shop's home page and contact page, the way a visitor would and keeping to its robots.txt, and saves a business address on the shop's own site, such as info@ or hello@. It never replaces an address you typed, and skips Gmail and personal-looking addresses. It takes a few minutes. Check each one before you send.</p>
+  </form>
+  {% endif %}
   {% for row in rows %}
   <form method="post" id="shop-{{ row.contact.pk }}" style="margin: 0 0 28px; padding-top: 14px; border-top: 1px solid var(--hairline-color)">
     {% csrf_token %}
@@ -17,13 +26,15 @@
     <p style="margin: 0 0 8px; color: var(--body-quiet-color)">
       {{ row.contact.visitors_quarter }} shopper{{ row.contact.visitors_quarter|pluralize }} in 3 months, {{ row.contact.listed }} listed.
       {{ row.contact.get_status_display }}{% if row.sent_on %}, update sent {{ row.sent_on|date:"j M Y" }}{% endif %}.
-      <a href="{{ row.contact.retailer.website }}" target="_blank" rel="noopener noreferrer">Their website</a>, to find the address.
+      <a href="{{ row.contact.retailer.website }}" target="_blank" rel="noopener noreferrer">Their website</a>{% if not row.contact.email %}, to find the address{% endif %}.
     </p>
     <p style="margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
       <label for="email-{{ row.contact.pk }}"><strong>Their address</strong></label>
       <input type="email" id="email-{{ row.contact.pk }}" name="email" value="{{ row.contact.email }}" autocomplete="off" style="flex: 1 1 14rem; min-width: 0">
       <button type="submit" class="button" name="_save" value="1" style="padding: 10px 15px">Save address</button>
     </p>
+    {% if row.contact.email and row.found_label %}<p style="margin: 0 0 8px; color: var(--body-quiet-color)">Found automatically on <a href="{{ row.contact.email_found_on }}" target="_blank" rel="noopener noreferrer">{{ row.found_label }}</a>. Check it looks right before you send.</p>
+    {% elif not row.contact.email and row.contact.email_note %}<p style="margin: 0 0 8px; color: var(--body-quiet-color)">Looked {{ row.looked_at|date:"j M" }} and found none: {{ row.contact.email_note }}. Add it by hand.</p>{% endif %}
     <p style="margin: 0 0 6px"><strong>Subject:</strong> {{ row.subject }}</p>
     <textarea readonly rows="{{ row.lines }}" style="width: 100%; box-sizing: border-box; height: auto; max-height: none; field-sizing: content">{{ row.body }}</textarea>
     <p style="margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center">

@@ -4,7 +4,7 @@ from django.contrib import admin, messages
 from catalogue import mail
 
 from . import service
-from .models import Conversation, ShopContact, ShopEnquiry
+from .models import Conversation, OutreachMail, ShopContact, ShopEnquiry
 
 
 class ConversationForm(forms.ModelForm):
@@ -147,6 +147,110 @@ class FollowUpFilter(admin.SimpleListFilter):
         return queryset
 
 
+class OutreachMailForm(forms.ModelForm):
+    password = forms.CharField(
+        label="App password", required=False, widget=forms.PasswordInput(render_value=False, attrs={"autocomplete": "new-password"}),
+        help_text="Paste a new one to change it. It is kept in a file only the site can read and never shown again. "
+                  "Leave empty to keep the one saved.")
+    send_test = forms.BooleanField(
+        label="Send me a test email when I save", required=False,
+        help_text="Sends the first shop's email to your own mailbox, so you see how it arrives.")
+
+    class Meta:
+        model = OutreachMail
+        fields = ("on", "host", "port", "username", "from_name", "from_address", "copy_to_me", "daily_limit")
+
+    def clean(self):
+        from . import sending
+
+        data = super().clean()
+        if data.get("port") not in (465, 587):
+            self.add_error("port", "Use 465 (Zoho's usual) or 587.")
+        if data.get("on"):
+            if not data.get("username"):
+                self.add_error("username", "Add your mailbox address to switch sending on.")
+            if not (data.get("password") or sending.password()):
+                self.add_error("password", "Add the app password to switch sending on.")
+        return data
+
+
+@admin.register(OutreachMail)
+class OutreachMailAdmin(admin.ModelAdmin):
+    """Sending shop emails from the app, through the owner's own Zoho mailbox (inbox/sending.py). The list goes
+    straight to the one row."""
+
+    form = OutreachMailForm
+    save_on_top = True
+    readonly_fields = ("status",)
+    fieldsets = (
+        (None, {"fields": ("status",)}),
+        ("Set up", {
+            "description": "In Zoho, open Accounts (accounts.zoho.com), then Security, then App passwords, and make "
+                           "one called RipRaptor. Paste it below with your mailbox address, tick Send from RipRaptor, "
+                           "tick Send me a test email and save. Your normal Zoho password is never needed.",
+            "fields": ("on", "username", "password", "from_name", "from_address"),
+        }),
+        ("Limits and copies", {"fields": ("daily_limit", "copy_to_me", "send_test")}),
+        ("Mail server", {"fields": ("host", "port")}),
+    )
+
+    def has_add_permission(self, request):
+        return False   # the list opens the one row, made on first use
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        return HttpResponseRedirect(reverse("admin:inbox_outreachmail_change", args=[OutreachMail.load().pk]))
+
+    @admin.display(description="Status")
+    def status(self, obj):
+        from django.utils.html import format_html
+
+        from . import sending
+
+        why = sending.why_not(obj)
+        password = f"App password saved (ends {obj.password_hint})." if obj.password_hint else "No app password saved yet."
+        return format_html(
+            "<p><strong>{}</strong></p><p>{} {} of {} sent today.</p>{}",
+            why or "Ready: Send now is on every shop email.", password, sending.sent_today(), obj.daily_limit,
+            format_html("<p>Last problem: {}</p>", obj.problem) if obj.problem else "")
+
+    def save_model(self, request, obj, form, change):
+        from . import outreach, sending
+
+        super().save_model(request, obj, form, change)
+        new = form.cleaned_data.get("password", "").strip()
+        if new:
+            try:
+                sending.save_password(new)
+            except OSError:
+                self.message_user(request, "The server could not save the password, so nothing was changed there.",
+                                  messages.ERROR)
+                return
+            self.message_user(request, "Password saved. It is not shown again.")
+        if form.cleaned_data.get("send_test"):
+            contact = next(iter(outreach.update_queue()[:1]), None)
+            if contact:
+                subject, body = outreach.draft(contact.retailer, outreach.UPDATE, outreach.figures(contact.retailer))
+            else:
+                subject, body = "RipRaptor", "This is a test from RipRaptor. If you can read this, sending works."
+            try:
+                address = sending.send_test(subject, body)
+            except sending.SendError as exc:
+                self.message_user(request, f"The test was not sent: {exc}", messages.ERROR)
+            else:
+                self.message_user(request, f"Test sent to {address}. Check your inbox: it arrives as a shop's would.")
+
+    def response_change(self, request, obj):
+        from django.http import HttpResponseRedirect
+
+        return HttpResponseRedirect(request.path)
+
+
 @admin.register(ShopContact)
 class ShopContactAdmin(admin.ModelAdmin):
     """Shop outreach: write to a shop from your own mailbox with its own figures (inbox/outreach.py). Every shop on
@@ -199,8 +303,8 @@ class ShopContactAdmin(admin.ModelAdmin):
 
     def update_emails_view(self, request):
         """One ready-to-send update and badge email for each shop worth writing to, the ones sending most shoppers
-        first. Each has its own address box, the draft, Open in your mail app and Mark as sent, so the owner works
-        down the page. Nothing is sent from the site."""
+        first. Each has its own address box, the draft, Send now (once sending is set up on the Sending page), Open in
+        your mail app and Mark as sent, so the owner works down the page. Nothing is sent but by pressing Send now."""
         from urllib.parse import urlsplit
 
         from django.core.exceptions import PermissionDenied
@@ -209,7 +313,7 @@ class ShopContactAdmin(admin.ModelAdmin):
         from content import service as copy
         from django.utils import timezone
 
-        from . import outreach, shop_emails
+        from . import outreach, sending, shop_emails
         from .models import OutreachEmail
 
         if not self.has_change_permission(request):
@@ -239,7 +343,8 @@ class ShopContactAdmin(admin.ModelAdmin):
                          "looked_at": timezone.localtime(contact.email_looked_at) if contact.email_looked_at else None})
         context = dict(self.admin_site.each_context(request), title="Update and badge emails", opts=self.model._meta,
                        rows=rows, show_sent=show_sent, no_address=sum(1 for row in rows if not row["contact"].email),
-                       looking=shop_emails.running(), looked=sum(1 for row in rows if row["contact"].email_looked_at))
+                       looking=shop_emails.running(), looked=sum(1 for row in rows if row["contact"].email_looked_at),
+                       sending=sending.ready(), not_sending=sending.why_not(), room_today=sending.room_today())
         return TemplateResponse(request, "admin/shop_update_emails.html", context)
 
     def _update_emails_post(self, request):
@@ -276,9 +381,12 @@ class ShopContactAdmin(admin.ModelAdmin):
             # An address typed here is the owner's own: where one was found no longer applies.
             contact.email, contact.email_found_on = address, ""
             contact.save(update_fields=["email", "email_found_on"])
-        if "_sent" not in request.POST:
+        if "_sent" not in request.POST and "_send" not in request.POST:
             self.message_user(request, f"Saved the address for {contact}.")
             return HttpResponseRedirect(f"{back}#shop-{contact.pk}")
+        if "_send" in request.POST:
+            self._send(request, contact, outreach.UPDATE)
+            return HttpResponseRedirect(back)
         if not outreach.can_email(contact):
             self.message_user(request, f"{contact} asked not to be emailed, so nothing was recorded.", messages.ERROR)
             return HttpResponseRedirect(back)
@@ -296,6 +404,9 @@ class ShopContactAdmin(admin.ModelAdmin):
         if "email" in form.changed_data:
             obj.email_found_on = ""
         super().save_model(request, obj, form, change)
+        if request.POST.get("_send"):
+            self._send(request, obj, request.POST["_send"])
+            return
         kind = request.POST.get("_sent", "")
         if not kind:
             return
@@ -310,8 +421,22 @@ class ShopContactAdmin(admin.ModelAdmin):
         self.message_user(request, f"Marked as sent to {obj}. Follow up on {obj.follow_up_on:%-d %B %Y} if they "
                                    "have not replied.")
 
+    def _send(self, request, contact, kind):
+        """Send the draft from the app (inbox/outreach.py send_now) and say what happened. Nothing is recorded unless
+        it went."""
+        from . import outreach, sending
+
+        try:
+            _subject, address = outreach.send_now(contact, kind)
+        except sending.SendError as exc:
+            self.message_user(request, str(exc), messages.ERROR)
+            return False
+        self.message_user(request, f"Sent to {contact} at {address}. Follow up on {contact.follow_up_on:%-d %B %Y} if "
+                                   "they have not replied.")
+        return True
+
     def response_change(self, request, obj):
-        if "_sent" in request.POST:
+        if "_sent" in request.POST or "_send" in request.POST:
             from django.http import HttpResponseRedirect
 
             return HttpResponseRedirect(request.path)
@@ -364,21 +489,34 @@ class ShopContactAdmin(admin.ModelAdmin):
 
         from content import service as copy
 
-        from . import outreach
+        from django.urls import reverse
+
+        from . import outreach, sending
 
         if not outreach.can_email(obj):
             return format_html("<p><strong>{} asked not to be emailed.</strong> No drafts are shown while the status "
                                "is Do not email.</p>", obj.retailer)
         found, store = self._figures(obj), copy.load_all()
         to = obj.email or ""
+        can_send = sending.ready()
         rows = []
         for kind, name in outreach.DRAFTS:
             subject, body = outreach.draft(obj.retailer, kind, found, store)
+            send = (format_html('<button type="submit" class="button default" style="padding:10px 15px" name="_send" '
+                                'value="{}" data-confirm="Send this email to {} now?">Send now</button>', kind, obj.retailer.name)
+                    if can_send else "")
             rows.append((name, subject, len(body.splitlines()) + 1, body, outreach.mailto(to, subject, body), kind,
-                         outreach.mailto(to, subject)))
-        note = ("" if to else format_html(
-            '<p style="color:var(--body-quiet-color)">No email address saved, so your mail app opens the draft '
-            "with nobody to send it to. Add their address above and save to fill it in.</p>"))
+                         outreach.mailto(to, subject), send))
+        if not can_send:
+            note = format_html(
+                '<p style="color:var(--body-quiet-color)">{} <a href="{}">Set it up</a> to send from here.</p>',
+                sending.why_not(), reverse("admin:inbox_outreachmail_changelist"))
+        else:
+            note = ""
+        if not to:
+            note = format_html(
+                '{}<p style="color:var(--body-quiet-color)">No email address saved, so there is nobody to send it to. '
+                "Add their address above and save.</p>", note)
         return format_html(
             '{}<p style="color:var(--body-quiet-color)">Open in your mail app copies the message first. In the app, '
             "press and hold in the empty message and choose Paste: some mail apps run a filled-in message's lines "
@@ -392,7 +530,7 @@ class ShopContactAdmin(admin.ModelAdmin):
                 '<textarea readonly id="body-{5}" rows="{2}" style="width:100%;box-sizing:border-box;height:auto;'
                 'max-height:none;field-sizing:content">{3}</textarea>'
                 '<p style="margin:8px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
-                '<a class="button" style="padding:10px 15px" href="{4}" data-copy-from="body-{5}" data-short="{6}">'
+                '{7}<a class="button" style="padding:10px 15px" href="{4}" data-copy-from="body-{5}" data-short="{6}">'
                 'Open in your mail app</a>'
                 '<button type="submit" class="button" style="padding:10px 15px" name="_sent" value="{5}">Mark as sent'
                 "</button></p></div>",

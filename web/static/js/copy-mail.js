@@ -4,6 +4,11 @@
 // the link is the full mailto: link it always was. Nothing here talks to the server.
 (function () {
   "use strict";
+  // A button that sends a real email asks first, so a stray tap does not email a shop.
+  document.addEventListener("click", function (event) {
+    const sender = event.target.closest("button[data-confirm]");
+    if (sender && !window.confirm(sender.dataset.confirm)) event.preventDefault();
+  });
   document.addEventListener("click", function (event) {
     const link = event.target.closest("a[data-copy-from]");
     if (!link || !(navigator.clipboard && window.isSecureContext)) return;

@@ -5,7 +5,9 @@
 {% block content %}
 {% comment %}One card per shop: its own address box, the email filled in with its figures, and the two buttons. Each card is its own form, so Save address (the first button, which Enter presses) never marks anything as sent. Nothing is sent from the site: the email opens in the owner's mail app.{% endcomment %}
 <div style="max-width: 46rem">
-  <p>One email for each shop, filled in with its own figures: what we sent them, then the badge. Check the shop's address (press <strong>Find the missing addresses</strong> to fill them in, or type one), press <strong>Open in your mail app</strong>, send it, then press <strong>Mark as sent</strong>. A shop you have marked as sent drops off this list. The shops sending the most shoppers are first.</p>
+  <p>One email for each shop, filled in with its own figures: what we sent them, then the badge. Check the shop's address (press <strong>Find the missing addresses</strong> to fill them in, or type one), then {% if sending %}press <strong>Send now</strong>: it goes out from your own mailbox and the shop is marked as sent for you.{% else %}press <strong>Open in your mail app</strong>, send it, then press <strong>Mark as sent</strong>.{% endif %} A shop you have marked as sent drops off this list. The shops sending the most shoppers are first.</p>
+  {% if sending %}<p style="color: var(--body-quiet-color)">Sending from RipRaptor is on: {{ room_today }} more can go today. Replies come to your own inbox.</p>
+  {% else %}<p style="padding: 10px; background: var(--darkened-bg)">{{ not_sending }} <a href="{% url 'admin:inbox_outreachmail_changelist' %}">Set it up</a> to send from here, or use Open in your mail app below.</p>{% endif %}
   <p style="color: var(--body-quiet-color)">Open in your mail app copies the message first. In the app, press and hold in the empty message and choose <strong>Paste</strong>: some mail apps run a filled-in message's lines together.</p>
   <p style="color: var(--body-quiet-color)">
     {{ rows|length }} shop{{ rows|length|pluralize }} here{% if no_address %}, {{ no_address }} with no address saved yet{% endif %}.
@@ -41,6 +43,7 @@
     <p style="margin: 0 0 6px"><strong>Subject:</strong> {{ row.subject }}</p>
     <textarea readonly id="body-{{ row.contact.pk }}" rows="{{ row.lines }}" style="width: 100%; box-sizing: border-box; height: auto; max-height: none; field-sizing: content">{{ row.body }}</textarea>
     <p style="margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+      {% if sending %}<button type="submit" class="button default" style="padding: 10px 15px" name="_send" value="update" data-confirm="Send this email to {{ row.contact.retailer.name }} now?">Send now</button>{% endif %}
       <a class="button" style="padding: 10px 15px" href="{{ row.mailto }}" data-copy-from="body-{{ row.contact.pk }}" data-short="{{ row.mailto_short }}">Open in your mail app</a>
       <button type="submit" class="button" style="padding: 10px 15px" name="_sent" value="update">Mark as sent</button>
     </p>

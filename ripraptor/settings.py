@@ -358,6 +358,11 @@ RIPRAPTOR_CLAUDE_API_KEY = os.environ.get("RIPRAPTOR_CLAUDE_API_KEY", "").strip(
 RIPRAPTOR_CLAUDE_KEY_FILE = os.environ.get("RIPRAPTOR_CLAUDE_KEY_FILE", "").strip() or str(
     Path(DATABASES["default"]["NAME"]).with_name("claude-key")
 )
+# The owner's own mailbox password (an app password from Zoho) for sending shop outreach emails from the app
+# (inbox/sending.py), saved from the Sending page in Admin into a file only the site can read, beside the database.
+RIPRAPTOR_OUTREACH_PASSWORD_FILE = os.environ.get("RIPRAPTOR_OUTREACH_PASSWORD_FILE", "").strip() or str(
+    Path(DATABASES["default"]["NAME"]).with_name("outreach-mail-password")
+)
 RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD = int(os.environ.get("RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD", "100") or 100)
 # Before Claude is asked about a row, the shop pages involved are read for evidence (catalogue/shop_pages.py),
 # politely and at most 60 a run. Off in tests, which give it recorded pages.

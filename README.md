@@ -4249,17 +4249,47 @@ the logo, the font or the brand colours change, run `python scripts/make_badges.
 Admin -> Messages -> Shop outreach is where you write to the shops
 RipRaptor lists: to ask for an affiliate link, to tell them how many
 shoppers you sent them, to ask for a product feed, or to offer the
-RipRaptor badge (below). Nothing is sent from
-the site. Each draft opens in your own mail app (a `mailto:` link), so it
-goes from your Zoho address and the replies come back there. Open in your
+RipRaptor badge (below). With Sending set up (below), **Send now** on a
+draft sends it from the app, through your own Zoho mailbox. Nothing is ever
+sent unless you press it, one email at a time. Without it, each draft opens
+in your own mail app (a `mailto:` link), so it goes from your Zoho address
+and the replies come back there. Open in your
 mail app first copies the whole message to the phone's clipboard
 (`web/static/js/copy-mail.js`) and opens the app with only the address and
 subject: press and hold in the empty message and choose Paste. That is
 because the Zoho Mail app on Android runs a filled-in message's lines
 together (the line breaks are sent the standard way, `%0D%0A`, and it drops
 them); pasting keeps them. With JavaScript off, or when the browser will not
-copy, the link is the full `mailto:` link, message included, as before. ZeptoMail is
-for the automatic alert emails only and is never used for this.
+copy, the link is the full `mailto:` link, message included, as before.
+
+**Sending shop emails from the app** (Admin, **Sending shop emails**, also on
+Admin's home page; `inbox/sending.py`): the owner, 3 Nov 2026: "I want to send
+emails each time from the app, I have a mailserver ... zepto for mass mail
+and zoho is my normal emails". It sends through the owner's own Zoho Mail
+mailbox over SMTP (`smtp.zoho.com`, port 465, or 587; `smtp.zoho.eu` for an
+EU account), so each email goes out as them, with replies, and by default a
+copy, back to their inbox. **It never uses ZeptoMail**: that service is for
+the automatic alert emails only, its rules are for automatic emails, and
+shop outreach sent through it could cost the alerts their sender. Set it up
+once on that page: make an app password in Zoho (Accounts, Security, App
+passwords), paste it with your mailbox address, tick Send from RipRaptor and
+Send me a test email, and save. The password is saved to a file only the site
+can read (`RIPRAPTOR_OUTREACH_PASSWORD_FILE`, beside the database), never to
+the database and never shown again (the page keeps its last four characters),
+and your normal Zoho password is never needed. It can send as an address you
+have added to the mailbox in Zoho (an alias such as ben@ripraptor.com).
+
+Send now appears on every draft, on each shop's page and on Update and badge
+emails, and asks first. It sends one plain text email, then records it as
+Mark as sent does (Emailed, a follow-up in two weeks). It refuses, sends
+nothing and records nothing, saying why, when sending is not set up, the shop
+has no address or asked not to be emailed, it was sent the same email in the
+last 7 days, or the day's limit is reached (30 by default, counted across
+emails sent and marked as sent, set on the Sending page). A refused send by
+Zoho (a wrong password, an address that is not the mailbox's or an alias,
+the server out of reach) is worded plainly on the page and noted as the last
+problem. Open in your mail app and Mark as sent stay for anything you would
+rather write by hand.
 
 Every shop except eBay and Amazon has a row, made when the page opens
 (`inbox/outreach.py ensure_contacts`). The list puts the shops that get

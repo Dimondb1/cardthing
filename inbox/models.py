@@ -125,6 +125,56 @@ class ShopContact(models.Model):
         return str(self.retailer)
 
 
+class OutreachMail(models.Model):
+    """The one row of settings for sending shop outreach emails from the app (inbox/sending.py), through the owner's
+    own mailbox over SMTP, so each goes out as them and every reply comes back to their inbox. It is Zoho Mail, the
+    owner's normal email, and never ZeptoMail: that is for the automatic alert emails only, and sending someone's
+    own business emails through it could cost the alerts their sender. The mailbox's password (an app password) is
+    never kept here: it lives in a file only the site can read (RIPRAPTOR_OUTREACH_PASSWORD_FILE)."""
+
+    on = models.BooleanField("send from RipRaptor", default=False,
+                             help_text="Ticked: Send now appears on every shop email. Unticked: only Open in your mail app.")
+    host = models.CharField("mail server", max_length=100, default="smtp.zoho.com",
+                            help_text="Zoho's: smtp.zoho.com. Use smtp.zoho.eu if your Zoho account is on the EU site.")
+    port = models.PositiveIntegerField(default=465, help_text="465 for Zoho (the usual) or 587.")
+    username = models.EmailField("your mailbox", blank=True, help_text="Your Zoho mailbox address, which you sign in with.")
+    from_name = models.CharField("sent as", max_length=80, default="Ben Dimond", help_text="The name shops see.")
+    from_address = models.EmailField(
+        "sent from", blank=True,
+        help_text="Leave empty to send from your mailbox. Or an address you have added to it in Zoho (an alias), "
+                  "such as ben@ripraptor.com: replies come back to it.")
+    copy_to_me = models.BooleanField("send me a copy", default=True,
+                                     help_text="Each email is also copied to you, so the full email is in your mailbox.")
+    daily_limit = models.PositiveSmallIntegerField(
+        "most a day", default=30,
+        help_text="No more than this many shop emails in a day, sent or marked as sent. It keeps your mailbox "
+                  "trusted and the emails personal.")
+    password_hint = models.CharField(max_length=4, blank=True, editable=False)
+    password_saved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    problem = models.CharField(max_length=300, blank=True, editable=False,
+                               help_text="Why the last send or test failed.")
+
+    class Meta:
+        verbose_name = "sending shop emails"
+        verbose_name_plural = "sending shop emails"
+
+    def __str__(self):
+        return "Sending shop emails"
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    @classmethod
+    def current(cls):
+        """The row, or the defaults unsaved: a page that only reads it never writes."""
+        return cls.objects.filter(pk=1).first() or cls(pk=1)
+
+    @property
+    def sender(self):
+        return self.from_address or self.username
+
+
 class OutreachEmail(models.Model):
     """One email the owner marked as sent to a shop: which draft and its subject. The email itself is in the
     owner's own Sent folder."""

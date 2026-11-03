@@ -2,11 +2,12 @@
 Shop outreach: emails the owner sends to shops from their own mailbox, filled in with each shop's own figures.
 
 The owner asked for "a CRM type of place to send emails" to shops: what RipRaptor has sent them, and asks such as
-an affiliate link or a product feed, with replies handled in Zoho Mail. So nothing is sent from the site. The Shop
-outreach page in admin keeps a ShopContact per shop (its business address, where things stand, notes and when to
-follow up), fills in a draft from the wording in Site wording (``outreach.*``) and opens it in the owner's mail
-app (a mailto: link), so the email goes from their own address and its replies come back there. The alert emails'
-service (ZeptoMail) is for automatic emails only, and outreach through it could cost the alerts their sender.
+an affiliate link or a product feed, with replies handled in Zoho Mail. The Shop outreach page in admin keeps a
+ShopContact per shop (its business address, where things stand, notes and when to follow up) and fills in a draft from
+the wording in Site wording (``outreach.*``). It is sent one email at a time, when the owner presses Send now, through
+the owner's own Zoho mailbox (inbox/sending.py, send_now below), or opened in their mail app (a mailto: link), so the
+email goes from their own address and its replies come back there. The alert emails' service (ZeptoMail) is for
+automatic emails only, and outreach through it could cost the alerts their sender, so it is never used for this.
 
 Every draft ends with the line saying how to ask for no more (``outreach.optout``), and a shop marked "Do not
 email" gets no draft at all. The figures are RipRaptor's own: shoppers sent are people's clicks to the shop
@@ -215,6 +216,46 @@ def mailto(email, subject, body=""):
     if body:
         query += f"&body={quote(body.replace(chr(13), '').replace(chr(10), chr(13) + chr(10)))}"
     return f"mailto:{quote(email, safe='@')}?{query}"
+
+
+# The same kind of email to the same shop is not sent twice within this long from the app: a second tap, or a
+# page opened twice, must not email a shop the same thing again.
+RESEND_AFTER = timedelta(days=7)
+
+
+def send_now(contact, kind, store=None, now=None):
+    """Send the ``kind`` email to the shop from the owner's own mailbox (inbox/sending.py), then record it as Mark as
+    sent does: Emailed, a follow-up in two weeks. Returns (subject, address). Raises SendError, worded for the owner,
+    when it was not sent and nothing is recorded: not set up, the shop asked not to be emailed, no address, the same
+    email sent lately, or the day's limit reached."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    from . import sending
+
+    now = now or timezone.now()
+    if kind not in KINDS:
+        raise sending.SendError("That email is not one of the drafts.")
+    if not can_email(contact):
+        raise sending.SendError(f"{contact} asked not to be emailed, so nothing was sent.")
+    try:
+        validate_email(contact.email)
+    except ValidationError:
+        raise sending.SendError(f"{contact} has no email address saved, so nothing was sent.") from None
+    why = sending.why_not()
+    if why:
+        raise sending.SendError(why)
+    last = contact.emails.filter(kind=kind, sent_at__gte=now - RESEND_AFTER).first()
+    if last:
+        raise sending.SendError(f"{contact} was sent this email on {timezone.localtime(last.sent_at):%-d %B}, so it was "
+                                "not sent again.")
+    if not sending.room_today(now=now):
+        raise sending.SendError("Today's limit is reached, so nothing was sent. It is on the Sending page, and "
+                                "tomorrow starts again.")
+    subject, body = draft(contact.retailer, kind, figures(contact.retailer, now), store)
+    sending.send(contact.email, subject, body)
+    mark_sent(contact, kind, subject, now)
+    return subject, contact.email
 
 
 def update_queue(show_sent=False):

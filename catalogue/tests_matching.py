@@ -6,7 +6,7 @@ from django.test import TestCase
 
 from .importers import Offer, apply_offers
 from .languages import language_of
-from .matching import match_key
+from .matching import identity_numbers, match_key, same_product, set_codes
 from .models import Listing, Product
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
@@ -314,6 +314,56 @@ class GemPackTests(TestCase):
         call_command("merge_duplicates", stdout=out)
         self.assertIn("2 products merged", out.getvalue())
         self.assertEqual(Listing.objects.filter(product__is_active=True).values("product").distinct().count(), 1)
+
+
+class LegendaryDuelistsTests(TestCase):
+    """"Legendary Duelists: Duels From The Deep Booster Pack" (£4.34 at Zatu) and "Legendary Duelists 9 Duels From The
+    Deep Booster Pack" (out of stock) sat on two pages, and so did the boxes (3 Nov 2026). The 9 is the set's code,
+    LED9, which Konami's name leaves out and some shops put in."""
+
+    YGO = "yu-gi-oh"
+    BOX = "Legendary Duelists: Duels from the Deep Booster Box"
+    NUMBERED_BOX = "Legendary Duelists 9: Duels From the Deep Booster Box"
+    PACK = "Legendary Duelists: Duels From The Deep Booster Pack"
+    NUMBERED_PACK = "Legendary Duelists 9 Duels From The Deep Booster Pack"
+
+    def test_the_number_is_the_sets_code_and_names_with_and_without_it_are_one_product(self):
+        for plain, numbered in ((self.BOX, self.NUMBERED_BOX), (self.PACK, self.NUMBERED_PACK)):
+            self.assertEqual(match_key(plain, self.YGO), match_key(numbered, self.YGO), numbered)
+            self.assertTrue(same_product(plain, numbered, self.YGO), numbered)
+        self.assertEqual(set_codes(self.NUMBERED_BOX, self.YGO), {"led9"})
+        self.assertEqual(set_codes(self.BOX, self.YGO), set())
+        # A box and a pack of the one set are still two products.
+        self.assertNotEqual(match_key(self.NUMBERED_BOX, self.YGO), match_key(self.NUMBERED_PACK, self.YGO))
+
+    def test_a_name_that_carries_the_code_itself_meets_them_too(self):
+        for name in ("Legendary Duelists Duels From The Deep LED9 Booster Box",
+                     "Legendary Duelists Duels From The Deep LED-09 Booster Box"):
+            self.assertEqual(match_key(name, self.YGO), match_key(self.BOX, self.YGO), name)
+            self.assertTrue(same_product(name, self.NUMBERED_BOX, self.YGO), name)
+
+    def test_another_set_or_a_pack_count_is_never_taken_for_the_code(self):
+        # Another Legendary Duelists set, whichever way its number is written.
+        self.assertFalse(same_product("Legendary Duelists 3 Duels From The Deep Booster Box", self.NUMBERED_BOX, self.YGO))
+        self.assertNotEqual(match_key("Legendary Duelists 3: Rage of Ra Booster Box", self.YGO),
+                            match_key(self.NUMBERED_BOX, self.YGO))
+        # A count straight after the name stays a count, and the rule belongs to Yu-Gi-Oh! alone.
+        self.assertEqual(identity_numbers("Legendary Duelists 3x Booster Packs", self.YGO), {"3"})
+        self.assertNotEqual(match_key(self.NUMBERED_BOX, "pokemon"), match_key(self.BOX, "pokemon"))
+
+    def test_the_hourly_merge_joins_the_pages_and_keeps_every_shops_price(self):
+        game = make_game("Yu-Gi-Oh!", self.YGO)
+        zatu, lvl = make_retailer("Zatu Games"), make_retailer("Lvl Up")
+        for name, kind, shop in ((self.PACK, "booster_pack", zatu), (self.NUMBERED_PACK, "booster_pack", lvl),
+                                 (self.BOX, "booster_box", zatu), (self.NUMBERED_BOX, "booster_box", lvl)):
+            make_listing(Product.objects.create(game=game, name=name, product_type=kind), shop)
+        out = StringIO()
+        call_command("merge_duplicates", stdout=out)
+        self.assertIn("2 products merged", out.getvalue())
+        shown = Product.objects.filter(is_active=True)
+        self.assertEqual(sorted(shown.values_list("product_type", flat=True)), ["booster_box", "booster_pack"])
+        for product in shown:
+            self.assertEqual(product.listings.filter(is_active=True).count(), 2)
 
 
 class HourlyMergeGuardTests(TestCase):

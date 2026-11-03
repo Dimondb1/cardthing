@@ -160,7 +160,7 @@ COUNTS = re.compile(r"(?<!\bvol )(?<!\bvolume )(?<!\bseries )(?<!\bset )(?<!\bge
 # Set codes, one spelling each: "OP-09", "OP 09" and "OP09" are "op9", "PRB-01" and "PRB01" are "prb1",
 # "FS06" is "fs6". Like the series, a name keeps its code only when nothing else names the product
 # ("OP-09 Booster Box"), so "OP-09 Emperors in the New World" meets "Emperors in the New World".
-SET_CODES = re.compile(r"\b((?:op|eb|prb)[ck]?|st|bt|ex|lm|pb|fb|fs|sd)[- ]?(\d{1,3})\b")
+SET_CODES = re.compile(r"\b((?:op|eb|prb)[ck]?|st|bt|ex|lm|pb|fb|fs|sd|led)[- ]?(\d{1,3})\b")
 # Pokémon's own codes: English Mega Evolution sets (ME01, ME02.5) and Japanese sets (M1L, M2a, S6a, S12a).
 # Pokémon only: Magic's "M20" and "M21" are two core sets whose names differ by nothing else.
 POKEMON_CODES = re.compile(r"\b(?:me ?(0\d)|(me|m|s)(\d{1,2}))(?: (5)(?= |$))?([a-z]{0,2})\b")
@@ -203,9 +203,16 @@ CHINESE_CODE_WORD = re.compile(
 BOX_PACKS = re.compile(r"\b((?:booster )?display(?: box)?|booster box|elite trainer box) +(\d{1,2}) ?x (?:sealed )?(?:booster )?packs?\b")
 # A word of a key that is a set or series code, as key_text spells them.
 SET_CODE = re.compile(r"^(?:(?:sv|swsh|sm|xy|bw|dp|hgss)(?:\d{1,2}(?:\.5)?)?|(?:sv|swsh|sm|xy)\d{1,3}[a-z]{1,2}|"
-                      r"(?:(?:op|eb|prb)[ck]?|st|bt|ex|lm|pb|b|fb|fs|sd)\d{1,3}[a-z]?)$")
+                      r"(?:(?:op|eb|prb)[ck]?|st|bt|ex|lm|pb|b|fb|fs|sd|led)\d{1,3}[a-z]?)$")
 POKEMON_SET_CODE = re.compile(r"^(?:me(?:\d{1,2}(?:\.5)?)?|m\d{1,2}[a-z]{0,2}|s\d{1,2}[a-z]{0,2})$")
 POKEMON = "pokemon"
+YUGIOH = "yu-gi-oh"
+# Yu-Gi-Oh!'s Legendary Duelists sets are numbered by their code: "Legendary Duelists 9: Duels From the Deep" is LED9,
+# whose name Konami gives without the number ("Legendary Duelists: Duels From the Deep"). Shops write it either way
+# (the owner, 3 Nov 2026, with two pages for one pack), so the number is the set's code and not a count. Not a count
+# after it: "Legendary Duelists 3x Booster Packs" is not the third set.
+LEGENDARY_DUELISTS_NUMBER = re.compile(
+    r"\b(legendary duelists?) (\d{1,2})\b(?! ?x\b| (?:packs?|boosters?|blisters?|pk)\b)")
 # Words that say what kind of thing a product is, or describe it, without naming which one. A name made of
 # these and a code is named by its code: "PRB-01 Premium Booster Box" is not "PRB-02 Premium Booster Box".
 KIND_WORDS = {"elite", "trainer", "box", "center", "booster", "bundle", "display", "pack", "packs", "case", "tin",
@@ -303,6 +310,8 @@ def key_text(text, game=""):
         expanded = MEGA_EVOLUTION.sub(" me ", expanded)
         # Shops' names for the Simplified Chinese Gem Pack boxes: "Gem Series 4", "Gem Pack Vol. 4", "Gem 4".
         expanded = re.sub(r"\bgem series (?=\d)", "gem ", expanded)
+    if game == YUGIOH:
+        expanded = LEGENDARY_DUELISTS_NUMBER.sub(lambda m: f"{m.group(1)} led{int(m.group(2))}", expanded)
     expanded = SERIES.sub(_series_code, _spaced(expanded))
     # Codes before counts: "PRB 02 Booster Pack" is the second Premium Booster, and "(csv9.5) Booster Pack" a
     # pack of csv9.5, not five packs. Pokémon's "ex" is a kind of card ("Charizard ex"), never a code.
@@ -331,7 +340,7 @@ def key_text(text, game=""):
 # the same box written two ways, not two products.
 BOX_CONTENTS = re.compile(r"\b(?:booster box|display(?: box)?|elite trainer box|case)(?: of)? \d{1,3}(?: ?x)?"
                           r"(?: (?:sealed )?(?:booster )?packs?)?\b")
-CODES = re.compile(r"\b(?:(?:op|eb|prb)[ck]?|st|bt|ex|lm|pb|fb|fs|sd|b|sv|swsh|sm|xy|me|m|s)[- ]?\d{1,3}(?: 5)?[a-z]{0,2}\b"
+CODES = re.compile(r"\b(?:(?:op|eb|prb)[ck]?|st|bt|ex|lm|led|pb|fb|fs|sd|b|sv|swsh|sm|xy|me|m|s)[- ]?\d{1,3}(?: 5)?[a-z]{0,2}\b"
                    r"|\bu[ae]\d{1,2} ?(?:bt|st)\b")
 # A box's packs in brackets, as a shop writes what the box holds: "Booster Box M2A High Class Packs (10 Booster
 # Packs)". Only in a box's name: a bundle's "(5 Packs)" says which bundle it is.
@@ -356,6 +365,8 @@ def identity_numbers(name, game=""):
     for pattern, number in NUMBER_WORDS:
         text = pattern.sub(number, text)
     text = SERIES.sub(" ", MEGA_SET_NUMBER.sub(" ", text))
+    if game == YUGIOH:
+        text = LEGENDARY_DUELISTS_NUMBER.sub(r"\1", text)
     if game == POKEMON and re.search(r"\bbooster (?:pack )?bundle\b", text):
         # A Pokémon Booster Bundle holds six packs, which some shops say: what it holds, not which it is.
         text = re.sub(r"\b6 ?x? (?:sealed )?(?:booster )?packs?\b", " ", text)

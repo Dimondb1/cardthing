@@ -4735,7 +4735,13 @@ only a plain booster pack's, so "Mega Pack (18 Cards)" stays apart from its
 tin). The hourly tidy takes the notes out of names already shown too.
 Lorcana's set number goes ("Fabled (Set 9)", "Fabled (Chapter 9)"), and a
 set number is never read as a "box set", so "Fabled Booster Box (Set 9)" is
-a booster box. For Pokémon, "Mega Evolution 2 Phantasmal Flames" is ME02
+a booster box. For Yu-Gi-Oh!, the number after "Legendary Duelists" is the
+set's code, LED<n> ("Legendary Duelists 9: Duels From the Deep" is LED9), which
+Konami's own name leaves out and some shops put in, so a name with it and one
+without are one product, and two with different numbers are not (not when a
+pack count follows: "Legendary Duelists 3x Booster Packs"); this joined a
+booster pack that sat on two pages on 3 Nov 2026. For Pokémon,
+"Mega Evolution 2 Phantasmal Flames" is ME02
 (not when a pack count follows: "Mega Evolution 2 Pack Blister"), a
 "Checklane Blister" is a "Checklane", a "3 Pack Blister" a "Triple Blister",
 a "Booster Pack Bundle" the Booster Bundle, whose six packs are what it

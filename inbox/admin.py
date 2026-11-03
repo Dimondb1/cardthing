@@ -163,6 +163,9 @@ class ShopContactAdmin(admin.ModelAdmin):
     # Save comes first in the form, so Enter in a box saves rather than pressing the first Mark as sent.
     save_on_top = True
     change_list_template = "admin/shopcontact_change_list.html"
+
+    class Media:
+        js = ("js/copy-mail.js",)
     fieldsets = (
         (None, {"fields": ("retailer", "email", "status", "follow_up_on", "notes")}),
         ("Their figures on RipRaptor", {"fields": ("figures",)}),
@@ -230,6 +233,7 @@ class ShopContactAdmin(admin.ModelAdmin):
             found_on = urlsplit(contact.email_found_on)
             rows.append({"contact": contact, "subject": subject, "body": body, "lines": lines,
                          "mailto": outreach.mailto(contact.email or "", subject, body),
+                         "mailto_short": outreach.mailto(contact.email or "", subject),
                          "sent_on": sent_on.get(contact.pk),
                          "found_label": f"{found_on.hostname or ''}{found_on.path}"[:60] if contact.email_found_on else "",
                          "looked_at": timezone.localtime(contact.email_looked_at) if contact.email_looked_at else None})
@@ -370,22 +374,27 @@ class ShopContactAdmin(admin.ModelAdmin):
         rows = []
         for kind, name in outreach.DRAFTS:
             subject, body = outreach.draft(obj.retailer, kind, found, store)
-            rows.append((name, subject, len(body.splitlines()) + 1, body, outreach.mailto(to, subject, body), kind))
+            rows.append((name, subject, len(body.splitlines()) + 1, body, outreach.mailto(to, subject, body), kind,
+                         outreach.mailto(to, subject)))
         note = ("" if to else format_html(
             '<p style="color:var(--body-quiet-color)">No email address saved, so your mail app opens the draft '
             "with nobody to send it to. Add their address above and save to fill it in.</p>"))
         return format_html(
-            '{}<div style="width:100%">{}</div><p style="color:var(--body-quiet-color)">Change the wording in Site '
-            "wording, under Shop outreach emails.</p>",
+            '{}<p style="color:var(--body-quiet-color)">Open in your mail app copies the message first. In the app, '
+            "press and hold in the empty message and choose Paste: some mail apps run a filled-in message's lines "
+            'together.</p><div style="width:100%">{}</div><p style="color:var(--body-quiet-color)">Change the wording '
+            "in Site wording, under Shop outreach emails.</p>",
             note,
             format_html_join(
                 "",
-                '<div style="margin:0 0 20px;max-width:46rem"><h3 style="margin:0 0 6px">{}</h3>'
-                '<p style="margin:0 0 6px"><strong>Subject:</strong> {}</p>'
-                '<textarea readonly rows="{}" style="width:100%;box-sizing:border-box">{}</textarea>'
+                '<div style="margin:0 0 20px;max-width:46rem"><h3 style="margin:0 0 6px">{0}</h3>'
+                '<p style="margin:0 0 6px"><strong>Subject:</strong> {1}</p>'
+                '<textarea readonly id="body-{5}" rows="{2}" style="width:100%;box-sizing:border-box;height:auto;'
+                'max-height:none;field-sizing:content">{3}</textarea>'
                 '<p style="margin:8px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">'
-                '<a class="button" style="padding:10px 15px" href="{}">Open in your mail app</a>'
-                '<button type="submit" class="button" style="padding:10px 15px" name="_sent" value="{}">Mark as sent'
+                '<a class="button" style="padding:10px 15px" href="{4}" data-copy-from="body-{5}" data-short="{6}">'
+                'Open in your mail app</a>'
+                '<button type="submit" class="button" style="padding:10px 15px" name="_sent" value="{5}">Mark as sent'
                 "</button></p></div>",
                 rows,
             ),

@@ -1,9 +1,12 @@
 {% extends "admin/base_site.html" %}
+{% load static %}
+{% block extrahead %}{{ block.super }}<script src="{% static 'js/copy-mail.js' %}" defer></script>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; <a href="{% url 'admin:inbox_shopcontact_changelist' %}">Shop outreach</a> &rsaquo; {{ title }}</div>{% endblock %}
 {% block content %}
 {% comment %}One card per shop: its own address box, the email filled in with its figures, and the two buttons. Each card is its own form, so Save address (the first button, which Enter presses) never marks anything as sent. Nothing is sent from the site: the email opens in the owner's mail app.{% endcomment %}
 <div style="max-width: 46rem">
   <p>One email for each shop, filled in with its own figures: what we sent them, then the badge. Check the shop's address (press <strong>Find the missing addresses</strong> to fill them in, or type one), press <strong>Open in your mail app</strong>, send it, then press <strong>Mark as sent</strong>. A shop you have marked as sent drops off this list. The shops sending the most shoppers are first.</p>
+  <p style="color: var(--body-quiet-color)">Open in your mail app copies the message first. In the app, press and hold in the empty message and choose <strong>Paste</strong>: some mail apps run a filled-in message's lines together.</p>
   <p style="color: var(--body-quiet-color)">
     {{ rows|length }} shop{{ rows|length|pluralize }} here{% if no_address %}, {{ no_address }} with no address saved yet{% endif %}.
     {% if show_sent %}<a href="{% url 'admin:inbox_shopcontact_update_emails' %}">Hide the ones already sent</a>{% else %}<a href="{% url 'admin:inbox_shopcontact_update_emails' %}?show=all">Show the ones already sent too</a>{% endif %}.
@@ -36,9 +39,9 @@
     {% if row.contact.email and row.found_label %}<p style="margin: 0 0 8px; color: var(--body-quiet-color)">Found automatically on <a href="{{ row.contact.email_found_on }}" target="_blank" rel="noopener noreferrer">{{ row.found_label }}</a>. Check it looks right before you send.</p>
     {% elif not row.contact.email and row.contact.email_note %}<p style="margin: 0 0 8px; color: var(--body-quiet-color)">Looked {{ row.looked_at|date:"j M" }} and found none: {{ row.contact.email_note }}. Add it by hand.</p>{% endif %}
     <p style="margin: 0 0 6px"><strong>Subject:</strong> {{ row.subject }}</p>
-    <textarea readonly rows="{{ row.lines }}" style="width: 100%; box-sizing: border-box; height: auto; max-height: none; field-sizing: content">{{ row.body }}</textarea>
+    <textarea readonly id="body-{{ row.contact.pk }}" rows="{{ row.lines }}" style="width: 100%; box-sizing: border-box; height: auto; max-height: none; field-sizing: content">{{ row.body }}</textarea>
     <p style="margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
-      <a class="button" style="padding: 10px 15px" href="{{ row.mailto }}">Open in your mail app</a>
+      <a class="button" style="padding: 10px 15px" href="{{ row.mailto }}" data-copy-from="body-{{ row.contact.pk }}" data-short="{{ row.mailto_short }}">Open in your mail app</a>
       <button type="submit" class="button" style="padding: 10px 15px" name="_sent" value="update">Mark as sent</button>
     </p>
   </form>

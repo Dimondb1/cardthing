@@ -207,6 +207,12 @@ class MarkSentTests(OutreachTestCase):
         outreach.ensure_contacts()
         self.contact = ShopContact.objects.get(retailer=self.shop)
 
+    def test_mailto_without_a_body_carries_only_the_address_and_subject(self):
+        self.assertEqual(outreach.mailto("hello@harbour.example", "A badge for Harbour Games"),
+                         "mailto:hello@harbour.example?subject=A%20badge%20for%20Harbour%20Games")
+        self.assertEqual(outreach.mailto("", "Hi"), "mailto:?subject=Hi")
+        self.assertIn("&body=Hello%0D%0A%0D%0AThere", outreach.mailto("a@b.example", "Hi", "Hello\n\nThere"))
+
     def test_first_email_sets_emailed_and_a_follow_up(self):
         now = timezone.now()
         outreach.mark_sent(self.contact, "affiliate", "Subject", now)
@@ -500,3 +506,47 @@ class UpdateEmailsPageTests(OutreachTestCase):
         self.client.post(self.url, {"contact": self.contact(self.shop).pk, "email": "hello@harbour.example",
                                     "_sent": "update"})
         self.assertEqual(mail.outbox, [])
+
+
+class CopyBeforeOpeningTests(OutreachTestCase):
+    """Some mail apps (Zoho Mail on Android) run a filled-in message's lines together, so Open in your mail app
+    copies the message and opens the app with only the address and subject: the owner pastes it, line breaks kept."""
+
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.com", "pw"))
+        outreach.ensure_contacts()
+        ShopContact.objects.filter(retailer=self.shop).update(email="hello@harbour.example")
+
+    def test_every_draft_on_a_shops_page_copies_its_message_first(self):
+        contact = ShopContact.objects.get(retailer=self.shop)
+        html = self.client.get(reverse("admin:inbox_shopcontact_change", args=[contact.pk])).content.decode()
+        self.assertIn("js/copy-mail.js", html)
+        for kind, _name in outreach.DRAFTS:
+            with self.subTest(kind):
+                self.assertIn(f'<textarea readonly id="body-{kind}"', html)
+                link = html[html.index(f'data-copy-from="body-{kind}"'):]
+                link = link[:link.index(">")]
+                # The link itself still carries the whole message; the short one has the address and subject only.
+                self.assertRegex(link, r'data-short="mailto:hello@harbour\.example\?subject=[^"&]+"')
+                self.assertNotIn("body=", link[link.index("data-short"):])
+        self.assertIn("press and hold in the empty message and choose Paste", html)
+
+    def test_the_all_shops_page_does_too(self):
+        html = self.client.get(reverse("admin:inbox_shopcontact_update_emails")).content.decode()
+        contact = ShopContact.objects.get(retailer=self.shop)
+        self.assertIn("js/copy-mail.js", html)
+        self.assertIn(f'<textarea readonly id="body-{contact.pk}"', html)
+        link = html[html.index(f'data-copy-from="body-{contact.pk}"'):]
+        link = link[:link.index(">")]
+        self.assertRegex(link, r'data-short="mailto:hello@harbour\.example\?subject=A%20RipRaptor%20update[^"&]*"')
+        self.assertIn("press and hold in the empty message and choose <strong>Paste</strong>", html)
+
+    def test_the_script_copies_then_opens_and_falls_back_to_the_full_link(self):
+        from pathlib import Path
+
+        from django.conf import settings
+
+        script = (Path(settings.BASE_DIR) / "web" / "static" / "js" / "copy-mail.js").read_text()
+        self.assertIn("navigator.clipboard.writeText(box.value)", script)
+        self.assertIn("window.location.href = link.dataset.short", script)
+        self.assertIn("window.location.href = link.href", script)

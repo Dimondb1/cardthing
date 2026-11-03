@@ -210,10 +210,13 @@ def draft(retailer, kind, found, store=None):
     return subject, re.sub(r"[ \t]+\n", "\n", body)
 
 
-def mailto(email, subject, body):
+def mailto(email, subject, body=""):
     """A mailto: link that opens the email in the owner's mail app, ready to send. Line breaks as CRLF, as the
-    standard asks."""
-    query = f"subject={quote(subject)}&body={quote(body.replace(chr(13), '').replace(chr(10), chr(13) + chr(10)))}"
+    standard asks. With no ``body`` the link carries only the address and subject: some mail apps (Zoho Mail on
+    Android) run a filled-in message's lines together, so the owner's page copies the message and opens that link."""
+    query = f"subject={quote(subject)}"
+    if body:
+        query += f"&body={quote(body.replace(chr(13), '').replace(chr(10), chr(13) + chr(10)))}"
     return f"mailto:{quote(email, safe='@')}?{query}"
 
 

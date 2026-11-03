@@ -4216,7 +4216,14 @@ RipRaptor lists: to ask for an affiliate link, to tell them how many
 shoppers you sent them, to ask for a product feed, or to offer the
 RipRaptor badge (below). Nothing is sent from
 the site. Each draft opens in your own mail app (a `mailto:` link), so it
-goes from your Zoho address and the replies come back there. ZeptoMail is
+goes from your Zoho address and the replies come back there. Open in your
+mail app first copies the whole message to the phone's clipboard
+(`web/static/js/copy-mail.js`) and opens the app with only the address and
+subject: press and hold in the empty message and choose Paste. That is
+because the Zoho Mail app on Android runs a filled-in message's lines
+together (the line breaks are sent the standard way, `%0D%0A`, and it drops
+them); pasting keeps them. With JavaScript off, or when the browser will not
+copy, the link is the full `mailto:` link, message included, as before. ZeptoMail is
 for the automatic alert emails only and is never used for this.
 
 Every shop except eBay and Amazon has a row, made when the page opens

@@ -1,6 +1,6 @@
 {% extends "web/base.html" %}
 {% load sitecopy ripraptor static %}
-{% block scripts %}<script src="{% static 'js/feed.js' %}" defer></script>
+{% block scripts %}<script src="{% static 'js/feed.js' %}" defer></script><script src="{% static 'js/browse.js' %}" defer></script>
 {# Switching games: Chrome cross-fades one feed page into the next and fetches a game's page as the finger lands on it (web/static/css/site.css, the feed); other browsers load as usual. #}
 <style>@view-transition { navigation: auto; }</style>
 <script type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".feed-game"}, "eagerness": "moderate"}]}</script>{% endblock %}
@@ -11,7 +11,10 @@
 {# The new home page (web/feed.py, on while the owner's switch is: web/look.py): the dock first (the search box and the games, fixed to the foot of a phone, a tab row under the header on a wide screen), then the feed's top, then the partners the owner added in Admin. #}
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" %}
+{# A type tile's list takes this region's place (browse.js), the dock and the partners staying put; Back brings the feed again. #}
+<div data-browse>
 {% include "web/includes/feed_top.html" %}
+</div>
 
 {% if partners %}
 {# The partners the owner added in Admin (web/partners.py), by their logos, as on the usual home page: each logo whole, at its own proportions, in full colour and with clear space round it; the link as any shop link, sponsored and not followed. #}

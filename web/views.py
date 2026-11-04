@@ -1055,15 +1055,37 @@ def drop_spotlight(request, today=None):
 @require_GET
 def search(request):
     query = request.GET.get("q", "").strip()
+    kind = request.GET.get("type", "")
     if query:
         heading = text(request, "browse.results.title", query=query)
+    elif kind in Product.Type.values and kind != Product.Type.OTHER:
+        # A type on its own (a type tile on the new home page opens one): the page is that type, not "All products".
+        heading = type_heading(kind)
     else:
         heading = text(request, "browse.all.title")
     return _browse(
         request,
-        {"heading": heading, "meta_title": heading, "noindex": True, "is_search": True},
+        {
+            "heading": heading, "meta_title": heading, "noindex": True, "is_search": True,
+            # The sort and filters fold under one button, as on a game's page, so the list is in reach on a phone.
+            "fold_filters": True,
+            # With the new home page on (web/look.py), a type's list leads with its tiles, the chosen one marked, so a
+            # tap on a tile lands on results and not under them (web/feed.py).
+            "feed": feed.context(request, kind=kind) if not query and look.for_request(request) and kind in feed.TYPE_LABELS
+            else None,
+        },
         base_queryset=Product.objects.for_lists(),
     )
+
+
+def type_heading(kind):
+    """A product type as a page heading: the short plural the new home page's tiles use ("Booster boxes", "ETBs"),
+    else its plural, capitalised."""
+    if kind in feed.TYPE_LABELS:
+        return feed.TYPE_LABELS[kind]
+    words = plural_words(None, [kind])
+    word = words[0] if words else kind.replace("_", " ")
+    return word[:1].upper() + word[1:]
 
 
 @require_GET
@@ -1168,7 +1190,8 @@ def game_detail(request, game_slug):
             "canonical_url": page_url,
             "coming_soon": coming_soon_sets(game),
             # With the new home page on (web/look.py), the game's page leads with the feed's top (web/feed.py).
-            "feed": feed.context(request, game) if not pane and look.for_request(request) else None,
+            "feed": (feed.context(request, game, kind=request.GET.get("type", ""))
+                     if not pane and look.for_request(request) else None),
         },
         base_queryset=Product.objects.for_lists().filter(game=game),
         fixed_game=game,

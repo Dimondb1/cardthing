@@ -3,8 +3,8 @@
 // that page is fetched and its results (the part of the page under data-browse) take the place of the ones on
 // screen, under a short cross-fade where the browser has view transitions and motion is not reduced: nothing
 // scrolls away, the folded panel stays open, the address follows and Back goes through the lists seen. The
-// scripts that enhance the list hear ripraptor:content (images, Save links, the filter form) and ripraptor:page
-// (the stock tabs) and set the new markup up. Nothing here is required.
+// scripts that enhance the list hear ripraptor:content (images, Save links, the filter form, the feed's rows) and
+// ripraptor:page (the stock tabs) and set the new markup up. Nothing here is required.
 (() => {
   const OPEN = "rr-filters-open";   // the folded panel, kept open across a full load of the same page
   let root = document.querySelector("[data-browse]");
@@ -52,11 +52,13 @@
     else apply();
   }
 
-  function load(url, push) {
+  function load(url, push, source) {
     if (controller) controller.abort();
     controller = new AbortController();
     const { signal } = controller;
     root.setAttribute("aria-busy", "true");
+    // What asked for the page, for a script that shows something while it comes (feed.js: a type tile's list).
+    document.dispatchEvent(new CustomEvent("ripraptor:loading", { detail: { url, source: source || null } }));
     fetch(url, { credentials: "same-origin", signal })
       .then((response) => {
         if (!response.ok) throw new Error(String(response.status));
@@ -89,15 +91,18 @@
 
   // So does a link to this page with other choices: a quick filter, Clear filters, the link under an empty
   // list. Another page's link, a page of results (the top of a new page should be in view) and a link the
-  // stock tabs or Save already took are left alone.
+  // stock tabs or Save already took are left alone. A link marked data-browse-link (the new home page's type
+  // tiles, which open the search page's list) is loaded in whatever page it names, so the list lands under
+  // the tiles and Back brings the feed.
   document.addEventListener("click", (event) => {
     const link = event.target.closest && event.target.closest("a[href]");
     if (!link || event.defaultPrevented || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!root.contains(link) || link.target || link.closest(".pagination")) return;
     const url = new URL(link.href, location.href);
-    if (url.origin !== location.origin || url.pathname !== location.pathname || url.hash || url.search === location.search) return;
+    if (url.origin !== location.origin || url.hash || url.href === location.href) return;
+    if (!link.hasAttribute("data-browse-link") && url.pathname !== location.pathname) return;
     event.preventDefault();
-    load(url.href, true);
+    load(url.href, true, link);
   });
 
   // Back and Forward move through the lists seen, fetched again so the prices are the page's own.

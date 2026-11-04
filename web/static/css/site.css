@@ -2269,6 +2269,33 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-tile__well .product-image { display: block; width: var(--feed-tile-image); height: var(--feed-tile-image); line-height: 0; }
 .feed-tile__well img, .feed-card__well img { display: block; width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
 .feed-tile__label { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); text-align: center; }
+/* Filtered to a type (a tile tapped): the chosen tile wears a ring, the row sticks to the top over the list, and the rails
+   dim the moment the tap lands (browse.js marks the region busy) before the list takes their place. */
+.feed-tile__link[aria-current="page"] .feed-tile__well { box-shadow: inset 0 0 0 var(--feed-ring) var(--color-brand); }
+.feed-tile__link[aria-current="page"] .feed-tile__label { color: var(--color-brand-text); }
+.feed--filtered .feed__scroller--tiles { position: sticky; top: 0; z-index: 3; margin-inline: calc(-1 * var(--gutter)); padding: var(--space-2) var(--gutter) 0; background: var(--color-paper); box-shadow: 0 var(--border-width) 0 var(--color-line); }
+.feed--filtered .feed__scroller--tiles .feed__row { margin-inline: 0; padding-inline: 0; margin-top: 0; padding-top: 0; }
+.feed--filtered .feed__scroller--tiles .feed__more { right: var(--space-3); }
+.feed__scroller--tiles { view-transition-name: feed-tiles; }
+.feed__rail { transition: opacity var(--motion-fast) var(--ease-standard); }
+/* The list's head under the tiles: the type and its count, the sort beside them and Clear. */
+.feed-list-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-4); }
+.feed-list-head__text { flex: 1 1 auto; min-width: 0; }
+.feed-list-head .browse-head__title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }
+.feed-list-head .browse-head__count { margin: 0; }
+.feed-sort { display: flex; align-items: center; gap: var(--space-2); }
+.feed-list-head__clear { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-pill); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); text-decoration: none; }
+.feed-list-head__clear:hover { background: var(--color-shelf); }
+/* The sketch of a list while a tile's list is fetched: the type's name, Loading, and four grey cards that breathe. */
+.feed-sketch { margin-top: var(--space-4); }
+.feed-sketch__title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }
+.feed-sketch__status { margin: var(--space-1) 0 var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
+.feed-sketch__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.feed-sketch__grid span { display: block; aspect-ratio: 4 / 5; border-radius: var(--radius-card); background: var(--color-shelf); animation: feed-breathe var(--motion-slow) var(--ease-standard) infinite alternate; }
+@keyframes feed-breathe { from { opacity: 1; } to { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .feed-sketch__grid span { animation: none; } }
+@media (min-width: 48rem) { .feed-sketch__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+[data-browse][aria-busy="true"] .feed__rail { opacity: 0.35; }
 .feed__rail { margin-top: var(--space-5); }
 .feed__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
 .feed__h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }
@@ -2354,6 +2381,8 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .feed-games { gap: var(--space-2); padding: var(--space-2) 0 var(--space-3); border-bottom: var(--border-width) solid var(--color-line); }
   .feed__title { margin-top: var(--space-4); }
   .feed__row { margin-inline: 0; padding-inline: 0; }
+  .feed--filtered .feed__scroller--tiles { margin-inline: 0; padding-inline: 0; }
+  .feed--filtered .feed__scroller--tiles .feed__more { right: 0; }
   .feed-tile, .feed-tile__well { width: var(--feed-tile-wide); }
   .feed-tile__well { height: var(--feed-tile-wide); }
   .feed-tile__well .product-image { width: var(--feed-tile-image-wide); height: var(--feed-tile-image-wide); }

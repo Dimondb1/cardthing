@@ -265,11 +265,12 @@ class FilterTests(HubLayoutTestCase):
         self.assertIn(".filter-bar .filter-panel { grid-area: 1 / 1 / 2 / 3;", css)
         self.assertIn(".filter-bar__clear { grid-area: 1 / 2;", css)
 
-    def test_search_keeps_its_filters_in_view(self):
+    def test_search_folds_its_filters_too(self):
+        # The owner, 4 Nov 2026: the search page's filters pushed its results below the fold on a phone.
         self.fill(2)
         html = self.get(reverse("web:search") + "?q=duelist")
         self.assertIn('<form class="filters"', html)
-        self.assertNotIn("filter-panel", html)
+        self.assertIn('<details class="filter-panel" data-filter-panel>', html)
 
 
 class GameSetRowTests(HubLayoutTestCase):

@@ -6,8 +6,9 @@
 {% block content %}
 {% include "web/includes/share_dialog.html" %}
 {# Everything a filter can change: browse.js fetches the page a change names and swaps this region in, so the share sheet above and the rest of the page stay put. #}
+{% if feed %}{# The new home page is on (web/look.py): the page carries the feed's search and game bar, and leads with the feed's top, which a filter change swaps with the list (web/feed.py). #}{% include "web/includes/feed_sprite.svg" %}{% include "web/includes/feed_dock.html" %}{% endif %}
 <div data-browse>
-{% if feed %}{# The new home page is on (web/look.py): the game's page leads with the feed's top, and carries its search and game bar (web/feed.py). #}{% include "web/includes/feed_sprite.svg" %}{% include "web/includes/feed_dock.html" %}{% include "web/includes/feed_top.html" %}{% endif %}
+{% if feed %}{% include "web/includes/feed_top.html" %}{% endif %}
 {% if query %}<span data-search-query="{{ query }}" hidden></span>{% endif %}
 {% if game %}<span data-visited-game="{{ game.slug }}" hidden></span>{% endif %}
 {% if no_matches %}
@@ -27,6 +28,24 @@
   </div>
 </div>
 {% else %}
+{% if feed.filtered %}
+{# Filtered to a type from the feed's tiles: the type as the heading with its count, the sort beside it and Clear, which leads back to the feed. The other filters wait on the usual page. #}
+<div class="browse-head feed-list-head">
+  <div class="feed-list-head__text"><h1 class="browse-head__title">{{ feed.list_title }}</h1><p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p></div>
+  <form class="feed-sort" method="get" action="" data-autosubmit>
+    <input type="hidden" name="type" value="{{ feed.kind }}">
+    {% if form.game.value %}<input type="hidden" name="game" value="{{ form.game.value }}">{% endif %}
+    {% if form.lang.value %}<input type="hidden" name="lang" value="{{ form.lang.value }}">{% endif %}
+    {% if tab %}<input type="hidden" name="tab" value="{{ tab_asked }}" data-tab-input>{% endif %}
+    <div class="pill pill--sort">
+      <label class="visually-hidden" for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
+      {{ form.sort }}
+    </div>
+    <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
+  </form>
+  <a class="feed-list-head__clear" href="{{ feed.clear_url }}" data-browse-link><span aria-hidden="true">× </span>{% copy "feed.list.clear" %}</a>
+</div>
+{% else %}
 <div class="browse-head">
   {% if game %}
   <nav class="breadcrumbs" aria-label="Breadcrumb">
@@ -43,8 +62,9 @@
   {# The line under the heading already counts the products, unless a filter has narrowed the list; the stock tabs count them too. #}
   {% if not tab_row %}{% if not intro or filters_active %}<p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p>{% endif %}{% endif %}
 </div>
+{% endif %}
 
-{% if sets %}
+{% if sets and not feed.filtered %}
 <nav class="set-nav" id="sets" aria-label="{% copy 'browse.game.sets_title' %}">
   <ul>
     {# Each set with how many of its products are in stock (in the language and type chosen): a dot in the in-stock colour when some are, grey when none. #}
@@ -90,7 +110,7 @@
 </nav>
 {% endif %}
 
-{% if show_filters %}
+{% if show_filters and not feed.filtered %}
 {# On game and set pages the choices fold under one button, closed even while some are chosen: the button names them, and Clear filters sits beside it. site.js keeps it open after a change made in it. #}
 {% if fold_filters %}<div class="filter-bar">
 <details class="filter-panel" data-filter-panel>

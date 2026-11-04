@@ -172,7 +172,7 @@ class HomeFeedTests(FeedCase):
         self.assertIn('<p class="feed__sub">Cheapest delivered prices from UK shops</p>', html)
         # The tiles: each type with something in stock, the most stocked first, pictured by its cheapest product
         # and opening the search narrowed to that type. The sold-out bundle neither counts nor pictures.
-        tiles = re.findall(r'<li class="feed-tile"><a class="feed-tile__link" href="([^"]+)">.*?'
+        tiles = re.findall(r'<li class="feed-tile"><a class="feed-tile__link" href="([^"]+)" data-browse-link>.*?'
                            r'<span class="feed-tile__label">([^<]+)</span>', html, re.S)
         self.assertEqual(tiles, [
             (f"{reverse('web:search')}?type=booster_box", "Booster boxes"),
@@ -336,7 +336,7 @@ class HomeFeedTests(FeedCase):
         self.assertIn('<h1 class="feed__title">Pokémon</h1>', html)
         self.assertIn('<h2 class="browse-head__title">Pokémon</h2>', html)   # the usual list below: one h1 a page
         self.assertEqual(html.count("<h1"), 1)
-        tiles = re.findall(r'<li class="feed-tile"><a class="feed-tile__link" href="([^"]+)">', html)
+        tiles = re.findall(r'<li class="feed-tile"><a class="feed-tile__link" href="([^"]+)" data-browse-link>', html)
         self.assertEqual(tiles, [f"{url}?type=booster_box", f"{url}?type=bundle", f"{url}?type=elite_trainer_box",
                                  f"{url}?type=tin"])   # one of each in stock (the drop is on pre-order), so by type
         # Three Pokémon products under RRP: Best prices today, the saving on the next shop, no game label.
@@ -394,6 +394,103 @@ class HomeFeedTests(FeedCase):
         after = {url: count(url) for url in before}
         self.assertEqual(after, before)
         self.assertLessEqual(before[HOME], 6)   # the wording, the tiles' products and the bar's games
+
+
+class TypeTileTests(FeedCase):
+    """A type tile filters in place: the list lands under the tiles, the row sticks, Back works (browse.js). The
+    owner, 4 Nov 2026: tapping a tile went to /search/?type=, "where the results are below the fold, so users
+    think nothing happened"."""
+
+    def setUp(self):
+        super().setUp()
+        switch(True)
+
+    def test_the_search_page_names_the_type_and_folds_its_filters(self):
+        switch(False)
+        for kind, title in (("booster_box", "Booster boxes"), ("elite_trainer_box", "ETBs"), ("tin", "Tins")):
+            html = self.page(reverse("web:search"), type=kind)
+            with self.subTest(kind=kind):
+                self.assertIn(f'<h1 class="browse-head__title">{title}</h1>', html)
+                self.assertIn(f"<title>{title} | RipRaptor</title>", html)
+                self.assertNotIn("All products", html)
+        self.assertIn('<h1 class="browse-head__title">All products</h1>', self.page(reverse("web:search")))
+        self.assertIn("Results for ‘etb’", self.page(reverse("web:search"), q="etb", type="booster_box"))
+        # The sort and filters fold under one button, as on a game's page, on every search.
+        for params in ({"type": "booster_box"}, {"q": "box"}):
+            with self.subTest(params=params):
+                html = self.page(reverse("web:search"), **params)
+                self.assertIn('<details class="filter-panel" data-filter-panel>', html)
+                self.assertIn('<summary class="filter-panel__toggle"><span>Sort and filter</span>', html)
+
+    def test_a_tile_is_a_link_that_loads_its_list_in_place(self):
+        html = self.page()
+        self.assertIn('<div data-browse>\n', html)
+        self.assertLess(html.index("<div data-browse>"), html.index('<div class="feed">'))
+        self.assertIn('<script src="/static/js/browse.js" defer></script>', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{reverse("web:search")}?type=booster_box" data-browse-link>', html)
+        self.assertNotIn('aria-current="page"><span class="feed-tile__well"', html)
+        self.assertIn('data-loading="Loading"', html)
+        self.assertIn('class="feed__scroller feed__scroller--tiles"', html)
+
+    def test_the_search_page_filtered_to_a_type_leads_with_the_tiles_and_the_list_right_under(self):
+        html = self.page(reverse("web:search"), type="booster_box")
+        self.assertIn('<div class="feed feed--filtered">', html)
+        self.assertNotIn("feed__title", html)
+        self.assertNotIn("feed-rail-title", html)
+        self.assertNotIn("feed-deals-title", html)
+        self.assertNotIn("feed-drop-title", html)
+        self.assertNotIn('id="interest-games"', html)
+        # The chosen tile wears the mark and leads back to the feed; the others open their own lists in place.
+        self.assertIn(f'<a class="feed-tile__link" href="{HOME}" data-browse-link aria-current="page">', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{reverse("web:search")}?type=bundle" data-browse-link>', html)
+        # The list's head: the type, its count, the sort, and Clear back to the feed. No folded filters here.
+        head = html[html.index('<div class="browse-head feed-list-head">'):html.index("</div>\n", html.index("feed-list-head__clear"))]
+        self.assertIn('<h1 class="browse-head__title">Booster boxes</h1>', head)
+        self.assertIn('<p class="browse-head__count" role="status">2 products</p>', head)   # the box and the drop's
+        self.assertIn('<form class="feed-sort" method="get" action="" data-autosubmit>', head)
+        self.assertIn('<input type="hidden" name="type" value="booster_box">', head)
+        self.assertIn('name="sort"', head)
+        self.assertIn(f'<a class="feed-list-head__clear" href="{HOME}" data-browse-link><span aria-hidden="true">× </span>Clear</a>', head)
+        self.assertNotIn("filter-panel", html)
+        self.assertIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):])
+        self.assertEqual(html.count("<h1"), 1)
+        # The dock stays, outside the region a tile swaps.
+        self.assertLess(html.index('<div class="feed-dock">'), html.index("<div data-browse>"))
+        # A search with words is the usual results page, feed or no feed.
+        self.assertNotIn('class="feed', self.page(reverse("web:search"), q="box", type="booster_box"))
+        self.assertNotIn('class="feed', self.page(reverse("web:search"), q="box"))
+
+    def test_a_games_page_filtered_to_a_type_does_the_same_and_clears_to_the_games_page(self):
+        url = self.pokemon.get_absolute_url()
+        html = self.page(url, type="elite_trainer_box")
+        self.assertIn('<div class="feed feed--filtered">', html)
+        self.assertNotIn("feed__title", html)
+        self.assertNotIn("feed-rail-title", html)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}" data-browse-link aria-current="page">', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}?type=booster_box" data-browse-link>', html)
+        self.assertIn('<h1 class="browse-head__title">ETBs</h1>', html)
+        self.assertIn(f'<a class="feed-list-head__clear" href="{url}" data-browse-link>', html)
+        self.assertNotIn("filter-panel", html)
+        self.assertNotIn('class="sets', html)
+        self.assertIn(self.etb.get_absolute_url(), html)
+        self.assertNotIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):])
+        self.assertLess(html.index('<div class="feed-dock">'), html.index("<div data-browse>"))
+        # The usual game page, unfiltered, keeps its feed, sets and folded filters.
+        plain = self.page(url)
+        self.assertIn('<div class="feed">', plain)
+        self.assertIn("feed-rail-title", plain)
+        self.assertNotIn("feed-list-head", plain)
+
+    def test_the_filtered_pages_keep_the_house_style(self):
+        for url, params in ((reverse("web:search"), {"type": "booster_box"}), (self.pokemon.get_absolute_url(), {"type": "tin"})):
+            html = self.page(url, **params)
+            text = text_of(html)
+            with self.subTest(url=url):
+                self.assertNotIn("!", text)
+                for phrase in CopyStyleTests.BANNED:
+                    self.assertNotIn(phrase, html.lower())
+                for mark in ("{#", "#}", "{%", "%}", "{{", "}}"):
+                    self.assertNotIn(mark, text)
 
 
 class CacheTests(FeedCase):

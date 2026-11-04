@@ -5094,7 +5094,15 @@ results as you type by the header's own script (`site.js`), above the box.
 Switching games is a normal page load; in Chrome the feed pages opt in to a
 cross-document view transition (the dock stays, the chosen pill glides) and
 fetch a game's page as the finger lands on it (speculation rules), so it
-feels like one screen changing. Each game's page leads with the same top for that game, its search
+feels like one screen changing. A type tile is a link to the list of that
+type (`/search/?type=` from the home page, `/games/<game>/?type=` from a
+game's page); with the feed on, those pages lead with the tiles, the chosen
+one marked and the row stuck to the top, and the list right under them with
+the type as its heading, its count, the sort and Clear. The feed's region is
+`data-browse`, so `browse.js` loads a tile's list in place (a sketch of the
+list shows while it comes), puts `?type=` in the address, and Back brings
+the feed again. The search page's own heading names the type too, and its
+sort and filters fold under one button. Each game's page leads with the same top for that game, its search
 scoped to the game. From a tablet up the search goes back into the header
 and the games are a tab row under it. Every price is a live delivered price
 and a saving is only claimed where the data backs it: the product's RRP, or

@@ -374,5 +374,6 @@
   --radius-tile: 22px;
   --color-brand-pill: #ffdccb;     /* the selected game's pill in the bar */
   --feed-line: 1.5px;              /* the search pill's and the bell's firmer line */
+  --feed-ring: 2px;                /* the ring round the chosen type tile */
   --shadow-search: 0 2px 10px rgb(31 36 48 / 0.08);
 }

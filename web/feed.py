@@ -58,6 +58,7 @@ class Tile:
     label: str
     product: object
     url: str
+    current: bool = False   # the type the list under the tiles is filtered to; its link clears the filter
 
 
 @dataclass
@@ -97,21 +98,23 @@ def tile_picks(fresh=False):
     return picks
 
 
-def tiles(game=None):
+def tiles(game=None, current=""):
     """The product type tiles for ``game`` (or every game): TILES_SHOWN at most, each pictured by a real product and
-    opening the list of that type. One query for the products."""
+    opening the list of that type. With ``current`` (the type the list is filtered to) that tile is marked and leads
+    back to the unfiltered page, so a second tap clears the filter. One query for the products."""
     picks = tile_picks()
     rows = picks["games"].get(game.pk, []) if game is not None else picks["all"]
     rows = [row for row in rows if row[0] in TYPE_LABELS][:TILES_SHOWN]
     products = Product.objects.active().in_bulk([pk for _kind, pk, _n in rows]) if rows else {}
+    base = game.get_absolute_url() if game is not None else reverse("web:search")
+    clear = game.get_absolute_url() if game is not None else reverse("web:home")
     found = []
     for kind, pk, _n in rows:
         product = products.get(pk)
         if product is None:
             continue
-        url = (f"{game.get_absolute_url()}?type={kind}" if game is not None
-               else f"{reverse('web:search')}?type={kind}")
-        found.append(Tile(kind, TYPE_LABELS[kind], product, url))
+        chosen = kind == current
+        found.append(Tile(kind, TYPE_LABELS[kind], product, clear if chosen else f"{base}?type={kind}", chosen))
     return found
 
 
@@ -230,14 +233,20 @@ def games_bar(games=None):
              "url": game.get_absolute_url()} for game in games]
 
 
-def context(request, game=None):
-    """Everything the feed's templates show for the home page (``game`` None) or a game's page."""
+def context(request, game=None, kind=""):
+    """Everything the feed's templates show for the home page (``game`` None), a game's page, or, with ``kind`` a
+    product type, the list filtered to that type: then only the tiles show, the chosen one marked and the row stuck
+    to the top, and the list sits right under them with the type as its heading, so the feed's title is left out."""
     from web import views
 
     store = copy.for_request(request)
-    kind, cards = rail(game)
-    shown, spares = cards[:RAIL_SIZE], cards[RAIL_SIZE:]
-    deal_rows, deal_spares = deals(game, {card.product.pk for card in cards})
+    filtered = kind in TYPE_LABELS
+    if filtered:
+        rail_kind, shown, spares, deal_rows, deal_spares = "save", [], [], [], []
+    else:
+        rail_kind, cards = rail(game)
+        shown, spares = cards[:RAIL_SIZE], cards[RAIL_SIZE:]
+        deal_rows, deal_spares = deals(game, {card.product.pk for card in cards})
     games = games_with_products()
     if game is not None:
         title = game.name
@@ -248,11 +257,14 @@ def context(request, game=None):
         rail_url = reverse("web:deals")
         search_hint = copy.get("feed.search.placeholder", store=store)
     return {
-        "game": game, "show_game": game is None, "title": title,
-        "tiles": tiles(game), "rail_kind": kind, "rail": shown, "rail_spares": spares,
-        "rail_title": copy.get("feed.rail.rrp" if kind == "rrp" else "feed.rail.best", store=store),
+        "game": game, "show_game": game is None, "title": title, "show_title": not filtered,
+        # Filtered to a type: the list's heading is the tile's label, and Clear leads back to the page unfiltered.
+        "filtered": filtered, "kind": kind if filtered else "", "list_title": TYPE_LABELS.get(kind, ""),
+        "clear_url": game.get_absolute_url() if game is not None else reverse("web:home"),
+        "tiles": tiles(game, current=kind), "rail_kind": rail_kind, "rail": shown, "rail_spares": spares,
+        "rail_title": copy.get("feed.rail.rrp" if rail_kind == "rrp" else "feed.rail.best", store=store),
         "rail_url": rail_url, "deals": deal_rows, "deals_spares": deal_spares,
         "deals_paying_only": FeaturedSettings.current().paying_only if deal_rows else False,
-        "drop": drop(game), "games": games_bar(games), "interest_games": views.interest_lexicon(games),
-        "search_hint": search_hint, "today": date.today(),
+        "drop": None if filtered else drop(game), "games": games_bar(games),
+        "interest_games": views.interest_lexicon(games), "search_hint": search_hint, "today": date.today(),
     }

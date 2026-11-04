@@ -486,6 +486,8 @@ ENTRIES = [
           "can listen."),
     Entry("feed.search.listening", B, "New home page: search by voice, listening", "Listening",
           "What the microphone button says while the browser listens."),
+    Entry("feed.list.clear", B, "New home page: clear the type filter", "Clear",
+          "Beside a type's list under the tiles: leads back to the feed. The chosen tile does the same."),
     Entry("feed.row.more", B, "New home page: the arrow at the end of a row", "Show more",
           "The arrow at the end of each row of tiles or cards, read out by screen readers. A tap scrolls the row on."),
     Entry("feed.search.placeholder_game", T, "New home page search box hint on a game's page",

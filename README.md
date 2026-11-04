@@ -5089,7 +5089,12 @@ of the games. The two rails carry hidden spares and `interest.js` brings
 the visitor's own games forward, in the browser, as on the usual home page.
 `feed.js` adds an arrow at the end of each row while there is more to see,
 and a microphone to the search box where the browser can listen (Chrome on
-a phone), which searches for what was said. Each game's page leads with the same top for that game, its search
+a phone), which searches for what was said. The dock's search box shows
+results as you type by the header's own script (`site.js`), above the box.
+Switching games is a normal page load; in Chrome the feed pages opt in to a
+cross-document view transition (the dock stays, the chosen pill glides) and
+fetch a game's page as the finger lands on it (speculation rules), so it
+feels like one screen changing. Each game's page leads with the same top for that game, its search
 scoped to the game. From a tablet up the search goes back into the header
 and the games are a tab row under it. Every price is a live delivered price
 and a saving is only claimed where the data backs it: the product's RRP, or

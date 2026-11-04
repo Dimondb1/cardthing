@@ -173,4 +173,4 @@
 {% endblock %}
 
 {# tabs.js on every page with stock tabs, not only one with a tab row: a filter change can bring the row in. #}
-{% block scripts %}{% if stock_tabs %}<script src="{% static 'js/tabs.js' %}" defer></script>{% endif %}<script src="{% static 'js/browse.js' %}" defer></script><script src="{% static 'js/share.js' %}" defer></script>{% if feed %}<script src="{% static 'js/feed.js' %}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if stock_tabs %}<script src="{% static 'js/tabs.js' %}" defer></script>{% endif %}<script src="{% static 'js/browse.js' %}" defer></script><script src="{% static 'js/share.js' %}" defer></script>{% if feed %}<script src="{% static 'js/feed.js' %}" defer></script><style>@view-transition { navigation: auto; }</style><script type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".feed-game"}, "eagerness": "moderate"}]}</script>{% endif %}{% endblock %}

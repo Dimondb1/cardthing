@@ -1,4 +1,4 @@
-{% load sitecopy ripraptor static %}{# The feed's top (web/feed.py): the title, the product type tiles, the rail of deals, Rip's Deals and the next drop. Takes feed (feed.context). Each row swipes sideways; feed.js adds an arrow at its end while there is more to see. #}
+{% load sitecopy ripraptor static %}{# The feed's top (web/feed.py): the title, the product type tiles, the rail of deals, Rip's Deals and the next drop. Takes feed (feed.context). Each row swipes sideways; feed.js adds an arrow at its end while there is more to see. The headers wear the site's own marks, as the usual home page's do: the hunting raptor on the deals, the raptor on Rip's Deals, the drops mark on the next drop. #}
 <div class="feed">
   <h1 class="feed__title">{{ feed.title }}</h1>
   <p class="feed__sub">{% copy "feed.subtitle" %}</p>
@@ -13,7 +13,7 @@
   {% endif %}
   {% if feed.rail %}
   <section class="feed__rail" aria-labelledby="feed-rail-title">
-    <div class="feed__head"><h2 id="feed-rail-title" class="feed__h2">{{ feed.rail_title }}</h2><a class="feed__all" href="{{ feed.rail_url }}">{% copy "site.see_all" %}</a></div>
+    <div class="feed__head"><h2 id="feed-rail-title" class="feed__h2 feed__h2--mark">{% include "web/includes/mark_hunt.html" %}{{ feed.rail_title }}</h2><a class="feed__all" href="{{ feed.rail_url }}">{% copy "site.see_all" %}</a></div>
     {# The spares wait hidden after the shown cards; interest.js brings the visitor's own games forward, in the browser only. #}
     <div class="feed__scroller">
       <ul class="feed__row feed__cards" data-interest data-interest-show="{{ feed.rail|length }}">
@@ -27,7 +27,7 @@
   {% if feed.deals %}
   {# Rip's Deals as on the usual home page (web/views.py featured_pick): the shops that pay a commission first, which the line under the row says, as the law asks. #}
   <section class="feed__rail" aria-labelledby="feed-deals-title">
-    <div class="feed__head"><h2 id="feed-deals-title" class="feed__h2">{% copy "home.featured.title" %}</h2><a class="feed__all" href="{% url 'web:deals' %}{% if feed.game %}?game={{ feed.game.slug }}{% endif %}">{% copy "site.see_all" %}</a></div>
+    <div class="feed__head"><h2 id="feed-deals-title" class="feed__h2 feed__h2--mark"><span class="mark section-head__mascot" aria-hidden="true"></span>{% copy "home.featured.title" %}</h2><a class="feed__all" href="{% url 'web:deals' %}{% if feed.game %}?game={{ feed.game.slug }}{% endif %}">{% copy "site.see_all" %}</a></div>
     <div class="feed__scroller">
       <ul class="feed__row feed__cards" data-interest data-interest-show="{{ feed.deals|length }}">
         {% for product, summary in feed.deals %}{% include "web/includes/feed_card.html" with kind="deal" show_game=feed.show_game %}{% endfor %}
@@ -41,7 +41,7 @@
   {% if feed.rail or feed.deals %}{{ feed.interest_games|json_script:"interest-games" }}<script>{% inline_static "js/interest.js" %}</script>{% endif %}
   {% if feed.drop %}{% with drop=feed.drop %}
   <section class="feed__rail feed__drop" aria-labelledby="feed-drop-title">
-    <div class="feed__head"><h2 id="feed-drop-title" class="feed__h2">{% copy "feed.drop.title" %}</h2><a class="feed__all" href="{% url 'web:drops' %}{% if feed.game %}?game={{ feed.game.slug }}{% endif %}">{% copy "feed.drop.all" %}</a></div>
+    <div class="feed__head"><h2 id="feed-drop-title" class="feed__h2"><svg class="section-head__icon" aria-hidden="true" focusable="false"><use href="#rr-drops"/></svg>{% copy "feed.drop.title" %}</h2><a class="feed__all" href="{% url 'web:drops' %}{% if feed.game %}?game={{ feed.game.slug }}{% endif %}">{% copy "feed.drop.all" %}</a></div>
     <div class="feed-drop">
       <span class="feed-drop__date" aria-hidden="true">{% if drop.release_date %}<small>{{ drop.release_date|date:"M" }}</small><strong>{{ drop.release_date|date:"j" }}</strong>{% else %}<small>{% copy "feed.drop.soon" %}</small>{% endif %}</span>
       <span class="feed-drop__text">

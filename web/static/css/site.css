@@ -2270,8 +2270,11 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-tile__well img, .feed-card__well img { display: block; width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
 .feed-tile__label { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); text-align: center; }
 .feed__rail { margin-top: var(--space-5); }
-.feed__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.feed__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
 .feed__h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }
+/* The site's own marks beside the headers, as on the usual home page: the hunting raptor, the raptor, the drops mark. */
+.feed__h2--mark { display: flex; align-items: center; gap: var(--space-2); }
+.feed__h2 .section-head__icon { width: var(--icon-nav); height: var(--icon-nav); }
 .feed__all { flex: none; font-size: var(--text-sm); font-weight: var(--weight-heading); color: var(--color-brand-text); text-decoration: none; }
 .feed__all:hover { text-decoration: underline; }
 .feed__note { margin: var(--space-3) 0 0; font-size: var(--text-xs); color: var(--color-ink-muted); }
@@ -2329,6 +2332,17 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-game__label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.2; }
 .feed-game[aria-current="page"] { color: var(--color-ink); font-weight: var(--weight-price); }
 .feed-game[aria-current="page"] .feed-game__pill { background: var(--color-brand-pill); }
+/* Results as you type open above the search box, clear of the keyboard; the header's search has its own on a wide screen. */
+.feed-dock .live { position: absolute; z-index: 1; left: var(--space-3); right: var(--space-3); bottom: calc(100% + var(--space-2)); margin: 0; max-height: 60vh; overflow: auto; }
+/* Switching games: the pill answers the press at once; in Chrome the page cross-fades into the next while the dock stays put
+   and the chosen pill glides to the new game (the @view-transition rule in the feed pages' head; other browsers load as usual). */
+.feed-game__pill { transition: background var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard); }
+.feed-game:active .feed-game__pill { transform: scale(0.94); }
+.feed-dock { view-transition-name: feed-dock; }
+.feed-game[aria-current="page"] .feed-game__pill { view-transition-name: feed-game-pill; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--motion-normal); }
+::view-transition-group(feed-game-pill) { animation-duration: var(--motion-normal); animation-timing-function: var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none; } }
 /* On a phone the dock has the search box, so the header's is put away. */
 @media (max-width: 47.99rem) { body.feed-look .masthead__search { display: none; } }
 @media (min-width: 48rem) {
@@ -2336,7 +2350,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   /* A tab row under the header, in the page's flow; the header has the search box. */
   .feed-dock { position: static; box-shadow: none; }
   .feed-dock__in { padding: 0; }
-  .feed-search { display: none; }
+  .feed-search, .feed-dock .live { display: none; }
   .feed-games { gap: var(--space-2); padding: var(--space-2) 0 var(--space-3); border-bottom: var(--border-width) solid var(--color-line); }
   .feed__title { margin-top: var(--space-4); }
   .feed__row { margin-inline: 0; padding-inline: 0; }

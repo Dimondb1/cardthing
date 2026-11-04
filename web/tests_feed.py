@@ -41,6 +41,13 @@ def switch(on):
     row.save()
 
 
+def rail_title(html):
+    """The words of the rail's heading, after the hunting raptor mark it wears."""
+    found = re.search(r'<h2 id="feed-rail-title" class="feed__h2 feed__h2--mark"><svg class="hunt-mark".*?</svg>(.*?)</h2>',
+                      html, re.S)
+    return found.group(1) if found else None
+
+
 def text_of(html):
     return re.sub(r"<[^>]*>", " ", re.sub(r"(?s)<(script|style|svg)\b.*?</\1>", " ", html))
 
@@ -177,7 +184,7 @@ class HomeFeedTests(FeedCase):
         self.assertIn(picture(self.bundle), html)
         self.assertNotIn(picture(self.gone), html)
         # The rail: four products under their RRP, so Furthest under RRP, furthest first.
-        self.assertIn('<h2 id="feed-rail-title" class="feed__h2">Furthest under RRP</h2>', html)
+        self.assertEqual(rail_title(html), "Furthest under RRP")
         self.assertIn(f'<a class="feed__all" href="{reverse("web:deals")}">See all</a>', html)
         self.assertEqual([url for _game, url, _spare in self.cards(html)],
                          [p.get_absolute_url() for p in (self.collector, self.box, self.bundle, self.tin)])
@@ -194,7 +201,8 @@ class HomeFeedTests(FeedCase):
         # Rip's Deals under it, as on the usual home page: the deals with evidence that are not on the rail above,
         # the line that says the row favours shops that pay, and the saving each deal is measured by.
         deals = html[html.index("feed-deals-title"):html.index("feed-drop-title")]
-        self.assertIn('<h2 id="feed-deals-title" class="feed__h2">Rip&#x27;s Deals</h2>', deals)
+        self.assertIn('class="feed__h2 feed__h2--mark"><span class="mark section-head__mascot" aria-hidden="true"></span>'
+                      'Rip&#x27;s Deals</h2>', deals)
         self.assertEqual([url for _game, url, _spare in self.cards(html, "feed-deals-title", "feed-drop-title")],
                          [self.etb.get_absolute_url()])
         self.assertIn('data-compare="featured"', deals)
@@ -220,10 +228,30 @@ class HomeFeedTests(FeedCase):
         self.assertIn(f'<a class="feed__all" href="{reverse("web:drops")}">All drops</a>', html)
         # The dock: the search box, then every game with products, All chosen, each by its own icon.
         dock = html[html.index('<div class="feed-dock">'):html.index('<div class="feed">')]
-        self.assertIn(f'<form class="feed-search" action="{reverse("web:search")}" method="get" role="search">', dock)
+        self.assertIn(f'<form class="feed-search" action="{reverse("web:search")}" method="get" role="search" ', dock)
         self.assertIn('placeholder="Search sets, boxes and packs"', dock)
         self.assertIn('<button class="feed-search__mic" type="button" hidden aria-label="Search by voice" '
                       'data-listening="Listening">', dock)
+        # Results as you type: the same script and wording as the header's search, the panel above the box.
+        self.assertIn(f'data-live-search="{reverse("web:search_api")}" data-checking="', dock)
+        self.assertIn('data-recent="', dock)
+        self.assertIn('<div class="live" hidden data-live-panel="feed-q"><p class="live__status" role="status" '
+                      'aria-live="polite"></p><ul class="live__results" role="listbox" id="feed-q-results"></ul></div>', dock)
+        self.assertIn('role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="feed-q-results"', dock)
+        # The headers wear the site's marks: the hunting raptor on the deals, the raptor on Rip's Deals, the drops mark.
+        self.assertIn('<h2 id="feed-rail-title" class="feed__h2 feed__h2--mark"><svg class="hunt-mark"', html)
+        self.assertIn('<h2 id="feed-deals-title" class="feed__h2 feed__h2--mark"><span class="mark section-head__mascot" '
+                      'aria-hidden="true"></span>Rip&#x27;s Deals</h2>', html)
+        self.assertIn('<h2 id="feed-drop-title" class="feed__h2"><svg class="section-head__icon" aria-hidden="true" '
+                      'focusable="false"><use href="#rr-drops"/></svg>Dropping soon</h2>', html)
+        # Switching games: Chrome cross-fades feed pages and fetches a game's page on touch; only feed pages say so.
+        self.assertIn("<style>@view-transition { navigation: auto; }</style>", html)
+        self.assertIn('<script type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".feed-game"}, '
+                      '"eagerness": "moderate"}]}</script>', html)
+        self.assertIn("@view-transition", self.page(self.pokemon.get_absolute_url()))
+        switch(False)
+        self.assertNotIn("@view-transition", self.page())
+        self.assertNotIn("@view-transition", self.page(self.pokemon.get_absolute_url()))
         self.assertNotIn('name="game"', dock)
         self.assertIn(f'<a class="feed-game" href="{HOME}" aria-current="page">', dock)
         self.assertIn('<use href="#rr-game-all"/>', dock)
@@ -251,7 +279,7 @@ class HomeFeedTests(FeedCase):
         cache.clear()
         look.remember()
         html = self.page()
-        self.assertIn('<h2 id="feed-rail-title" class="feed__h2">Best prices today</h2>', html)
+        self.assertEqual(rail_title(html), "Best prices today")
         self.assertEqual([url for _game, url, _spare in self.cards(html, end="feed-drop-title")],
                          [self.box.get_absolute_url(), self.etb.get_absolute_url()])
         self.assertIn('<span class="feed-card__save">Save £8.00 vs Northgate Cards</span>', self.card(html, self.box))
@@ -312,7 +340,7 @@ class HomeFeedTests(FeedCase):
         self.assertEqual(tiles, [f"{url}?type=booster_box", f"{url}?type=bundle", f"{url}?type=elite_trainer_box",
                                  f"{url}?type=tin"])   # one of each in stock (the drop is on pre-order), so by type
         # Three Pokémon products under RRP: Best prices today, the saving on the next shop, no game label.
-        self.assertIn('<h2 id="feed-rail-title" class="feed__h2">Best prices today</h2>', html)
+        self.assertEqual(rail_title(html), "Best prices today")
         self.assertIn(f'<a class="feed__all" href="{reverse("web:deals")}?game=pokemon">See all</a>', html)
         self.assertEqual([(game, url) for game, url, _spare in self.cards(html, end="feed-drop-title")],
                          [("pokemon", self.box.get_absolute_url()), ("pokemon", self.etb.get_absolute_url())])

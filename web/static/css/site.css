@@ -2255,6 +2255,12 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   padding: var(--space-1) var(--gutter) var(--space-3); margin: calc(-1 * var(--space-1)) calc(-1 * var(--gutter)) calc(-1 * var(--space-3)); scroll-padding-inline: var(--gutter);
 }
 .feed__row::-webkit-scrollbar { display: none; }
+/* The arrow at the end of a row, over its last card, while feed.js finds more to the right; a tap scrolls the row on. */
+.feed__scroller { position: relative; }
+.feed__more { position: absolute; z-index: 1; top: 50%; right: var(--space-2); display: flex; align-items: center; justify-content: center; width: var(--feed-more); height: var(--feed-more); padding: 0; border: var(--border-width) solid var(--color-line); border-radius: 50%; background: var(--color-paper); color: var(--color-ink); box-shadow: var(--shadow-card); cursor: pointer; transform: translateY(-50%); }
+.feed__more .feed-ic { width: var(--icon-button); height: var(--icon-button); }
+.feed__tiles + .feed__more { top: calc(var(--feed-tile) / 2 + var(--space-1)); }
+.feed__cards + .feed__more { top: calc(var(--feed-card-well) / 2 + var(--space-1)); }
 .feed__row > * { flex: none; scroll-snap-align: start; }
 .feed__tiles { margin-top: var(--space-4); }
 .feed-tile { width: var(--feed-tile); }
@@ -2268,6 +2274,8 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed__h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }
 .feed__all { flex: none; font-size: var(--text-sm); font-weight: var(--weight-heading); color: var(--color-brand-text); text-decoration: none; }
 .feed__all:hover { text-decoration: underline; }
+.feed__note { margin: var(--space-3) 0 0; font-size: var(--text-xs); color: var(--color-ink-muted); }
+.feed__note a { color: var(--color-brand-text); }
 .feed-card { width: var(--feed-card); }
 .feed-card__link {
   position: relative; display: flex; flex-direction: column; height: 100%; border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card);
@@ -2307,6 +2315,12 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-search:focus-within { border-color: var(--color-ink); }
 .feed-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--color-ink); }
 .feed-search input::placeholder { color: var(--color-ink-muted); }
+.feed-search__mic { display: flex; align-items: center; justify-content: center; flex: none; width: var(--feed-go); height: var(--feed-go); padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--color-ink-muted); cursor: pointer; }
+.feed-search--listening .feed-search__mic { color: var(--color-brand-text); }
+/* Listening: the microphone breathes, transform only, under the motion limit; still for those who ask. */
+.feed-search--listening .feed-search__mic .feed-ic { animation: feed-listen var(--motion-slow) var(--ease-standard) infinite alternate; }
+@keyframes feed-listen { from { transform: scale(1); } to { transform: scale(1.2); } }
+@media (prefers-reduced-motion: reduce) { .feed-search--listening .feed-search__mic .feed-ic { animation: none; } }
 .feed-search__go { display: flex; align-items: center; justify-content: center; flex: none; width: var(--feed-go); height: var(--feed-go); padding: 0; border: 0; border-radius: 50%; background: var(--color-brand); color: var(--color-brand-ink); cursor: pointer; }
 .feed-games { display: flex; overflow-x: auto; padding: var(--space-2) var(--space-1) 0; scrollbar-width: none; scroll-snap-type: x proximity; }
 .feed-games::-webkit-scrollbar { display: none; }
@@ -2329,6 +2343,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .feed-tile, .feed-tile__well { width: var(--feed-tile-wide); }
   .feed-tile__well { height: var(--feed-tile-wide); }
   .feed-tile__well .product-image { width: var(--feed-tile-image-wide); height: var(--feed-tile-image-wide); }
-  .feed-card { width: calc((100% - 4 * var(--space-3)) / 5); }
+  .feed-card { width: calc((100% - 5 * var(--space-3)) / 6); }
+  .feed__more { right: 0; }
 }
-@media (min-width: 60rem) { .feed-card { width: calc((100% - 5 * var(--space-3)) / 6); } }
+@media (min-width: 64rem) { .feed-card { width: calc((100% - 7 * var(--space-3)) / 8); } }

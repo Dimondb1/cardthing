@@ -5077,13 +5077,19 @@ anyone else is sent to the admin sign-in. Top to bottom:
 (`site_redesign/README.md`, their brief) built in beside the usual home
 page, not in its place, so it can be tried and rolled back in a tap. With
 the switch on, the home page is the feed: the title (Today's best prices),
-product type tiles each pictured by the cheapest product of its kind in
-stock (`feed.tile_picks`, one query hourly), a rail of product cards
-(Furthest under RRP, or Best prices today when fewer than four products are
-under their RRP; `feed.rails`, every game's at once, cached and warmed with
-the other lists), the next drop with its pre-order price, the partners'
-row, and, fixed to the foot of a phone, the search box and a bar of the
-games. Each game's page leads with the same top for that game, its search
+product type tiles each pictured by a product of its kind in stock that
+the most shops sell (`feed.tile_picks`, one query hourly), a rail of
+product cards (Furthest under RRP, or Best prices today when fewer than
+four products are under their RRP; `feed.rails`, every game's at once,
+cached and warmed with the other lists), the Rip's Deals rail the usual
+home page has (`views.featured_pick`, with its disclosure line and the
+Featured deals setting), the next drop with its pre-order price, the
+partners' row, and, fixed to the foot of a phone, the search box and a bar
+of the games. The two rails carry hidden spares and `interest.js` brings
+the visitor's own games forward, in the browser, as on the usual home page.
+`feed.js` adds an arrow at the end of each row while there is more to see,
+and a microphone to the search box where the browser can listen (Chrome on
+a phone), which searches for what was said. Each game's page leads with the same top for that game, its search
 scoped to the game. From a tablet up the search goes back into the header
 and the games are a tab row under it. Every price is a live delivered price
 and a saving is only claimed where the data backs it: the product's RRP, or

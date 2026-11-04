@@ -3,9 +3,11 @@ The feed: the new home page, and the top of each game's page, while the owner's 
 
 The marketing team's design of 4 Nov 2026 (site_redesign/README.md, "a Google Shopping style product feed with a game
 bar at the bottom"), top to bottom: a title (Today's best prices, or the game's name), product type tiles each pictured
-by the cheapest product of its kind in stock, a rail of product cards (Furthest under RRP, or Best prices today when
-fewer than RAIL_MIN_RRP products are under their RRP), the next drop with its pre-order price, and, fixed to the foot
-of a phone, the search box and a bar of the games. Every price is a real delivered price from the site's own offers,
+by a product of its kind in stock, a rail of product cards (Furthest under RRP, or Best prices today when fewer than
+RAIL_MIN_RRP products are under their RRP), the Rip's Deals rail the usual home page has (the shops that pay a
+commission first, as its disclosure says), the next drop with its pre-order price, and, fixed to the foot of a phone,
+the search box (by voice too, where the browser can) and a bar of the games. The rails carry hidden spares so the
+visitor's own games come first, worked out in the browser by interest.js as on the usual home page. Every price is a real delivered price from the site's own offers,
 and a saving is only claimed where the data backs it: the product's RRP, or the next shop's confirmed delivered price,
 with the same rules every list uses (catalogue/offers.summarise).
 
@@ -22,7 +24,7 @@ from django.db.models import Count, Q
 from django.urls import reverse
 
 from catalogue import offers
-from catalogue.models import Game, Listing, Product
+from catalogue.models import FeaturedSettings, Game, Listing, Product
 from content import service as copy
 
 from . import listcache
@@ -30,9 +32,10 @@ from . import listcache
 RAILS_KEY = "web:feed-rails:v1"
 TILES_KEY = "web:feed-tiles:v1"
 TILES_SECONDS = 60 * 60
-RAIL_SIZE = 8          # cards on a rail
+RAIL_SIZE = 12         # cards shown on a rail
+RAIL_SPARES = 12       # more behind the home page's rails, hidden, for interest.js to bring the visitor's games forward
 RAIL_MIN_RRP = 4       # under this many products under RRP, the rail is Best prices today instead
-TILES_SHOWN = 6
+TILES_SHOWN = 8
 # The game bar's order: All first, then these by name, then the rest by size. Each game's icon in the sprite
 # (web/templates/web/includes/feed_sprite.svg) is matched on its slug, so a renamed game keeps its icon.
 BAR_ORDER = ("pokemon", "magic", "one-piece", "lorcana", "yu-gi-oh", "sports", "star-wars", "riftbound", "digimon",
@@ -152,14 +155,16 @@ def build_rails(candidates=None):
     scopes = [None, *sorted({product.game_id for product in products})]
     chosen = {}
     for scope in scopes:
+        # The home page's rail carries spares behind the shown cards (interest.js); a game's page needs none.
+        size = RAIL_SIZE + RAIL_SPARES if scope is None else RAIL_SIZE
         mine = [row for row in under if scope is None or row[1].game_id == scope]
         mine.sort(key=lambda row: (-row[0], row[1].pk))
         if len(mine) >= RAIL_MIN_RRP:
-            chosen[scope] = ("rrp", mine[:RAIL_SIZE])
+            chosen[scope] = ("rrp", mine[:size])
         else:
             mine = [row for row in saves if scope is None or row[1].game_id == scope]
             mine.sort(key=lambda row: (-row[0], row[1].pk))
-            chosen[scope] = ("save", mine[:RAIL_SIZE])
+            chosen[scope] = ("save", mine[:size])
     # The products as a list shows them (game, set, prices), in one query for every rail.
     groups = views.with_list_fields(*([(product, summary) for _amount, product, summary in rows]
                                       for _kind, rows in chosen.values()))
@@ -171,8 +176,19 @@ def build_rails(candidates=None):
 
 
 def rail(game=None):
-    """(kind, [Card]) for ``game``'s rail or the home page's, from the cache."""
+    """(kind, [Card]) for ``game``'s rail or the home page's, from the cache: RAIL_SIZE to show, then the spares."""
     return rails().get(game.pk if game is not None else None, ("save", []))
+
+
+def deals(game=None, shown=()):
+    """(rows, spares) for the Rip's Deals rail: the home page's featured deals (web.views.featured_pick, which
+    favours the shops that pay a commission, or takes only them with the owner's Featured deals setting) and the
+    spares behind them, for ``game`` or any, less the products ``shown`` on the rail above. From the cache."""
+    from web import views
+
+    featured, _trending, spares = views.home_lists()
+    keep = lambda product: product.pk not in shown and (game is None or product.game_id == game.pk)   # noqa: E731
+    return ([row for row in featured if keep(row[0])], [row for row in spares if keep(row[0])])
 
 
 # The drop and the bar ---------------------------------------------------------------------------------------------
@@ -191,9 +207,8 @@ def icon_for(slug):
     return next((icon for key, icon in ICONS.items() if key in slug), "all")
 
 
-def games_bar():
-    """Every game with products, in the bar's order: All is the template's, then BAR_ORDER by name, then the rest by
-    size. One query."""
+def games_with_products():
+    """Every game with products, in the bar's order: BAR_ORDER by name, then the rest by size. One query."""
     found = list(
         Game.objects.filter(is_active=True)
         .annotate(product_count=Count("products", filter=Q(products__is_active=True)))
@@ -204,14 +219,26 @@ def games_bar():
         place = next((i for i, key in enumerate(BAR_ORDER) if key in game.slug), len(BAR_ORDER))
         return (place, -game.product_count, game.name)
 
+    return sorted(found, key=rank)
+
+
+def games_bar(games=None):
+    """The bar's items for ``games`` (games_with_products): All is the template's."""
+    if games is None:
+        games = games_with_products()
     return [{"slug": game.slug, "label": game.display_short, "icon": icon_for(game.slug),
-             "url": game.get_absolute_url()} for game in sorted(found, key=rank)]
+             "url": game.get_absolute_url()} for game in games]
 
 
 def context(request, game=None):
     """Everything the feed's templates show for the home page (``game`` None) or a game's page."""
+    from web import views
+
     store = copy.for_request(request)
     kind, cards = rail(game)
+    shown, spares = cards[:RAIL_SIZE], cards[RAIL_SIZE:]
+    deal_rows, deal_spares = deals(game, {card.product.pk for card in cards})
+    games = games_with_products()
     if game is not None:
         title = game.name
         rail_url = f"{reverse('web:deals')}?game={game.slug}"
@@ -222,8 +249,10 @@ def context(request, game=None):
         search_hint = copy.get("feed.search.placeholder", store=store)
     return {
         "game": game, "show_game": game is None, "title": title,
-        "tiles": tiles(game), "rail_kind": kind, "rail": cards,
+        "tiles": tiles(game), "rail_kind": kind, "rail": shown, "rail_spares": spares,
         "rail_title": copy.get("feed.rail.rrp" if kind == "rrp" else "feed.rail.best", store=store),
-        "rail_url": rail_url, "drop": drop(game), "games": games_bar(), "search_hint": search_hint,
-        "today": date.today(),
+        "rail_url": rail_url, "deals": deal_rows, "deals_spares": deal_spares,
+        "deals_paying_only": FeaturedSettings.current().paying_only if deal_rows else False,
+        "drop": drop(game), "games": games_bar(games), "interest_games": views.interest_lexicon(games),
+        "search_hint": search_hint, "today": date.today(),
     }

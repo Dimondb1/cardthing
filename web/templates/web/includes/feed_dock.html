@@ -1,4 +1,4 @@
-{% load sitecopy %}{# The feed's dock (web/feed.py): the search box and the bar of games. Fixed to the foot of a phone; from a tablet up it is a tab row under the header and the search box gives way to the header's. First in the page, so it reads first and sits at the top on a wide screen. Every item is a plain link, so it works without script; feed.js only brings the chosen game into view. #}
+{% load sitecopy %}{# The feed's dock (web/feed.py): the search box and the bar of games. Fixed to the foot of a phone; from a tablet up it is a tab row under the header and the search box gives way to the header's. First in the page, so it reads first and sits at the top on a wide screen. Every item is a plain link, so it works without script; feed.js brings the chosen game into view and adds voice search where the browser can listen. #}
 <div class="feed-dock">
   <div class="feed-dock__in">
     <form class="feed-search" action="{% url 'web:search' %}" method="get" role="search">
@@ -6,6 +6,8 @@
       <label class="visually-hidden" for="feed-q">{{ feed.search_hint }}</label>
       <input id="feed-q" name="q" type="search" placeholder="{{ feed.search_hint }}" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="100">
       {% if feed.game %}<input type="hidden" name="game" value="{{ feed.game.slug }}">{% endif %}
+      {# Voice search: feed.js shows the microphone where the browser can listen (Chrome on a phone can), fills the box with what was said and searches. #}
+      <button class="feed-search__mic" type="button" hidden aria-label="{% copy 'feed.search.voice' %}" data-listening="{% copy 'feed.search.listening' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-mic"/></svg></button>
       <button class="feed-search__go" type="submit" aria-label="{% copy 'site.search.button' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-arrow-right"/></svg></button>
     </form>
     <nav class="feed-games" aria-label="{% copy 'feed.games.label' %}">

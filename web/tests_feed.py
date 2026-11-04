@@ -25,6 +25,8 @@ from web import feed, listcache, look, pagecache, warming
 from .tests import CopyStyleTests
 
 HOME = reverse("web:home")
+CARD_START = (r'<li class="feed-card" data-game="([^"]+)" data-side="[a-z]+"( data-spare hidden)?>'
+              r'\n  <a class="feed-card__link" href="([^"]+)"')
 PICTURE = "https://cdn.example/{}.png"
 
 
@@ -86,9 +88,16 @@ class FeedCase(TestCase):
         return self.client.get(url, params).content.decode()
 
     def card(self, html, product):
-        start = html.index(f'<li class="feed-card" data-game="{product.game.slug}">\n  <a class="feed-card__link" '
-                           f'href="{product.get_absolute_url()}"')
-        return html[start:html.index("</li>", start)]
+        found = re.search(rf'<li class="feed-card" data-game="{product.game.slug}" data-side="[a-z]+"( data-spare hidden)?>'
+                          rf'\n  <a class="feed-card__link" href="{re.escape(product.get_absolute_url())}"', html)
+        self.assertIsNotNone(found, product.name)
+        return html[found.start():html.index("</li>", found.start())]
+
+    def cards(self, html, start="feed-rail-title", end="feed-deals-title"):
+        """[(game slug, product URL, spare?)] of the cards on the rail headed ``start``, up to ``end``."""
+        part = html[html.index(start):html.index(end) if end and end in html else len(html)]
+        return [(game, url, bool(spare)) for game, spare, url in re.findall(
+            CARD_START, part)]
 
 
 class SwitchTests(FeedCase):
@@ -170,8 +179,9 @@ class HomeFeedTests(FeedCase):
         # The rail: four products under their RRP, so Furthest under RRP, furthest first.
         self.assertIn('<h2 id="feed-rail-title" class="feed__h2">Furthest under RRP</h2>', html)
         self.assertIn(f'<a class="feed__all" href="{reverse("web:deals")}">See all</a>', html)
-        cards = re.findall(r'<li class="feed-card" data-game="[^"]+">\n  <a class="feed-card__link" href="([^"]+)"', html)
-        self.assertEqual(cards, [p.get_absolute_url() for p in (self.collector, self.box, self.bundle, self.tin)])
+        self.assertEqual([url for _game, url, _spare in self.cards(html)],
+                         [p.get_absolute_url() for p in (self.collector, self.box, self.bundle, self.tin)])
+        self.assertIn('<ul class="feed__row feed__cards" data-interest data-interest-show="4">', html)
         card = self.card(html, self.collector)
         self.assertIn('<span class="feed-card__game">Magic</span>', card)
         self.assertIn('<span class="feed-card__name">Final Fantasy Collector Booster Box</span>', card)
@@ -180,7 +190,26 @@ class HomeFeedTests(FeedCase):
         self.assertIn("Harbour Games</span>", card)
         self.assertIn('<span class="feed-card__save">£100.00 under RRP</span>', card)
         self.assertIn('data-compare="feed"', card)
-        self.assertNotIn(self.etb.get_absolute_url(), html[html.index("feed-rail-title"):html.index("feed-drop-title")])
+        self.assertNotIn(self.etb.get_absolute_url(), html[html.index("feed-rail-title"):html.index("feed-deals-title")])
+        # Rip's Deals under it, as on the usual home page: the deals with evidence that are not on the rail above,
+        # the line that says the row favours shops that pay, and the saving each deal is measured by.
+        deals = html[html.index("feed-deals-title"):html.index("feed-drop-title")]
+        self.assertIn('<h2 id="feed-deals-title" class="feed__h2">Rip&#x27;s Deals</h2>', deals)
+        self.assertEqual([url for _game, url, _spare in self.cards(html, "feed-deals-title", "feed-drop-title")],
+                         [self.etb.get_absolute_url()])
+        self.assertIn('data-compare="featured"', deals)
+        self.assertIn("Save £5.00 vs Northgate Cards", deals)
+        self.assertIn('<p class="feed__note">Rip&#x27;s Deals favour shops that pay us a commission.', deals)
+        self.assertIn(f'<a href="{reverse("web:about")}">', deals)
+        self.assertIn(f'<a class="feed__all" href="{reverse("web:deals")}">See all</a>', deals)
+        # The visitor's own games first, in the browser: the games to match on and the script, after the rails.
+        self.assertIn('<script id="interest-games" type="application/json">', html)
+        self.assertIn('"ptcg"', html[html.index('id="interest-games"'):html.index("feed-drop-title")])
+        self.assertLess(html.index("feed-deals-title"), html.index('id="interest-games"'))
+        self.assertLess(html.index('id="interest-games"'), html.index("feed-drop-title"))
+        self.assertIn("[data-interest]:not([data-interest-done])", html)
+        # An arrow waits at the end of each row for feed.js to show while there is more to the right.
+        self.assertEqual(html.count('<button class="feed__more" type="button" hidden aria-label="Show more">'), 3)
         # The next drop: its date, its set, its pre-order price, and All drops.
         drop = html[html.index('<div class="feed-drop">'):html.index("</section>", html.index('<div class="feed-drop">'))]
         self.assertIn(f'<small>{self.drop_day:%b}</small><strong>{self.drop_day.day}</strong>', drop)
@@ -193,6 +222,8 @@ class HomeFeedTests(FeedCase):
         dock = html[html.index('<div class="feed-dock">'):html.index('<div class="feed">')]
         self.assertIn(f'<form class="feed-search" action="{reverse("web:search")}" method="get" role="search">', dock)
         self.assertIn('placeholder="Search sets, boxes and packs"', dock)
+        self.assertIn('<button class="feed-search__mic" type="button" hidden aria-label="Search by voice" '
+                      'data-listening="Listening">', dock)
         self.assertNotIn('name="game"', dock)
         self.assertIn(f'<a class="feed-game" href="{HOME}" aria-current="page">', dock)
         self.assertIn('<use href="#rr-game-all"/>', dock)
@@ -221,11 +252,26 @@ class HomeFeedTests(FeedCase):
         look.remember()
         html = self.page()
         self.assertIn('<h2 id="feed-rail-title" class="feed__h2">Best prices today</h2>', html)
-        cards = re.findall(r'<li class="feed-card" data-game="[^"]+">\n  <a class="feed-card__link" href="([^"]+)"', html)
-        self.assertEqual(cards, [self.box.get_absolute_url(), self.etb.get_absolute_url()])
+        self.assertEqual([url for _game, url, _spare in self.cards(html, end="feed-drop-title")],
+                         [self.box.get_absolute_url(), self.etb.get_absolute_url()])
         self.assertIn('<span class="feed-card__save">Save £8.00 vs Northgate Cards</span>', self.card(html, self.box))
         self.assertIn('<span class="feed-card__save">Save £5.00 vs Northgate Cards</span>', self.card(html, self.etb))
         self.assertNotIn("under RRP", html)
+        self.assertNotIn("feed-deals-title", html)   # both deals are on the rail already
+
+    def test_the_home_rail_keeps_spares_behind_it_for_the_visitors_own_games_and_a_games_page_does_not(self):
+        for n in range(12):
+            self.product(self.fantasy, f"Final Fantasy Thing {n}", Product.Type.BOOSTER_PACK, "4.00", rrp="5.00")
+        cache.clear()
+        look.remember()
+        html = self.page()
+        cards = self.cards(html)
+        self.assertEqual(len(cards), feed.RAIL_SIZE + 4)
+        self.assertEqual([spare for _game, _url, spare in cards], [False] * feed.RAIL_SIZE + [True] * 4)
+        self.assertIn(f'data-interest data-interest-show="{feed.RAIL_SIZE}"', html)
+        self.assertEqual(cards[0][1], self.collector.get_absolute_url())   # furthest under RRP first, still
+        self.assertEqual([spare for _game, _url, spare in self.cards(self.page(self.magic.get_absolute_url()), end=None)],
+                         [False] * feed.RAIL_SIZE)
 
     def test_the_chip_is_the_price_checks_own_verdict(self):
         Product.objects.filter(pk=self.collector.pk).update(price_band=fair_price.LOWEST)
@@ -268,9 +314,11 @@ class HomeFeedTests(FeedCase):
         # Three Pokémon products under RRP: Best prices today, the saving on the next shop, no game label.
         self.assertIn('<h2 id="feed-rail-title" class="feed__h2">Best prices today</h2>', html)
         self.assertIn(f'<a class="feed__all" href="{reverse("web:deals")}?game=pokemon">See all</a>', html)
-        cards = re.findall(r'<li class="feed-card" data-game="([^"]+)">\n  <a class="feed-card__link" href="([^"]+)"', html)
-        self.assertEqual(cards, [("pokemon", self.box.get_absolute_url()), ("pokemon", self.etb.get_absolute_url())])
+        self.assertEqual([(game, url) for game, url, _spare in self.cards(html, end="feed-drop-title")],
+                         [("pokemon", self.box.get_absolute_url()), ("pokemon", self.etb.get_absolute_url())])
         self.assertNotIn("feed-card__game", html)
+        self.assertNotIn("feed-deals-title", html)   # its deals are on the rail already
+        self.assertIn('id="interest-games"', html)
         self.assertIn("Save £8.00 vs Northgate Cards", self.card(html, self.box))
         self.assertIn(f'<a class="feed__all" href="{reverse("web:drops")}?game=pokemon">All drops</a>', html)
         self.assertIn('<a class="feed-drop__name" href="{}">Mega Evolution</a>'.format(self.mega.get_absolute_url()),
@@ -313,9 +361,8 @@ class HomeFeedTests(FeedCase):
             return len(queries)
 
         before = {url: count(url) for url in (HOME, self.pokemon.get_absolute_url())}
-        for n in range(12):
-            self.product(self.surging, f"Surging Sparks Thing {n}", Product.Type.BOOSTER_PACK, "4.00", second="5.00",
-                         rrp="6.00")
+        for n in range(12):   # in stock, so picked over, but no RRP or second shop: the rows stay as they are
+            self.product(self.surging, f"Surging Sparks Thing {n}", Product.Type.BOOSTER_PACK, "4.00")
         after = {url: count(url) for url in before}
         self.assertEqual(after, before)
         self.assertLessEqual(before[HOME], 6)   # the wording, the tiles' products and the bar's games

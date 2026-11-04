@@ -355,13 +355,14 @@
 /* The feed (web/feed.py), the new home page the owner switches on in Admin (web/look.py): the marketing team's sizes
    of 4 Nov 2026, in rem at 16px. The selected game's pill and the search box's shadow are its only new colours. */
 :root {
-  --feed-tile: 5.25rem;            /* 84px: a product type tile */
-  --feed-tile-image: 4.5rem;       /* 72px: the picture inside it */
-  --feed-tile-wide: 6.5rem;        /* the tiles from a tablet up, where 84px would look lost */
-  --feed-tile-image-wide: 5.5rem;
-  --feed-card: 9.375rem;           /* 150px: a product card on a rail */
-  --feed-card-well: 7.75rem;       /* 124px: the card's picture well */
-  --feed-card-image: 6.75rem;      /* 108px: the picture inside it */
+  --feed-tile: 4.5rem;             /* 72px: a product type tile, denser than the team's 84 so more fit a screen (the owner) */
+  --feed-tile-image: 3.75rem;      /* 60px: the picture inside it */
+  --feed-tile-wide: 5.5rem;        /* the tiles from a tablet up, where 72px would look lost */
+  --feed-tile-image-wide: 4.5rem;
+  --feed-card: 8.25rem;            /* 132px: a product card on a rail, denser than the team's 150 for the same reason */
+  --feed-card-well: 6.75rem;       /* 108px: the card's picture well */
+  --feed-card-image: 5.75rem;      /* 92px: the picture inside it */
+  --feed-more: 2rem;               /* the arrow at the end of a row */
   --feed-search: 3.25rem;          /* 52px: the search pill */
   --feed-go: 2.5rem;               /* 40px: its round go button */
   --feed-game: 3.625rem;           /* 58px: an item of the game bar */

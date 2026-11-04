@@ -18,10 +18,11 @@ Kind = ClaudeAsk.Kind
 URL = "/admin/claude/"
 
 
-def ask(kind, cost=0, held=0, days_ago=0, outcome=ClaudeAsk.Outcome.ANSWERED):
+def ask(kind, cost=0, held=0, days_ago=0, outcome=ClaudeAsk.Outcome.ANSWERED, read=0, fresh=0, written=0):
     return ClaudeAsk.objects.create(
         kind=kind, row_key=f"{kind}:{ClaudeAsk.objects.count()}", fingerprint="f", model_asked="claude-opus-5-5",
         effort="medium", cost_micros=cost, reserved_micros=held, outcome=outcome,
+        cache_read_tokens=read, input_tokens=fresh, cache_write_tokens=written,
         asked_at=timezone.now() - timedelta(days=days_ago))
 
 
@@ -121,8 +122,8 @@ class PageTests(Base):
 
     def test_it_shows_what_each_job_asked_and_spent_this_month_and_today(self):
         self.switch_on(sort_all=True)
-        ask(Kind.PAIR, cost=3_000_000)
-        ask(Kind.PAIR, cost=1_000_000, days_ago=2)
+        ask(Kind.PAIR, cost=3_000_000, read=1_600, fresh=2_400)
+        ask(Kind.PAIR, cost=1_000_000, days_ago=2, read=0, fresh=2_400, written=1_600)
         ask(Kind.PAIR, held=250_000, outcome=ClaudeAsk.Outcome.SENT)
         ask(Kind.RRP, cost=120_000)
         ClaudeJob.objects.create(name="rrps", monthly_budget_usd=Decimal("0.10"))
@@ -135,9 +136,12 @@ class PageTests(Base):
         self.assertIn("$4.25, 3 asked", pairs)
         self.assertIn("$3.25, 2 asked", pairs)
         self.assertIn('name="on_pairs" checked', pairs)
+        self.assertIn('data-label="From cache">20%<', pairs)   # 1,600 of 8,000 input tokens read from the cache
+        self.assertIn("20% of what Claude read this month came from the prompt cache", html)
         rrps = html[html.index('data-job="rrps"'):]
         self.assertIn("$0.12, 1 asked <span class=\"at\">(at its limit)</span>", rrps)
         self.assertIn('value="0.10"', rrps)
+        self.assertIn('data-label="From cache">-<', rrps)   # no tokens recorded
         for _name, (title, _kinds) in judge.JOBS.items():
             self.assertIn(f"<b>{title}</b>", html)
 
@@ -198,11 +202,11 @@ class ReportTests(Base):
         from web import report
 
         self.switch_on()
-        ask(Kind.PAIR, cost=2_000_000)
+        ask(Kind.PAIR, cost=2_000_000, read=3_000, fresh=1_000)
         ClaudeJob.objects.create(name="pairs", monthly_budget_usd=Decimal("10"))
         ClaudeJob.objects.create(name="rrps", on=False)
         text = report.build(timezone.now(), copy.load_all())
         claude = text[text.index("\nCLAUDE\n"):]
         self.assertIn("By job, this month", claude)
-        self.assertRegex(claude, r"Possible duplicates\s+1\s+\$2\.00\s+yes\s+\$10\.00\n")
-        self.assertRegex(claude, r"RRPs\s+0\s+\$0\.00\s+no\s+-\n")
+        self.assertRegex(claude, r"Possible duplicates\s+1\s+\$2\.00\s+75%\s+yes\s+\$10\.00\n")
+        self.assertRegex(claude, r"RRPs\s+0\s+\$0\.00\s+-\s+no\s+-\n")

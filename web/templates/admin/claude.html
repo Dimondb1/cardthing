@@ -32,6 +32,7 @@
     <p><b>{{ claude.status }}</b></p>
     {% if claude.now %}<p class="note">{{ claude.now }}</p>{% endif %}
     <p>This month: <b>{{ claude.spent }}</b> of {{ claude.limit }} across every job, {{ asked_month|number }} question{{ asked_month|pluralize }}. Today: {{ spent_today }}, {{ asked_today|number }} question{{ asked_today|pluralize }}.</p>
+    {% if cached is not None %}<p class="note">{{ cached }}% of what Claude read this month came from the prompt cache, at a twentieth of the price. The rest is each row's own evidence and Claude's answers, which no cache can hold. The model setting is what changes the price: Sonnet 5.5 is half of Opus 5.5 an answer, Haiku 5.5 a fortieth.</p>{% endif %}
     {% if claude.state.sort_all %}<p class="note">Sort everything is on: Claude works through the whole list run after run, sending up to 300 rows at a time to Anthropic at half price, up to $25 a batch and several batches a day. That is most of the spend. Stop it and Claude goes back to {{ claude.per_run }} rows an hour.</p>{% endif %}
     {% if claude.has_key and claude.server_on %}<div class="row">
       {% if claude.state.enabled %}
@@ -50,13 +51,14 @@
     <p class="note">Switch a job off and every run skips it. Give it a monthly limit of its own and it stops there while the other jobs carry on; empty means only the shared limit applies. A batch already out at Anthropic still comes back and is acted on, free.</p>
     <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_jobs">
     <table>
-      <thead><tr><th>Job</th><th>On</th><th class="num">This month</th><th class="num">Today</th><th class="num">Own limit ($)</th></tr></thead>
+      <thead><tr><th>Job</th><th>On</th><th class="num">This month</th><th class="num">Today</th><th class="num">From cache</th><th class="num">Own limit ($)</th></tr></thead>
       <tbody>{% for job in jobs %}
         <tr data-job="{{ job.name }}">
           <td><label for="on_{{ job.name }}"><b>{{ job.title }}</b></label><span class="does">{{ job.does }}</span></td>
           <td data-label="On"><input type="checkbox" id="on_{{ job.name }}" name="on_{{ job.name }}"{% if job.on %} checked{% endif %}></td>
           <td class="num" data-label="This month">{{ job.spent_month }}, {{ job.asked_month|number }} asked{% if job.at_limit %} <span class="at">(at its limit)</span>{% endif %}</td>
           <td class="num" data-label="Today">{{ job.spent_today }}, {{ job.asked_today|number }} asked</td>
+          <td class="num" data-label="From cache">{% if job.cached is not None %}{{ job.cached }}%{% else %}-{% endif %}</td>
           <td class="num" data-label="Own limit ($)"><input type="number" name="cap_{{ job.name }}" min="0" max="{{ claude.max_monthly }}" step="0.01" inputmode="decimal" value="{% if job.cap is not None %}{{ job.cap }}{% endif %}" aria-label="{{ job.title }}: own monthly limit in dollars"></td>
         </tr>{% endfor %}
       </tbody>

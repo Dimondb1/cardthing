@@ -3352,32 +3352,43 @@ def claude_page(request):
     start_of_today = timezone.localtime(now).replace(hour=0, minute=0, second=0, microsecond=0)
 
     def by_kind(since):
+        """{kind: (questions, micro-dollars with reservations held, input tokens read from the cache, all input
+        tokens)} since ``since``. The cache share says whether prompt caching is doing its work."""
         rows = (ClaudeAsk.objects.filter(asked_at__gte=since).order_by().values("kind")
                 .annotate(n=Count("pk"), cost=Sum("cost_micros"),
-                          held=Sum("reserved_micros", filter=Q(outcome=ClaudeAsk.Outcome.SENT))))
-        return {row["kind"]: (row["n"], (row["cost"] or 0) + (row["held"] or 0)) for row in rows}
+                          held=Sum("reserved_micros", filter=Q(outcome=ClaudeAsk.Outcome.SENT)),
+                          read=Sum("cache_read_tokens"), fresh=Sum("input_tokens"), written=Sum("cache_write_tokens")))
+        return {row["kind"]: (row["n"], (row["cost"] or 0) + (row["held"] or 0), row["read"] or 0,
+                              (row["read"] or 0) + (row["fresh"] or 0) + (row["written"] or 0)) for row in rows}
 
     month, today = by_kind(judge.month_start(now)), by_kind(start_of_today)
     settings_ = judge.job_settings()
+    none = (0, 0, 0, 0)
     jobs = []
     for name, (link, title, does) in CLAUDE_JOBS.items():
         kinds = judge.JOBS[name][1]
-        asked_month = sum(month.get(kind, (0, 0))[0] for kind in kinds)
-        spent_month = sum(month.get(kind, (0, 0))[1] for kind in kinds)
-        asked_today = sum(today.get(kind, (0, 0))[0] for kind in kinds)
-        spent_today = sum(today.get(kind, (0, 0))[1] for kind in kinds)
+        asked_month = sum(month.get(kind, none)[0] for kind in kinds)
+        spent_month = sum(month.get(kind, none)[1] for kind in kinds)
+        asked_today = sum(today.get(kind, none)[0] for kind in kinds)
+        spent_today = sum(today.get(kind, none)[1] for kind in kinds)
+        read = sum(month.get(kind, none)[2] for kind in kinds)
+        all_input = sum(month.get(kind, none)[3] for kind in kinds)
         job = settings_[name]
         cap = judge.job_cap_micros(job)
         jobs.append({
             "name": name, "title": title, "does": does, "on": job.on, "cap": job.monthly_budget_usd,
             "asked_month": asked_month, "spent_month": judge.dollars(spent_month),
             "asked_today": asked_today, "spent_today": judge.dollars(spent_today),
+            "cached": round(100 * read / all_input) if all_input else None,
             "at_limit": cap is not None and spent_month >= cap,
         })
+    read = sum(row[2] for row in month.values())
+    all_input = sum(row[3] for row in month.values())
     context = {
         **admin.site.each_context(request), "title": "Claude", "claude": claude, "jobs": jobs,
         "asked_month": sum(job["asked_month"] for job in jobs), "asked_today": sum(job["asked_today"] for job in jobs),
-        "spent_today": judge.dollars(sum(n for _n, n in today.values())),
+        "spent_today": judge.dollars(sum(row[1] for row in today.values())),
+        "cached": round(100 * read / all_input) if all_input else None,
     }
     return render(request, "admin/claude.html", context)
 

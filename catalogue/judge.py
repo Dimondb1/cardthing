@@ -94,7 +94,7 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 # US dollars per million tokens, which is micro-dollars per token: input, cache write, cache read, output.
 PRICES = {
     "claude-opus-5-5": (4, 5, 0.20, 20),
-    "claude-sonnet-5-5": (2, 2.50, 0.20, 10),
+    "claude-sonnet-5-5": (2, 2.50, 0.10, 10),
     "claude-sonnet-5": (2, 2.50, 0.20, 10),
     "claude-haiku-5-5": (0.10, 0.125, 0.01, 0.50),
     "claude-opus-5": (5, 6.25, 0.50, 25),

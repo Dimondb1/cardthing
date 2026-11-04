@@ -875,8 +875,14 @@ its own within the shared one (empty means none of its own). Every run asks
 the same gate before each question (`judge.job_room`): a job switched off is
 skipped, and one at its own limit waits for next month, while the other jobs
 carry on. A batch already out at Anthropic still comes back and is acted on,
-free. Sort everything, and Claude itself, can be switched off from the same
-page; the model, effort, shared limit and key stay under Claude settings and
+free. The page's From cache column (and the report's) is the share of each
+job's input read from Anthropic's prompt cache this month, at a twentieth
+of the input price: every job but the set retail check already marks its
+system prompt for caching (the retail prompt is under the 512 token minimum
+and would not be cached), so the rest of the spend is each row's own
+evidence and the answer, which the cache cannot hold. The model setting is
+what changes the price. Sort everything, and Claude itself, can be switched
+off from the same page; the model, effort, shared limit and key stay under Claude settings and
 key on Things to check. The owner, 3 Nov 2026, with Sort everything through
 $67 in three days: "control and set what it does in a settings menu".
 

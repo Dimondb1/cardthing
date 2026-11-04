@@ -400,23 +400,30 @@ def claude(out, data, now):
     if data["last_run"]:
         out.fact("Last run", f"{data['last_run']} {data['last_note']}".strip())
     out.sub("By job, this month")
-    out.table([("Job", "title", "<"), ("Asked", "asked", ">"), ("Spent", "spent", ">"), ("On", "on", "<"),
-               ("Own limit", "cap", ">")], claude_jobs(now))
+    out.table([("Job", "title", "<"), ("Asked", "asked", ">"), ("Spent", "spent", ">"), ("From cache", "cached", ">"),
+               ("On", "on", "<"), ("Own limit", "cap", ">")], claude_jobs(now))
 
 
 def claude_jobs(now):
     """What each of Claude's jobs (judge.JOBS) asked and spent this month, and how the Claude page has it set."""
-    from django.db.models import Count
+    from django.db.models import Count, Sum
 
     from catalogue import judge
     from catalogue.models import ClaudeAsk
 
-    asked = dict(ClaudeAsk.objects.filter(asked_at__gte=judge.month_start(now)).order_by().values_list("kind")
-                 .annotate(n=Count("pk")).values_list("kind", "n"))
+    rows = {row["kind"]: row for row in (
+        ClaudeAsk.objects.filter(asked_at__gte=judge.month_start(now)).order_by().values("kind")
+        .annotate(n=Count("pk"), read=Sum("cache_read_tokens"), fresh=Sum("input_tokens"), written=Sum("cache_write_tokens")))}
     spent, jobs = judge.spent_by_job(now), judge.job_settings()
-    return [{"title": title, "asked": sum(asked.get(kind, 0) for kind in kinds), "spent": judge.dollars(spent[name]),
-             "on": jobs[name].on, "cap": "-" if jobs[name].monthly_budget_usd is None else f"${jobs[name].monthly_budget_usd}"}
-            for name, (title, kinds) in judge.JOBS.items()]
+    out = []
+    for name, (title, kinds) in judge.JOBS.items():
+        found = [rows[kind] for kind in kinds if kind in rows]
+        read = sum(row["read"] or 0 for row in found)
+        all_input = read + sum((row["fresh"] or 0) + (row["written"] or 0) for row in found)
+        out.append({"title": title, "asked": sum(row["n"] for row in found), "spent": judge.dollars(spent[name]),
+                    "cached": f"{round(100 * read / all_input)}%" if all_input else "-", "on": jobs[name].on,
+                    "cap": "-" if jobs[name].monthly_budget_usd is None else f"${jobs[name].monthly_budget_usd}"})
+    return out
 
 
 # The download ----------------------------------------------------------------------------------------------------

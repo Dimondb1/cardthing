@@ -2275,7 +2275,18 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-tile__link[aria-current="page"] .feed-tile__label { color: var(--color-brand-text); }
 .feed--filtered .feed__scroller--tiles { position: sticky; top: 0; z-index: 3; margin-inline: calc(-1 * var(--gutter)); padding: var(--space-2) var(--gutter) 0; background: var(--color-paper); box-shadow: 0 var(--border-width) 0 var(--color-line); }
 .feed--filtered .feed__scroller--tiles .feed__row { margin-inline: 0; padding-inline: 0; margin-top: 0; padding-top: 0; }
-.feed--filtered .feed__scroller--tiles .feed__more { right: var(--space-3); }
+.feed--filtered .feed__scroller--tiles .feed__more { right: var(--space-3); top: 50%; }
+/* Once a type is chosen the row is a line of pills, each the type's picture and name, so the stuck row costs a third of the
+   height and the list is in view (the owner: the filters took the screen). The chosen pill is filled. */
+.feed--filtered .feed__scroller--tiles { padding-bottom: var(--space-2); }
+.feed--filtered .feed__tiles { gap: var(--space-2); }
+.feed--filtered .feed-tile { width: auto; }
+.feed--filtered .feed-tile__link { flex-direction: row; gap: var(--space-2); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-pill); }
+.feed--filtered .feed-tile__well { width: var(--feed-tile-mini); height: var(--feed-tile-mini); border-radius: var(--radius); }
+.feed--filtered .feed-tile__well .product-image { width: var(--feed-tile-mini-image); height: var(--feed-tile-mini-image); }
+.feed--filtered .feed-tile__label { white-space: nowrap; font-size: var(--text-xs); }
+.feed--filtered .feed-tile__link[aria-current="page"] { background: var(--color-brand-soft); border-color: var(--color-brand); }
+.feed--filtered .feed-tile__link[aria-current="page"] .feed-tile__well { box-shadow: none; }
 .feed__scroller--tiles { view-transition-name: feed-tiles; }
 .feed__rail { transition: opacity var(--motion-fast) var(--ease-standard); }
 /* The list's head under the tiles: the type and its count, the sort beside them and Clear. */
@@ -2286,15 +2297,18 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-sort { display: flex; align-items: center; gap: var(--space-2); }
 .feed-list-head__clear { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-pill); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); text-decoration: none; }
 .feed-list-head__clear:hover { background: var(--color-shelf); }
-/* Under the list's head: the languages it holds as chips, and the Filters pill, a details element that opens on its own
-   full line with the price band and 2+ shops. Nothing more: the type is the heading, the sort is beside it. */
-.feed-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; }
+/* Under the list's head, one line that scrolls sideways: the Filters pill, then the languages the list holds as chips. The
+   pill is a details element whose panel (the price band and 2+ shops) drops over the list, so nothing below moves. */
+.feed-filters { position: relative; margin: var(--space-3) 0; }
+.feed-filters__row { display: flex; align-items: center; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); }
+.feed-filters__row::-webkit-scrollbar { display: none; }
+.feed-filters__row > * { flex: none; }
+.feed-filters .chip { padding: 0.4em 0.8em; font-size: var(--text-xs); }
 .feed-filters__more > summary { list-style: none; display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; }
 .feed-filters__more > summary::-webkit-details-marker { display: none; }
 .feed-filters__more > summary .feed-ic { width: var(--icon-button); height: var(--icon-button); }
-.feed-filters__more[open] { flex-basis: 100%; }
 .feed-filters__more[open] > summary { background: var(--color-brand-soft); border-color: var(--color-brand); border-style: solid; }
-.feed-filters__form { margin-top: var(--space-3); }
+.feed-filters__form { position: absolute; z-index: 4; left: 0; right: 0; top: calc(100% + var(--space-2)); margin: 0; padding: var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-lift); }
 /* The sketch of a list while a tile's list is fetched: the type's name, Loading, and four grey cards that breathe. */
 .feed-sketch { margin-top: var(--space-4); }
 .feed-sketch__title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }
@@ -2391,6 +2405,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .feed__title { margin-top: var(--space-4); }
   .feed__row { margin-inline: 0; padding-inline: 0; }
   .feed--filtered .feed__scroller--tiles { margin-inline: 0; padding-inline: 0; }
+  .feed-filters__row { margin-inline: 0; padding-inline: 0; }
   .feed--filtered .feed__scroller--tiles .feed__more { right: 0; }
   .feed-tile, .feed-tile__well { width: var(--feed-tile-wide); }
   .feed-tile__well { height: var(--feed-tile-wide); }

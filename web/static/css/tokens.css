@@ -363,6 +363,8 @@
   --feed-card-well: 6.75rem;       /* 108px: the card's picture well */
   --feed-card-image: 5.75rem;      /* 92px: the picture inside it */
   --feed-more: 2rem;               /* the arrow at the end of a row */
+  --feed-tile-mini: 2.25rem;       /* 36px: the tile's picture once a type is chosen and the row is a line of pills */
+  --feed-tile-mini-image: 1.875rem;
   --feed-search: 3.25rem;          /* 52px: the search pill */
   --feed-go: 2.5rem;               /* 40px: its round go button */
   --feed-game: 3.625rem;           /* 58px: an item of the game bar */

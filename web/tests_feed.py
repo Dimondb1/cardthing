@@ -492,12 +492,12 @@ class TypeTileTests(FeedCase):
         cache.clear()
         look.remember()
         html = self.page(url, type="booster_box")
-        row = html[html.index('<div class="feed-filters">'):html.index("</details>", html.index('<div class="feed-filters">'))]
+        row = html[html.index('<div class="feed-filters">'):html.index("</div>\n</div>", html.index('<div class="feed-filters">'))]
         self.assertIn('<a class="chip" href="?type=booster_box&amp;lang=en">English</a>', row)
         self.assertIn('<a class="chip" href="?type=booster_box&amp;lang=ja">Japanese</a>', row)
         self.assertNotIn("Chinese", row)
         # The Filters pill, last in the row, folds the price band and 2+ shops; the type and sort ride along hidden.
-        self.assertIn('<details class="feed-filters__more" data-filter-panel>', row)
+        self.assertIn('<div class="feed-filters__row">\n  <details class="feed-filters__more">', row)   # the pill first, closed
         self.assertIn('<summary class="chip chip--more"><svg class="feed-ic" aria-hidden="true" focusable="false">'
                       '<use href="#rr-filter"/></svg>Filters</summary>', row)
         self.assertIn('<form class="filters feed-filters__form" method="get" action="" data-autosubmit>', row)
@@ -509,7 +509,7 @@ class TypeTileTests(FeedCase):
         self.assertNotIn("Sort and filter", html)
         # A tap on Japanese narrows the list and marks the chip; a tap on it again clears the language.
         html = self.page(url, type="booster_box", lang="ja")
-        row = html[html.index('<div class="feed-filters">'):html.index("</details>", html.index('<div class="feed-filters">'))]
+        row = html[html.index('<div class="feed-filters">'):html.index("</div>\n</div>", html.index('<div class="feed-filters">'))]
         self.assertIn('<a class="chip" href="?type=booster_box" aria-current="true">Japanese<span class="chip__off" '
                       'aria-hidden="true">×</span>', row)
         self.assertIn('<a class="chip" href="?type=booster_box&amp;lang=en">English</a>', row)
@@ -525,7 +525,7 @@ class TypeTileTests(FeedCase):
         # A game's page: the same row, without the In stock toggle the stock tabs replace.
         game = self.pokemon.get_absolute_url()
         html = self.page(game, type="booster_box")
-        row = html[html.index('<div class="feed-filters">'):html.index("</details>", html.index('<div class="feed-filters">'))]
+        row = html[html.index('<div class="feed-filters">'):html.index("</div>\n</div>", html.index('<div class="feed-filters">'))]
         self.assertIn('<a class="chip" href="?type=booster_box&amp;lang=ja">Japanese</a>', row)
         self.assertNotIn('name="in_stock"', row)
         self.assertIn('name="compared"', row)

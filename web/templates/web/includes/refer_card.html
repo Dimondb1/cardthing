@@ -7,4 +7,4 @@
     <button type="button" class="button button--quiet button--small" data-refer-card-dismiss>{% copy "refer.nudge.dismiss" %}</button>
   </div>
 </aside>
-<script src="{% static 'js/refer-card.js' %}" defer></script>
+<script nonce="{{ csp_nonce }}" src="{% static 'js/refer-card.js' %}" defer></script>

@@ -74,6 +74,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "ripraptor.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "web.middleware.SmallFormMiddleware",
@@ -208,9 +209,13 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
     # Browsers that have seen the site once use https for it for a year, even if a link or a typed address says
-    # http, so nobody between them and the site can serve a fake copy first. ripraptor.com only (no subdomains,
-    # no preload list): easy to undo while the site is young.
+    # http, so nobody between them and the site can serve a fake copy first.
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 365
+
+# With the year above: every subdomain too, and the site may go on the browsers' built-in list (the owner submits it
+# at hstspreload.org), so even a first visit is https. Nothing of the site's is served over plain http.
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
 
 # RipRaptor settings ---------------------------------------------------------
 

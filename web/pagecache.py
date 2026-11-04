@@ -22,6 +22,8 @@ from django.http.request import validate_host
 from django.test import RequestFactory
 from django.urls import resolve
 
+from ripraptor import csp
+
 from . import look, seasons
 
 HEADER = "X-RipRaptor-Page"   # "cached" on a copy from the cache, so a check can tell
@@ -65,8 +67,14 @@ def cached_page(view):
             return view(request, *args, **kwargs)
         key = key_for(request.get_full_path())
         found = cache.get(key)
+        # The nonce on the page's scripts (ripraptor/csp.py) is this response's own: a kept page is served with a
+        # fresh one written in where the one it was built with was.
+        fresh = getattr(request, "csp_nonce", "")
         if found is not None:
-            response = HttpResponse(found["body"])
+            body = found["body"]
+            if found.get("nonce") and fresh:
+                body = body.replace(found["nonce"].encode(), fresh.encode())
+            response = HttpResponse(body)
             for name, value in found["headers"]:
                 response[name] = value
             response[HEADER] = "cached"
@@ -74,7 +82,7 @@ def cached_page(view):
         response = view(request, *args, **kwargs)
         if response.status_code == 200 and not response.cookies and not getattr(response, "streaming", False):
             headers = [(name, value) for name, value in response.items() if name.lower() != "set-cookie"]
-            cache.set(key, {"body": response.content, "headers": headers}, seconds())
+            cache.set(key, {"body": response.content, "headers": headers, "nonce": fresh}, seconds())
         return response
 
     wrapper.__name__, wrapper.__doc__, wrapper.__wrapped__ = view.__name__, view.__doc__, view
@@ -98,6 +106,7 @@ def warm(path):
     host, scheme = warm_host()
     request = RequestFactory(HTTP_HOST=host).get(path, secure=scheme == "https")
     request.user = AnonymousUser()
+    request.csp_nonce = csp.nonce()
     request.resolver_match = match = resolve(urlsplit(path).path)
     response = match.func(request, *match.args, **match.kwargs)
     return response.status_code == 200 and response.get(HEADER) != "cached"

@@ -423,7 +423,7 @@ class DoorTests(PageCase):
 
     def test_the_checker_is_never_rendered_ahead_of_a_tap(self):
         html = self.client.get(reverse("web:home")).content.decode()
-        rules = json.loads(html.split('<script type="speculationrules">')[1].split("</script>")[0])
+        rules = json.loads(re.split(r'<script nonce="[^"]+" type="speculationrules">', html)[1].split("</script>")[0])
         self.assertIn("/guides/fair-price/*", rules["prerender"][0]["where"]["and"][1]["not"]["href_matches"])
 
 

@@ -246,8 +246,8 @@ class HomeFeedTests(FeedCase):
                       'focusable="false"><use href="#rr-drops"/></svg>Dropping soon</h2>', html)
         # Switching games: Chrome cross-fades feed pages and fetches a game's page on touch; only feed pages say so.
         self.assertIn("<style>@view-transition { navigation: auto; }</style>", html)
-        self.assertIn('<script type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".feed-game"}, '
-                      '"eagerness": "moderate"}]}</script>', html)
+        self.assertRegex(html, r'<script nonce="[^"]+" type="speculationrules">\{"prefetch": \[\{"where": '
+                             r'\{"selector_matches": "\.feed-game"\}, "eagerness": "moderate"\}\]\}</script>')
         self.assertIn("@view-transition", self.page(self.pokemon.get_absolute_url()))
         switch(False)
         self.assertNotIn("@view-transition", self.page())
@@ -259,7 +259,7 @@ class HomeFeedTests(FeedCase):
                            r'<span class="feed-game__label">([^<]+)</span>', dock)
         self.assertEqual(games, [(HOME, "all", "All"), (self.pokemon.get_absolute_url(), "pokemon", "Pokémon"),
                                  (self.magic.get_absolute_url(), "magic", "Magic")])
-        self.assertIn('<script src="/static/js/feed.js" defer></script>', html)
+        self.assertRegex(html, r'<script nonce="[^"]+" src="/static/js/feed.js" defer></script>')
         self.assertIn('<body class="feed-look', html)
 
     def test_a_tile_is_pictured_by_the_product_most_shops_sell_not_the_cheapest(self):
@@ -426,7 +426,7 @@ class TypeTileTests(FeedCase):
         html = self.page()
         self.assertIn('<div data-browse>\n', html)
         self.assertLess(html.index("<div data-browse>"), html.index('<div class="feed">'))
-        self.assertIn('<script src="/static/js/browse.js" defer></script>', html)
+        self.assertRegex(html, r'<script nonce="[^"]+" src="/static/js/browse.js" defer></script>')
         self.assertIn(f'<a class="feed-tile__link" href="{reverse("web:search")}?type=booster_box" data-browse-link>', html)
         self.assertNotIn('aria-current="page"><span class="feed-tile__well"', html)
         self.assertIn('data-loading="Loading"', html)

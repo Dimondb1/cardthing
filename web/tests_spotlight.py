@@ -218,7 +218,7 @@ class FoldAndJumpTests(TestCase):
         self.assertIn("Out in 6 days", bar)
         self.assertIn("Check your inbox to confirm", bar)
         # The choice made on this device is put back before the panel is painted: the script stands right after it.
-        self.assertRegex(html, r"(?s)</details>\s*<script>.*rr-spotlight:.*</script>\s*</section>")
+        self.assertRegex(html, r'(?s)</details>\s*<script nonce="[^"]+">.*rr-spotlight:.*</script>\s*</section>')
 
     def test_the_game_tiles_come_before_the_spotlight_and_no_jump_row(self):
         # The game tiles took the jump buttons' place under the search (the owner, 2 Nov 2026: "i want the games back

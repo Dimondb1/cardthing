@@ -87,6 +87,6 @@ hidden or alerts are set, which spotlight_state.js puts back before the page sho
     </ol>
     </div>
   </details>
-  <script>{% inline_static "js/spotlight_state.js" %}</script>
+  <script nonce="{{ csp_nonce }}">{% inline_static "js/spotlight_state.js" %}</script>
 </section>
 {% endwith %}

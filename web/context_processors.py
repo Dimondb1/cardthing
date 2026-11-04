@@ -23,6 +23,8 @@ def site(request):
     private = bool(PRIVATE_LINK.match(request.path))
     return {
         "site_name": settings.RIPRAPTOR_SITE_NAME,
+        # On every script tag: only scripts carrying it run (ripraptor/csp.py).
+        "csp_nonce": getattr(request, "csp_nonce", ""),
         "adsense_client": getattr(settings, "RIPRAPTOR_ADSENSE_CLIENT", ""),
         "awin_publisher_id": getattr(settings, "RIPRAPTOR_AWIN_PUBLISHER_ID", ""),
         # Amazon links carry our tag: Amazon's required statement goes on every page and beside its buttons.

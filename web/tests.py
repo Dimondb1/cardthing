@@ -532,7 +532,8 @@ class AwinTagTests(PageTestCase):
         for url in self.public_urls():
             with self.subTest(url=url):
                 html = self.client.get(url).content.decode()
-                self.assertIn('<script src="https://www.dwin2.com/pub.3111686.min.js"></script>', html)
+                # The tag carries the response's nonce (ripraptor/csp.py), so the policy lets it run.
+                self.assertRegex(html, r'<script nonce="[A-Za-z0-9_-]{22,}" src="https://www.dwin2.com/pub.3111686.min.js"></script>')
                 self.assertLess(html.index("dwin2.com"), html.index("</body>"))
                 self.assertGreater(html.index("dwin2.com"), html.index("site-footer"))
         with override_settings(RIPRAPTOR_AWIN_PUBLISHER_ID=""):

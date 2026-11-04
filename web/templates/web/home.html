@@ -1,6 +1,6 @@
 {% extends "web/base.html" %}
 {% load sitecopy ripraptor static %}
-{% block scripts %}{% if spotlight %}<script src="{% static 'js/drops.js' %}" defer></script><script src="{% static 'js/spotlight.js' %}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if spotlight %}<script nonce="{{ csp_nonce }}" src="{% static 'js/drops.js' %}" defer></script><script nonce="{{ csp_nonce }}" src="{% static 'js/spotlight.js' %}" defer></script>{% endif %}{% endblock %}
 
 {% block content %}
 <section class="hero" aria-labelledby="hero-title">
@@ -44,7 +44,7 @@
   </ul>
   <p class="section-head__note section-head__note--after">{% copy "home.best.note" %}</p>
 </section>
-{{ interest_games|json_script:"interest-games" }}<script>{% inline_static "js/interest.js" %}</script>
+{{ interest_games|json_script:"interest-games" }}<script nonce="{{ csp_nonce }}">{% inline_static "js/interest.js" %}</script>
 {% endif %}
 
 {% if featured %}
@@ -61,7 +61,7 @@
   {# Said beside the row it is about, not only in the footer: commission shapes which deals are picked, never a comparison's order. Under the row, so the prices come first. #}
   <p class="section-head__note section-head__note--after">{% if featured_paying_only %}{% copy "home.featured.disclosure_paying" %}{% else %}{% copy "home.featured.disclosure" %}{% endif %} <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a></p>
 </section>
-{% if not best %}{{ interest_games|json_script:"interest-games" }}{% endif %}<script>{% inline_static "js/interest.js" %}</script>
+{% if not best %}{{ interest_games|json_script:"interest-games" }}{% endif %}<script nonce="{{ csp_nonce }}">{% inline_static "js/interest.js" %}</script>
 {% endif %}
 
 {% if spotlight %}{% include "web/includes/spotlight.html" %}{% endif %}
@@ -174,7 +174,7 @@
 </section>
 {% endif %}
 {# Runs as soon as the rows above are read, before they are painted: the visitor's own games first, from this browser's history only. #}
-{% if coming_soon %}{% if not featured and not best %}{{ interest_games|json_script:"interest-games" }}{% endif %}<script>{% inline_static "js/interest.js" %}</script>{% endif %}
+{% if coming_soon %}{% if not featured and not best %}{{ interest_games|json_script:"interest-games" }}{% endif %}<script nonce="{{ csp_nonce }}">{% inline_static "js/interest.js" %}</script>{% endif %}
 
 <section class="home-section" aria-labelledby="watch-title">
   <a class="poster poster--watch" href="{% url 'web:watchlist' %}">

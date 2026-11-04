@@ -3,7 +3,7 @@
 
 {% block page_class %}page--deck{% endblock %}
 {% block body_class %}body--deck{% endblock %}
-{% block scripts %}{% load static %}<script src="{% static 'js/deck.js' %}" defer></script>{% endblock %}
+{% block scripts %}{% load static %}<script nonce="{{ csp_nonce }}" src="{% static 'js/deck.js' %}" defer></script>{% endblock %}
 {% block content %}
 <div class="deck-page" data-deck="{% url 'web:deck_api' %}"
      data-save="{% copy 'deck.save' %}" data-skip="{% copy 'deck.skip' %}"

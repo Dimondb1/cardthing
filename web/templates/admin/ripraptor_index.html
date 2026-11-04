@@ -107,7 +107,7 @@
     </th><td></td></tr>
   </table>
 </div>
-<script>
+<script nonce="{{ csp_nonce }}">
 (() => {
   const box = document.querySelector("[data-admin-app]");
   if (matchMedia("(display-mode: standalone)").matches || navigator.standalone === true) { box.hidden = true; return; }

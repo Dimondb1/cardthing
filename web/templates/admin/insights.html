@@ -31,7 +31,7 @@
 <div class="ins">
   <form method="get">
     <label for="days">Last</label>
-    <select id="days" name="days" onchange="this.form.submit()">
+    <select id="days" name="days" data-submits>
       <option value="7"{% if days == 7 %} selected{% endif %}>7 days</option>
       <option value="30"{% if days == 30 %} selected{% endif %}>30 days</option>
       <option value="90"{% if days == 90 %} selected{% endif %}>90 days</option>
@@ -271,4 +271,5 @@
     </div>
   </div>
 </div>
+<script nonce="{{ csp_nonce }}">document.getElementById("days").addEventListener("change", function () { this.form.submit(); });</script>
 {% endblock %}

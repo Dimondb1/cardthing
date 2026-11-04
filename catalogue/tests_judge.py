@@ -53,6 +53,13 @@ def error(cls, status, kind="error", message="no"):
     return cls(message, response=response, body={"type": "error", "error": {"type": kind, "message": message}})
 
 
+
+def without_nonce(body):
+    """A page's body with the response's own script nonce (ripraptor/csp.py) taken out, so two can be compared."""
+    import re
+
+    return re.sub(rb'nonce="[A-Za-z0-9_-]+"', b'nonce=""', body)
+
 class FakeClient:
     """Answers each request through ``answer(row_key, params)``, which returns a reply or raises."""
 
@@ -1547,7 +1554,7 @@ class ClearsTheQueueTests(Base):
         cheap.refresh_from_db()
         self.assertEqual((cheap.is_active, cheap.sanity, cheap.trusted_price), (True, Listing.Sanity.DOUBTFUL, None))
         cache.clear()
-        self.assertEqual(self.client.get(self.bundle.get_absolute_url()).content, before)
+        self.assertEqual(without_nonce(self.client.get(self.bundle.get_absolute_url()).content), without_nonce(before))
         self.assertEqual((checks.doubtful_count(), checks.checked_count()), (0, 1))
         self.assertEqual(judge.open_rows(), [])
         self.assertContains(self.client.get(self.url), "1 more is checked as the right product.")

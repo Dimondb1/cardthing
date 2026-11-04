@@ -49,4 +49,4 @@
   </section>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/checker.js' %}" defer></script>{% endblock %}
+{% block scripts %}<script nonce="{{ csp_nonce }}" src="{% static 'js/checker.js' %}" defer></script>{% endblock %}

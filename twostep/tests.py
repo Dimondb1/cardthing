@@ -349,8 +349,8 @@ class ServerSettingsTests(SimpleTestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         return json.loads(done.stdout)
 
-    def test_the_server_requires_two_step_and_sends_hsts_for_a_year_on_this_address_only(self):
-        self.assertEqual(self.server_settings(), [True, 365 * 24 * 3600, False, False])
+    def test_the_server_requires_two_step_and_sends_hsts_for_a_year_every_subdomain_and_the_preload_list(self):
+        self.assertEqual(self.server_settings(), [True, 365 * 24 * 3600, True, True])
 
     def test_two_step_can_be_switched_off_from_the_environment(self):
         self.assertFalse(self.server_settings(RIPRAPTOR_TWO_STEP="0")[0])

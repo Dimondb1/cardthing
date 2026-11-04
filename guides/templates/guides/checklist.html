@@ -12,4 +12,4 @@
   <p class="checklist__actions"><button class="button" type="button" data-print hidden>{% copy "guides.checklist.print" %}</button> <a class="button button--quiet" href="{{ guide.get_absolute_url }}">{% copy "guides.checklist.back" %}</a></p>
 </div>
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/checker.js' %}" defer></script>{% endblock %}
+{% block scripts %}<script nonce="{{ csp_nonce }}" src="{% static 'js/checker.js' %}" defer></script>{% endblock %}

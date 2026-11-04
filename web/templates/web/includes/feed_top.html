@@ -38,7 +38,7 @@
     <p class="feed__note">{% if feed.deals_paying_only %}{% copy "home.featured.disclosure_paying" %}{% else %}{% copy "home.featured.disclosure" %}{% endif %} <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a></p>
   </section>
   {% endif %}
-  {% if feed.rail or feed.deals %}{{ feed.interest_games|json_script:"interest-games" }}<script>{% inline_static "js/interest.js" %}</script>{% endif %}
+  {% if feed.rail or feed.deals %}{{ feed.interest_games|json_script:"interest-games" }}<script nonce="{{ csp_nonce }}">{% inline_static "js/interest.js" %}</script>{% endif %}
   {% if feed.drop %}{% with drop=feed.drop %}
   <section class="feed__rail feed__drop" aria-labelledby="feed-drop-title">
     <div class="feed__head"><h2 id="feed-drop-title" class="feed__h2"><svg class="section-head__icon" aria-hidden="true" focusable="false"><use href="#rr-drops"/></svg>{% copy "feed.drop.title" %}</h2><a class="feed__all" href="{% url 'web:drops' %}{% if feed.game %}?game={{ feed.game.slug }}{% endif %}">{% copy "feed.drop.all" %}</a></div>

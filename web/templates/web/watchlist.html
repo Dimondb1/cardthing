@@ -1,6 +1,6 @@
 {% extends "web/base.html" %}
 {% load sitecopy ripraptor static %}
-{% block scripts %}{% if alerts_on %}<script src="{% static 'js/search-alert.js' %}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if alerts_on %}<script nonce="{{ csp_nonce }}" src="{% static 'js/search-alert.js' %}" defer></script>{% endif %}{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1 class="page-title">{% copy "watchlist.title" %}</h1>

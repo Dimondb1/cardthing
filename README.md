@@ -4733,10 +4733,27 @@ typing your name; the address is the one Caddy adds last to
 `X-Forwarded-For`.
 
 **HTTPS only.** On the server (`DJANGO_DEBUG=0`) every page tells browsers
-to use https for ripraptor.com for a year (HSTS, `SECURE_HSTS_SECONDS`),
-so nobody between a visitor and the site can serve a plain http copy
-first. Subdomains and the browsers' preload list are left out, so it is
-easy to undo while the site is young.
+to use https for ripraptor.com and every subdomain for a year (HSTS,
+`SECURE_HSTS_SECONDS`, `SECURE_HSTS_INCLUDE_SUBDOMAINS`), so nobody between
+a visitor and the site can serve a plain http copy first. The header also
+says `preload`, so the site can go on the list built into browsers, which
+makes even a first visit https: the owner submits ripraptor.com once at
+hstspreload.org. Nothing of the site's is served over plain http, on any
+subdomain, so there is nothing to lose by it.
+
+**What a page may run.** Every response carries a Content Security Policy
+(`ripraptor/csp.py`): only scripts carrying the response's nonce run (a
+random token the templates put on every script tag, `csp_nonce`), and the
+scripts those load in turn (Awin's tag, Google's); nothing runs from an
+inline attribute, no plugins, no `<base>` tricks. Images may come from any
+https address (the shops' pictures), styles may be inline, connections go
+only to the site itself and, when their ids are set, to Awin and Google.
+The admin's policy is the same without `strict-dynamic`, since Django's own
+script tags carry no nonce. A page kept whole in the cache
+(`web/pagecache.py`) is served with a fresh nonce written in, so no two
+responses share one. A script added to a template needs
+`nonce="{{ csp_nonce }}"` or the browser refuses it; `web/tests_csp.py`
+checks every public page.
 
 **Hacking tools' searches.** Scanners search for markup and code
 (`"><svg onload=...>`, `{{7*7}}` and the like) to see whether the site

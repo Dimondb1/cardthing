@@ -1,6 +1,6 @@
 {% extends "web/base.html" %}
 {% load sitecopy static %}
-{% block scripts %}<script src="{% static 'js/badge.js' %}" defer></script>{% endblock %}
+{% block scripts %}<script nonce="{{ csp_nonce }}" src="{% static 'js/badge.js' %}" defer></script>{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1 class="page-title">{% copy "listshop.title" %}</h1>

@@ -1,9 +1,9 @@
 {% extends "web/base.html" %}
 {% load sitecopy ripraptor static %}
-{% block scripts %}<script src="{% static 'js/feed.js' %}" defer></script><script src="{% static 'js/browse.js' %}" defer></script>
+{% block scripts %}<script nonce="{{ csp_nonce }}" src="{% static 'js/feed.js' %}" defer></script><script nonce="{{ csp_nonce }}" src="{% static 'js/browse.js' %}" defer></script>
 {# Switching games: Chrome cross-fades one feed page into the next and fetches a game's page as the finger lands on it (web/static/css/site.css, the feed); other browsers load as usual. #}
 <style>@view-transition { navigation: auto; }</style>
-<script type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".feed-game"}, "eagerness": "moderate"}]}</script>{% endblock %}
+<script nonce="{{ csp_nonce }}" type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".feed-game"}, "eagerness": "moderate"}]}</script>{% endblock %}
 {% block body_class %}feed-look{% endblock %}
 {% block page_class %}page--feed{% endblock %}
 

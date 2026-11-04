@@ -2,6 +2,7 @@
 tap in Chrome without miscounting visits, and taps that answer at once."""
 
 import json
+import re
 
 from django.contrib.staticfiles import finders
 from django.core.cache import cache
@@ -41,7 +42,9 @@ class PageCacheTests(TestCase):
         with self.assertNumQueries(0):
             second = self.client.get(url)
         self.assertEqual(second[pagecache.HEADER], "cached")
-        self.assertEqual(second.content, first.content)
+        # The same page but for the script nonce, which is each response's own (ripraptor/csp.py).
+        strip = lambda body: re.sub(rb'nonce="[A-Za-z0-9_-]+"', b"", body)   # noqa: E731
+        self.assertEqual(strip(second.content), strip(first.content))
         self.assertEqual(second["Content-Type"], first["Content-Type"])
         # Each tab's list and each set of filters is its own page.
         self.assertNotIn(pagecache.HEADER, self.client.get(url + "?tab=out-of-stock"))
@@ -111,8 +114,8 @@ class AheadOfATapTests(TestCase):
 
     def test_public_pages_say_which_pages_may_be_rendered_ahead(self):
         html = self.client.get(reverse("web:home")).content.decode()
-        self.assertIn('<script type="speculationrules">', html)
-        rules = json.loads(html.split('<script type="speculationrules">')[1].split("</script>")[0])
+        self.assertRegex(html, r'<script nonce="[A-Za-z0-9_-]+" type="speculationrules">')
+        rules = json.loads(re.split(r'<script nonce="[^"]+" type="speculationrules">', html)[1].split("</script>")[0])
         rule = rules["prerender"][0]
         self.assertEqual(rule["eagerness"], "moderate")
         self.assertEqual(rule["where"]["and"][0], {"href_matches": "/*"})

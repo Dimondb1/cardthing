@@ -1,6 +1,6 @@
 {% extends "web/base.html" %}
 {% load sitecopy static %}
-{% block scripts %}{% if expired and alerts_on %}<script src="{% static 'js/search-alert.js' %}" defer></script>{% endif %}{% endblock %}
+{% block scripts %}{% if expired and alerts_on %}<script nonce="{{ csp_nonce }}" src="{% static 'js/search-alert.js' %}" defer></script>{% endif %}{% endblock %}
 {% block content %}
 {% if expired %}
 <div class="page-head">

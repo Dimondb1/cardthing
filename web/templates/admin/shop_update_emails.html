@@ -1,6 +1,6 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
-{% block extrahead %}{{ block.super }}<script src="{% static 'js/copy-mail.js' %}" defer></script>{% endblock %}
+{% block extrahead %}{{ block.super }}<script nonce="{{ csp_nonce }}" src="{% static 'js/copy-mail.js' %}" defer></script>{% endblock %}
 {% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; <a href="{% url 'admin:inbox_shopcontact_changelist' %}">Shop outreach</a> &rsaquo; {{ title }}</div>{% endblock %}
 {% block content %}
 {% comment %}One card per shop: its own address box, the email filled in with its figures, and the two buttons. Each card is its own form, so Save address (the first button, which Enter presses) never marks anything as sent. Nothing is sent from the site: the email opens in the owner's mail app.{% endcomment %}

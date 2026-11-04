@@ -68,16 +68,18 @@ class Card:
 
 def tile_picks(fresh=False):
     """{"all": [(type, product pk, in stock)], "games": {game id: [...]}}, most stocked types first: for each game and
-    across them, the cheapest product in stock of each type with a picture. One query over every product in stock,
-    at most hourly, like the home page's type covers."""
+    across them, the product in stock of each type with a picture that the most shops sell, the cheapest of those.
+    A product many shops stock is a mainstream one of its kind; the cheapest alone was a mis-typed accessory (a card
+    display frame as the Booster boxes tile, 4 Nov 2026). One query over every product in stock, at most hourly,
+    like the home page's type covers."""
     picks = None if fresh else cache.get(TILES_KEY)
     if picks is None:
         rows = (Product.objects.active().with_prices().filter(in_stock_count__gte=1)
                 .exclude(product_type=Product.Type.OTHER).exclude(image="", image_url="")
-                .order_by().values_list("game_id", "product_type", "pk", "lowest_known"))
+                .order_by().values_list("game_id", "product_type", "pk", "lowest_known", "in_stock_count"))
         counts, best = {}, {}
-        for game_id, kind, pk, price in rows:
-            order = (price is None, price or 0, pk)   # a confirmed delivered price first, the cheapest of them
+        for game_id, kind, pk, price, shops in rows:
+            order = (-shops, price is None, price or 0, pk)   # most shops; then a confirmed delivered price, cheapest
             for scope in (game_id, None):
                 counts[(scope, kind)] = counts.get((scope, kind), 0) + 1
                 if (scope, kind) not in best or order < best[(scope, kind)][0]:

@@ -14,6 +14,7 @@ from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.text import slugify
 
 from catalogue import fair_price
 from catalogue.models import Listing, Product, SiteLook
@@ -25,6 +26,11 @@ from .tests import CopyStyleTests
 
 HOME = reverse("web:home")
 PICTURE = "https://cdn.example/{}.png"
+
+
+def picture(product):
+    """The stand-in picture a test product was given: its own, by name."""
+    return PICTURE.format(slugify(product.name))
 
 
 def switch(on):
@@ -69,7 +75,7 @@ class FeedCase(TestCase):
         make_listing(self.drop, self.harbour, price="95.49", availability=Listing.Availability.PREORDER)
 
     def product(self, product_set, name, kind, price, second=None, rrp=None, stock=Listing.Availability.IN_STOCK):
-        product = make_product(product_set, name=name, product_type=kind, image_url=PICTURE.format(len(name)),
+        product = make_product(product_set, name=name, product_type=kind, image_url=PICTURE.format(slugify(name)),
                                rrp=Decimal(rrp) if rrp else None)
         make_listing(product, self.harbour, price=price, availability=stock)
         if second:
@@ -159,8 +165,8 @@ class HomeFeedTests(FeedCase):
             (f"{reverse('web:search')}?type=elite_trainer_box", "ETBs"),
             (f"{reverse('web:search')}?type=tin", "Tins"),
         ])
-        self.assertIn(PICTURE.format(len(self.bundle.name)), html)
-        self.assertNotIn(PICTURE.format(len(self.gone.name)), html)
+        self.assertIn(picture(self.bundle), html)
+        self.assertNotIn(picture(self.gone), html)
         # The rail: four products under their RRP, so Furthest under RRP, furthest first.
         self.assertIn('<h2 id="feed-rail-title" class="feed__h2">Furthest under RRP</h2>', html)
         self.assertIn(f'<a class="feed__all" href="{reverse("web:deals")}">See all</a>', html)
@@ -196,6 +202,18 @@ class HomeFeedTests(FeedCase):
                                  (self.magic.get_absolute_url(), "magic", "Magic")])
         self.assertIn('<script src="/static/js/feed.js" defer></script>', html)
         self.assertIn('<body class="feed-look', html)
+
+    def test_a_tile_is_pictured_by_the_product_most_shops_sell_not_the_cheapest(self):
+        # A mis-typed accessory is cheap and at one shop; a real booster box is at two. The owner, 4 Nov 2026:
+        # "We have a picture frame as a booster pack".
+        frame = self.product(self.surging, "Pikachu Card Display Frame", Product.Type.BOOSTER_BOX, "17.98")
+        cache.clear()
+        look.remember()
+        html = self.page()
+        tile = html[html.index('<li class="feed-tile">'):html.index("</li>", html.index('<li class="feed-tile">'))]
+        self.assertIn("Booster boxes", tile)
+        self.assertIn(picture(self.box), tile)
+        self.assertNotIn(picture(frame), html)
 
     def test_with_fewer_products_under_rrp_the_rail_is_best_prices_today_with_the_saving_on_the_next_shop(self):
         Product.objects.filter(pk__in=[self.collector.pk, self.bundle.pk]).update(rrp=None)

@@ -198,6 +198,16 @@ class ClassifyLeakTests(TestCase):
                       "Pokemon Island Guardians GX Premium Collection Play Mat"]:
             self.assertIsNone(classify(title, price=10), title)
 
+    def test_a_card_display_frame_is_an_accessory_but_a_box_that_comes_with_one_is_sealed(self):
+        for title in ["Center Japan Pikachu Face Card Display Frame", "Center Japan Black Ver.2 Card Display Frame",
+                      "Center Japan Snivy & Tepig Evolution Line Triple Display Frame", "Center Japan Gym Badge Display Frame",
+                      "30th Celebration Coin Display Frame (Simplified Chinese)", "Pokemon Card Display Frames"]:
+            self.assertIsNone(classify(title, price=18), title)
+        for title in ["Pokemon Umbreon Display Frame Collection Box Simplified Chinese",
+                      "Pokemon Umbreon cs4.5DF1 Simplified Chinese Display Frame Gift Box",
+                      "Pokemon Terastal Grand Crystal Gathering Simplified Chinese Card Display Frame Set Blind Box"]:
+            self.assertIsNotNone(classify(title, price=29), title)
+
     def test_merchandise_makers_are_never_sealed(self):
         self.assertIsNone(classify("Pokemon - Pikachu Gift box", vendor="GB Posters", price=19.99))
         self.assertIsNone(classify("Pikachu Gift Box Set Pokemon", vendor="GB EYE", price=19.99))

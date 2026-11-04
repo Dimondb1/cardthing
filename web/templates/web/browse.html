@@ -36,6 +36,9 @@
     <input type="hidden" name="type" value="{{ feed.kind }}">
     {% if form.game.value %}<input type="hidden" name="game" value="{{ form.game.value }}">{% endif %}
     {% if form.lang.value %}<input type="hidden" name="lang" value="{{ form.lang.value }}">{% endif %}
+    {% if form.price.value %}<input type="hidden" name="price" value="{{ form.price.value }}">{% endif %}
+    {% if form.compared.value %}<input type="hidden" name="compared" value="on">{% endif %}
+    {% if form.in_stock.value and not stock_tabs %}<input type="hidden" name="in_stock" value="on">{% endif %}
     {% if tab %}<input type="hidden" name="tab" value="{{ tab_asked }}" data-tab-input>{% endif %}
     <div class="pill pill--sort">
       <label class="visually-hidden" for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>
@@ -45,6 +48,31 @@
   </form>
   <a class="feed-list-head__clear" href="{{ feed.clear_url }}" data-browse-link><span aria-hidden="true">× </span>{% copy "feed.list.clear" %}</a>
 </div>
+{% if lang_chips or show_filters %}
+{# The languages the list holds, ready to tap (views.language_chips), and a Filters pill that folds the price band and 2+ shops away; the chosen ones are named on it. Plain links and a details element, so it all works without script; browse.js swaps the list in place and keeps the pill open. #}
+<div class="feed-filters">
+  {% for chip in lang_chips %}<a class="chip" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}{% if chip.active %}<span class="chip__off" aria-hidden="true">×</span><span class="visually-hidden">, {% copy "browse.quick.remove" %}</span>{% endif %}</a>{% endfor %}
+  {% if show_filters %}<details class="feed-filters__more" data-filter-panel>
+    <summary class="chip chip--more"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-filter"/></svg>{% copy "feed.filters.button" %}{% if feed_chosen %}<span class="chip__count">{{ feed_chosen|join:" · " }}</span>{% endif %}</summary>
+    <form class="filters feed-filters__form" method="get" action="" data-autosubmit>
+      <input type="hidden" name="type" value="{{ feed.kind }}">
+      {% if form.game.value %}<input type="hidden" name="game" value="{{ form.game.value }}">{% endif %}
+      {% if form.lang.value %}<input type="hidden" name="lang" value="{{ form.lang.value }}">{% endif %}
+      {% if form.sort.value %}<input type="hidden" name="sort" value="{{ form.sort.value }}">{% endif %}
+      {% if tab %}<input type="hidden" name="tab" value="{{ tab_asked }}" data-tab-input>{% endif %}
+      <div class="pill">
+        <label class="visually-hidden" for="{{ form.price.id_for_label }}">{{ form.price.label }}</label>
+        {{ form.price }}
+      </div>
+      {% if not stock_tabs %}<label class="toggle">{{ form.in_stock }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.in_stock.label }}</span></label>{% endif %}
+      <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>
+      <div class="filters__actions">
+        <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
+      </div>
+    </form>
+  </details>{% endif %}
+</div>
+{% endif %}
 {% else %}
 <div class="browse-head">
   {% if game %}

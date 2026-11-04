@@ -451,7 +451,7 @@ class TypeTileTests(FeedCase):
         self.assertIn('<input type="hidden" name="type" value="booster_box">', head)
         self.assertIn('name="sort"', head)
         self.assertIn(f'<a class="feed-list-head__clear" href="{HOME}" data-browse-link><span aria-hidden="true">× </span>Clear</a>', head)
-        self.assertNotIn("filter-panel", html)
+        self.assertNotIn('class="filter-panel"', html)   # the folded Sort and filter: the Filters pill serves instead
         self.assertIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):])
         self.assertEqual(html.count("<h1"), 1)
         # The dock stays, outside the region a tile swaps.
@@ -470,7 +470,7 @@ class TypeTileTests(FeedCase):
         self.assertIn(f'<a class="feed-tile__link" href="{url}?type=booster_box" data-browse-link>', html)
         self.assertIn('<h1 class="browse-head__title">ETBs</h1>', html)
         self.assertIn(f'<a class="feed-list-head__clear" href="{url}" data-browse-link>', html)
-        self.assertNotIn("filter-panel", html)
+        self.assertNotIn('class="filter-panel"', html)   # the folded Sort and filter: the Filters pill serves instead
         self.assertNotIn('class="sets', html)
         self.assertIn(self.etb.get_absolute_url(), html)
         self.assertNotIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):])
@@ -480,6 +480,55 @@ class TypeTileTests(FeedCase):
         self.assertIn('<div class="feed">', plain)
         self.assertIn("feed-rail-title", plain)
         self.assertNotIn("feed-list-head", plain)
+
+    def test_the_languages_a_list_holds_are_chips_ready_to_tap_and_the_rest_folds_under_filters(self):
+        # The owner, 4 Nov 2026: "a filter button but smart filter like. Languages ready to tap could work. Less is
+        # more and maintain a beautiful layout."
+        url = reverse("web:search")
+        html = self.page(url, type="booster_box")
+        self.assertNotIn('class="chip"', html)   # one language: nothing to choose between
+        japan = self.product(self.surging, "Surging Sparks Japanese Booster Box", Product.Type.BOOSTER_BOX, "60.00")
+        Product.objects.filter(pk=japan.pk).update(language="ja")
+        cache.clear()
+        look.remember()
+        html = self.page(url, type="booster_box")
+        row = html[html.index('<div class="feed-filters">'):html.index("</details>", html.index('<div class="feed-filters">'))]
+        self.assertIn('<a class="chip" href="?type=booster_box&amp;lang=en">English</a>', row)
+        self.assertIn('<a class="chip" href="?type=booster_box&amp;lang=ja">Japanese</a>', row)
+        self.assertNotIn("Chinese", row)
+        # The Filters pill, last in the row, folds the price band and 2+ shops; the type and sort ride along hidden.
+        self.assertIn('<details class="feed-filters__more" data-filter-panel>', row)
+        self.assertIn('<summary class="chip chip--more"><svg class="feed-ic" aria-hidden="true" focusable="false">'
+                      '<use href="#rr-filter"/></svg>Filters</summary>', row)
+        self.assertIn('<form class="filters feed-filters__form" method="get" action="" data-autosubmit>', row)
+        self.assertIn('<input type="hidden" name="type" value="booster_box">', row)
+        self.assertIn('name="price"', row)
+        self.assertIn('name="compared"', row)
+        self.assertIn('name="in_stock"', row)
+        self.assertNotIn('name="lang"', row)
+        self.assertNotIn("Sort and filter", html)
+        # A tap on Japanese narrows the list and marks the chip; a tap on it again clears the language.
+        html = self.page(url, type="booster_box", lang="ja")
+        row = html[html.index('<div class="feed-filters">'):html.index("</details>", html.index('<div class="feed-filters">'))]
+        self.assertIn('<a class="chip" href="?type=booster_box" aria-current="true">Japanese<span class="chip__off" '
+                      'aria-hidden="true">×</span>', row)
+        self.assertIn('<a class="chip" href="?type=booster_box&amp;lang=en">English</a>', row)
+        self.assertIn('<p class="browse-head__count" role="status">1 product</p>', html)
+        self.assertIn(japan.get_absolute_url(), html)
+        self.assertNotIn(self.box.get_absolute_url(), html[html.index("feed-list-head"):])
+        self.assertIn('<input type="hidden" name="lang" value="ja">', html)   # the sort keeps the language
+        # A price band chosen is named on the pill and kept by the sort.
+        html = self.page(url, type="booster_box", price="50-100", compared="on")
+        self.assertIn('Filters<span class="chip__count">£50 to £100 · 2+ shops</span></summary>', html)
+        self.assertIn('<input type="hidden" name="price" value="50-100">', html)
+        self.assertIn('<input type="hidden" name="compared" value="on">', html)
+        # A game's page: the same row, without the In stock toggle the stock tabs replace.
+        game = self.pokemon.get_absolute_url()
+        html = self.page(game, type="booster_box")
+        row = html[html.index('<div class="feed-filters">'):html.index("</details>", html.index('<div class="feed-filters">'))]
+        self.assertIn('<a class="chip" href="?type=booster_box&amp;lang=ja">Japanese</a>', row)
+        self.assertNotIn('name="in_stock"', row)
+        self.assertIn('name="compared"', row)
 
     def test_the_filtered_pages_keep_the_house_style(self):
         for url, params in ((reverse("web:search"), {"type": "booster_box"}), (self.pokemon.get_absolute_url(), {"type": "tin"})):

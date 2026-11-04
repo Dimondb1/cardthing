@@ -2286,6 +2286,15 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-sort { display: flex; align-items: center; gap: var(--space-2); }
 .feed-list-head__clear { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-pill); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); text-decoration: none; }
 .feed-list-head__clear:hover { background: var(--color-shelf); }
+/* Under the list's head: the languages it holds as chips, and the Filters pill, a details element that opens on its own
+   full line with the price band and 2+ shops. Nothing more: the type is the heading, the sort is beside it. */
+.feed-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; }
+.feed-filters__more > summary { list-style: none; display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; }
+.feed-filters__more > summary::-webkit-details-marker { display: none; }
+.feed-filters__more > summary .feed-ic { width: var(--icon-button); height: var(--icon-button); }
+.feed-filters__more[open] { flex-basis: 100%; }
+.feed-filters__more[open] > summary { background: var(--color-brand-soft); border-color: var(--color-brand); border-style: solid; }
+.feed-filters__form { margin-top: var(--space-3); }
 /* The sketch of a list while a tile's list is fetched: the type's name, Loading, and four grey cards that breathe. */
 .feed-sketch { margin-top: var(--space-4); }
 .feed-sketch__title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }

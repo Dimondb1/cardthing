@@ -111,6 +111,28 @@ class FilterForm(forms.Form):
         return self.cleaned_data.get(name) or default
 
 
+def language_chips(request, products, chosen):
+    """[{code, label, url, active}] for the languages ``products`` hold, in the filter's order, when there is more
+    than one: a tap narrows the list to that language, a tap on the chosen one clears it."""
+    from catalogue.languages import filter_code
+
+    present = {filter_code(code) for code in products.order_by().values_list("language", flat=True).distinct()}
+    if len(present) < 2:
+        return []
+
+    def link(code):
+        params = request.GET.copy()
+        params.pop("page", None)
+        if code == chosen:
+            params.pop("lang", None)
+        else:
+            params["lang"] = code
+        return "?" + params.urlencode()
+
+    return [{"code": code, "label": label, "url": link(code), "active": code == chosen}
+            for code, label in LANGUAGES if code in present]
+
+
 def types_for(game, queryset):
     """The type filter's choices: this game's words, only for types the list holds."""
     present = set(queryset.order_by().values_list("product_type", flat=True).distinct())
@@ -195,6 +217,10 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         if high:
             products = products.filter(lowest_price__lt=high)
     languages = [form.value("lang")] if form.value("lang") else []
+    # A type's list on the new home page (web/feed.py) offers the languages it holds as chips, ready to tap: from the
+    # list before the language choice, so a chip never leads to an empty list. One query, only there.
+    feed_filtered = bool((template_context.get("feed") or {}).get("filtered"))
+    lang_chips = language_chips(request, products, form.value("lang")) if feed_filtered else []
     products = apply_languages(products, languages)
 
     tab, tab_counts, opening, asked = "", {}, "", ""
@@ -296,6 +322,10 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         # One list and no tab row: a list other than In stock says what it is in a heading.
         "single_list": tabs and len(shown_tabs) == 1,
         "soonest": sort == "soonest",
+        "lang_chips": lang_chips,
+        # Named on the Filters pill of a type's list: the price band and 2+ shops, the choices its panel holds.
+        "feed_chosen": [label for label in (dict(form.fields["price"].choices).get(band) if band else "",
+                                            form.fields["compared"].label if form.value("compared") else "") if label],
     }
     context.update(template_context)
     if not (page.object_list or context.get("set_upcoming")):

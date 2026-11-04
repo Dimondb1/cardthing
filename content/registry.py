@@ -486,6 +486,8 @@ ENTRIES = [
           "can listen."),
     Entry("feed.search.listening", B, "New home page: search by voice, listening", "Listening",
           "What the microphone button says while the browser listens."),
+    Entry("feed.filters.button", B, "New home page: the Filters pill on a type's list", "Filters",
+          "Folds the price band and 2+ shops away under a type's list; the chosen ones are named on it."),
     Entry("feed.list.clear", B, "New home page: clear the type filter", "Clear",
           "Beside a type's list under the tiles: leads back to the feed. The chosen tile does the same."),
     Entry("feed.row.more", B, "New home page: the arrow at the end of a row", "Show more",

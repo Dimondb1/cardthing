@@ -5115,7 +5115,9 @@ feels like one screen changing. A type tile is a link to the list of that
 type (`/search/?type=` from the home page, `/games/<game>/?type=` from a
 game's page); with the feed on, those pages lead with the tiles, the chosen
 one marked and the row stuck to the top, and the list right under them with
-the type as its heading, its count, the sort and Clear. The feed's region is
+the type as its heading, its count, the sort and Clear, then the languages
+the list holds as chips ready to tap (`views.language_chips`, one query) and
+a Filters pill that folds the price band and 2+ shops away. The feed's region is
 `data-browse`, so `browse.js` loads a tile's list in place (a sketch of the
 list shows while it comes), puts `?type=` in the address, and Back brings
 the feed again. The search page's own heading names the type too, and its

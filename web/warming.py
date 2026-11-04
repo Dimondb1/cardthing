@@ -32,10 +32,11 @@ def cached_keys(games):
         BEST_CACHE_KEY, COMING_SOON_CACHE_KEY, DEALS_CACHE_KEY, HOME_CACHE_KEY, HOME_DROPS_CACHE_KEY, NEW_CACHE_KEY,
     )
 
+    from web.feed import RAILS_KEY
     from web.views import PER_CARD_KEY
 
     return [BEST_CACHE_KEY, HOME_CACHE_KEY, DEALS_CACHE_KEY, NEW_CACHE_KEY, COMING_SOON_CACHE_KEY, HOME_DROPS_CACHE_KEY, PER_CARD_KEY,
-            *(f"{COMING_SOON_CACHE_KEY}:{game.slug}" for game in games)]
+            RAILS_KEY, *(f"{COMING_SOON_CACHE_KEY}:{game.slug}" for game in games)]
 
 
 def active_games():
@@ -76,7 +77,7 @@ def warm_pages(fresh=False, only=None):
     from catalogue.signals import (
         BEST_CACHE_KEY, COMING_SOON_CACHE_KEY, DEALS_CACHE_KEY, HOME_CACHE_KEY, HOME_DROPS_CACHE_KEY, NEW_CACHE_KEY,
     )
-    from web import views
+    from web import feed, views
 
     games = active_games()
     wanted = set(cached_keys(games) if fresh else due(games))
@@ -93,6 +94,8 @@ def warm_pages(fresh=False, only=None):
         ("out now", NEW_CACHE_KEY, lambda: views.home_drops_new(fresh=True)),
         ("deals", DEALS_CACHE_KEY, lambda: views.deals_lists(fresh=True, candidates=candidates)),
         ("home per card", views.PER_CARD_KEY, lambda: views.home_per_card(fresh=True)),
+        # The feed's rails (web.feed), every game's at once, from the same offers as the home and Deals lists.
+        ("feed rails", feed.RAILS_KEY, lambda: feed.rails(fresh=True, candidates=candidates)),
     ]
     took = {}
     for name, key, build in steps:
@@ -107,6 +110,8 @@ def warm_pages(fresh=False, only=None):
     shops_compared()
     # The product the home page's Browse by product tiles picture each type with (one query when due).
     views.type_covers()
+    # And the feed's tiles, each type's cheapest product in stock (three queries when due).
+    feed.tile_picks()
     # Each game's own page, built whole and kept (web.pagecache), so the tap from the home page never waits.
     from web import pagecache
 

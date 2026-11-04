@@ -22,7 +22,7 @@ from django.http.request import validate_host
 from django.test import RequestFactory
 from django.urls import resolve
 
-from . import seasons
+from . import look, seasons
 
 HEADER = "X-RipRaptor-Page"   # "cached" on a copy from the cache, so a check can tell
 # Bumped by forget(): every page kept before it is then a miss, without a key to find and delete.
@@ -59,8 +59,9 @@ def cached_page(view):
     """Keep the view's answer to a GET in the shared cache for RIPRAPTOR_PAGE_CACHE_SECONDS, by its full
     address, and serve the copy to the next visitor. Only a 200 is kept, and never with cookies to set."""
     def wrapper(request, *args, **kwargs):
-        # A staff preview of a seasonal theme (?theme=, web.seasons) is never kept or served from the cache.
-        if request.method != "GET" or not on() or seasons.PREVIEW in request.GET:
+        # A staff preview of a seasonal theme (?theme=, web.seasons) or a look (?look=, web.look) is never kept or
+        # served from the cache.
+        if request.method != "GET" or not on() or seasons.PREVIEW in request.GET or look.PREVIEW in request.GET:
             return view(request, *args, **kwargs)
         key = key_for(request.get_full_path())
         found = cache.get(key)

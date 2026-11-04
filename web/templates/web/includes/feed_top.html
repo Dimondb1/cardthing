@@ -1,0 +1,33 @@
+{% load sitecopy ripraptor %}{# The feed's top (web/feed.py): the title, the product type tiles, the rail of deals and the next drop. Takes feed (feed.context). #}
+<div class="feed">
+  <h1 class="feed__title">{{ feed.title }}</h1>
+  <p class="feed__sub">{% copy "feed.subtitle" %}</p>
+  {% if feed.tiles %}
+  {# Each type pictured by the cheapest product of its kind in stock, so the tile stays current; the whole tile opens that type's list. #}
+  <ul class="feed__row feed__tiles" aria-label="{% copy 'feed.tiles.label' %}">
+    {% for tile in feed.tiles %}<li class="feed-tile"><a class="feed-tile__link" href="{{ tile.url }}"><span class="feed-tile__well" aria-hidden="true">{% product_image tile.product "tile" %}</span><span class="feed-tile__label">{{ tile.label }}</span></a></li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% if feed.rail %}
+  <section class="feed__rail" aria-labelledby="feed-rail-title">
+    <div class="feed__head"><h2 id="feed-rail-title" class="feed__h2">{{ feed.rail_title }}</h2><a class="feed__all" href="{{ feed.rail_url }}">{% copy "site.see_all" %}</a></div>
+    <ul class="feed__row feed__cards">
+      {% for card in feed.rail %}{% include "web/includes/feed_card.html" with product=card.product summary=card.summary amount=card.amount kind=feed.rail_kind show_game=feed.show_game %}{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+  {% if feed.drop %}{% with drop=feed.drop %}
+  <section class="feed__rail feed__drop" aria-labelledby="feed-drop-title">
+    <div class="feed__head"><h2 id="feed-drop-title" class="feed__h2">{% copy "feed.drop.title" %}</h2><a class="feed__all" href="{% url 'web:drops' %}{% if feed.game %}?game={{ feed.game.slug }}{% endif %}">{% copy "feed.drop.all" %}</a></div>
+    <div class="feed-drop">
+      <span class="feed-drop__date" aria-hidden="true">{% if drop.release_date %}<small>{{ drop.release_date|date:"M" }}</small><strong>{{ drop.release_date|date:"j" }}</strong>{% else %}<small>{% copy "feed.drop.soon" %}</small>{% endif %}</span>
+      <span class="feed-drop__text">
+        <span class="feed-drop__meta">{% if feed.show_game %}{{ drop.game.display_short }}{% if drop.release_date %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% endif %}{% if drop.release_date %}{% copy "new.coming_soon.out" date=drop.release_date|short_date %}{% endif %}</span>
+        <a class="feed-drop__name" href="{{ drop.get_absolute_url }}">{{ drop.name }}</a>
+        <span class="feed-drop__price">{% preorders_from drop %}</span>
+      </span>
+      {% can_remind drop.release_date as remindable %}{% if remindable %}<a class="feed-drop__bell" href="{% url 'web:drops' %}?remind={{ drop.pk }}#drop-{{ drop.pk }}" aria-label="{% copy 'drops.remind.open' %} {{ drop.name }}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-bell"/></svg></a>{% endif %}
+    </div>
+  </section>
+  {% endwith %}{% endif %}
+</div>

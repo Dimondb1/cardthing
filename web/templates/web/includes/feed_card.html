@@ -1,0 +1,12 @@
+{% load sitecopy ripraptor %}{# One card on the feed's rail (web/feed.py): the whole card is the link. Takes product, summary (offers.Summary), amount, kind ("rrp" or "save") and show_game. The chip is the Price check's own verdict, only Lowest yet or Good price; the saving line only what the data backs. #}<li class="feed-card" data-game="{{ product.game.slug }}">
+  <a class="feed-card__link" href="{{ product.get_absolute_url }}" data-compare="feed">
+    <span class="feed-card__well">{% with check=product.card_check %}{% if check.key == "lowest" %}<span class="feed-chip feed-chip--lowest">{% copy "product.fair.verdict_lowest" %}</span>{% elif check.key == "good" %}<span class="feed-chip">{% copy "product.fair.verdict_good" %}</span>{% endif %}{% endwith %}{% product_image product "feed" %}</span>
+    <span class="feed-card__body">
+      {% if show_game %}<span class="feed-card__game">{{ product.game.display_short }}</span>{% endif %}
+      <span class="feed-card__name">{{ product.name }}</span>
+      <span class="feed-card__price">{{ summary.best.shown_price|gbp }}</span>
+      <span class="feed-card__meta">{% copy "browse.price.label" %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ summary.best.retailer.name }}</span>
+      {% if kind == "rrp" %}<span class="feed-card__save">{% copy "feed.card.under_rrp" amount=amount|gbp %}</span>{% elif summary.saving and summary.second %}<span class="feed-card__save">{% copy "home.savings.save_vs" amount=summary.saving|gbp retailer=summary.second.retailer.name %}</span>{% endif %}
+    </span>
+  </a>
+</li>

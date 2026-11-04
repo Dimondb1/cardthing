@@ -351,3 +351,27 @@
     --product-media-phone-long: clamp(7rem, 100svh - 32rem, 15rem);
   }
 }
+
+/* The feed (web/feed.py), the new home page the owner switches on in Admin (web/look.py): the marketing team's sizes
+   of 4 Nov 2026, in rem at 16px. The selected game's pill and the search box's shadow are its only new colours. */
+:root {
+  --feed-tile: 5.25rem;            /* 84px: a product type tile */
+  --feed-tile-image: 4.5rem;       /* 72px: the picture inside it */
+  --feed-tile-wide: 6.5rem;        /* the tiles from a tablet up, where 84px would look lost */
+  --feed-tile-image-wide: 5.5rem;
+  --feed-card: 9.375rem;           /* 150px: a product card on a rail */
+  --feed-card-well: 7.75rem;       /* 124px: the card's picture well */
+  --feed-card-image: 6.75rem;      /* 108px: the picture inside it */
+  --feed-search: 3.25rem;          /* 52px: the search pill */
+  --feed-go: 2.5rem;               /* 40px: its round go button */
+  --feed-game: 3.625rem;           /* 58px: an item of the game bar */
+  --feed-pill-w: 3.25rem;          /* 52 by 32px: the pill behind a game's icon */
+  --feed-pill-h: 2rem;
+  --feed-date: 3.25rem;            /* 52 by 58px: the next drop's date block */
+  --feed-date-h: 3.625rem;
+  --feed-dock-space: 9rem;         /* room at the foot of a phone's page for the dock */
+  --radius-tile: 22px;
+  --color-brand-pill: #ffdccb;     /* the selected game's pill in the bar */
+  --feed-line: 1.5px;              /* the search pill's and the bell's firmer line */
+  --shadow-search: 0 2px 10px rgb(31 36 48 / 0.08);
+}

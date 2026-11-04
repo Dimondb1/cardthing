@@ -2566,6 +2566,32 @@ class SeasonalThemes(models.Model):
         return cls.objects.get_or_create(pk=1)[0]
 
 
+class SiteLook(models.Model):
+    """The one row of owner switches for how the site looks (web/look.py). The new home page (the marketing team's
+    feed of 4 Nov 2026: today's best prices, product type tiles, a rail of deals and the next drop, with the search
+    box and the games fixed to the foot of a phone; web/feed.py) is off until the owner switches it on here, and comes
+    off again the same way, so a look can be tried and rolled back without a deploy. The owner, 4 Nov 2026: "can we
+    easily roll this back if I don't like it"."""
+
+    feed_home = models.BooleanField(
+        "New home page", default=False,
+        help_text="Ticked: the home page and each game's page lead with the feed (today's best prices, product "
+                  "types, the next drop) with search and the games at the foot of a phone. Unticked: the usual home "
+                  "page. Staff can see either any time by adding ?look=feed or ?look=classic to the address.",
+    )
+
+    class Meta:
+        verbose_name = "site look"
+        verbose_name_plural = "site look"
+
+    def __str__(self):
+        return "Site look"
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+
 class Referrer(models.Model):
     """Someone who asked for a link to share. Their own email address, given by them and confirmed."""
 

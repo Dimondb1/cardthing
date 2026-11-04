@@ -2241,3 +2241,94 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .page--checklist .page-title { margin-top: 0; }
   .checklist__item { break-inside: avoid; }
 }
+
+/* The feed (web/feed.py, web/look.py): the new home page and the top of a game's page, the marketing team's design of
+   4 Nov 2026. A title, product type tiles, a rail of deals and the next drop; the search box and the games fixed to the
+   foot of a phone. From a tablet up the search goes back into the header and the games are a tab row under it. Every
+   price green, savings green, the logo and the go button the only orange, as the brand rules ask. ------------------ */
+.page--feed { padding-bottom: var(--feed-dock-space); }
+.feed__title { margin: var(--space-2) 0 0; font-size: var(--text-page-title); font-weight: var(--weight-price); letter-spacing: -0.02em; line-height: var(--leading-tight); }
+.feed__sub { margin: var(--space-1) 0 0; font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--color-ink-muted); }
+/* A row that swipes sideways, like the usual product rows: the next item peeking in, scrolled by the browser. */
+.feed__row {
+  list-style: none; display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+  padding: var(--space-1) var(--gutter) var(--space-3); margin: calc(-1 * var(--space-1)) calc(-1 * var(--gutter)) calc(-1 * var(--space-3)); scroll-padding-inline: var(--gutter);
+}
+.feed__row::-webkit-scrollbar { display: none; }
+.feed__row > * { flex: none; scroll-snap-align: start; }
+.feed__tiles { margin-top: var(--space-4); }
+.feed-tile { width: var(--feed-tile); }
+.feed-tile__link { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); color: inherit; text-decoration: none; border-radius: var(--radius-tile); }
+.feed-tile__well { display: flex; align-items: center; justify-content: center; width: var(--feed-tile); height: var(--feed-tile); border-radius: var(--radius-tile); background: var(--color-shelf); overflow: hidden; }
+.feed-tile__well .product-image { display: block; width: var(--feed-tile-image); height: var(--feed-tile-image); line-height: 0; }
+.feed-tile__well img, .feed-card__well img { display: block; width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.feed-tile__label { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); text-align: center; }
+.feed__rail { margin-top: var(--space-5); }
+.feed__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.feed__h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }
+.feed__all { flex: none; font-size: var(--text-sm); font-weight: var(--weight-heading); color: var(--color-brand-text); text-decoration: none; }
+.feed__all:hover { text-decoration: underline; }
+.feed-card { width: var(--feed-card); }
+.feed-card__link {
+  position: relative; display: flex; flex-direction: column; height: 100%; border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card);
+  background: var(--color-paper); color: inherit; text-decoration: none; overflow: hidden;
+  transition: transform var(--motion-normal) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out);
+}
+@media (hover: hover) { .feed-card__link:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); } }
+.feed-card__link:active { transform: scale(0.99); }
+.feed-card__well { position: relative; display: flex; align-items: center; justify-content: center; height: var(--feed-card-well); background: var(--color-shelf); }
+.feed-card__well .product-image { display: block; width: var(--feed-card-image); height: var(--feed-card-image); line-height: 0; }
+/* The Price check's own verdict as a chip in the picture's corner: Lowest yet in the brand's soft orange, Good price green. */
+.feed-chip { position: absolute; z-index: 1; top: var(--space-2); left: var(--space-2); padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--color-price-soft); color: var(--color-price); font-size: var(--text-2xs); font-weight: var(--weight-heading); line-height: 1.3; }
+.feed-chip--lowest { background: var(--color-brand-soft); color: var(--color-brand-text); }
+.feed-card__body { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3); }
+.feed-card__game { font-size: var(--text-2xs); font-weight: var(--weight-heading); color: var(--color-ink-muted); }
+.feed-card__name { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: calc(2 * 1.3em); }
+.feed-card__price { margin-top: var(--space-1); font-size: var(--text-price-md); font-weight: var(--weight-price); line-height: var(--leading-tight); color: var(--color-price); font-variant-numeric: tabular-nums; }
+.feed-card__meta { font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--color-ink-muted); }
+.feed-card__save { font-size: var(--text-xs); font-weight: var(--weight-heading); color: var(--color-price); }
+/* The next drop: its date in a soft orange block, its name and pre-order price, and the bell that opens Remind me. */
+.feed-drop { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); }
+.feed-drop__date { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: none; width: var(--feed-date); height: var(--feed-date-h); border-radius: var(--radius); background: var(--color-brand-soft); }
+.feed-drop__date small { font-size: var(--text-2xs); font-weight: var(--weight-price); letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-brand-text); }
+.feed-drop__date strong { font-size: var(--text-xl); font-weight: var(--weight-price); line-height: 1.1; }
+.feed-drop__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.feed-drop__meta { font-size: var(--text-xs); font-weight: var(--weight-strong); color: var(--color-ink-muted); }
+.feed-drop__name { font-size: var(--text-base); font-weight: var(--weight-heading); line-height: var(--leading-snug); color: inherit; text-decoration: none; }
+.feed-drop__name:hover { text-decoration: underline; }
+.feed-drop__price { font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--color-ink-muted); }
+.feed-drop__price .price { color: var(--color-price); font-weight: var(--weight-price); }
+.feed-drop__bell { display: flex; align-items: center; justify-content: center; flex: none; width: var(--tap); height: var(--tap); border: var(--feed-line) solid var(--color-line); border-radius: 50%; background: var(--color-paper); color: var(--color-ink); }
+.feed-ic { width: var(--icon-nav); height: var(--icon-nav); flex: none; }
+/* The dock: the search pill and the game bar, fixed to the foot of a phone, clear of its home indicator. */
+.feed-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--color-paper); box-shadow: 0 calc(-1 * var(--border-width)) 0 var(--color-line); }
+.feed-dock__in { padding: var(--space-3) 0 calc(var(--space-2) + env(safe-area-inset-bottom)); }
+.feed-search { display: flex; align-items: center; gap: var(--space-3); height: var(--feed-search); margin: 0 var(--space-3); padding: 0 var(--space-2) 0 var(--space-4); border: var(--feed-line) solid var(--color-line-strong); border-radius: var(--radius-pill); background: var(--color-paper); box-shadow: var(--shadow-search); }
+.feed-search:focus-within { border-color: var(--color-ink); }
+.feed-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--color-ink); }
+.feed-search input::placeholder { color: var(--color-ink-muted); }
+.feed-search__go { display: flex; align-items: center; justify-content: center; flex: none; width: var(--feed-go); height: var(--feed-go); padding: 0; border: 0; border-radius: 50%; background: var(--color-brand); color: var(--color-brand-ink); cursor: pointer; }
+.feed-games { display: flex; overflow-x: auto; padding: var(--space-2) var(--space-1) 0; scrollbar-width: none; scroll-snap-type: x proximity; }
+.feed-games::-webkit-scrollbar { display: none; }
+.feed-game { flex: none; display: flex; flex-direction: column; align-items: center; gap: var(--space-1); width: var(--feed-game); min-height: var(--tap); scroll-snap-align: start; font-size: var(--text-2xs); font-weight: var(--weight-strong); color: var(--color-ink-muted); text-decoration: none; }
+.feed-game__pill { display: flex; align-items: center; justify-content: center; width: var(--feed-pill-w); height: var(--feed-pill-h); border-radius: var(--radius-pill); color: var(--color-ink); }
+.feed-game__label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.2; }
+.feed-game[aria-current="page"] { color: var(--color-ink); font-weight: var(--weight-price); }
+.feed-game[aria-current="page"] .feed-game__pill { background: var(--color-brand-pill); }
+/* On a phone the dock has the search box, so the header's is put away. */
+@media (max-width: 47.99rem) { body.feed-look .masthead__search { display: none; } }
+@media (min-width: 48rem) {
+  .page--feed { padding-bottom: var(--space-6); }
+  /* A tab row under the header, in the page's flow; the header has the search box. */
+  .feed-dock { position: static; box-shadow: none; }
+  .feed-dock__in { padding: 0; }
+  .feed-search { display: none; }
+  .feed-games { gap: var(--space-2); padding: var(--space-2) 0 var(--space-3); border-bottom: var(--border-width) solid var(--color-line); }
+  .feed__title { margin-top: var(--space-4); }
+  .feed__row { margin-inline: 0; padding-inline: 0; }
+  .feed-tile, .feed-tile__well { width: var(--feed-tile-wide); }
+  .feed-tile__well { height: var(--feed-tile-wide); }
+  .feed-tile__well .product-image { width: var(--feed-tile-image-wide); height: var(--feed-tile-image-wide); }
+  .feed-card { width: calc((100% - 4 * var(--space-3)) / 5); }
+}
+@media (min-width: 60rem) { .feed-card { width: calc((100% - 5 * var(--space-3)) / 6); } }

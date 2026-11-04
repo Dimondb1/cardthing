@@ -11,7 +11,7 @@ from django.utils.html import format_html
 from . import pricing, sanity
 from .models import (
     AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, DropSpotlight, KeyringClaim, Partner, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
-    RemovedProduct, RemovedShop, Restock, Retailer, SeasonalThemes, ShopProduct, StockAlert, TypeBand,
+    RemovedProduct, RemovedShop, Restock, Retailer, SeasonalThemes, ShopProduct, SiteLook, StockAlert, TypeBand,
 )
 
 # A listing field the product page shows. Changing one here stamps the listing's changed_at, the sitemap's
@@ -735,6 +735,37 @@ class PartnerAdmin(admin.ModelAdmin):
         return format_html('<img src="{}" alt="" width="{}" height="{}" style="width:120px;height:auto;padding:20px;'
                            'border:1px solid var(--hairline-color);background:#fff">',
                            obj.logo.url, obj.logo_width or 120, obj.logo_height or 120)
+
+
+@admin.register(SiteLook)
+class SiteLookAdmin(admin.ModelAdmin):
+    """The one row for the site's look (web/look.py): the new home page's switch. The list goes straight to it."""
+
+    fields = ("feed_home", "preview")
+    readonly_fields = ("preview",)
+
+    def has_add_permission(self, request):
+        return False   # the list opens the one row, made on first use
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        return HttpResponseRedirect(reverse("admin:catalogue_sitelook_change", args=[SiteLook.load().pk]))
+
+    @admin.display(description="See it first")
+    def preview(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+
+        return format_html(
+            '<a href="{}?look=feed" target="_blank" rel="noopener">The new home page</a> and '
+            '<a href="{}?look=classic" target="_blank" rel="noopener">the usual one</a>, whichever is switched on. '
+            "Only staff see a preview; visitors see the one ticked above.",
+            reverse("web:home"), reverse("web:home"))
 
 
 @admin.register(SeasonalThemes)

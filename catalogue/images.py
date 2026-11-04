@@ -73,6 +73,8 @@ def steps(low, high):
 #   large    the product page's picture well: 17rem on a phone; from 60rem as tall as the name and price box
 #            beside it, 22 to 35rem by how many shops it lists. 33rem takes the 540 copy on a 1x screen, sharp for all of them.
 #   spotlight the home page's drop spotlight: a fan of the set's boxes, 5.5rem a picture on a phone, 8rem from 48rem.
+#   tile     the feed's product type tile (.feed-tile__well, web/feed.py): a 4.5rem picture in a 5.25rem well.
+#   feed     the feed's product card (.feed-card__well): a 6.75rem picture in its well.
 #   swipe    .swipe__image: as tall as the screen allows on a phone, up to 27.5rem inside the 30rem deck, and
 #            about 20.5rem from 48rem where the card has a fixed height.
 # Each slot offers the steps from its smallest picture on a 1x screen to its largest on a 3x phone, so a sharp
@@ -94,6 +96,8 @@ SLOTS = {
     "large": (540, "(min-width: 60rem) 33rem, 17rem", steps(272, 1440)),
     "swipe": (420, "(min-width: 48rem) 20.5rem, (min-width: 30rem) 27.5rem, 85vw", steps(245, 1362)),
     "spotlight": (200, "(min-width: 48rem) 8rem, 5.5rem", steps(88, 384)),
+    "tile": (100, "4.5rem", steps(72, 216)),
+    "feed": (200, "6.75rem", steps(108, 324)),
 }
 
 # Social previews and search engines want a large picture: about 1200 pixels wide.

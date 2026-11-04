@@ -1,0 +1,25 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor static %}
+{% block scripts %}<script src="{% static 'js/feed.js' %}" defer></script>{% endblock %}
+{% block body_class %}feed-look{% endblock %}
+{% block page_class %}page--feed{% endblock %}
+
+{% block content %}
+{# The new home page (web/feed.py, on while the owner's switch is: web/look.py): the dock first (the search box and the games, fixed to the foot of a phone, a tab row under the header on a wide screen), then the feed's top, then the partners the owner added in Admin. #}
+{% include "web/includes/feed_sprite.svg" %}
+{% include "web/includes/feed_dock.html" %}
+{% include "web/includes/feed_top.html" %}
+
+{% if partners %}
+{# The partners the owner added in Admin (web/partners.py), by their logos, as on the usual home page: each logo whole, at its own proportions, in full colour and with clear space round it; the link as any shop link, sponsored and not followed. #}
+<section class="home-section partners" aria-labelledby="partners-title">
+  <div class="section-head"><h2 id="partners-title" class="section-head__title">{% copy "home.partners.title" %}</h2></div>
+  <p class="section-head__note">{% copy "home.partners.note" %}</p>
+  <ul class="partners__list">
+    {% for partner in partners %}
+    <li><a class="partners__link" href="{{ partner.url }}" target="_blank" rel="sponsored nofollow noopener"><img class="partners__logo" src="{{ partner.logo }}" alt="{{ partner.name }}" {% if partner.width and partner.height %}width="{{ partner.width }}" height="{{ partner.height }}" {% endif %}loading="lazy" decoding="async"><span class="visually-hidden"> (opens in a new tab)</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

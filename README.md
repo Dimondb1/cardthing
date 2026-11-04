@@ -5072,6 +5072,31 @@ site's own look (header, cards with the soft orange border, green for good,
 red for bad). The admin home and Insights link to it. It is for staff only:
 anyone else is sent to the admin sign-in. Top to bottom:
 
+**The new home page** (Admin, **Site look**; `web/look.py`, `web/feed.py`,
+`catalogue.SiteLook`): the marketing team's redesign of 4 Nov 2026
+(`site_redesign/README.md`, their brief) built in beside the usual home
+page, not in its place, so it can be tried and rolled back in a tap. With
+the switch on, the home page is the feed: the title (Today's best prices),
+product type tiles each pictured by the cheapest product of its kind in
+stock (`feed.tile_picks`, one query hourly), a rail of product cards
+(Furthest under RRP, or Best prices today when fewer than four products are
+under their RRP; `feed.rails`, every game's at once, cached and warmed with
+the other lists), the next drop with its pre-order price, the partners'
+row, and, fixed to the foot of a phone, the search box and a bar of the
+games. Each game's page leads with the same top for that game, its search
+scoped to the game. From a tablet up the search goes back into the header
+and the games are a tab row under it. Every price is a live delivered price
+and a saving is only claimed where the data backs it: the product's RRP, or
+the next shop's confirmed delivered price, by the rules every list uses.
+The chips are the Price check's own verdicts (Lowest yet, Good price). The
+icons are the team's original motifs, never a franchise's logo
+(`web/templates/web/includes/feed_sprite.svg`). The switch is read from the
+cache like the seasonal themes', so no page gains a query; saving it also
+lets the game pages (kept whole, `web/pagecache.py`) be built again. Staff
+can see either look any time with `?look=feed` or `?look=classic` on the
+home page or a game's page; visitors see the one switched on. The owner, 4
+Nov 2026: "can we easily roll this back if I don't like it".
+
 **Download a report** (`/dashboard/report.txt`, `web/report.py`; linked at
 the top of the dashboard and on the admin home): the dashboard's figures,
 built fresh, and the Insights page's for the last 28 days, as one plain

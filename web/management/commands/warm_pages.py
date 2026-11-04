@@ -27,11 +27,12 @@ class Command(BaseCommand):
 
     def handle(self, *args, due=False, missing=False, **options):
         from guides import state as guides
-        from web import partners, seasons
+        from web import look, partners, seasons
 
         guides.remember()   # the Guides link is read from the cache: put back within five minutes of a deploy
         seasons.remember()  # and the seasonal themes switch, the same way
         partners.remember()   # and the partners row on the home page
+        look.remember()   # and the new home page switch (web.look)
         if missing:
             took = warm_pages(only=missing_keys())
         else:

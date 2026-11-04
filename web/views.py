@@ -39,7 +39,7 @@ from inbox.models import Conversation
 from guides import state as guide_doors
 from guides.access import not_for_editors
 
-from . import hubs, listcache, partners, share
+from . import feed, hubs, listcache, look, partners, share
 from .pagecache import cached_page
 from .charts import price_chart
 from .templatetags.ripraptor import gbp, short_date
@@ -886,7 +886,10 @@ def game_covers(games):
 @require_GET
 def home(request):
     """The money page kept short: search, the games, the visitor's own picks, deals worth having and new
-    releases. Savings, price drops, restocks and trending live on the Deals page; every set on Games."""
+    releases. Savings, price drops, restocks and trending live on the Deals page; every set on Games. While the
+    owner's switch is on (web/look.py), the feed instead (feed_home)."""
+    if look.for_request(request):
+        return feed_home(request)
     games = list(
         Game.objects.filter(is_active=True)
         .annotate(product_count=Count("products", filter=Q(products__is_active=True)))
@@ -929,6 +932,24 @@ def home(request):
             "meta_full_title": text(
                 request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME
             ),
+            "canonical_url": request.build_absolute_uri("/"),
+            "structured_json": ld_json(site_json(request)),
+        },
+    )
+
+
+def feed_home(request):
+    """The home page as the feed (web/feed.py): the marketing team's design of 4 Nov 2026, while the owner's switch is
+    on (web/look.py). The partners' row and the footer stay; the rest of the usual home page is the feed's. The
+    header keeps its search box for wide screens; on a phone the dock at the foot has it."""
+    return render(
+        request,
+        "web/home_feed.html",
+        {
+            "feed": feed.context(request),
+            "partners": partners.current(),
+            "hide_header_search": False,
+            "meta_full_title": text(request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME),
             "canonical_url": request.build_absolute_uri("/"),
             "structured_json": ld_json(site_json(request)),
         },
@@ -1146,6 +1167,8 @@ def game_detail(request, game_slug):
             "meta_description": meta_description,
             "canonical_url": page_url,
             "coming_soon": coming_soon_sets(game),
+            # With the new home page on (web/look.py), the game's page leads with the feed's top (web/feed.py).
+            "feed": feed.context(request, game) if not pane and look.for_request(request) else None,
         },
         base_queryset=Product.objects.for_lists().filter(game=game),
         fixed_game=game,

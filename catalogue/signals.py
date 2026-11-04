@@ -9,7 +9,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from .languages import product_language
-from .models import Game, Listing, Partner, Product, ProductSet, RemovedShop, Retailer, SeasonalThemes
+from .models import Game, Listing, Partner, Product, ProductSet, RemovedShop, Retailer, SeasonalThemes, SiteLook
 from .search import build_search_text
 
 HOME_CACHE_KEY = "web:home-lists:v6"
@@ -134,3 +134,13 @@ def shop_added(sender, instance, created=False, raw=False, **kwargs):
     # A shop added again (Admin, discover_shops) is no longer one the owner removed.
     if created and not raw:
         RemovedShop.forget(instance)
+
+
+@receiver(post_save, sender=SiteLook)
+def site_look_saved(sender, instance, **kwargs):
+    # The new home page switch is read from the cache on every page (web.look): put the new one there at once, and
+    # let the game pages, kept whole (web.pagecache), be built again in the new look.
+    from web import look, pagecache
+
+    look.remember()
+    pagecache.forget()

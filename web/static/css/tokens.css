@@ -356,13 +356,12 @@
 /* The feed (web/feed.py), the new home page the owner switches on in Admin (web/look.py): the marketing team's sizes
    of 4 Nov 2026, in rem at 16px. The selected game's pill and the search box's shadow are its only new colours. */
 :root {
-  --feed-tile: 4.5rem;             /* 72px: a product type tile, denser than the team's 84 so more fit a screen (the owner) */
-  --feed-tile-image: 3.75rem;      /* 60px: the picture inside it */
-  --feed-tile-wide: 5.5rem;        /* the tiles from a tablet up, where 72px would look lost */
-  --feed-tile-image-wide: 4.5rem;
-  --feed-card: 8.25rem;            /* 132px: a product card on a rail, denser than the team's 150 for the same reason */
-  --feed-card-well: 6.75rem;       /* 108px: the card's picture well */
-  --feed-card-image: 5.75rem;      /* 92px: the picture inside it */
+  --feed-tile: 5rem;               /* 80px: a product type tile, and its picture edge to edge (the owner, 5 Nov 2026: "the images are very small") */
+  --feed-tile-wide: 5.5rem;        /* the tiles from a tablet up */
+  --feed-card: 8.25rem;            /* 132px: a product card on a rail, denser than the team's 150 so more fit a screen (the owner) */
+  --feed-card-well: 6rem;          /* 96px: the card's picture well on a phone, its picture the well's full width and height */
+  --feed-card-well-wide: 6.75rem;  /* 108px from a tablet up */
+  --feed-image-inset: 0.25rem;     /* the breath between a picture and its well's edge */
   --feed-more: 2rem;               /* the arrow at the end of a row */
   --feed-spark: 1rem;              /* the fairy's spark on a lit pill or tile */
   --feed-tile-mini: 2.25rem;       /* 36px: the tile's picture once a type is chosen and the row is a line of pills */

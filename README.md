@@ -5104,8 +5104,8 @@ the most popular products first (clicks through to a shop in the trending
 window, `feed.click_counts`, one query at build), then the stronger
 evidence, then the more shops stocking it, so with no clicks to go on the
 strongest deals lead. Every card wears a green label saying why it is a
-deal (`feed.card.why_*`: "£8.00 cheaper than Northgate Cards", "Lowest in
-30 days, 21% under its usual price"). Nothing on the feed is measured
+deal (`feed.card.why_*`: "£8.00 less than Northgate Cards", "Lowest in 30
+days, 21% under average"). Nothing on the feed is measured
 against an RRP; the owner, 5 Nov 2026: "don't show RRP rip offs". Then the
 Rip's Deals rail the usual home page has (`views.featured_pick`, with its
 disclosure line and the Featured deals setting, less the products on the

@@ -467,13 +467,14 @@ ENTRIES = [
     Entry("feed.rail.deals", H, "New home page rail: Today's best deals", "Today's best deals",
           "Heading of the first row of products: the deals with evidence on the most popular products (clicks through "
           "to shops this week), the strongest first among equals. Nothing is measured against an RRP."),
-    Entry("feed.card.why_save", T, "New home page card: why it is a deal, a saving", "{amount} cheaper than {retailer}",
+    Entry("feed.card.why_save", T, "New home page card: why it is a deal, a saving", "{amount} less than {retailer}",
           "The green label on a card: the saving on the next shop's confirmed delivered price, which must be in line "
-          "with the market. {amount} is the saving, {retailer} the next shop.", placeholders=("amount", "retailer")),
+          "with the market. {amount} is the saving, {retailer} the next shop. Short: a card is narrow and the label "
+          "should take two lines at most.", placeholders=("amount", "retailer")),
     Entry("feed.card.why_low_under", T, "New home page card: why it is a deal, a 30-day low",
-          "Lowest in 30 days, {percent}% under its usual price",
+          "Lowest in 30 days, {percent}% under average",
           "The green label on a card whose price is a verified 30-day low. {percent} is how far under the month's "
-          "average delivered price it is.", placeholders=("percent",)),
+          "average delivered price it is. Short, as above.", placeholders=("percent",)),
     Entry("feed.card.why_low", T, "New home page card: why it is a deal, a 30-day low without the figure",
           "Lowest in 30 days", "The same label when the figure under the average is not known."),
     Entry("feed.drop.title", H, "New home page next drop heading", "Dropping soon",

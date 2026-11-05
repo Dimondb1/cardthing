@@ -204,8 +204,8 @@ class HomeFeedTests(FeedCase):
         self.assertIn("Harbour Games</span>", card)
         self.assertIn('data-compare="feed"', card)
         # Every card says why it is a deal, and nothing on the page is measured against an RRP.
-        self.assertIn('<span class="feed-card__why">£8.00 cheaper than Northgate Cards</span>', card)
-        self.assertIn('<span class="feed-card__why">£5.00 cheaper than Northgate Cards</span>', self.card(html, self.etb))
+        self.assertIn('<span class="feed-card__why">£8.00 less than Northgate Cards</span>', card)
+        self.assertIn('<span class="feed-card__why">£5.00 less than Northgate Cards</span>', self.card(html, self.etb))
         rail = html[html.index("feed-rail-title"):html.index("feed-drop-title")]
         for product in (self.collector, self.bundle, self.tin):
             self.assertNotIn(product.get_absolute_url(), rail)
@@ -286,7 +286,7 @@ class HomeFeedTests(FeedCase):
         self.assertEqual([url for _game, url, _spare in self.cards(html, "feed-deals-title", "feed-drop-title")],
                          [self.etb.get_absolute_url()])
         self.assertIn('data-compare="featured"', deals)
-        self.assertIn('<span class="feed-card__why">£5.00 cheaper than Northgate Cards</span>', deals)
+        self.assertIn('<span class="feed-card__why">£5.00 less than Northgate Cards</span>', deals)
         self.assertIn('<p class="feed__note">Rip&#x27;s Deals favour shops that pay us a commission.', deals)
         self.assertIn(f'<a href="{reverse("web:about")}">', deals)
         self.assertIn(f'<a class="feed__all" href="{reverse("web:deals")}">See all</a>', deals)
@@ -312,9 +312,9 @@ class HomeFeedTests(FeedCase):
         # By clicks (the tin 3, the box 2, the ETB 1, the bundle none), then the stronger evidence among equals.
         self.assertEqual([url for _game, url, _spare in self.cards(html, end="feed-drop-title")],
                          [p.get_absolute_url() for p in (self.tin, self.box, self.etb, self.bundle)])
-        self.assertIn('<span class="feed-card__why">Lowest in 30 days, 21% under its usual price</span>',
+        self.assertIn('<span class="feed-card__why">Lowest in 30 days, 21% under average</span>',
                       self.card(html, self.tin))
-        self.assertIn('<span class="feed-card__why">£10.00 cheaper than Northgate Cards</span>', self.card(html, self.bundle))
+        self.assertIn('<span class="feed-card__why">£10.00 less than Northgate Cards</span>', self.card(html, self.bundle))
         self.assertEqual(html.count('class="feed-card__why"'), 4)   # one on every card
         # £100 under its RRP and nothing else: the collector box is not a deal, and no RRP is mentioned.
         rail = html[html.index("feed-rail-title"):html.index("feed-drop-title")]
@@ -387,7 +387,7 @@ class HomeFeedTests(FeedCase):
         self.assertNotIn("feed-card__game", html)
         self.assertNotIn("feed-deals-title", html)   # its deals are on the rail already
         self.assertIn('id="interest-games"', html)
-        self.assertIn('<span class="feed-card__why">£8.00 cheaper than Northgate Cards</span>', self.card(html, self.box))
+        self.assertIn('<span class="feed-card__why">£8.00 less than Northgate Cards</span>', self.card(html, self.box))
         self.assertIn(f'<a class="feed__all" href="{reverse("web:drops")}?game=pokemon">All drops</a>', html)
         self.assertIn('<a class="feed-drop__name" href="{}">Mega Evolution</a>'.format(self.mega.get_absolute_url()),
                       html)
@@ -619,11 +619,11 @@ class CacheTests(FeedCase):
 
     def test_a_price_change_rebuilds_the_rail(self):
         switch(True)
-        self.assertIn("£8.00 cheaper than Northgate Cards", self.page())
+        self.assertIn("£8.00 less than Northgate Cards", self.page())
         listing = Listing.objects.get(product=self.box, retailer=self.northgate)
         listing.price = Decimal("100.00")
         listing.save()   # a save clears the lists (catalogue.signals)
-        self.assertIn("£13.00 cheaper than Northgate Cards", self.page())
+        self.assertIn("£13.00 less than Northgate Cards", self.page())
 
 
 class BarTests(TestCase):

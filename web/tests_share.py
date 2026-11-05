@@ -131,7 +131,8 @@ class PostTests(TestCase):
         self.assertEqual(found["caption"], (
             "Surging Sparks Booster Box\n\n"
             f"£87.00 delivered today, the cheapest of 2 UK shops we compare. Checked {when}.\n\n"
-            "Every UK shop's delivered price, compared at ripraptor.com. Link in bio.\n\n"
+            "Every UK shop's delivered price, compared at ripraptor.com. Link in bio. Scan the code in the picture for "
+            "today's price.\n\n"
             "#pokemontcg #pokemoncards #tcg #sealedproduct #ukcollectors"))
         self.assertEqual(found["image"], f"http://testserver/products/{self.product.slug}/post.png")
         self.assertEqual(found["name"], "Surging Sparks Booster Box")
@@ -202,6 +203,47 @@ class PostTests(TestCase):
         with Image.open(BytesIO(response.content)) as picture:
             self.assertEqual(picture.size, (1080, 1080))
             self.assertEqual(picture.getpixel((540, 300))[:3], (246, 246, 248))   # the well, empty
+
+    def test_the_picture_carries_a_code_that_opens_the_product_page_as_a_visit_from_instagram(self):
+        # The owner, 5 Nov 2026: "a QR code that some phones can long hold to take you to the site". A post carries
+        # no link; the code does. Its address is the page on the site itself, tagged so the dashboard counts the
+        # scan as a visit from Instagram (a camera passes no Referer).
+        from io import BytesIO
+        from unittest import mock
+
+        from django.core.cache import cache
+        from django.test import RequestFactory
+        from PIL import Image
+
+        from catalogue import insights
+        from web import share
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        url = share.post_url(self.product)
+        self.assertEqual(url, f"https://ripraptor.com/products/{self.product.slug}/?utm_source=instagram.com")
+        parts = urlsplit(url)
+        self.assertEqual(insights.source_of(RequestFactory().get(f"{parts.path}?{parts.query}")), "instagram.com")
+        with mock.patch("catalogue.importers.fetch", side_effect=OSError("down")):
+            response = self.client.get(f"/products/{self.product.slug}/post.png")
+        matrix = share.code_matrix(url)
+        cell, left, top = share.code_cells(matrix)
+        self.assertGreaterEqual(cell, 5)   # a module is a few pixels even on a phone's screen, so a camera can read it
+        ink = (0x1f, 0x24, 0x30)
+        with Image.open(BytesIO(response.content)) as picture:
+            # Every module of the code is drawn, dark or light, at the foot right.
+            for row, modules in enumerate(matrix):
+                for column, dark in enumerate(modules):
+                    pixel = picture.getpixel((left + column * cell + cell // 2, top + row * cell + cell // 2))[:3]
+                    self.assertEqual(pixel == ink, dark, (row, column))
+            # The quiet zone: paper on every side of it, at least four modules wide (the standard's floor).
+            quiet = 4 * cell
+            for x, y in ((left - quiet, top + 100), (left + 100, top - quiet), (left + cell * len(matrix) + quiet - 1, top + 100),
+                         (left + 100, top + cell * len(matrix) + quiet - 1)):
+                self.assertEqual(picture.getpixel((x, y))[:3], (255, 255, 255), (x, y))
+            # The site's name sits by the logo now, clear of the code; nothing else is drawn at the foot right.
+            self.assertEqual(picture.getpixel((share.CODE_X - 10, 1016))[:3], (255, 255, 255))
+        self.assertIn("qrcode", open("requirements.txt", encoding="utf-8").read())
 
     def test_the_share_panel_and_the_cards_sheet_offer_post(self):
         html = self.client.get(self.product.get_absolute_url()).content.decode()

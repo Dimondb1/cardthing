@@ -21,11 +21,19 @@ def reddit_text(cheapest, store=None):
 # Share as post ---------------------------------------------------------------------------------------------------
 # A square picture of the product and its price, and a caption, for an Instagram post: Instagram takes no post from
 # a web page, so the phone's share sheet takes the picture and the caption goes on the clipboard (share.js). The
-# owner, 5 Nov 2026: "a share as post button so it created an insta post with a realistic not spammy caption".
+# owner, 5 Nov 2026: "a share as post button so it created an insta post with a realistic not spammy caption". A
+# post carries no link either, so the picture carries a QR code to the product page: a phone's camera, or a long
+# press on the picture (Google Lens, Live Text), opens it. The owner, 5 Nov 2026: "a QR code that some phones can
+# long hold to take you to the site".
 
 POST_SIZE = 1080
 POST_SECONDS = 60 * 60            # the picture is kept this long, for the same price
 POST_FETCH_SECONDS = 8            # the shop's picture, at most
+POST_MARGIN = 60
+CODE_BOX = 272                    # the QR code's square at the foot right; the margins around it are its quiet zone
+CODE_X = CODE_Y = POST_SIZE - POST_MARGIN - CODE_BOX
+CODE_GAP = 40                     # between the words and the code
+CODE_SOURCE = "instagram.com"     # the tag on the code's address: the dashboard counts a scan as a visit from Instagram
 FONT = "fonts/DMSans-variable.ttf"
 LOGO = "img/logo.png"
 # The game's own hashtags, few and the ones its collectors use; the registry's general ones follow.
@@ -74,7 +82,7 @@ def post_caption(product, summary, store=None):
             middle.append(copy.get(f"product.share.post_{check.key}", store=store))
         middle.append(copy.get("product.share.post_checked", store=store, when=when_words(best.last_checked)))
         lines.append(" ".join(middle))
-    lines.append(copy.get("product.share.post_site", store=store))
+    lines.append(f"{copy.get('product.share.post_site', store=store)} {copy.get('product.share.post_scan', store=store)}")
     tags = " ".join(part for part in (POST_TAGS.get(product.game.slug, ""), copy.get("product.share.post_tags", store=store)) if part)
     if tags:
         lines.append(tags)
@@ -83,13 +91,51 @@ def post_caption(product, summary, store=None):
 
 def post_image_key(product, summary):
     best = summary.best
-    return f"web:post-image:v1:{product.pk}:{best.pk if best else 0}:{best.shown_price if best else ''}"
+    return f"web:post-image:v2:{product.pk}:{best.pk if best else 0}:{best.shown_price if best else ''}"
+
+
+def post_url(product):
+    """The address the code opens: the product page on the site itself (RIPRAPTOR_SITE_URL), tagged as a visit from
+    Instagram, since a phone's camera passes no Referer (catalogue.insights.source_of reads the tag)."""
+    from django.conf import settings
+
+    return f"{settings.RIPRAPTOR_SITE_URL}{product.get_absolute_url()}?utm_source={CODE_SOURCE}"
+
+
+def code_matrix(text):
+    """The QR code for ``text`` as rows of booleans, dark modules True. Error correction M: a quarter of the code can
+    be lost to Instagram's compression or a thumb and it still reads. No border: the picture's margins are the quiet
+    zone."""
+    import qrcode
+
+    code = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, border=0)
+    code.add_data(text)
+    code.make(fit=True)
+    return code.get_matrix()
+
+
+def code_cells(matrix, box=CODE_BOX, x=CODE_X, y=CODE_Y):
+    """(cell, left, top): whole pixels a module, the code centred in its box, so every edge is crisp."""
+    cell = box // len(matrix)
+    span = cell * len(matrix)
+    return cell, x + (box - span) // 2, y + (box - span) // 2
+
+
+def draw_code(draw, text):
+    matrix = code_matrix(text)
+    cell, left, top = code_cells(matrix)
+    for row, modules in enumerate(matrix):
+        for column, dark in enumerate(modules):
+            if dark:
+                draw.rectangle((left + column * cell, top + row * cell, left + (column + 1) * cell - 1,
+                                top + (row + 1) * cell - 1), fill=INK)
 
 
 def post_image(product, summary, store=None):
     """The post's picture as PNG bytes, kept POST_SECONDS: the product's photo in a soft well, its name, its cheapest
-    delivered price in the site's green, how many shops and when it was checked, and the logo. Without a photo, or
-    with one that will not come in POST_FETCH_SECONDS, the well is empty and the words carry it."""
+    delivered price in the site's green, how many shops and when it was checked, the logo, and the code that opens
+    the page. Without a photo, or with one that will not come in POST_FETCH_SECONDS, the well is empty and the words
+    carry it."""
     from django.core.cache import cache
 
     key = post_image_key(product, summary)
@@ -157,13 +203,15 @@ def fit_lines(draw, text, font, width, lines=2):
 
 def draw_post(product, summary, photo, store=None):
     """The picture, top to bottom on a fixed grid so every post looks the same: the well with the photo, the name
-    (two lines at most), the price, two short lines about the shops and when, and the logo and site at the foot."""
+    (two lines at most), the price, two short lines about the shops and when, the logo and site at the foot, and the
+    code at the foot right, with the words kept CODE_GAP clear of it."""
     from io import BytesIO
 
     from django.contrib.staticfiles import finders
     from PIL import Image, ImageDraw
 
-    size, margin = POST_SIZE, 60
+    size, margin = POST_SIZE, POST_MARGIN
+    words = CODE_X - CODE_GAP - margin   # the width the price and the lines beside the code may take
     card = Image.new("RGB", (size, size), PAPER)
     draw = ImageDraw.Draw(card)
     well = (margin, margin, size - margin, 540)
@@ -191,7 +239,9 @@ def draw_post(product, summary, photo, store=None):
         price = f"£{best.shown_price:.2f}"
         draw.text((margin, y), price, font=price_font, fill=PRICE)
         after = post_price(best, store).replace(price, "").strip()
-        draw.text((margin + draw.textlength(price, font=price_font) + 20, y + 48), after, font=small, fill=INK_MUTED)
+        taken = draw.textlength(price, font=price_font) + 20
+        draw.text((margin + taken, y + 48), fit_lines(draw, after, small, words - taken, lines=1)[0], font=small,
+                  fill=INK_MUTED)
         shops = len({offer.retailer_id for offer in getattr(product, "offers", [])
                      if offer.availability == Listing.Availability.IN_STOCK})
         if best.availability == Listing.Availability.PREORDER:
@@ -205,18 +255,19 @@ def draw_post(product, summary, photo, store=None):
         lines = [copy.get("product.share.post_image_none", store=store)]
     y = 856
     for line in lines:
-        draw.text((margin, y), fit_lines(draw, line, small, size - 2 * margin, lines=1)[0], font=small, fill=INK_MUTED)
+        draw.text((margin, y), fit_lines(draw, line, small, words, lines=1)[0], font=small, fill=INK_MUTED)
         y += 42
     foot, height = 1000, 48
+    x = margin
     logo_path = finders.find(LOGO)
     if logo_path:
         with Image.open(logo_path) as logo:
             logo = logo.convert("RGBA")
             logo = logo.resize((round(logo.width * height / logo.height), height))
             card.paste(logo, (margin, foot), logo)
-    site_font = post_font(30, 600, 14)
-    site = "ripraptor.com"
-    draw.text((size - margin - draw.textlength(site, font=site_font), foot + 8), site, font=site_font, fill=INK_MUTED)
+            x += logo.width + 24
+    draw.text((x, foot + 8), "ripraptor.com", font=post_font(30, 600, 14), fill=INK_MUTED)
+    draw_code(draw, post_url(product))
     out = BytesIO()
     card.save(out, "PNG", optimize=True)
     return out.getvalue()

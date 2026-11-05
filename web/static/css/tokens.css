@@ -214,6 +214,7 @@
 
   /* The raptor mark (web/static/img/raptor.png, 417 x 400, drawn through a CSS mask) ------- */
   --mark-sm: 2.5rem;             /* the floor: under 40px the crest smudges, so the head is never a 1em icon */
+  --mark-nav: 1.75rem;           /* the one exception: Rip's head as the Find with Rip icon in the header, beside the 1.5rem icons */
   --mark-md: 3.5rem;             /* empty states */
   --mark-poster: clamp(13rem, 6rem + 30vw, 30rem);  /* the head on a raptor panel, cropped by its edge (raptor-lg.png) */
   --mark-poster-sm: clamp(13rem, 7rem + 18vw, 24rem); /* the same on the shorter watchlist card */

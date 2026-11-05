@@ -1,8 +1,7 @@
-{% load sitecopy ripraptor static %}{# The feed's top (web/feed.py): the title, the product type tiles, the rail of deals, Rip's Deals and the next drop. Takes feed (feed.context). Each row swipes sideways; feed.js adds an arrow at its end while there is more to see. The headers wear the site's own marks, as the usual home page's do: the hunting raptor on the deals, the raptor on Rip's Deals, the drops mark on the next drop. #}
+{% load sitecopy ripraptor static %}{# The feed's top (web/feed.py): the title, the product type tiles, Today's best deals, Rip's Deals and the next drop. Takes feed (feed.context). Each row swipes sideways; feed.js adds an arrow at its end while there is more to see. The headers wear the site's own marks, as the usual home page's do: the hunting raptor on the deals, the raptor on Rip's Deals, the drops mark on the next drop. Find with Rip (web/find.py) is in the header, so nothing sits between the headline and the tiles. #}
 <div class="feed{% if feed.filtered %} feed--filtered{% endif %}">
   {% if feed.show_title %}<h1 class="feed__title">{{ feed.title }}</h1>
   <p class="feed__sub">{% copy "feed.subtitle" %}</p>{% endif %}
-  {% if feed.hints %}{# The guided search (web/find.py), for those who do not know where to start. #}<a class="find-link" href="{% url 'web:find' %}"><span class="mark" aria-hidden="true"></span>{% copy "feed.find.link" %}<span class="find-link__go" aria-hidden="true"> →</span></a>{% endif %}
   {% if feed.tiles %}
   {# Each type pictured by a product of its kind the most shops sell, so the tile stays current; the whole tile opens that type's list, which browse.js loads in under the tiles (data-browse-link). Filtered to a type, the row sticks to the top and the chosen tile, marked, leads back out. #}
   <div class="feed__scroller feed__scroller--tiles">
@@ -19,8 +18,8 @@
     {# The spares wait hidden after the shown cards; interest.js brings the visitor's own games forward, in the browser only. #}
     <div class="feed__scroller">
       <ul class="feed__row feed__cards" data-interest data-interest-show="{{ feed.rail|length }}">
-        {% for card in feed.rail %}{% include "web/includes/feed_card.html" with product=card.product summary=card.summary amount=card.amount kind=feed.rail_kind show_game=feed.show_game %}{% endfor %}
-        {% for card in feed.rail_spares %}{% include "web/includes/feed_card.html" with product=card.product summary=card.summary amount=card.amount kind=feed.rail_kind show_game=feed.show_game spare=True %}{% endfor %}
+        {% for card in feed.rail %}{% include "web/includes/feed_card.html" with product=card.product summary=card.summary kind="feed" show_game=feed.show_game %}{% endfor %}
+        {% for card in feed.rail_spares %}{% include "web/includes/feed_card.html" with product=card.product summary=card.summary kind="feed" show_game=feed.show_game spare=True %}{% endfor %}
       </ul>
       <button class="feed__more" type="button" hidden aria-label="{% copy 'feed.row.more' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button>
     </div>
@@ -32,8 +31,8 @@
     <div class="feed__head"><h2 id="feed-deals-title" class="feed__h2 feed__h2--mark"><span class="mark section-head__mascot" aria-hidden="true"></span>{% copy "home.featured.title" %}</h2><a class="feed__all" href="{% url 'web:deals' %}{% if feed.game %}?game={{ feed.game.slug }}{% endif %}">{% copy "site.see_all" %}</a></div>
     <div class="feed__scroller">
       <ul class="feed__row feed__cards" data-interest data-interest-show="{{ feed.deals|length }}">
-        {% for product, summary in feed.deals %}{% include "web/includes/feed_card.html" with kind="deal" show_game=feed.show_game %}{% endfor %}
-        {% for product, summary in feed.deals_spares %}{% include "web/includes/feed_card.html" with kind="deal" show_game=feed.show_game spare=True %}{% endfor %}
+        {% for card in feed.deals %}{% include "web/includes/feed_card.html" with product=card.product summary=card.summary kind="deal" show_game=feed.show_game %}{% endfor %}
+        {% for card in feed.deals_spares %}{% include "web/includes/feed_card.html" with product=card.product summary=card.summary kind="deal" show_game=feed.show_game spare=True %}{% endfor %}
       </ul>
       <button class="feed__more" type="button" hidden aria-label="{% copy 'feed.row.more' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button>
     </div>

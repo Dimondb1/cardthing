@@ -3,38 +3,40 @@ The feed: the new home page, and the top of each game's page, while the owner's 
 
 The marketing team's design of 4 Nov 2026 (site_redesign/README.md, "a Google Shopping style product feed with a game
 bar at the bottom"), top to bottom: a title (Today's best prices, or the game's name), product type tiles each pictured
-by a product of its kind in stock, a rail of product cards (Furthest under RRP, or Best prices today when fewer than
-RAIL_MIN_RRP products are under their RRP), the Rip's Deals rail the usual home page has (the shops that pay a
-commission first, as its disclosure says), the next drop with its pre-order price, and, fixed to the foot of a phone,
-the search box (by voice too, where the browser can) and a bar of the games. The rails carry hidden spares so the
-visitor's own games come first, worked out in the browser by interest.js as on the usual home page. Every price is a real delivered price from the site's own offers,
-and a saving is only claimed where the data backs it: the product's RRP, or the next shop's confirmed delivered price,
-with the same rules every list uses (catalogue/offers.summarise).
+by a product of its kind in stock, Today's best deals (the deals with evidence on the most popular products, each
+card saying why it is one), the Rip's Deals rail the usual home page has (the shops that pay a commission first, as
+its disclosure says), the next drop with its pre-order price, and, fixed to the foot of a phone, the search box (by
+voice too, where the browser can) and a bar of the games. The rails carry hidden spares so the visitor's own games
+come first, worked out in the browser by interest.js as on the usual home page. Every price is a real delivered
+price from the site's own offers, and a deal is only claimed where the data backs it: a verified 30-day low under
+the month's average, or the next shop's confirmed delivered price, with the same rules every list uses
+(catalogue/offers.summarise, Summary.is_deal). Nothing is measured against an RRP: the owner, 5 Nov 2026, "Don't
+show RRP rip offs".
 
 What reads every product is cached like the home page's other lists (web.listcache, built again by web.warming): the
 rails in one entry for every game at once, the tile pictures hourly. A page then costs a handful of queries.
 """
 
 from dataclasses import dataclass
-from datetime import date
-from decimal import Decimal
+from datetime import date, timedelta
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Count, Q
 from django.urls import reverse
+from django.utils import timezone
 
 from catalogue import offers
-from catalogue.models import FeaturedSettings, Game, Listing, Product
+from catalogue.models import FeaturedSettings, Game, Listing, OutboundClick, Product
 from content import service as copy
 
 from . import listcache
 
-RAILS_KEY = "web:feed-rails:v1"
+RAILS_KEY = "web:feed-rails:v2"
 TILES_KEY = "web:feed-tiles:v1"
 TILES_SECONDS = 60 * 60
 RAIL_SIZE = 12         # cards shown on a rail
 RAIL_SPARES = 12       # more behind the home page's rails, hidden, for interest.js to bring the visitor's games forward
-RAIL_MIN_RRP = 4       # under this many products under RRP, the rail is Best prices today instead
 TILES_SHOWN = 8
 # The game bar's order: All first, then these by name, then the rest by size. Each game's icon in the sprite
 # (web/templates/web/includes/feed_sprite.svg) is matched on its slug, so a renamed game keeps its icon.
@@ -63,9 +65,10 @@ class Tile:
 
 @dataclass
 class Card:
+    """A product on a rail with the offers.Summary its deal was judged on: the card's label says why it is a deal
+    from the summary (feed_card.html), so a changed wording in Admin shows without the rails being built again."""
     product: object
     summary: object
-    amount: Decimal   # how far under RRP, or the saving on the next shop
 
 
 # The tiles ------------------------------------------------------------------------------------------------------
@@ -120,16 +123,8 @@ def tiles(game=None, current=""):
 
 # The rails -------------------------------------------------------------------------------------------------------
 
-def rrp_map(products):
-    """{product pk: the RRP the Price check measures against (Product.rrp_now)}, in one query."""
-    rows = Product.objects.filter(pk__in=[product.pk for product in products]).values_list(
-        "pk", "rrp", "shop_rrp", "found_rrp")
-    return {pk: rrp or shop_rrp or found_rrp for pk, rrp, shop_rrp, found_rrp in rows
-            if rrp or shop_rrp or found_rrp}
-
-
 def rails(fresh=False, candidates=None):
-    """{game id or None: ("rrp" or "save", [Card])}: each game's rail and the home page's, cached together. ``fresh``
+    """{game id or None: [Card]}: each game's Today's best deals and the home page's, cached together. ``fresh``
     and ``candidates`` as for the home page's lists (web.views.home_lists)."""
     from web import views
 
@@ -137,61 +132,63 @@ def rails(fresh=False, candidates=None):
                                   since=views.read_since(candidates))
 
 
+def click_counts(days=None):
+    """{product pk: clicks through to a shop by people in the last ``days``} (RIPRAPTOR_TRENDING_DAYS, as the
+    Trending list counts, catalogue.pricing.popular), in one query: what the site itself knows of what is popular."""
+    since = timezone.now() - timedelta(days=days or settings.RIPRAPTOR_TRENDING_DAYS)
+    rows = (OutboundClick.objects.people().filter(created_at__gte=since)
+            .values("product").annotate(n=Count("id")).values_list("product", "n"))
+    return dict(rows)
+
+
 def build_rails(candidates=None):
+    """The deals with evidence (offers.Summary.is_deal: a verified 30-day low clearly under the month's average, or a
+    saving of at least offers.DEAL_PERCENT on a next shop in line with the market), the most popular products first:
+    by clicks through to a shop this week, then the stronger evidence, then the more shops stocking it, so with no
+    clicks to go on the rail is the strongest deals. The owner, 5 Nov 2026: "the best deals on the most popular
+    products". Only a product in stock at a confirmed delivered price, with no sign of a wrong product link."""
     from web import views
 
     products = (candidates or views.deal_candidates)()
     week_lows = views.lows_for(candidates, products)
-    rrps = rrp_map(products)
-    under, saves = [], []
+    clicks = click_counts()
+    good = []
     for product in products:
         summary = offers.summarise(product, week_lows)
         best = summary.best
         if (best is None or best.availability != Listing.Availability.IN_STOCK or not best.delivery_known
-                or summary.suspect):
+                or summary.suspect or not summary.is_deal):
             continue
-        rrp = rrps.get(product.pk)
-        if rrp and best.delivered_price < rrp:
-            under.append((rrp - best.delivered_price, product, summary))
-        if summary.saving:
-            saves.append((summary.saving, product, summary))
+        shops = sum(1 for offer in product.offers if offer.availability == Listing.Availability.IN_STOCK)
+        good.append(((-clicks.get(product.pk, 0), -summary.strength, -shops, product.name), product, summary))
+    good.sort(key=lambda row: row[0])
     scopes = [None, *sorted({product.game_id for product in products})]
     chosen = {}
     for scope in scopes:
         # The home page's rail carries spares behind the shown cards (interest.js); a game's page needs none.
         size = RAIL_SIZE + RAIL_SPARES if scope is None else RAIL_SIZE
-        mine = [row for row in under if scope is None or row[1].game_id == scope]
-        mine.sort(key=lambda row: (-row[0], row[1].pk))
-        if len(mine) >= RAIL_MIN_RRP:
-            chosen[scope] = ("rrp", mine[:size])
-        else:
-            mine = [row for row in saves if scope is None or row[1].game_id == scope]
-            mine.sort(key=lambda row: (-row[0], row[1].pk))
-            chosen[scope] = ("save", mine[:size])
+        chosen[scope] = [(product, summary) for _rank, product, summary in good
+                         if scope is None or product.game_id == scope][:size]
     # The products as a list shows them (game, set, prices), in one query for every rail.
-    groups = views.with_list_fields(*([(product, summary) for _amount, product, summary in rows]
-                                      for _kind, rows in chosen.values()))
-    result = {}
-    for (scope, (kind, rows)), group in zip(chosen.items(), groups):
-        amounts = {product.pk: amount for amount, product, _summary in rows}
-        result[scope] = (kind, [Card(product, summary, amounts[product.pk]) for product, summary in group])
-    return result
+    groups = views.with_list_fields(*chosen.values())
+    return {scope: [Card(product, summary) for product, summary in group] for scope, group in zip(chosen, groups)}
 
 
 def rail(game=None):
-    """(kind, [Card]) for ``game``'s rail or the home page's, from the cache: RAIL_SIZE to show, then the spares."""
-    return rails().get(game.pk if game is not None else None, ("save", []))
+    """[Card] for ``game``'s rail or the home page's, from the cache: RAIL_SIZE to show, then the spares."""
+    return rails().get(game.pk if game is not None else None, [])
 
 
 def deals(game=None, shown=()):
-    """(rows, spares) for the Rip's Deals rail: the home page's featured deals (web.views.featured_pick, which
+    """([Card], spares) for the Rip's Deals rail: the home page's featured deals (web.views.featured_pick, which
     favours the shops that pay a commission, or takes only them with the owner's Featured deals setting) and the
     spares behind them, for ``game`` or any, less the products ``shown`` on the rail above. From the cache."""
     from web import views
 
     featured, _trending, spares = views.home_lists()
     keep = lambda product: product.pk not in shown and (game is None or product.game_id == game.pk)   # noqa: E731
-    return ([row for row in featured if keep(row[0])], [row for row in spares if keep(row[0])])
+    return ([Card(product, summary) for product, summary in featured if keep(product)],
+            [Card(product, summary) for product, summary in spares if keep(product)])
 
 
 # The drop and the bar ---------------------------------------------------------------------------------------------
@@ -242,9 +239,9 @@ def context(request, game=None, kind=""):
     store = copy.for_request(request)
     filtered = kind in TYPE_LABELS
     if filtered:
-        rail_kind, shown, spares, deal_rows, deal_spares = "save", [], [], [], []
+        shown, spares, deal_rows, deal_spares = [], [], [], []
     else:
-        rail_kind, cards = rail(game)
+        cards = rail(game)
         shown, spares = cards[:RAIL_SIZE], cards[RAIL_SIZE:]
         deal_rows, deal_spares = deals(game, {card.product.pk for card in cards})
     games = games_with_products()
@@ -260,12 +257,12 @@ def context(request, game=None, kind=""):
         "game": game, "show_game": game is None, "title": title, "show_title": not filtered,
         # Filtered to a type: the list's heading is the tile's label, and Clear leads back to the page unfiltered.
         "filtered": filtered, "kind": kind if filtered else "", "list_title": TYPE_LABELS.get(kind, ""),
-        # The two quiet hints a first visit gets (feed.js): only the home page, unfiltered, has them in its markup.
+        # The two quiet hints the first visits get (feed.js): only the home page, unfiltered, has them in its markup.
         "hints": game is None and not filtered,
         "clear_url": game.get_absolute_url() if game is not None else reverse("web:home"),
-        "tiles": tiles(game, current=kind), "rail_kind": rail_kind, "rail": shown, "rail_spares": spares,
-        "rail_title": copy.get("feed.rail.rrp" if rail_kind == "rrp" else "feed.rail.best", store=store),
-        "rail_url": rail_url, "deals": deal_rows, "deals_spares": deal_spares,
+        "tiles": tiles(game, current=kind), "rail": shown, "rail_spares": spares,
+        "rail_title": copy.get("feed.rail.deals", store=store), "rail_url": rail_url,
+        "deals": deal_rows, "deals_spares": deal_spares,
         "deals_paying_only": FeaturedSettings.current().paying_only if deal_rows else False,
         "drop": None if filtered else drop(game), "games": games_bar(games),
         "interest_games": views.interest_lexicon(games), "search_hint": search_hint, "today": date.today(),

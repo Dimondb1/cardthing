@@ -1,6 +1,6 @@
 // The feed (web/feed.py). The page works without this: every item is a plain link, each row scrolls by itself and the
 // search box is a plain form. This adds: the chosen game brought into the bar's view; an arrow at the end of each row
-// while there is more to see, which scrolls the row on; two hints on a first visit; and search by voice where the
+// while there is more to see, which scrolls the row on; two hints on the first visits; and search by voice where the
 // browser can listen. A type
 // tile's list loading in under the tiles is browse.js's work (data-browse-link).
 // No exclamation marks: the copy tests read script as page text.
@@ -72,13 +72,22 @@
     feed.appendChild(sketch);
   });
 
-  // The first visit's two hints: Pick by game by the bar, then Pick by type by the tiles, each on for a moment and
-  // gone, and never again in this browser. Any tap, scroll or key ends them early: the visitor is already going.
+  // The two hints: Pick by game by the bar, then Pick by type by the tiles, each on for a moment and gone. A new
+  // visitor sees them on their first three landings, or until they tap a game or a type, whichever comes first: the
+  // hints have then done their work. #hints on the address shows them again (the owner checking them). Any tap,
+  // scroll or key once they are showing ends them early: the visitor is already going.
   var hints = document.querySelectorAll(".feed-hint");
-  var seen = false;
-  try { seen = localStorage.getItem("ripraptor.hinted") === "1"; } catch (e) { seen = false; }
-  if (hints.length && !seen) {
-    try { localStorage.setItem("ripraptor.hinted", "1"); } catch (e) { /* storage off: shown this once */ }
+  var HINTS_KEY = "ripraptor.hints";
+  var HINTS_LANDINGS = 3;
+  var landings = 0;
+  try { landings = parseInt(localStorage.getItem(HINTS_KEY) || "0", 10) || 0; } catch (e) { landings = 0; }
+  var remember = function (count) { try { localStorage.setItem(HINTS_KEY, String(count)); } catch (e) { /* storage off */ } };
+  if (hints.length && (landings < HINTS_LANDINGS || window.location.hash === "#hints")) {
+    remember(landings + 1);
+    document.addEventListener("click", function (event) {
+      var target = event.target;
+      if (target && target.closest && target.closest(".feed-game, .feed-tile__link")) remember(HINTS_LANDINGS);
+    }, true);
     var timers = [];
     // On a wide screen the bar and the tiles sit at the left with room beside them, so each hint goes to the right of
     // the last item, vertically centred on it, with its caret pointing left; on a phone the stylesheet places them.
@@ -123,7 +132,11 @@
       at(700 + i * 2600 + 2200, function () { hide(hint); });
     });
     at(700 + hints.length * 2600, end);
-    ["pointerdown", "scroll", "keydown"].forEach(function (name) { window.addEventListener(name, end, true); });
+    // Listened for from the first hint on, not from the page's load: the browser's own scroll as it settles (the
+    // address bar, a restored position) must not end them before they start.
+    at(650, function () {
+      ["pointerdown", "scroll", "keydown"].forEach(function (name) { window.addEventListener(name, end, true); });
+    });
   }
 
   // Search by voice: the browser listens (Chrome on a phone can, Firefox cannot), the words go in the box and the

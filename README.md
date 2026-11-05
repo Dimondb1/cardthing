@@ -5095,19 +5095,30 @@ anyone else is sent to the admin sign-in. Top to bottom:
 page, not in its place, so it can be tried and rolled back in a tap. With
 the switch on, the home page is the feed: the title (Today's best prices),
 product type tiles each pictured by a product of its kind in stock that
-the most shops sell (`feed.tile_picks`, one query hourly), a rail of
-product cards (Furthest under RRP, or Best prices today when fewer than
-four products are under their RRP; `feed.rails`, every game's at once,
-cached and warmed with the other lists), the Rip's Deals rail the usual
-home page has (`views.featured_pick`, with its disclosure line and the
-Featured deals setting), the next drop with its pre-order price, the
-partners' row, and, fixed to the foot of a phone, the search box and a bar
-of the games. The two rails carry hidden spares and `interest.js` brings
-the visitor's own games forward, in the browser, as on the usual home page.
-On a visitor's first landing `feed.js` shows two quiet hints in turn, Pick
-by game by the bar and Pick by type by the tiles, each for a couple of
-seconds, ended early by any tap or scroll and never shown again in that
-browser (`ripraptor.hinted`); the wording is `feed.hint.*` in the registry.
+the most shops sell (`feed.tile_picks`, one query hourly), Today's best
+deals (`feed.rails`, every game's at once, cached and warmed with the other
+lists): the deals with evidence, by the rules every list uses
+(`offers.Summary.is_deal`: a verified 30-day low clearly under the month's
+average, or a saving of 5% or more on a next shop in line with the market),
+the most popular products first (clicks through to a shop in the trending
+window, `feed.click_counts`, one query at build), then the stronger
+evidence, then the more shops stocking it, so with no clicks to go on the
+strongest deals lead. Every card wears a green label saying why it is a
+deal (`feed.card.why_*`: "£8.00 cheaper than Northgate Cards", "Lowest in
+30 days, 21% under its usual price"). Nothing on the feed is measured
+against an RRP; the owner, 5 Nov 2026: "don't show RRP rip offs". Then the
+Rip's Deals rail the usual home page has (`views.featured_pick`, with its
+disclosure line and the Featured deals setting, less the products on the
+rail above), the next drop with its pre-order price, the partners' row,
+and, fixed to the foot of a phone, the search box and a bar of the games.
+The two rails carry hidden spares and `interest.js` brings the visitor's
+own games forward, in the browser, as on the usual home page. On a
+visitor's first three landings, or until they tap a game or a type,
+`feed.js` shows two quiet hints in turn, Pick by game by the bar and Pick
+by type by the tiles, each for a couple of seconds while the pills or the
+tiles light up one after another, ended early by any tap or scroll
+(`ripraptor.hints` counts the landings; `#hints` on the address shows
+them again any time); the wording is `feed.hint.*` in the registry.
 `feed.js` adds an arrow at the end of each row while there is more to see,
 and a microphone to the search box where the browser can listen (Chrome on
 a phone), which searches for what was said. The dock's search box shows
@@ -5139,9 +5150,10 @@ can see either look any time with `?look=feed` or `?look=classic` on the
 home page or a game's page; visitors see the one switched on. The owner, 4
 Nov 2026: "can we easily roll this back if I don't like it".
 
-**Find with Rip** (`web/find.py`, `/find/`): the guided search, linked
-under the new home page's headline, one question a screen for a visitor who
-does not know where to start: the game, the product type in stock for it,
+**Find with Rip** (`web/find.py`, `/find/`): the guided search, Rip's head
+in the header while the new home page is on (a soft orange pill, the one
+button in the menu; a phone says Find under it), one question a screen for
+a visitor who does not know where to start: the game, the product type in stock for it,
 the newest sets with that type in stock (or any set), and what matters
 most, which is the list's sort. Every answer is a plain link carrying the
 answers so far in the address (`?game=&type=&set=&want=`), so it works

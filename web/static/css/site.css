@@ -266,9 +266,19 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .wordmark__img { transition: transform var(--motion-normal) var(--ease-out); }
 @media (hover: hover) { .wordmark:hover .wordmark__img { transform: scale(1.03) rotate(-1deg); } }
 .masthead__swipe-icon, .masthead__watch-icon { display: none; width: var(--icon-nav); height: var(--icon-nav); }
+/* Find with Rip (web/find.py) while the new home page is on: Rip's head on the brand's soft pill, so it reads as the
+   one button in the menu. A tablet up says Find with Rip beside the head; a phone puts Find under it, with the icons. */
+.masthead__find { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--color-brand-soft); color: var(--color-brand-text); }
+.masthead__find-icon { --mark-size: var(--mark-nav); color: var(--color-brand); }
+.masthead__find-brief { display: none; }
+.masthead__nav .masthead__find:hover, .masthead__nav .masthead__find[aria-current="page"] { background: var(--color-brand-pill); text-decoration: none; }
 @media (max-width: 47.99rem) {
   .masthead__nav { gap: var(--space-1); }
-  .masthead__nav a:not(.masthead__swipe):not(.masthead__watch) { display: none; }
+  .masthead__nav a:not(.masthead__swipe):not(.masthead__watch):not(.masthead__find) { display: none; }
+  .masthead__find { flex-direction: column; gap: 1px; min-width: var(--tap); padding: var(--space-1); border-radius: var(--radius-sm); font-size: var(--text-2xs); font-weight: var(--weight-medium); letter-spacing: 0.01em; }
+  .masthead__find-full { display: none; }
+  .masthead__find-brief { display: inline; line-height: 1; }
+  .masthead__find:active { transform: scale(0.94); }
   .masthead__swipe, .masthead__watch { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-width: var(--tap); padding: var(--space-1); color: var(--color-brand-text); border-radius: var(--radius-sm); font-size: var(--text-2xs); font-weight: var(--weight-medium); letter-spacing: 0.01em; }
   .masthead__watch { margin-right: calc(-1 * var(--space-1)); }
   .masthead__swipe span, .masthead__watch span { line-height: 1; }
@@ -286,6 +296,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   .masthead__inner { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand nav" "search search"; column-gap: var(--space-2); }
   .masthead--home .masthead__inner { grid-template-areas: "brand nav"; }
   .masthead__swipe > span, .masthead__watch > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .masthead__find-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 @media (min-width: 48rem) {
   .masthead__inner { max-width: calc(var(--page-width) + 2 * var(--gutter-wide)); padding: var(--space-4) var(--gutter-wide); gap: var(--space-4) var(--space-5); }
@@ -2347,7 +2358,8 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-card__name { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: calc(2 * 1.3em); }
 .feed-card__price { margin-top: var(--space-1); font-size: var(--text-price-md); font-weight: var(--weight-price); line-height: var(--leading-tight); color: var(--color-price); font-variant-numeric: tabular-nums; }
 .feed-card__meta { font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--color-ink-muted); }
-.feed-card__save { font-size: var(--text-xs); font-weight: var(--weight-heading); color: var(--color-price); }
+/* Why it is a deal, on every card: the saving on the next shop, or the verified 30-day low. Green, as every saving is. */
+.feed-card__why { align-self: flex-start; margin-top: var(--space-1); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--color-price-soft); color: var(--color-price); font-size: var(--text-2xs); font-weight: var(--weight-heading); line-height: 1.3; }
 /* The next drop: its date in a soft orange block, its name and pre-order price, and the bell that opens Remind me. */
 .feed-drop { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); }
 .feed-drop__date { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: none; width: var(--feed-date); height: var(--feed-date-h); border-radius: var(--radius); background: var(--color-brand-soft); }
@@ -2442,13 +2454,9 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 }
 @media (min-width: 64rem) { .feed-card { width: calc((100% - 7 * var(--space-3)) / 8); } }
 
-/* Find with Rip (web/find.py): a link under the feed's title, and the page it opens, one question a screen: Rip and his
-   line, big option cards that arrive one after another, the steps as dots, the choices so far as chips. Opacity and
-   transform only; none of it for those who ask. Chrome cross-fades one step into the next (the page's own head). */
-.find-link { display: inline-flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-pill); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); text-decoration: none; background: var(--color-paper); }
-.find-link .mark { --mark-size: var(--mark-sm); color: var(--color-brand); }
-.find-link:hover { background: var(--color-shelf); }
-.find-link__go { color: var(--color-brand-text); }
+/* Find with Rip (web/find.py): the page the header's Rip opens, one question a screen: Rip and his line, big option
+   cards that arrive one after another, the steps as dots, the choices so far as chips. Opacity and transform only;
+   none of it for those who ask. Chrome cross-fades one step into the next (the page's own head). */
 .find { max-width: var(--find-width); margin: 0 auto; padding-bottom: var(--space-6); }
 .find__steps { list-style: none; display: flex; gap: var(--space-2); justify-content: center; margin: var(--space-4) 0 var(--space-5); }
 .find__step { width: var(--find-dot); height: var(--find-dot); border-radius: 50%; background: var(--color-line); }

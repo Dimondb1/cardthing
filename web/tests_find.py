@@ -159,13 +159,26 @@ class StepTests(FindCase):
 
 
 class LinkTests(FindCase):
-    def test_the_new_home_page_links_to_it_under_its_headline(self):
+    def test_rip_sits_in_the_header_while_the_new_home_page_is_on(self):
+        # The owner, 5 Nov 2026: "move Find with Rip up, into a special icon in the top, as it's pushed products down".
+        self.assertNotIn("masthead__find", self.client.get(reverse("web:home")).content.decode())
         row = SiteLook.load()
         row.feed_home = True
         row.save()
         look.remember()
+        link = (f'<a class="masthead__find" href="{FIND}"><span class="mark masthead__find-icon" aria-hidden="true"></span>'
+                '<span class="masthead__find-text"><span class="masthead__find-full">Find with Rip</span>'
+                '<span class="masthead__find-brief">Find</span></span></a>')
+        for url in (reverse("web:home"), self.pokemon.get_absolute_url(), reverse("web:deals")):
+            html = self.client.get(url).content.decode()
+            with self.subTest(url=url):
+                self.assertIn(link, html)
+                self.assertLess(html.index("masthead__find"), html.index("masthead__swipe"))
+        self.assertIn(f'<a class="masthead__find" href="{FIND}" aria-current="page">', self.client.get(FIND).content.decode())
+        # Nothing sits between the headline and the tiles any more.
         html = self.client.get(reverse("web:home")).content.decode()
-        self.assertIn(f'<a class="find-link" href="{FIND}"><span class="mark" aria-hidden="true"></span>Find with Rip', html)
-        self.assertLess(html.index('class="feed__sub"'), html.index('class="find-link"'))
-        self.assertLess(html.index('class="find-link"'), html.index("feed__tiles"))
-        self.assertNotIn("find-link", self.client.get(self.pokemon.get_absolute_url()).content.decode())
+        self.assertNotIn("find-link", html)
+        self.assertNotIn("<a ", html[html.index('class="feed__sub"'):html.index("feed__tiles")])
+        css = open("web/static/css/site.css", encoding="utf-8").read()
+        self.assertIn(".masthead__find-brief { display: inline; line-height: 1; }", css)   # a phone: the short word
+        self.assertIn(".masthead__find-icon { --mark-size: var(--mark-nav); color: var(--color-brand); }", css)

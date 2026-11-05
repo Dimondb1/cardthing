@@ -5,7 +5,7 @@ from django.conf import settings
 from catalogue import referrals
 from guides import state as guides
 
-from . import seasons
+from . import look, seasons
 
 # Addresses that are private links: a message thread, the links in stock alert and refer a friend emails (and the
 # Your alerts page they and the watchlist page link to), and the owner's dashboard. analytics.js holds the same pattern.
@@ -44,4 +44,6 @@ def site(request):
         "guide_pages": GUIDE_PAGES,
         # Today's seasonal theme (web/seasons.py), from the cache alone; staff can preview one with ?theme=.
         "season": seasons.for_request(request),
+        # Find with Rip in the header (web/find.py) while the new home page is on (web/look.py, from the cache alone).
+        "find_link": look.for_request(request),
     }

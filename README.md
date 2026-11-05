@@ -5115,12 +5115,14 @@ rail above), the next drop with its pre-order price, the partners' row,
 and, fixed to the foot of a phone, the search box and a bar of the games.
 The two rails carry hidden spares and `interest.js` brings the visitor's
 own games forward, in the browser, as on the usual home page. On a
-visitor's first three landings, or until they tap a game or a type,
-`feed.js` shows two quiet hints in turn, Pick by game by the bar and Pick
-by type by the tiles, each for a couple of seconds while the pills or the
-tiles light up one after another, ended early by any tap or scroll
-(`ripraptor.hints` counts the landings; `#hints` on the address shows
-them again any time); the wording is `feed.hint.*` in the registry.
+visitor's first landing each day `feed.js` shows two quiet hints in turn,
+Pick by game by the bar and Pick by type by the tiles, each for a couple of
+seconds while the pills or the tiles light up one after another, ended
+early by any tap or scroll (`ripraptor.hints` holds the day; `#hints` on
+the address shows them any time); the wording is `feed.hint.*` in the
+registry. On a phone a small down arrow sits on the dock's edge while the
+page has more below the first screen and nothing has scrolled yet; a tap
+scrolls on a screen, and the first scroll takes it away.
 `feed.js` adds an arrow at the end of each row while there is more to see,
 and a microphone to the search box where the browser can listen (Chrome on
 a phone), which searches for what was said. The dock's search box shows

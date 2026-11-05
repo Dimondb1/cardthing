@@ -231,7 +231,17 @@ class HomeFeedTests(FeedCase):
         # The dock: the search box, then every game with products, All chosen, each by its own icon.
         dock = html[html.index('<div class="feed-dock">'):html.index('<div class="feed">')]
         self.assertIn(f'<form class="feed-search" action="{reverse("web:search")}" method="get" role="search" ', dock)
-        self.assertIn('placeholder="Search sets, boxes and packs"', dock)
+        self.assertIn('placeholder="Search any product"', dock)
+        # The down arrow on the dock's edge, for feed.js to show while there is more below; a tablet up has no dock to put it on.
+        self.assertIn('<button class="feed-dock__cue" type="button" hidden aria-label="More below"><svg class="feed-ic" '
+                      'aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button>\n</div>', dock)
+        css = open("web/static/css/site.css", encoding="utf-8").read()
+        self.assertIn(".feed-dock__cue .feed-ic { width: var(--icon-button); height: var(--icon-button); transform: rotate(90deg); }", css)
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .feed-dock__cue { animation: none; } }", css)
+        self.assertIn(".feed-search, .feed-dock .live, .feed-dock__cue { display: none; }", css)
+        script = open("web/static/js/feed.js", encoding="utf-8").read()
+        self.assertIn('getComputedStyle(dock).position === "fixed"', script)
+        self.assertIn('window.addEventListener("scroll", gone, { passive: true });', script)
         self.assertIn('<button class="feed-search__mic" type="button" hidden aria-label="Search by voice" '
                       'data-listening="Listening">', dock)
         # Results as you type: the same script and wording as the header's search, the panel above the box.
@@ -393,7 +403,7 @@ class HomeFeedTests(FeedCase):
                       html)
         dock = html[html.index('<div class="feed-dock">'):html.index('<div class="feed">')]
         self.assertIn('<input type="hidden" name="game" value="pokemon">', dock)
-        self.assertIn('placeholder="Search Pokémon boxes and packs"', dock)
+        self.assertIn('placeholder="Search Pokémon"', dock)
         self.assertIn(f'<a class="feed-game" href="{url}" aria-current="page">', dock)
         self.assertNotIn(f'<a class="feed-game" href="{HOME}" aria-current="page">', dock)
         # Magic has nothing on pre-order and one product under RRP.
@@ -581,8 +591,9 @@ class TypeTileTests(FeedCase):
 
     def test_the_home_feed_alone_carries_the_two_first_visit_hints(self):
         # The owner, 5 Nov 2026: "a small, little highlight ... pick by game, pick by type ... just comes on, goes away".
-        # And, having seen the first version once: "couldn't seem to see the guide highlighter thing. Nothing happens":
-        # a new key, three landings, and #hints to see them any time.
+        # And, having seen the first version once: "couldn't seem to see the guide highlighter thing. Nothing happens",
+        # then, after three landings were spent: "didn't you accidentally remove the highlighted games and type thing":
+        # the first landing of each day, and #hints to see them any time.
         html = self.page()
         self.assertIn('<span class="feed-hint feed-hint--games" hidden aria-hidden="true">Pick by game</span>', html)
         self.assertIn('<span class="feed-hint feed-hint--types" hidden aria-hidden="true">Pick by type</span>', html)
@@ -593,9 +604,10 @@ class TypeTileTests(FeedCase):
                 self.assertNotIn("feed-hint", self.page(url, **params))
         script = open("web/static/js/feed.js", encoding="utf-8").read()
         self.assertIn('var HINTS_KEY = "ripraptor.hints";', script)
-        self.assertIn("var HINTS_LANDINGS = 3;", script)
-        self.assertIn('window.location.hash === "#hints"', script)
-        self.assertIn('target.closest(".feed-game, .feed-tile__link")) remember(HINTS_LANDINGS)', script)
+        self.assertIn('var today = new Date().toISOString().slice(0, 10);', script)
+        self.assertIn('if (hints.length && (last !== today || window.location.hash === "#hints")) {', script)
+        self.assertIn("localStorage.setItem(HINTS_KEY, today);", script)
+        self.assertNotIn("HINTS_LANDINGS", script)
         self.assertNotIn("ripraptor.hinted", script)
         self.assertIn('["pointerdown", "scroll", "keydown"]', script)
         css = open("web/static/css/site.css", encoding="utf-8").read()

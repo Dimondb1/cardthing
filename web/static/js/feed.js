@@ -72,22 +72,19 @@
     feed.appendChild(sketch);
   });
 
-  // The two hints: Pick by game by the bar, then Pick by type by the tiles, each on for a moment and gone. A new
-  // visitor sees them on their first three landings, or until they tap a game or a type, whichever comes first: the
-  // hints have then done their work. #hints on the address shows them again (the owner checking them). Any tap,
-  // scroll or key once they are showing ends them early: the visitor is already going.
+  // The two hints: Pick by game by the bar, then Pick by type by the tiles, each on for a moment and gone. They show on
+  // the first landing of each day: a newcomer who did not take them in gets them again, a regular is nudged once a day
+  // at most, for a few seconds. (Three landings in all was too few: the owner had landed many more times than that
+  // checking the page, and asked where they had gone.) #hints on the address shows them any time. Any tap, scroll or
+  // key once they are showing ends them early: the visitor is already going.
   var hints = document.querySelectorAll(".feed-hint");
+  var hintsUntil = 0;   // when the hints are over, in ms from now: the dock's arrow waits for them (it shares their spot)
   var HINTS_KEY = "ripraptor.hints";
-  var HINTS_LANDINGS = 3;
-  var landings = 0;
-  try { landings = parseInt(localStorage.getItem(HINTS_KEY) || "0", 10) || 0; } catch (e) { landings = 0; }
-  var remember = function (count) { try { localStorage.setItem(HINTS_KEY, String(count)); } catch (e) { /* storage off */ } };
-  if (hints.length && (landings < HINTS_LANDINGS || window.location.hash === "#hints")) {
-    remember(landings + 1);
-    document.addEventListener("click", function (event) {
-      var target = event.target;
-      if (target && target.closest && target.closest(".feed-game, .feed-tile__link")) remember(HINTS_LANDINGS);
-    }, true);
+  var today = new Date().toISOString().slice(0, 10);
+  var last = "";
+  try { last = localStorage.getItem(HINTS_KEY) || ""; } catch (e) { last = ""; }
+  if (hints.length && (last !== today || window.location.hash === "#hints")) {
+    try { localStorage.setItem(HINTS_KEY, today); } catch (e) { /* storage off: shown this once */ }
     var timers = [];
     // On a wide screen the bar and the tiles sit at the left with room beside them, so each hint goes to the right of
     // the last item, vertically centred on it, with its caret pointing left; on a phone the stylesheet places them.
@@ -131,11 +128,36 @@
       });
       at(700 + i * 2600 + 2200, function () { hide(hint); });
     });
-    at(700 + hints.length * 2600, end);
+    hintsUntil = 700 + hints.length * 2600;
+    at(hintsUntil, end);
     // Listened for from the first hint on, not from the page's load: the browser's own scroll as it settles (the
     // address bar, a restored position) must not end them before they start.
     at(650, function () {
       ["pointerdown", "scroll", "keydown"].forEach(function (name) { window.addEventListener(name, end, true); });
+    });
+  }
+
+  // The down arrow on the dock's edge: shown while the page has more below the first screen and nothing has scrolled
+  // yet, on a phone, where the dock is fixed; a tap scrolls on a screen. The first scroll, or a tap in the dock, takes
+  // it away. The owner, 5 Nov 2026: "a down arrow to indicate there is content further down".
+  var cue = document.querySelector(".feed-dock__cue");
+  var dock = cue && cue.closest(".feed-dock");
+  if (cue && dock && getComputedStyle(dock).position === "fixed"
+      && document.documentElement.scrollHeight > window.innerHeight + 80) {
+    var gone = function () {
+      cue.classList.add("is-gone");
+      window.removeEventListener("scroll", gone);
+      dock.removeEventListener("focusin", gone);
+    };
+    // After the hints, if they are showing: Pick by game sits on the same spot of the dock's edge.
+    setTimeout(function () {
+      if (window.scrollY > 40) return;
+      cue.hidden = false;
+      window.addEventListener("scroll", gone, { passive: true });
+      dock.addEventListener("focusin", gone);
+    }, hintsUntil);
+    cue.addEventListener("click", function () {
+      window.scrollBy({ top: Math.round(window.innerHeight * 0.7), behavior: reduced ? "auto" : "smooth" });
     });
   }
 

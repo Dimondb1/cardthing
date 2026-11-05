@@ -486,8 +486,9 @@ ENTRIES = [
           "Read out for the bar of games at the foot of a phone; not shown."),
     Entry("feed.games.all", B, "New home page game bar: all games", "All",
           "The first item of the game bar, which opens the home page."),
-    Entry("feed.search.placeholder", T, "New home page search box hint", "Search sets, boxes and packs",
-          "Grey words in the search box at the foot of the new home page."),
+    Entry("feed.search.placeholder", T, "New home page search box hint", "Search any product",
+          "Grey words in the search box at the foot of the new home page. Short: a phone's box shows about eighteen "
+          "letters beside the microphone and the go button (the owner, 5 Nov 2026: \"it cut off\")."),
     Entry("feed.search.voice", B, "New home page: search by voice button", "Search by voice",
           "The microphone in the new home page's search box, read out by screen readers. Only shown where the browser "
           "can listen."),
@@ -542,9 +543,12 @@ ENTRIES = [
     Entry("feed.row.more", B, "New home page: the arrow at the end of a row", "Show more",
           "The arrow at the end of each row of tiles or cards, read out by screen readers. A tap scrolls the row on."),
     Entry("feed.search.placeholder_game", T, "New home page search box hint on a game's page",
-          "Search {game} boxes and packs",
-          "Grey words in the search box on a game's page, which searches that game only. {game} is the game.",
+          "Search {game}",
+          "Grey words in the search box on a game's page, which searches that game only. {game} is the game. Short, as above.",
           placeholders=("game",)),
+    Entry("feed.dock.more", B, "New home page: the down arrow on the dock", "More below",
+          "Read out for the small arrow on the dock's edge that shows while there is more under the first screen; a tap "
+          "scrolls on."),
     Entry("home.percard.title", H, "Cheapest per card heading", "Cheapest per card",
           "Home page row of the products in stock with the cheapest price per card."),
     Entry("home.percard.note", T, "Cheapest per card note", "For rippers: what each card costs you, delivered.",

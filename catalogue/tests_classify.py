@@ -208,6 +208,13 @@ class ClassifyLeakTests(TestCase):
                       "Pokemon Terastal Grand Crystal Gathering Simplified Chinese Card Display Frame Set Blind Box"]:
             self.assertIsNotNone(classify(title, price=29), title)
 
+    def test_a_card_game_the_site_does_not_cover_is_not_filed_under_a_shops_tag(self):
+        # Clifford TCG files Kayou's My Little Pony packs with its Pokémon: the title names no game the catalogue knows,
+        # so the shop's tag would decide. The owner, 5 Nov 2026: "my little pony isn't pokemon".
+        self.assertIsNone(classify("My Little Pony Friendship Eternal Cards Sleeved Booster Pack", shop_type="Booster Packs",
+                                   vendor="Kayou", tags=("Pokemon", "Pokémon TCG"), price=5.75))
+        self.assertIsNone(classify("MLP Kayou Friendship Eternal Booster Box", vendor="Pokemon", price=40))
+
     def test_merchandise_makers_are_never_sealed(self):
         self.assertIsNone(classify("Pokemon - Pikachu Gift box", vendor="GB Posters", price=19.99))
         self.assertIsNone(classify("Pikachu Gift Box Set Pokemon", vendor="GB EYE", price=19.99))

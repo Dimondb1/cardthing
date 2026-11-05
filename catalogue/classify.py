@@ -101,6 +101,9 @@ NOT_SEALED = re.compile(
     r"\btrade[- ]?ins?\b|\(trade\b[^)]*\)|\bpre[- ]?owned\b|\bsecond[- ]?hand\b|"
     r"\btheme booster card\b|\bbooster card\b|\bstickers?\b|\bmini album\b|\bcrates?\b|\bdeck box(?:es)?\b|\bcard case\b|"
     r"\bposters?\b|\bbeanie\b|\bscarf\b|\bfigures\b|\binch\b|\bmug\b|\bkeychain\b|\bwallet\b|\bhoodie\b|\bt-shirt\b|\bsocks\b|\bpuzzle\b|\bsofbits\b|\bshokugan\b|"
+    # Card games the site does not cover, which TCG shops file under a game it does: Kayou's My Little Pony packs sat
+    # under Pokémon (the owner, 5 Nov 2026: "my little pony isn't pokemon").
+    r"\bmy little pony\b|\bmlp\b|"
     # A frame to show a card in ("Center Japan Pikachu Face Card Display Frame", Japan2UK) is an accessory, which
     # the owner saw on a Booster boxes tile on 4 Nov 2026. A sealed box that comes with one ("Umbreon Display Frame
     # Collection Box", "Display Frame Gift Box") says box, set or collection after the frame, so it stays.

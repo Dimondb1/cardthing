@@ -5139,6 +5139,18 @@ can see either look any time with `?look=feed` or `?look=classic` on the
 home page or a game's page; visitors see the one switched on. The owner, 4
 Nov 2026: "can we easily roll this back if I don't like it".
 
+**Find with Rip** (`web/find.py`, `/find/`): the guided search, linked
+under the new home page's headline, one question a screen for a visitor who
+does not know where to start: the game, the product type in stock for it,
+the newest sets with that type in stock (or any set), and what matters
+most, which is the list's sort. Every answer is a plain link carrying the
+answers so far in the address (`?game=&type=&set=&want=`), so it works
+without script and Back goes back a question; with all four the view sends
+the visitor to the game's or set's page, filtered and sorted, which opens on
+what is in stock, best first. Rip asks each question from a speech bubble,
+the option cards arrive one after another, and in Chrome one question
+cross-fades into the next. The wording is `find.*` in the registry.
+
 **Share as post** (`web/share.py`, `share.js`): the Post icon in a product's
 Share panel, and in the cards' Share sheet, makes an Instagram post. The
 server draws a square picture (1080 by 1080, Pillow, DM Sans from

@@ -2406,6 +2406,16 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-hint--side.is-on { transform: translate(0, -50%); }
 .feed-hint.feed-hint--side::after { left: calc(-1 * var(--space-1)); top: 50%; bottom: auto; transform: translateY(-50%) rotate(45deg); }
 @media (prefers-reduced-motion: reduce) { .feed-hint { transition: none; transform: translate(var(--hint-x), 0); } .feed-hint--side { transform: translate(0, -50%); } }
+/* The fairy's pass (feed.js): each pill, then each tile, lifts for a moment with a soft orange glow behind it and a spark at
+   its corner, one after another. The glow is a layer whose opacity moves, the lift a transform; nothing else animates. */
+.feed-game__pill, .feed-tile__well { position: relative; }
+.feed-game__pill::after, .feed-tile__well::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--color-brand-soft); opacity: 0; transition: opacity var(--motion-fast) var(--ease-standard); pointer-events: none; }
+.feed-game__pill::before, .feed-tile__well::before { content: "✦"; position: absolute; z-index: 1; top: calc(-1 * var(--space-2)); right: calc(-1 * var(--space-1)); font-size: var(--feed-spark); line-height: 1; color: var(--color-brand); opacity: 0; transform: scale(0.4); transition: opacity var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out); pointer-events: none; }
+.feed-game__pill.is-lit, .feed-tile__well.is-lit { transform: scale(1.1); }
+.feed-tile__well { transition: transform var(--motion-fast) var(--ease-standard); }
+.feed-game__pill.is-lit::after, .feed-tile__well.is-lit::after { opacity: 1; }
+.feed-game__pill.is-lit::before, .feed-tile__well.is-lit::before { opacity: 1; transform: scale(1); }
+.feed-tile__well .product-image, .feed-game__pill .feed-ic { position: relative; z-index: 1; }
 /* On a phone the dock has the search box, so the header's is put away. */
 @media (max-width: 47.99rem) { body.feed-look .masthead__search { display: none; } }
 @media (min-width: 48rem) {
@@ -2431,3 +2441,40 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .feed__more { right: 0; }
 }
 @media (min-width: 64rem) { .feed-card { width: calc((100% - 7 * var(--space-3)) / 8); } }
+
+/* Find with Rip (web/find.py): a link under the feed's title, and the page it opens, one question a screen: Rip and his
+   line, big option cards that arrive one after another, the steps as dots, the choices so far as chips. Opacity and
+   transform only; none of it for those who ask. Chrome cross-fades one step into the next (the page's own head). */
+.find-link { display: inline-flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-pill); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); text-decoration: none; background: var(--color-paper); }
+.find-link .mark { --mark-size: var(--mark-sm); color: var(--color-brand); }
+.find-link:hover { background: var(--color-shelf); }
+.find-link__go { color: var(--color-brand-text); }
+.find { max-width: var(--find-width); margin: 0 auto; padding-bottom: var(--space-6); }
+.find__steps { list-style: none; display: flex; gap: var(--space-2); justify-content: center; margin: var(--space-4) 0 var(--space-5); }
+.find__step { width: var(--find-dot); height: var(--find-dot); border-radius: 50%; background: var(--color-line); }
+.find__step--done { background: var(--color-brand); }
+.find__step--now { background: var(--color-brand); transform: scale(1.4); }
+.find__ask { display: flex; align-items: flex-end; gap: var(--space-3); margin-bottom: var(--space-5); }
+.find__rip { flex: none; --mark-size: var(--find-rip); color: var(--color-brand); -webkit-mask-image: url("../img/raptor-lg.png"); mask-image: url("../img/raptor-lg.png"); }
+.find__bubble { position: relative; padding: var(--space-3) var(--space-4); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-card); }
+.find__bubble::after { content: ""; position: absolute; left: calc(-1 * var(--space-2)); bottom: var(--space-4); width: var(--space-3); height: var(--space-3); border-left: var(--border-width) solid var(--color-line); border-bottom: var(--border-width) solid var(--color-line); background: var(--color-paper); transform: rotate(45deg); }
+.find__question { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-price); line-height: var(--leading-tight); letter-spacing: -0.01em; }
+.find__sub { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--color-ink-muted); }
+.find__options { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.find__option { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--find-option); padding: var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); color: var(--color-ink); text-align: center; text-decoration: none; font-weight: var(--weight-strong); line-height: var(--leading-snug); transition: transform var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard); }
+.find__option:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); }
+.find__option:active { transform: scale(0.97); }
+.find__option--quiet { font-weight: var(--weight-medium); color: var(--color-ink-muted); border-style: dashed; }
+.find__icon { width: var(--find-icon); height: var(--find-icon); color: var(--color-ink); }
+.find__picture { width: var(--feed-tile-image); height: var(--feed-tile-image); line-height: 0; }
+.find__picture img { display: block; width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.find__note { font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--color-ink-muted); }
+.find__chosen { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-5); }
+.find__chosen .chip { font-size: var(--text-xs); }
+.find__again { margin-top: var(--space-4); font-size: var(--text-sm); }
+/* Each card arrives in turn, the question first. */
+@keyframes find-arrive { from { opacity: 0; transform: translateY(var(--space-3)); } to { opacity: 1; transform: none; } }
+.find__ask { animation: find-arrive var(--motion-normal) var(--ease-out) both; }
+.find__option { animation: find-arrive var(--motion-normal) var(--ease-out) both; animation-delay: calc(var(--motion-fast) + var(--i, 0) * var(--find-stagger)); }
+@media (prefers-reduced-motion: reduce) { .find__ask, .find__option { animation: none; } .find__option:hover { transform: none; } }
+@media (min-width: 48rem) { .find__options { grid-template-columns: repeat(3, minmax(0, 1fr)); } .find__question { font-size: var(--text-page-title); } }

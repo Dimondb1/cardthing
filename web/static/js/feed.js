@@ -102,12 +102,24 @@
     var hide = function (hint) { hint.classList.remove("is-on"); timers.push(setTimeout(function () { hint.hidden = true; }, reduced ? 0 : 260)); };
     var end = function () {
       timers.forEach(clearTimeout);
+      Array.prototype.forEach.call(document.querySelectorAll(".is-lit"), function (item) { item.classList.remove("is-lit"); });
       Array.prototype.forEach.call(hints, function (hint) { if (!hint.hidden) hide(hint); });
       ["pointerdown", "scroll", "keydown"].forEach(function (name) { window.removeEventListener(name, end, true); });
     };
     var at = function (ms, fn) { timers.push(setTimeout(fn, ms)); };
+    // The fairy's pass: as a hint shows, the items it points at light up one after another, left to right.
+    var pass = function (selector) {
+      if (reduced) return;
+      Array.prototype.forEach.call(document.querySelectorAll(selector), function (item, i) {
+        at(i * 110, function () { item.classList.add("is-lit"); });
+        at(i * 110 + 520, function () { item.classList.remove("is-lit"); });
+      });
+    };
     Array.prototype.forEach.call(hints, function (hint, i) {
-      at(700 + i * 2600, function () { show(hint); });
+      at(700 + i * 2600, function () {
+        show(hint);
+        pass(hint.classList.contains("feed-hint--games") ? ".feed-game__pill" : ".feed-tile__well");
+      });
       at(700 + i * 2600 + 2200, function () { hide(hint); });
     });
     at(700 + hints.length * 2600, end);

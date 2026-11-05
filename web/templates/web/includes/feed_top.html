@@ -2,6 +2,7 @@
 <div class="feed{% if feed.filtered %} feed--filtered{% endif %}">
   {% if feed.show_title %}<h1 class="feed__title">{{ feed.title }}</h1>
   <p class="feed__sub">{% copy "feed.subtitle" %}</p>{% endif %}
+  {% if feed.hints %}{# The guided search (web/find.py), for those who do not know where to start. #}<a class="find-link" href="{% url 'web:find' %}"><span class="mark" aria-hidden="true"></span>{% copy "feed.find.link" %}<span class="find-link__go" aria-hidden="true"> →</span></a>{% endif %}
   {% if feed.tiles %}
   {# Each type pictured by a product of its kind the most shops sell, so the tile stays current; the whole tile opens that type's list, which browse.js loads in under the tiles (data-browse-link). Filtered to a type, the row sticks to the top and the chosen tile, marked, leads back out. #}
   <div class="feed__scroller feed__scroller--tiles">

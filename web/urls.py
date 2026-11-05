@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/note/", views.note_api, name="note_api"),
     path("swipe/", views.deck, name="deck"),
     path("deals/", views.deals, name="deals"),
+    path("find/", views.find, name="find"),
     path("new/", views.latest_drops, name="new"),
     path("drops/", views.drops, name="drops"),
     path("drops/remind/<int:set_id>/", views.drop_ask, name="drop_ask"),

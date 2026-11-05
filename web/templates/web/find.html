@@ -1,0 +1,38 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor static %}
+{% block scripts %}{# Chrome cross-fades one question into the next and fetches an answer's page as the finger lands on it; other browsers load as usual. #}
+<style>@view-transition { navigation: auto; }</style>
+<script nonce="{{ csp_nonce }}" type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".find__option"}, "eagerness": "moderate"}]}</script>{% endblock %}
+{% block page_class %}page--find{% endblock %}
+
+{% block content %}
+{# Find with Rip (web/find.py): one question a screen. Every answer is a plain link, so it works without script and Back goes back a question. #}
+{% include "web/includes/feed_sprite.svg" %}
+<div class="find">
+  <h1 class="visually-hidden">{% copy "find.title" %}</h1>
+  <ol class="find__steps" aria-label="{% copy 'find.title' %}">
+    {% for key in steps %}<li class="find__step{% if forloop.counter < step.number %} find__step--done{% elif forloop.counter == step.number %} find__step--now{% endif %}"><span class="visually-hidden">{{ forloop.counter }}</span></li>{% endfor %}
+  </ol>
+  <div class="find__ask">
+    <span class="mark find__rip" aria-hidden="true"></span>
+    <div class="find__bubble">
+      <h2 class="find__question">{{ step.question }}</h2>
+      {% if step.sub %}<p class="find__sub">{{ step.sub }}</p>{% endif %}
+    </div>
+  </div>
+  {% if step.options %}
+  <ul class="find__options">
+    {% for option in step.options %}<li style="--i: {{ forloop.counter0 }}"><a class="find__option{% if option.quiet %} find__option--quiet{% endif %}" href="{{ option.url }}">{% if option.product %}<span class="find__picture" aria-hidden="true">{% product_image option.product "tile" %}</span>{% elif option.icon %}<svg class="find__icon" aria-hidden="true" focusable="false"><use href="#rr-{{ option.icon }}"/></svg>{% endif %}<span>{{ option.label }}</span>{% if option.note %}<span class="find__note">{{ option.note }}</span>{% endif %}</a></li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="find__sub">{% copy "find.empty" %}</p>
+  {% endif %}
+  {% if step.chosen %}
+  <div class="find__chosen">
+    <span class="visually-hidden">{% copy "find.chosen.label" %}</span>
+    {% for label, url in step.chosen %}<a class="chip" href="{{ url }}">{{ label }}<span class="chip__off" aria-hidden="true">×</span></a>{% endfor %}
+  </div>
+  <p class="find__again"><a href="{% url 'web:find' %}">{% copy "find.again" %}</a></p>
+  {% endif %}
+</div>
+{% endblock %}

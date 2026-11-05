@@ -363,6 +363,7 @@
   --feed-card-well: 6.75rem;       /* 108px: the card's picture well */
   --feed-card-image: 5.75rem;      /* 92px: the picture inside it */
   --feed-more: 2rem;               /* the arrow at the end of a row */
+  --feed-spark: 1rem;              /* the fairy's spark on a lit pill or tile */
   --feed-tile-mini: 2.25rem;       /* 36px: the tile's picture once a type is chosen and the row is a line of pills */
   --feed-tile-mini-image: 1.875rem;
   --feed-search: 3.25rem;          /* 52px: the search pill */
@@ -374,6 +375,12 @@
   --feed-date-h: 3.625rem;
   --feed-dock-space: 9rem;         /* room at the foot of a phone's page for the dock */
   --radius-tile: 22px;
+  --find-option: 7.5rem;           /* Find with Rip: an option card's least height */
+  --find-icon: 2.5rem;             /* its icon */
+  --find-rip: 5.5rem;              /* Rip beside the question */
+  --find-dot: 0.5rem;              /* a step dot */
+  --find-width: 42rem;             /* the page's measure */
+  --find-stagger: 45ms;            /* between one option card arriving and the next */
   --color-brand-pill: #ffdccb;     /* the selected game's pill in the bar */
   --feed-line: 1.5px;              /* the search pill's and the bell's firmer line */
   --feed-ring: 2px;                /* the ring round the chosen type tile */

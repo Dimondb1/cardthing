@@ -40,6 +40,7 @@ from guides import state as guide_doors
 from guides.access import not_for_editors
 
 from . import feed, hubs, listcache, look, partners, share
+from . import find as find_steps
 from .pagecache import cached_page
 from .charts import price_chart
 from .templatetags.ripraptor import gbp, short_date
@@ -2508,6 +2509,18 @@ def guides_line(request, cheapest):
     if not guide_doors.current()["live"]:
         return None
     return {"url": reverse("web:guides"), "line": text(request, "product.guides.learn")}
+
+
+@require_GET
+def find(request):
+    """Find with Rip (web/find.py): a question a screen, then the list the answers lead to."""
+    words = lambda key, **kw: text(request, key, **kw)   # noqa: E731
+    found = find_steps.step(request, words)
+    if isinstance(found, str):
+        return HttpResponseRedirect(found)
+    return render(request, "web/find.html", {
+        "step": found, "steps": find_steps.STEPS, "meta_title": words("find.title"), "noindex": True,
+    })
 
 
 def post_product(slug):

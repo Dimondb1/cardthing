@@ -5104,6 +5104,10 @@ Featured deals setting), the next drop with its pre-order price, the
 partners' row, and, fixed to the foot of a phone, the search box and a bar
 of the games. The two rails carry hidden spares and `interest.js` brings
 the visitor's own games forward, in the browser, as on the usual home page.
+On a visitor's first landing `feed.js` shows two quiet hints in turn, Pick
+by game by the bar and Pick by type by the tiles, each for a couple of
+seconds, ended early by any tap or scroll and never shown again in that
+browser (`ripraptor.hinted`); the wording is `feed.hint.*` in the registry.
 `feed.js` adds an arrow at the end of each row while there is more to see,
 and a microphone to the search box where the browser can listen (Chrome on
 a phone), which searches for what was said. The dock's search box shows

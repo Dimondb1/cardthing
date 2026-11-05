@@ -9,6 +9,7 @@
       {% for tile in feed.tiles %}<li class="feed-tile"><a class="feed-tile__link" href="{{ tile.url }}" data-browse-link{% if tile.current %} aria-current="page"{% endif %}><span class="feed-tile__well" aria-hidden="true">{% product_image tile.product "tile" %}</span><span class="feed-tile__label">{{ tile.label }}</span></a></li>{% endfor %}
     </ul>
     <button class="feed__more" type="button" hidden aria-label="{% copy 'feed.row.more' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button>
+    {% if feed.hints %}<span class="feed-hint feed-hint--types" hidden aria-hidden="true">{% copy "feed.hint.types" %}</span>{% endif %}
   </div>
   {% endif %}
   {% if feed.rail %}

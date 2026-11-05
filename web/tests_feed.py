@@ -530,6 +530,22 @@ class TypeTileTests(FeedCase):
         self.assertNotIn('name="in_stock"', row)
         self.assertIn('name="compared"', row)
 
+    def test_the_home_feed_alone_carries_the_two_first_visit_hints(self):
+        # The owner, 5 Nov 2026: "a small, little highlight ... pick by game, pick by type ... just comes on, goes away".
+        html = self.page()
+        self.assertIn('<span class="feed-hint feed-hint--games" hidden aria-hidden="true">Pick by game</span>', html)
+        self.assertIn('<span class="feed-hint feed-hint--types" hidden aria-hidden="true">Pick by type</span>', html)
+        self.assertLess(html.index("feed-hint--games"), html.index('<nav class="feed-games"'))
+        self.assertLess(html.index("feed-hint--types"), html.index("feed-rail-title"))
+        for url, params in ((self.pokemon.get_absolute_url(), {}), (reverse("web:search"), {"type": "booster_box"})):
+            with self.subTest(url=url):
+                self.assertNotIn("feed-hint", self.page(url, **params))
+        script = open("web/static/js/feed.js", encoding="utf-8").read()
+        self.assertIn('localStorage.getItem("ripraptor.hinted")', script)
+        self.assertIn('["pointerdown", "scroll", "keydown"]', script)
+        css = open("web/static/css/site.css", encoding="utf-8").read()
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .feed-hint { transition: none;", css)
+
     def test_the_filtered_pages_keep_the_house_style(self):
         for url, params in ((reverse("web:search"), {"type": "booster_box"}), (self.pokemon.get_absolute_url(), {"type": "tin"})):
             html = self.page(url, **params)

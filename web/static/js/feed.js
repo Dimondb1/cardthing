@@ -1,6 +1,7 @@
 // The feed (web/feed.py). The page works without this: every item is a plain link, each row scrolls by itself and the
 // search box is a plain form. This adds: the chosen game brought into the bar's view; an arrow at the end of each row
-// while there is more to see, which scrolls the row on; and search by voice where the browser can listen. A type
+// while there is more to see, which scrolls the row on; two hints on a first visit; and search by voice where the
+// browser can listen. A type
 // tile's list loading in under the tiles is browse.js's work (data-browse-link).
 // No exclamation marks: the copy tests read script as page text.
 (function () {
@@ -70,6 +71,48 @@
     sketch.appendChild(grid);
     feed.appendChild(sketch);
   });
+
+  // The first visit's two hints: Pick by game by the bar, then Pick by type by the tiles, each on for a moment and
+  // gone, and never again in this browser. Any tap, scroll or key ends them early: the visitor is already going.
+  var hints = document.querySelectorAll(".feed-hint");
+  var seen = false;
+  try { seen = localStorage.getItem("ripraptor.hinted") === "1"; } catch (e) { seen = false; }
+  if (hints.length && !seen) {
+    try { localStorage.setItem("ripraptor.hinted", "1"); } catch (e) { /* storage off: shown this once */ }
+    var timers = [];
+    // On a wide screen the bar and the tiles sit at the left with room beside them, so each hint goes to the right of
+    // the last item, vertically centred on it, with its caret pointing left; on a phone the stylesheet places them.
+    if (window.matchMedia && window.matchMedia("(min-width: 48rem)").matches) {
+      var beside = function (hint, selector, within) {
+        var items = document.querySelectorAll(selector);
+        var last = items[items.length - 1];
+        if (!last || !within) return;
+        var box = within.getBoundingClientRect();
+        var edge = last.getBoundingClientRect();
+        hint.classList.add("feed-hint--side");
+        hint.style.left = Math.round(edge.right - box.left + 12) + "px";
+        hint.style.top = Math.round(edge.top - box.top + edge.height / 2) + "px";
+      };
+      Array.prototype.forEach.call(hints, function (hint) {
+        if (hint.classList.contains("feed-hint--games")) beside(hint, ".feed-game__pill", hint.closest(".feed-dock"));
+        else beside(hint, ".feed-tile__well", hint.closest(".feed__scroller"));
+      });
+    }
+    var show = function (hint) { hint.hidden = false; hint.getBoundingClientRect(); hint.classList.add("is-on"); };
+    var hide = function (hint) { hint.classList.remove("is-on"); timers.push(setTimeout(function () { hint.hidden = true; }, reduced ? 0 : 260)); };
+    var end = function () {
+      timers.forEach(clearTimeout);
+      Array.prototype.forEach.call(hints, function (hint) { if (!hint.hidden) hide(hint); });
+      ["pointerdown", "scroll", "keydown"].forEach(function (name) { window.removeEventListener(name, end, true); });
+    };
+    var at = function (ms, fn) { timers.push(setTimeout(fn, ms)); };
+    Array.prototype.forEach.call(hints, function (hint, i) {
+      at(700 + i * 2600, function () { show(hint); });
+      at(700 + i * 2600 + 2200, function () { hide(hint); });
+    });
+    at(700 + hints.length * 2600, end);
+    ["pointerdown", "scroll", "keydown"].forEach(function (name) { window.addEventListener(name, end, true); });
+  }
 
   // Search by voice: the browser listens (Chrome on a phone can, Firefox cannot), the words go in the box and the
   // search runs. Nothing is kept. The button only appears where listening is possible.

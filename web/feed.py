@@ -260,6 +260,8 @@ def context(request, game=None, kind=""):
         "game": game, "show_game": game is None, "title": title, "show_title": not filtered,
         # Filtered to a type: the list's heading is the tile's label, and Clear leads back to the page unfiltered.
         "filtered": filtered, "kind": kind if filtered else "", "list_title": TYPE_LABELS.get(kind, ""),
+        # The two quiet hints a first visit gets (feed.js): only the home page, unfiltered, has them in its markup.
+        "hints": game is None and not filtered,
         "clear_url": game.get_absolute_url() if game is not None else reverse("web:home"),
         "tiles": tiles(game, current=kind), "rail_kind": rail_kind, "rail": shown, "rail_spares": spares,
         "rail_title": copy.get("feed.rail.rrp" if rail_kind == "rrp" else "feed.rail.best", store=store),

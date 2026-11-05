@@ -2393,12 +2393,29 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--motion-normal); }
 ::view-transition-group(feed-game-pill) { animation-duration: var(--motion-normal); animation-timing-function: var(--ease-out); }
 @media (prefers-reduced-motion: reduce) { ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none; } }
+/* The first-visit hints (feed.js): a small ink label with a caret, by the game bar then by the tiles, each on for a
+   moment and gone; opacity and a few pixels of travel only, and none of that for those who ask. */
+.feed-hint { position: absolute; z-index: 7; left: 50%; padding: var(--space-1) var(--space-3); border-radius: var(--radius-pill); background: var(--color-ink); color: var(--color-paper); font-size: var(--text-xs); font-weight: var(--weight-strong); line-height: 1.4; white-space: nowrap; pointer-events: none; opacity: 0; --hint-x: -50%; transform: translate(var(--hint-x), var(--space-1)); transition: opacity var(--motion-normal) var(--ease-out), transform var(--motion-normal) var(--ease-out); }
+.feed-hint::after { content: ""; position: absolute; left: 50%; width: var(--space-2); height: var(--space-2); background: var(--color-ink); transform: translateX(-50%) rotate(45deg); }
+.feed-hint.is-on { opacity: 1; transform: translate(var(--hint-x), 0); }
+.feed-hint--games { bottom: calc(100% + var(--space-2)); }
+.feed-hint--games::after { bottom: calc(-1 * var(--space-1)); }
+.feed-hint--types { top: calc(100% - var(--space-1)); }
+.feed-hint--types::after { top: calc(-1 * var(--space-1)); }
+.feed-hint--side { --hint-x: 0; bottom: auto; transform: translate(var(--space-1), -50%); }
+.feed-hint--side.is-on { transform: translate(0, -50%); }
+.feed-hint.feed-hint--side::after { left: calc(-1 * var(--space-1)); top: 50%; bottom: auto; transform: translateY(-50%) rotate(45deg); }
+@media (prefers-reduced-motion: reduce) { .feed-hint { transition: none; transform: translate(var(--hint-x), 0); } .feed-hint--side { transform: translate(0, -50%); } }
 /* On a phone the dock has the search box, so the header's is put away. */
 @media (max-width: 47.99rem) { body.feed-look .masthead__search { display: none; } }
 @media (min-width: 48rem) {
   .page--feed { padding-bottom: var(--space-6); }
   /* A tab row under the header, in the page's flow; the header has the search box. */
-  .feed-dock { position: static; box-shadow: none; }
+  .feed-dock { position: relative; box-shadow: none; }
+  /* On a wide screen the bar and the tiles sit at the left, so the hints do too. */
+  .feed-hint { --hint-x: 0; left: var(--space-5); }
+  .feed-hint--games { bottom: auto; top: calc(100% + var(--space-1)); }
+  .feed-hint--games::after { bottom: auto; top: calc(-1 * var(--space-1)); }
   .feed-dock__in { padding: 0; }
   .feed-search, .feed-dock .live { display: none; }
   .feed-games { gap: var(--space-2); padding: var(--space-2) 0 var(--space-3); border-bottom: var(--border-width) solid var(--color-line); }

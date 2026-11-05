@@ -486,6 +486,11 @@ ENTRIES = [
           "can listen."),
     Entry("feed.search.listening", B, "New home page: search by voice, listening", "Listening",
           "What the microphone button says while the browser listens."),
+    Entry("feed.hint.games", T, "New home page: first-visit hint at the game bar", "Pick by game",
+          "A small label that shows for a moment by the game bar on a visitor's first landing, then goes. Two or three "
+          "words."),
+    Entry("feed.hint.types", T, "New home page: first-visit hint at the type tiles", "Pick by type",
+          "The same by the product type tiles, after the game bar's. Two or three words."),
     Entry("feed.filters.button", B, "New home page: the Filters pill on a type's list", "Filters",
           "Folds the price band and 2+ shops away under a type's list; the chosen ones are named on it."),
     Entry("feed.list.clear", B, "New home page: clear the type filter", "Clear",

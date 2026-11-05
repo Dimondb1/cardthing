@@ -2260,16 +2260,6 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .page--feed { padding-bottom: var(--feed-dock-space); }
 .feed__title { margin: var(--space-2) 0 0; font-size: var(--text-page-title); font-weight: var(--weight-price); letter-spacing: -0.02em; line-height: var(--leading-tight); }
 .feed__sub { margin: var(--space-1) 0 0; font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--color-ink-muted); }
-/* A phone's first screen holds the header, the title, the tiles, the deals heading and a whole card above the dock (the owner,
-   5 Nov 2026: "push everything up a bit so the product tiles fully fit"): a smaller title, and each gap one step tighter. */
-@media (max-width: 47.99rem) {
-  .feed__title { margin-top: var(--space-1); font-size: var(--text-xl); }
-  .feed__sub { font-size: var(--text-xs); }
-  .feed__tiles { margin-top: var(--space-3); }
-  .feed__rail { margin-top: var(--space-4); }
-  .feed__head { margin-bottom: var(--space-2); }
-  .feed-card__body { padding: var(--space-2); }
-}
 /* A row that swipes sideways, like the usual product rows: the next item peeking in, scrolled by the browser. */
 .feed__row {
   list-style: none; display: flex; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
@@ -2441,6 +2431,17 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-game__pill.is-lit::after, .feed-tile__well.is-lit::after { opacity: 1; }
 .feed-game__pill.is-lit::before, .feed-tile__well.is-lit::before { opacity: 1; transform: scale(1); }
 .feed-tile__well .product-image, .feed-game__pill .feed-ic { position: relative; z-index: 1; }
+/* A phone's first screen holds the header, the tiles, the deals heading and a whole card above the dock (the owner, 5 Nov
+   2026: "push everything up a bit so the product tiles fully fit", then "save space by removing the headline and tag line"):
+   the title and its line are read out but not shown, the header and the game bar say where you are, and each gap is one
+   step tighter. */
+@media (max-width: 47.99rem) {
+  .feed__title, .feed__sub { position: absolute; width: var(--read-only-size); height: var(--read-only-size); overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .feed__tiles { margin-top: var(--space-2); }
+  .feed__rail { margin-top: var(--space-3); }
+  .feed__head { margin-bottom: var(--space-2); }
+  .feed-card__body { padding: var(--space-2); }
+}
 /* On a phone the dock has the search box, so the header's is put away. */
 @media (max-width: 47.99rem) { body.feed-look .masthead__search { display: none; } }
 @media (min-width: 48rem) {

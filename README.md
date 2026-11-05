@@ -5093,7 +5093,9 @@ anyone else is sent to the admin sign-in. Top to bottom:
 `catalogue.SiteLook`): the marketing team's redesign of 4 Nov 2026
 (`site_redesign/README.md`, their brief) built in beside the usual home
 page, not in its place, so it can be tried and rolled back in a tap. With
-the switch on, the home page is the feed: the title (Today's best prices),
+the switch on, the home page is the feed: the title (Today's best prices;
+on a phone it and its line are read out but not shown, so the first screen
+holds the tiles, the deals heading and a whole card above the dock),
 product type tiles each pictured by a product of its kind in stock that
 the most shops sell (`feed.tile_picks`, one query hourly), Today's best
 deals (`feed.rails`, every game's at once, cached and warmed with the other

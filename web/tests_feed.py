@@ -570,6 +570,15 @@ class TypeTileTests(FeedCase):
         self.assertNotIn('name="in_stock"', row)
         self.assertIn('name="compared"', row)
 
+    def test_a_phone_reads_the_headline_out_but_does_not_show_it(self):
+        # The owner, 5 Nov 2026, with a card still under the dock on his phone: "save space by removing Today's best prices,
+        # the headline and tag line". They stay in the page for screen readers and search engines; a phone hides them.
+        css = open("web/static/css/site.css", encoding="utf-8").read()
+        phone = css[css.index("@media (max-width: 47.99rem) {\n  .feed__title, .feed__sub"):]
+        self.assertIn(".feed__title, .feed__sub { position: absolute; width: var(--read-only-size); height: var(--read-only-size); "
+                      "overflow: hidden; clip: rect(0 0 0 0);", phone[:phone.index("}")])
+        self.assertIn('<h1 class="feed__title">Today&#x27;s best prices</h1>', self.page())
+
     def test_the_home_feed_alone_carries_the_two_first_visit_hints(self):
         # The owner, 5 Nov 2026: "a small, little highlight ... pick by game, pick by type ... just comes on, goes away".
         # And, having seen the first version once: "couldn't seem to see the guide highlighter thing. Nothing happens":

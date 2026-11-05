@@ -2510,6 +2510,37 @@ def guides_line(request, cheapest):
     return {"url": reverse("web:guides"), "line": text(request, "product.guides.learn")}
 
 
+def post_product(slug):
+    """The product a Share as post is about, with its buyable offers and the week's lows (offers.summarise), or 404."""
+    product = get_object_or_404(
+        Product.objects.active().for_lists().prefetch_related(offers.buyable_prefetch()), slug=slug)
+    return product, offers.summarise(product, offers.week_low_map([product.pk]))
+
+
+@require_GET
+def product_post(request, slug):
+    """Share as post (web/share.py): the caption, and where the picture is."""
+    product, summary = post_product(slug)
+    response = JsonResponse({
+        "caption": share.post_caption(product, summary, copy.for_request(request)),
+        "image": request.build_absolute_uri(reverse("web:product_post_image", args=[product.slug])),
+        "name": product.name,
+    })
+    response["X-Robots-Tag"] = "noindex"
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_GET
+def product_post_image(request, slug):
+    """Share as post: the square picture, PNG."""
+    product, summary = post_product(slug)
+    response = HttpResponse(share.post_image(product, summary, copy.for_request(request)), content_type="image/png")
+    response["X-Robots-Tag"] = "noindex"
+    response["Cache-Control"] = f"private, max-age={share.POST_SECONDS}"
+    return response
+
+
 def share_links(request, product, page_url, cheapest=None):
     """The product page's Share panel. Each network's link names where it was shared (utm_source), so analytics
     shows which one sends visitors; the link to copy by hand is the plain address. Reddit takes a link, a title

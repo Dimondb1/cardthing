@@ -5135,6 +5135,22 @@ can see either look any time with `?look=feed` or `?look=classic` on the
 home page or a game's page; visitors see the one switched on. The owner, 4
 Nov 2026: "can we easily roll this back if I don't like it".
 
+**Share as post** (`web/share.py`, `share.js`): the Post icon in a product's
+Share panel, and in the cards' Share sheet, makes an Instagram post. The
+server draws a square picture (1080 by 1080, Pillow, DM Sans from
+`web/static/fonts/DMSans-variable.ttf`): the product's photo in a soft
+well, its name, the cheapest delivered price in the site's green, how many
+shops and when it was checked, and the logo. It writes a caption from the
+registry's `product.share.post_*` sentences: the name, the price today and
+the shops compared (or pre-order, or none in stock), the Price check's
+verdict when it has one, when it was checked, the site (a caption takes no
+link), and a few hashtags, the game's own (`POST_TAGS`) then the general
+ones. The caption goes on the clipboard and the picture to the phone's
+share sheet, where Instagram makes a post of it; a browser without one
+saves the picture instead. The picture is kept an hour for the same price.
+`/products/<slug>/post/` gives the caption and the picture's address,
+`/products/<slug>/post.png` the picture; both are noindex.
+
 **Download a report** (`/dashboard/report.txt`, `web/report.py`; linked at
 the top of the dashboard and on the admin home): the dashboard's figures,
 built fresh, and the Insights page's for the last 28 days, as one plain

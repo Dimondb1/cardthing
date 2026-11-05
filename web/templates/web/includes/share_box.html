@@ -1,4 +1,4 @@
 {% load sitecopy %}{# Share on a product page (views.share_links). Hidden until Share opens it. Without script, Reddit is a plain link and the address sits in a box to copy; the copy buttons and the share sheet need script (share.js), which hides the box. #}
-<div class="buybox-panel share-box" id="share" data-share data-share-title="{{ product.name }}">
+<div class="buybox-panel share-box" id="share" data-share data-share-title="{{ product.name }}" data-share-post="{% url 'web:product_post' product.slug %}">
   {% include "web/includes/share_logos.html" %}
 </div>

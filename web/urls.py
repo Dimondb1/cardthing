@@ -53,6 +53,9 @@ urlpatterns = [
     path("products/<slug:slug>/", views.product_detail, name="product"),
     # The Report link's form on a product page posts here; it sends the visitor back to the product.
     path("products/<slug:slug>/report/", views.report_listing, name="report_listing"),
+    # Share as post: the caption and the picture's address, and the picture itself (web/share.py).
+    path("products/<slug:slug>/post/", views.product_post, name="product_post"),
+    path("products/<slug:slug>/post.png", views.product_post_image, name="product_post_image"),
     path("go/<int:listing_id>/", views.go, name="go"),
     path("go/search/<slug:slug>/<str:market>/", views.go_search, name="go_search"),
     path("about/", views.about, name="about"),

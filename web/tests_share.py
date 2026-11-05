@@ -103,3 +103,122 @@ class CardShareTests(TestCase):
     def test_without_script_the_icon_opens_the_product_page_share_panel(self):
         page = self.client.get("/products/30th-pack/")
         self.assertContains(page, '<div class="buybox-panel share-box" id="share" data-share')
+
+
+class PostTests(TestCase):
+    """Share as post (web/share.py): a square picture of the product and its price, and a caption, for an Instagram
+    post. The owner, 5 Nov 2026: "a share as post button so it created an insta post with a realistic not spammy
+    caption"."""
+
+    def setUp(self):
+        self.game = make_game()
+        self.product = make_product(make_set(self.game), name="Surging Sparks Booster Box", slug="surging-box",
+                                    product_type="booster_box", image_url="https://cdn.example/surging.jpg")
+        self.harbour, self.northgate = make_retailer("Harbour Games"), make_retailer("Northgate Cards")
+        self.listing = make_listing(self.product, self.harbour, price="87.00", delivery="0.00")
+        make_listing(self.product, self.northgate, price="95.00", delivery="0.00")
+        self.url = f"/products/{self.product.slug}/post/"
+
+    def caption(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response["Content-Type"], "application/json")
+        self.assertEqual(response["X-Robots-Tag"], "noindex")
+        return response.json()
+
+    def test_the_caption_reads_as_a_post_the_owner_would_write(self):
+        found = self.caption()
+        when = when_words(self.listing.last_checked)
+        self.assertEqual(found["caption"], (
+            "Surging Sparks Booster Box\n\n"
+            f"£87.00 delivered today, the cheapest of 2 UK shops we compare. Checked {when}.\n\n"
+            "Every UK shop's delivered price, compared at ripraptor.com. Link in bio.\n\n"
+            "#pokemontcg #pokemoncards #tcg #sealedproduct #ukcollectors"))
+        self.assertEqual(found["image"], f"http://testserver/products/{self.product.slug}/post.png")
+        self.assertEqual(found["name"], "Surging Sparks Booster Box")
+        for mark in ("!", "—"):
+            self.assertNotIn(mark, found["caption"])
+        self.assertLessEqual(found["caption"].count("#"), 6)
+
+    def test_the_caption_says_one_shop_a_pre_order_or_none_and_what_the_price_check_makes_of_it(self):
+        from catalogue import fair_price
+        from catalogue.models import Product
+
+        Listing.objects.filter(retailer=self.northgate).delete()
+        self.assertIn("£87.00 delivered today at the one UK shop we found it at.", self.caption()["caption"])
+        Product.objects.filter(pk=self.product.pk).update(price_band=fair_price.GOOD_PRICE)
+        self.assertIn("at the one UK shop we found it at. A good price by our Price check. Checked", self.caption()["caption"])
+        Product.objects.filter(pk=self.product.pk).update(price_band=fair_price.LOWEST)
+        self.assertIn("The lowest price we have seen for it.", self.caption()["caption"])
+        Listing.objects.filter(pk=self.listing.pk).update(availability=Listing.Availability.PREORDER, delivery_known=False)
+        caption = self.caption()["caption"]
+        self.assertIn("On pre-order at £87.00 plus delivery, the cheapest of the UK shops taking orders.", caption)
+        Listing.objects.filter(pk=self.listing.pk).update(availability=Listing.Availability.OUT_OF_STOCK)
+        caption = self.caption()["caption"]
+        self.assertIn("No UK shop we compare has it in stock right now.", caption)
+        self.assertNotIn("Checked", caption)
+        self.assertIn("#pokemontcg", caption)
+
+    def test_a_game_without_its_own_tags_gets_the_general_ones_only(self):
+        other = make_game("Battle Spirits Saga", "battle-spirits-saga")
+        product = make_product(make_set(other, "Dawn", "dawn", code="BSS"), name="Dawn Booster Box", slug="dawn-box")
+        make_listing(product, self.harbour, price="60.00")
+        self.assertTrue(self.client.get(f"/products/{product.slug}/post/").json()["caption"].endswith(
+            "\n\n#tcg #sealedproduct #ukcollectors"))
+
+    def test_a_product_nobody_can_see_has_no_post(self):
+        from catalogue.models import Product
+
+        Product.objects.filter(pk=self.product.pk).update(is_active=False)
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+        self.assertEqual(self.client.get(f"/products/{self.product.slug}/post.png").status_code, 404)
+
+    def test_the_picture_is_a_square_png_with_the_shops_photo_when_it_comes_and_without_it_when_not(self):
+        from io import BytesIO
+        from unittest import mock
+
+        from django.core.cache import cache
+        from PIL import Image
+
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        photo = BytesIO()
+        Image.new("RGB", (600, 400), "#ff0000").save(photo, "PNG")
+        with mock.patch("catalogue.importers.fetch", return_value=photo.getvalue()) as fetched:
+            response = self.client.get(f"/products/{self.product.slug}/post.png")
+            self.assertEqual(response["Content-Type"], "image/png")
+            self.assertEqual(response["X-Robots-Tag"], "noindex")
+            with Image.open(BytesIO(response.content)) as picture:
+                self.assertEqual((picture.size, picture.format), ((1080, 1080), "PNG"))
+                self.assertEqual(picture.getpixel((540, 300))[:3], (255, 0, 0))   # the photo, centred in the well
+                self.assertEqual(picture.getpixel((80, 80))[:3], (246, 246, 248))  # the well around it
+            fetched.assert_called_once()
+            # Kept for the next tap at the same price: the shop's photo is not fetched again.
+            self.client.get(f"/products/{self.product.slug}/post.png")
+            fetched.assert_called_once()
+        cache.clear()
+        with mock.patch("catalogue.importers.fetch", side_effect=OSError("down")):
+            response = self.client.get(f"/products/{self.product.slug}/post.png")
+        with Image.open(BytesIO(response.content)) as picture:
+            self.assertEqual(picture.size, (1080, 1080))
+            self.assertEqual(picture.getpixel((540, 300))[:3], (246, 246, 248))   # the well, empty
+
+    def test_the_share_panel_and_the_cards_sheet_offer_post(self):
+        html = self.client.get(self.product.get_absolute_url()).content.decode()
+        self.assertIn(f'data-share-post="/products/{self.product.slug}/post/"', html)
+        self.assertIn('<li hidden data-share-post data-share-making="Making the picture." data-share-shared="Caption copied. '
+                      'Choose Instagram, make a post with the picture and paste the caption." data-share-saved="Picture '
+                      'saved and caption copied. Open Instagram, start a post with the picture and paste the caption." '
+                      'data-share-failed="The picture could not be made. Try again in a moment."><button '
+                      'class="share-box__item" type="button" aria-label="Share as post">', html)
+        self.assertIn('<span class="share-box__name" aria-hidden="true">Post</span>', html)
+        sheet = self.client.get(self.game.get_absolute_url()).content.decode()
+        self.assertIn('<li hidden data-share-post', sheet)
+
+    def test_the_caption_costs_a_few_queries_however_many_shops(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as queries:
+            self.client.get(self.url)
+        self.assertLessEqual(len(queries), 8)

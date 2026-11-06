@@ -2043,8 +2043,18 @@ that keeps prices fresh all day:
   points a product's listings are checked every ten minutes (at most 600
   listings; the rest wait their turn hourly), with 3 every hour, otherwise
   only by its shop's whole read. A listing checked in the last 8 minutes,
-  or at a shop being read, is skipped. Feed shops, eBay and Amazon are
-  never asked about single listings.
+  or at a shop being read, is skipped. Feed shops and Amazon are never
+  asked about single listings. eBay's are, through its bulk item lookup
+  (`ebay.check_listings`, twenty a request, up to a hundred a job): the
+  item's price, postage and whether it is still live, so a price from eBay
+  is as fresh as any shop's for the products people are looking at (the
+  owner, 6 Nov 2026: "20 hours ago isn't good enough"). The lookup's own
+  daily allowance is asked about hourly and counted down, and 400 of it
+  are left for the daily run; when it is down to that the listings wait for
+  the reset, with no back-off, so the daily read is not delayed. eBay not
+  answering backs it off like a failed read. An ended listing, or one whose
+  seller or postage no longer passes, is out of stock at its last price
+  until the daily run searches again.
 - **The pre-order pulse** for each Shopify shop every 15 minutes (see
   Pre-order pulse below).
 - **Release sources**, one at a time, every 6 hours (Scryfall once a day),

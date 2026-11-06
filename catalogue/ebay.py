@@ -59,6 +59,22 @@ GIVE_UP_AFTER = 5  # failed lookups in a row before a run stops and keeps what i
 RUN_SECONDS = 45 * 60
 
 
+# Checking the listings we already have between the daily runs (check_listings, the background reader's
+# single-listing checks): twenty a request through the bulk item lookup, whose own daily allowance of 5,000 is
+# counted down and asked about hourly, leaving BULK_KEEP_BACK for the daily run. An application token lasts two
+# hours; one is kept for TOKEN_LIFE so the checks do not ask for one each time. The owner, 6 Nov 2026, of a
+# price "checked at eBay 20 hours ago": "I want users to know they are getting the latest prices".
+BULK_KEEP_BACK = 400
+TOKEN_LIFE = 90 * 60
+ALLOWANCE_ASK_EVERY = 60 * 60
+_live = {"token": "", "token_until": 0.0, "bulk_left": None, "bulk_asked": None}
+
+
+def forget_live():
+    """Drop the kept token and allowance (tests, and a run that got a new keyset)."""
+    _live.update(token="", token_until=0.0, bulk_left=None, bulk_asked=None)
+
+
 class EbayError(Exception):
     pass
 
@@ -92,6 +108,112 @@ def http(url, headers, data=None, retries=3, wait=5):
                 continue
             raise EbayError(f"eBay API unreachable: {exc}") from exc
     raise EbayError("eBay API kept throttling us.")
+
+
+class AllowanceUsed(EbayError):
+    """eBay's bulk lookup allowance for today is down to what the daily run keeps back."""
+
+
+def token_for(request=None, clock=None):
+    """An application token, kept for TOKEN_LIFE."""
+    clock = clock or time.monotonic
+    if _live["token"] and clock() < _live["token_until"]:
+        return _live["token"]
+    app, cert, _campaign = credentials()
+    _live["token"] = access_token(app, cert, request=request)
+    _live["token_until"] = clock() + TOKEN_LIFE
+    return _live["token"]
+
+
+def bulk_allowance(headers, request=None, clock=None):
+    """How many bulk lookups eBay says are left today: asked at most every ALLOWANCE_ASK_EVERY and counted down
+    between asks (spend_bulk). None when eBay does not say."""
+    clock = clock or time.monotonic
+    asked = _live["bulk_asked"]
+    if asked is None or clock() - asked >= ALLOWANCE_ASK_EVERY:
+        _searches, bulk, _reset = allowances(headers, request=request)
+        _live.update(bulk_left=bulk, bulk_asked=clock())
+    return _live["bulk_left"]
+
+
+def spend_bulk():
+    if _live["bulk_left"] is not None:
+        _live["bulk_left"] -= 1
+
+
+def check_listings(listings, request=None, clock=None, pause=None, sleep=None, stop=None):
+    """{listing pk: (price, availability, postage)} for the eBay ``listings`` asked about now, twenty a request
+    through the bulk item lookup. A listing eBay no longer knows, or whose item now fails the rules (the seller,
+    no UK postage, too cheap for the product, junk), is out of stock at its last price, and the daily run
+    searches for it again. A listing not reached (``stop`` said so, or the allowance ran down to BULK_KEEP_BACK)
+    is left out, so its check time stays and it is asked about later. Raises AllowanceUsed when the day's
+    allowance is already down to what the daily run keeps, and EbayError when eBay could not be asked."""
+    from .importers import Offer
+
+    request = request or http
+    clock = clock or time.monotonic
+    pause = PAUSE if pause is None else pause
+    sleep = sleep or time.sleep
+    wanted = {}
+    for listing in listings:
+        item_id = item_id_of(listing.url)
+        if item_id:
+            wanted.setdefault(item_id, []).append(listing)
+    results = {}
+    if not wanted:
+        return results
+    headers = headers_for(token_for(request=request, clock=clock), credentials()[2])
+    left = bulk_allowance(headers, request=request, clock=clock)
+    if left is not None and left <= BULK_KEEP_BACK:
+        raise AllowanceUsed(f"eBay's item lookup allowance for today is down to the {BULK_KEEP_BACK} the daily run keeps. "
+                            "The listings wait for the reset.")
+    shops = shop_prices()
+
+    def gone(item_id):
+        for listing in wanted[item_id]:
+            results[listing.pk] = (listing.price, Listing.Availability.OUT_OF_STOCK, listing.delivery_cost)
+
+    ids = list(wanted)
+    batches = [ids[start:start + BULK] for start in range(0, len(ids), BULK)]
+    done = 0
+    while done < len(batches):
+        if stop is not None and stop():
+            break
+        if _live["bulk_left"] is not None and _live["bulk_left"] <= BULK_KEEP_BACK:
+            break
+        batch = batches[done]
+        try:
+            answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
+        except EbayError as exc:
+            spend_bulk()
+            if "11001" in str(exc) or "404" in str(exc):
+                # eBay refuses the whole batch when one listing has ended: ask for each on its own.
+                if len(batch) > 1:
+                    batches[done:done + 1] = [[item_id] for item_id in batch]
+                else:
+                    gone(batch[0])
+                    done += 1
+                continue
+            raise
+        spend_bulk()
+        done += 1
+        found = set()
+        for item in answer.get("items", []) or []:
+            item_id = item.get("itemId")
+            for listing in wanted.get(item_id, ()):
+                found.add(item_id)
+                product = listing.product
+                offer = item_offer(item, product, Offer)
+                if (offer is None or junk(product, offer.title)
+                        or (product.pk in shops and offer.price + offer.delivery < shops[product.pk] * PRICE_FLOOR)):
+                    results[listing.pk] = (listing.price, Listing.Availability.OUT_OF_STOCK, listing.delivery_cost)
+                else:
+                    results[listing.pk] = (offer.price, Listing.Availability.IN_STOCK, offer.delivery)
+        for item_id in batch:
+            if item_id not in found:
+                gone(item_id)
+        sleep(pause)
+    return results
 
 
 def access_token(app, cert, request=None):

@@ -551,7 +551,8 @@ class ProbeTests(WorkerTestCase):
         listing = Listing.objects.select_related("retailer", "product__product_set").get(pk=self.preorder(None).pk)
         self.assertEqual(probe.probe_listing(listing, fetch=lambda url: js_answer(4999))[1], "in_stock")
 
-    def test_marketplace_listings_are_never_probed(self):
+    def test_amazon_listings_are_never_probed_and_an_ebay_one_only_with_an_item_id(self):
+        # eBay's listings are checked through its item lookup (tests_ebay_checks); Amazon's only by its daily read.
         asked = []
         for source in (Retailer.Source.EBAY, Retailer.Source.AMAZON):
             shop = self.shop(f"Market {source}", source_type=source)
@@ -559,7 +560,7 @@ class ProbeTests(WorkerTestCase):
                                    url=f"https://market.example/products/box-{source}")
             self.assertIsNone(probe.probe_listing(listing, fetch=lambda url: asked.append(url)))
         self.assertEqual(asked, [])
-        self.assertEqual(self.make_worker().plan(self.clock()), [])
+        self.assertEqual(self.make_worker().plan(self.clock()), [])   # no item id in the eBay address: not planned
 
 
 class FallbackTests(WorkerTestCase):

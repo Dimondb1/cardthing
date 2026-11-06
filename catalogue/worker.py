@@ -61,7 +61,7 @@ from django.db import connections
 from django.db.models import Q
 from django.utils import timezone
 
-from . import checks, crawl, finder, heat, importers, notify, probe, releases
+from . import checks, crawl, ebay, finder, heat, importers, notify, probe, releases
 from .models import ImportRun, Listing, Retailer, WorkerState
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,8 @@ PROBE_FETCH_SECONDS = 10
 PROBE_ERRORS_IN_A_ROW = 3
 GONE = (404, 410)
 PROBE_BATCH = 30
+# eBay's listings are checked twenty a request through its bulk item lookup (ebay.check_listings), so one job takes more.
+EBAY_CHECK_BATCH = 100
 # A listing checked this recently is not probed: a shop read or a probe has just seen it.
 RECENTLY_CHECKED = timedelta(minutes=8)
 # The reader looks for cached page lists that are due a build (web/warming.py) at least this often, and at
@@ -375,10 +377,11 @@ def deadline_for(task):
 
 class Worker:
     def __init__(self, clock=None, fetch=None, sleep=None, threads=THREADS, executor=None, import_lock=None,
-                 page_pause=None, release_fetch=None, warm=False):
+                 page_pause=None, release_fetch=None, warm=False, ebay_request=None):
         self.clock = clock or timezone.now
         self.sleep = sleep or time.sleep
         self.fetch = fetch
+        self.ebay_request = ebay_request   # eBay's API, for tests; None asks eBay itself
         self.release_fetch = release_fetch
         self.threads = max(1, threads)
         self.executor = executor
@@ -502,13 +505,16 @@ class Worker:
                 is_active=True, retailer__is_active=True, retailer__reading_paused=False,
                 last_checked__lt=now - RECENTLY_CHECKED,
             )
-            .exclude(retailer__source_type__in=probe.NOT_PROBED)
+            .exclude(retailer__source_type__in=probe.NEVER_CHECKED)
             .exclude(retailer_id__in=skip)
             .filter(Q(retailer__backoff_until__isnull=True) | Q(retailer__backoff_until__lte=now))
-            .values_list("pk", "product_id", "retailer_id", "retailer__source_type", "retailer__name", "last_checked")
+            .values_list("pk", "product_id", "retailer_id", "retailer__source_type", "retailer__name", "last_checked", "url")
         )
         hot, warm = [], []
         for row in rows:
+            # An eBay listing is checked through eBay's item lookup, which needs the item's id from its address.
+            if row[3] == Retailer.Source.EBAY and not ebay.item_id_of(row[6]):
+                continue
             points = scores.get(row[1], 0)
             if points >= heat.HOT:
                 hot.append((points, row))
@@ -519,7 +525,7 @@ class Worker:
         hot = hot[:heat.HOT_CAP]
         by_shop = {}
         for tier, every, items in (("hot", heat.HOT_EVERY, hot), ("warm", heat.WARM_EVERY, warm)):
-            for _points, (pk, _product, retailer_id, source_type, name, checked) in items:
+            for _points, (pk, _product, retailer_id, source_type, name, checked, _url) in items:
                 overdue = now - checked - every
                 if overdue < timedelta(0):
                     continue
@@ -530,7 +536,7 @@ class Worker:
         tasks = []
         for retailer_id, (source_type, name, items) in by_shop.items():
             items.sort(key=lambda item: (item[0] != "hot", item[1]))
-            items = items[:PROBE_BATCH]
+            items = items[:EBAY_CHECK_BATCH if source_type == Retailer.Source.EBAY else PROBE_BATCH]
             tier = items[0][0]
             worst = max(overdue for t, _c, overdue, _pk in items if t == tier)
             tasks.append(Task(
@@ -696,6 +702,8 @@ class Worker:
         listings = Listing.objects.select_related("retailer", "product__product_set").in_bulk(job.task.listings)
         if not listings:
             return True
+        if next(iter(listings.values())).retailer.source_type == Retailer.Source.EBAY:
+            return self.check_ebay(job, listings)
         fetch = self.fetch_for(next(iter(listings.values())).retailer, probing=True)
         retailer_id = job.task.retailer_id
         with self.lock:
@@ -734,6 +742,45 @@ class Worker:
         if restocked:
             clear_list_caches(force=True)
         return failures == 0
+
+    def check_ebay(self, job, listings):
+        """eBay's listings of the products that matter, twenty a request through eBay's bulk item lookup, which has
+        its own daily allowance (ebay.check_listings), so a price eBay shows is as fresh as any shop's between the
+        daily runs. eBay not answering backs the marketplace off like a failed read; its allowance run down only
+        makes the listings wait. The owner, 6 Nov 2026: "20 hours ago isn't good enough"."""
+        from .signals import clear_list_caches
+
+        retailer_id = job.task.retailer_id
+        now = self.clock()
+        wanted = [listings[pk] for pk in job.task.listings
+                  if pk in listings and listings[pk].last_checked < now - RECENTLY_CHECKED]
+        if not wanted:
+            return True
+        try:
+            found = ebay.check_listings(
+                wanted, request=self.ebay_request, pause=self.page_pause, sleep=self.sleep,
+                stop=lambda: self.clock() - job.started >= PROBE_BUDGET,
+            )
+        except ebay.AllowanceUsed as exc:
+            logger.warning("eBay: %s", exc)
+            with self.lock:
+                for listing in wanted:
+                    self.probe_failed[listing.pk] = now
+            return True
+        except ebay.EbayError as exc:
+            self.back_off(retailer_id, self.clock(), crawl.http_status(str(exc)), f"Checking eBay listings: {exc}")
+            return False
+        with self.lock:
+            for listing in wanted:
+                if listing.pk not in found:
+                    self.probe_failed[listing.pk] = now
+        restocked = False
+        for listing in wanted:
+            outcome = probe.record_probe(listing, found.get(listing.pk))
+            restocked = restocked or outcome == "restocked"
+        if restocked:
+            clear_list_caches(force=True)
+        return True
 
     def pulse_shop(self, job):
         """Look at one Shopify shop's collection list and read the pre-order collections that changed.

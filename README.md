@@ -1331,6 +1331,19 @@ through `/go/` like any other shop link. When the shop drops the tag and
 sells it normally, it is stock again (and counts as a restock). A draw that
 is not open (sold out) is out of stock as usual.
 
+The shop's own words win over its button (`importers.closed_reason`,
+`description_says_preorder`, applied when an `Offer` is made from any
+source, on the description every read carries): a description that says
+the raffle, lottery, ballot or draw is closed, ended or over makes the
+listing out of stock though the shop still says available; so does one
+that keeps the product for the shop's VIP or members, or says it will not
+be available to purchase; and a description that calls the product itself
+a pre-order ("this is a pre-order product") makes an "in stock" listing a
+pre-order. "Pre-order now" or "pre-order bonus" in passing does not. The
+owner, 6 Nov 2026, with a closed raffle and a VIP-only box shown as stock:
+"otherwise we're advertising old stuff". A listing already wrong is put
+right at the shop's next read.
+
 A listing for one variant of a Shopify product (an address
 ending `?variant=...`, for example a case rather than a box) takes that
 variant's price and stock, never the cheapest on the page, and is left as

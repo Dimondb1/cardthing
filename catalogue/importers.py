@@ -97,11 +97,21 @@ class Offer:
     # What eBay says of the item or its seller (Listing.SellerNote): "" when it says nothing, None when the read is
     # not eBay's, which leaves the listing's as it was.
     seller_note: str | None = None
+    # Why the shop's description says it cannot be bought today (closed_reason), or "": set on reading.
+    closed: str = ""
 
     def __post_init__(self):
         # An open draw is not stock, from whichever source the offer came.
         if self.availability in Listing.BUYABLE and says_lottery(self.title, self.tags):
             self.availability = Listing.Availability.LOTTERY
+        # A draw that has closed, or a product kept for the shop's members, cannot be bought today whatever the
+        # shop's button says (closed_reason); a page that calls the product a pre-order is one, whatever its flag.
+        if self.availability in (*Listing.BUYABLE, Listing.Availability.LOTTERY):
+            self.closed = closed_reason(self.description)
+            if self.closed:
+                self.availability = Listing.Availability.OUT_OF_STOCK
+        if self.availability == Listing.Availability.IN_STOCK and description_says_preorder(self.description):
+            self.availability = Listing.Availability.PREORDER
         # A shop read from a feed (Shopify's products.json, a CSV or XML feed) is never read page by page, so its
         # description and tags are read here for what a product page's own text is read for (not_sealed_reason).
         if not self.not_sealed:
@@ -456,6 +466,46 @@ LOTTERY_WORDS = re.compile(r"\b(?:lottery|lotteries|raffles?|ballots?)\b", re.I)
 def says_lottery(title="", tags=()):
     """True when a product's title or one of its tags says it is sold by a draw."""
     return bool(LOTTERY_WORDS.search(title or "")) or any(LOTTERY_WORDS.search(str(tag)) for tag in tags or ())
+
+
+# A shop's own words, in its description, that say the product cannot be bought by a visitor today though the
+# shop's button still says it can: a draw that has closed, or a product kept for the shop's members. A Shopify
+# product stays "available" through both, so the site showed a closed raffle and a VIP-only box as stock. The
+# owner, 6 Nov 2026: "pre-orders that are closed, raffles closed: otherwise we're advertising old stuff". Read on
+# the description every source carries (Offer.description), as the draw words are read on the title and tags.
+CLOSED_DRAW = re.compile(
+    r"\b(?:raffle|lottery|ballot|draw|entries|entry)\s+(?:is|are|has|have)\s+(?:now\s+)?(?:closed|ended|finished|over)\b"
+    r"|\b(?:raffle|lottery|ballot)\s+(?:closed|ended)\b",
+    re.I,
+)
+MEMBERS_ONLY = re.compile(
+    r"\bvip[\s-]*(?:exclusive|only)\b"
+    r"|\b(?:exclusive(?:ly)?|only)\s+(?:available\s+)?(?:to|for)\s+(?:\S+\s+){0,4}?(?:vip|members?)\b"
+    r"|\bmembers[\s-]+only\b"
+    r"|\b(?:will\s+)?not\s+be\s+available\s+(?:to|for)\s+purchase\b",
+    re.I,
+)
+CLOSED, MEMBERS = "closed", "members"
+# A description that says the product itself is a pre-order, for a shop whose stock flag says in stock while its
+# page says pre-order. Only the product's own standing: "pre-order bonus" or "pre-order now" in passing is not it.
+PREORDER_TEXT = re.compile(r"\b(?:this|it)\s+is\s+an?\s+pre[\s-]?order\b|\bpre[\s-]?order\s+(?:product|item|listing)\b", re.I)
+
+
+def closed_reason(description):
+    """Why a shop's description says its product cannot be bought today, or "": CLOSED for a draw that has ended,
+    MEMBERS for a product kept for the shop's members."""
+    if not description:
+        return ""
+    if CLOSED_DRAW.search(description):
+        return CLOSED
+    if MEMBERS_ONLY.search(description):
+        return MEMBERS
+    return ""
+
+
+def description_says_preorder(description):
+    """True when a shop's description says the product itself is a pre-order."""
+    return bool(description and PREORDER_TEXT.search(description))
 
 
 def says_preorder(product):

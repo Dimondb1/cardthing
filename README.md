@@ -1972,6 +1972,17 @@ read and lets you change it with one tap, from a phone:
   email or both, turned off (`RIPRAPTOR_CRAWL_PUSHES=0`), or in red when
   neither `RIPRAPTOR_NTFY_TOPIC` nor `RIPRAPTOR_INBOX_NOTIFY_EMAIL` with
   ZeptoMail is set, so nothing is sent.
+- **Drop day**: **Turn on faster reads** makes every shop be read at least
+  every 10, 15 or 30 minutes (your choice) for 6, 12 or 24 hours, so new
+  listings and stock show within minutes on a release day; every shop is
+  made due at once, and when the time is up each goes back to its own
+  schedule from its next read (`WorkerState.fast_until`, `fast_minutes`,
+  applied in `Retailer.cadence_for`; a slow shop is still never read more
+  than a third of the time, and the hourly schedule is unchanged, so it
+  needs the background reader running). **Turn off faster reads** ends it
+  early. **Read all** makes every shop that is not paused due at once and
+  forgets its errors, as Read now does for one shop; paused shops stay
+  paused and the message says how many.
 - **Pause all** stops every scheduled read and stock check until you tap
   **Resume all**: the background reader starts no new job (the ones
   running finish, and its heartbeat goes on), `import_prices --due` and

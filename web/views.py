@@ -3941,6 +3941,33 @@ def crawl_page(request):
                 messages.warning(request, f"{product.name} is first in line, but the background reader is not running, "
                                           "so the search starts when it is back.")
             return HttpResponseRedirect(reverse("insights"))
+        elif action in ("read_all", "fast_on", "fast_off"):
+            # Read all, and a drop day's faster reads (crawl.start_fast): the owner, 6 Nov 2026, "read all and an interval
+            # override for drop days, so during a drop day we can refresh more frequently".
+            state = WorkerState.current()
+            soon = "within a few minutes" if state is not None and state.alive() else "at the next hourly read"
+            if action == "fast_off":
+                crawl.stop_fast()
+                messages.success(request, "Faster reads are off. Each shop is read on its own schedule from its next read.")
+            else:
+                if action == "fast_on":
+                    minutes, hours = request.POST.get("minutes", ""), request.POST.get("hours", "")
+                    if not (minutes.isdigit() and int(minutes) in crawl.FAST_MINUTES and hours.isdigit()
+                            and int(hours) in crawl.FAST_HOURS):
+                        raise Http404("No such choice.")
+                    made_due, paused = crawl.start_fast(int(minutes), int(hours))
+                    note = (f"Faster reads are on for {hours} hours: every shop is read at least every {minutes} minutes, "
+                            f"and {made_due} shop{'s' if made_due != 1 else ''} will be read {soon}.")
+                else:
+                    made_due, paused = crawl.make_all_due()
+                    note = f"{made_due} shop{'s' if made_due != 1 else ''} will be read {soon}."
+                if paused:
+                    note += f" {paused} paused shop{'s stay' if paused != 1 else ' stays'} paused: tap Resume to include {'them' if paused != 1 else 'it'}."
+                if crawl.all_paused(state):
+                    note += " Reading is paused for every shop: tap Resume all as well."
+                if action == "fast_on" and not (state is not None and state.alive()):
+                    note += " The background reader is not running, so until it is back the hourly schedule reads the shops."
+                messages.success(request, note)
         elif action in ("read_now", "pause", "resume"):
             pk = request.POST.get("shop", "")
             if not pk.isdigit():
@@ -3980,6 +4007,7 @@ def crawl_page(request):
         **admin.site.each_context(request), "title": "Crawl health",
         "all_paused": crawl.all_paused(state), "last_finished": insights.clock(last, now) if last else None,
         "shops": crawl.shops(now, state), "worker": crawl.worker_status(state, now), "hot": hot, "warm": warm,
+        "fast": crawl.fast_read(state, now), "fast_minutes": crawl.FAST_MINUTES, "fast_hours": crawl.FAST_HOURS,
         # Whether a problem reaches the owner's phone, so a page with no way to set it up says so.
         "alerts": {"on": settings.RIPRAPTOR_CRAWL_PUSHES, "push": notify.can_push(), "email": notify.can_email()},
     }

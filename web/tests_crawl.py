@@ -98,6 +98,70 @@ class CrawlPageTests(TestCase):
         self.shop.refresh_from_db()
         self.assertFalse(self.shop.reading_paused)
 
+    def test_read_all_makes_every_scheduled_shop_due_now_and_leaves_paused_ones(self):
+        # The owner, 6 Nov 2026: "a quick feature in admin Crawl health to read all".
+        other = self.make_shop("Northgate Cards", next_read_at=self.now + timedelta(hours=2), error_streak=3,
+                               backoff_until=self.now + timedelta(hours=1))
+        paused = self.make_shop("Paused Cards", reading_paused=True, next_read_at=self.now + timedelta(hours=2))
+        by_hand = make_retailer("By Hand", source_type=Retailer.Source.MANUAL, next_read_at=self.now + timedelta(hours=2))
+        self.shop.next_read_at = self.now + timedelta(hours=3)
+        self.shop.save()
+        page = self.client.post(self.url, {"action": "read_all"}, follow=True)
+        self.assertRedirects(page, self.url)
+        self.assertContains(page, "2 shops will be read at the next hourly read. 1 paused shop stays paused: tap Resume to include it.")
+        for shop in (self.shop, other):
+            shop.refresh_from_db()
+            self.assertLessEqual(shop.next_read_at, timezone.now())
+            self.assertEqual((shop.backoff_until, shop.error_streak), (None, 0))
+        for shop in (paused, by_hand):
+            shop.refresh_from_db()
+            self.assertEqual(shop.next_read_at, self.now + timedelta(hours=2))
+        self.assertEqual(self.run_due(due=True)[0], ["Harbour Games", "Northgate Cards"])
+
+    def test_a_drop_day_reads_every_shop_more_often_for_a_while(self):
+        # The owner, 6 Nov 2026: "an interval override for drop days, so during a drop day we can refresh more
+        # frequently".
+        self.shop.read_every_minutes = 60
+        self.shop.next_read_at = self.now + timedelta(hours=3)
+        self.shop.save()
+        page = self.client.get(self.url)
+        self.assertContains(page, "Turn on faster reads")
+        self.assertContains(page, '<select name="minutes"><option value="10">10</option><option value="15" selected>15</option>'
+                                  '<option value="30">30</option></select>', html=False)
+        page = self.client.post(self.url, {"action": "fast_on", "minutes": "15", "hours": "12"}, follow=True)
+        self.assertRedirects(page, self.url)
+        self.assertContains(page, "Faster reads are on for 12 hours: every shop is read at least every 15 minutes, and 1 shop "
+                                  "will be read at the next hourly read.")
+        self.assertContains(page, "The background reader is not running")
+        self.assertContains(page, "Faster reads on until")
+        self.assertContains(page, "Turn off faster reads")
+        state = WorkerState.current()
+        self.assertEqual(state.fast_minutes, 15)
+        self.assertAlmostEqual(state.fast_until, self.now + timedelta(hours=12), delta=timedelta(minutes=1))
+        self.shop.refresh_from_db()
+        self.assertLessEqual(self.shop.next_read_at, timezone.now())
+        # While it is on, a read that worked sets the next one by the faster interval; the slow-shop floor still holds.
+        self.assertEqual(self.shop.cadence_for(self.now, 60), self.now + timedelta(minutes=15))
+        self.assertEqual(self.shop.cadence_for(self.now, 10 * 60), self.now + timedelta(minutes=30))
+        self.assertEqual(WorkerState.fast_read_minutes(self.now), 15)
+        # A shop read every five minutes anyway keeps its own, faster, schedule.
+        self.shop.read_every_minutes = 5
+        self.assertEqual(self.shop.cadence_for(self.now, 0), self.now + timedelta(minutes=5))
+        self.shop.read_every_minutes = 60
+        # When the time is up, each shop's own schedule applies again, with nothing to tap.
+        later = self.now + timedelta(hours=13)
+        self.assertEqual(self.shop.cadence_for(later, 60), later + timedelta(minutes=60))
+        self.assertEqual(WorkerState.fast_read_minutes(later), 0)
+        self.assertIsNone(crawl.fast_read(now=later))
+        # Turned off early.
+        page = self.client.post(self.url, {"action": "fast_off"}, follow=True)
+        self.assertContains(page, "Faster reads are off.")
+        self.assertIsNone(WorkerState.current().fast_until)
+        self.assertEqual(self.shop.cadence_for(self.now, 60), self.now + timedelta(minutes=60))
+        # Only the choices offered.
+        self.assertEqual(self.client.post(self.url, {"action": "fast_on", "minutes": "1", "hours": "12"}).status_code, 404)
+        self.assertEqual(self.client.post(self.url, {"action": "fast_on", "minutes": "15", "hours": "48"}).status_code, 404)
+
     def test_buttons_only_act_on_shops_read_on_a_schedule(self):
         by_hand = make_retailer("Hand Shop", source_type=Retailer.Source.MANUAL)
         self.assertEqual(self.client.post(self.url, {"action": "pause", "shop": by_hand.pk}).status_code, 404)

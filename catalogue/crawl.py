@@ -12,6 +12,7 @@ Resume all brings back exactly the shops that were reading before.
 
 import re
 import traceback
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -53,6 +54,44 @@ def resume_all():
         flag_path().unlink(missing_ok=True)
     except OSError:
         pass
+
+
+# A drop day: the choices the Crawl health page offers for how often every shop is read, and for how long. Never
+# under ten minutes: a shop's own rate limit and the three-times-the-read-time floor (Retailer.cadence_for) hold.
+FAST_MINUTES = (10, 15, 30)
+FAST_HOURS = (6, 12, 24)
+
+
+def fast_read(state=_UNREAD, now=None):
+    """{"minutes", "until"} while a drop day is on, else None. ``state`` as for all_paused."""
+    if state is _UNREAD:
+        state = WorkerState.current()
+    now = now or timezone.now()
+    if state is None or state.fast_until is None or state.fast_until <= now:
+        return None
+    return {"minutes": state.fast_minutes, "until": clock(state.fast_until, now)}
+
+
+def start_fast(minutes, hours, now=None):
+    """Turn a drop day on: every shop read at least every ``minutes`` for ``hours``, and every shop due now, so the
+    first round starts at once. The owner, 6 Nov 2026: "during a drop day we can refresh more frequently"."""
+    now = now or timezone.now()
+    WorkerState.objects.update_or_create(pk=1, defaults={"fast_minutes": minutes, "fast_until": now + timedelta(hours=hours)})
+    return make_all_due(now)
+
+
+def stop_fast():
+    """Turn the drop day off: each shop is read on its own schedule from its next read."""
+    WorkerState.objects.filter(pk=1).update(fast_until=None)
+
+
+def make_all_due(now=None):
+    """Read all: every shop read on a schedule and not paused is due now, its errors forgotten, as Read now does for
+    one. Returns (shops made due, shops left paused)."""
+    now = now or timezone.now()
+    scheduled = Retailer.objects.filter(is_active=True).exclude(source_type=Retailer.Source.MANUAL)
+    made_due = scheduled.filter(reading_paused=False).update(next_read_at=now, backoff_until=None, error_streak=0)
+    return made_due, scheduled.filter(reading_paused=True).count()
 
 
 def http_status(error):

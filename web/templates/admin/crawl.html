@@ -52,6 +52,23 @@
     {% endif %}
   </section>
 
+  <section id="drop-day">
+    <h2>Drop day</h2>
+    {% if fast %}
+    <p class="ok" id="fast-line"><strong>Faster reads on until {{ fast.until }}.</strong> Every shop is read at least every {{ fast.minutes }} minutes (a shop that takes long to read, less often, so it is never being read more than a third of the time). Then each shop goes back to its own schedule.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="fast_off"><input type="submit" value="Turn off faster reads"></form>
+    {% else %}
+    <p class="note" id="fast-line">On a drop day, read every shop more often for a while, so new listings and stock show within minutes. Every shop is read at once when you turn it on, and each goes back to its own schedule when the time is up. Needs the background reader running.</p>
+    <form method="post" class="row">{% csrf_token %}<input type="hidden" name="action" value="fast_on">
+      <label>Every <select name="minutes">{% for n in fast_minutes %}<option value="{{ n }}"{% if n == 15 %} selected{% endif %}>{{ n }}</option>{% endfor %}</select> minutes</label>
+      <label>for <select name="hours">{% for n in fast_hours %}<option value="{{ n }}"{% if n == 12 %} selected{% endif %}>{{ n }}</option>{% endfor %}</select> hours</label>
+      <input type="submit" value="Turn on faster reads">
+    </form>
+    {% endif %}
+    <p class="note">Read all makes every shop that is not paused due at once and forgets its errors, as Read now does for one.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="read_all"><input type="submit" value="Read all"></form>
+  </section>
+
   <section>
     <h2>Shops ({{ shops|length }})</h2>
     <p class="note">Read now makes a shop due at once and forgets its errors: the background reader takes it within a few minutes, or the next hourly read does. Pause stops reading and stock checks for one shop until you tap Resume.</p>

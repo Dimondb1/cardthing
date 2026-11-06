@@ -614,7 +614,12 @@ class Retailer(models.Model):
         in an hourly run is still due at the next one) or from ``finished``. Never sooner than three times
         the read time after it ended, so a slow shop is never being read more than a third of the time.
         """
-        interval = (since or finished) + timedelta(minutes=self.read_every_minutes)
+        minutes = self.read_every_minutes
+        # A drop day (WorkerState.fast_until, the Crawl health page): every shop at least this often while it lasts.
+        fast = WorkerState.fast_read_minutes(finished)
+        if fast:
+            minutes = min(minutes, fast)
+        interval = (since or finished) + timedelta(minutes=minutes)
         return max(interval, finished + timedelta(minutes=3 * (seconds or 0) / 60))
 
     def read_ok(self, now, seconds, ok_at=None, since=None):
@@ -1875,6 +1880,10 @@ class WorkerState(models.Model):
     in_flight = models.JSONField(default=list, blank=True)
     # When each owner notice was last sent, {subject: iso time}, so one is sent at most once a day.
     notices = models.JSONField(default=dict, blank=True)
+    # A drop day (the Crawl health page): until this moment every shop is read at least every fast_minutes, so new
+    # listings and stock show within minutes; after it each shop's own schedule applies again.
+    fast_until = models.DateTimeField("faster reads until", null=True, blank=True)
+    fast_minutes = models.PositiveSmallIntegerField("faster reads every (minutes)", default=15)
 
     class Meta:
         verbose_name = "background reader"
@@ -1896,6 +1905,12 @@ class WorkerState(models.Model):
         """True while the heartbeat is younger than ``STALE_AFTER``."""
         now = now or timezone.now()
         return self.heartbeat_at is not None and now - self.heartbeat_at < self.STALE_AFTER
+
+    @classmethod
+    def fast_read_minutes(cls, now=None):
+        """The minutes every shop is read at least every while a drop day is on (fast_until ahead of ``now``), else 0."""
+        now = now or timezone.now()
+        return cls.objects.filter(pk=1, fast_until__gt=now).values_list("fast_minutes", flat=True).first() or 0
 
     @classmethod
     def beating_within(cls, minutes, now=None):

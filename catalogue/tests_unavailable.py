@@ -3,10 +3,12 @@ kept for the shop's VIP members, a page that calls an "in stock" product a pre-o
 description_says_preorder). The owner, 6 Nov 2026, with each shown as stock on the site: "pre-orders that are
 closed, raffles closed: otherwise we're advertising old stuff"."""
 
+import json
 from decimal import Decimal
 
 from django.test import TestCase
 
+from . import probe
 from .importers import Offer, apply_offers, closed_reason, description_says_preorder, product_offers
 from .models import Listing, Retailer
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
@@ -87,3 +89,42 @@ class ReadTests(TestCase):
                                        product_pk=self.box.pk)])
         listing.refresh_from_db()
         self.assertEqual(listing.availability, Listing.Availability.LOTTERY)
+
+
+
+class ProbeTests(TestCase):
+    """The ten-minute stock probe (probe.ask, /products/<handle>.js) reads the page's own words as a shop read does.
+    It once put Eclipse's VIP-only Delta Reign ETB back in stock after every hourly read took it out: the owner,
+    6 Nov 2026, "VIP product is back messing up listings"."""
+
+    def setUp(self):
+        self.etb = make_product(make_set(make_game(), name="Delta Reign", slug="delta-reign"),
+                                name="Delta Reign Elite Trainer Box", slug="delta-etb", product_type="elite_trainer_box")
+        self.shop = make_retailer("Eclipse Cards", source_type=Retailer.Source.SHOPIFY,
+                                  source_url="https://eclipse.example/", delivery_cost=Decimal("4.99"))
+        self.listing = make_listing(self.etb, self.shop, price="49.99", url="https://eclipse.example/products/delta-etb",
+                                    availability=Listing.Availability.OUT_OF_STOCK)
+
+    def ask(self, description, tags=()):
+        answer = {"title": "Pokémon TCG: Mega Evolution—Delta Reign Elite Trainer Box", "tags": list(tags),
+                  "description": description, "variants": [{"id": 1, "price": 4999, "available": True}]}
+        return probe.ask(self.listing, fetch=lambda url: json.dumps(answer).encode())
+
+    def test_a_members_only_box_stays_out_of_stock_though_the_shop_says_available(self):
+        result = self.ask("<p>Coming Soon – VIP Exclusive</p><p>This product will initially be available exclusively "
+                          "to qualifying Eclipse Cards VIP customers.</p>")
+        self.assertEqual(result, (Decimal("49.99"), Listing.Availability.OUT_OF_STOCK))
+        # Saving it is no restock, so no "Back in stock" row and no alert email.
+        self.assertEqual(probe.record_probe(self.listing, result), "same")
+        self.assertEqual(Listing.objects.get(pk=self.listing.pk).availability, Listing.Availability.OUT_OF_STOCK)
+
+    def test_a_closed_draw_and_a_page_calling_the_product_a_pre_order_read_the_same(self):
+        self.assertEqual(self.ask("<h2>This raffle is closed.</h2>", tags=("Raffle",))[1], Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(self.ask("<p>Enter now for a chance to win.</p>", tags=("Raffle",))[1], Listing.Availability.LOTTERY)
+        self.assertEqual(self.ask("<p>This is a pre-order product with a 14th November release date.</p>")[1],
+                         Listing.Availability.PREORDER)
+        # Plain words, and an answer with no description at all: in stock, as before.
+        self.assertEqual(self.ask("<p>9 booster packs and a promo card.</p>")[1], Listing.Availability.IN_STOCK)
+        answer = {"title": "Delta Reign Elite Trainer Box", "tags": [], "variants": [{"id": 1, "price": 4999, "available": True}]}
+        self.assertEqual(probe.ask(self.listing, fetch=lambda url: json.dumps(answer).encode())[1],
+                         Listing.Availability.IN_STOCK)

@@ -91,12 +91,19 @@ def ask(listing, fetch=None, today=None):
             return None
         if not available:
             return price, Listing.Availability.OUT_OF_STOCK
-        # As a shop read does: an open draw is not stock.
+        # As a shop read does (importers.Offer): the page's own words win over its button. A draw that has
+        # closed, or a product kept for the shop's members, cannot be bought today (closed_reason); the probe
+        # once put such a box back in stock every ten minutes after each hourly read took it out. The owner,
+        # 6 Nov 2026, with Eclipse's VIP-only Delta Reign ETB: "VIP product is back messing up listings".
+        description = importers.clean_description(data.get("description")) if "description" in data else ""
+        if importers.closed_reason(description):
+            return price, Listing.Availability.OUT_OF_STOCK
+        # An open draw is not stock.
         if importers.says_lottery(data.get("title", ""), data.get("tags") or ()):
             return price, Listing.Availability.LOTTERY
-        # As a shop read does: a product whose own title or tags say pre-order is a pre-order while
-        # available, so a probe never turns a newly opened pre-order into stock and a restock.
-        if importers.says_preorder(data):
+        # A product whose own title, tags or description say pre-order is a pre-order while available, so a
+        # probe never turns a newly opened pre-order into stock and a restock.
+        if importers.says_preorder(data) or importers.description_says_preorder(description):
             return price, Listing.Availability.PREORDER
         return price, settle_preorder(listing, Listing.Availability.IN_STOCK, today)
     if listing.retailer.session_url and fetch is importers.fetch:

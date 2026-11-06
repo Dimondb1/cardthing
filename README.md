@@ -1346,7 +1346,12 @@ a pre-order ("this is a pre-order product") makes an "in stock" listing a
 pre-order. "Pre-order now" or "pre-order bonus" in passing does not. The
 owner, 6 Nov 2026, with a closed raffle and a VIP-only box shown as stock:
 "otherwise we're advertising old stuff". A listing already wrong is put
-right at the shop's next read.
+right at the shop's next read. The ten-minute stock probe (`probe.ask`,
+`/products/<handle>.js`, which carries the description too) reads the same
+words, so it never puts such a listing back in stock between reads: for a
+day it did, every ten minutes after each hourly read took Eclipse's
+VIP-only Delta Reign ETB out. The owner, 6 Nov 2026: "VIP product is back
+messing up listings".
 
 A listing for one variant of a Shopify product (an address
 ending `?variant=...`, for example a case rather than a box) takes that

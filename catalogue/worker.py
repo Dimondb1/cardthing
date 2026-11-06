@@ -89,6 +89,12 @@ WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, "cold": 10, PULSE: 300, FIN
 # eBay's listings of the products nobody is looking at are still checked this often through the bulk item lookup:
 # cheap (twenty a request), and an eBay price otherwise waits a day for the next daily run.
 EBAY_EVERY = timedelta(hours=6)
+# eBay listings on the products people are looking at are checked less often than a shop's: every lookup is one of
+# the day's 5,000, twenty listings at a time, and ten-minute checks of the busiest ran the allowance out by early
+# afternoon on 6 Nov 2026 (eBay then answered 429). Half an hour for the hot tier, two hours for the warm, six for
+# the rest keeps a day's checks a fraction of it.
+EBAY_HOT_EVERY = timedelta(minutes=30)
+EBAY_WARM_EVERY = timedelta(hours=2)
 # A shop never read before has no next read; it counts as an hour overdue.
 NEVER_READ_MINUTES = 60
 
@@ -529,13 +535,15 @@ class Worker:
         warm += hot[heat.HOT_CAP:]
         hot = hot[:heat.HOT_CAP]
         by_shop = {}
+        ebay_every = {"hot": EBAY_HOT_EVERY, "warm": EBAY_WARM_EVERY, "cold": EBAY_EVERY}
         for tier, every, items in (("hot", heat.HOT_EVERY, hot), ("warm", heat.WARM_EVERY, warm), ("cold", EBAY_EVERY, cold)):
             for _points, (pk, _product, retailer_id, source_type, name, checked, _url) in items:
-                overdue = now - checked - every
+                wait = ebay_every[tier] if source_type == Retailer.Source.EBAY else every
+                overdue = now - checked - wait
                 if overdue < timedelta(0):
                     continue
                 failed = failed_at.get(pk)
-                if failed is not None and now - failed < every:
+                if failed is not None and now - failed < wait:
                     continue
                 by_shop.setdefault(retailer_id, (source_type, name, []))[2].append((tier, checked, overdue, pk))
         tasks = []

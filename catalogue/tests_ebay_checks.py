@@ -3,6 +3,7 @@ matter every ten minutes or every hour, like any shop's, through eBay's bulk ite
 a price "checked at eBay 20 hours ago": "I want users to know they are getting the latest prices. 20 hours ago
 isn't good enough. If the eBay API times out then we need another way."."""
 
+import time
 from datetime import timedelta
 from decimal import Decimal
 
@@ -146,6 +147,53 @@ class CheckTests(WorkerTestCase):
         self.assertGreater(self.row.last_checked, now - timedelta(minutes=1))   # checked now, as a probe records it
         self.ebay.refresh_from_db()
         self.assertIsNone(self.ebay.backoff_until)
+
+    def test_a_429_from_the_lookup_is_the_allowance_used_not_ebay_failing(self):
+        # The owner, 6 Nov 2026, with eBay "backing off until 13:49" on Crawl health after one: "That's the eBay failure".
+        refused = ('eBay API 429: {"errors": [{"errorId": 2001, "domain": "ACCESS", "category": "REQUEST", '
+                   '"message": "Too many requests."}]}')
+        api = FakeEbay([item(123)], fail=refused)
+        reader = self.make_worker(ebay_request=api)
+        [task] = reader.plan(self.clock())
+        now = self.clock()
+        reader.run_job(worker.Job(task, now, now + worker.PROBE_DEADLINE))
+        self.ebay.refresh_from_db()
+        self.assertIsNone(self.ebay.backoff_until)      # not a failed read: the daily search run is not delayed
+        self.assertEqual(reader.plan(self.clock()), [])  # the listing waits
+        # The checks wait BULK_PAUSE without asking eBay, then ask its counter again and go on if there is room.
+        api.fail = None
+        base = time.monotonic()
+        ticks = [0.0]
+        counter_asks = lambda: len([url for url in api.calls if url.startswith(ebay.LIMITS_URL)])   # noqa: E731
+        asked = counter_asks()
+        with self.assertRaises(ebay.AllowanceUsed):
+            ebay.check_listings([self.row], request=api, clock=lambda: base + ticks[0], pause=0, sleep=lambda s: None)
+        self.assertEqual(counter_asks(), asked)
+        ticks[0] = ebay.BULK_PAUSE + 1
+        found = ebay.check_listings([self.row], request=api, clock=lambda: base + ticks[0], pause=0, sleep=lambda s: None)
+        self.assertEqual(set(found), {self.row.pk})
+        self.assertEqual(counter_asks(), asked + 1)
+
+    def test_ebays_counter_is_asked_again_after_a_hundred_lookups_not_only_hourly(self):
+        api = FakeEbay([item(123)])
+        self.check(api)
+        asked = len([url for url in api.calls if url.startswith(ebay.LIMITS_URL)])
+        for _n in range(ebay.ALLOWANCE_ASK_SPEND - 1):
+            ebay.spend_bulk()     # what the daily run's refresh and the title filler count as they go
+        self.check(api)
+        self.assertEqual(len([url for url in api.calls if url.startswith(ebay.LIMITS_URL)]), asked + 1)
+
+    def test_an_ebay_listing_people_look_at_is_checked_every_half_hour_not_every_ten_minutes(self):
+        api = FakeEbay([item(123)])
+        reader = self.make_worker(ebay_request=api)
+        [task] = reader.plan(self.clock())
+        now = self.clock()
+        reader.run_job(worker.Job(task, now, now + worker.PROBE_DEADLINE))
+        self.clock.advance(minutes=15)
+        self.assertEqual(reader.plan(self.clock()), [])   # a shop's hot listing would be due again by now
+        self.clock.advance(minutes=16)
+        [task] = reader.plan(self.clock())
+        self.assertEqual(task.listings, [self.row.pk])
 
     def test_ebay_not_answering_backs_it_off_and_a_used_allowance_only_makes_the_listings_wait(self):
         api = FakeEbay([item(123)], fail="eBay API 503: Service Unavailable")

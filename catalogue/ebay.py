@@ -67,7 +67,14 @@ RUN_SECONDS = 45 * 60
 BULK_KEEP_BACK = 400
 TOKEN_LIFE = 90 * 60
 ALLOWANCE_ASK_EVERY = 60 * 60
-_live = {"token": "", "token_until": 0.0, "bulk_left": None, "bulk_asked": None}
+# eBay's counter is asked again after this many lookups counted down as well, so what other runs spend (the daily
+# run's refresh, the title filler in the hourly tidy) cannot put the count far out for an hour.
+ALLOWANCE_ASK_SPEND = 100
+# A 429 from the lookup is eBay's own counter saying no, whatever ours said: the checks wait this long, then ask
+# eBay's counter again and go on only if it says there is room. The owner, 6 Nov 2026, with eBay "backing off" on
+# Crawl health after one: "That's the eBay failure".
+BULK_PAUSE = 10 * 60
+_live = {"token": "", "token_until": 0.0, "bulk_left": None, "bulk_asked": None, "bulk_spent": 0}
 
 
 def forget_live():
@@ -130,15 +137,24 @@ def bulk_allowance(headers, request=None, clock=None):
     between asks (spend_bulk). None when eBay does not say."""
     clock = clock or time.monotonic
     asked = _live["bulk_asked"]
-    if asked is None or clock() - asked >= ALLOWANCE_ASK_EVERY:
+    if asked is None or clock() - asked >= ALLOWANCE_ASK_EVERY or _live["bulk_spent"] >= ALLOWANCE_ASK_SPEND:
         _searches, bulk, _reset = allowances(headers, request=request)
-        _live.update(bulk_left=bulk, bulk_asked=clock())
+        _live.update(bulk_left=bulk, bulk_asked=clock(), bulk_spent=0)
     return _live["bulk_left"]
 
 
 def spend_bulk():
+    """One bulk lookup made, by any run in this process: counted down from what eBay last said was left."""
+    _live["bulk_spent"] += 1
     if _live["bulk_left"] is not None:
         _live["bulk_left"] -= 1
+
+
+def bulk_refused(clock=None):
+    """eBay answered a bulk lookup with 429: nothing is left as far as it is concerned. The checks wait BULK_PAUSE
+    (AllowanceUsed), then ask eBay's counter again."""
+    clock = clock or time.monotonic
+    _live.update(bulk_left=0, bulk_asked=clock() - ALLOWANCE_ASK_EVERY + BULK_PAUSE, bulk_spent=0)
 
 
 def check_listings(listings, request=None, clock=None, pause=None, sleep=None, stop=None):
@@ -194,6 +210,12 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
                     gone(batch[0])
                     done += 1
                 continue
+            if "429" in str(exc):
+                # eBay's counter says no: keep what was found, and the rest wait (bulk_refused). Not a failed read,
+                # so eBay is not backed off and its daily search run is not delayed.
+                logger.warning("eBay: the item lookup was refused (%s); the checks wait %d minutes", exc, BULK_PAUSE // 60)
+                bulk_refused(clock)
+                break
             raise
         spend_bulk()
         done += 1
@@ -378,6 +400,7 @@ def fill_titles(request=None, pause=None):
         batch = batches.pop(0)
         try:
             answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
+            spend_bulk()
         except EbayError as exc:
             if ("11001" in str(exc) or "404" in str(exc)) and len(batch) > 1:
                 batches[:0] = [[item_id] for item_id in batch]   # one ended listing refuses the batch
@@ -671,6 +694,7 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
             try:
                 answer = request(ITEMS_URL + "?item_ids=" + ",".join(batch), headers)
             except EbayError as exc:
+                spend_bulk()
                 if bulk_left is not None:
                     bulk_left -= 1
                 if "11001" in str(exc) or "404" in str(exc):
@@ -688,6 +712,7 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
                     logger.warning("eBay: bulk lookup failed, keeping what was found: %s", exc)
                 break
             done += 1
+            spend_bulk()
             if bulk_left is not None:
                 bulk_left -= 1
             found = set()

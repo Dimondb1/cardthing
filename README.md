@@ -2062,14 +2062,24 @@ that keeps prices fresh all day:
   or at a shop being read, is skipped. Feed shops and Amazon are never
   asked about single listings. eBay's are, through its bulk item lookup
   (`ebay.check_listings`, twenty a request, up to a hundred a job): the
-  item's price, postage and whether it is still live, so a price from eBay
-  is as fresh as any shop's for the products people are looking at, and
-  every six hours for the rest, so no eBay price waits a day for the next
-  daily run (the owner, 6 Nov 2026: "20 hours ago isn't good enough"). The lookup's own
-  daily allowance is asked about hourly and counted down, and 400 of it
-  are left for the daily run; when it is down to that the listings wait for
-  the reset, with no back-off, so the daily read is not delayed. eBay not
-  answering backs it off like a failed read. An ended listing, or one whose
+  item's price, postage and whether it is still live, so no eBay price
+  waits a day for the next daily run (the owner, 6 Nov 2026: "20 hours ago
+  isn't good enough"). eBay's listings keep their own, slower cadence than
+  a shop's, since every lookup is one of the day's 5,000: every half hour
+  for the products people are looking at, every two hours for the warm
+  tier and every six for the rest (`EBAY_HOT_EVERY`, `EBAY_WARM_EVERY`,
+  `EBAY_EVERY`). Ten-minute checks of the busiest ran the allowance out by
+  early afternoon on 6 Nov 2026. The lookup's own daily allowance is asked
+  about hourly, and again after every hundred lookups counted down in the
+  process (the daily run's refresh and the title filler count theirs too),
+  and 400 of it are left for the daily run; when it is down to that the
+  listings wait for the reset, with no back-off, so the daily read is not
+  delayed. A 429 from the lookup is eBay's own counter saying no, whatever
+  ours said: what was found is kept, the checks wait ten minutes
+  (`BULK_PAUSE`) and then ask eBay's counter again, and eBay is not backed
+  off (the owner, 6 Nov 2026, with "backing off until 13:49" on Crawl
+  health: "That's the eBay failure"). eBay not answering at all backs it
+  off like a failed read. An ended listing, or one whose
   seller or postage no longer passes, is out of stock at its last price
   until the daily run searches again.
 - **The pre-order pulse** for each Shopify shop every 15 minutes (see

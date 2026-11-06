@@ -1193,13 +1193,16 @@ def game_detail(request, game_slug):
     # counts only Korean products in stock.
     in_view = apply_languages(Product.objects.active().filter(game=game), [request.GET.get("lang", "")])
     kind = request.GET.get("type", "")
-    kind = kind if kind in Product.Type.values else ""
-    if kind:
+    kind = kind if kind in Product.Type.values or kind == feed.ALL else ""
+    if kind in Product.Type.values:
         in_view = in_view.filter(product_type=kind)
     # The set chosen (?set=, the picker on a type's list below): the list is that set's alone. A set with none of
-    # the type in view is honoured all the same, so the chip says why the list is empty and clears it.
+    # the type in view is honoured all the same, so the chip says why the list is empty and clears it. A set on its
+    # own (no type) is the whole set: the All types tile (feed.ALL).
     asked_set = request.GET.get("set", "")
     chosen_set = ProductSet.objects.filter(game=game, slug=asked_set).first() if asked_set else None
+    if chosen_set is not None and not kind:
+        kind = feed.ALL
     sets = []
     if not pane:
         stocked = (in_view.in_stock().filter(product_set=OuterRef("pk")).order_by().values("product_set")
@@ -1248,7 +1251,8 @@ def game_detail(request, game_slug):
             "canonical_url": page_url,
             "coming_soon": coming_soon_sets(game),
             # With the new home page on (web/look.py), the game's page leads with the feed's top (web/feed.py).
-            "feed": (feed.context(request, game, kind=kind, keep={"set": chosen_set.slug} if chosen_set else None)
+            "feed": (feed.context(request, game, kind=kind, keep={"set": chosen_set.slug} if chosen_set else None,
+                                  list_title=chosen_set.name if chosen_set and kind == feed.ALL else "")
                      if feed_on else None),
             "chosen_set": chosen_set, "set_options": set_options, "set_clear_url": set_clear_url,
         },

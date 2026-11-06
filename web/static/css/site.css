@@ -2282,6 +2282,9 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-tile__well .product-image { display: block; width: var(--feed-tile); height: var(--feed-tile); line-height: 0; }
 .feed-tile__well img, .feed-card__well img { display: block; width: 100%; height: 100%; padding: var(--feed-image-inset); object-fit: contain; mix-blend-mode: multiply; }
 .feed-tile__label { font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); text-align: center; }
+/* The All types tile at the start of a game's row: the four tiles icon in place of a picture. */
+.feed-tile__icon { width: var(--feed-tile-icon); height: var(--feed-tile-icon); color: var(--color-ink); }
+.feed--filtered .feed-tile__icon { width: var(--feed-tile-mini-image); height: var(--feed-tile-mini-image); }
 /* Filtered to a type (a tile tapped): the chosen tile wears a ring, the row sticks to the top over the list, and the rails
    dim the moment the tap lands (browse.js marks the region busy) before the list takes their place. */
 .feed-tile__link[aria-current="page"] .feed-tile__well { box-shadow: inset 0 0 0 var(--feed-ring) var(--color-brand); }

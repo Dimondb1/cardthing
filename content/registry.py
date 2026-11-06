@@ -464,6 +464,9 @@ ENTRIES = [
           "Under the heading on the new home page and a game's page."),
     Entry("feed.tiles.label", T, "New home page tiles label", "Browse by product",
           "Read out for the row of product type tiles on the new home page; not shown."),
+    Entry("feed.tiles.all", T, "New home page: the All types tile on a game's page", "All types",
+          "The first tile of a game's row: opens the game's whole list, where a set can be picked on its own. Two "
+          "short words."),
     Entry("feed.rail.deals", H, "New home page rail: Today's best deals", "Today's best deals",
           "Heading of the first row of products: the deals with evidence on the most popular products (clicks through "
           "to shops this week), the strongest first among equals. Nothing is measured against an RRP."),

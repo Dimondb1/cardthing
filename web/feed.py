@@ -39,6 +39,7 @@ TILES_SECONDS = 60 * 60
 RAIL_SIZE = 12         # cards shown on a rail
 RAIL_SPARES = 12       # more behind the home page's rails, hidden, for interest.js to bring the visitor's games forward
 TILES_SHOWN = 8
+ALL = "all"            # the first tile on a game's page: every type at once, so a set can be picked on its own
 # The game bar's order: All first, then these by name, then the rest by size. Each game's icon in the sprite
 # (web/templates/web/includes/feed_sprite.svg) is matched on its slug, so a renamed game keeps its icon.
 BAR_ORDER = ("pokemon", "magic", "one-piece", "lorcana", "yu-gi-oh", "sports", "star-wars", "riftbound", "digimon",
@@ -102,25 +103,31 @@ def tile_picks(fresh=False):
     return picks
 
 
-def tiles(game=None, current="", keep=None):
+def tiles(game=None, current="", keep=None, all_label=""):
     """The product type tiles for ``game`` (or every game): TILES_SHOWN at most, each pictured by a real product and
-    opening the list of that type. With ``current`` (the type the list is filtered to) that tile is marked and leads
-    back to the unfiltered page, so a second tap clears the filter. ``keep`` is a dict of parameters every tile's
-    link carries on (the set chosen on a game's page). One query for the products."""
+    opening the list of that type. A game's row leads with an All types tile (ALL, no picture: the four tiles icon),
+    which opens the whole list, where a set can be picked on its own (the owner, 6 Nov 2026: "select all and then
+    set, as if I wanted to find all the Delta Reign stuff available"). With ``current`` (the type the list is
+    filtered to) that tile is marked and leads back out: to the page unfiltered, or, with a set kept, to all of that
+    set. ``keep`` is a dict of parameters every tile's link carries on (the set). One query for the products."""
     picks = tile_picks()
     rows = picks["games"].get(game.pk, []) if game is not None else picks["all"]
     rows = [row for row in rows if row[0] in TYPE_LABELS][:TILES_SHOWN]
     products = Product.objects.active().in_bulk([pk for _kind, pk, _n in rows]) if rows else {}
     base = game.get_absolute_url() if game is not None else reverse("web:search")
     clear = game.get_absolute_url() if game is not None else reverse("web:home")
-    carried = "&" + urlencode({key: value for key, value in (keep or {}).items() if value}) if keep else ""
+    kept = {key: value for key, value in (keep or {}).items() if value}
+    carried = "&" + urlencode(kept) if kept else ""
+    out_of_type = f"{base}?type={ALL}{carried}" if kept and game is not None else clear
     found = []
+    if game is not None:
+        found.append(Tile(ALL, all_label, None, clear if current == ALL else f"{base}?type={ALL}{carried}", current == ALL))
     for kind, pk, _n in rows:
         product = products.get(pk)
         if product is None:
             continue
         chosen = kind == current
-        found.append(Tile(kind, TYPE_LABELS[kind], product, clear if chosen else f"{base}?type={kind}{carried}", chosen))
+        found.append(Tile(kind, TYPE_LABELS[kind], product, out_of_type if chosen else f"{base}?type={kind}{carried}", chosen))
     return found
 
 
@@ -233,15 +240,16 @@ def games_bar(games=None):
              "url": game.get_absolute_url()} for game in games]
 
 
-def context(request, game=None, kind="", keep=None):
+def context(request, game=None, kind="", keep=None, list_title=""):
     """Everything the feed's templates show for the home page (``game`` None), a game's page, or, with ``kind`` a
-    product type, the list filtered to that type: then only the tiles show, the chosen one marked and the row stuck
-    to the top, and the list sits right under them with the type as its heading, so the feed's title is left out.
+    product type (or ALL on a game's page), the list filtered to that type: then only the tiles show, the chosen one
+    marked and the row stuck to the top, and the list sits right under them with the type as its heading (or
+    ``list_title``: the set's name, when a set alone narrows a game's whole list), so the feed's title is left out.
     ``keep`` as for tiles()."""
     from web import views
 
     store = copy.for_request(request)
-    filtered = kind in TYPE_LABELS
+    filtered = kind in TYPE_LABELS or (kind == ALL and game is not None)
     if filtered:
         shown, spares, deal_rows, deal_spares = [], [], [], []
     else:
@@ -260,11 +268,13 @@ def context(request, game=None, kind="", keep=None):
     return {
         "game": game, "show_game": game is None, "title": title, "show_title": not filtered,
         # Filtered to a type: the list's heading is the tile's label, and Clear leads back to the page unfiltered.
-        "filtered": filtered, "kind": kind if filtered else "", "list_title": TYPE_LABELS.get(kind, ""),
+        "filtered": filtered, "kind": kind if filtered else "",
+        "list_title": list_title or (copy.get("browse.all.title", store=store) if kind == ALL else TYPE_LABELS.get(kind, "")),
         # The two quiet hints the first visits get (feed.js): only the home page, unfiltered, has them in its markup.
         "hints": game is None and not filtered,
         "clear_url": game.get_absolute_url() if game is not None else reverse("web:home"),
-        "tiles": tiles(game, current=kind, keep=keep), "rail": shown, "rail_spares": spares,
+        "tiles": tiles(game, current=kind, keep=keep, all_label=copy.get("feed.tiles.all", store=store)),
+        "rail": shown, "rail_spares": spares,
         "rail_title": copy.get("feed.rail.deals", store=store), "rail_url": rail_url,
         "deals": deal_rows, "deals_spares": deal_spares,
         "deals_paying_only": FeaturedSettings.current().paying_only if deal_rows else False,

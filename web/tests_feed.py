@@ -387,7 +387,7 @@ class HomeFeedTests(FeedCase):
         self.assertIn('<h2 class="browse-head__title">Pokémon</h2>', html)   # the usual list below: one h1 a page
         self.assertEqual(html.count("<h1"), 1)
         tiles = re.findall(r'<li class="feed-tile"><a class="feed-tile__link" href="([^"]+)" data-browse-link>', html)
-        self.assertEqual(tiles, [f"{url}?type=booster_box", f"{url}?type=bundle", f"{url}?type=elite_trainer_box",
+        self.assertEqual(tiles, [f"{url}?type=all", f"{url}?type=booster_box", f"{url}?type=bundle", f"{url}?type=elite_trainer_box",
                                  f"{url}?type=tin"])   # one of each in stock (the drop is on pre-order), so by type
         # The game's own deals, the most clicked first, each saying why, no game label.
         self.assertEqual(rail_title(html), "Today&#x27;s best deals")
@@ -564,7 +564,8 @@ class TypeTileTests(FeedCase):
         self.assertNotIn(self.drop.get_absolute_url(), listed)
         self.assertEqual(html.count('<input type="hidden" name="set" value="surging-sparks">'), 2)
         self.assertIn(f'<a class="feed-tile__link" href="{url}?type=bundle&amp;set=surging-sparks" data-browse-link>', html)
-        self.assertIn(f'<a class="feed-tile__link" href="{url}" data-browse-link aria-current="page">', html)
+        # The chosen tile leads out of the type but keeps the set: all of it.
+        self.assertIn(f'<a class="feed-tile__link" href="{url}?type=all&amp;set=surging-sparks" data-browse-link aria-current="page">', html)
         # A tab fetched on its own keeps to the set too.
         pane = self.page(url, type="booster_box", set="surging-sparks", pane=1)
         self.assertIn(self.box.get_absolute_url(), pane)
@@ -591,6 +592,46 @@ class TypeTileTests(FeedCase):
         # The unfiltered page keeps its row of sets, and the search page, across games, offers no picker.
         self.assertIn('<nav class="set-nav"', self.page(url))
         self.assertNotIn("feed-set", self.page(reverse("web:search"), type="booster_box"))
+
+    def test_an_all_types_tile_opens_the_whole_list_so_a_set_can_be_picked_on_its_own(self):
+        # The owner, 6 Nov 2026: "you should be able to select all and then set, as if I wanted to find all the
+        # Delta Reign stuff available".
+        url = self.pokemon.get_absolute_url()
+        html = self.page(url)
+        self.assertIn(f'<li class="feed-tile"><a class="feed-tile__link" href="{url}?type=all" data-browse-link><span class="feed-tile__well" '
+                      'aria-hidden="true"><svg class="feed-ic feed-tile__icon" aria-hidden="true" focusable="false"><use href="#rr-game-all"/>'
+                      '</svg></span><span class="feed-tile__label">All types</span></a></li>', html)
+        self.assertNotIn("?type=all", self.page())   # the home page's tiles have no such tile: no set to pick across games
+        # All types: the whole list under the tiles, the Set picker offering every set with products, and the tile marked.
+        html = self.page(url, type="all")
+        self.assertIn('<div class="feed feed--filtered">', html)
+        self.assertIn('<h1 class="browse-head__title">All products</h1>', html)
+        self.assertIn('<p class="browse-head__count" role="status">5 products</p>', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}" data-browse-link aria-current="page">', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}?type=booster_box" data-browse-link>', html)
+        row = html[html.index('<div class="feed-filters">'):html.index("</div>\n</div>", html.index('<div class="feed-filters">'))]
+        self.assertEqual(re.findall(r'<li><a href="([^"]+)">([^<]+)<span', row), [   # the clicked sets first, then the newest
+            ("?type=all&amp;set=surging-sparks", "Surging Sparks"), ("?type=all&amp;set=prismatic-evolutions", "Prismatic Evolutions"),
+            ("?type=all&amp;set=mega-evolution", "Mega Evolution")])
+        self.assertNotIn("feed-rail-title", html)
+        # A set on its own is the whole set, headed by its name; the sort keeps it, the tiles narrow it by type.
+        html = self.page(url, set="prismatic-evolutions")
+        self.assertIn('<h1 class="browse-head__title">Prismatic Evolutions</h1>', html)
+        self.assertIn('<p class="browse-head__count" role="status">3 products</p>', html)
+        self.assertIn('aria-current="true">Prismatic Evolutions<span class="chip__off"', html)
+        self.assertIn('<input type="hidden" name="type" value="all">', html)
+        self.assertIn('<input type="hidden" name="set" value="prismatic-evolutions">', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}" data-browse-link aria-current="page">', html)   # All types, chosen
+        self.assertIn(f'<a class="feed-tile__link" href="{url}?type=elite_trainer_box&amp;set=prismatic-evolutions" data-browse-link>', html)
+        listed = html[html.index("feed-list-head"):]
+        for product in (self.etb, self.bundle, self.tin):
+            self.assertIn(product.get_absolute_url(), listed)
+        self.assertNotIn(self.box.get_absolute_url(), listed)
+        # Then a type within the set, and back out of it to the whole set.
+        html = self.page(url, type="elite_trainer_box", set="prismatic-evolutions")
+        self.assertIn('<h1 class="browse-head__title">ETBs</h1>', html)
+        self.assertIn('<p class="browse-head__count" role="status">1 product</p>', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}?type=all&amp;set=prismatic-evolutions" data-browse-link aria-current="page">', html)
 
     def test_the_languages_a_list_holds_are_chips_ready_to_tap_and_the_rest_folds_under_filters(self):
         # The owner, 4 Nov 2026: "a filter button but smart filter like. Languages ready to tap could work. Less is

@@ -5141,7 +5141,11 @@ its products of the type are in stock, as links that narrow the list in
 place; with more than six sets a find box on top narrows them as you type
 (`feed.js`); the chosen set is a chip that clears it, and the sort, the
 filters and the type tiles keep it (the owner, 6 Nov 2026: "a dynamic way
-to filter by collection without overwhelming the page"); then the languages
+to filter by collection without overwhelming the page"). A game's row of
+tiles leads with an All types tile (`feed.ALL`, `?type=all`), which opens
+the game's whole list with the picker, so a set can be picked on its own
+(`?set=` alone means the same, headed by the set's name); a chosen type
+tile leads back out to all of the set. Then the languages
 the list holds as chips ready to tap (`views.language_chips`, one query) and
 a Filters pill that folds the price band and 2+ shops away. The feed's region is
 `data-browse`, so `browse.js` loads a tile's list in place (a sketch of the

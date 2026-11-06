@@ -6,7 +6,7 @@
   {# Each type pictured by a product of its kind the most shops sell, so the tile stays current; the whole tile opens that type's list, which browse.js loads in under the tiles (data-browse-link). Filtered to a type, the row sticks to the top and the chosen tile, marked, leads back out. #}
   <div class="feed__scroller feed__scroller--tiles">
     <ul class="feed__row feed__tiles" aria-label="{% copy 'feed.tiles.label' %}" data-loading="{% copy 'browse.tabs.loading' %}">
-      {% for tile in feed.tiles %}<li class="feed-tile"><a class="feed-tile__link" href="{{ tile.url }}" data-browse-link{% if tile.current %} aria-current="page"{% endif %}><span class="feed-tile__well" aria-hidden="true">{% product_image tile.product "tile" %}</span><span class="feed-tile__label">{{ tile.label }}</span></a></li>{% endfor %}
+      {% for tile in feed.tiles %}<li class="feed-tile"><a class="feed-tile__link" href="{{ tile.url }}" data-browse-link{% if tile.current %} aria-current="page"{% endif %}><span class="feed-tile__well" aria-hidden="true">{% if tile.product %}{% product_image tile.product "tile" %}{% else %}<svg class="feed-ic feed-tile__icon" aria-hidden="true" focusable="false"><use href="#rr-game-all"/></svg>{% endif %}</span><span class="feed-tile__label">{{ tile.label }}</span></a></li>{% endfor %}
     </ul>
     <button class="feed__more" type="button" hidden aria-label="{% copy 'feed.row.more' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button>
     {% if feed.hints %}<span class="feed-hint feed-hint--types" hidden aria-hidden="true">{% copy "feed.hint.types" %}</span>{% endif %}

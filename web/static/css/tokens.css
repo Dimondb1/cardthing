@@ -364,6 +364,7 @@
   --feed-image-inset: 0.25rem;     /* the breath between a picture and its well's edge */
   --feed-more: 2rem;               /* the arrow at the end of a row */
   --feed-spark: 1rem;              /* the fairy's spark on a lit pill or tile */
+  --feed-tile-icon: 2.25rem;       /* 36px: the All types tile's icon in its well */
   --feed-tile-mini: 2.25rem;       /* 36px: the tile's picture once a type is chosen and the row is a line of pills */
   --feed-tile-mini-image: 1.875rem;
   --feed-search: 3.25rem;          /* 52px: the search pill */

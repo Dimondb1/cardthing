@@ -4008,6 +4008,7 @@ def crawl_page(request):
         "all_paused": crawl.all_paused(state), "last_finished": insights.clock(last, now) if last else None,
         "shops": crawl.shops(now, state), "worker": crawl.worker_status(state, now), "hot": hot, "warm": warm,
         "fast": crawl.fast_read(state, now), "fast_minutes": crawl.FAST_MINUTES, "fast_hours": crawl.FAST_HOURS,
+        "ebay_usage": crawl.ebay_usage(state, now),
         # Whether a problem reaches the owner's phone, so a page with no way to set it up says so.
         "alerts": {"on": settings.RIPRAPTOR_CRAWL_PUSHES, "push": notify.can_push(), "email": notify.can_email()},
     }

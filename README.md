@@ -585,7 +585,11 @@ stays inside that; when the allowance is used up it stops and keeps what
 it found, and the hourly import tries again after the reset at 08:00 UK
 time. A product whose listing has gone is searched again and marked out
 of stock if nothing matches; products not reached in a run keep their
-last state.
+last state. Both allowances, as eBay last reported them, show on Crawl
+health as eBay today. A higher allowance is eBay's to grant, free, through
+its Application Growth Check on the developer site, once usage shows the
+need; a second developer account to double it breaks eBay's rules and
+risks the affiliate account with it.
 
 ## Real prices from UK shops
 
@@ -1983,6 +1987,13 @@ read and lets you change it with one tap, from a phone:
   early. **Read all** makes every shop that is not paused due at once and
   forgets its errors, as Read now does for one shop; paused shops stay
   paused and the message says how many.
+- **eBay today** says what eBay last said was left of the day's two
+  allowances, searches (which find products not yet on eBay) and item
+  lookups (which keep known listings fresh, twenty at a time), when it was
+  asked and when they reset (`WorkerState.ebay_usage`, written whenever a
+  run or a check asks eBay). The owner, 6 Nov 2026: "in the past we've
+  always exhausted it", which was the searches, one a product, against
+  thousands of products not yet looked up; the lookups were barely used.
 - **Pause all** stops every scheduled read and stock check until you tap
   **Resume all**: the background reader starts no new job (the ones
   running finish, and its heartbeat goes on), `import_prices --due` and
@@ -2047,8 +2058,9 @@ that keeps prices fresh all day:
   asked about single listings. eBay's are, through its bulk item lookup
   (`ebay.check_listings`, twenty a request, up to a hundred a job): the
   item's price, postage and whether it is still live, so a price from eBay
-  is as fresh as any shop's for the products people are looking at (the
-  owner, 6 Nov 2026: "20 hours ago isn't good enough"). The lookup's own
+  is as fresh as any shop's for the products people are looking at, and
+  every six hours for the rest, so no eBay price waits a day for the next
+  daily run (the owner, 6 Nov 2026: "20 hours ago isn't good enough"). The lookup's own
   daily allowance is asked about hourly and counted down, and 400 of it
   are left for the daily run; when it is down to that the listings wait for
   the reset, with no back-off, so the daily read is not delayed. eBay not

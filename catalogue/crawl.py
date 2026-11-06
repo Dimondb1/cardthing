@@ -62,6 +62,29 @@ FAST_MINUTES = (10, 15, 30)
 FAST_HOURS = (6, 12, 24)
 
 
+def ebay_usage(state=_UNREAD, now=None):
+    """What eBay last said was left of the day's allowances, for the Crawl health page: {"searches", "lookups",
+    "asked", "reset"} with the words for when, or None before eBay has been asked. ``state`` as for all_paused."""
+    from datetime import datetime
+
+    if state is _UNREAD:
+        state = WorkerState.current()
+    usage = (state.ebay_usage if state is not None else None) or {}
+    if not usage.get("asked_at"):
+        return None
+    now = now or timezone.now()
+    try:
+        asked = clock(datetime.fromisoformat(usage["asked_at"]), now)
+    except ValueError:
+        asked = ""
+    reset = ""
+    try:
+        reset = clock(datetime.fromisoformat(usage["reset"].replace("Z", "+00:00")), now) if usage.get("reset") else ""
+    except ValueError:
+        reset = ""
+    return {"searches": usage.get("searches"), "lookups": usage.get("lookups"), "asked": asked, "reset": reset}
+
+
 def fast_read(state=_UNREAD, now=None):
     """{"minutes", "until"} while a drop day is on, else None. ``state`` as for all_paused."""
     if state is _UNREAD:

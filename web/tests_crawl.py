@@ -98,6 +98,20 @@ class CrawlPageTests(TestCase):
         self.shop.refresh_from_db()
         self.assertFalse(self.shop.reading_paused)
 
+    def test_the_page_says_what_ebay_last_said_was_left_of_the_days_allowances(self):
+        # The owner, 6 Nov 2026: "in the past we've always exhausted it".
+        self.assertNotContains(self.client.get(self.url), "eBay today")
+        WorkerState.objects.update_or_create(pk=1, defaults={"ebay_usage": {
+            "searches": 3870, "lookups": 4610, "reset": "2026-11-07T08:00:00.000Z",
+            "asked_at": (self.now - timedelta(minutes=12)).isoformat(),
+        }})
+        page = self.client.get(self.url)
+        self.assertContains(page, "eBay today, as of ")
+        self.assertContains(page, "3870 searches and 4610 item lookups left, resetting ")
+        self.assertContains(page, "Searches find products not yet on eBay; item lookups keep known listings fresh, twenty at a time.")
+        WorkerState.objects.filter(pk=1).update(ebay_usage={"searches": None, "lookups": 200, "reset": "", "asked_at": self.now.isoformat()})
+        self.assertContains(self.client.get(self.url), "searches not counted and 200 item lookups left.")
+
     def test_read_all_makes_every_scheduled_shop_due_now_and_leaves_paused_ones(self):
         # The owner, 6 Nov 2026: "a quick feature in admin Crawl health to read all".
         other = self.make_shop("Northgate Cards", next_read_at=self.now + timedelta(hours=2), error_streak=3,

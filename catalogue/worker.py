@@ -85,7 +85,10 @@ FINDER_KEY = 0
 RELEASE_KEY = -1
 # Reads go before every other job (plan). Among reads, and among the rest, priority is weight times minutes
 # overdue, so nothing waits for ever behind something heavier.
-WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, PULSE: 300, FINDER: 50, RELEASE_SCAN: 20}
+WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, "cold": 10, PULSE: 300, FINDER: 50, RELEASE_SCAN: 20}
+# eBay's listings of the products nobody is looking at are still checked this often through the bulk item lookup:
+# cheap (twenty a request), and an eBay price otherwise waits a day for the next daily run.
+EBAY_EVERY = timedelta(hours=6)
 # A shop never read before has no next read; it counts as an hour overdue.
 NEVER_READ_MINUTES = 60
 
@@ -510,7 +513,7 @@ class Worker:
             .filter(Q(retailer__backoff_until__isnull=True) | Q(retailer__backoff_until__lte=now))
             .values_list("pk", "product_id", "retailer_id", "retailer__source_type", "retailer__name", "last_checked", "url")
         )
-        hot, warm = [], []
+        hot, warm, cold = [], [], []
         for row in rows:
             # An eBay listing is checked through eBay's item lookup, which needs the item's id from its address.
             if row[3] == Retailer.Source.EBAY and not ebay.item_id_of(row[6]):
@@ -520,11 +523,13 @@ class Worker:
                 hot.append((points, row))
             elif points >= heat.WARM:
                 warm.append((points, row))
+            elif row[3] == Retailer.Source.EBAY:
+                cold.append((points, row))
         hot.sort(key=lambda item: (-item[0], item[1][5]))
         warm += hot[heat.HOT_CAP:]
         hot = hot[:heat.HOT_CAP]
         by_shop = {}
-        for tier, every, items in (("hot", heat.HOT_EVERY, hot), ("warm", heat.WARM_EVERY, warm)):
+        for tier, every, items in (("hot", heat.HOT_EVERY, hot), ("warm", heat.WARM_EVERY, warm), ("cold", EBAY_EVERY, cold)):
             for _points, (pk, _product, retailer_id, source_type, name, checked, _url) in items:
                 overdue = now - checked - every
                 if overdue < timedelta(0):

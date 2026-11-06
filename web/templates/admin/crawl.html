@@ -39,6 +39,7 @@
     {% endif %}
     <p>{% if last_finished %}The last read finished at {{ last_finished }}.{% else %}No read has finished yet.{% endif %}</p>
     <p class="note">Checked every ten minutes: {{ hot }} product{{ hot|pluralize }}. Every hour: {{ warm }} product{{ warm|pluralize }}. The rest are refreshed when their shop is read.</p>
+    {% if ebay_usage %}<p class="note" id="ebay-line">eBay today, as of {{ ebay_usage.asked }}: {% if ebay_usage.searches is not None %}{{ ebay_usage.searches }} searches{% else %}searches not counted{% endif %} and {% if ebay_usage.lookups is not None %}{{ ebay_usage.lookups }} item lookups{% else %}item lookups not counted{% endif %} left{% if ebay_usage.reset %}, resetting {{ ebay_usage.reset }}{% endif %}. Searches find products not yet on eBay; item lookups keep known listings fresh, twenty at a time.</p>{% endif %}
     {% if worker.known %}
     <p class="note">In the last hour: {{ worker.requests }} request{{ worker.requests|pluralize }} to shops, {{ worker.errors }} error{{ worker.errors|pluralize }}. Jobs done since {{ worker.started|default:"it started" }}: {{ worker.jobs_done }}{% if worker.last_job %}, the latest: {{ worker.last_job }}{% endif %}.</p>
     {% if worker.note %}<p class="note">Last restart: {{ worker.note }}</p>{% endif %}

@@ -232,7 +232,10 @@ def access_token(app, cert, request=None):
 
 
 def allowances(headers, request=None):
-    """(searches left today, bulk lookups left today, reset time) from eBay's own counter."""
+    """(searches left today, bulk lookups left today, reset time) from eBay's own counter, and remembered for the
+    Crawl health page (WorkerState.ebay_usage): the owner, 6 Nov 2026, "in the past we've always exhausted it"."""
+    from .models import WorkerState
+
     request = request or http
     answer = request(LIMITS_URL, headers)
     left = {"buy.browse": None, "buy.browse.item.bulk": None}
@@ -243,6 +246,13 @@ def allowances(headers, request=None):
                 if resource.get("name") in left:
                     left[resource["name"]] = rate.get("remaining")
                     reset = rate.get("reset", reset)
+    try:
+        WorkerState.objects.update_or_create(pk=1, defaults={"ebay_usage": {
+            "searches": left["buy.browse"], "lookups": left["buy.browse.item.bulk"], "reset": reset or "",
+            "asked_at": timezone.now().isoformat(),
+        }})
+    except Exception:  # noqa: BLE001 - the page's figures are a courtesy; a busy database must not stop a run
+        logger.warning("eBay: could not note the allowances for the Crawl health page")
     return left["buy.browse"], left["buy.browse.item.bulk"], reset
 
 

@@ -109,6 +109,30 @@ class CheckTests(WorkerTestCase):
         self.assertEqual(set(found), {self.row.pk, other.pk})   # one request covers both
         self.assertEqual(ebay._live["bulk_left"], ebay.BULK_KEEP_BACK)
 
+    def test_asking_ebay_about_the_allowances_notes_them_for_the_crawl_health_page(self):
+        from .models import WorkerState
+
+        api = FakeEbay([item(123)], bulk_left=4610)
+        self.check(api)
+        usage = WorkerState.current().ebay_usage
+        self.assertEqual((usage["searches"], usage["lookups"]), (4000, 4610))
+        self.assertTrue(usage["asked_at"])
+
+    def test_an_ebay_listing_nobody_is_looking_at_is_still_checked_every_six_hours(self):
+        box = self.product("cold-box")
+        self.listing(box, self.shop("Other Shop"), 5, price="21.00")   # two shops sell it and nobody looks: cold
+        cold = self.listing(box, self.ebay, 5 * 60, price="20.00", url="https://www.ebay.co.uk/itm/789")
+        reader = self.make_worker(ebay_request=FakeEbay([item(123), item(789, title="Cold Box", price="19.00", postage="0.00")]))
+        [task] = reader.plan(self.clock())
+        self.assertEqual(task.listings, [self.row.pk])   # the hot one; the cold one is not due for another hour
+        Listing.objects.filter(pk=cold.pk).update(last_checked=self.clock() - timedelta(hours=7))
+        [task] = reader.plan(self.clock())
+        self.assertEqual(task.listings, [self.row.pk, cold.pk])   # one job for eBay, the hot listing first
+        now = self.clock()
+        reader.run_job(worker.Job(task, now, now + worker.PROBE_DEADLINE))
+        cold.refresh_from_db()
+        self.assertEqual((cold.price, cold.availability), (Decimal("19.00"), Listing.Availability.IN_STOCK))
+
     def test_the_background_reader_checks_a_wanted_ebay_listing_and_records_what_it_found(self):
         api = FakeEbay([item(123, price="79.99", postage="2.99")])
         reader = self.make_worker(ebay_request=api)

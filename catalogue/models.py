@@ -1884,6 +1884,9 @@ class WorkerState(models.Model):
     # listings and stock show within minutes; after it each shop's own schedule applies again.
     fast_until = models.DateTimeField("faster reads until", null=True, blank=True)
     fast_minutes = models.PositiveSmallIntegerField("faster reads every (minutes)", default=15)
+    # What eBay last said was left of the day's allowances, {"searches", "lookups", "reset", "asked_at"}, written
+    # whenever a run or a check asks (ebay.allowances), for the Crawl health page.
+    ebay_usage = models.JSONField(default=dict, blank=True)
 
     class Meta:
         verbose_name = "background reader"

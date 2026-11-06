@@ -1256,6 +1256,12 @@ ENTRIES = [
         "Small label above the main price when no shop's delivery charge is known.",
     ),
     Entry(
+        "product.cheapest.label_stock", T, "Main price label (cheaper pre-order below)",
+        "Cheapest in stock",
+        "Small label above the main price when the price shown is the cheapest shop with stock and a cheaper "
+        "pre-order sits further down the list.",
+    ),
+    Entry(
         "product.cheapest.retailer", T, "Cheapest retailer",
         "at {retailer}",
         "Inside the Buy now button on a product page: the shop the button goes to.",
@@ -1651,6 +1657,13 @@ ENTRIES = [
         "product.compare.jump_note", T, "Compare prices button, shop count",
         "{count} shops, cheapest delivered first",
         "Small line inside the Compare prices button when two or more shops have a price.",
+        placeholders=("count",),
+    ),
+    Entry(
+        "product.compare.jump_note_mixed", T, "Compare prices button, shop count, in stock first",
+        "{count} shops, in stock first",
+        "The same line when a pre-order cheaper than the price shown sits further down the list: shops with stock "
+        "come first, then pre-orders, each cheapest delivered first.",
         placeholders=("count",),
     ),
     Entry(
@@ -3314,12 +3327,12 @@ ENTRIES = [
         placeholders=("product", "date"),
     ),
     Entry(
-        "meta.product.description_preorder_stock", T, "Product page description with a cheaper pre-order",
-        "{product} is on pre-order from {price} delivered at {retailer}, or in stock from {stock_price} at "
-        "{stock_retailer}. Compare {shops} with stock, delivery and when each price was checked.",
-        "Search engine description for product pages whose cheapest price is a pre-order while another shop "
-        "has it in stock. Cut to 160 characters at a whole sentence or word.",
-        placeholders=("product", "price", "retailer", "count", "shops", "stock_price", "stock_retailer"),
+        "meta.product.description_stock_preorder", T, "Product page description with a cheaper pre-order",
+        "Cheapest {product} in stock is {price} delivered at {retailer}, or on pre-order from {preorder_price} at "
+        "{preorder_retailer}. Compare {shops} with stock, delivery and when each price was checked.",
+        "Search engine description for product pages that lead with a shop's in-stock price while another shop "
+        "takes pre-orders for less. Cut to 160 characters at a whole sentence or word.",
+        placeholders=("product", "price", "retailer", "count", "shops", "preorder_price", "preorder_retailer"),
     ),
     Entry(
         "meta.watchlist.title", T, "Watchlist page title",

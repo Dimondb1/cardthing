@@ -26,7 +26,7 @@
       <span class="buybox__sweep" aria-hidden="true"></span>
       <div class="buybox__offer">
         <div class="buybox__top">
-          <p class="buybox__label">{% if cheapest.delivery_known %}{% copy "product.cheapest.label" %}{% else %}{% copy "product.cheapest.label_unknown" %}{% endif %}</p>
+          <p class="buybox__label">{% if not cheapest.delivery_known %}{% copy "product.cheapest.label_unknown" %}{% elif cheaper_preorder %}{% copy "product.cheapest.label_stock" %}{% else %}{% copy "product.cheapest.label" %}{% endif %}</p>
           <span class="buybox__badge">{% include "web/includes/badge.html" with explain=True gauge=fair %}</span>
         </div>
         <p class="buybox__price"><span class="buybox__amount"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span></span>{% if fair %}{% include "web/includes/fair_price.html" %}{% endif %}</p>
@@ -67,7 +67,7 @@
       {# A plain link to the price list, so it works without script; product.js scrolls there smoothly and moves focus. #}
       <a class="compare-jump" href="#offers-title" data-jump data-compare="buy_box">
         <span class="compare-jump__label">{% copy "product.compare.jump" %}<span class="compare-jump__arrow" aria-hidden="true">↓</span></span>
-        {% if shop_count > 1 %}<span class="compare-jump__note">{% copy "product.compare.jump_note" count=shop_count %}</span>{% elif shop_count %}<span class="compare-jump__note">{% copy "product.compare.one_shop" %}</span>{% endif %}
+        {% if shop_count > 1 %}<span class="compare-jump__note">{% if cheaper_preorder %}{% copy "product.compare.jump_note_mixed" count=shop_count %}{% else %}{% copy "product.compare.jump_note" count=shop_count %}{% endif %}</span>{% elif shop_count %}<span class="compare-jump__note">{% copy "product.compare.one_shop" %}</span>{% endif %}
       </a>
     {% endif %}
     {% if cheapest %}

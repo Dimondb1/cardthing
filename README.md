@@ -3685,6 +3685,19 @@ delivered first and no shop can pay to move up, with a How it works link
 that pay, and the Terms page explains how they are chosen. Product
 pages and their price order are unchanged.
 
+The product page leads with the cheapest shop that has the product in
+stock, as the cards and a post do: a cheaper pre-order follows in the
+list under its own Pre-order label. The owner, 6 Nov 2026, after a card
+showing a shop's in-stock price opened a page leading with a cheaper
+pre-order: "I want to click the one I just clicked on, otherwise it's
+confusing." With such a pre-order further down, the price label reads
+"Cheapest in stock" (`product.cheapest.label_stock`), the Compare prices
+line says "in stock first" (`product.compare.jump_note_mixed`), no row is
+marked Cheapest, and the search description names both prices
+(`meta.product.description_stock_preorder`). The Price check and the
+title quote the in-stock price. Only when no shop has it in stock does
+the cheapest pre-order lead, with the Pre-order button and Dropping soon.
+
 When no shop has a product in stock, the price box leads with "Compare on
 Amazon" and "Search eBay": a tagged Amazon search and an eBay UK search
 for new, buy it now listings carrying the eBay Partner Network campaign,

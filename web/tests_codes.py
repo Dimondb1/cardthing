@@ -200,14 +200,14 @@ class CodePageTests(TestCase):
         # A dearer pre-order beside a cheaper in-stock price: the quoted price is in stock.
         make_listing(self.box, self.other, price="120.00", availability=Listing.Availability.PREORDER)
         self.assertNotIn("pre-order", self.page(self.box)[1])
-        # A cheaper pre-order while another shop has it in stock: the product is out, so the title quotes the
-        # price without "pre-order" and the description says which is which.
+        # A cheaper pre-order while another shop has it in stock: the page leads with the shop that has it, so
+        # the title quotes that price without "pre-order" and the description names both.
         Listing.objects.filter(retailer=self.other).update(price="60.00")
         _html, title, description = self.page(self.box)
         self.assertNotIn("pre-order", title)
-        self.assertIn("from £60.00", title)
-        self.assertIn("on pre-order from £60.00", description)
-        self.assertIn("in stock from £95.00", description)
+        self.assertIn("from £95.00", title)
+        self.assertIn("in stock is £95.00 delivered at Harbour Games", description)
+        self.assertIn("on pre-order from £60.00 at Northgate Cards", description)
 
     def test_a_stale_pre_order_flag_after_release_is_not_a_pre_order_title(self):
         # The set came out 30 days ago; one shop still marks its only listing as a pre-order.

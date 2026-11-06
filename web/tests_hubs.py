@@ -297,21 +297,21 @@ class ProductMetaTests(PageTestCase):
 
 
     def test_a_cheaper_pre_order_is_not_called_cheapest_today(self):
-        # The cheapest price is a pre-order; another shop has it in stock for more.
+        # A pre-order cheaper than the shop with stock: the page leads with the shop that has it, so the
+        # description quotes that price as the cheapest in stock, never as the cheapest today, and names the
+        # pre-order after it.
         preorder_shop = make_retailer("Total Cards")
         make_listing(self.etb, preorder_shop, price="40.00", availability=Listing.Availability.PREORDER)
         html = self.client.get(self.etb.get_absolute_url()).content.decode()
         description = description_of(html)
         self.assertTrue(description.startswith(
-            f"{self.etb.name} is on pre-order from £40.00 delivered at Total Cards, or in stock from £54.99 at "
-            "Harbour Games."
+            f"Cheapest {self.etb.name} in stock is £54.99 delivered at Harbour Games, or on pre-order from £40.00 "
+            "at Total Cards."
         ), description)
-        self.assertNotIn("Cheapest", description)
         self.assertNotIn("today", description)
         self.assertLessEqual(len(description), 160)
-        # The title quotes the lowest price, which is true of any offer. It does not say pre-order: another shop
-        # has it in stock, so the product is out.
-        self.assertTrue(title_of(html).startswith(f"{self.etb.name} UK from £40.00"), title_of(html))
+        # The title quotes the price the page leads with. It does not say pre-order: a shop has it in stock.
+        self.assertTrue(title_of(html).startswith(f"{self.etb.name} UK from £54.99"), title_of(html))
         self.assertNotIn("pre-order", title_of(html))
 
 

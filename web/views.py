@@ -1495,12 +1495,16 @@ def product_detail(request, slug):
         .select_related("retailer")
         .order_by("-delivery_known", "delivered_price", "retailer__name")
     )
+    # In stock first, then the cheapest delivered: the page leads with the cheapest shop that has the product now,
+    # as a card and a post do (in_stock_offers, share.post_lead), and a cheaper pre-order follows under its own
+    # label. The owner, 6 Nov 2026, after a card showing a shop's in-stock price opened a page leading with a
+    # cheaper pre-order: "I want to click the one I just clicked on, otherwise it's confusing."
     in_stock_first = {Listing.Availability.IN_STOCK: 0, Listing.Availability.PREORDER: 1}
     current = sorted(
         (listing for listing in listings if listing.is_buyable),
         key=lambda listing: (
-            *offers.offer_order(listing),
             in_stock_first.get(listing.availability, 2),
+            *offers.offer_order(listing),
             listing.retailer.name,
         ),
     )
@@ -1512,6 +1516,10 @@ def product_detail(request, slug):
         and not listing.is_stale and listing.sanity != Listing.Sanity.EXCLUDED
     ]
     cheapest = current[0] if current else None
+    # The cheapest pre-order under the lead's price, when the lead is in stock: the page then calls the lead the
+    # cheapest in stock, not the cheapest, and the list says it is in stock first.
+    cheaper_preorder = next((listing for listing in current if listing.availability == Listing.Availability.PREORDER
+                             and offers.offer_order(listing) < offers.offer_order(cheapest)), None) if cheapest else None
     shop_count = len({listing.retailer_id for listing in current})
     # Every UK shop listing it, in stock or not: with one, its price has nothing to be compared with, so no
     # badge or Price check calls it a good one (offers.summarise, fair_price.verdict).
@@ -1627,15 +1635,14 @@ def product_detail(request, slug):
                     and (release is None or release > today))
         meta_title = hubs.product_title(words, search_name, meta_values["price"], preorder,
                                         retailer=meta_values["retailer"], count=shop_count)
-        # "Cheapest today" only when the price quoted is in stock. When the cheapest is a pre-order, the
-        # description says so, and names the cheapest shop with it in stock if there is one.
-        stock_offer = next((listing for listing in current if listing.availability == Listing.Availability.IN_STOCK
-                            and listing.delivery_known), None)
-        if cheapest.availability == Listing.Availability.IN_STOCK:
+        # "Cheapest today" only when the price quoted is in stock and nothing is cheaper. With a cheaper
+        # pre-order under it, the description names both; when only pre-orders are left, it says so.
+        if cheapest.availability == Listing.Availability.IN_STOCK and cheaper_preorder is not None:
+            key = "meta.product.description_stock_preorder"
+            meta_values.update(preorder_price=gbp(cheaper_preorder.delivered_price),
+                               preorder_retailer=cheaper_preorder.retailer.name)
+        elif cheapest.availability == Listing.Availability.IN_STOCK:
             key = "meta.product.description_priced"
-        elif stock_offer is not None:
-            key = "meta.product.description_preorder_stock"
-            meta_values.update(stock_price=gbp(stock_offer.delivered_price), stock_retailer=stock_offer.retailer.name)
         elif release_shown:
             key = "meta.product.description_preorder_dated"
             meta_values["date"] = release_shown
@@ -1684,6 +1691,7 @@ def product_detail(request, slug):
             "report_listing": next((listing for listing in listings if str(listing.pk) == request.GET.get("report")), None),
             "report_state": request.GET.get("report_state") if request.GET.get("report_state") in REPORT_STATES else "",
             "cheapest": cheapest,
+            "cheaper_preorder": cheaper_preorder,
             # What one pack costs at the cheapest price, for a product holding two or more (catalogue/contents.py).
             "per_pack": per_pack(cheapest, product),
             "per_card": price_a_card(cheapest.shown_price if cheapest else None, product),

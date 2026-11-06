@@ -103,3 +103,65 @@ class OutNowTests(TestCase):
         html = self.client.get("/search/?q=Mixed").content.decode()
         card = html[html.index('<li class="card'):]
         self.assertIn("£80.00", card[:card.index("</li>")])
+
+
+class ProductPageTests(TestCase):
+    """The product page leads with the cheapest shop that has the product in stock, as the cards and a post do.
+    The owner, 6 Nov 2026, after a card showing a shop's in-stock price opened a page leading with a cheaper
+    pre-order: "I want to click the one I just clicked on, otherwise it's confusing"."""
+
+    def setUp(self):
+        cache.clear()
+        self.game = make_game()
+        self.harbour = make_retailer("Harbour Games")
+        self.north = make_retailer("Northgate Cards")
+        product_set = make_set(self.game, name="Mixed Set", slug="mixed-set", code="MIX",
+                               release_date=timezone.localdate() - timedelta(days=2))
+        self.box = make_product(product_set, name="Mixed Set Booster Box", slug="mixed-set-box",
+                                product_type=Product.Type.BOOSTER_BOX)
+
+    def buy_box(self):
+        html = self.client.get(self.box.get_absolute_url()).content.decode()
+        box = html[html.index('class="buybox'):]
+        return html, box[:box.index('id="offers-title"')]
+
+    def test_the_page_leads_with_the_shop_that_has_it_never_a_cheaper_pre_order(self):
+        make_listing(self.box, self.harbour, price="80.00", availability=PRE)
+        make_listing(self.box, self.north, price="95.00")
+        html, box = self.buy_box()
+        self.assertIn("£95.00", box)
+        self.assertIn("at Northgate Cards", box)
+        self.assertIn("Buy now", box)
+        self.assertNotIn("Pre-order", box)
+        self.assertNotIn("Dropping soon", box)
+        # The labels say the price shown is the cheapest with stock, and that the list puts stock first.
+        self.assertIn("Cheapest in stock", box)
+        self.assertIn("2 shops, in stock first", box)
+        self.assertNotIn("rank__price--more", box)   # the #2 pre-order is not a dearer price, so not red
+        # The pre-order is still in the list, after the shop with stock, and no row is called the cheapest.
+        rows = html[html.index('id="offers-title"'):]
+        self.assertLess(rows.index("Northgate Cards"), rows.index("Harbour Games"))
+        self.assertIn("£80.00", rows)
+        self.assertNotIn('class="offer__flag"', rows)
+        self.assertIn('"lowPrice": "80.00"', html)
+
+    def test_with_nothing_in_stock_the_cheapest_pre_order_leads_as_before(self):
+        make_listing(self.box, self.harbour, price="80.00", availability=PRE)
+        make_listing(self.box, self.north, price="95.00", availability=PRE)
+        html, box = self.buy_box()
+        self.assertIn("£80.00", box)
+        self.assertIn("at Harbour Games", box)
+        self.assertIn("Pre-order", box)
+        self.assertIn("Dropping soon", box)
+        self.assertIn("2 shops, cheapest delivered first", box)
+        self.assertNotIn("Cheapest in stock", box)
+
+    def test_a_dearer_pre_order_leaves_the_usual_labels(self):
+        make_listing(self.box, self.north, price="95.00")
+        make_listing(self.box, self.harbour, price="120.00", availability=PRE)
+        html, box = self.buy_box()
+        self.assertIn("Cheapest price", box)
+        self.assertNotIn("Cheapest in stock", box)
+        self.assertIn("2 shops, cheapest delivered first", box)
+        self.assertIn("rank__price--more", box)
+        self.assertIn('class="offer__flag"', html)

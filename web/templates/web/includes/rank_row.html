@@ -1,5 +1,5 @@
-{% load sitecopy ripraptor %}{# Two cheapest retailers, ranked. #}
+{% load sitecopy ripraptor %}{# The two shops the list leads with, ranked. Red only for a dearer price: on a product page the second may be a pre-order cheaper than the in-stock lead (web.views.product_detail). #}
 <ol class="rank">
   <li class="rank__item"><span class="rank__pos rank__pos--1">#1</span><span class="rank__name">{{ summary.best.retailer.name }}</span><span class="rank__price">{{ summary.best.shown_price|gbp }}{% if not summary.best.delivery_known %} {% copy "browse.price.plus" %}{% endif %}</span></li>
-  {% if summary.second %}<li class="rank__item"><span class="rank__pos rank__pos--2">#2</span><span class="rank__name">{{ summary.second.retailer.name }}</span><span class="rank__price rank__price--more">{{ summary.second.shown_price|gbp }}{% if not summary.second.delivery_known %} {% copy "browse.price.plus" %}{% endif %}{% if summary.saving %} <span class="rank__up" aria-hidden="true">↑</span>{% endif %}</span></li>{% endif %}
+  {% if summary.second %}<li class="rank__item"><span class="rank__pos rank__pos--2">#2</span><span class="rank__name">{{ summary.second.retailer.name }}</span><span class="rank__price{% if summary.second.shown_price > summary.best.shown_price %} rank__price--more{% endif %}">{{ summary.second.shown_price|gbp }}{% if not summary.second.delivery_known %} {% copy "browse.price.plus" %}{% endif %}{% if summary.saving %} <span class="rank__up" aria-hidden="true">↑</span>{% endif %}</span></li>{% endif %}
 </ol>

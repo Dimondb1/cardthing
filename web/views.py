@@ -39,7 +39,7 @@ from inbox.models import Conversation
 from guides import state as guide_doors
 from guides.access import not_for_editors
 
-from . import feed, hubs, listcache, look, partners, share
+from . import feed, hubs, listcache, look, partners, refresh, share
 from . import find as find_steps
 from .pagecache import cached_page
 from .charts import price_chart
@@ -1695,6 +1695,8 @@ def product_detail(request, slug):
             "report_state": request.GET.get("report_state") if request.GET.get("report_state") in REPORT_STATES else "",
             "cheapest": cheapest,
             "cheaper_preorder": cheaper_preorder,
+            # The refresh dots under the logo: the next read of one of this product's shops (web/refresh.py).
+            "refresh": refresh.for_product(listings, now=timezone.now()),
             # What one pack costs at the cheapest price, for a product holding two or more (catalogue/contents.py).
             "per_pack": per_pack(cheapest, product),
             "per_card": price_a_card(cheapest.shown_price if cheapest else None, product),

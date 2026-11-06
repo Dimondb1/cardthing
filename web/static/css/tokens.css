@@ -393,4 +393,8 @@
   --amazon-ring: linear-gradient(90deg, #ff5a1f, #ffc233, #35c759, #2e8bff, #a259ff, #ff5a1f);
   --amazon-ring-width: 2px;
   --amazon-ring-inset: 4px;
+  /* The refresh dots under the logo (web/refresh.py). */
+  --pulse-dot: 0.3rem;
+  --pulse-gap: 0.3rem;
+  --pulse-note: 18rem;             /* the widest the tapped line grows */
 }

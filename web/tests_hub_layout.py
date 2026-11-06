@@ -222,7 +222,8 @@ class FilterTests(HubLayoutTestCase):
         html = self.get(self.url)
         self.assertIn('<details class="filter-panel" data-filter-panel>', html)
         self.assertIn('<summary class="filter-panel__toggle"><span>Sort and filter</span></summary>', html)
-        panel = html[html.index('<details class="filter-panel"'):html.index("</details>")]
+        start = html.index('<details class="filter-panel"')
+        panel = html[start:html.index("</details>", start)]   # the header's refresh dots are a details element too
         self.assertIn('<form class="filters"', panel)
         self.assertIn('name="sort"', panel)
         # Without script the form still works: its button is in the page.

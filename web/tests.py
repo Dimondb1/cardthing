@@ -3075,7 +3075,7 @@ class GoldenLayoutTests(PageTestCase):
 
     def test_the_logo_sits_at_the_left_with_no_back_arrow(self):
         css = self.css("site.css")
-        self.assertIn(".wordmark { grid-area: brand; justify-self: start;", css)
+        self.assertIn(".brand { grid-area: brand; justify-self: start;", css)   # the logo and the refresh dots under it
         self.assertNotIn("justify-self: center", css[css.index("/* Header"):css.index("/* Search ---")])
         self.assertIn('grid-template-areas: "brand . nav" "search search search";', css)
         for url in (reverse("web:home"), reverse("web:deals"), self.etb.get_absolute_url()):

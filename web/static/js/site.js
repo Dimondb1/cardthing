@@ -293,3 +293,28 @@ document.addEventListener("ripraptor:content", (event) => {
   autosubmit(event.detail);
   fitPills();
 });
+
+// The refresh dots under the logo (web/refresh.py): the page says when the next price refresh is; this keeps the
+// dots and the tapped line right while the page stays open, and on a page served from the cache.
+{
+  const pulse = document.querySelector("[data-refresh]");
+  const next = pulse && Date.parse(pulse.dataset.next);
+  const cycle = pulse && Number(pulse.dataset.cycle) * 1000;
+  if (pulse && next && cycle) {
+    const dots = pulse.querySelectorAll(".pulse__dot");
+    const note = pulse.querySelector(".pulse__note");
+    const when = (left) => {
+      if (left < 60000) return pulse.dataset.soon;
+      const minutes = Math.max(1, Math.round(left / 60000));
+      return minutes === 1 ? pulse.dataset.minute : pulse.dataset.minutes.replace("{n}", minutes);
+    };
+    const tick = () => {
+      const left = next - Date.now();
+      const lit = left <= 0 ? dots.length : Math.min(dots.length - 1, Math.max(0, Math.round(dots.length * (1 - left / cycle))));
+      dots.forEach((dot, i) => dot.classList.toggle("is-on", i < lit));
+      if (note) note.textContent = left <= 0 ? pulse.dataset.now : pulse.dataset.note.replace("{time}", when(left));
+    };
+    tick();
+    setInterval(tick, 30000);
+  }
+}

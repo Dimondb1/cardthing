@@ -553,9 +553,12 @@ ENTRIES = [
           "Search {game}",
           "Grey words in the search box on a game's page, which searches that game only. {game} is the game. Short, as above.",
           placeholders=("game",)),
-    Entry("feed.dock.more", B, "New home page: the down arrow on the dock", "More below",
-          "Read out for the small arrow on the dock's edge that shows while there is more under the first screen; a tap "
-          "scrolls on."),
+    Entry("feed.dock.more", B, "New home page: the down arrow on the dock", "Next heading",
+          "Read out for the small down arrow on the dock's edge, shown while a heading is below: a tap takes the page "
+          "to it."),
+    Entry("feed.dock.back", B, "New home page: the up arrow on the dock", "Back up",
+          "Read out for the small up arrow on the dock's edge, shown once the page has moved down: a tap takes it to "
+          "the heading before, or the top."),
     Entry("home.percard.title", H, "Cheapest per card heading", "Cheapest per card",
           "Home page row of the products in stock with the cheapest price per card."),
     Entry("home.percard.note", T, "Cheapest per card note", "For rippers: what each card costs you, delivered.",

@@ -18,6 +18,6 @@
       {% for item in feed.games %}<a class="feed-game" href="{{ item.url }}"{% if feed.game and item.slug == feed.game.slug %} aria-current="page"{% endif %}><span class="feed-game__pill"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-game-{{ item.icon }}"/></svg></span><span class="feed-game__label">{{ item.label }}</span></a>{% endfor %}
     </nav>
   </div>
-  {# The down arrow on the dock's edge: feed.js shows it while the page has more below the first screen and nothing has scrolled yet; a tap scrolls on a screen. #}
-  <button class="feed-dock__cue" type="button" hidden aria-label="{% copy 'feed.dock.more' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button>
+  {# The arrows on the dock's edge (feed.js): down takes the page to the next heading while there is one below, up to the heading before, or the top. The owner, 6 Nov 2026: "the little down arrow when pressed should pop the user down to the next heading and then maybe an up one to pop them back up". #}
+  <div class="feed-dock__cues"><button class="feed-dock__cue feed-dock__cue--up" type="button" hidden aria-label="{% copy 'feed.dock.back' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button><button class="feed-dock__cue feed-dock__cue--down" type="button" hidden aria-label="{% copy 'feed.dock.more' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button></div>
 </div>

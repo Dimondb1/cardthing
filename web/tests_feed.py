@@ -232,16 +232,22 @@ class HomeFeedTests(FeedCase):
         dock = html[html.index('<div class="feed-dock">'):html.index('<div class="feed">')]
         self.assertIn(f'<form class="feed-search" action="{reverse("web:search")}" method="get" role="search" ', dock)
         self.assertIn('placeholder="Search any product"', dock)
-        # The down arrow on the dock's edge, for feed.js to show while there is more below; a tablet up has no dock to put it on.
-        self.assertIn('<button class="feed-dock__cue" type="button" hidden aria-label="More below"><svg class="feed-ic" '
-                      'aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button>\n</div>', dock)
+        # The arrows on the dock's edge, for feed.js to show on a phone: down to the next heading, up to the one before.
+        # The owner, 6 Nov 2026: "pop the user down to the next heading and then maybe an up one to pop them back up".
+        self.assertIn('<div class="feed-dock__cues"><button class="feed-dock__cue feed-dock__cue--up" type="button" hidden '
+                      'aria-label="Back up"><svg class="feed-ic" aria-hidden="true" focusable="false">'
+                      '<use href="#rr-chevron-right"/></svg></button><button class="feed-dock__cue feed-dock__cue--down" '
+                      'type="button" hidden aria-label="Next heading"><svg class="feed-ic" aria-hidden="true" '
+                      'focusable="false"><use href="#rr-chevron-right"/></svg></button></div>\n</div>', dock)
         css = open("web/static/css/site.css", encoding="utf-8").read()
         self.assertIn(".feed-dock__cue .feed-ic { width: var(--icon-button); height: var(--icon-button); transform: rotate(90deg); }", css)
-        self.assertIn("@media (prefers-reduced-motion: reduce) { .feed-dock__cue { animation: none; } }", css)
-        self.assertIn(".feed-search, .feed-dock .live, .feed-dock__cue { display: none; }", css)
+        self.assertIn(".feed-dock__cue--up .feed-ic { transform: rotate(-90deg); }", css)
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .feed-dock__cue--down.is-new { animation: none; } }", css)
+        self.assertIn(".feed-search, .feed-dock .live, .feed-dock__cues { display: none; }", css)   # a tablet up has no dock
         script = open("web/static/js/feed.js", encoding="utf-8").read()
-        self.assertIn('getComputedStyle(dock).position === "fixed"', script)
-        self.assertIn('window.addEventListener("scroll", gone, { passive: true });', script)
+        self.assertIn('getComputedStyle(dock).position !== "fixed") return;', script)   # a phone's dock only
+        self.assertIn('document.querySelectorAll("main h1, main h2")', script)
+        self.assertIn('window.addEventListener("scroll", showCues, { passive: true });', script)
         self.assertIn('<button class="feed-search__mic" type="button" hidden aria-label="Search by voice" '
                       'data-listening="Listening">', dock)
         # Results as you type: the same script and wording as the header's search, the panel above the box.

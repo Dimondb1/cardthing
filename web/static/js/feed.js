@@ -155,29 +155,68 @@
     });
   });
 
-  // The down arrow on the dock's edge: shown while the page has more below the first screen and nothing has scrolled
-  // yet, on a phone, where the dock is fixed; a tap scrolls on a screen. The first scroll, or a tap in the dock, takes
-  // it away. The owner, 5 Nov 2026: "a down arrow to indicate there is content further down".
-  var cue = document.querySelector(".feed-dock__cue");
-  var dock = cue && cue.closest(".feed-dock");
-  if (cue && dock && getComputedStyle(dock).position === "fixed"
-      && document.documentElement.scrollHeight > window.innerHeight + 80) {
-    var gone = function () {
-      cue.classList.add("is-gone");
-      window.removeEventListener("scroll", gone);
-      dock.removeEventListener("focusin", gone);
+  // The arrows on the dock's edge, on a phone, where the dock is fixed: down takes the page to the next heading
+  // while there is one below, up to the heading before, or the top. The down one began as a hint that there is more
+  // under the first screen (the owner, 5 Nov 2026) and still bobs until the page first moves; the owner, 6 Nov 2026:
+  // "the little down arrow when pressed should pop the user down to the next heading and then maybe an up one to pop
+  // them back up". Both go while the search box has the keyboard up. In its own scope: the hints above share this
+  // function's variables, and a second "show" would take theirs.
+  (function () {
+    var cues = document.querySelector(".feed-dock__cues");
+    var dock = cues && cues.closest(".feed-dock");
+    if (!cues || !dock || getComputedStyle(dock).position !== "fixed") return;
+    var up = cues.querySelector(".feed-dock__cue--up");
+    var down = cues.querySelector(".feed-dock__cue--down");
+    var margin = 16;    // a heading lands this far under the top of the screen
+    var stops = function () {
+      // Every heading on the page a reader can see, in order; the feed's own title is read out but not shown.
+      return Array.prototype.filter.call(document.querySelectorAll("main h1, main h2"), function (heading) {
+        return heading.offsetHeight > 4 && !heading.closest("[hidden]");
+      });
     };
+    var placeOf = function (heading) { return heading.getBoundingClientRect().top + window.scrollY - margin; };
+    var next = function () {
+      var here = window.scrollY + margin;
+      return stops().filter(function (heading) { return placeOf(heading) > here; })[0] || null;
+    };
+    var previous = function () {
+      var here = window.scrollY - margin;
+      var before = stops().filter(function (heading) { return placeOf(heading) < here; });
+      return before.length ? before[before.length - 1] : null;
+    };
+    var quiet = false;   // the search box has the keyboard up
+    var showCues = function () {
+      var below = next();
+      // The page can only move as far as its foot: a heading nearer than that still counts while it is out of sight.
+      var limit = document.documentElement.scrollHeight - window.innerHeight;
+      down.hidden = quiet || !below || Math.min(placeOf(below), limit) <= window.scrollY + 1;
+      up.hidden = quiet || window.scrollY <= margin;
+    };
+    var settled = function () {
+      down.classList.remove("is-new");
+      window.removeEventListener("scroll", settled);
+    };
+    var go = function (heading) {
+      var where = heading ? Math.max(0, placeOf(heading)) : 0;
+      window.scrollTo({ top: where, behavior: reduced ? "auto" : "smooth" });
+    };
+    down.addEventListener("click", function () { settled(); go(next()); });
+    up.addEventListener("click", function () { go(previous()); });
+    dock.addEventListener("focusin", function (event) {
+      if (event.target && event.target.matches && event.target.matches("input")) { quiet = true; showCues(); }
+    });
+    dock.addEventListener("focusout", function (event) {
+      if (event.target && event.target.matches && event.target.matches("input")) { quiet = false; showCues(); }
+    });
+    window.addEventListener("resize", showCues);
     // After the hints, if they are showing: Pick by game sits on the same spot of the dock's edge.
     setTimeout(function () {
-      if (window.scrollY > 40) return;
-      cue.hidden = false;
-      window.addEventListener("scroll", gone, { passive: true });
-      dock.addEventListener("focusin", gone);
+      if (window.scrollY <= margin) down.classList.add("is-new");
+      showCues();
+      window.addEventListener("scroll", showCues, { passive: true });
+      window.addEventListener("scroll", settled, { passive: true });
     }, hintsUntil);
-    cue.addEventListener("click", function () {
-      window.scrollBy({ top: Math.round(window.innerHeight * 0.7), behavior: reduced ? "auto" : "smooth" });
-    });
-  }
+  })();
 
   // Search by voice: the browser listens (Chrome on a phone can, Firefox cannot), the words go in the box and the
   // search runs. Nothing is kept. The button only appears where listening is possible.

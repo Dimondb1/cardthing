@@ -5204,9 +5204,14 @@ Pick by game by the bar and Pick by type by the tiles, each for a couple of
 seconds while the pills or the tiles light up one after another, ended
 early by any tap or scroll (`ripraptor.hints` holds the day; `#hints` on
 the address shows them any time); the wording is `feed.hint.*` in the
-registry. On a phone a small down arrow sits on the dock's edge while the
-page has more below the first screen and nothing has scrolled yet; a tap
-scrolls on a screen, and the first scroll takes it away.
+registry. On a phone two small arrows sit on the dock's edge: down while a
+heading is below, which takes the page to the next heading (every visible
+h1 or h2 in the page, in order), and up once the page has moved, which
+takes it to the heading before, or the top. The down arrow bobs until the
+page first moves, as the hint it began as, and both go while the search
+box has the keyboard up. The owner, 6 Nov 2026: "the little down arrow
+when pressed should pop the user down to the next heading and then maybe
+an up one to pop them back up".
 `feed.js` adds an arrow at the end of each row while there is more to see,
 and a microphone to the search box where the browser can listen (Chrome on
 a phone), which searches for what was said. The dock's search box shows

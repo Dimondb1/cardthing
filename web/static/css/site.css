@@ -2416,11 +2416,16 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 /* The down arrow on the dock's edge, while the page has more below the first screen and nothing has scrolled yet (feed.js;
    the owner, 5 Nov 2026: "a down arrow to indicate there is content further down"): the row arrow's own look, bobbing as the
    listening microphone breathes, transform only; still for those who ask. A tap scrolls on a screen; the first scroll takes it away. */
-.feed-dock__cue { position: absolute; z-index: 1; left: 50%; top: 0; display: flex; align-items: center; justify-content: center; width: var(--feed-more); height: var(--feed-more); padding: 0; border: var(--border-width) solid var(--color-line); border-radius: 50%; background: var(--color-paper); color: var(--color-ink); box-shadow: var(--shadow-card); cursor: pointer; transform: translate(-50%, -50%); animation: feed-cue var(--motion-slow) var(--ease-standard) infinite alternate; transition: opacity var(--motion-fast) var(--ease-standard); }
+/* The arrows on the dock's edge: up to the heading before, down to the next. The down one bobs until the page first
+   moves, as the hint it began as; both go when the search box has the keyboard up. */
+.feed-dock__cues { position: absolute; z-index: 1; left: 50%; top: 0; display: flex; gap: var(--space-2); transform: translate(-50%, -50%); }
+.feed-dock__cue { display: flex; align-items: center; justify-content: center; width: var(--feed-more); height: var(--feed-more); padding: 0; border: var(--border-width) solid var(--color-line); border-radius: 50%; background: var(--color-paper); color: var(--color-ink); box-shadow: var(--shadow-card); cursor: pointer; transition: opacity var(--motion-fast) var(--ease-standard); }
+.feed-dock__cue[hidden] { display: none; }
 .feed-dock__cue .feed-ic { width: var(--icon-button); height: var(--icon-button); transform: rotate(90deg); }
-.feed-dock__cue.is-gone { opacity: 0; pointer-events: none; animation: none; }
-@keyframes feed-cue { from { transform: translate(-50%, -50%); } to { transform: translate(-50%, -64%); } }
-@media (prefers-reduced-motion: reduce) { .feed-dock__cue { animation: none; } }
+.feed-dock__cue--up .feed-ic { transform: rotate(-90deg); }
+.feed-dock__cue--down.is-new { animation: feed-cue var(--motion-slow) var(--ease-standard) infinite alternate; }
+@keyframes feed-cue { from { transform: translateY(0); } to { transform: translateY(-28%); } }
+@media (prefers-reduced-motion: reduce) { .feed-dock__cue--down.is-new { animation: none; } }
 /* The search box's hint ends in an ellipsis where the box is narrower than the words, rather than cutting a word in half. */
 .feed-search input { text-overflow: ellipsis; }
 /* Results as you type open above the search box, clear of the keyboard; the header's search has its own on a wide screen. */
@@ -2479,7 +2484,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .feed-hint--games { bottom: auto; top: calc(100% + var(--space-1)); }
   .feed-hint--games::after { bottom: auto; top: calc(-1 * var(--space-1)); }
   .feed-dock__in { padding: 0; }
-  .feed-search, .feed-dock .live, .feed-dock__cue { display: none; }
+  .feed-search, .feed-dock .live, .feed-dock__cues { display: none; }
   .feed-games { gap: var(--space-2); padding: var(--space-2) 0 var(--space-3); border-bottom: var(--border-width) solid var(--color-line); }
   .feed__title { margin-top: var(--space-4); }
   .feed__row { margin-inline: 0; padding-inline: 0; }

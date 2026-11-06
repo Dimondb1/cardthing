@@ -34,6 +34,7 @@
   <div class="feed-list-head__text"><h1 class="browse-head__title">{{ feed.list_title }}</h1><p class="browse-head__count" role="status">{% copy_count "browse.count" total %}</p></div>
   <form class="feed-sort" method="get" action="" data-autosubmit>
     <input type="hidden" name="type" value="{{ feed.kind }}">
+    {% if chosen_set %}<input type="hidden" name="set" value="{{ chosen_set.slug }}">{% endif %}
     {% if form.game.value %}<input type="hidden" name="game" value="{{ form.game.value }}">{% endif %}
     {% if form.lang.value %}<input type="hidden" name="lang" value="{{ form.lang.value }}">{% endif %}
     {% if form.price.value %}<input type="hidden" name="price" value="{{ form.price.value }}">{% endif %}
@@ -48,14 +49,25 @@
   </form>
   <a class="feed-list-head__clear" href="{{ feed.clear_url }}" data-browse-link><span aria-hidden="true">× </span>{% copy "feed.list.clear" %}</a>
 </div>
-{% if lang_chips or show_filters %}
-{# One line that scrolls sideways: a Filters pill whose panel (the price band and 2+ shops) drops over the list and closes once a choice is made, the chosen ones named on it; then the languages the list holds, ready to tap (views.language_chips). Plain links and a details element, so it all works without script; browse.js swaps the list in place. #}
+{% if lang_chips or show_filters or set_options or chosen_set %}
+{# One line that scrolls sideways: on a game's page the Set picker, a chip that opens the sets holding this type (views.game_detail set_options), the chosen set a chip that clears it; a Filters pill whose panel (the price band and 2+ shops) drops over the list and closes once a choice is made, the chosen ones named on it; then the languages the list holds, ready to tap (views.language_chips). Plain links and details elements, so it all works without script; browse.js swaps the list in place. #}
 <div class="feed-filters">
 <div class="feed-filters__row">
-  {% if show_filters %}<details class="feed-filters__more">
+  {% if chosen_set %}<a class="chip" href="{{ set_clear_url }}" aria-current="true">{{ chosen_set.name }}<span class="chip__off" aria-hidden="true">×</span><span class="visually-hidden">, {% copy "browse.quick.remove" %}</span></a>
+  {% elif set_options %}<details class="feed-filters__more feed-set">
+    <summary class="chip chip--more"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-set"/></svg>{% copy "feed.set.chip" %}</summary>
+    <div class="feed-set__panel">
+      {# With many sets, a box to narrow them as you type (feed.js; hidden without script, where the list is the way). #}
+      {% if set_options|length > 6 %}<input class="feed-set__find" type="search" placeholder="{% copy 'feed.set.find' %}" aria-label="{% copy 'feed.set.find' %}" autocomplete="off" hidden data-set-find>{% endif %}
+      <ul class="feed-set__list" aria-label="{% copy 'browse.game.sets_title' %}">
+        {% for item in set_options %}<li><a href="{{ item.url }}">{{ item.name }}<span class="feed-set__count{% if not item.in_stock %} feed-set__count--none{% endif %}"><span aria-hidden="true">{{ item.in_stock }}</span><span class="visually-hidden">, {% copy_count "browse.game.set_stock" item.in_stock %}</span></span></a></li>{% endfor %}
+      </ul>
+    </div>
+  </details>{% endif %}{% if show_filters %}<details class="feed-filters__more">
     <summary class="chip chip--more"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-filter"/></svg>{% copy "feed.filters.button" %}{% if feed_chosen %}<span class="chip__count">{{ feed_chosen|join:" · " }}</span>{% endif %}</summary>
     <form class="filters feed-filters__form" method="get" action="" data-autosubmit>
       <input type="hidden" name="type" value="{{ feed.kind }}">
+      {% if chosen_set %}<input type="hidden" name="set" value="{{ chosen_set.slug }}">{% endif %}
       {% if form.game.value %}<input type="hidden" name="game" value="{{ form.game.value }}">{% endif %}
       {% if form.lang.value %}<input type="hidden" name="lang" value="{{ form.lang.value }}">{% endif %}
       {% if form.sort.value %}<input type="hidden" name="sort" value="{{ form.sort.value }}">{% endif %}

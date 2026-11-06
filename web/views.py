@@ -168,7 +168,7 @@ def stock_tab(tab, compared=False):
 
 
 def _browse(request, template_context, *, base_queryset, fixed_game=None, default_ordering=None, tabs=False,
-            template="web/browse.html", structured=None, stock_now=False, default_sort=None):
+            template="web/browse.html", structured=None, stock_now=False, default_sort=None, narrow=None):
     """Shared by search, game and set pages, and Out now on the drops page (``template``).
 
     ``structured``, when given, is called with the page of products shown and whether this is the canonical
@@ -177,6 +177,10 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
 
     ``stock_now`` (Out now), the In stock tab and the In stock filter lead each card with its cheapest in-stock
     shop (in_stock_offers), so a list about stock never shows a pre-order's price or Dropping soon.
+
+    ``narrow``, when given, is called with the products after the form is built and returns them narrowed (a
+    game's page to one set): the form's choices still come from the whole of ``base_queryset``, so the type in the
+    address stays a valid choice when the set has none of it, and the list counts as filtered.
 
     With ``tabs`` (game and set pages) the products are split into STOCK_TABS: the page shows one tab's
     list, counted for every tab in one query, and ``?pane=1`` returns just that tab's list for the
@@ -195,7 +199,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     form.is_valid()
 
     query = (form.value("q") or "").strip()
-    products = base_queryset
+    products = narrow(base_queryset) if narrow else base_queryset
     terms = []
     if query:
         products, terms = apply_search(products, query)
@@ -263,7 +267,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
 
     filters_active = bool(
         game or product_type or (form.value("in_stock") and not tabs) or form.value("compared") or band or languages
-        or sort not in (form.default_sort, "soonest")
+        or sort not in (form.default_sort, "soonest") or narrow is not None
     )
     # The Alert me form on the watchlist page, filled in with this list's game, type, language and price band.
     alert_url = ""
@@ -1188,8 +1192,14 @@ def game_detail(request, game_slug):
     # Only sets with products in the language and type in view: a Korean list offers only Korean sets, and
     # counts only Korean products in stock.
     in_view = apply_languages(Product.objects.active().filter(game=game), [request.GET.get("lang", "")])
-    if request.GET.get("type") in Product.Type.values:
-        in_view = in_view.filter(product_type=request.GET["type"])
+    kind = request.GET.get("type", "")
+    kind = kind if kind in Product.Type.values else ""
+    if kind:
+        in_view = in_view.filter(product_type=kind)
+    # The set chosen (?set=, the picker on a type's list below): the list is that set's alone. A set with none of
+    # the type in view is honoured all the same, so the chip says why the list is empty and clears it.
+    asked_set = request.GET.get("set", "")
+    chosen_set = ProductSet.objects.filter(game=game, slug=asked_set).first() if asked_set else None
     sets = []
     if not pane:
         stocked = (in_view.in_stock().filter(product_set=OuterRef("pk")).order_by().values("product_set")
@@ -1202,6 +1212,23 @@ def game_detail(request, game_slug):
         )
         wanted = popularity.set_demand([item.pk for item in sets])
         sets.sort(key=lambda item: -wanted.get(item.pk, 0))   # stable: newest first among equals
+    feed_on = not pane and look.for_request(request)
+    # The Set picker on a type's list with the new home page on (web/feed.py): every set that holds the type, in the
+    # row's order, each with how many of its products of the type are in stock, as links to this page that keep the
+    # other choices; the chosen set's chip clears it. The owner, 6 Nov 2026: "a dynamic way to filter by collection
+    # without overwhelming the page".
+    set_options, set_clear_url = [], ""
+    if feed_on and kind:
+        def set_link(slug):
+            params = request.GET.copy()
+            for name in ("page", "pane", "set"):
+                params.pop(name, None)
+            if slug:
+                params["set"] = slug
+            return "?" + params.urlencode()
+
+        set_options = [{"name": item.name, "url": set_link(item.slug), "in_stock": item.in_stock} for item in sets]
+        set_clear_url = set_link("")
     words = hubs.Words(text, request)
     stats = hubs.HubStats() if pane else hubs.hub_stats(game=game)
     meta_title, meta_description = hubs.game_meta(words, game, stats)
@@ -1221,12 +1248,14 @@ def game_detail(request, game_slug):
             "canonical_url": page_url,
             "coming_soon": coming_soon_sets(game),
             # With the new home page on (web/look.py), the game's page leads with the feed's top (web/feed.py).
-            "feed": (feed.context(request, game, kind=request.GET.get("type", ""))
-                     if not pane and look.for_request(request) else None),
+            "feed": (feed.context(request, game, kind=kind, keep={"set": chosen_set.slug} if chosen_set else None)
+                     if feed_on else None),
+            "chosen_set": chosen_set, "set_options": set_options, "set_clear_url": set_clear_url,
         },
         base_queryset=Product.objects.for_lists().filter(game=game),
         fixed_game=game,
         tabs=True,
+        narrow=(lambda products: products.filter(product_set=chosen_set)) if chosen_set else None,
         structured=lambda page, canonical: [crumbs] + ([hubs.item_list_json(
             request, page_url, meta_title, meta_description, crumbs["@id"], page.object_list,
         )] if canonical else []),

@@ -374,6 +374,8 @@
   --feed-date: 3.25rem;            /* 52 by 58px: the next drop's date block */
   --feed-date-h: 3.625rem;
   --feed-dock-space: 9rem;         /* room at the foot of a phone's page for the dock */
+  --feed-set-panel: 60vh;          /* the Set picker's list, at most, before it scrolls */
+  --feed-set-width: 20rem;         /* the picker from a tablet up, where it need not take the row's width */
   --read-only-size: 1px;           /* what a thing read out but not shown keeps of its size (the feed's title on a phone) */
   --radius-tile: 22px;
   --find-option: 7.5rem;           /* Find with Rip: an option card's least height */

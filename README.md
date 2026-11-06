@@ -5134,7 +5134,14 @@ feels like one screen changing. A type tile is a link to the list of that
 type (`/search/?type=` from the home page, `/games/<game>/?type=` from a
 game's page); with the feed on, those pages lead with the tiles, the chosen
 one marked and the row stuck to the top, and the list right under them with
-the type as its heading, its count, the sort and Clear, then the languages
+the type as its heading, its count, the sort and Clear, then, on a game's
+page, a Set picker (`views.game_detail`, `?set=`): one chip that opens the
+sets holding that type, newest and most wanted first, each with how many of
+its products of the type are in stock, as links that narrow the list in
+place; with more than six sets a find box on top narrows them as you type
+(`feed.js`); the chosen set is a chip that clears it, and the sort, the
+filters and the type tiles keep it (the owner, 6 Nov 2026: "a dynamic way
+to filter by collection without overwhelming the page"); then the languages
 the list holds as chips ready to tap (`views.language_chips`, one query) and
 a Filters pill that folds the price band and 2+ shops away. The feed's region is
 `data-browse`, so `browse.js` loads a tile's list in place (a sketch of the

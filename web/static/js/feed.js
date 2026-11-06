@@ -137,6 +137,24 @@
     });
   }
 
+  // The Set picker's find box on a type's list of a game (views.game_detail): shown only here, where there is script
+  // to work it, it narrows the sets as you type. Set up again for a list browse.js brings in.
+  var finders = function (scope) {
+    Array.prototype.forEach.call(scope.querySelectorAll("[data-set-find]"), function (box) { box.hidden = false; });
+  };
+  finders(document);
+  document.addEventListener("ripraptor:content", function (event) {
+    if (event.detail && event.detail.querySelectorAll) finders(event.detail);
+  });
+  document.addEventListener("input", function (event) {
+    var box = event.target;
+    if (!box || !box.matches || !box.matches("[data-set-find]")) return;
+    var words = box.value.trim().toLowerCase();
+    Array.prototype.forEach.call(box.parentNode.querySelectorAll("li"), function (item) {
+      item.hidden = Boolean(words) && item.textContent.toLowerCase().indexOf(words) === -1;
+    });
+  });
+
   // The down arrow on the dock's edge: shown while the page has more below the first screen and nothing has scrolled
   // yet, on a phone, where the dock is fixed; a tap scrolls on a screen. The first scroll, or a tap in the dock, takes
   // it away. The owner, 5 Nov 2026: "a down arrow to indicate there is content further down".

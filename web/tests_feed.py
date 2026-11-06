@@ -531,6 +531,67 @@ class TypeTileTests(FeedCase):
         self.assertIn("feed-rail-title", plain)
         self.assertNotIn("feed-list-head", plain)
 
+    def test_a_games_list_filtered_to_a_type_offers_its_sets_to_pick_from(self):
+        # The owner, 6 Nov 2026: "not a way to filter by collection any more on card games. We need a dynamic way to
+        # filter this without overwhelming the page." The row of sets served the usual page and went with a type
+        # tile's tap; the list under the tiles now has a Set picker: one chip, the sets holding the type behind it.
+        url = self.pokemon.get_absolute_url()
+        html = self.page(url, type="booster_box")
+        row = html[html.index('<div class="feed-filters">'):html.index("</div>\n</div>", html.index('<div class="feed-filters">'))]
+        self.assertIn('<details class="feed-filters__more feed-set">\n    <summary class="chip chip--more"><svg class="feed-ic" '
+                      'aria-hidden="true" focusable="false"><use href="#rr-set"/></svg>Set</summary>', row)
+        self.assertLess(row.index("feed-set"), row.index("#rr-filter"))   # first in the row
+        # The sets that hold booster boxes, the most wanted first (the box's set has the week's clicks), then the newest,
+        # each with how many are in stock: the drop's set has one on pre-order, and Prismatic Evolutions, with no
+        # booster box, is not offered. Each is a link to this page.
+        links = re.findall(r'<li><a href="([^"]+)">([^<]+)<span class="feed-set__count( feed-set__count--none)?">'
+                           r'<span aria-hidden="true">(\d+)</span>', row)
+        self.assertEqual(links, [("?type=booster_box&amp;set=surging-sparks", "Surging Sparks", "", "1"),
+                                 ("?type=booster_box&amp;set=mega-evolution", "Mega Evolution", " feed-set__count--none", "0")])
+        self.assertNotIn("Prismatic Evolutions", row)
+        self.assertNotIn("data-set-find", row)   # six sets or fewer: the list alone
+        self.assertNotIn("set-nav", html)   # the usual row of sets belongs to the unfiltered page
+        # A set picked narrows the list in place (browse.js: a link to this page); its chip names it and clears it,
+        # and the sort, the filters and the type tiles keep it.
+        html = self.page(url, type="booster_box", set="surging-sparks")
+        row = html[html.index('<div class="feed-filters">'):html.index("</div>\n</div>", html.index('<div class="feed-filters">'))]
+        self.assertIn('<a class="chip" href="?type=booster_box" aria-current="true">Surging Sparks<span class="chip__off" '
+                      'aria-hidden="true">×</span>', row)
+        self.assertNotIn("feed-set__panel", row)
+        self.assertIn('<p class="browse-head__count" role="status">1 product</p>', html)
+        listed = html[html.index("feed-list-head"):]
+        self.assertIn(self.box.get_absolute_url(), listed)
+        self.assertNotIn(self.drop.get_absolute_url(), listed)
+        self.assertEqual(html.count('<input type="hidden" name="set" value="surging-sparks">'), 2)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}?type=bundle&amp;set=surging-sparks" data-browse-link>', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{url}" data-browse-link aria-current="page">', html)
+        # A tab fetched on its own keeps to the set too.
+        pane = self.page(url, type="booster_box", set="surging-sparks", pane=1)
+        self.assertIn(self.box.get_absolute_url(), pane)
+        self.assertNotIn(self.drop.get_absolute_url(), pane)
+        # A set with none of the type is honoured, so the chip says why the list is empty; an unknown set is ignored.
+        html = self.page(url, type="booster_box", set="prismatic-evolutions")
+        self.assertIn('aria-current="true">Prismatic Evolutions<span class="chip__off"', html)
+        self.assertIn('<p class="browse-head__count" role="status">0 products</p>', html)
+        html = self.page(url, type="booster_box", set="nope")
+        self.assertIn('<details class="feed-filters__more feed-set">', html)
+        self.assertIn('<p class="browse-head__count" role="status">2 products</p>', html)
+        # With many sets, a find box on top for feed.js to narrow them as you type; hidden where no script runs it.
+        for n in range(6):
+            self.product(make_set(self.pokemon, f"Set {n}", f"set-{n}", code=f"S{n}"), f"Set {n} Booster Box",
+                         Product.Type.BOOSTER_BOX, "80.00")
+        cache.clear()
+        look.remember()
+        html = self.page(url, type="booster_box")
+        self.assertIn('<input class="feed-set__find" type="search" placeholder="Find a set" aria-label="Find a set" '
+                      'autocomplete="off" hidden data-set-find>', html)
+        script = open("web/static/js/feed.js", encoding="utf-8").read()
+        self.assertIn('box.matches("[data-set-find]")', script)
+        self.assertIn("item.textContent.toLowerCase().indexOf(words) === -1", script)
+        # The unfiltered page keeps its row of sets, and the search page, across games, offers no picker.
+        self.assertIn('<nav class="set-nav"', self.page(url))
+        self.assertNotIn("feed-set", self.page(reverse("web:search"), type="booster_box"))
+
     def test_the_languages_a_list_holds_are_chips_ready_to_tap_and_the_rest_folds_under_filters(self):
         # The owner, 4 Nov 2026: "a filter button but smart filter like. Languages ready to tap could work. Less is
         # more and maintain a beautiful layout."

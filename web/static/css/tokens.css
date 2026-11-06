@@ -389,4 +389,8 @@
   --feed-line: 1.5px;              /* the search pill's and the bell's firmer line */
   --feed-ring: 2px;                /* the ring round the chosen type tile */
   --shadow-search: 0 2px 10px rgb(31 36 48 / 0.08);
+  /* The Amazon button's rainbow ring, set just inside its edge (the owner's ask, 6 Nov 2026). */
+  --amazon-ring: linear-gradient(90deg, #ff5a1f, #ffc233, #35c759, #2e8bff, #a259ff, #ff5a1f);
+  --amazon-ring-width: 2px;
+  --amazon-ring-inset: 4px;
 }

@@ -471,7 +471,13 @@ an Amazon row, "Check price and stock on Amazon", whose button opens a tagged
 Amazon search, and the price box keeps its "Compare on Amazon" button. A
 product with no prices at all still gets the list with that one row. Both go
 once we have an Amazon price for the product, which then sits in the list
-like any other shop. The hourly import reads Amazon once a day: every product already
+like any other shop. The Amazon buttons are the site's one dark button
+(`.button--amazon`): ink, with a thin rainbow ring set just inside the edge
+(`--amazon-ring*` in tokens.css, a gradient under a mask that keeps its
+rim), so the button that pays on anything bought at Amazon stands apart from
+Buy now and the quiet buttons. The owner asked for it on 6 Nov 2026 ("an
+outline of a rectangle inside the button, like a rainbow"), an exception
+to the rule that nothing but prices and the brand is coloured. The hourly import reads Amazon once a day: every product already
 found there is refreshed in batches of ten, then up to
 `RIPRAPTOR_AMAZON_DAILY_LIMIT` products are looked up, by barcode where we
 have one and otherwise by name. The products visitors want most go first

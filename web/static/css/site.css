@@ -185,6 +185,16 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .button--card .buy-mark { --buy-mark: var(--buy-mark-card); --buy-mark-head: var(--buy-mark-head-card); flex: none; }
 .button--big { min-width: 8rem; padding: var(--space-4) var(--space-5); font-size: var(--text-lg); }
 .button--big .icon--bag { width: 2.75rem; height: 2.75rem; }
+/* The Amazon button: ink, with a rainbow ring set just inside its edge, so the one button that pays the site on
+   anything bought at Amazon stands apart from Buy now and the quiet buttons. The owner, 6 Nov 2026: "an outline of a
+   rectangle inside the button, like a rainbow... make it so people click that button". The ring is a gradient under a
+   mask that keeps only its rim; it brightens on hover, and the button lifts as every button does. */
+.button--amazon { position: relative; isolation: isolate; background: var(--color-ink); border-color: var(--color-ink); color: var(--color-paper); }
+.button--amazon::after { content: ""; position: absolute; inset: var(--amazon-ring-inset); border-radius: calc(var(--radius) - var(--amazon-ring-inset)); padding: var(--amazon-ring-width); background: var(--amazon-ring); -webkit-mask: linear-gradient(var(--color-ink) 0 0) content-box, linear-gradient(var(--color-ink) 0 0); mask: linear-gradient(var(--color-ink) 0 0) content-box, linear-gradient(var(--color-ink) 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: 0.85; pointer-events: none; transition: opacity var(--motion-fast) var(--ease-standard); }
+@media (hover: hover) {
+  .button--amazon:hover { background: var(--color-ink); border-color: var(--color-ink); }
+  .button--amazon:hover::after { opacity: 1; }
+}
 
 /* Price */
 .price {

@@ -159,6 +159,46 @@ class PostTests(TestCase):
         self.assertNotIn("Checked", caption)
         self.assertIn("#pokemontcg", caption)
 
+    def test_a_post_leads_with_the_shop_that_has_it_never_a_cheaper_pre_order(self):
+        # The owner, 6 Nov 2026, with a post saying "On pre-order" for a pack two shops had in stock: "it's saying
+        # pre-order when the actual item isn't". The rule the stock lists use: a pre-order leads only when no shop
+        # has it.
+        from io import BytesIO
+        from unittest import mock
+
+        from django.core.cache import cache
+        from PIL import Image
+
+        from catalogue import fair_price
+        from catalogue.models import Product
+        from web import share
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        Listing.objects.filter(retailer=self.northgate).update(price="80.00", availability=Listing.Availability.PREORDER)
+        Product.objects.filter(pk=self.product.pk).update(price_band=fair_price.GOOD_PRICE)   # worked out on the £80
+        caption = self.caption()["caption"]
+        self.assertIn("£87.00 delivered today at the one UK shop we found it at. Checked", caption)
+        self.assertNotIn("pre-order", caption)
+        self.assertNotIn("Price check", caption)   # that verdict was for the other price
+        with mock.patch("catalogue.importers.fetch", side_effect=OSError("down")):
+            response = self.client.get(f"/products/{self.product.slug}/post.png")
+        with Image.open(BytesIO(response.content)) as picture:
+            self.assertEqual(picture.size, (1080, 1080))
+        # The picture is drawn from the shop that has it: its price and line, not the pre-order's.
+        with mock.patch("web.share.draw_post", wraps=share.draw_post) as drawn, \
+                mock.patch("catalogue.importers.fetch", side_effect=OSError("down")):
+            cache.clear()
+            self.client.get(f"/products/{self.product.slug}/post.png")
+            product, summary = drawn.call_args[0][:2]
+            lead = share.post_lead(product, summary)
+            self.assertEqual((lead.retailer, lead.availability, str(lead.shown_price)),
+                             (self.harbour, Listing.Availability.IN_STOCK, "87.00"))
+            self.assertEqual(str(summary.best.shown_price), "80.00")   # the cheapest of all is the pre-order
+        # With no shop having it, the pre-order leads, as before.
+        Listing.objects.filter(retailer=self.harbour).update(availability=Listing.Availability.OUT_OF_STOCK)
+        self.assertIn("On pre-order at £80.00 delivered, the cheapest of the UK shops taking orders.", self.caption()["caption"])
+
     def test_a_game_without_its_own_tags_gets_the_general_ones_only(self):
         other = make_game("Battle Spirits Saga", "battle-spirits-saga")
         product = make_product(make_set(other, "Dawn", "dawn", code="BSS"), name="Dawn Booster Box", slug="dawn-box")

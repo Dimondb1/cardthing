@@ -59,12 +59,21 @@ def post_price(best, store=None):
                     store=store, price=f"£{best.shown_price:.2f}")
 
 
+def post_lead(product, summary):
+    """The offer a post leads with: the cheapest shop that has the product in stock, never a cheaper pre-order, as
+    a list about stock leads its cards (web.views.in_stock_offers); a pre-order only when no shop has it. The
+    owner, 6 Nov 2026, with a post saying pre-order for a pack two shops had in stock: "it's saying pre-order when
+    the actual item isn't"."""
+    offers = getattr(product, "offers", [])
+    return next((offer for offer in offers if offer.availability == Listing.Availability.IN_STOCK), summary.best)
+
+
 def post_caption(product, summary, store=None):
     """The caption for a post about ``product``: its name; the cheapest delivered price today and how many UK shops
     were compared (or that it is on pre-order, or that no shop has it); what the Price check makes of it, when it
     has a verdict; when it was checked; the site, since a caption takes no link; and a few hashtags. Plain sentences
     the owner would write, each one true to the page."""
-    best = summary.best
+    best = post_lead(product, summary)
     lines = [product.name]
     if best is None:
         lines.append(copy.get("product.share.post_none", store=store))
@@ -77,7 +86,9 @@ def post_caption(product, summary, store=None):
                          if offer.availability == Listing.Availability.IN_STOCK})
             middle = [copy.get("product.share.post_price", store=store, price=price, shops=shops) if shops > 1
                       else copy.get("product.share.post_price_one", store=store, price=price)]
-        check = product.price_check
+        # The Price check was worked out on the cheapest price of all: not this one, when a cheaper pre-order sits
+        # behind the shop that has it.
+        check = product.price_check if best is summary.best else None
         if check is not None and check.key in ("lowest", "good"):
             middle.append(copy.get(f"product.share.post_{check.key}", store=store))
         middle.append(copy.get("product.share.post_checked", store=store, when=when_words(best.last_checked)))
@@ -90,7 +101,7 @@ def post_caption(product, summary, store=None):
 
 
 def post_image_key(product, summary):
-    best = summary.best
+    best = post_lead(product, summary)
     return f"web:post-image:v2:{product.pk}:{best.pk if best else 0}:{best.shown_price if best else ''}"
 
 
@@ -231,7 +242,7 @@ def draw_post(product, summary, photo, store=None):
     for line in fit_lines(draw, product.name, name_font, size - 2 * margin):
         draw.text((margin, y), line, font=name_font, fill=INK)
         y += 62
-    best = summary.best
+    best = post_lead(product, summary)
     small = post_font(32, 500, 14)
     y = 736
     if best is not None:

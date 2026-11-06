@@ -5189,7 +5189,11 @@ writes a caption from the registry's `product.share.post_*` sentences: the
 name, the price today and the shops compared (or pre-order, or none in
 stock), the Price check's verdict when it has one, when it was checked, the
 site and the code (a caption takes no link), and a few hashtags, the game's
-own (`POST_TAGS`) then the general ones. The caption goes on the clipboard and the picture to the phone's
+own (`POST_TAGS`) then the general ones. The picture and the caption lead
+with the cheapest shop that has the product in stock, never a cheaper
+pre-order, as the stock lists do (`share.post_lead`); a pre-order leads only
+when no shop has it, and the Price check's verdict is left out when it was
+worked out on that other price. The caption goes on the clipboard and the picture to the phone's
 share sheet, where Instagram makes a post of it; a browser without one
 saves the picture instead. The picture is kept an hour for the same price.
 `/products/<slug>/post/` gives the caption and the picture's address,

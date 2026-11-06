@@ -345,6 +345,15 @@ class Product(models.Model):
         return Verdict(self.price_band, None)
 
     @property
+    def dear(self):
+        """The stored Price check calls the cheapest price dearer than usual (Above average or High price), so the
+        product is never a deal on any list, whatever the next shop charges. The owner, 6 Nov 2026, after a box on
+        Today's best deals opened to a High price chip: "what am I supposed to believe?"."""
+        from .fair_price import ABOVE
+
+        return bool(self.price_band) and self.price_band <= ABOVE
+
+    @property
     def packs_inside(self):
         """How many packs it holds: the owner's figure, else the one the shops agree on, else None."""
         return self.packs or self.packs_found

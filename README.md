@@ -3408,6 +3408,22 @@ product page (`web.views.product_detail`) and on a card led by that shop
 - A price that has never moved is its own lowest every day. That is a fair
   price, never "Lowest yet": the lowest band also needs the price to be 5%
   under the average.
+- A wrong price does not stay in the record. A day's low under a quarter
+  of the median of the product's lows in the window, lasting at most three
+  recorded days before a normal price follows, was a wrong price (a pack
+  filed as the box, a typo at a shop), not a low: the hourly
+  `refresh_price_checks` removes it (`pricing.prune_wrong_lows`) before the
+  bands are stored, and `install.sh` runs that after an update. A real fall
+  stays, since the price does not go straight back up, and a run still going
+  is left until a later day says what it was. The owner, 6 Nov 2026, with a
+  £230 One Piece box whose Price check said "Lowest £13.99" from one wrong
+  day, its chart diving to it: "which is pretty unlikely".
+- A product the Price check calls dearer than usual (Above average or High
+  price, `Product.dear`) is never a deal anywhere, whatever the next shop
+  charges: not on Today's best deals, Featured deals (Rip's Deals) or the
+  Deals page's biggest savings. The owner, 6 Nov 2026, after a box on
+  Today's best deals opened to a High price chip: "what am I supposed to
+  believe?".
 - The record is ours: it lives in the database whatever happens to any shop
   or source, so the price check keeps working if a source stops. The
   outside references are Cardmarket's European price (see The European
@@ -3642,7 +3658,8 @@ page and went on to open a product (`DailyVisitor.opened_product`, kept from
 
 "Featured deals" (Rip's Deals) is the next deal row on the home page: up to eight in-stock products
 with evidence that today's price is a good one (`offers.Summary.is_deal`),
-strongest first, each card naming its evidence:
+never one the Price check calls dearer than usual (`Product.dear`, see Price
+check), strongest first, each card naming its evidence:
 
 - **Lowest in 30 days**, verified from our own daily record: today's
   cheapest delivered price is at or below every day's cheapest over the
@@ -5164,7 +5181,10 @@ average, or a saving of 5% or more on a next shop in line with the market),
 the most popular products first (clicks through to a shop in the trending
 window, `feed.click_counts`, one query at build), then the stronger
 evidence, then the more shops stocking it, so with no clicks to go on the
-strongest deals lead. Every card wears a green label saying why it is a
+strongest deals lead. A product the Price check calls dearer than usual is
+left off however big its saving (`Product.dear`, see Price check): the owner,
+6 Nov 2026, after a box on the rail opened to a High price chip, "what am I
+supposed to believe?". Every card wears a green label saying why it is a
 deal (`feed.card.why_*`: "£8.00 less than Northgate Cards", "Lowest in 30
 days, 21% under average"). Nothing on the feed is measured
 against an RRP; the owner, 5 Nov 2026: "don't show RRP rip offs". Then the

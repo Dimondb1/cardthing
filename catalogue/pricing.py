@@ -8,6 +8,7 @@ retailer. It updates the listing and today's lowest price for the product.
 
 import logging
 import time
+from collections import defaultdict
 from contextlib import contextmanager
 from datetime import timedelta
 from decimal import Decimal
@@ -349,6 +350,59 @@ def correct_daily_lowest(product_id, date=None):
         rows.delete()
     else:
         rows.exclude(price=lowest).update(price=lowest)
+
+
+# A wrong price in the daily record (DailyLowestPrice): a day's low under WRONG_SHARE of the median of the product's
+# lows in the Price check's window, lasting at most WRONG_RUN recorded days before a price at or above that share
+# follows, was a wrong price (a pack filed as the box, a typo at a shop), not a low. A real fall stays: the price does
+# not go straight back up. One wrong day made a £230 box's Price check say "Lowest £13.99", its chart dive to it, and
+# its own low unreachable, so every later price looked high. Fewer than WRONG_MIN_DAYS rows give no median to trust.
+WRONG_SHARE = Decimal("0.25")
+WRONG_RUN = 3
+WRONG_MIN_DAYS = 14
+
+
+def wrong_lows(rows):
+    """The rows of ``rows`` ([(date, price)], oldest first, one product) that were wrong prices by the rule above."""
+    if len(rows) < WRONG_MIN_DAYS:
+        return []
+    prices = sorted(price for _day, price in rows)
+    middle = len(prices) // 2
+    median = prices[middle] if len(prices) % 2 else (prices[middle - 1] + prices[middle]) / 2
+    floor = median * WRONG_SHARE
+    wrong, start = [], 0
+    while start < len(rows):
+        if rows[start][1] >= floor:
+            start += 1
+            continue
+        end = start
+        while end < len(rows) and rows[end][1] < floor:
+            end += 1
+        # Short, and followed by a normal price: a run still going may be a real fall.
+        if end < len(rows) and end - start <= WRONG_RUN:
+            wrong.extend(rows[start:end])
+        start = end
+    return wrong
+
+
+def prune_wrong_lows(today=None):
+    """Remove the wrong prices (wrong_lows) from every product's daily record over the Price check's window. Returns
+    how many rows went. refresh_price_checks runs it each hour before the bands are stored, and install.sh after an
+    update, so the record the Price check and the chart rest on holds only prices a shop really charged."""
+    from .fair_price import WINDOW_DAYS
+
+    today = today or timezone.localdate()
+    by_product = defaultdict(list)
+    rows = (DailyLowestPrice.objects.filter(date__gte=today - timedelta(days=WINDOW_DAYS))
+            .order_by("product_id", "date").values_list("product_id", "date", "price").iterator())
+    for product_id, day, price in rows:
+        by_product[product_id].append((day, price))
+    gone = 0
+    for product_id, record in by_product.items():
+        wrong = wrong_lows(record)
+        if wrong:
+            gone += DailyLowestPrice.objects.filter(product_id=product_id, date__in=[day for day, _ in wrong]).delete()[0]
+    return gone
 
 
 def snapshot_all(date=None):

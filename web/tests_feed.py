@@ -337,6 +337,28 @@ class HomeFeedTests(FeedCase):
         self.assertEqual([url for _game, url, _spare in self.cards(self.page(), end="feed-drop-title")],
                          [p.get_absolute_url() for p in (self.bundle, self.tin, self.etb, self.box)])
 
+    def test_a_product_the_price_check_calls_dear_is_no_deal_anywhere(self):
+        # The owner, 6 Nov 2026, after a box on Today's best deals opened to a High price chip: "what am I supposed
+        # to believe?". The box's saving on the next shop stands, but its stored Price check says High price; the
+        # ETB's says Fair price, so it stays.
+        Product.objects.filter(pk=self.box.pk).update(price_band=fair_price.HIGH_PRICE)
+        Product.objects.filter(pk=self.etb.pk).update(price_band=fair_price.FAIR)
+        cache.clear()
+        look.remember()
+        html = self.page()
+        self.assertEqual([url for _game, url, _spare in self.cards(html, end="feed-drop-title")],
+                         [self.etb.get_absolute_url()])
+        # Above average is dearer than usual too.
+        Product.objects.filter(pk=self.box.pk).update(price_band=fair_price.ABOVE)
+        cache.clear()
+        look.remember()
+        self.assertNotIn(self.box.get_absolute_url(), self.page())
+        # The Deals page's biggest savings leave it out as well.
+        deals = self.page(reverse("web:deals"))
+        savings = deals[deals.index('id="savings-title"'):deals.index("</ol>", deals.index('id="savings-title"'))]
+        self.assertIn(self.etb.get_absolute_url(), savings)
+        self.assertNotIn(self.box.get_absolute_url(), savings)
+
     def test_the_home_rail_keeps_spares_behind_it_for_the_visitors_own_games_and_a_games_page_does_not(self):
         for n in range(12):
             self.product(self.fantasy, f"Final Fantasy Thing {n}", Product.Type.BOOSTER_PACK, "4.00", second="5.00")

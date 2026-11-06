@@ -156,7 +156,9 @@ def build_rails(candidates=None):
     saving of at least offers.DEAL_PERCENT on a next shop in line with the market), the most popular products first:
     by clicks through to a shop this week, then the stronger evidence, then the more shops stocking it, so with no
     clicks to go on the rail is the strongest deals. The owner, 5 Nov 2026: "the best deals on the most popular
-    products". Only a product in stock at a confirmed delivered price, with no sign of a wrong product link."""
+    products". Only a product in stock at a confirmed delivered price, with no sign of a wrong product link, and never
+    one the Price check calls dearer than usual (Product.dear): the owner, 6 Nov 2026, after a box on the rail opened
+    to a High price chip, "what am I supposed to believe?"."""
     from web import views
 
     products = (candidates or views.deal_candidates)()
@@ -167,7 +169,7 @@ def build_rails(candidates=None):
         summary = offers.summarise(product, week_lows)
         best = summary.best
         if (best is None or best.availability != Listing.Availability.IN_STOCK or not best.delivery_known
-                or summary.suspect or not summary.is_deal):
+                or summary.suspect or not summary.is_deal or product.dear):
             continue
         shops = sum(1 for offer in product.offers if offer.availability == Listing.Availability.IN_STOCK)
         good.append(((-clicks.get(product.pk, 0), -summary.strength, -shops, product.name), product, summary))

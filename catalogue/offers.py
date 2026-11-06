@@ -202,11 +202,12 @@ def week_low_map(product_ids, days=None, today=None):
 
 
 def biggest_savings(products, limit=6):
-    """Products whose cheapest offer beats the runner-up by the most, as (product, summary)."""
+    """Products whose cheapest offer beats the runner-up by the most, as (product, summary). Never one the Price
+    check calls dearer than usual (Product.dear): beating the next shop is no saving on a high price."""
     rows = []
     for product in products:
         summary = summarise(product)
-        if summary.saving:
+        if summary.saving and not product.dear:
             rows.append((product, summary))
     rows.sort(key=lambda row: (-row[1].percent, -row[1].saving, row[0].name))
     return rows[:limit]

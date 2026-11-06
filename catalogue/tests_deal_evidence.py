@@ -7,7 +7,7 @@ from decimal import Decimal
 from django.test import TestCase
 from django.utils import timezone
 
-from . import offers
+from . import fair_price, offers
 from .models import DailyLowestPrice, Product
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
@@ -90,6 +90,10 @@ class DealEvidenceTests(TestCase):
         self.product("flat", "60.00", history=["60.00"] * 20)       # its own low, never moved: out
         self.product("dropped", "50.00", history=["60.00"] * 20)    # 17% under its month: in
         self.product("fair-box", "250.00", "265.00")                # 6% on a shop in line: in
+        self.product("dear-box", "250.00", "265.00")                # the same saving, but the Price check says High price: out
+        Product.objects.filter(slug="dear-box").update(price_band=fair_price.HIGH_PRICE)
         candidates = list(Product.objects.for_lists().prefetch_related(offers.buyable_prefetch()))
         rows, _spares = featured_pick(candidates)
         self.assertEqual([product.slug for product, _ in rows], ["dropped", "fair-box"])
+        # The Deals page's biggest savings (any true saving, deal or not) skip it too.
+        self.assertEqual([product.slug for product, _ in offers.biggest_savings(candidates)], ["fair-box", "tiny"])

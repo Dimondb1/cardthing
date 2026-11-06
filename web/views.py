@@ -457,7 +457,8 @@ def deal_candidates():
     """Every product a shop has in stock, with its buyable offers (``product.offers``) and its name, for
     picking deals from. Only what picking needs: the prices of the few picked are loaded afterwards by
     with_list_fields, not worked out for every product in stock."""
-    return Product.objects.active().in_stock().only("pk", "name", "game_id").prefetch_related(offers.buyable_prefetch())
+    return (Product.objects.active().in_stock().only("pk", "name", "game_id", "price_band")
+            .prefetch_related(offers.buyable_prefetch()))
 
 
 class SharedCandidates:
@@ -562,7 +563,9 @@ def featured_pick(products, week_lows=None):
         # Promoted deals need a confirmed delivered price and no sign of a wrong product link.
         if not summary.best.delivery_known or summary.suspect:
             continue
-        if not summary.is_deal:
+        # Nor a price the Price check calls dearer than usual (Product.dear): a saving on the next shop is no deal
+        # when the product page then says High price.
+        if not summary.is_deal or product.dear:
             continue
         good.append((product, summary))
     good.sort(key=lambda row: (-row[1].strength, row[0].name))

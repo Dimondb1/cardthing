@@ -6,3 +6,4 @@
   </ul>
   {% if now_on.more %}<p class="dash-card__line">{% copy "dashboard.now.more" %}</p>{% endif %}
   {% else %}<p class="dash-card__line">{% copy "dashboard.now.none" minutes=now_on.minutes %}</p>{% endif %}
+  <p class="dash-card__line"><a href="{{ now_on.online_url }}">{% copy "dashboard.now.who" %}</a></p>

@@ -24,6 +24,7 @@ class AffiliateClickTests(TestCase):
 
     def setUp(self):
         cache.clear()
+        self.client.cookies["rr_page"] = "1"   # a browser that ran one of our pages (catalogue/clicks.py)
 
     def click(self, url, referer="http://testserver/products/pre-etb/"):
         headers = {"HTTP_USER_AGENT": BROWSER}

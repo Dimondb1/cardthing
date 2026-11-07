@@ -1155,8 +1155,9 @@ class TypeBand(models.Model):
 
 class OutboundClickQuerySet(models.QuerySet):
     def people(self):
-        """Clicks from a person on our pages: the ones that carried our tracking and that every count uses."""
-        return self.filter(suspect=False)
+        """Clicks from a person on our pages: the ones that carried our tracking and that every count uses, less any
+        found afterwards to be a script's (catalogue/automated.py)."""
+        return self.filter(suspect=False, automated=False)
 
     def suspects(self):
         """Direct hits sent on to the shop without tracking (catalogue/clicks.py)."""
@@ -1196,8 +1197,19 @@ class OutboundClick(models.Model):
     visitor = models.CharField(max_length=32, blank=True, help_text="The day's one-way visitor token.")
     suspect = models.BooleanField(
         default=False,
-        help_text="A direct hit (no link from our pages, a robot, a prefetch or too many in an hour), sent to the "
-        "shop without tracking and left out of every click count.",
+        help_text="A direct hit (no link from our pages, a browser that never ran one of our pages, a prefetch or too "
+        "many in an hour), sent to the shop without tracking and left out of every click count.",
+    )
+    # Why a direct hit was one (catalogue/clicks.py suspect_reason: referer, page, prefetch, cap), empty on a
+    # person's click and on direct hits from before 7 Nov 2026.
+    suspect_why = models.CharField("why it was a direct hit", max_length=8, blank=True)
+    # The click passed the check that its browser had run one of our pages (from 7 Nov 2026); empty on older clicks,
+    # which catalogue/automated.py checks against the day's visitors instead.
+    ran_page = models.BooleanField(null=True, blank=True, default=None)
+    automated = models.BooleanField(
+        default=False,
+        help_text="Sent with tracking, but found afterwards to be a script's: its visitor never ran one of our pages, "
+        "or was marked automated (catalogue/automated.py). Left out of every click count.",
     )
 
     objects = OutboundClickQuerySet.as_manager()
@@ -1856,6 +1868,14 @@ class DailyVisitor(models.Model):
     # to a product (the owner, 2 Nov 2026: "Is that maybe a reason why people leave the site?"). Empty on rows from
     # before it was kept, which the dashboard leaves out.
     opened_product = models.BooleanField(null=True, blank=True, default=None)
+    # Found to be a script though its browser ran the page (catalogue/automated.py), and left out of people: it sent
+    # a shop link without our page, or was one of a flood of one-page visits from abroad with no link to us. The
+    # owner, 7 Nov 2026, after 11,000 such "people" in a day: "fix the bot clicks and burst detection".
+    automated = models.BooleanField(default=False)
+    automated_why = models.CharField(max_length=8, blank=True, choices=[
+        ("direct", "Sent a shop link without coming from our page"),
+        ("flood", "One of a flood of one-page visits from abroad with no link to us"),
+    ])
 
     class Meta:
         unique_together = [("date", "token")]
@@ -1864,6 +1884,52 @@ class DailyVisitor(models.Model):
 
     def __str__(self):
         return f"{self.date} {self.country or '??'}"
+
+
+class LiveVisitor(models.Model):
+    """Someone on the site in the last few minutes, for the owner's Who is online page (web/online.py): their internet
+    address, country, device, the site that sent them and the page they are on. Unlike DailyVisitor it holds the
+    address, so it is kept only while they are here: a row is deleted LIVE_KEEP minutes after their last page
+    (catalogue/online.py forget, run by the background reader every few minutes and hourly by tidy_all). Never in a
+    report, an export or Insights. The owner, 7 Nov 2026: "so I can see the IP address and the location and how
+    many people are online at any given point"."""
+
+    date = models.DateField()
+    token = models.CharField(max_length=32, unique=True)   # the day's visitor token, as DailyVisitor's
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    country = models.CharField(max_length=2, blank=True)
+    device = models.CharField(max_length=8, blank=True)
+    source = models.CharField(max_length=80, blank=True)
+    agent = models.CharField(max_length=200, blank=True)
+    page = models.CharField(max_length=120, blank=True)    # kind and slug, as DailyVisitor.last_page
+    path = models.CharField(max_length=200, blank=True)    # the address on our site, without its query
+    browser = models.BooleanField(default=False)           # its browser ran the page
+    first_seen = models.DateTimeField()
+    last_seen = models.DateTimeField(db_index=True)
+
+    class Meta:
+        verbose_name = "visitor on the site now"
+        verbose_name_plural = "visitors on the site now"
+
+    def __str__(self):
+        return f"{self.ip or '?'} {self.page}"
+
+
+class OnlineCount(models.Model):
+    """How many were on the site at a moment, taken every five minutes by the background reader (catalogue/online.py
+    sample): people, and visits found or fetched automated. Counts only. Kept for ONLINE_DAYS days."""
+
+    at = models.DateTimeField(unique=True)
+    people = models.PositiveIntegerField(default=0)
+    automated = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["at"]
+        verbose_name = "count of people online"
+        verbose_name_plural = "counts of people online"
+
+    def __str__(self):
+        return f"{self.at:%d %b %H:%M} {self.people}"
 
 
 class WorkerState(models.Model):

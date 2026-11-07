@@ -69,6 +69,8 @@
 
     {% if why.bursts %}<h3>Burst days, left out of the averages</h3>
     <ul class="ins__rows">{% for b in why.bursts %}<li>{{ b.date|date:"D j M" }}{% if b.today %} (so far){% endif %}: {{ b.reasons|join:"; " }}</li>{% endfor %}</ul>{% endif %}
+    {% if why.floods %}<h3>Floods of scripts, left out of people</h3>
+    <ul class="ins__rows">{% for f in why.floods %}<li>{{ f.date|date:"D j M" }}{% if f.today %} (so far){% endif %}: {{ f.reason }}</li>{% endfor %}</ul>{% endif %}
 
     <h3>Health</h3>
     {% if why.health %}<ul class="ins__rows">{% for h in why.health %}<li class="bad">{{ h.text }}</li>{% endfor %}</ul>

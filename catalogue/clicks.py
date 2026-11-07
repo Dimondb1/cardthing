@@ -7,6 +7,9 @@ person who pressed a button on one of our pages:
 * the request is a GET (link checkers often send HEAD),
 * it has a Referer from our own site (the site's Referrer-Policy sends our origin with every click from a page),
 * the browser does not say it is a robot, and is not prefetching or building a link preview,
+* the browser has run one of our pages today: it carries the PAGE_COOKIE our page's report sets, or the day's visitor
+  row says so (from 7 Nov 2026: thousands of clicks on 4 and 5 Nov came from visitors whose browser never ran a page,
+  scripts that fetched our pages and followed the links with our page as their Referer),
 * the connection has not already made more than CLICKS_PER_HOUR such clicks this hour.
 
 Everything else is a "direct hit": the visitor still reaches the shop, at the plain product address with no
@@ -15,7 +18,7 @@ browsers, link scanners and scripts then never reach eBay with our campaign id, 
 only clicks that could become sales.
 
 The hourly cap counts a one-way hash of the internet address and the day's secret, held in the cache for an
-hour. The address itself is never stored.
+hour. The address itself is never stored with a click.
 """
 
 import hashlib
@@ -26,9 +29,14 @@ from django.core.cache import cache
 from django.urls import Resolver404, resolve
 from django.utils import timezone
 
-from .insights import client_ip, is_bot
+from .insights import client_ip, is_bot, visitor_token
 
 CLICKS_PER_HOUR = 30
+# Set by our page's report that it was shown (web.views.note_api), holding only "1", for a day: the browser has run
+# one of our pages, so a click it makes is a person's. The visitor row is asked too, for a browser that keeps no
+# cookie.
+PAGE_COOKIE = "rr_page"
+PAGE_COOKIE_SECONDS = 24 * 3600
 OWN_HOSTS = ("ripraptor.com", "www.ripraptor.com")
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 PREFETCH_HEADERS = ("Purpose", "Sec-Purpose", "X-Moz", "X-Purpose")
@@ -126,6 +134,16 @@ def over_cap(request):
     return count > CLICKS_PER_HOUR
 
 
+def ran_a_page(request):
+    """True when this browser has run one of our pages today: its PAGE_COOKIE, or its visitor row for the day."""
+    if request.COOKIES.get(PAGE_COOKIE) == "1":
+        return True
+    from .models import DailyVisitor
+
+    day = timezone.localdate()
+    return DailyVisitor.objects.filter(date=day, token=visitor_token(request, day), browser=True).exists()
+
+
 def suspect_reason(request):
     """"" for a click from a person on our pages, otherwise a short word for why it is not counted."""
     if request.method != "GET":
@@ -136,6 +154,8 @@ def suspect_reason(request):
         return "prefetch"
     if not from_our_pages(request):
         return "referer"
+    if not ran_a_page(request):
+        return "page"
     if over_cap(request):
         return "cap"
     return ""

@@ -38,8 +38,18 @@ from content import service as copy
 from inbox.service import unread_count
 from inbox.shops import open_count
 
+# Each part of the dashboard is built by the background reader once it is a minute old, while someone has had the
+# dashboard open in the last WATCHED_SECONDS (warm, catalogue/worker.py), and the page serves the copy it holds: a
+# part is built while the owner waits only when it is missing, or older than SECTION_STALE because the reader is
+# not running. Building them all took five seconds and more on every load after a minute (the owner, 7 Nov 2026:
+# "look at why it takes so long to open the dashboard").
 SECTION_SECONDS = 60
+SECTION_IDLE_SECONDS = 5 * 60    # nobody looking: the reader still keeps every part this fresh, so an open never waits
+SECTION_STALE = 15 * 60
+SECTION_KEEP = 30 * 60
 SECTION_KEY = "dashboard:{name}:v2"
+WATCHED_KEY = "dashboard:watched"
+WATCHED_SECONDS = 30 * 60
 WEEK_DAYS = 7
 TOP_SOURCES = 5
 TOP_ROWS = 10
@@ -151,7 +161,7 @@ def now_section(now, store):
     page's script reports in), and the pages they are on, most people first. A visitor whose browser never ran a
     page (a scanner, a script) is never here. Built on every load, never cached: a query, and one for the names."""
     rows = list(
-        DailyVisitor.objects.filter(browser=True, last_seen__gte=now - timedelta(minutes=NOW_MINUTES),
+        DailyVisitor.objects.filter(browser=True, automated=False, last_seen__gte=now - timedelta(minutes=NOW_MINUTES),
                                     views__lt=insights.VIEWS_PER_VISITOR_CAP)
         .order_by().values_list("last_page").annotate(n=Count("id")).order_by("-n", "last_page")
     )
@@ -175,7 +185,8 @@ def now_section(now, store):
         url = reverse("web:product", args=[key]) if kind == "product" and (kind, key) in names else ""
         pages.append({"name": name, "kind": kinds.get(kind, "") if (kind, key) in names else "", "url": url,
                       "people": n})
-    return {"people": people, "pages": pages, "more": len(rows) > NOW_PAGES, "minutes": NOW_MINUTES}
+    return {"people": people, "pages": pages, "more": len(rows) > NOW_PAGES, "minutes": NOW_MINUTES,
+            "online_url": reverse("online")}
 
 
 def traffic_section(now, store):
@@ -268,6 +279,8 @@ def traffic_section(now, store):
         "direct": sum(day["direct"] for day in days),
         "per_person": round(counted_clicks / people, 2) if people else None,
         "bursts": bursts, "best": best, "most_clicks": most_clicks,
+        # The floods of scripts left out of people this week (catalogue/automated.py), newest first: (day, count).
+        "floods": [(flood["date"], flood["count"]) for flood in why.get("floods", []) if flood["date"] >= first],
         # From the first day pages reported in, people are browsers; what else visited is counted as automated.
         "browser_since": browser_since if browser_since and browser_since >= first else None,
         "automated": sum(day["automated"] for day in days if day["by_browser"]),
@@ -329,7 +342,11 @@ def money_section(now, store):
     tracked_from = timezone.localtime(tracked).date() if tracked else first
     clicked_visits = (clicks.exclude(visitor="").values("created_at__date", "visitor").distinct().count()
                       if tracked else 0)
-    counts = DailyVisitor.objects.filter(date__gte=first, date__lte=today, views__lt=insights.VIEWS_PER_VISITOR_CAP)
+    # Visits are people's, as the clicks are: from the first day pages reported in, browsers not found automated.
+    browser_since = (DailyVisitor.objects.filter(browser=True, date__gte=first - timedelta(days=traffic.WINDOW_DAYS))
+                     .order_by("date").values_list("date", flat=True).first())
+    counts = DailyVisitor.objects.filter(traffic.people_q(browser_since), date__gte=first, date__lte=today,
+                                         views__lt=insights.VIEWS_PER_VISITOR_CAP)
     counts = counts.aggregate(visits=Count("pk"), tracked=Count("pk", filter=Q(date__gte=tracked_from)))
     visits, tracked_visits = counts["visits"], counts["tracked"]
     clicked_visits = min(clicked_visits, tracked_visits)
@@ -842,13 +859,33 @@ def cards_for(order, hidden, context, store):
 
 
 def section(name, build, now, store, fresh=False):
-    """{"built_at", "data"} for one section, from the shared cache unless ``fresh`` or older than a minute."""
+    """{"built_at", "data"} for one section: the shared cache's copy, built here only when ``fresh``, missing or
+    older than SECTION_STALE (the background reader keeps it under a minute old while the dashboard is in use)."""
     key = SECTION_KEY.format(name=name)
     found = None if fresh else cache.get(key)
-    if found is None:
+    if found is None or (now - found["built_at"]).total_seconds() >= SECTION_STALE:
         found = {"built_at": now, "data": build(now, store)}
-        cache.set(key, found, SECTION_SECONDS)
+        cache.set(key, found, SECTION_KEEP)
     return found
+
+
+def warm(now=None, store=None, force=False):
+    """Build again every section older than SECTION_SECONDS while someone has had the dashboard open in the last
+    WATCHED_SECONDS (or ``force``), and older than SECTION_IDLE_SECONDS while nobody has, so the first open after a
+    while (or after an update emptied the cache) finds a recent copy too. The background reader runs it on its
+    turn. Returns the names built."""
+    now = now or timezone.now()
+    age = SECTION_SECONDS if force or cache.get(WATCHED_KEY) else SECTION_IDLE_SECONDS
+    built = []
+    for name, build in SECTIONS:
+        key = SECTION_KEY.format(name=name)
+        found = cache.get(key)
+        if found is None or (now - found["built_at"]).total_seconds() >= age:
+            if store is None:
+                store = copy.load_all()
+            cache.set(key, {"built_at": now, "data": build(now, store)}, SECTION_KEEP)
+            built.append(name)
+    return built
 
 
 def admin_links():
@@ -886,6 +923,8 @@ def dashboard(request):
     now = timezone.now()
     store = copy.for_request(request)
     fresh = request.GET.get("fresh") == "1"
+    # The background reader keeps the parts fresh from now on, for the next half hour (warm).
+    cache.set(WATCHED_KEY, True, WATCHED_SECONDS)
     found = {name: section(name, build, now, store, fresh) for name, build in SECTIONS}
     data = {name: entry["data"] for name, entry in found.items()}
     order, hidden = layout_of(request.user)

@@ -247,6 +247,7 @@ class OutboundTests(PageTestCase):
     def test_uses_the_affiliate_link(self):
         self.harbour.affiliate_url_template = "https://network.example/c?u={url}"
         self.harbour.save()
+        self.client.cookies["rr_page"] = "1"   # its browser ran one of our pages (catalogue/clicks.py)
         response = self.client.get(self.cheap.get_outbound_url(), HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0",
                                    HTTP_REFERER="http://testserver/")
         self.assertTrue(response["Location"].startswith("https://network.example/c?u=https%3A"))
@@ -943,6 +944,7 @@ class FeaturedAndMarketplaceTests(TestCase):
         self.assertEqual(len(found), 3)   # Amazon and eBay in the price box, Amazon again as the last price row
         for tag in found:
             self.assertIn('rel="sponsored nofollow noopener"', tag)
+        self.client.cookies["rr_page"] = "1"   # its browser ran one of our pages (catalogue/clicks.py)
         with self.settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21", RIPRAPTOR_EBAY_CAMPAIGN_ID="5339216899"):
             ebay = self.client.get("/go/search/30th-bundle/ebay/", HTTP_REFERER="http://testserver/products/30th-bundle/",
                                    HTTP_USER_AGENT="Mozilla/5.0 Safari/604.1")["Location"]

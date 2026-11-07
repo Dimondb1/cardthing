@@ -144,6 +144,9 @@ set -a; . ./.env; set +a
 [ -f /var/lib/ripraptor/dbip-country.mmdb ] || .venv/bin/python manage.py fetch_geoip || true
 chown -R ripraptor:ripraptor "$DIR" /var/lib/ripraptor
 
+# Scripts that ran our pages left out of people and clicks (catalogue/automated.py), now rather than at the hour, so
+# the deals rails and the stock checks stop following them at once.
+sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py classify_visits" || true
 # Each product's Price check for lists (the Fairest price sort, the gauge on cards), now rather than at the hour.
 sudo -u ripraptor bash -c "cd $DIR && set -a && . ./.env && set +a && timeout -k 30 600 .venv/bin/python manage.py refresh_price_checks" || true
 # How many packs, and cards a pack, each product holds, from the shops' descriptions: now rather than at the hour.

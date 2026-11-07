@@ -142,6 +142,9 @@ RECENTLY_CHECKED = timedelta(minutes=8)
 # The reader looks for cached page lists that are due a build (web/warming.py) at least this often, and at
 # once after a forced clear or when one is missing. Looking reads every list, so not on every five-second turn.
 WARM_CHECK = timedelta(seconds=30)
+# Every this often the reader marks today's automated visitors and clicks (catalogue/automated.py), counts who is
+# online and forgets the addresses of those who have gone (catalogue/online.py).
+VISITS_EVERY = timedelta(minutes=5)
 IMPORT_LOCK_HOLD_LIMIT = timedelta(minutes=20)
 
 MARKETPLACES = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
@@ -412,6 +415,8 @@ class Worker:
         # Whether this reader keeps the cached page lists built (run_worker turns it on), and when it last
         # built them all.
         self.warm = warm
+        self.last_dashboard = None
+        self.last_visits = None
         self.last_warm = None
         self.warm_forced = None
 
@@ -976,6 +981,35 @@ class Worker:
         if planned:
             self.notify_safely(now)
         self.keep_pages_warm(now)
+        self.keep_dashboard_warm(now)
+        self.keep_visits_tidy(now)
+
+    def keep_dashboard_warm(self, now):
+        """Build again the dashboard's parts over a minute old while it is in use (web.dashboard.warm), so the owner's
+        page serves them at once. Looks every WARM_CHECK; a failure waits for the next turn."""
+        if not self.warm or (self.last_dashboard is not None and now - self.last_dashboard < WARM_CHECK):
+            return
+        self.last_dashboard = now
+        from web import dashboard
+
+        try:
+            dashboard.warm()
+        except Exception:  # noqa: BLE001 - the owner's page builds what it lacks
+            logger.exception("Could not build the dashboard")
+
+    def keep_visits_tidy(self, now):
+        """Every VISITS_EVERY: today's automated visitors and clicks marked, who is online counted and the addresses
+        of those gone forgotten. A failure waits for the next turn; tidy_all does the same hourly."""
+        if not self.warm or (self.last_visits is not None and now - self.last_visits < VISITS_EVERY):
+            return
+        self.last_visits = now
+        from . import automated, online
+
+        try:
+            automated.classify(days=1)
+            online.sample()
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not tidy the visit counts")
 
     def keep_pages_warm(self, now):
         """Build the cached page lists that are due (cleared by a job's price changes, missing, or nearly

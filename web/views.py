@@ -1754,8 +1754,8 @@ def save_click(request, reason, product, retailer, listing=None):
     saved = None
     with pricing.drop_if_locked("Click"):
         saved = pricing.retry_locked(lambda: OutboundClick.objects.create(
-            listing=listing, product=product, retailer=retailer, suspect=bool(reason),
-            source=clicks.page_of(request), button=clicks.button_of(request),
+            listing=listing, product=product, retailer=retailer, suspect=bool(reason), suspect_why=reason[:8],
+            ran_page=True if not reason else None, source=clicks.page_of(request), button=clicks.button_of(request),
             visitor=insights.visitor_token(request, timezone.localdate()),
         ))
     return saved
@@ -2492,6 +2492,7 @@ def note_api(request):
     kept beyond their row for the day."""
     event = request.GET.get("what", "")
     match = None
+    ran = False
     if insights.is_bot(request):
         pass
     elif event in insights.INSTALL_EVENTS:
@@ -2508,18 +2509,24 @@ def note_api(request):
         match = page_match(request.GET.get("path", ""))
         if match is not None and match.namespace == "web" and match.url_name in KINDS:
             insights.record_view(request, KINDS[match.url_name], view_key(match))
-            insights.mark_browser(request, KINDS[match.url_name], view_key(match))
+            insights.mark_browser(request, KINDS[match.url_name], view_key(match), path=request.GET.get("path", ""))
+            ran = True
     elif event == "here" and not clicks.prefetching(request):
         # The page's script reporting in once a page view (site.js): a browser, so a person, on this page now.
         from .middleware import KINDS, view_key
 
         found = page_match(request.GET.get("path", ""))
         if found is not None and found.namespace == "web" and found.url_name in KINDS:
-            insights.mark_browser(request, KINDS[found.url_name], view_key(found))
+            insights.mark_browser(request, KINDS[found.url_name], view_key(found), path=request.GET.get("path", ""))
         else:
             insights.mark_browser(request)
+        ran = True
     response = HttpResponse(status=204)
     response["Cache-Control"] = "no-store"
+    # The browser ran one of our pages: a click it makes today is a person's (catalogue/clicks.py ran_a_page).
+    if ran and request.COOKIES.get(clicks.PAGE_COOKIE) != "1":
+        response.set_cookie(clicks.PAGE_COOKIE, "1", max_age=clicks.PAGE_COOKIE_SECONDS, httponly=True,
+                            samesite="Lax", secure=request.is_secure())
     # A guide rendered ahead of a tap set no cookie when fetched: its reader is marked once it is shown.
     if match is not None and match.namespace == "web" and match.url_name in insights.GUIDE_READ_PAGES:
         insights.mark_guide_reader(request, response)

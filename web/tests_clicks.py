@@ -33,6 +33,8 @@ class ClickTestCase(TestCase):
 
     def setUp(self):
         cache.clear()
+        # A browser that ran one of our pages today (catalogue/clicks.py ran_a_page), as a person's has.
+        self.client.cookies[clicks.PAGE_COOKIE] = "1"
 
     def go(self, listing, method="get", referer="http://testserver/products/x/", agent=BROWSER, **extra):
         headers = {"HTTP_USER_AGENT": agent, **extra}
@@ -63,14 +65,15 @@ class GoTests(ClickTestCase):
     def request(self, referer, **extra):
         from django.test import RequestFactory
 
-        return RequestFactory().get("/go/1/", HTTP_REFERER=referer, HTTP_USER_AGENT=BROWSER, **extra)
+        return RequestFactory().get("/go/1/", HTTP_REFERER=referer, HTTP_USER_AGENT=BROWSER,
+                                    HTTP_COOKIE=f"{clicks.PAGE_COOKIE}=1", **extra)
 
     def test_localhost_counts_only_in_debug(self):
         from django.test import RequestFactory
 
         def local():
             return RequestFactory().get("/go/1/", HTTP_HOST="ripraptor.com", HTTP_REFERER="http://localhost:8000/",
-                                        HTTP_USER_AGENT=BROWSER)
+                                        HTTP_USER_AGENT=BROWSER, HTTP_COOKIE=f"{clicks.PAGE_COOKIE}=1")
         with override_settings(DEBUG=False, ALLOWED_HOSTS=["ripraptor.com"]):
             self.assertEqual(clicks.suspect_reason(local()), "referer")
         with override_settings(DEBUG=True, ALLOWED_HOSTS=["ripraptor.com"]):

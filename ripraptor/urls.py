@@ -4,6 +4,7 @@ from django.urls import include, path, re_path
 from twostep import views as twostep_views
 from twostep.forms import LoginForm
 from web import media as web_media
+from web import online as web_online
 from web import views as web_views
 
 admin.site.site_header = "RipRaptor admin"
@@ -19,6 +20,7 @@ urlpatterns = [
     path("admin/checks/", web_views.checks_page, name="checks"),
     path("admin/claude/", web_views.claude_page, name="claude"),
     path("admin/crawl/", web_views.crawl_page, name="crawl"),
+    path("admin/online/", web_online.online_page, name="online"),
     path("admin/data/", web_views.data_page, name="data"),
     path("admin/data/download/<int:pk>/", web_views.data_download, name="data_download"),
     path("admin/data/upload/<int:pk>/", web_views.data_import_page, name="data_import"),

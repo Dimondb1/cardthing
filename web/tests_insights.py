@@ -736,10 +736,11 @@ class TrafficExplainerPageTests(TestCase):
         from catalogue.models import DailyVisitor
 
         factory = RequestFactory()
-        # 8 queries for a new visitor and 4 for their next page, the same as before arrival times were kept.
-        with self.assertNumQueries(8):
+        # 9 queries for a new visitor and 5 for their next page: as before arrival times were kept, and one more each
+        # for the Who is online page (catalogue/online.py, one upsert).
+        with self.assertNumQueries(9):
             insights.record_view(factory.get("/x/", **HUMAN), DailyPageView.Kind.PRODUCT, self.product.slug)
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(5):
             insights.record_view(factory.get("/x/", **HUMAN), DailyPageView.Kind.PRODUCT, self.product.slug)
         row = DailyVisitor.objects.get()
         self.assertEqual(row.landing, f"product:{self.product.slug}")

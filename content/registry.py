@@ -3056,9 +3056,13 @@ ENTRIES = [
         "does not record who clicked. We count visits to our pages under a code made from your connection and "
         "browser that changes every day and cannot be traced back to you, with your country, the kind of device "
         "and the site that sent you. Each page also tells our server once, with only its own address, that your "
-        "browser showed it, so we can tell people from automated visits. One small cookie of ours remembers only that your browser "
-        "has visited before, so we can count returning visitors, and another only that it has read one of our "
-        "guides, so we can count readers who come back. Each holds nothing about you.\n\n"
+        "browser showed it, so we can tell people from automated visits. While you are on the site, and for 30 "
+        "minutes after the last page you open, we also keep your internet address with your country, device and the "
+        "page you are on, so we can see who is visiting now and keep automated visits out. It is then deleted, and "
+        "it is never kept with our counts. One small cookie of ours remembers only that your browser "
+        "has visited before, so we can count returning visitors, another only that it has read one of our "
+        "guides, so we can count readers who come back, and a third, for a day, only that it has shown one of our "
+        "pages, so your clicks to retailers count as a person's. Each holds nothing about you.\n\n"
         "If you ask to be emailed when a product is back in stock, or with Track price when it is "
         "in stock at or under a price you choose, we keep your email address (and that price and "
         "how long to look) for that alone. Nothing is sent until you confirm by the link we email "
@@ -3621,6 +3625,10 @@ ENTRIES = [
           "Why a day looks automated.", placeholders=("count", "share")),
     Entry("insights.why.reason_few_one", T, "Burst: one visitor", "1 visitor opened {share}% of the pages",
           "Why a day looks automated, when it is one visitor.", placeholders=("share",)),
+    Entry("insights.why.reason_flood", T, "Flood: one-page visits from abroad",
+          "{count} one-page visits from outside the UK with no link to us, far above the usual, were scripts and are "
+          "left out of people. The day's other visitors still count.",
+          "Why part of a day is left out of people, when a flood of scripts ran our pages.", placeholders=("count",)),
     Entry("insights.why.gap", T, "No visitors recorded",
           "No visitors were recorded from {start} to {end}, when about {expected} usually arrive. Check the site "
           "loads and that counting works.",
@@ -3748,6 +3756,9 @@ ENTRIES = [
           "In the on the site now card when nobody has opened a page lately.", placeholders=("minutes",)),
     Entry("dashboard.now.more", T, "Dashboard more pages now", "And others on other pages.",
           "Under the list when people are on more pages than it shows."),
+    Entry("dashboard.now.who", B, "Dashboard link to Who is online", "See who is online",
+          "Link at the foot of the on the site now card to the Who is online page: each visitor, their address and "
+          "country."),
     Entry("dashboard.now.other", T, "Dashboard other pages", "Other pages",
           "For people on a page that is not counted by name (an alert link, the dashboard)."),
     Entry("dashboard.kpi.checks_none", T, "Dashboard nothing to check", "Nothing waiting for you.",

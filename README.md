@@ -1764,7 +1764,15 @@ it again after changing the mark and commit the files.
   own host, and localhost when `DJANGO_DEBUG` is on), the browser does not say
   it is a robot or is prefetching (`Purpose`, `Sec-Purpose`, `X-Moz`), and the
   connection has made no more than 30 such clicks this hour (a one-way hash of
-  the address, held in the cache for an hour, never stored). Anything else
+  the address, held in the cache for an hour, never stored with a click), and
+  the browser has run one of our pages today: it carries the `rr_page` cookie
+  (holding only "1", set for a day by the page's report that it was shown,
+  `/api/note/?what=here`), or that day's visitor row says its browser ran a
+  page. On 4 and 5 Nov 2026 thousands of clicks came from scripts that fetched
+  our pages and followed their links with our page as the Referer, never
+  running a page; these are now direct hits too (reason `page`). Each direct
+  hit keeps why it was one (`OutboundClick.suspect_why`: `referer`, `page`,
+  `prefetch` or `cap`). Anything else
   still gets a 302 to the shop, but at the plain address: eBay's `mkevt`,
   `mkcid`, `mkrid`, `campid`, `customid`, `toolid` and similar are removed
   (the item id is kept), Amazon's `tag` likewise, and no affiliate format is
@@ -5209,6 +5217,20 @@ site's own look (header, cards with the soft orange border, green for good,
 red for bad). The admin home and Insights link to it. It is for staff only:
 anyone else is sent to the admin sign-in. Top to bottom:
 
+**It opens at once.** Each card is built by the background reader
+(`dashboard.warm`, on its turn every 30 seconds) and the page serves the copy
+it holds: every minute while someone has had it open in the last half hour,
+every 5 minutes otherwise, so the first open after a while, or after an update
+empties the cache, finds a recent copy too. The page builds a card while you
+wait only when it is missing or over 15 minutes old (the reader not running),
+and `?fresh=1` builds them all. "Updated" says when the oldest was built. On a
+copy of the site at live size the page took 5.5 seconds and more on every load
+after a minute; it now takes about 25 ms. Most of that was the Things to check
+card's count of wrong matches, which loaded every priced product with its
+offers to count a handful: it now finds them from plain values in one query and
+loads only those (`checks.gap_candidates`). The owner, 7 Nov 2026: "look at why
+it takes so long to open the dashboard".
+
 **The new home page** (Admin, **Site look**; `web/look.py`, `web/feed.py`,
 `catalogue.SiteLook`): the marketing team's redesign of 4 Nov 2026
 (`site_redesign/README.md`, their brief) built in beside the usual home
@@ -5390,6 +5412,71 @@ earlier days start then, so like is set against like; days before keep the
 old count. A report never creates a visitor, and a known bot's is ignored.
 Without JavaScript a visitor is not counted as a person, which leaves out
 very few real people. The Terms page's data section says so.
+
+**Scripts that ran our pages** (`catalogue/automated.py`). Headless browsers
+run the page's script too: on 5 and 6 Nov 2026 about 13,000 of them in two
+days, most opening one page from abroad with no link to us, and on 4 and 5
+Nov thousands of clicks to shops from visitors whose browser never ran a
+page. They filled the people and clicks every count reads (Today's best
+deals, which products the stock checks treat as hot, the dashboard, the
+report), and no day was flagged, since browsers were trusted. Now visitors
+and clicks are marked automated on evidence, never on a guess about one
+visitor, and left out of people (`traffic.people_q`) and clicks
+(`OutboundClick.objects.people()`):
+
+- **Direct hits:** a visitor who sent one of our shop links without coming
+  from our page that day (a direct hit with reason `referer` or `page`, or
+  any from before reasons were kept). A person pressing Buy on our page
+  always sends our page with it. Too many clicks in an hour, or a prefetch,
+  is not evidence: a busy shared connection or a browser's own guess.
+- **Floods:** one-page visits with no link to us (typed, or an app that
+  sends none) from a known country outside the UK and Ireland, by browsers
+  new to the site, far above their usual number that day (3 times the
+  median of the calm days before and 5 robust spreads above it, at least
+  100; with fewer than 4 calm days to go on, at least 300 and half the
+  day's people). Only the flood is left out: the day and its real people
+  still count, and Insights and the report name it ("Floods of scripts, left
+  out of people"). A drop brings people from the UK, on phones, from
+  Discord and Facebook, opening pages of one set, so none of them is ever
+  in a flood. The owner, 7 Nov 2026: "fix the bot clicks and burst
+  detection, but factor it was a massive Delta Reign Pokémon drop
+  yesterday". Whole days are still never left out as bursts once browsers
+  report in.
+- **Clicks:** a tracked click whose visitor was marked, and one from before
+  clicks were checked when made (`OutboundClick.ran_page` empty) whose
+  visitor's browser never ran a page that day, is `automated`: it reached
+  the shop with tracking, but counts nowhere.
+- **Page views:** a marked visitor who opened one page takes it off that
+  day's page counts, so the products a flood opened are not the most opened,
+  or hot for the stock checks.
+
+Each visitor and click is marked once and never unmarked. The background
+reader runs it on today every 5 minutes, `tidy_all` on the last 36 days
+every hour, and the installer once after an update (`manage.py
+classify_visits`, also by hand with `--days`).
+
+**Who is online** (Admin home, **Who is online**; `/admin/online/`,
+`web/online.py`, `catalogue/online.py`): everyone who opened a page in the
+last 5 minutes, with their internet address, country, device and browser,
+the site that sent them, the page they are on (linked), how many pages they
+have opened today, when they arrived and their last page, and whether they
+are a person or a script (and why: fetched the page without running it, sent
+a shop link without our page, or one of a flood from abroad). Above it, how
+many people are on the site now, by country, and a chart of how many were
+online every 5 minutes over the last 24 hours with the most at once. The
+page refreshes itself every 30 seconds. Staff only, never for a Guide
+editor, never cached or indexed; the dashboard's On the site now links to
+it. The addresses live only in `LiveVisitor`, never in `DailyVisitor`, a
+report, an export or Insights: a row is made on a visitor's first page in
+one query, kept current by their next pages and their page's report, and
+deleted 30 minutes after their last page (`online.forget`, by the background
+reader every 5 minutes and `tidy_all` hourly). The nightly backup holds at
+most the last half hour's. The counts (`OnlineCount`, people and automated
+only) are taken every 5 minutes by the reader and kept for 8 days. The
+country is the only place looked up. The Terms page's data section says the
+address is kept while someone is here and for 30 minutes after, and names the
+`rr_page` cookie. The owner, 7 Nov 2026: "so I can see the IP address and
+the location and how many people are online at any given point".
 - **Price check coverage** (`prices_section`): of the products with a
   price now, the share showing the Price check, the share whose check uses
   Cardmarket's price and the share using our own record, then each game,

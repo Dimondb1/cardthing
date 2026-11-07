@@ -157,8 +157,9 @@ def start_of(day):
 
 
 def people_q(browser_since):
-    """The visitors who count as people: from ``browser_since`` on, those whose browser ran the page; before it, all."""
-    return Q(date__lt=browser_since) | Q(browser=True) if browser_since else Q()
+    """The visitors who count as people: from ``browser_since`` on, those whose browser ran the page and were not found
+    to be scripts after all (catalogue/automated.py); before it, all."""
+    return Q(date__lt=browser_since) | Q(browser=True, automated=False) if browser_since else Q()
 
 
 def explain(now=None, store=None):
@@ -191,8 +192,11 @@ def explain(now=None, store=None):
             heavy=Count("id", filter=heavy_q), heavy_pages=Sum("views", filter=heavy_q),
             timed=Count("first_seen"), landed=Count("id", filter=~Q(landing="")),
             # Before ``returning``, whose name then stands for the count rather than the field.
-            browsers_returning=Count("id", filter=Q(browser=True, returning=True, views__lt=cap)),
-            browsers=Count("id", filter=Q(browser=True, views__lt=cap)),
+            browsers_returning=Count("id", filter=Q(browser=True, automated=False, returning=True, views__lt=cap)),
+            browsers=Count("id", filter=Q(browser=True, automated=False, views__lt=cap)),
+            # Found to be scripts though their browser ran the page (catalogue/automated.py): a flood, left out
+            # of the day's people while the day and its real people still count.
+            flood=Count("id", filter=Q(automated_why="flood")),
             returning=Count("id", filter=Q(returning=True, views__lt=cap)),
         ).order_by("date")
     ):
@@ -210,7 +214,7 @@ def explain(now=None, store=None):
         .values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n")
     )
     empty = {"visitors": 0, "scripts": 0, "own_pages": 0, "people_pages": 0, "heavy": 0, "heavy_views": 0,
-             "timed": 0, "landed": 0, "returning": 0, "browsers": 0, "browsers_returning": 0}
+             "timed": 0, "landed": 0, "returning": 0, "browsers": 0, "browsers_returning": 0, "flood": 0}
     for offset in range(WINDOW_DAYS + 1):
         day = since + timedelta(days=offset)
         row = days.setdefault(day, {"date": day, **empty})
@@ -222,9 +226,11 @@ def explain(now=None, store=None):
         row["burst"] = False
 
     # From the first day a page's script reported in (site.js, from 31 Oct 2026), people are the visitors whose browser
-    # ran the page: scanners and scripts that only fetch pages never do, so those days need no guessing at bursts,
-    # and the rest of the day's visitors are automated. Comparisons start then too, so like is set against like.
-    browser_since = next((d for d in sorted(days) if days[d]["browsers"]), None)
+    # ran the page: scanners and scripts that only fetch pages never do, and the rest of the day's visitors are
+    # automated. A whole day is never left out as a burst: a flood of scripts that ran the page too is found visitor
+    # by visitor and left out on its own (catalogue/automated.py), so a drop day's real crowd still counts. The
+    # owner, 7 Nov 2026: "factor it was a massive Delta Reign Pokémon drop yesterday". Comparisons start then too.
+    browser_since = next((d for d in sorted(days) if days[d]["browsers"] or days[d]["flood"]), None)
     for day, row in days.items():
         if browser_since and day >= browser_since:
             row["people"], row["returning"], row["by_browser"] = row["browsers"], row["browsers_returning"], True
@@ -237,7 +243,7 @@ def explain(now=None, store=None):
     timed_since = next((d for d in sorted(days) if days[d]["timed"]), None)
     if counting_since is None:
         return {"enough": False, "headline": say("insights.why.too_little"), "findings": [], "health": [],
-                "bursts": [], "burst_dates": set(), "comparisons": [], "today": today, "now": local_now,
+                "bursts": [], "burst_dates": set(), "floods": [], "comparisons": [], "today": today, "now": local_now,
                 "history": {"counting_since": None, "timed_since": timed_since, "browser_since": browser_since},
                 "days": days}
 
@@ -261,6 +267,10 @@ def explain(now=None, store=None):
                 "reasons": [say(key, **values) for key, values in reasons],
             })
     bursts.reverse()
+    # The floods found on browser days: the day stays, its flood is left out of its people.
+    floods = [{"date": day, "today": day == today, "count": days[day]["flood"],
+               "reason": say("insights.why.reason_flood", count=number(days[day]["flood"]))}
+              for day in sorted(days, reverse=True) if days[day]["flood"]]
 
     def usable(day):
         return day >= counting_since and not days[day]["burst"]
@@ -437,6 +447,7 @@ def explain(now=None, store=None):
         "yesterday": yesterday_cmp,
         "bursts": bursts,
         "burst_dates": {b["date"] for b in bursts},
+        "floods": floods,
         "health": health,
         "healthy": healthy if not health else "",
         "checked": checked,

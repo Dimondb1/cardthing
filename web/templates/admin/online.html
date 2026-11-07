@@ -1,0 +1,80 @@
+{% extends "admin/base_site.html" %}
+{% load ripraptor %}
+{% block title %}Who is online | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta http-equiv="refresh" content="{{ refresh }}"><meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .online { display: grid; gap: 24px; max-width: 72rem; }
+  .online h2 { margin: 0 0 4px; }
+  .online p { margin: 0 0 8px; }
+  .online .note { color: var(--body-quiet-color); }
+  .online .big { font-size: 1.6rem; font-weight: 600; margin: 0; }
+  .online .bad { color: var(--error-fg); }
+  .online .ok { color: var(--message-success-fg, #2a7a2a); }
+  .online .chart { display: block; width: 100%; height: 140px; border-bottom: 1px solid var(--hairline-color); }
+  .online .chart rect { fill: var(--primary); }
+  .online .chart rect.peak { fill: var(--message-success-fg, #2a7a2a); }
+  .online .axis { display: flex; justify-content: space-between; color: var(--body-quiet-color); font-size: 0.8rem; margin-top: 4px; }
+  .online table { width: 100%; }
+  .online td, .online th { vertical-align: top; }
+  .online td.wrap { overflow-wrap: anywhere; max-width: 20rem; }
+  .online .muted { color: var(--body-quiet-color); font-size: 0.85em; display: block; }
+  .online .tags { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0; margin: 0; list-style: none; }
+  .online .tags li { list-style-type: none; }
+  /* A phone or a tablet: each visitor is a card of labelled lines rather than a table wider than the screen. */
+  @media (max-width: 63.99rem) {
+    .online table thead { display: none; }
+    .online table, .online tbody, .online tr, .online td { display: block; width: auto; max-width: none; }
+    .online tr { padding: 10px 0; border-bottom: 1px solid var(--hairline-color); }
+    .online td { padding: 2px 0; border: 0; }
+    .online td[data-label]::before { content: attr(data-label) ": "; color: var(--body-quiet-color); }
+    .online td.first { font-weight: 600; }
+    .online .muted { display: inline; margin-left: 6px; }
+  }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Who is online</div>{% endblock %}
+{% block content %}
+<div class="online">
+  <section>
+    <h2>On the site now</h2>
+    <p class="big" id="online-count">{{ people }} {% if people == 1 %}person{% else %}people{% endif %}</p>
+    <p>{% if automated %}And {{ automated }} automated visit{{ automated|pluralize }}: scripts that only fetched a page, or ran it and were found to be scripts.{% else %}No automated visits.{% endif %} Everyone who opened a page in the last {{ minutes }} minutes, as of {{ updated|time:"H:i:s" }}. The page refreshes itself every {{ refresh }} seconds.</p>
+    {% if countries %}<ul class="tags">{% for name, n in countries %}<li>{{ name }}: {{ n }}</li>{% endfor %}</ul>{% endif %}
+  </section>
+
+  <section>
+    <h2>People online, last {{ hours }} hours</h2>
+    {% if bars %}
+    <svg class="chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="People online every five minutes for the last {{ hours }} hours">
+      {% for bar in bars %}<rect{% if bar.peak %} class="peak"{% endif %} x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.width }}" height="{{ bar.height }}"><title>{{ bar.at|time:"H:i" }}: {{ bar.people }} {% if bar.people == 1 %}person{% else %}people{% endif %}{% if bar.automated %}, {{ bar.automated }} automated{% endif %}</title></rect>{% endfor %}
+    </svg>
+    <div class="axis"><span>{{ bars.0.at|time:"H:i" }}</span><span>now</span></div>
+    {% if peak %}<p>Most at once: <strong>{{ peak.people }}</strong> at {{ peak.at|time:"H:i" }}{% if peak.at|date:"Ymd" != updated|date:"Ymd" %} yesterday{% endif %}.</p>{% endif %}
+    {% else %}<p class="note">Counted every five minutes by the background reader. The first count appears within five minutes of it running.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Each visitor</h2>
+    {% if rows %}
+    <table>
+      <thead><tr><th>Internet address</th><th>Country</th><th>Device</th><th>Came from</th><th>On page</th><th>Pages</th><th>Here since</th><th>Last page</th><th>Person or script</th></tr></thead>
+      <tbody>{% for row in rows %}<tr>
+        <td class="first">{{ row.ip|default:"unknown" }}</td>
+        <td data-label="Country">{{ row.country_name|default:"unknown" }}</td>
+        <td data-label="Device">{{ row.device_name }}{% if row.browser_name %}<span class="muted" title="{{ row.agent }}">{{ row.browser_name }}</span>{% endif %}</td>
+        <td class="wrap" data-label="Came from">{{ row.source_name|default:"No link: typed, an app or a bookmark" }}</td>
+        <td class="wrap" data-label="On page">{% if row.path %}<a href="{{ row.path }}">{{ row.path }}</a>{% else %}{{ row.page }}{% endif %}</td>
+        <td data-label="Pages">{{ row.views }}</td>
+        <td data-label="Here since">{{ row.first_seen|time:"H:i" }}</td>
+        <td data-label="Last page">{{ row.last_seen|ago }}</td>
+        <td>{% if row.person %}<span class="ok">Person</span>{% elif row.why == "direct" %}<span class="bad">Script</span><span class="muted">Sent a shop link without our page</span>{% elif row.why == "flood" %}<span class="bad">Script</span><span class="muted">One of a flood from abroad</span>{% else %}<span class="bad">Script</span><span class="muted">Fetched the page without running it</span>{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table>
+    {% if more %}<p class="note">And {{ more }} more.</p>{% endif %}
+    {% else %}<p class="note">Nobody has opened a page in the last {{ minutes }} minutes.</p>{% endif %}
+  </section>
+
+  <section>
+    <p class="note">Addresses are kept only while a visitor is here and for {{ keep }} minutes after their last page, then deleted. They never go into a report, an export or Insights. The country comes from the address; nothing finer is looked up.</p>
+  </section>
+</div>
+{% endblock %}

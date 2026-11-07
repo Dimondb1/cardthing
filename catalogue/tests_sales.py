@@ -29,6 +29,7 @@ class SalesTests(TestCase):
         self.assertEqual(self.harbour.outbound_url("https://shop.example/p", click=42),
                          "https://www.awin1.com/cread.php?awinmid=1&awinaffid=2&clickref=42&ued=https%3A%2F%2Fshop.example%2Fp")
         self.assertIn("clickref=&ued=", self.harbour.outbound_url("https://shop.example/p"))
+        self.client.cookies["rr_page"] = "1"   # its browser ran one of our pages (catalogue/clicks.py)
         response = self.client.get(self.listing.get_outbound_url() + "?b=buy_now", HTTP_USER_AGENT=BROWSER,
                                    HTTP_REFERER="http://testserver/products/pre-etb/")
         click = OutboundClick.objects.get()

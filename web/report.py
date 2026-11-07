@@ -114,7 +114,9 @@ def build(now, store):
     out.prose("Every figure is read from the site's own database, as the Dashboard and Insights pages show it. "
               "It holds nothing personal: no email address, visitor token or message.")
     out.prose("People are visitors whose browser ran the page; a script or a crawler is left out, and so is a burst "
-              "day (a day one source flooded). Clicks are people's clicks through to a shop.")
+              "day (a day one source flooded) and a flood of scripts that ran our pages (one-page visits from abroad "
+              "with no link to us, far above the usual). Clicks are people's clicks through to a shop, from a browser "
+              "that ran one of our pages.")
     out.prose("Google's own figures (impressions, clicks from search, pages indexed) are not here: they live only in "
               "Search Console.")
 
@@ -152,6 +154,9 @@ def headline(out, week, month, today):
               "column counts people only.")
     if week["bursts"]:
         out.fact("Burst days left out of the 7 day people", ", ".join(f"{day:%a %d %b}" for day in week["bursts"]))
+    if week.get("floods"):
+        out.fact("Floods of scripts left out of people (one-page visits from abroad)",
+                 ", ".join(f"{day:%a %d %b} ({count:,})" for day, count in week["floods"]))
     if week["automated"]:
         out.fact("Automated visits in the last 7 days", week["automated"])
     today_row = week["today"]

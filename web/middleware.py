@@ -1,4 +1,5 @@
-"""Count public page views by kind and day. Nothing about the visitor is kept.
+"""Count public page views by kind and day. Nothing about the visitor is kept with the counts; their internet address
+is held only while they are on the site, for the owner's Who is online page (catalogue/online.py).
 
 One cookie is set, holding only "1", so a browser that comes back on another
 day counts as a returning visitor. It carries no identifier.

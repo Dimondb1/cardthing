@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from . import checks, geo
 from .importers import STOPPED, section_handles
+from . import online
 from .pricing import drop_if_locked, retry_locked
 from .models import (
     DailyPageView, DailySearch, DailyVisitor, ImportRun, Listing, OutboundClick, Product, Retailer, StockAlert, WorkerState,
@@ -26,6 +27,11 @@ COUNTRY_NAMES = {
     "ES": "Spain", "IT": "Italy", "AU": "Australia", "CA": "Canada", "SE": "Sweden", "NO": "Norway", "DK": "Denmark",
     "PL": "Poland", "BE": "Belgium", "PT": "Portugal", "JP": "Japan", "IN": "India", "NZ": "New Zealand", "CH": "Switzerland",
     "AT": "Austria", "FI": "Finland", "BR": "Brazil", "MX": "Mexico", "SG": "Singapore", "HK": "Hong Kong", "AE": "United Arab Emirates",
+    "AR": "Argentina", "PK": "Pakistan", "BD": "Bangladesh", "CO": "Colombia", "VN": "Vietnam", "TR": "Turkey",
+    "ZA": "South Africa", "MA": "Morocco", "CL": "Chile", "RU": "Russia", "ID": "Indonesia", "PH": "Philippines",
+    "TH": "Thailand", "MY": "Malaysia", "NG": "Nigeria", "EG": "Egypt", "KR": "South Korea", "CN": "China",
+    "TW": "Taiwan", "UA": "Ukraine", "RO": "Romania", "CZ": "Czechia", "HU": "Hungary", "GR": "Greece",
+    "IL": "Israel", "SA": "Saudi Arabia", "KE": "Kenya", "PE": "Peru", "VE": "Venezuela", "EC": "Ecuador",
 }
 
 BOT_MARKERS = ("bot", "crawl", "spider", "slurp", "preview", "monitor", "python-requests", "curl/", "python-urllib",
@@ -179,7 +185,9 @@ def record_visitor(request, kind="", key=""):
     seen = DailyVisitor.objects.filter(date=day, token=token, views__lt=VIEWS_PER_VISITOR_CAP)
     product = kind == DailyPageView.Kind.PRODUCT
     changes = {"views": F("views") + 1, **({"opened_product": True} if product else {})}
+    page = landing_of(kind, key) if kind else ""
     if retry_locked(lambda: seen.update(**changes)):
+        online.seen(request, token, day, page=page)
         return True
 
     def create():
@@ -194,25 +202,29 @@ def record_visitor(request, kind="", key=""):
 
     try:
         retry_locked(create)
+        online.seen(request, token, day, page=page)
         return True
     except IntegrityError:
         # Already here today and past the cap (or two requests at once): not counted.
         return False
 
 
-def mark_browser(request, kind="", key=""):
+def mark_browser(request, kind="", key="", path=""):
     """The page's own script reported in (site.js): this visitor's browser runs pages, so they count as a person, and
-    the page they are on is kept for the dashboard's On the site now. Only today's row of a visitor already counted
-    is changed: a report never makes a visitor, and a bot's never makes one a person."""
+    the page they are on is kept for the dashboard's On the site now and the Who is online page (catalogue/online.py,
+    ``path`` the page's own address). Only today's row of a visitor already counted is changed: a report never makes
+    a visitor, and a bot's never makes one a person."""
     if is_bot(request):
         return
     day = timezone.localdate()
-    seen = DailyVisitor.objects.filter(date=day, token=visitor_token(request, day))
+    token = visitor_token(request, day)
+    seen = DailyVisitor.objects.filter(date=day, token=token)
     changes = {"browser": True, "last_seen": timezone.now()}
     if kind:
         changes["last_page"] = landing_of(kind, key)
     with drop_if_locked("Browser"):
-        retry_locked(lambda: seen.update(**changes))
+        if retry_locked(lambda: seen.update(**changes)):
+            online.seen(request, token, day, page=changes.get("last_page", ""), path=path, browser=True)
 
 
 def record_view(request, kind, key=""):

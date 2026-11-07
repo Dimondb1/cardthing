@@ -78,6 +78,18 @@ class Command(BaseCommand):
 
             self.stdout.write(f"{purge()} old shop enquiries deleted.")
 
+        # Scripts that ran our pages, found visitor by visitor (catalogue/automated.py), and the addresses of the
+        # visitors who have left forgotten (catalogue/online.py). The background reader does today every few minutes.
+        self.stdout.write("== visits")
+        if dry_run:
+            self.stdout.write("Automated visitors and clicks would be marked, and gone visitors' addresses deleted.")
+        else:
+            from catalogue import automated, online
+
+            done = automated.classify()
+            self.stdout.write(f"{done['direct'] + done['flood']} automated visitors and {done['clicks']} clicks "
+                              f"marked, {online.forget()} gone visitors' addresses deleted.")
+
         # Counted here, never while the Insights page waits: a big shop's list runs to thousands of lines.
         from catalogue.insights import count_left_out
 

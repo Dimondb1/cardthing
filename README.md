@@ -1518,6 +1518,20 @@ runner-up. Swipe right (or press the right arrow) to save it to a list kept
 in the browser, left to skip, tap to open the product. Cards come from
 `/api/deck/` twelve at a time and the next batch loads before it is needed.
 
+The gesture (`js/deck.js`): a swipe may start anywhere on the card, Buy now
+included; only a touch that never moved more than six pixels is a tap (the
+card opens the product, Buy now its shop), and after a drag any click the
+browser fires is swallowed. A card goes once dragged 30% of its width, or
+flicked at half a pixel a millisecond with 8% behind it; the velocity is
+smoothed over the last few moves. The card takes every gesture
+(`touch-action: none`), so a sideways swipe with a little lift is never
+turned into a scroll, and a gesture the browser does take back settles the
+card and opens nothing. The pointer is not captured: the moves and the
+release are read on the window, so a finger that strays off the card still
+drives it and a tap on Buy now stays the link's own click. The owner, 7
+Nov 2026: "as soon as you swipe right it takes you to the site on another
+tab... it's hard to dismiss a card. It doesn't swipe either way nicely."
+
 ## Search results
 
 **Best match.** The words as typed first (a name that starts with them, then

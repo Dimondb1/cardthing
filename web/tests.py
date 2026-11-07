@@ -2696,6 +2696,24 @@ class RaptorMarkTests(PageTestCase):
         self.assertIn('setAttribute("aria-hidden", "true")', finished)
         self.assertIn("words.finished", finished)
 
+    def test_a_swipe_may_start_on_buy_now_and_a_scroll_never_opens_anything(self):
+        # The owner, 7 Nov 2026: "as soon as you swipe right it takes you to the site on another tab... it's hard to
+        # dismiss a card. It doesn't swipe either way nicely." A drag that began on Buy now was the link's click, a
+        # gesture the browser took back within four pixels opened the product, and a swipe needed half the card.
+        from django.contrib.staticfiles import finders
+
+        script = open(finders.find("js/deck.js"), encoding="utf-8").read()
+        self.assertIn("const THRESHOLD = 0.3;", script)
+        self.assertIn("const FLING = 0.5;", script)
+        self.assertNotIn('if (e.target.closest("[data-stop]") || e.button !== 0) return;', script)   # Buy now starts a drag too
+        self.assertIn('if (moved) { e.preventDefault(); e.stopPropagation(); return; }', script)       # and its click is swallowed after one
+        cancel = script[script.index("const cancel = (e) => {"):script.index("card.addEventListener(\"pointerdown\"")]
+        self.assertIn("settle(card);", cancel)
+        self.assertNotIn("location.href", cancel)
+        self.assertNotIn("setPointerCapture", script)
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn("transform-origin: 50% 110%; touch-action: none; cursor: grab;", css)
+
 
 class StockTabsTests(TestCase):
     """Game and set pages split their products into In stock, Pre-orders and Out of stock: what can be

@@ -1,6 +1,9 @@
 // Swipe deck. Pointer events drive a transform on the top card; nothing
 // else on the page changes while a finger is down, so it stays at 60fps.
 // Right = save (kept in this browser), left = skip, tap = open the product.
+// A swipe may start anywhere on the card, Buy now included: the finger decides, and only a tap with no movement
+// is a click. A gesture the browser takes back (pointercancel) settles the card and opens nothing. The owner,
+// 7 Nov 2026: "as soon as you swipe right it takes you to the site on another tab... it's hard to dismiss a card".
 (() => {
   const root = document.querySelector("[data-deck]");
   if (!root) return;
@@ -16,8 +19,10 @@
   const STORE = "ripraptor.saved";
   const SEEN = "ripraptor.seen";
   const VISIBLE = 3;           // cards rendered in the stack
-  const THRESHOLD = 0.5;       // fraction of card width that counts as a swipe
-  const FLING = 1.0;           // px per ms: a flick has to mean it
+  const THRESHOLD = 0.3;       // fraction of card width that counts as a swipe
+  const FLING = 0.5;           // px per ms: a flick, with at least FLING_MIN of the width behind it
+  const FLING_MIN = 0.08;
+  const SLOP = 6;              // px of movement before a touch is a drag rather than a tap
 
   // The page's game, sort and language choices go to the API as they are.
   const filters = new URLSearchParams(location.search);
@@ -99,6 +104,7 @@
     const buy = el("a", "button button--buy button--card", words.buy);
     buy.href = c.buy; buy.target = "_blank"; buy.rel = "sponsored nofollow noopener";
     buy.dataset.stop = "1";
+    buy.draggable = false;   // a mouse dragging a link would start the browser's own drag and end the swipe
     // What Analytics' affiliate_click event reports, as the server-drawn links carry (analytics.js).
     Object.assign(buy.dataset, { click: "swipe", clickShop: c.retailer, clickProduct: c.name, clickGame: c.game || "" });
     bottom.append(offer, buy);
@@ -176,11 +182,13 @@
 
   // Gestures ----------------------------------------------------------------
   function attach(card) {
-    let startX = 0, startY = 0, dx = 0, dy = 0, dragging = false, moved = false;
-    let lastX = 0, lastT = 0, vx = 0;
+    let active = null;   // the finger down on this card: where it began, where it is, how fast it moves
+    let moved = false;   // whether the last touch moved: its click, if the browser fires one, is then not a tap
     const width = () => card.offsetWidth || 320;
 
     const paint = () => {
+      if (!active) return;
+      const { dx, dy } = active;
       const rot = (dx / width()) * 10;
       card.style.transform = `translate3d(${dx}px, ${dy * 0.35}px, 0) rotate(${rot}deg)`;
       const p = Math.min(Math.abs(dx) / (width() * THRESHOLD), 1);
@@ -192,39 +200,63 @@
       }
     };
 
-    card.addEventListener("pointerdown", (e) => {
-      if (e.target.closest("[data-stop]") || e.button !== 0) return;
-      if (card !== stack.querySelector(".swipe:not(.swipe--leaving)")) return;
-      dragging = true; moved = false;
-      startX = lastX = e.clientX; startY = e.clientY; lastT = e.timeStamp; vx = 0;
-      card.classList.remove("swipe--settle", "swipe--fly");
-      card.setPointerCapture(e.pointerId);
-    });
-    card.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
-      dx = e.clientX - startX; dy = e.clientY - startY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
-      const dt = e.timeStamp - lastT;
-      if (dt > 0) { vx = (e.clientX - lastX) / dt; lastX = e.clientX; lastT = e.timeStamp; }
-      requestAnimationFrame(paint);
-    });
-    const release = (e) => {
-      if (!dragging) return;
-      dragging = false;
-      const w = width();
-      if (!moved) {
-        if (!e.target.closest("[data-stop]")) location.href = new URL(queue[0].url, location.href).href;
-        return;
+    const move = (e) => {
+      if (!active || e.pointerId !== active.id) return;
+      active.dx = e.clientX - active.startX;
+      active.dy = e.clientY - active.startY;
+      if (!moved && Math.hypot(active.dx, active.dy) > SLOP) moved = true;
+      const dt = e.timeStamp - active.lastT;
+      if (dt > 0) {
+        // Smoothed over the last few moves, so one jittery sample neither flings nor stops a flick.
+        active.vx = active.vx * 0.6 + ((e.clientX - active.lastX) / dt) * 0.4;
+        active.lastX = e.clientX; active.lastT = e.timeStamp;
       }
-      const goRight = dx > w * THRESHOLD || vx > FLING;
-      const goLeft = dx < -w * THRESHOLD || vx < -FLING;
-      if (goRight) fly(card, 1);
-      else if (goLeft) fly(card, -1);
-      else settle(card);
-      dx = dy = 0;
+      if (moved && !active.frame) active.frame = requestAnimationFrame(() => { if (active) active.frame = 0; paint(); });
     };
-    card.addEventListener("pointerup", release);
-    card.addEventListener("pointercancel", release);
+    const end = (e) => {
+      if (!active || e.pointerId !== active.id) return;
+      const { dx, vx } = active;
+      active = null;
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", end);
+      removeEventListener("pointercancel", cancel);
+      if (!moved) return;   // a tap: the card's click opens the product, Buy now's its shop
+      const w = width();
+      if (dx > w * THRESHOLD || (vx > FLING && dx > w * FLING_MIN)) fly(card, 1);
+      else if (dx < -w * THRESHOLD || (vx < -FLING && dx < -w * FLING_MIN)) fly(card, -1);
+      else settle(card);
+    };
+    const cancel = (e) => {
+      // The browser took the gesture (a scroll, a system gesture): back to rest, and nothing opens.
+      if (!active || e.pointerId !== active.id) return;
+      active = null;
+      moved = true;
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", end);
+      removeEventListener("pointercancel", cancel);
+      settle(card);
+    };
+    card.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !e.isPrimary || active) return;
+      if (card !== stack.querySelector(".swipe:not(.swipe--leaving)")) return;
+      moved = false;
+      active = { id: e.pointerId, startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastT: e.timeStamp, vx: 0, dx: 0, dy: 0, frame: 0 };
+      card.classList.remove("swipe--settle", "swipe--fly");
+      // On the window, not the card: a finger that strays off the card still drives it, and no pointer capture
+      // means a tap on Buy now is still the link's own click.
+      addEventListener("pointermove", move);
+      addEventListener("pointerup", end);
+      addEventListener("pointercancel", cancel);
+    });
+    // The browser's own drag of a link or picture would end the swipe (pointercancel): never on a card.
+    card.addEventListener("dragstart", (e) => e.preventDefault());
+    // A tap opens the product; a tap on Buy now is the link's own click. After a drag, any click the browser
+    // fires is swallowed, so a swipe that began on Buy now never opens the shop.
+    card.addEventListener("click", (e) => {
+      if (moved) { e.preventDefault(); e.stopPropagation(); return; }
+      if (e.target.closest("[data-stop]")) return;
+      if (queue[0]) location.href = new URL(queue[0].url, location.href).href;
+    }, true);
   }
 
   function settle(card) {

@@ -1800,7 +1800,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   position: absolute; inset: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--space-3);
   padding: var(--space-3); border: 1px solid var(--color-line); border-radius: var(--radius-card);
   background: var(--color-paper); box-shadow: var(--shadow-lift);
-  will-change: transform; transform-origin: 50% 110%; touch-action: pan-y; cursor: grab;
+  will-change: transform; transform-origin: 50% 110%; touch-action: none; cursor: grab;   /* no gesture on a card goes to the browser: a sideways swipe with a little lift stays a swipe */
 }
 /* A new top card fades in as one piece: continuity from the card that just left, nothing more. */
 .swipe--enter { animation: fade-in var(--motion-normal) var(--ease-out) both; }

@@ -21,7 +21,9 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from . import offers
-from .models import CheckAnswer, Listing, OutboundClick, Product, Release, ReleaseSourceState, Retailer, ShopProduct
+from .models import (
+    CheckAnswer, Listing, OutboundClick, Product, Release, ReleaseSourceState, Retailer, ShopProduct, stale_cutoff,
+)
 from .pricing import MARKETPLACES
 
 # How many doubtful or excluded prices the page lists at once.
@@ -125,7 +127,11 @@ def wrong_matches(doubtful_too=False):
     ``doubtful_too`` also lists every product whose cheapest or next price is doubtful, for the
     suspect_savings command, which lists every saving the site holds back.
     """
-    products = Product.objects.for_lists().priced().prefetch_related(offers.buyable_prefetch())
+    candidates = gap_candidates(doubtful_too)
+    if not candidates:
+        return []
+    products = (Product.objects.for_lists().priced().filter(pk__in=candidates)
+                .prefetch_related(offers.buyable_prefetch()))
     rows = []
     for product in products.order_by("name"):
         summary = offers.summarise(product)
@@ -150,6 +156,37 @@ def wrong_matches(doubtful_too=False):
     ).values_list("listing_id", "price", "title"))
     return [(product, summary) for product, summary in rows
             if (summary.best.pk, summary.best.price, summary.best.title) not in checked]
+
+
+def gap_candidates(doubtful_too=False):
+    """The products wrong_matches need look at: those whose two first offers (in the order offers.buyable_prefetch
+    gives them) are far apart, or, ``doubtful_too``, doubtful. Read as plain values in one query, so the full products
+    and offers are loaded only for these: loading every priced product to count a handful took two seconds and more
+    on every dashboard build (the owner, 7 Nov 2026: "look at why it takes so long to open the dashboard")."""
+    rows = (
+        Listing.objects.filter(is_active=True, retailer__is_active=True, last_checked__gte=stale_cutoff(),
+                               availability__in=Listing.BUYABLE, product__is_active=True)
+        .exclude(sanity=Listing.Sanity.EXCLUDED)
+        .order_by("product_id", "-delivery_known", "delivered_price", "retailer__name")
+        .values_list("product_id", "delivery_known", "delivered_price", "sanity")
+    )
+    found, first = set(), {}
+    taken = {}
+    for product_id, known, price, sanity in rows.iterator(chunk_size=5000):
+        place = taken.get(product_id, 0)
+        taken[product_id] = place + 1
+        if place == 0:
+            first[product_id] = (known, price, sanity)
+            continue
+        if place > 1:
+            continue
+        best_known, best_price, best_sanity = first.pop(product_id)
+        doubtful = Listing.Sanity.DOUBTFUL in (best_sanity, sanity)
+        far = (best_known and known and price and price > 0
+               and (price - best_price) / price * 100 > offers.MAX_REAL_PERCENT)
+        if far or (doubtful_too and doubtful):
+            found.add(product_id)
+    return found
 
 
 def kept_apart():

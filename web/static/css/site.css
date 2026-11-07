@@ -254,7 +254,9 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 
 /* Header ------------------------------------------------------------------ */
 
-.masthead { background: var(--color-paper); }
+/* Above what follows it: with a view-transition-name the header is its own layer, as the feed's tiles row is, and a
+   later layer paints over an earlier one however high a z-index inside it; the refresh dots' line opens over the page. */
+.masthead { position: relative; z-index: 7; background: var(--color-paper); }
 .masthead__inner {
   max-width: calc(var(--page-width) + 2 * var(--gutter)); margin: 0 auto;
   padding: var(--space-2) var(--gutter);
@@ -269,12 +271,14 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .wordmark { display: block; line-height: 0; border-radius: var(--radius); }
 /* The refresh dots under the logo (web/refresh.py): five dots that fill as the next price refresh nears, lit in the
    brand's orange; a tap opens a line saying how long. Subtle: no wider than the logo, no words until asked. */
-.pulse { position: relative; z-index: 7; margin-top: var(--pulse-gap); }   /* the opened line sits over what follows the header */
+.pulse { position: relative; margin-top: var(--pulse-gap); }
 .pulse__dots { display: flex; gap: var(--pulse-gap); width: max-content; padding: var(--space-1) 0; list-style: none; cursor: pointer; }
 .pulse__dots::-webkit-details-marker { display: none; }
 .pulse__dot { width: var(--pulse-dot); height: var(--pulse-dot); border-radius: 50%; background: var(--color-line); transition: background var(--motion-fast); }
 .pulse__dot.is-on { background: var(--color-brand); }
-.pulse__note { position: absolute; z-index: 5; left: 0; top: 100%; margin: 0; width: max-content; max-width: var(--pulse-note); padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius); background: var(--color-paper); box-shadow: var(--shadow-card); color: var(--color-ink); font-size: var(--text-sm); line-height: 1.4; }
+.pulse__note { position: absolute; z-index: 5; left: 0; top: 100%; margin: 0; width: max-content; max-width: var(--pulse-note); padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius); background: var(--color-paper); box-shadow: var(--shadow-card); color: var(--color-ink); font-size: var(--text-sm); line-height: 1.4; transition: opacity var(--motion-normal) var(--ease-standard); }
+.pulse.is-fading .pulse__note { opacity: 0; }   /* site.js closes the line five seconds after a tap, fading it first */
+@media (prefers-reduced-motion: reduce) { .pulse__note { transition: none; } }
 /* The logo keeps its proportions however crowded the row. When a narrow screen or very large text leaves less room
    than its full width beside the menu, it draws smaller inside its own box rather than pushing the page sideways. */
 .wordmark__img { height: var(--masthead-logo-wide); width: auto; max-width: 100%; object-fit: contain; object-position: left center; }

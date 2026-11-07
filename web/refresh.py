@@ -1,6 +1,6 @@
 """
 The refresh dots under the logo (web/templates/web/includes/refresh_dots.html): five dots that fill as the next
-price refresh nears, and a line, on a tap, saying how long it is. On a product page that is the next read of one
+price refresh nears, and a line, on a tap, counting down to it in minutes and seconds. On a product page that is the next read of one
 of its shops by the background reader (Retailer.next_read_at, or the end of its wait after errors); on every other
 page it is the next five-minute rebuild of the page's lists (warm_pages --due, from cron at 1, 6, 11... minutes
 past the hour, deploy/install.sh). Nothing here costs a query: a product page has its shops loaded with its
@@ -39,9 +39,12 @@ class Refresh:
         return self.remaining <= 0
 
     @property
-    def minutes(self):
-        """The wait to the nearest minute, never under one: "about a minute" from 60 to 89 seconds."""
-        return max(1, round(self.remaining / 60))
+    def minutes_part(self):
+        return self.remaining // 60
+
+    @property
+    def seconds_part(self):
+        return self.remaining % 60
 
     @property
     def dots(self):

@@ -294,8 +294,9 @@ document.addEventListener("ripraptor:content", (event) => {
   fitPills();
 });
 
-// The refresh dots under the logo (web/refresh.py): the page says when the next price refresh is; this keeps the
-// dots and the tapped line right while the page stays open, and on a page served from the cache.
+// The refresh dots under the logo (web/refresh.py): the page says when the next stock recheck is; this counts the
+// seconds down while the page stays open (and on a page served from the cache), and closes the tapped line five
+// seconds after it opens, fading it first.
 {
   const pulse = document.querySelector("[data-refresh]");
   const next = pulse && Date.parse(pulse.dataset.next);
@@ -304,9 +305,9 @@ document.addEventListener("ripraptor:content", (event) => {
     const dots = pulse.querySelectorAll(".pulse__dot");
     const note = pulse.querySelector(".pulse__note");
     const when = (left) => {
-      if (left < 60000) return pulse.dataset.soon;
-      const minutes = Math.max(1, Math.round(left / 60000));
-      return minutes === 1 ? pulse.dataset.minute : pulse.dataset.minutes.replace("{n}", minutes);
+      const seconds = Math.ceil(left / 1000);
+      if (seconds < 60) return pulse.dataset.seconds.replace("{s}", seconds);
+      return pulse.dataset.time.replace("{m}", Math.floor(seconds / 60)).replace("{s}", seconds % 60);
     };
     const tick = () => {
       const left = next - Date.now();
@@ -315,6 +316,17 @@ document.addEventListener("ripraptor:content", (event) => {
       if (note) note.textContent = left <= 0 ? pulse.dataset.now : pulse.dataset.note.replace("{time}", when(left));
     };
     tick();
-    setInterval(tick, 30000);
+    setInterval(tick, 1000);
+    let closing = [];
+    pulse.addEventListener("toggle", () => {
+      closing.forEach(clearTimeout);
+      closing = [];
+      pulse.classList.remove("is-fading");
+      if (!pulse.open) return;
+      closing.push(setTimeout(() => {
+        pulse.classList.add("is-fading");
+        closing.push(setTimeout(() => { pulse.open = false; pulse.classList.remove("is-fading"); }, 400));
+      }, 5000));
+    });
   }
 }

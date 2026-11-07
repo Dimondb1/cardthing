@@ -5271,23 +5271,27 @@ home page or a game's page; visitors see the one switched on. The owner, 4
 Nov 2026: "can we easily roll this back if I don't like it".
 
 **Refresh dots** (`web/refresh.py`, `includes/refresh_dots.html`): five
-small dots under the logo on every page, which fill as the next price
-refresh nears and light up in the brand's orange; a tap opens a line saying
-how long it is. On a product page that is the next read of one of its shops
-by the background reader (the soonest `next_read_at` among them, or the end
-of a shop's wait after errors, with paused and never-read shops left out):
-"Prices here are checked again in about 12 minutes", the dots filling over
-the hour before it. On every other page it is the next five-minute rebuild
-of the page lists (`warm_pages --due`, at 1, 6, 11... minutes past the
-hour): "The shops are read all day. The prices on this page are refreshed
-in about 3 minutes." No page gains a query: a product page has its shops
-loaded with its listings, and the lists' tick is the clock. The dots are a
-`details` element, so the tap works without script; `site.js` keeps the
-dots and the line right while the page stays open, and on a page served
-from the cache. The wording is `site.refresh.*` in the registry. The owner,
-6 Nov 2026: "5 dots to accumulate under the RipRaptor logo to show when
-the prices are next going to be refreshed, so users who are trying to get
-the latest deal before it sells out know it's looking for them".
+small dots under the logo on every page, which fill as the next stock
+recheck nears and light up in the brand's orange; a tap opens a line
+counting down to it, "Rechecking stock in 4 min 32 s", which closes itself
+five seconds later (fading first; `site.js`), and "Rechecking stock now"
+while it is due. On a product page the recheck is the next read of one of
+its shops by the background reader (the soonest `next_read_at` among them,
+or the end of a shop's wait after errors, with paused and never-read shops
+left out), the dots filling over the hour before it. On every other page
+it is the next five-minute rebuild of the page lists (`warm_pages --due`,
+at 1, 6, 11... minutes past the hour). No page gains a query: a product
+page has its shops loaded with its listings, and the lists' tick is the
+clock. The dots are a `details` element, so the tap works without script;
+`site.js` counts the seconds down while the page stays open, and on a page
+served from the cache. The header sits above what follows it (`z-index`):
+with a view-transition name it is its own layer, as the feed's tiles row
+is, and the later layer painted over the line until it was. The wording is
+`site.refresh.*` in the registry. The owner, 6 Nov 2026: "5 dots to
+accumulate under the RipRaptor logo to show when the prices are next
+going to be refreshed, so users who are trying to get the latest deal
+before it sells out know it's looking for them"; 7 Nov: "I just want it
+to say rechecking stock in x seconds".
 
 **Find with Rip** (`web/find.py`, `/find/`): the guided search, Rip's head
 in the header while the new home page is on (a soft orange pill, the one

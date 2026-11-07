@@ -18,13 +18,13 @@ class ListsTests(TestCase):
     def test_the_next_five_minute_rebuild_from_the_clock(self):
         found = refresh.for_lists(NOW)
         self.assertEqual((found.kind, found.next), ("lists", datetime(2026, 11, 6, 13, 21, tzinfo=tz.utc)))
-        self.assertEqual((found.remaining, found.minutes, found.due), (210, 4, False))
+        self.assertEqual((found.remaining, found.minutes_part, found.seconds_part, found.due), (210, 3, 30, False))
         self.assertEqual(found.dots, [True, True, False, False, False])
         # On the tick itself the next one is five minutes off; just before it, under a minute, four dots lit.
         self.assertEqual(refresh.for_lists(datetime(2026, 11, 6, 13, 21, tzinfo=tz.utc)).next,
                          datetime(2026, 11, 6, 13, 26, tzinfo=tz.utc))
         before = refresh.for_lists(datetime(2026, 11, 6, 13, 20, 50, tzinfo=tz.utc))
-        self.assertEqual((before.dots, before.remaining, before.minutes), ([True, True, True, True, False], 10, 1))
+        self.assertEqual((before.dots, before.remaining, before.minutes_part, before.seconds_part), ([True, True, True, True, False], 10, 0, 10))
 
 
 class ProductTests(TestCase):
@@ -44,7 +44,7 @@ class ProductTests(TestCase):
         self.shop(self.north, next_read_at=NOW + timedelta(minutes=12))
         found = refresh.for_product(self.listings, NOW)
         self.assertEqual((found.kind, found.next), ("product", NOW + timedelta(minutes=12)))
-        self.assertEqual((found.dots, found.minutes), ([True, True, True, True, False], 12))
+        self.assertEqual((found.dots, found.minutes_part, found.seconds_part), ([True, True, True, True, False], 12, 0))
         self.assertEqual(refresh.for_product(self.listings, NOW - timedelta(minutes=40)).dots, [True, False, False, False, False])
 
     def test_a_shop_waiting_after_errors_a_paused_one_and_one_never_read(self):
@@ -70,24 +70,21 @@ class PageTests(TestCase):
         Retailer.objects.filter(pk=shop.pk).update(next_read_at=timezone.now() + timedelta(minutes=12))
         html = self.client.get(box.get_absolute_url()).content.decode()
         self.assertIn('<details class="pulse" data-refresh data-next="', html)
-        self.assertIn('data-cycle="3600" data-note="Prices here are checked again in {time}." '
-                      'data-now="Prices here are being checked now." data-minutes="about {n} minutes" '
-                      'data-minute="about a minute" data-soon="under a minute">', html)
-        self.assertIn('<summary class="pulse__dots" aria-label="When prices are next checked">', html)
+        self.assertIn('data-cycle="3600" data-note="Rechecking stock in {time}." data-now="Rechecking stock now." '
+                      'data-time="{m} min {s} s" data-seconds="{s} s">', html)
+        self.assertIn('<summary class="pulse__dots" aria-label="When stock is next rechecked">', html)
         self.assertEqual(html.count('<span class="pulse__dot'), 5)
-        self.assertIn('<p class="pulse__note">Prices here are checked again in about 12 minutes.</p>', html)
-        # The time a shop's read is due: every dot lit and the line says so. Under a minute, and one minute, have words.
+        self.assertRegex(html, r'<p class="pulse__note">Rechecking stock in 1[12] min \d+ s\.</p>')
+        # The time a shop's read is due: every dot lit and the line says so. Under a minute it is seconds alone.
         Retailer.objects.filter(pk=shop.pk).update(next_read_at=timezone.now() - timedelta(minutes=1))
         html = self.client.get(box.get_absolute_url()).content.decode()
-        self.assertIn('<p class="pulse__note">Prices here are being checked now.</p>', html)
+        self.assertIn('<p class="pulse__note">Rechecking stock now.</p>', html)
         self.assertEqual(html.count('class="pulse__dot is-on"'), 5)
         Retailer.objects.filter(pk=shop.pk).update(next_read_at=timezone.now() + timedelta(seconds=30))
-        self.assertIn("checked again in under a minute.", self.client.get(box.get_absolute_url()).content.decode())
-        Retailer.objects.filter(pk=shop.pk).update(next_read_at=timezone.now() + timedelta(seconds=70))
-        self.assertIn("checked again in about a minute.", self.client.get(box.get_absolute_url()).content.decode())
+        self.assertRegex(self.client.get(box.get_absolute_url()).content.decode(), r"Rechecking stock in (29|30) s\.")
         # The home page counts to the lists' rebuild.
         home = self.client.get("/").content.decode()
-        self.assertIn('data-cycle="300" data-note="The shops are read all day. The prices on this page are refreshed in {time}."', home)
+        self.assertIn('data-cycle="300" data-note="Rechecking stock in {time}."', home)
         self.assertEqual(home.count('<span class="pulse__dot'), 5)
         # Under the logo, inside the brand's own box.
         self.assertIn('<div class="brand"><a class="wordmark"', home)

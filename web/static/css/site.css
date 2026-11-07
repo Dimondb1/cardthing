@@ -1802,12 +1802,17 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   background: var(--color-paper); box-shadow: var(--shadow-lift);
   will-change: transform; transform-origin: 50% 110%; touch-action: none; cursor: grab;   /* no gesture on a card goes to the browser: a sideways swipe with a little lift stays a swipe */
 }
-/* A new top card fades in as one piece: continuity from the card that just left, nothing more. */
-.swipe--enter { animation: fade-in var(--motion-normal) var(--ease-out) both; }
 .swipe:active { cursor: grabbing; }
 .swipe--behind { box-shadow: var(--shadow-card); }
-.swipe--settle { transition: transform var(--motion-slow) var(--ease-out), opacity var(--motion-slow); }
-.swipe--fly { transition: transform var(--motion-slow) var(--ease-out), opacity var(--motion-slow); }
+/* Let go short of a swipe, the card springs back to the centre and its stamp fades; the card behind, already at
+   full colour, grows to full size as the top card leaves, so promoting it paints nothing new. A card let go past
+   the threshold is thrown clear of the screen, still whole and still turning, at about the speed it was released
+   (deck.js sets the duration), and only then removed; it takes no taps on its way. The owner's note of 7 Nov 2026,
+   from stills of a recording: "the cards don't fly off, they hang at the screen edge and then vanish". */
+.swipe--settle { transition: transform var(--motion-normal) var(--ease-out); }
+.swipe--settle .swipe__stamp { transition: opacity var(--motion-normal) var(--ease-out); }
+.swipe--fly { transition: transform var(--motion-normal) linear; }
+.swipe--leaving { pointer-events: none; }
 .swipe__top { display: grid; grid-template-rows: minmax(3rem, 1fr) auto auto; gap: var(--space-2); min-height: 0; overflow: hidden; }
 .swipe__image { position: relative; display: grid; place-items: center; min-height: 3rem; border-radius: var(--radius); background: var(--color-shelf); overflow: hidden; }
 @media (max-height: 40rem) { .swipe__meta { display: none; } .swipe__name { font-size: var(--text-base); } }

@@ -22,7 +22,9 @@
   const THRESHOLD = 0.3;       // fraction of card width that counts as a swipe
   const FLING = 0.5;           // px per ms: a flick, with at least FLING_MIN of the width behind it
   const FLING_MIN = 0.08;
-  const SLOP = 6;              // px of movement before a touch is a drag rather than a tap
+  const SLOP = 10;             // px of movement before a touch is a drag rather than a tap
+  const THROW_MIN = 160;       // ms: a thrown card is off the screen within this range, faster the harder it was flung
+  const THROW_MAX = 260;
 
   // The page's game, sort and language choices go to the API as they are.
   const filters = new URLSearchParams(location.search);
@@ -129,11 +131,6 @@
     const cards = Array.from(stack.querySelectorAll(".swipe")).filter((c) => !c.classList.contains("swipe--leaving"));
     cards.forEach((card, i) => {
       const depth = i;
-      if (depth === 0 && !card.dataset.shown) {
-        card.dataset.shown = "1";
-        card.classList.add("swipe--enter");
-        card.addEventListener("animationend", () => card.classList.remove("swipe--enter"), { once: true });
-      }
       card.style.zIndex = String(10 - depth);
       card.classList.toggle("swipe--behind", depth > 0);
       if (depth > 0) {
@@ -222,8 +219,8 @@
       removeEventListener("pointercancel", cancel);
       if (!moved) return;   // a tap: the card's click opens the product, Buy now's its shop
       const w = width();
-      if (dx > w * THRESHOLD || (vx > FLING && dx > w * FLING_MIN)) fly(card, 1);
-      else if (dx < -w * THRESHOLD || (vx < -FLING && dx < -w * FLING_MIN)) fly(card, -1);
+      if (dx > w * THRESHOLD || (vx > FLING && dx > w * FLING_MIN)) fly(card, 1, dx, vx);
+      else if (dx < -w * THRESHOLD || (vx < -FLING && dx < -w * FLING_MIN)) fly(card, -1, dx, vx);
       else settle(card);
     };
     const cancel = (e) => {
@@ -266,18 +263,24 @@
     layout();
   }
 
-  function fly(card, dir) {
+  // The card thrown clear of the screen the way it was going: from where it was let go (``dx``), at about the speed
+  // it was released (``vx``, px per ms), still turning, whole until it is off, then removed. The buttons and the
+  // arrow keys throw from the centre at the usual pace.
+  function fly(card, dir, dx = 0, vx = 0) {
     if (card.classList.contains("swipe--leaving")) return;
     const item = queue.shift();
     if (!item) return;
+    card.classList.remove("swipe--settle");
     card.classList.add("swipe--leaving", "swipe--fly");
     card.style.zIndex = "20";
     card.querySelector(dir > 0 ? ".swipe__stamp--save" : ".swipe__stamp--skip").style.opacity = 1;
-    const x = dir * (window.innerWidth * 0.9 + card.offsetWidth);
+    const x = dir * (window.innerWidth + card.offsetWidth);
+    const ms = Math.round(Math.min(THROW_MAX, Math.max(THROW_MIN, Math.abs(x - dx) / Math.max(Math.abs(vx), 0.1))));
+    card.style.transitionDuration = `${ms}ms`;
     card.style.transform = `translate3d(${x}px, ${-24}px, 0) rotate(${dir * 18}deg)`;
-    card.style.opacity = "0";
-    card.addEventListener("transitionend", () => card.remove(), { once: true });
-    setTimeout(() => card.isConnected && card.remove(), 500);
+    const gone = () => card.isConnected && card.remove();
+    card.addEventListener("transitionend", (e) => { if (e.target === card && e.propertyName === "transform") gone(); });
+    setTimeout(gone, ms + 100);
     seen.add(item.id); store(SEEN, [...seen].slice(-500));
     if (dir > 0 && !saved.some((s) => s.id === item.id)) { saved.push(item); store(STORE, saved); renderSaved(); }
     if (hint) hint.hidden = true;

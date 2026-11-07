@@ -1531,6 +1531,15 @@ release are read on the window, so a finger that strays off the card still
 drives it and a tap on Buy now stays the link's own click. The owner, 7
 Nov 2026: "as soon as you swipe right it takes you to the site on another
 tab... it's hard to dismiss a card. It doesn't swipe either way nicely."
+Let go past the threshold, the card is thrown clear of the screen the way
+it was going, whole and still turning, in 160 to 260 ms depending on how
+hard it was flung, and removed only once it is off; it takes no taps on
+the way, so the next card is usable at once. Let go short of it, the card
+springs back to the centre in 220 ms and its stamp fades. The card behind
+is already at full colour and grows to full size as the top card leaves,
+so nothing fades in. The owner's note of 7 Nov 2026, from stills of a
+recording: "the cards don't fly off, they hang at the screen edge and then
+vanish... the new top card flashes faded for a frame".
 
 ## Search results
 

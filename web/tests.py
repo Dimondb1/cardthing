@@ -2713,6 +2713,18 @@ class RaptorMarkTests(PageTestCase):
         self.assertNotIn("setPointerCapture", script)
         css = open(finders.find("css/site.css"), encoding="utf-8").read()
         self.assertIn("transform-origin: 50% 110%; touch-action: none; cursor: grab;", css)
+        # The owner's note of 7 Nov 2026, from stills: a thrown card stays whole until it is off the screen, at about
+        # the speed it was released, takes no taps on its way, and the card behind is not faded in again.
+        self.assertIn("const SLOP = 10;", script)
+        fly = script[script.index("function fly(card, dir, dx = 0, vx = 0) {"):script.index("seen.add(item.id)")]
+        self.assertNotIn('style.opacity = "0"', fly)
+        self.assertIn("card.style.transitionDuration = `${ms}ms`;", fly)
+        self.assertIn('e.propertyName === "transform"', fly)
+        self.assertNotIn("swipe--enter", script)
+        self.assertNotIn(".swipe--enter", css)
+        self.assertIn(".swipe--leaving { pointer-events: none; }", css)
+        self.assertIn(".swipe--settle .swipe__stamp { transition: opacity var(--motion-normal) var(--ease-out); }", css)
+        self.assertIn(".swipe--fly { transition: transform var(--motion-normal) linear; }", css)
 
 
 class StockTabsTests(TestCase):

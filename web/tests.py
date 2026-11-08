@@ -409,6 +409,32 @@ class TermsAndRefreshTests(PageTestCase):
         self.assertContains(response, "independent")
         self.assertContains(response, "kept in your browser, not by us")
 
+    def test_terms_say_what_others_may_do_with_the_site_and_its_name(self):
+        """The owner, 8 Nov 2026, after applying for the trade mark: no bulk copying or scraping, the name is ours."""
+        html = self.client.get(reverse("web:terms")).content.decode()
+        use = html[html.index('<h2 id="terms-use">'):html.index('<h2 id="terms-data">')]
+        self.assertIn("Using RipRaptor", use)
+        self.assertIn("collect them with scripts, crawlers or other automated tools, without our written permission", use)
+        self.assertIn("Search engines and AI assistants may read the pages our robots.txt allows.", use)
+        self.assertIn("RipRaptor and the RipRaptor logo are our trade marks.", use)
+        # Every page's footer carries the mark.
+        self.assertIn("RipRaptor&trade;</span>", self.client.get(reverse("web:home")).content.decode())
+
+    def test_the_logo_carries_the_trade_mark_on_a_clear_background(self):
+        """The owner's artwork with TM (8 Nov 2026): the same size as before, the white keyed out, in the brand orange."""
+        from PIL import Image
+
+        root = Path(settings.BASE_DIR) / "web" / "static" / "img"
+        for name in ("logo.png", "logo.webp"):
+            with self.subTest(name=name):
+                logo = Image.open(root / name).convert("RGBA")
+                self.assertEqual(logo.size, (1200, 304))   # the width and height the templates give it
+                self.assertEqual(logo.getpixel((0, 0))[3], 0)
+                self.assertEqual(logo.getpixel((1150, 45))[3], 0)   # between the TM and the snout: clear
+                # The TM, top right above the snout, solid brand orange.
+                tm = [logo.getpixel((x, y)) for x in range(1150, 1200) for y in range(0, 30)]
+                self.assertTrue(any(p[3] == 255 and p[:3] == (255, 90, 31) for p in tm))
+
     def test_footer_is_one_line_with_a_terms_link(self):
         html = self.client.get(reverse("web:home")).content.decode()
         self.assertIn("Prices include UK delivery.", html)

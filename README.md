@@ -1684,7 +1684,13 @@ preload in `web/templates/web/base.html` and the emails' fallback list in
 The logo is `web/static/img/logo.png`, served as `logo.webp` (the same
 pixels, lossless, half the bytes) to browsers that take WebP, through
 `web/templates/web/includes/wordmark.html`. Replace both files to change the
-logo everywhere. The favicon is
+logo everywhere. Since 8 Nov 2026 it carries a TM (the owner applied to
+register RipRaptor as a UK trade mark): the owner's artwork, flat orange on
+white, with the white turned transparent and cropped to the same 1200 by 304
+as before. The footer reads "RipRaptor" with a TM too, and the Terms page's
+"Using RipRaptor" section (`terms.use.body`) asks others not to copy the
+prices or pages in bulk or collect them with scripts, and not to use the name
+or logo as their own. Only switch TM to (R) once the mark is registered. The favicon is
 `web/static/img/favicon.png`. The home screen icons (`icon-192.png`,
 `icon-512.png`, `icon-maskable-512.png` and `apple-touch-icon.png`) are
 made from `web/static/img/mark.png` by `python manage.py make_icons`; run

@@ -3069,6 +3069,20 @@ ENTRIES = [
     ),
     Entry("terms.prices.title", H, "Prices heading", "Prices", "Heading on the terms page."),
     Entry("terms.independence.title", H, "Independence heading", "Independence", "Heading on the terms page."),
+    Entry("terms.use.title", H, "Using RipRaptor heading", "Using RipRaptor", "Heading on the terms page."),
+    Entry(
+        "terms.use.body", P, "Using RipRaptor",
+        "You are welcome to use RipRaptor to compare prices, and to share links to any of our pages.\n\n"
+        "Please do not copy our prices, stock information, product lists or pages in bulk, or collect them with "
+        "scripts, crawlers or other automated tools, without our written permission. Search engines and AI "
+        "assistants may read the pages our robots.txt allows.\n\n"
+        "RipRaptor and the RipRaptor logo are our trade marks. Please do not use them, or anything confusingly "
+        "similar, in a way that suggests you are RipRaptor or that we run, endorse or work with you.\n\n"
+        "We may block access that breaks these terms.",
+        "On the terms page, between Independence and Your data: what others may and may not do with the site, "
+        "its prices and its name (added 8 Nov 2026, with the trade mark application).",
+        legal=True,
+    ),
     Entry("terms.data.title", H, "Data heading", "Your data", "Heading on the terms page."),
     Entry(
         "terms.data.body", P, "Data explanation",

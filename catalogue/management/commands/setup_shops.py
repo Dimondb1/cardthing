@@ -238,6 +238,81 @@ SHOPS = [
     # so only its sealed collections are read (COLLECTIONS). Its sealed names leave the game out (ONE_GAME).
     ("clifford-tcg", "Clifford TCG", "https://cliffordtcg.co.uk/", S.SHOPIFY, "3.50", None,
      "Standard £3.50 (basket check), no free threshold published, read 27 Oct 2026"),
+    # Found by searching the web for UK shops at the owner's request on 8 Nov 2026 ("you get the list of shops by
+    # scouring the web for me and add them for me"), and checked: priced in pounds, sealed trading card products
+    # listed, robots.txt lets our reader in, no bot challenge. Shops that turned the check away (Chaos Cards,
+    # Wayland Games, We Love Collectibles, Firestorm Games, Chief Cards, Big Orbit Cards) are left out. Delivery
+    # from each shop's delivery page or a test basket (check_delivery), which also fills in the rest daily.
+    ("thirsty-meeples", "Thirsty Meeples", "https://thirstymeeples.co.uk/", S.SHOPIFY, "4.50", "65",
+     "Standard £4.50 (basket check), free over £65 (delivery page), read 8 Nov 2026"),
+    ("infinity-collectables", "Infinity Collectables", "https://infinitycollectables.com/", S.SHOPIFY, None, "25",
+     "Free over £25 (delivery page); standard charge not yet confirmed, read 8 Nov 2026"),
+    ("dugz-cards", "Dugz Cards", "https://dugzcards.co.uk/", S.SHOPIFY, "2.99", None,
+     "Standard £2.99 (basket check), read 8 Nov 2026"),
+    ("incom-gaming", "Incom Gaming", "https://www.incomgaming.co.uk/", S.SHOPIFY, None, "100",
+     "Free over £100 (delivery page); standard charge not yet confirmed, read 8 Nov 2026"),
+    ("west-end-games", "West End Games", "https://www.westendgames.co.uk/", S.SHOPIFY, "3.99", None,
+     "Standard £3.99 (basket check), read 8 Nov 2026"),
+    ("ultimate-tcg", "Ultimate TCG", "https://www.ultimatetcg.co.uk/", S.SHOPIFY, "1.25", "50",
+     "Standard £1.25 (basket check), free over £50 (delivery page), read 8 Nov 2026"),
+    ("lockett-labs", "Lockett Labs", "https://lockett-labs.com/", S.SHOPIFY, "4.00", "60",
+     "Standard £4.00 (basket check), free over £60 (delivery page), read 8 Nov 2026"),
+    ("meeples-corner", "Meeples Corner", "https://meeplescorner.co.uk/", S.SHOPIFY, "2.99", "100",
+     "Standard £2.99 (basket check), free over £100 (delivery page), read 8 Nov 2026"),
+    ("mox-in-the-hole", "Mox in the Hole", "https://moxinthehole.co.uk/", S.SHOPIFY, None, "100",
+     "Free over £100 (delivery page); standard charge not yet confirmed, read 8 Nov 2026"),
+    ("tcg-dragon", "TCG Dragon", "https://tcgdragon.co.uk/", S.SHOPIFY, "2.95", None,
+     "Standard £2.95 (basket check), read 8 Nov 2026"),
+    ("galleon-games", "Galleon Games", "https://galleongames.co.uk/", S.SHOPIFY, "5.95", None,
+     "Standard £5.95 (basket check), read 8 Nov 2026"),
+    ("toys-n-geek", "Toys 'N' Geek", "https://www.toysngeek.co.uk/", S.SHOPIFY, "2.99", "30",
+     "Standard £2.99 (basket check), free over £30 (delivery page, confirmed by basket), read 8 Nov 2026"),
+    ("endo-collects", "Endo Collects", "https://endocollects.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("tnocards", "TNOcards", "https://www.tnocards.co.uk/", S.SHOPIFY, "1.25", "100",
+     "Standard £1.25 (delivery page), free over £100 (delivery page), read 8 Nov 2026"),
+    ("toys4you", "Toys4you", "https://www.toys4you.co.uk/", S.SHOPIFY, None, "30",
+     "Free over £30 (home page banner); standard charge not yet confirmed, read 8 Nov 2026"),
+    ("rules-of-play", "Rules of Play", "https://rulesofplay.co.uk/", S.SHOPIFY, None, "30",
+     "Free over £30 (delivery page); standard charge not yet confirmed, read 8 Nov 2026"),
+    ("the-cards-hub", "The Cards Hub", "https://thecardshub.co.uk/", S.SHOPIFY, "3.50", "75",
+     "Standard £3.50 (basket check), free over £75 (delivery page, confirmed by basket), read 8 Nov 2026"),
+    ("pokepals", "PokePals", "https://pokepals.co.uk/", S.SHOPIFY, "2.95", None,
+     "Standard £2.95 (basket check), read 8 Nov 2026"),
+    ("card-galaxy", "Card Galaxy", "https://cardgalaxy.co.uk/", S.SHOPIFY, "4.99", None,
+     "Standard £4.99 (basket check), read 8 Nov 2026"),
+    ("the-dice-dungeon", "The Dice Dungeon", "https://thedicedungeon.co.uk/", S.SHOPIFY, "3.55", "35",
+     "Standard £3.55 (basket check), free over £35 (delivery page, confirmed by basket), read 8 Nov 2026"),
+    ("thistle-tavern", "Thistle Tavern", "https://thistletavern.com/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("jarvvos", "Jarvvos", "https://www.jarvvos.co.uk/", S.SHOPIFY, None, "50",
+     "Free over £50 (delivery page); standard charge not yet confirmed, read 8 Nov 2026"),
+    ("battle-city-games", "Battle City Games", "https://battlecitygames.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("bristol-independent-gaming", "Bristol Independent Gaming", "https://www.bristolindependentgaming.co.uk/", S.SHOPIFY, None, "75",
+     "Free over £75 (delivery page); standard charge not yet confirmed, read 8 Nov 2026"),
+    ("wright-cards", "Wright Cards", "https://wrightcards.com/", S.SHOPIFY, "3.00", None,
+     "Standard £3.00 (basket check), read 8 Nov 2026"),
+    ("card-goblin", "Card Goblin", "https://www.cardgoblin.shop/", S.SHOPIFY, "3.20", "150",
+     "Standard £3.20 (basket check), free over £150 (delivery page), read 8 Nov 2026"),
+    ("dice-and-destiny", "Dice & Destiny", "https://www.diceanddestiny.co.uk/", S.SHOPIFY, "3.50", None,
+     "Standard £3.50 (basket check), read 8 Nov 2026"),
+    ("the-game-collection", "The Game Collection", "https://collect.thegamecollection.net/", S.SHOPIFY, "3.95", "30",
+     "Standard £3.95 (basket check), free over £30 (delivery page), read 8 Nov 2026"),
+    ("side-kicks", "Side Kicks", "https://sidekicks.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("famous-grail", "Famous Grail", "https://famousgrail.com/", S.SHOPIFY, "3.99", None,
+     "Standard £3.99 (basket check), read 8 Nov 2026"),
+    ("the-games-den", "The Games Den", "https://thegamesden.co.uk/", S.WEBSITE, None, None,
+     "Delivery charge not yet confirmed"),
+    ("pulse-collective", "Pulse Collective", "https://www.pulsecollective.co.uk/", S.WEBSITE, None, None,
+     "Delivery charge not yet confirmed"),
+    ("tcg-shop-uk", "TCG Shop UK", "https://tcgshopuk.co.uk/", S.WEBSITE, None, None,
+     "Delivery charge not yet confirmed"),
+    ("the-toy-planet", "The Toy Planet", "https://thetoyplanet.co.uk/", S.WEBSITE, None, "50",
+     "Free over £50 (home page banner); standard charge not yet confirmed, read 8 Nov 2026"),
+    ("langden-games", "Langden Games", "https://langdengames.co.uk/", S.WEBSITE, None, None,
+     "Delivery charge not yet confirmed"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's
@@ -326,8 +401,16 @@ class Command(BaseCommand):
             shops.append(AMAZON)
         if settings.RIPRAPTOR_EBAY_APP_ID and settings.RIPRAPTOR_EBAY_CAMPAIGN_ID:
             shops.append(EBAY)
+        by_host = {}
+        for shop in Retailer.objects.only("pk", "website", "source_url"):
+            for address in (shop.website, shop.source_url):
+                if RemovedShop.host_of(address):
+                    by_host.setdefault(RemovedShop.host_of(address), shop.pk)
         for slug, name, website, source, cost, free, note in shops:
-            existing = Retailer.objects.filter(website=website).first() or Retailer.objects.filter(slug=slug).first()
+            # The same shop added in Admin under another form of its address (www., http) or with this name.
+            existing = (Retailer.objects.filter(website=website).first() or Retailer.objects.filter(slug=slug).first()
+                        or Retailer.objects.filter(pk=by_host.get(RemovedShop.host_of(website), 0)).first()
+                        or Retailer.objects.filter(name=name).first())
             session_url = SESSIONS.get(slug, "")
             collection = COLLECTIONS.get(slug, "")
             if existing:

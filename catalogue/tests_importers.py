@@ -987,6 +987,26 @@ class SetupShopsTests(TestCase):
         self.assertFalse(RemovedShop.objects.exists())
         self.assertIn("Total Cards: already set up", self.setup())
 
+    def test_a_shop_added_in_admin_under_another_address_or_slug_is_never_added_twice(self):
+        """The list's shops found on the web on 8 Nov 2026 may already be there, added by hand under a www. address,
+        another slug or the same name: each is the same shop, set up once."""
+        Retailer.objects.create(slug="cards-hub", name="Cards Hub UK", website="https://www.thecardshub.co.uk/")
+        Retailer.objects.create(slug="thirsty", name="Thirsty Meeples", website="https://thirstymeeples.example/")
+        self.setup()
+        self.setup()
+        self.assertEqual(Retailer.objects.filter(website__contains="thecardshub").count(), 1)
+        self.assertEqual(Retailer.objects.filter(name="Thirsty Meeples").count(), 1)
+        self.assertEqual(Retailer.objects.get(slug="the-cards-hub").website, "https://www.thecardshub.co.uk/")
+        # And a new one arrives as the list has it: switched on, read by its kind, its delivery from its own pages.
+        dice = Retailer.objects.get(slug="the-dice-dungeon")
+        self.assertEqual((dice.is_active, dice.source_type, dice.source_url, dice.delivery_cost, dice.free_delivery_over),
+                         (True, Retailer.Source.SHOPIFY, "https://thedicedungeon.co.uk/", Decimal("3.55"), Decimal("35")))
+        den = Retailer.objects.get(slug="the-games-den")
+        self.assertEqual((den.source_type, den.delivery_cost), (Retailer.Source.WEBSITE, None))
+        # Never one the owner removed, nor one that turns readers away.
+        self.assertFalse(Retailer.objects.filter(website__contains="packratt").exists())
+        self.assertFalse(Retailer.objects.filter(website__contains="chaoscards").exists())
+
     def test_shops_deleted_together_are_matched_by_address_whatever_their_slug(self):
         from .models import RemovedShop
 

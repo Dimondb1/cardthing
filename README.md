@@ -362,6 +362,18 @@ works out how each shop can be read, adds it as a retailer, imports its
 prices and matches products by barcode or name. Then run `check_delivery`
 (below) and sort the uncertain matches under Shop products to review.
 
+The shops RipRaptor reads are listed in `setup_shops`, which every update
+runs: a new entry is added switched on and read within the hour, a shop
+already there (matched by its address with or without www., its slug or its
+name) keeps what was changed in Admin, and one deleted in Admin is never
+added back. On 8 Nov 2026 35 shops found by searching the web were added
+(131 in the list). Each was checked first: priced in pounds, sealed trading
+card products listed, its robots.txt lets our reader in and no bot challenge
+turned it away; shops that blocked the check were left out rather than worked
+round. Their delivery came from each shop's delivery page or a test basket;
+those still unknown show as "plus delivery" until the daily `check_delivery
+--unknown` finds them.
+
 ## Delivery charges
 
 ```sh

@@ -2289,7 +2289,13 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
    4 Nov 2026. A title, product type tiles, a rail of deals and the next drop; the search box and the games fixed to the
    foot of a phone. From a tablet up the search goes back into the header and the games are a tab row under it. Every
    price green, savings green, the logo and the go button the only orange, as the brand rules ask. ------------------ */
-.page--feed { padding-bottom: var(--feed-dock-space); }
+.page--feed { padding-bottom: var(--space-6); }
+/* On a phone the dock is fixed to the foot of the screen: the footer keeps room under it for the dock and the arrows on
+   its edge, so the footer's last links are never under them, and the page above ends where its content does (the
+   owner, 8 Nov 2026: words cut off at the bottom, and too much space under the last section). */
+@media (max-width: 47.99rem) {
+  body.feed-look .site-footer { padding-bottom: calc(var(--feed-dock-space) + var(--feed-more) / 2 + env(safe-area-inset-bottom)); }
+}
 .feed__title { margin: var(--space-2) 0 0; font-size: var(--text-page-title); font-weight: var(--weight-price); letter-spacing: -0.02em; line-height: var(--leading-tight); }
 .feed__sub { margin: var(--space-1) 0 0; font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--color-ink-muted); }
 /* A row that swipes sideways, like the usual product rows: the next item peeking in, scrolled by the browser. */
@@ -2508,7 +2514,6 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 /* On a phone the dock has the search box, so the header's is put away. */
 @media (max-width: 47.99rem) { body.feed-look .masthead__search { display: none; } }
 @media (min-width: 48rem) {
-  .page--feed { padding-bottom: var(--space-6); }
   /* A tab row under the header, in the page's flow; the header has the search box. */
   .feed-dock { position: relative; box-shadow: none; }
   /* On a wide screen the bar and the tiles sit at the left, so the hints do too. */

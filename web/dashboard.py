@@ -27,7 +27,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from catalogue import cardmarket, checks, crawl, insights, judge, referrals, traffic
+from catalogue import cardmarket, checks, crawl, insights, judge, online, referrals, traffic
 from catalogue.drop_alerts import SENT_FIELD
 from catalogue.models import (
     AffiliateSale, CardmarketMatch, CardmarketPrice, CardmarketProduct, ClaudeAsk, ClaudeJudge, DailyPageView, DailySearch,
@@ -159,7 +159,9 @@ def now_section(now, store):
     """Who is on the site now (the owner, 31 Oct 2026: "I don't know who is currently using the site"): the people
     whose browser opened a page in the last NOW_MINUTES minutes (DailyVisitor.browser and last_seen, kept when the
     page's script reports in), and the pages they are on, most people first. A visitor whose browser never ran a
-    page (a scanner, a script) is never here. Built on every load, never cached: a query, and one for the names."""
+    page (a scanner, a script) is never here, nor one found to be a script, today's newest judged first
+    (online.marked_lately). Built on every load, never cached: a query, and one for the names."""
+    online.marked_lately(now)
     rows = list(
         DailyVisitor.objects.filter(browser=True, automated=False, last_seen__gte=now - timedelta(minutes=NOW_MINUTES),
                                     views__lt=insights.VIEWS_PER_VISITOR_CAP)

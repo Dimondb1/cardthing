@@ -2519,7 +2519,7 @@ def note_api(request):
         if found is not None and found.namespace == "web" and found.url_name in KINDS:
             insights.mark_browser(request, KINDS[found.url_name], view_key(found), path=request.GET.get("path", ""))
         else:
-            insights.mark_browser(request)
+            insights.mark_browser(request, path=request.GET.get("path", "") if found is not None else "")
         ran = True
     response = HttpResponse(status=204)
     response["Cache-Control"] = "no-store"

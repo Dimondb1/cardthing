@@ -35,12 +35,15 @@ def seen(request, token, day, page="", path="", browser=False):
 
     now = timezone.now()
     ip = client_ip(request)
+    # The page's own address: the one its report names, else the request's, never the report's own (/api/note/).
+    where = urlsplit(path).path if path else ("" if request.path.startswith("/api/") else request.path)
     row = LiveVisitor(
         date=day, token=token, ip=ip or None, country=geo.country_of(ip), device=device_of(request),
         source=source_of(request), agent=request.headers.get("User-Agent", "")[:200], page=page[:120],
-        path=(urlsplit(path).path if path else request.path)[:200], browser=browser, first_seen=now, last_seen=now,
+        path=where[:200], browser=browser, first_seen=now, last_seen=now,
     )
-    fields = ["last_seen"] + (["page", "path"] if page else []) + (["browser"] if browser else [])
+    fields = (["last_seen"] + (["page"] if page else []) + (["path"] if where else [])
+              + (["browser"] if browser else []))
     with drop_if_locked("Online"):
         retry_locked(lambda: LiveVisitor.objects.bulk_create(
             [row], update_conflicts=True, unique_fields=["token"], update_fields=fields))
@@ -55,10 +58,26 @@ def forget(now=None):
     return gone
 
 
+MARK_EVERY = 30   # seconds: this page and the dashboard judge today's newest visitors at most this often themselves
+
+
+def marked_lately(now=None):
+    """Judge today's newest visitors (catalogue/automated.py) before they are counted, at most every MARK_EVERY
+    seconds, so a flood's latest scripts are not shown as people until the background reader's next turn (the
+    owner, 8 Nov 2026, with 132 "people" on Who is online, most of them the flood's last few minutes)."""
+    from django.core.cache import cache
+
+    from . import automated
+
+    if cache.add("online:marked", True, MARK_EVERY):
+        automated.classify(now=now, days=1)
+
+
 def online(now=None):
     """The LiveVisitor rows on the site now, newest page first, each with ``person`` (its browser ran the page and it
     was not found to be automated) and ``why`` (what the classifier found, from its DailyVisitor row). Two queries."""
     now = now or timezone.now()
+    marked_lately(now)
     rows = list(LiveVisitor.objects.filter(last_seen__gte=now - timedelta(minutes=ONLINE_MINUTES)).order_by("-last_seen"))
     days = {
         token: (views, automated, why) for token, views, automated, why in
@@ -75,6 +94,7 @@ def online(now=None):
 def counts(now=None):
     """(people, automated) on the site now, in one query."""
     now = now or timezone.now()
+    marked_lately(now)
     since = now - timedelta(minutes=ONLINE_MINUTES)
     rows = list(LiveVisitor.objects.filter(last_seen__gte=since).values_list("date", "token", "browser"))
     if not rows:

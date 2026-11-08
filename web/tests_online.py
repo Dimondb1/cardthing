@@ -85,6 +85,35 @@ class LiveTests(SiteCase):
         # The day's counts never hold the address.
         self.assertNotIn("ip", [field.name for field in DailyVisitor._meta.get_fields()])
 
+    def test_a_report_never_names_itself_as_the_page(self):
+        # A page counted from its report (rendered ahead of a tap), and a page the counts do not name (the dashboard).
+        self.client.get(reverse("web:note_api"), {"what": "view", "path": self.product.get_absolute_url()},
+                        HTTP_USER_AGENT=PHONE, REMOTE_ADDR="203.0.113.9")
+        self.assertEqual(LiveVisitor.objects.get().path, "/products/delta-etb/")
+        LiveVisitor.objects.all().delete()
+        self.client.get(reverse("web:note_api"), {"what": "here", "path": "/dashboard/"},
+                        HTTP_USER_AGENT=PHONE, REMOTE_ADDR="203.0.113.9")
+        self.assertEqual(LiveVisitor.objects.get().path, "/dashboard/")
+
+    def test_a_floods_newest_scripts_are_shown_as_scripts_at_once(self):
+        from catalogue import automated
+
+        today = timezone.localdate()
+        # Ten calm days, then today a flood the reader has already found.
+        for back in range(1, 11):
+            DailyVisitor.objects.bulk_create([DailyVisitor(date=today - timedelta(days=back), token=f"c{back}-{n}",
+                                                           country="GB", views=3, browser=True) for n in range(40)])
+        DailyVisitor.objects.bulk_create([DailyVisitor(date=today, token=f"f{n}", country="BR", device="desktop",
+                                                       views=1, browser=True) for n in range(500)])
+        automated.classify(days=1)
+        # A new one arrives, its browser runs the page: the next look judges it before counting.
+        self.open_page(agent=DESKTOP, address="198.51.100.77")
+        token = LiveVisitor.objects.get(ip="198.51.100.77").token
+        DailyVisitor.objects.filter(token=token).update(country="BR")
+        cache.delete("online:marked")
+        people, scripts = online.counts()
+        self.assertEqual((people, scripts), (0, 1))
+
     def test_the_address_is_forgotten_half_an_hour_after_the_last_page(self):
         self.open_page()
         self.open_page(agent=DESKTOP, address="192.0.2.7")

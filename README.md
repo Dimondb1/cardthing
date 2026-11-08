@@ -5451,9 +5451,12 @@ visitor, and left out of people (`traffic.people_q`) and clicks
   or hot for the stock checks.
 
 Each visitor and click is marked once and never unmarked. The background
-reader runs it on today every 5 minutes, `tidy_all` on the last 36 days
-every hour, and the installer once after an update (`manage.py
-classify_visits`, also by hand with `--days`).
+reader runs it on today every minute, Who is online and the dashboard's On the
+site now before they count (at most every 30 seconds, `online.marked_lately`,
+so a flood's newest scripts are not shown as people for minutes: the owner, 8
+Nov 2026, saw 132 "people", most of them the flood's last few minutes),
+`tidy_all` on the last 36 days every hour, and the installer once after an
+update (`manage.py classify_visits`, also by hand with `--days`).
 
 **Who is online** (Admin home, **Who is online**; `/admin/online/`,
 `web/online.py`, `catalogue/online.py`): everyone who opened a page in the

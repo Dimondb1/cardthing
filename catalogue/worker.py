@@ -142,9 +142,9 @@ RECENTLY_CHECKED = timedelta(minutes=8)
 # The reader looks for cached page lists that are due a build (web/warming.py) at least this often, and at
 # once after a forced clear or when one is missing. Looking reads every list, so not on every five-second turn.
 WARM_CHECK = timedelta(seconds=30)
-# Every this often the reader marks today's automated visitors and clicks (catalogue/automated.py), counts who is
-# online and forgets the addresses of those who have gone (catalogue/online.py).
-VISITS_EVERY = timedelta(minutes=5)
+# Every this often the reader marks today's automated visitors and clicks (catalogue/automated.py), and forgets the
+# addresses of those who have gone (catalogue/online.py); who is online is counted once every five minutes of it.
+VISITS_EVERY = timedelta(minutes=1)
 IMPORT_LOCK_HOLD_LIMIT = timedelta(minutes=20)
 
 MARKETPLACES = (Retailer.Source.EBAY, Retailer.Source.AMAZON)

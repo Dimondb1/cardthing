@@ -1,0 +1,63 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Add shops | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}{% if counts.waiting %}<meta http-equiv="refresh" content="30">{% endif %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .add-shops { display: grid; gap: 24px; max-width: 72rem; }
+  .add-shops h2 { margin: 0 0 4px; }
+  .add-shops p { margin: 0 0 8px; }
+  .add-shops .note { color: var(--body-quiet-color); }
+  .add-shops textarea { width: 100%; max-width: 40rem; min-height: 10rem; box-sizing: border-box; font-family: inherit; }
+  .add-shops .tags { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0; margin: 0; list-style: none; }
+  .add-shops .tags li { list-style-type: none; }
+  .add-shops .ok { color: var(--message-success-fg, #2a7a2a); }
+  .add-shops .bad { color: var(--error-fg); }
+  .add-shops table { width: 100%; }
+  .add-shops td, .add-shops th { vertical-align: top; }
+  .add-shops td.wrap { overflow-wrap: anywhere; }
+  .add-shops form.inline { display: inline; margin: 0; }
+  /* A phone or a tablet: each shop is a card of lines rather than a table wider than the screen. */
+  @media (max-width: 63.99rem) {
+    .add-shops table thead { display: none; }
+    .add-shops table, .add-shops tbody, .add-shops tr, .add-shops td { display: block; width: auto; }
+    .add-shops tr { padding: 10px 0; border-bottom: 1px solid var(--hairline-color); }
+    .add-shops td { padding: 2px 0; border: 0; }
+    .add-shops td.first { font-weight: 600; }
+  }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Add shops</div>{% endblock %}
+{% block content %}
+<div class="add-shops">
+  <section>
+    <h2>Paste shop addresses</h2>
+    <p>One address per line, for example <code>examplecards.co.uk</code>. The background reader checks each shop within a few minutes: it must price in pounds, list sealed trading card products and let readers like ours in (its robots.txt, and no bot challenge). Shops that pass are added and switched on, their prices read within the hour. Their delivery charge is found by the daily delivery check; until then their prices show as plus delivery.</p>
+    <form method="post">{% csrf_token %}
+      <p><textarea name="addresses" aria-label="Shop addresses" placeholder="examplecards.co.uk&#10;https://www.anothershop.com/"></textarea></p>
+      <p><button type="submit" class="button default">Check and add these shops</button></p>
+    </form>
+  </section>
+
+  <section>
+    <h2>Shops pasted here</h2>
+    <ul class="tags">
+      <li>Waiting: {{ counts.waiting }}</li>
+      <li>Added: {{ counts.added }}</li>
+      <li>Already on RipRaptor: {{ counts.already }}</li>
+      <li>Not added: {{ counts.not_added }}</li>
+    </ul>
+    {% if counts.waiting %}<p class="note">This page refreshes itself every 30 seconds while shops are waiting.</p>{% endif %}
+    {% if rows %}
+    <table>
+      <thead><tr><th>Shop</th><th>Result</th><th>Why</th><th>Checked</th><th></th></tr></thead>
+      <tbody>{% for row in rows %}<tr>
+        <td class="first wrap"><a href="{{ row.address }}" rel="noopener" target="_blank">{{ row.host }}</a></td>
+        <td>{% if row.status == Status.ADDED %}<span class="ok">Added</span>{% if row.retailer %}: <a href="{% url 'admin:catalogue_retailer_change' row.retailer.pk %}">{{ row.retailer.name }}</a>{% endif %}{% elif row.status == Status.ALREADY %}Already on RipRaptor{% if row.retailer %}: <a href="{% url 'admin:catalogue_retailer_change' row.retailer.pk %}">{{ row.retailer.name }}</a>{% endif %}{% elif row.status == Status.NOT_ADDED %}<span class="bad">Not added</span>{% else %}Waiting to be checked{% endif %}</td>
+        <td class="wrap">{{ row.note }}</td>
+        <td>{% if row.checked_at %}{{ row.checked_at|date:"j M H:i" }}{% endif %}</td>
+        <td>{% if row.status == Status.NOT_ADDED %}<form class="inline" method="post">{% csrf_token %}<button type="submit" name="again" value="{{ row.pk }}" class="button">Check again</button></form>{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table>
+    {% if more %}<p class="note">And {{ more }} more.</p>{% endif %}
+    {% else %}<p class="note">No shops pasted yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

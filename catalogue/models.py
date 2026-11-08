@@ -1442,6 +1442,34 @@ class RetailerCollection(models.Model):
         return f"{self.retailer} {self.handle}"
 
 
+class ShopToAdd(models.Model):
+    """A shop address pasted on the Add shops page (web/add_shops.py), checked by the background reader and added as
+    a Retailer when it passes (catalogue/shop_adding.py). Each address is checked once, so one the owner later
+    deletes is not added back by it."""
+
+    class Status(models.TextChoices):
+        WAITING = "waiting", "Waiting to be checked"
+        ADDED = "added", "Added"
+        ALREADY = "already", "Already on RipRaptor"
+        NOT_ADDED = "not_added", "Not added"
+
+    host = models.CharField(max_length=200, unique=True, help_text="The address's host without www.")
+    address = models.URLField(max_length=300)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.WAITING, db_index=True)
+    note = models.CharField(max_length=300, blank=True, help_text="What the check found, or why it was not added.")
+    retailer = models.ForeignKey(Retailer, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+    checked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "shop to add"
+        verbose_name_plural = "shops to add"
+
+    def __str__(self):
+        return self.host
+
+
 class RemovedShop(models.Model):
     """A shop the owner deleted in Admin, so the shop list in setup_shops (run by every update) does not add it
     back. Adding a shop with the same slug or address again, in Admin or with discover_shops, forgets it."""

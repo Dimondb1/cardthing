@@ -49,6 +49,12 @@
 </div>
 <div class="module" style="margin-bottom: 20px;">
   <table>
+    <caption><a href="{% url 'add_shops' %}" class="section">Add shops</a></caption>
+    <tr><th scope="row"><a href="{% url 'add_shops' %}">Paste shop addresses: each is checked and added if it passes</a></th><td></td></tr>
+  </table>
+</div>
+<div class="module" style="margin-bottom: 20px;">
+  <table>
     <caption><a href="{% url 'crawl' %}" class="section">Crawl health</a></caption>
     {% if stopped %}<tr><th scope="row"><a href="{% url 'crawl' %}" style="color: var(--error-fg);"><strong>Background reader stopped at {{ stopped }}.</strong> The hourly schedule reads the shops.</a></th><td></td></tr>{% endif %}
     <tr><th scope="row"><a href="{% url 'crawl' %}">Whether each shop is being read, with buttons to read one now or pause reading</a></th><td></td></tr>

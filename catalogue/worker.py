@@ -145,6 +145,8 @@ WARM_CHECK = timedelta(seconds=30)
 # Every this often the reader marks today's automated visitors and clicks (catalogue/automated.py), and forgets the
 # addresses of those who have gone (catalogue/online.py); who is online is counted once every five minutes of it.
 VISITS_EVERY = timedelta(minutes=1)
+# How often shops pasted on the Add shops page are looked for (catalogue/shop_adding.py).
+SHOPS_EVERY = timedelta(seconds=30)
 IMPORT_LOCK_HOLD_LIMIT = timedelta(minutes=20)
 
 MARKETPLACES = (Retailer.Source.EBAY, Retailer.Source.AMAZON)
@@ -340,6 +342,19 @@ class InlineExecutor:
         fn(*args)
 
 
+
+
+def check_shops():
+    """The Add shops checks, in their own thread, which closes its database connection when done."""
+    from . import shop_adding
+
+    try:
+        shop_adding.check_waiting()
+    except Exception:  # noqa: BLE001 - the shops wait for the next turn
+        logger.exception("Could not check the shops to add")
+    finally:
+        connections.close_all()
+
 @dataclass
 class Task:
     kind: str
@@ -417,6 +432,8 @@ class Worker:
         self.warm = warm
         self.last_dashboard = None
         self.last_visits = None
+        self.last_shops = None
+        self.shop_thread = None
         self.last_warm = None
         self.warm_forced = None
 
@@ -983,6 +1000,7 @@ class Worker:
         self.keep_pages_warm(now)
         self.keep_dashboard_warm(now)
         self.keep_visits_tidy(now)
+        self.keep_shops_checked(now)
 
     def keep_dashboard_warm(self, now):
         """Build again the dashboard's parts over a minute old while it is in use (web.dashboard.warm), so the owner's
@@ -1010,6 +1028,25 @@ class Worker:
             online.sample()
         except Exception:  # noqa: BLE001
             logger.exception("Could not tidy the visit counts")
+
+    def keep_shops_checked(self, now):
+        """Every SHOPS_EVERY: shops pasted on the Add shops page are checked and the good ones added
+        (catalogue/shop_adding.py), in a thread of their own so a slow shop never holds up the main loop."""
+        if not self.warm or (self.last_shops is not None and now - self.last_shops < SHOPS_EVERY):
+            return
+        self.last_shops = now
+        if self.shop_thread is not None and self.shop_thread.is_alive():
+            return
+        from .models import ShopToAdd
+
+        try:
+            waiting = ShopToAdd.objects.filter(status=ShopToAdd.Status.WAITING).exists()
+        except Exception:  # noqa: BLE001 - looked at again on the next turn
+            logger.exception("Could not look for shops to add")
+            return
+        if waiting:
+            self.shop_thread = threading.Thread(target=check_shops, name="shop-checks", daemon=True)
+            self.shop_thread.start()
 
     def keep_pages_warm(self, now):
         """Build the cached page lists that are due (cleared by a job's price changes, missing, or nearly

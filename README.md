@@ -374,6 +374,21 @@ round. Their delivery came from each shop's delivery page or a test basket;
 those still unknown show as "plus delivery" until the daily `check_delivery
 --unknown` finds them.
 
+**Add shops** (Admin, owner only, `/admin/add-shops/`, `web/add_shops.py`):
+paste shop addresses, one per line. Each is saved once (`ShopToAdd`) and the
+background reader checks waiting shops every 30 seconds in a thread of its
+own (`catalogue/shop_adding.py`), so a slow shop never holds up price reads.
+A shop already on RipRaptor (same host, with or without www.) is left as it
+is; one deleted in Admin is not added back; one whose robots.txt keeps
+readers like ours out, or that answers with a 401, 403 or 429, is not added
+and nothing is worked round. A Shopify shop must price in pounds and list a
+sealed trading card product in its first 1,000 products; any other shop
+must list product pages in its sitemap whose data carries a price in pounds
+(the Website source). A shop that passes is added switched on, named from
+its own data, with its delivery unknown until the daily delivery check reads
+it. The page lists every shop pasted with the result and why, refreshes
+itself while any wait, and a shop not added can be checked again.
+
 ## Delivery charges
 
 ```sh

@@ -313,6 +313,20 @@ SHOPS = [
      "Free over £50 (home page banner); standard charge not yet confirmed, read 8 Nov 2026"),
     ("langden-games", "Langden Games", "https://langdengames.co.uk/", S.WEBSITE, None, None,
      "Delivery charge not yet confirmed"),
+    ("tcg-group", "TCG Group", "https://tcggroup.co.uk/", S.SHOPIFY, "2.00", "50",
+     "Standard £2.00 (basket check), free over £50 (delivery page), read 8 Nov 2026"),
+    ("happy-piranha", "Happy Piranha", "https://happypiranha.com/", S.SHOPIFY, "3.60", None,
+     "Standard £3.60 (basket check), read 8 Nov 2026"),
+    ("kershkicks", "KershKicks", "https://www.kershkicks.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("loaded-dice", "Loaded Dice", "https://www.loadeddice.uk/", S.SHOPIFY, None, "65",
+     "Free over £65 (delivery page); standard charge not yet confirmed, read 8 Nov 2026"),
+    ("lorecards", "Lorecards", "https://lorecards.com/", S.SHOPIFY, "3.99", "50",
+     "Standard £3.99 (basket check), free over £50 (delivery page, confirmed by basket), read 8 Nov 2026"),
+    ("knightly-gaming", "Knightly Gaming", "https://www.knightlygaming.co.uk/", S.SHOPIFY, None, None,
+     "Delivery charge not yet confirmed"),
+    ("lennies-toys", "Lennies Toys", "https://lennies.com/", S.SHOPIFY, None, "50",
+     "Free over £50 (delivery page); standard charge not yet confirmed, read 8 Nov 2026"),
 ]
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's

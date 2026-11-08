@@ -1772,8 +1772,22 @@ it again after changing the mark and commit the files.
   our pages and followed their links with our page as the Referer, never
   running a page; these are now direct hits too (reason `page`). Each direct
   hit keeps why it was one (`OutboundClick.suspect_why`: `referer`, `page`,
-  `prefetch` or `cap`). Anything else
-  still gets a 302 to the shop, but at the plain address: eBay's `mkevt`,
+  `prefetch` or `cap`). Anything else is never tracked. A connection over
+  the hour's limit (`cap`: it came from our page in a browser that ran it)
+  gets a 302 to the shop's plain address. Every other direct hit (no Referer
+  from our pages, a browser that never ran one, a robot, a prefetch, a HEAD)
+  is shown the **Continue page** instead (`web.views.gate`, from 8 Nov 2026):
+  "Continue to {shop}", one button and a link back to the product's prices,
+  with no shop address anywhere on it, `noindex` and never cached. Scripts
+  that fetch our links to collect the shops' addresses then find none. The
+  button posts a signed note (the listing and the saved click, good for an
+  hour) to `/go/<listing>/continue/` (`go_continue`), which sends the
+  visitor to the plain address with a 303 and ticks the click's
+  **continued**; an old or altered note goes to the product page. The click
+  stays a direct hit and is judged as before (`catalogue/automated.py`),
+  since a script can press a button too. The dashboard shows how many
+  pressed Continue each day beside the direct hits. The plain address:
+  eBay's `mkevt`,
   `mkcid`, `mkrid`, `campid`, `customid`, `toolid` and similar are removed
   (the item id is kept), Amazon's `tag` likewise, and no affiliate format is
   applied. These are saved with **suspect** ticked, left out of every click
@@ -1781,8 +1795,9 @@ it again after changing the mark and commit the files.
   `shop_report`), and shown on Insights as "Direct hits sent on without
   tracking" beside "Clicks from people" for the last 7 days. Robots that say
   so and HEAD requests are not saved at all. The trade-off: a person whose
-  browser sends no Referer (strict privacy settings, some extensions) still
-  reaches the shop, but without our tracking, so such a sale earns nothing.
+  browser sends no Referer (strict privacy settings, some extensions), or
+  who has JavaScript off, presses Continue once and reaches the shop, but
+  without our tracking, so such a sale earns nothing.
   That is the price of sending eBay only clicks that could become sales.
   Emails therefore never link to `/go/`: the drop reminders link each price
   to the product page, where the reader presses Buy.
@@ -5517,7 +5532,8 @@ the location and how many people are online at any given point".
   far", burst days grey and left out of the totals), returning share, page
   views, where people came from, and the traffic explainer's top finding.
 - **Clicks to shops, last 7 days:** clicks from people beside direct hits a
-  day, clicks per person, clicks by how the shop pays (eBay Partner Network,
+  day, how many direct hits pressed Continue on the Continue page, clicks
+  per person, clicks by how the shop pays (eBay Partner Network,
   Amazon Associates, Awin, CJ, Rakuten, another affiliate link, or none,
   worked out from each shop's price source and affiliate link format).
 - **Products people want, last 7 days** (`products_section`): the ten

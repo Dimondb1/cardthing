@@ -2046,6 +2046,10 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .refer-form__agree { display: flex; align-items: flex-start; gap: var(--space-2); margin-top: var(--space-2); min-height: var(--tap); cursor: pointer; }
 .refer-form__agree input { flex: none; width: var(--space-5); height: var(--space-5); margin: 0; accent-color: var(--color-brand-action); }
 .refer-form__postcode { max-width: var(--field-short); text-transform: uppercase; }
+
+/* A shop link opened away from our pages (web/templates/web/go_gate.html): the button, and the way back beside it. */
+.gate { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
+.gate__back { display: inline-flex; align-items: center; min-height: var(--tap); font-weight: var(--weight-strong); }
 .refer-share { display: grid; gap: var(--space-2); max-width: var(--form-width); }
 .refer-share__link { font-weight: var(--weight-strong); overflow-wrap: anywhere; }
 .refer-share__list { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }

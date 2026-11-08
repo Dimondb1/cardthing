@@ -5,6 +5,7 @@
     <div><dt>{{ clicks_label }}</dt><dd>{{ traffic.clicks|number }}</dd></div>
     <div><dt>{% copy "dashboard.clicks.per_person" %}</dt><dd>{% if traffic.per_person is not None %}{{ traffic.per_person|floatformat:2 }}{% else %}&ndash;{% endif %}</dd></div>
     <div><dt>{{ direct_label }}</dt><dd>{{ traffic.direct|number }}</dd></div>
+    <div><dt>{% copy "dashboard.clicks.continued" %}</dt><dd>{{ traffic.continued|number }}</dd></div>
   </dl>
   <figure class="dash-chart">
     <ul class="dash-legend">
@@ -28,8 +29,8 @@
   <details class="dash-table">
     <summary>{% copy "dashboard.table" %}</summary>
     <table>
-      <thead><tr><th scope="col">{% copy "dashboard.day" %}</th><th scope="col" class="num">{{ clicks_label }}</th><th scope="col" class="num">{{ direct_label }}</th></tr></thead>
-      <tbody>{% for day in traffic.click_days reversed %}<tr><th scope="row">{{ day.date|date:"D j M" }}{% if day.today %} <span class="muted">{{ so_far }}</span>{% endif %}</th><td class="num">{{ day.clicks|number }}</td><td class="num">{{ day.direct|number }}</td></tr>{% endfor %}</tbody>
+      <thead><tr><th scope="col">{% copy "dashboard.day" %}</th><th scope="col" class="num">{{ clicks_label }}</th><th scope="col" class="num">{{ direct_label }}</th><th scope="col" class="num">{% copy "dashboard.clicks.continued" %}</th></tr></thead>
+      <tbody>{% for day in traffic.click_days reversed %}<tr><th scope="row">{{ day.date|date:"D j M" }}{% if day.today %} <span class="muted">{{ so_far }}</span>{% endif %}</th><td class="num">{{ day.clicks|number }}</td><td class="num">{{ day.direct|number }}</td><td class="num">{{ day.continued|number }}</td></tr>{% endfor %}</tbody>
     </table>
   </details>
   {% if traffic.earning %}

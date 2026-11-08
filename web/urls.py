@@ -58,6 +58,7 @@ urlpatterns = [
     path("products/<slug:slug>/post/", views.product_post, name="product_post"),
     path("products/<slug:slug>/post.png", views.product_post_image, name="product_post_image"),
     path("go/<int:listing_id>/", views.go, name="go"),
+    path("go/<int:listing_id>/continue/", views.go_continue, name="go_continue"),
     path("go/search/<slug:slug>/<str:market>/", views.go_search, name="go_search"),
     path("about/", views.about, name="about"),
     path("guides/", guides.hub, name="guides"),

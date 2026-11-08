@@ -38,7 +38,7 @@ class PolicyTests(PageTestCase):
         return self.public_urls() + [reverse("web:deals"), reverse("web:drops"), reverse("web:about"),
                                      reverse("web:watchlist"), "/no-such-page/"]
 
-    def check(self, html, header, strict):
+    def check(self, html, header, strict, form_action="'self'"):
         found = directives(header)
         nonce = NONCE.search(found["script-src"]).group(1)
         self.assertGreaterEqual(len(nonce), 22)
@@ -47,7 +47,7 @@ class PolicyTests(PageTestCase):
         self.assertEqual(found["default-src"], "'self'")
         self.assertEqual(found["style-src"], "'self' 'unsafe-inline'")
         self.assertEqual(found["img-src"], "'self' data: https:")
-        self.assertEqual(found["form-action"], "'self'")
+        self.assertEqual(found["form-action"], form_action)
         self.assertEqual(found["frame-ancestors"], "'self'")
         if strict:
             self.assertEqual(found["script-src"], f"'nonce-{nonce}' 'strict-dynamic' 'self' https: 'unsafe-inline'")
@@ -67,7 +67,10 @@ class PolicyTests(PageTestCase):
             response = self.client.get(url)
             with self.subTest(url=url):
                 self.assertIn(csp.HEADER, response)
-                nonces.add(self.check(response.content.decode(), response[csp.HEADER], strict=True))
+                # The Continue page's one form answers with a redirect to the shop (web.views.gate).
+                form_action = "'self' https:" if url.startswith("/go/") else "'self'"
+                nonces.add(self.check(response.content.decode(), response[csp.HEADER], strict=True,
+                                      form_action=form_action))
         self.assertEqual(len(nonces), len(self.public_pages()))   # a nonce is each response's own
 
     def test_the_new_home_page_and_its_filtered_lists_too(self):

@@ -1,7 +1,9 @@
-"""Clicks from people carry our tracking and count; direct hits reach the plain shop address and do not."""
+"""Clicks from people carry our tracking and count; direct hits do not: they are shown a page with a Continue button
+to the plain shop address (web.views.gate), or sent there when over the hour's limit."""
 
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -79,40 +81,106 @@ class GoTests(ClickTestCase):
         with override_settings(DEBUG=True, ALLOWED_HOSTS=["ripraptor.com"]):
             self.assertEqual(clicks.suspect_reason(local()), "")
 
-    def assert_direct(self, response, listing, plain, saved):
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], plain)
+    def assert_gated(self, response, listing, saved):
+        """The Continue page, with no shop address on it, and ``saved`` direct hits."""
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "web/go_gate.html")
         self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+        self.assertIn("no-store", response["Cache-Control"])
+        # Its button's answer redirects to the shop, which browsers hold to form-action; other pages keep 'self'.
+        self.assertIn("form-action 'self' https:;", response["Content-Security-Policy"])
+        body = response.content.decode()
+        self.assertNotIn(urlsplit(listing.url).netloc, body)
+        self.assertNotIn(urlsplit(clicks.plain_url(listing.url) or "https://none.example/").netloc, body)
         self.assertEqual(OutboundClick.objects.people().count(), 0)
         self.assertEqual(OutboundClick.objects.suspects().count(), saved)
 
-    def test_no_referer_goes_to_the_plain_address(self):
-        self.assert_direct(self.go(self.listing, referer=None), self.listing, self.listing.url, 1)
+    def press_continue(self, response):
+        """Press the Continue button on the gate page, as a browser would."""
+        body = response.content.decode()
+        action = re.search(r'<form class="gate" method="post" action="([^"]+)"', body).group(1)
+        token = re.search(r'name="t" value="([^"]+)"', body).group(1)
+        return self.client.post(action, {"t": token}, HTTP_USER_AGENT=BROWSER)
 
-    def test_a_foreign_referer_goes_to_the_plain_address(self):
-        for referer in ("https://evil.example/", "https://ripraptor.com.evil.example/", "not a url", "ftp://ripraptor.com/"):
-            response = self.go(self.listing, referer=referer)
-            self.assertEqual(response["Location"], self.listing.url, referer)
+    def test_no_referer_is_shown_the_continue_page(self):
+        response = self.go(self.listing, referer=None)
+        self.assert_gated(response, self.listing, 1)
+        self.assertIn("form-action 'self';", self.client.get(self.product.get_absolute_url())["Content-Security-Policy"])
+        self.assertContains(response, "Continue to Harbour Games")
+        self.assertContains(response, f'href="{self.product.get_absolute_url()}"')
+        self.assertContains(response, '<meta name="robots" content="noindex, nofollow">')
+
+    def test_pressing_continue_goes_to_the_plain_address_and_is_noted(self):
+        response = self.press_continue(self.go(self.ebay_listing, referer=None))
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response["Location"], "https://www.ebay.co.uk/itm/306123456789?_skw=etb&hash=item4746")
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+        click = OutboundClick.objects.suspects().get()
+        # Still a direct hit, judged as before (catalogue/automated.py): only the press is noted.
+        self.assertEqual((click.continued, click.suspect_why, click.ran_page), (True, "referer", None))
         self.assertEqual(OutboundClick.objects.people().count(), 0)
 
-    def test_head_goes_to_the_plain_address_and_is_not_saved(self):
-        self.assert_direct(self.go(self.listing, method="head"), self.listing, self.listing.url, 0)
+    def test_continue_works_without_cookies(self):
+        gate = self.go(self.listing, referer=None)
+        self.client.cookies.clear()
+        self.assertEqual(self.press_continue(gate)["Location"], self.listing.url)
+
+    def test_an_altered_old_or_other_listings_note_goes_to_the_product_page(self):
+        import time
+        from unittest import mock
+
+        from django.core import signing
+
+        from web import views
+
+        other = make_listing(make_product(self.product_set, name="Other Box", slug="other-box"), self.shop)
+        with mock.patch("time.time", return_value=time.time() - views.GATE_SECONDS - 5):
+            old = signing.dumps({"l": self.listing.pk, "c": 0}, salt=views.GATE_SALT)
+        url = reverse("web:go_continue", args=[self.listing.pk])
+        for note in ("", "nonsense", signing.dumps({"l": self.listing.pk, "c": 0}, salt="elsewhere"),
+                     signing.dumps({"l": other.pk, "c": 0}, salt=views.GATE_SALT), old):
+            with self.subTest(note=note):
+                response = self.client.post(url, {"t": note})
+                self.assertEqual(response.status_code, 303)
+                self.assertEqual(response["Location"], self.product.get_absolute_url())
+
+    def test_continue_is_only_a_post(self):
+        url = reverse("web:go_continue", args=[self.listing.pk])
+        self.assertEqual(self.client.get(url).status_code, 405)
+
+    def test_a_foreign_referer_is_shown_the_continue_page(self):
+        for referer in ("https://evil.example/", "https://ripraptor.com.evil.example/", "not a url", "ftp://ripraptor.com/"):
+            response = self.go(self.listing, referer=referer)
+            self.assertTemplateUsed(response, "web/go_gate.html")
+            self.assertFalse(response.has_header("Location"), referer)
+        self.assertEqual(OutboundClick.objects.people().count(), 0)
+
+    def test_a_browser_that_never_ran_our_page_is_shown_the_continue_page(self):
+        self.client.cookies.clear()
+        response = self.go(self.ebay_listing)
+        self.assert_gated(response, self.ebay_listing, 1)
+        self.assertEqual(OutboundClick.objects.get().suspect_why, "page")
+
+    def test_head_is_shown_the_continue_page_and_is_not_saved(self):
+        self.assert_gated(self.go(self.listing, method="head"), self.listing, 0)
 
     def test_post_is_not_allowed(self):
         self.assertEqual(self.go(self.listing, method="post").status_code, 405)
 
-    def test_prefetch_goes_to_the_plain_address(self):
+    def test_prefetch_is_shown_the_continue_page(self):
         for header in ({"HTTP_PURPOSE": "prefetch"}, {"HTTP_SEC_PURPOSE": "prefetch;prerender"}, {"HTTP_X_MOZ": "prefetch"}):
-            response = self.go(self.ebay_listing, **header)
-            self.assertEqual(response["Location"], "https://www.ebay.co.uk/itm/306123456789?_skw=etb&hash=item4746", header)
+            self.assertTemplateUsed(self.go(self.ebay_listing, **header), "web/go_gate.html")
         self.assertEqual(OutboundClick.objects.people().count(), 0)
         self.assertEqual(OutboundClick.objects.suspects().count(), 3)
 
-    def test_robots_go_to_the_plain_address_and_are_not_saved(self):
+    def test_robots_are_shown_the_continue_page_and_are_not_saved(self):
         for agent in ("Googlebot/2.1", "", "python-requests/2.32", "HeadlessChrome/120"):
             response = self.go(self.ebay_listing, agent=agent)
-            self.assertEqual(response.status_code, 302)
-            self.assertNotIn("campid", response["Location"])
+            self.assertEqual(response.status_code, 200)
+            self.assertNotIn("ebay.co.uk", response.content.decode())
+        self.assertFalse(OutboundClick.objects.exists())
+        # A robot that presses Continue anyway reaches the plain address, with nothing to note.
+        self.assertNotIn("campid", self.press_continue(response)["Location"])
         self.assertFalse(OutboundClick.objects.exists())
 
     def test_a_connection_over_the_hourly_cap_goes_to_the_plain_address(self):
@@ -148,7 +216,7 @@ class GoTests(ClickTestCase):
         self.assertEqual(clicks.plain_url("https://notebay.example/p?campid=1"), "https://notebay.example/p?campid=1")
 
     def test_the_affiliate_format_is_not_applied_to_direct_hits(self):
-        response = self.go(self.listing, referer=None)
+        response = self.press_continue(self.go(self.listing, referer=None))
         self.assertNotIn("awin1", response["Location"])
         self.assertEqual(response["Location"], self.listing.url)
 
@@ -160,10 +228,12 @@ class GoTests(ClickTestCase):
     def test_query_count_stays_small(self):
         with self.assertNumQueries(2):   # the listing, the click
             self.go(self.listing)
-        with self.assertNumQueries(2):
-            self.go(self.listing, referer=None)
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(3):   # the listing, the click, the page's wording
+            gate = self.go(self.listing, referer=None)
+        with self.assertNumQueries(2):   # a robot's click is not saved
             self.go(self.listing, agent="Googlebot/2.1")
+        with self.assertNumQueries(2):   # the listing, the note on the click
+            self.press_continue(gate)
 
 
 class NetworkLinkTests(ClickTestCase):
@@ -181,8 +251,9 @@ class NetworkLinkTests(ClickTestCase):
         listing = make_listing(self.product, shop, url=offer.url)
         self.assertEqual(listing.url, self.AWIN_PCLICK)
         # No shop address inside Awin's product click, so the shop's front page.
-        self.assertEqual(self.go(listing, referer=None)["Location"], "https://shop.example/")
-        self.assertEqual(self.go(listing, agent="Googlebot/2.1")["Location"], "https://shop.example/")
+        for gate in (self.go(listing, referer=None), self.go(listing, agent="Googlebot/2.1")):
+            self.assertNotIn("awin1.com", gate.content.decode())
+            self.assertEqual(GoTests.press_continue(self, gate)["Location"], "https://shop.example/")
         # A person on our pages still goes through Awin.
         self.assertEqual(self.go(listing)["Location"], self.AWIN_PCLICK)
 

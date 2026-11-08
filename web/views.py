@@ -10,6 +10,7 @@ from django.conf import settings
 from django.templatetags.static import static
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core import signing
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Case, Count, Exists, F, IntegerField, Max, OuterRef, Prefetch, Q, Subquery, Value, When
@@ -19,6 +20,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_http_methods, require_POST, require_safe
 
@@ -38,6 +40,7 @@ from inbox.models import Conversation
 
 from guides import state as guide_doors
 from guides.access import not_for_editors
+from ripraptor import csp
 
 from . import feed, hubs, listcache, look, partners, refresh, share
 from . import find as find_steps
@@ -1761,11 +1764,44 @@ def save_click(request, reason, product, retailer, listing=None):
     return saved
 
 
+# Shop links opened away from our pages (catalogue/clicks.py direct hits) are shown a page with a Continue button
+# rather than sent on (the owner, 8 Nov 2026: "let's gate it ourselves for now and see how that goes"). Scripts that
+# fetch our links for the shops' addresses then find none, and a person presses one button. Only a connection over the
+# hour's click limit is sent straight on: it came from our page in a browser that ran it.
+GATED = ("method", "robot", "prefetch", "referer", "page")
+GATE_SALT = "web.go.gate"
+GATE_SECONDS = 3600
+
+
+def shop_address(listing):
+    """The shop's plain address for a listing, with no tracking. An affiliate click address with no shop address
+    inside goes to the shop's front page instead."""
+    return clicks.plain_url(listing.url) or listing.retailer.website or listing.product.get_absolute_url()
+
+
+def gate(request, listing, saved):
+    """The Continue to the shop page. Its button posts a signed note of the listing and the saved click to
+    go_continue; the shop's address is never on it."""
+    token = signing.dumps({"l": listing.pk, "c": saved.pk if saved is not None else 0}, salt=GATE_SALT)
+    response = render(request, "web/go_gate.html", {
+        "listing": listing, "product": listing.product, "retailer": listing.retailer, "token": token,
+        "meta_title": text(request, "meta.gate.title"), "noindex": True, "robots": "noindex, nofollow",
+    })
+    response["Cache-Control"] = "private, no-store"
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    # The button's answer is a redirect to the shop, which browsers hold to the page's form-action: any https
+    # address, so the header names no shop either (http too while developing, for the demo shops).
+    response[csp.HEADER] = csp.policy(
+        getattr(request, "csp_nonce", ""), form_action="'self' https:" + (" http:" if settings.DEBUG else ""))
+    return response
+
+
 @require_safe
 def go(request, listing_id):
     """Send the visitor to the retailer. A click from a person on our pages is counted and carries our
-    tracking; anything else (no link from our pages, a robot, a prefetch, too many from one connection)
-    still reaches the shop, at its plain address, and is saved as suspect (catalogue/clicks.py)."""
+    tracking. Anything else (no link from our pages, a browser that never ran one, a robot, a prefetch) is shown
+    the Continue page (gate) and saved as suspect; a connection over the hour's limit is sent to the shop's plain
+    address (catalogue/clicks.py)."""
     listing = get_object_or_404(
         Listing.objects.live().select_related("retailer", "product"),
         pk=listing_id,
@@ -1773,14 +1809,46 @@ def go(request, listing_id):
     )
     reason = clicks.suspect_reason(request)
     saved = save_click(request, reason, listing.product, listing.retailer, listing)
+    if reason in GATED:
+        return gate(request, listing, saved)
     if reason:
-        # An affiliate click address with no shop address inside goes to the shop's front page instead.
-        target = clicks.plain_url(listing.url) or listing.retailer.website or listing.product.get_absolute_url()
+        target = shop_address(listing)
     else:
         # The click's number goes where the network reports it back, so a sale can be matched to it.
         number = saved.pk if saved is not None else ""
         target = clicks.with_click_ref(listing.retailer.outbound_url(listing.url, click=number), number)
     response = HttpResponseRedirect(target)
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
+
+@csrf_exempt   # the signed note is the check, and a browser that keeps no cookie still gets through
+@require_POST
+def go_continue(request, listing_id):
+    """The Continue button on the gate page: sends the visitor to the shop's plain address, without tracking, and
+    notes on the saved click that they pressed it. The click stays a direct hit, judged as before
+    (catalogue/automated.py), since a script can press a button too. An old or altered note goes to the product
+    page, where Buy works as usual."""
+    listing = get_object_or_404(
+        Listing.objects.live().select_related("retailer", "product"),
+        pk=listing_id,
+        product__is_active=True,
+    )
+    try:
+        signed = signing.loads(request.POST.get("t", ""), salt=GATE_SALT, max_age=GATE_SECONDS)
+    except signing.BadSignature:
+        signed = None
+    if not isinstance(signed, dict) or signed.get("l") != listing.pk:
+        target = listing.product.get_absolute_url()
+    else:
+        if signed.get("c"):
+            with pricing.drop_if_locked("Click"):
+                pricing.retry_locked(lambda: OutboundClick.objects.suspects().filter(
+                    pk=signed["c"], listing=listing).update(continued=True))
+        target = shop_address(listing)
+    response = HttpResponseRedirect(target)
+    response.status_code = 303
+    response["Cache-Control"] = "no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
 

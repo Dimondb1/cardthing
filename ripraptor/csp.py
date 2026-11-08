@@ -30,8 +30,9 @@ def nonce():
     return secrets.token_urlsafe(18)
 
 
-def policy(nonce, admin=False):
-    """The header's value for a page with ``nonce`` on its scripts."""
+def policy(nonce, admin=False, form_action="'self'"):
+    """The header's value for a page with ``nonce`` on its scripts. ``form_action`` is where its forms may go, and
+    where a form's answer may redirect: the Continue page's form lands on a shop (web.views.gate)."""
     connect, frames = ["'self'"], []
     if admin:
         script = f"'self' 'nonce-{nonce}'"
@@ -56,7 +57,7 @@ def policy(nonce, admin=False):
         "frame-src " + (" ".join(dict.fromkeys(frames)) if frames else "'none'"),
         "object-src 'none'",
         "base-uri 'none'",
-        "form-action 'self'",
+        f"form-action {form_action}",
         "frame-ancestors 'self'",
     ]
     return "; ".join(directives)

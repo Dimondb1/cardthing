@@ -1,0 +1,13 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}{# A shop link opened away from our pages (web.views.gate): one button on to the shop, whose address is not on this page. #}
+<div class="page-head">
+  <h1 class="page-title">{% copy "product.gate.title" retailer=retailer.name %}</h1>
+  <p class="page-intro">{% copy "product.gate.body" retailer=retailer.name product=product.name %}</p>
+</div>
+<form class="gate" method="post" action="{% url 'web:go_continue' listing.pk %}">
+  <input type="hidden" name="t" value="{{ token }}">
+  <button class="button" type="submit">{% copy "product.gate.button" retailer=retailer.name %}</button>
+  <a class="gate__back" href="{{ product.get_absolute_url }}">{% copy "product.gate.back" %}</a>
+</form>
+{% endblock %}

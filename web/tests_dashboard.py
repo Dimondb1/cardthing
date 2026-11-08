@@ -105,8 +105,8 @@ def build_fixtures(self):
         made += [OutboundClick(product=self.box, retailer=self.cj, created_at=at(day, hour))]
         made += [OutboundClick(product=self.tin, retailer=self.ebay, created_at=at(day, hour)) for _ in range(2)]
         made += [OutboundClick(product=self.box, retailer=self.plain, created_at=at(day, hour))]
-        made += [OutboundClick(product=self.tin, retailer=self.plain, created_at=at(day, hour), suspect=True)
-                 for _ in range(9)]
+        made += [OutboundClick(product=self.tin, retailer=self.plain, created_at=at(day, hour), suspect=True,
+                               continued=n < 2) for n in range(9)]
     OutboundClick.objects.bulk_create(made)
 
     # Searches this week, one found plenty, one before the week.
@@ -296,6 +296,10 @@ class FigureTests(DashboardCase):
         self.assertEqual(data["clicks"], 7 * 8)
         self.assertEqual(data["direct"], 7 * 9)
         self.assertEqual([day["direct"] for day in data["click_days"]], [9] * 7)
+        # Of them, those that pressed Continue on the page shown in place of the shop (web.views.gate).
+        self.assertEqual(data["continued"], 7 * 2)
+        self.assertEqual([day["continued"] for day in data["click_days"]], [2] * 7)
+        self.assertContains(self.page(), "<dt>Pressed Continue</dt><dd>14</dd>", html=False)
         # Clicks per person sets the clicks of the days counted against their people: the burst day is left out.
         self.assertEqual(data["per_person"], round((data["clicks"] - 8) / data["people"], 2))
         # Grouped by how the shop pays, from its price source and its affiliate link format.

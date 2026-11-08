@@ -199,10 +199,14 @@ def traffic_section(now, store):
     first = today - timedelta(days=WEEK_DAYS - 1)
     rows = why["days"]
     start = traffic.start_of(first)
-    direct = dict(
+    # Direct hits each day, and how many of them pressed Continue on the page shown in their place (web.views.gate).
+    direct, continued = {}, {}
+    for day, n, on in (
         OutboundClick.objects.suspects().filter(created_at__gte=start, created_at__lte=now).order_by()
-        .values_list("created_at__date").annotate(n=Count("id")).values_list("created_at__date", "n")
-    )
+        .values_list("created_at__date").annotate(n=Count("id"), on=Count("id", filter=Q(continued=True)))
+        .values_list("created_at__date", "n", "on")
+    ):
+        direct[day], continued[day] = n, on
     days = []
     for offset in range(WEEK_DAYS):
         day = first + timedelta(days=offset)
@@ -210,7 +214,7 @@ def traffic_section(now, store):
         days.append({
             "date": day, "today": day == today, "burst": bool(row.get("burst")),
             "people": row.get("people", 0), "returning": row.get("returning", 0), "views": row.get("views", 0),
-            "clicks": row.get("clicks", 0), "direct": direct.get(day, 0),
+            "clicks": row.get("clicks", 0), "direct": direct.get(day, 0), "continued": continued.get(day, 0),
             "by_browser": bool(row.get("by_browser")), "automated": row.get("automated", 0),
         })
     # Burst days are left out of the people, and of the clicks set against them; every click from people counts.
@@ -278,7 +282,7 @@ def traffic_section(now, store):
         "click_days": bars([dict(day) for day in days], ["clicks", "direct"]),
         "people": people, "returning": returning, "returning_share": share(returning, people),
         "views": sum(day["views"] for day in counted), "clicks": clicks,
-        "direct": sum(day["direct"] for day in days),
+        "direct": sum(day["direct"] for day in days), "continued": sum(day["continued"] for day in days),
         "per_person": round(counted_clicks / people, 2) if people else None,
         "bursts": bursts, "best": best, "most_clicks": most_clicks,
         # The floods of scripts left out of people this week (catalogue/automated.py), newest first: (day, count).

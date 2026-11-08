@@ -1283,6 +1283,27 @@ ENTRIES = [
         placeholders=("retailer",),
     ),
     Entry(
+        "product.gate.title", H, "Shop link check heading", "Continue to {retailer}",
+        "Page shown in place of the shop when a Buy link is opened away from our pages: a link pasted into a new "
+        "tab, a browser running no scripts, or a robot. Pressing Buy on our pages never shows it.",
+        placeholders=("retailer",),
+    ),
+    Entry(
+        "product.gate.body", T, "Shop link check text",
+        "You are going to {retailer} for {product}. We ask when a shop link is opened away from our pages.",
+        "Under the heading on the shop link check page.",
+        placeholders=("retailer", "product"),
+    ),
+    Entry(
+        "product.gate.button", B, "Shop link check button", "Continue to {retailer}",
+        "Button on the shop link check page. It opens the shop's page for the product.",
+        placeholders=("retailer",),
+    ),
+    Entry(
+        "product.gate.back", B, "Shop link check back link", "Compare every price first",
+        "Link under the button on the shop link check page, back to the product page.",
+    ),
+    Entry(
         "product.delivered.line", T, "Delivered price line",
         "{price} delivered",
         "Under the shop's own price on cards and the product page: what you pay with delivery.",
@@ -3007,6 +3028,8 @@ ENTRIES = [
         "No deals to show yet. Prices are checked every hour, so try again soon.",
         "Shown when there is nothing on the deals page.",
     ),
+    Entry("meta.gate.title", T, "Shop link check page title", "Leaving RipRaptor",
+          "Browser tab title of the shop link check page. Never shown in search results."),
     Entry("meta.percard.title", T, "Cheapest per card page title", "Cheapest sealed TCG per card in the UK",
           "Browser tab title for the Cheapest per card page. The site name is added after it."),
     Entry("meta.percard.description", T, "Cheapest per card page description",
@@ -3806,6 +3829,8 @@ ENTRIES = [
           "Figure, key and column: clicks counted and sent with our tracking."),
     Entry("dashboard.clicks.direct", T, "Dashboard direct hits", "Direct hits",
           "Figure, key and column: clicks sent to the plain shop address and not counted."),
+    Entry("dashboard.clicks.continued", T, "Dashboard pressed Continue", "Pressed Continue",
+          "Figure and column: direct hits whose visitor pressed Continue on the page shown in place of the shop."),
     Entry("dashboard.clicks.per_person", T, "Dashboard clicks per person", "Clicks per person",
           "Figure: clicks from people divided by people in the week."),
     Entry("dashboard.clicks.chart", T, "Dashboard clicks chart", "Clicks from people and direct hits each day",

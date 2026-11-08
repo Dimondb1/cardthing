@@ -63,6 +63,7 @@ class PageTestCase(TestCase):
             reverse("web:list_shop_thanks"),
             reverse("web:drops"),
             reverse("web:drops") + "?show=out",
+            self.cheap.get_outbound_url(),   # opened away from our pages: the Continue page (web.views.gate)
         ]
 
 
@@ -236,6 +237,7 @@ class PageTests(PageTestCase):
 class OutboundTests(PageTestCase):
     def test_redirects_and_counts_the_click(self):
         before = OutboundClick.objects.filter(product=self.etb).count()
+        self.client.cookies["rr_page"] = "1"   # its browser ran one of our pages (catalogue/clicks.py)
         response = self.client.get(
             self.cheap.get_outbound_url(), HTTP_USER_AGENT="Mozilla/5.0 Firefox/130.0",
             HTTP_REFERER="http://testserver/",

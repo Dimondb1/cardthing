@@ -1198,7 +1198,7 @@ class OutboundClick(models.Model):
     suspect = models.BooleanField(
         default=False,
         help_text="A direct hit (no link from our pages, a browser that never ran one of our pages, a prefetch or too "
-        "many in an hour), sent to the shop without tracking and left out of every click count.",
+        "many in an hour): sent on without tracking and left out of every click count.",
     )
     # Why a direct hit was one (catalogue/clicks.py suspect_reason: referer, page, prefetch, cap), empty on a
     # person's click and on direct hits from before 7 Nov 2026.
@@ -1206,6 +1206,11 @@ class OutboundClick(models.Model):
     # The click passed the check that its browser had run one of our pages (from 7 Nov 2026); empty on older clicks,
     # which catalogue/automated.py checks against the day's visitors instead.
     ran_page = models.BooleanField(null=True, blank=True, default=None)
+    # A direct hit is shown a page asking the visitor to continue to the shop rather than sent straight there (from 8
+    # Nov 2026, web.views.go_continue): set when they pressed Continue.
+    continued = models.BooleanField(
+        default=False, help_text="A direct hit whose visitor pressed Continue on the page shown in its place.",
+    )
     automated = models.BooleanField(
         default=False,
         help_text="Sent with tracking, but found afterwards to be a script's: its visitor never ran one of our pages, "

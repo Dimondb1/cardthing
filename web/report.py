@@ -144,6 +144,7 @@ def headline(out, week, month, today):
         {"what": "Page views", "week": week["views"], "month": month["total_views"]},
         {"what": "Clicks to shops", "week": week["clicks"], "month": month["total_clicks"]},
         {"what": "Direct hits (not people)", "week": week["direct"], "month": "-"},
+        {"what": "Of them pressed Continue", "week": week.get("continued", "-"), "month": "-"},
         {"what": "Clicks per person", "week": week["per_person"], "month": "-"},
         {"what": "Pages per visitor", "week": "-", "month": month["pages_per_visitor"]},
         {"what": "Clicks per 100 product views", "week": "-", "month": percent(month["click_rate"])},

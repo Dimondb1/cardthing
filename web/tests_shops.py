@@ -2,6 +2,7 @@
 and last check, so one public page states what the home page claims. The owner, 9 Nov 2026, on ChatGPT naming other
 comparison sites first."""
 
+from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 
@@ -34,6 +35,10 @@ class ShopsPageTests(TestCase):
         make_listing(cls.box, make_retailer("eBay", source_type=Retailer.Source.EBAY))
         make_listing(cls.box, make_retailer("Odd Prices"), sanity=Listing.Sanity.EXCLUDED)
 
+    def setUp(self):
+        # The shop count is kept for a few minutes (pricing.shops_compared): start each test without another's.
+        cache.clear()
+
     def test_every_compared_shop_is_listed_a_to_z_with_delivery_count_and_check(self):
         response = self.client.get(reverse("web:shops"))
         self.assertEqual(response.status_code, 200)
@@ -58,9 +63,6 @@ class ShopsPageTests(TestCase):
             self.assertNotIn(name, html)
 
     def test_one_query_for_the_shops(self):
-        from django.core.cache import cache
-
-        cache.clear()
         with self.assertNumQueries(2):   # the shops, and the site's wording
             self.client.get(reverse("web:shops"))
 
@@ -82,6 +84,9 @@ class WhyRipRaptorTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         ShopsPageTests.setUpTestData.__func__(cls)
+
+    def setUp(self):
+        cache.clear()
 
     def test_how_it_works_says_why_with_the_live_numbers(self):
         html = self.client.get(reverse("web:about")).content.decode()

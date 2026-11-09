@@ -5563,8 +5563,8 @@ are hidden below it.
   the header, every page and the footer use the screen.
 - The header leads with a wide search box (autocomplete as before), keeps
   Find with Rip and the Watchlist beside it, and moves the places to a row
-  under it: a Games menu, then Deals, Drops, Swipe, Guides (when live) and
-  Shops we compare at the right. The Games menu (`header.html`,
+  under it: a Games menu, then Deals, Drops, Swipe and Guides (when live).
+  Shops we compare stays in the footer. The Games menu (`header.html`,
   `web/navigation.py`) lists every game with products and All games; it is
   a plain details element, so it opens without script, and site.js closes
   it on a click elsewhere or Escape. On a game's page it carries the game's

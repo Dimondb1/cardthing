@@ -29,7 +29,6 @@
       <a href="{% url 'web:drops' %}"{% if request.resolver_match.url_name == "drops" %} aria-current="page"{% endif %}>{% copy "site.nav.drops" %}</a>
       <a href="{% url 'web:deck' %}"{% if request.resolver_match.url_name == "deck" %} aria-current="page"{% endif %}>{% copy "site.nav.swipe" %}</a>
       {% if guides_live %}<a href="{% url 'web:guides' %}"{% if request.resolver_match.url_name in guide_pages %} aria-current="page"{% endif %}>{% copy "site.nav.guides" %}</a>{% endif %}
-      <a href="{% url 'web:shops' %}"{% if request.resolver_match.url_name == "shops" %} aria-current="page"{% endif %}>{% copy "site.nav.shops" %}</a>
     </nav>
   </div>
 </header>

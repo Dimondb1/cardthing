@@ -228,8 +228,9 @@ class DeskTests(CompactCase):
         self.assertIn('<summary class="nav-games__open">Pokémon<svg', menu)
         self.assertIn(f'<a href="{self.pokemon.get_absolute_url()}" aria-current="page">Pokémon</a>', menu)
         places = html[html.index('<nav class="masthead__more"'):html.index("</nav>", html.index('<nav class="masthead__more"'))]
-        for name in ("web:deals", "web:drops", "web:deck", "web:shops"):
+        for name in ("web:deals", "web:drops", "web:deck"):
             self.assertIn(f'href="{reverse(name)}"', places)
+        self.assertNotIn(f'href="{reverse("web:shops")}"', places)   # the owner, 9 Nov 2026: "take off the shops we compare bit"
 
     def test_the_menu_games_come_from_warming_too(self):
         from web import navigation, warming

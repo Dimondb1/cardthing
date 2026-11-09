@@ -112,6 +112,10 @@ def warm_pages(fresh=False, only=None):
     views.type_covers()
     # And the feed's tiles, each type's cheapest product in stock (three queries when due).
     feed.tile_picks()
+    # The games in the header's Games menu on a desktop screen (web/navigation.py), one query.
+    from web import navigation
+
+    navigation.remember(feed.games_with_products())
     # The compact layout's numbers and set lists, while it is on (web/compact.py).
     from web import compact
 

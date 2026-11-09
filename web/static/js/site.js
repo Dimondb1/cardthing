@@ -330,3 +330,66 @@ document.addEventListener("ripraptor:content", (event) => {
     });
   }
 }
+
+// The header's Games menu on a desktop screen (header.html, data-nav-menu): a plain details element that opens without
+// script. This closes it on a tap or click anywhere else, on Escape (focus back on its button), and when another
+// menu opens.
+{
+  const menus = document.querySelectorAll("[data-nav-menu]");
+  if (menus.length) {
+    document.addEventListener("click", (event) => {
+      menus.forEach((menu) => { if (menu.open && !menu.contains(event.target)) menu.open = false; });
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      menus.forEach((menu) => {
+        if (!menu.open) return;
+        menu.open = false;
+        menu.querySelector("summary").focus();
+      });
+    });
+  }
+}
+
+// The sets on the home page on a desktop screen (compact/home.html, data-desk-tabs): a tab for each game. Without
+// script each tab is a link to the game's page; with it, a tab shows that game's sets in place, so the page stays put.
+// Arrow keys move along the tabs, as in any row of tabs.
+{
+  const box = document.querySelector("[data-desk-tabs]");
+  const row = box && box.querySelector(".dt-tabs");
+  if (row) {
+    const tabs = Array.from(row.querySelectorAll("[data-tab]"));
+    const panelFor = (tab) => box.querySelector(`[data-panel="${tab.dataset.tab}"]`);
+    const pick = (chosen, focus) => {
+      tabs.forEach((tab) => {
+        const on = tab === chosen;
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+        tab.tabIndex = on ? 0 : -1;
+        panelFor(tab).hidden = !on;
+      });
+      if (focus) chosen.focus();
+    };
+    row.setAttribute("role", "tablist");
+    tabs.forEach((tab) => {
+      const panel = panelFor(tab);
+      tab.id = `dt-tab-${tab.dataset.tab}`;
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-controls", panel.id = `dt-panel-${tab.dataset.tab}`);
+      tab.removeAttribute("aria-current");
+      panel.setAttribute("role", "tabpanel");
+      panel.setAttribute("aria-labelledby", tab.id);
+      tab.addEventListener("click", (event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;   // a new tab still opens the page
+        event.preventDefault();
+        pick(tab, false);
+      });
+      tab.addEventListener("keydown", (event) => {
+        const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+        if (!step) return;
+        event.preventDefault();
+        pick(tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length], true);
+      });
+    });
+    pick(tabs[0], false);
+  }
+}

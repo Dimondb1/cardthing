@@ -29,10 +29,12 @@ from catalogue.models import Listing, Product, ProductSet
 from catalogue.types import type_choices
 from content import service as copy
 
-from . import feed, pagecache
+from . import feed, navigation, pagecache
 
 STRIP = 10          # cards in the deals strip
 POPULAR = 24        # sets on the home page
+DESK_SETS = 12      # sets in each game's tab on a desktop screen
+DESK_GAMES = 5      # games with a tab of their own beside All
 # The product that pictures a set: a booster box first, the way a set is known, then the boxes and bundles.
 COVER_ORDER = ("booster_box", "elite_trainer_box", "bundle", "collection_box", "booster_pack", "tin", "deck")
 
@@ -134,25 +136,52 @@ def game_sets(game, fresh=False):
 
 def popular_sets(limit=POPULAR, fresh=False):
     """The sets people want now across every game (popularity.set_demand, then the newest), only those with
-    something to buy, for the home page. Cached (kept)."""
+    something to buy, for the home page. Cached (kept), with each game's own (sets_by_game)."""
+    return wanted_sets(fresh)["all"][:limit]
+
+
+def sets_by_game(fresh=False):
+    """{game pk: the DESK_SETS sets of that game people want now}, in the same order as popular_sets: the home page's
+    tabs on a desktop screen. Cached with them."""
+    return wanted_sets(fresh)["games"]
+
+
+def wanted_sets(fresh=False):
+    """{"all": the POPULAR sets people want now, "games": {game pk: its DESK_SETS}}. Built together, kept together:
+    two queries for the sets and one for their demand when due."""
     def build():
         rows = [row for row in set_rows() if row["in_stock"] or row["preorder"]]
         wanted = popularity.set_demand([row["set"].pk for row in rows])
         rows = newest_first(rows)
         rows.sort(key=lambda row: -wanted.get(row["set"].pk, 0))
-        return rows[:limit]
+        games = {}
+        for row in rows:
+            kept_rows = games.setdefault(row["set"].game_id, [])
+            if len(kept_rows) < DESK_SETS:
+                kept_rows.append(row)
+        return {"all": rows[:POPULAR], "games": games}
 
-    return kept("popular", build, fresh)
+    return kept("wanted-sets", build, fresh)
 
 
-def dock(request, game=None, hints=""):
+def with_covers_all(groups):
+    """Each list of ``groups`` (set_rows lists) with its rows' cover products, for their pictures, in one query."""
+    pks = {row["cover"] for rows in groups for row in rows if row["cover"]}
+    covers = Product.objects.in_bulk(pks)
+    return [[{**row, "cover": covers.get(row["cover"])} for row in rows] for rows in groups]
+
+
+def dock(request, game=None, hints="", games=None):
     """What the dock at the foot (feed_dock.html) needs: the search box's words and the bar of games, and on the home
     page the hint by the games (feed.js), which lights them one by one on each landing (the owner, 9 Nov 2026: "just
     want a subtle way of showing someone what to do")."""
     store = copy.for_request(request)
     hint = (copy.get("feed.search.placeholder_game", store=store, game=game.display_short) if game is not None
             else copy.get("feed.search.placeholder", store=store))
-    return {"game": game, "games": feed.games_bar(feed.games_with_products()), "search_hint": hint, "hints": hints}
+    games = feed.games_with_products() if games is None else games
+    if not navigation.games():
+        navigation.remember(games)   # the header's Games menu, read from the cache on every page
+    return {"game": game, "games": feed.games_bar(games), "search_hint": hint, "hints": hints}
 
 
 def strip(game=None):
@@ -276,14 +305,36 @@ def product_rows(products):
 
 
 def home(request, extra):
-    """The home page in the compact layout. ``extra``: the page's meta, partners and structured data."""
+    """The home page in the compact layout. ``extra``: the page's meta, partners and structured data. A desktop screen
+    shows the same page laid out for it (desk), with a short intro, a browse bar, the deals as a grid and the sets in
+    a tab for each game."""
+    games = feed.games_with_products()
+    by_game = sets_by_game()
+    tab_games = [game for game in games if by_game.get(game.pk)][:DESK_GAMES]
+    groups = with_covers_all([popular_sets(), *[by_game[game.pk] for game in tab_games]])
     return render(request, "web/compact/home.html", {
         **extra,
         "numbers": numbers(),
         "strip": strip(),
-        "sets": with_covers(popular_sets()),
-        "dock": dock(request, hints="home"),
+        "sets": groups[0],
+        "dock": dock(request, hints="home", games=games),
+        "desk": desk(games, tab_games, groups[1:]),
     })
+
+
+def desk(games, tab_games, tab_sets):
+    """What the home page shows only on a desktop screen: the browse bar's choices (every game with products, the
+    product types in stock now, the price bands the lists filter by) and a tab of sets for each of ``tab_games``."""
+    from .views import PRICE_BANDS, type_heading
+
+    types = [kind for kind, _pk, _count in feed.tile_picks()["all"]]
+    return {
+        "games": feed.games_bar(games),
+        "types": [(kind, type_heading(kind)) for kind in types],
+        "prices": [band for band in PRICE_BANDS if band[0]],
+        "tabs": [{"slug": game.slug, "label": game.display_short, "url": game.get_absolute_url(), "sets": rows}
+                 for game, rows in zip(tab_games, tab_sets)],
+    }
 
 
 def game_page(request, game, extra):
@@ -358,7 +409,7 @@ def warm(games):
     if not look.compact_on() or pagecache.seconds() <= 0:
         return False
     numbers(fresh=True)
-    popular_sets(fresh=True)
+    wanted_sets(fresh=True)
     for game in games:
         game_sets(game, fresh=True)
     return True

@@ -20,6 +20,19 @@ BOX, ETB, PACK, TIN = (Product.Type.BOOSTER_BOX, Product.Type.ELITE_TRAINER_BOX,
                        Product.Type.TIN)
 
 
+def static_text(path):
+    from django.contrib.staticfiles import finders
+
+    with open(finders.find(path), encoding="utf-8") as found:
+        return found.read()
+
+
+def section(html, start, end):
+    """The part of ``html`` from ``start`` to the first ``end`` after it."""
+    begin = html.index(start)
+    return html[begin:html.index(end, begin)]
+
+
 def switch(feed=False, on=True):
     row = SiteLook.load()
     row.feed_home, row.compact = feed, on
@@ -111,6 +124,128 @@ class HomeTests(CompactCase):
         self.assertIn('<span class="feed-hint feed-hint--games" hidden aria-hidden="true">Pick by game</span>',
                       self.page("/"))
         self.assertNotIn("feed-hint", self.page(self.pokemon.get_absolute_url()))
+
+
+class DeskTests(CompactCase):
+    """The home page on a desktop screen (the owner, 9 Nov 2026: "Redesign the desktop homepage ... leaving mobile as it
+    is"): its own intro and browse bar, the deals as a grid of fuller cards, the sets in a tab for each game, and the
+    header's Games menu. The phone's parts stay in the page; CSS shows each set of parts at its own width."""
+
+    def second_game(self):
+        magic = make_game(name="Magic: The Gathering", slug="magic-the-gathering", short_name="Magic",
+                          search_aliases="mtg")
+        tarkir = make_set(magic, name="Tarkir: Dragonstorm", slug="tarkir-dragonstorm", code="TDM",
+                          release_date=date(2025, 4, 11))
+        self.item(tarkir, "Tarkir: Dragonstorm Play Booster Box", BOX, ["120.00", "125.00"], packs=30)
+        return magic
+
+    def test_the_desktop_intro_says_what_the_site_does_with_the_live_numbers(self):
+        html = self.page("/")
+        self.assertIn('<h1 id="dt-intro-title" class="dt-intro__title">Find your cards. Pay less.</h1>', html)
+        self.assertIn("Compare sealed TCG prices from UK retailers. Delivery included, cheapest first.", html)
+        self.assertIn('<span class="dt-facts__number">4</span> prices in stock', html)
+        self.assertIn(f'<a class="dt-facts__link" href="{reverse("web:shops")}"><span class="dt-facts__number">2</span>'
+                      ' UK shops compared</a>', html)
+        # The phone's hero is still there, for the phone.
+        self.assertIn('<section class="cx-hero cx-hero--home">', html)
+
+    def test_the_browse_bar_offers_only_choices_the_lists_filter_by(self):
+        html = self.page("/")
+        bar = html[html.index('<form class="dt-browse"'):html.index("</form>", html.index('<form class="dt-browse"'))]
+        self.assertIn(f'action="{reverse("web:search")}" method="get"', bar)
+        self.assertIn('<option value="pokemon">Pokémon</option>', bar)
+        self.assertIn('<option value="booster_box">', bar)   # types in stock now, pictured (feed.tile_picks)
+        self.assertIn('<option value="0-10">Under £10</option>', bar)
+        self.assertIn('name="in_stock" value="on" checked', bar)
+        self.assertIn("Show products", bar)
+        for name in ("game", "type", "price"):
+            self.assertIn(f'<select name="{name}">', bar)
+        # What it sends, the search page understands.
+        found = self.page(reverse("web:search"), game="pokemon", type="booster_box", price="100-", in_stock="on")
+        self.assertIn("Delta Reign Booster Box", found)
+        self.assertNotIn("Elite Trainer Box", found[found.index("crows"):])
+
+    def test_a_deal_card_names_the_shop_how_many_have_it_and_offers_to_compare(self):
+        html = self.page("/")
+        strip = html[html.index('class="cx-strip"'):html.index("</section>", html.index('class="cx-strip"'))]
+        self.assertIn('<span class="cx-deal__where">Pokémon<span aria-hidden="true"> · </span><span class="visually-hidden">'
+                      ', </span>Mega Evolution—Delta Reign</span>', strip)
+        self.assertIn("Cheapest at Harbour Games", strip)
+        self.assertIn("2 shops", strip)
+        self.assertIn('<span class="cx-deal__cta">Compare prices', strip)
+        self.assertIn('data-compare="feed"', strip)
+        self.assertIn('<small class="cx-deal__delivered"> delivered</small>', strip)
+
+    def test_the_sets_have_a_tab_for_each_game_that_works_without_script(self):
+        magic = self.second_game()
+        html = self.page("/")
+        tabs = html[html.index('<nav class="dt-tabs"'):html.index("</nav>", html.index('<nav class="dt-tabs"'))]
+        self.assertIn(f'<a class="dt-tabs__tab" href="{reverse("web:games")}" data-tab="all" aria-current="true">All games</a>',
+                      tabs)
+        self.assertIn(f'<a class="dt-tabs__tab" href="{self.pokemon.get_absolute_url()}" data-tab="pokemon">Pokémon</a>', tabs)
+        self.assertIn(f'href="{magic.get_absolute_url()}" data-tab="magic-the-gathering">Magic</a>', tabs)
+        panel = html[html.index('data-panel="magic-the-gathering" hidden'):]
+        panel = panel[:panel.index("</div>")]
+        self.assertIn("Tarkir: Dragonstorm", panel)
+        self.assertNotIn("Surging Sparks", panel)
+        self.assertNotIn("cx-set__game", panel)   # one game in the tab: no need to name it
+        self.assertIn("All Magic sets", panel)
+        everything = html[html.index('data-panel="all"'):html.index('data-panel="pokemon"')]
+        self.assertIn("Tarkir: Dragonstorm", everything)
+        self.assertIn("Surging Sparks", everything)
+        self.assertIn(f'<a class="dt-more__link" href="{reverse("web:games")}">Browse all games</a>', everything)
+        self.assertIn('document.querySelector("[data-desk-tabs]")', static_text("js/site.js"))
+
+    def test_the_tabs_cost_no_query_per_game(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self.page("/")
+        with CaptureQueriesContext(connection) as one_game:
+            self.page("/")
+        self.second_game()
+        cache.clear()
+        switch()
+        self.page("/")
+        with CaptureQueriesContext(connection) as two_games:
+            html = self.page("/")
+        self.assertIn('data-tab="magic-the-gathering"', html)
+        self.assertEqual(len(two_games), len(one_game))
+
+    def test_the_header_lists_the_games_in_a_menu_on_every_page(self):
+        # Nothing kept yet: the menu offers All games alone, and costs no query.
+        html = self.page(reverse("web:deals"))
+        menu = section(html, '<details class="nav-games" data-nav-menu>', "</details>")
+        self.assertNotIn("nav-games__list", menu)
+        self.assertIn(f'<a class="nav-games__all" href="{reverse("web:games")}">All games</a>', menu)
+        self.page("/")   # the home page reads the games anyway and keeps them for the menu
+        html = self.page(reverse("web:deals"))
+        menu = section(html, '<details class="nav-games" data-nav-menu>', "</details>")
+        self.assertIn(f'<li><a href="{self.pokemon.get_absolute_url()}">Pokémon</a></li>', menu)
+        # On a game's page the menu is named after the game and marks it.
+        html = self.page(self.pokemon.get_absolute_url())
+        menu = section(html, '<details class="nav-games" data-nav-menu>', "</details>")
+        self.assertIn('<summary class="nav-games__open">Pokémon<svg', menu)
+        self.assertIn(f'<a href="{self.pokemon.get_absolute_url()}" aria-current="page">Pokémon</a>', menu)
+        places = html[html.index('<nav class="masthead__more"'):html.index("</nav>", html.index('<nav class="masthead__more"'))]
+        for name in ("web:deals", "web:drops", "web:deck", "web:shops"):
+            self.assertIn(f'href="{reverse(name)}"', places)
+
+    def test_the_menu_games_come_from_warming_too(self):
+        from web import navigation, warming
+
+        cache.clear()
+        switch()
+        self.assertEqual(navigation.games(), [])
+        warming.warm_pages()
+        self.assertEqual([game["slug"] for game in navigation.games()], ["pokemon"])
+
+    def test_phone_parts_are_unchanged_and_desktop_parts_hidden_below_64rem(self):
+        text = static_text("css/site.css")
+        block = text[text.index("/* The home page on a desktop screen"):]
+        self.assertIn(".dt-intro, .dt-tabs, .dt-more, .cx-deal__where, .cx-deal__delivered, .cx-deal__shop, "
+                      ".cx-deal__cta, .dt-panel--game { display: none; }", block)
+        self.assertIn("@media (min-width: 64rem) {\n  .cx-hero--home { display: none; }", block)
 
 
 class GamePageTests(CompactCase):

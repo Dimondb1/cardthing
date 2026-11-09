@@ -2745,3 +2745,122 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .botcheck__status--working { animation: feed-breathe var(--motion-slow) var(--ease-standard) infinite alternate; }
 .botcheck__go { margin-top: var(--space-2); }
 @media (prefers-reduced-motion: reduce) { .botcheck__status--working { animation: none; } }
+
+/* Desktop screens -----------------------------------------------------------------------------------------------
+   The owner, 9 Nov 2026: the desktop site "looks like a mobile interface stretched across a desktop screen". The header
+   leads with the search box, keeps Find with Rip and the Watchlist beside it, and moves the places to go to a row under
+   it, Games first as a menu (header.html, web/navigation.py). Phones and tablets are as they were: every rule that
+   changes them is inside the one query, and the row is hidden below it. */
+.masthead__more { display: none; }
+@media (min-width: 64rem) {
+  .masthead__inner { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "brand search nav" "more more more"; gap: 0 var(--space-6); padding-top: var(--space-3); padding-bottom: 0; }
+  .masthead--home .masthead__inner { grid-template-areas: "brand . nav" "more more more"; }
+  .masthead__search { justify-self: center; width: 100%; max-width: var(--desk-search); }
+  .masthead .search--header input { height: var(--desk-search-height); font-size: var(--text-base); border-radius: var(--radius); }
+  .masthead__nav { align-items: center; gap: var(--space-2); font-size: var(--text-base); }
+  .masthead__nav .masthead__moves { display: none; }
+  .masthead__nav a { padding: var(--space-2) var(--space-3); border-radius: var(--radius); }
+  .masthead__nav a:hover, .masthead__nav a[aria-current="page"] { text-decoration: none; background: var(--color-shelf); }
+  .masthead__find { border-radius: var(--radius); }
+  .masthead__watch { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .masthead__watch-icon { display: block; width: var(--desk-icon); height: var(--desk-icon); }
+
+  /* The row of places: a quiet line under the search, the place in view underlined in orange. */
+  .masthead__more { grid-area: more; display: flex; align-items: stretch; gap: var(--space-1); margin-top: var(--space-3); border-top: var(--border-width) solid var(--color-line); }
+  .masthead__more > a, .nav-games__open { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); text-decoration: none; transition: color var(--motion-fast) var(--ease-standard); }
+  .masthead__more > a:last-child { margin-left: auto; margin-right: calc(-1 * var(--space-3)); }
+  .masthead__more > a:hover, .nav-games__open:hover { color: var(--color-brand-text); }
+  .masthead__more > a[aria-current="page"] { color: var(--color-brand-text); box-shadow: inset 0 calc(-1 * var(--desk-rule)) 0 var(--color-brand); }
+  .nav-games { position: relative; margin-left: calc(-1 * var(--space-3)); }
+  .nav-games__open { cursor: pointer; list-style: none; font-size: var(--text-base); }
+  .nav-games__open::-webkit-details-marker { display: none; }
+  .nav-games__chevron { width: var(--desk-icon); height: var(--desk-icon); transition: transform var(--motion-fast) var(--ease-standard); }
+  .nav-games[open] .nav-games__chevron { transform: rotate(180deg); }
+  .nav-games__menu { position: absolute; z-index: 8; top: 100%; left: 0; width: var(--desk-menu); padding: var(--space-2); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-lift); animation: rise var(--motion-fast) var(--ease-out); }
+  .nav-games__list { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-1); margin: 0; padding: 0; }
+  .nav-games__list a, .nav-games__all { display: block; padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--color-ink); text-decoration: none; }
+  .nav-games__list a:hover, .nav-games__list a[aria-current="page"] { background: var(--color-shelf); color: var(--color-brand-text); }
+  .nav-games__all { margin-top: var(--space-1); padding-top: var(--space-3); border-top: var(--border-width) solid var(--color-line); border-radius: 0; font-weight: var(--weight-strong); color: var(--color-brand-text); }
+  .nav-games__all:hover { text-decoration: underline; }
+  /* The compact layout's bar of games: the Games menu does its job on a desktop screen. */
+  .compact-look .feed-dock { display: none; }
+}
+@media (min-width: 64rem) and (prefers-reduced-motion: reduce) { .nav-games__menu { animation: none; } .nav-games__chevron { transition: none; } }
+
+/* The home page on a desktop screen (compact/home.html): a short intro with the live numbers beside it and a slim
+   browse bar under, today's deals as a grid of substantial cards, the sets as a grid with a tab for each game. The
+   phone's hero hides; the intro, the tabs, the links under the sets and the deal cards' extra lines show only here.
+   One raptor stays, on the deals' heading. */
+.dt-intro, .dt-tabs, .dt-more, .cx-deal__where, .cx-deal__delivered, .cx-deal__shop, .cx-deal__cta, .dt-panel--game { display: none; }
+.dt-panel--all[hidden] { display: block; }
+@media (min-width: 64rem) {
+  .cx-hero--home { display: none; }
+  .dt-intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-5) var(--space-6); margin-bottom: var(--space-6); }
+  .dt-intro__title { margin: 0; font-size: var(--text-page-title); line-height: var(--leading-tight); letter-spacing: -0.02em; }
+  .dt-intro__lead { max-width: var(--desk-intro); margin: var(--space-2) 0 0; font-size: var(--text-lg); color: var(--color-ink-muted); }
+  .dt-facts { list-style: none; display: flex; align-items: baseline; gap: var(--space-5); margin: 0; padding: 0 0 var(--space-1); font-size: var(--text-sm); color: var(--color-ink-muted); white-space: nowrap; }
+  .dt-facts__number { font-size: var(--text-lg); font-weight: var(--weight-price); color: var(--color-ink); font-variant-numeric: tabular-nums; }
+  .dt-facts__link { color: inherit; text-decoration: none; }
+  .dt-facts__link:hover { color: var(--color-ink); text-decoration: underline; }
+  .dt-facts__item--checked { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-strong); color: var(--color-price); }
+
+  /* The browse bar: one quiet row of choices, the same height as the search box's button. */
+  .dt-browse { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); }
+  .dt-browse__title { flex: none; margin: 0 var(--space-2) 0 0; font-size: var(--text-sm); font-weight: var(--weight-strong); }
+  .dt-browse .dt-browse__field { flex: 1 1 var(--desk-field); min-width: 0; height: var(--desk-control); border-width: var(--border-width); border-radius: var(--radius); font-weight: var(--weight-body); }
+  .dt-browse .dt-browse__field select { flex: 1 1 auto; min-width: 0; max-width: none; }
+  .dt-browse__check { flex: none; display: inline-flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); font-size: var(--text-sm); font-weight: var(--weight-strong); cursor: pointer; }
+  .dt-browse__check input { accent-color: var(--color-brand); }
+  .dt-browse__go { flex: none; min-height: var(--desk-control); }
+
+  /* Today's deals as a grid: three cards to a row, four on a wider screen, two rows of them. */
+  .cx-strip { margin-bottom: var(--space-6); padding: 0; border: 0; background: none; }
+  .cx-strip__head { margin-bottom: var(--space-3); padding-right: 0; }
+  .cx-strip__title { font-size: var(--text-section); letter-spacing: -0.01em; text-transform: none; }
+  .cx-strip__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); padding: 0; overflow: visible; }
+  .cx-strip__row > li { width: auto; }
+  .cx-strip__row > li:nth-child(n + 7) { display: none; }
+  .cx-deal { display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden; border-radius: var(--radius-card); background: var(--color-paper); transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard); }
+  .cx-deal:hover { box-shadow: var(--shadow-hover); }
+  .cx-deal__pic { display: block; height: var(--desk-deal-well); background: var(--color-shelf); }
+  .cx-deal .product-image, .cx-set__pic .product-image { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; }
+  .cx-deal__body { display: flex; flex: 1; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4) var(--space-4); }
+  .cx-deal__where { display: block; order: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--color-ink-subtle); }
+  .cx-deal__name { order: 2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: calc(2em * var(--leading-snug)); white-space: normal; font-size: var(--text-base); line-height: var(--leading-snug); }
+  .cx-deal__price { order: 3; margin-top: var(--space-2); font-size: var(--text-xl); line-height: var(--leading-tight); }
+  .cx-deal__delivered { display: inline; font-size: var(--text-xs); font-weight: var(--weight-body); color: var(--color-ink-subtle); }
+  .cx-deal__why { order: 4; white-space: normal; font-weight: var(--weight-strong); color: var(--color-price); }
+  .cx-deal__shop { display: block; order: 5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--color-ink-muted); }
+  .cx-deal__cta { order: 6; display: inline-flex; align-items: center; gap: var(--space-1); margin-top: auto; padding-top: var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-brand-text); }
+  .cx-deal__arrow { width: var(--desk-icon); height: var(--desk-icon); transition: transform var(--motion-fast) var(--ease-out); }
+  .cx-deal:hover .cx-deal__arrow { transform: translateX(var(--space-1)); }
+
+  /* The sets: a tab for each game above a grid of tiles, each with its picture in a well. */
+  .dt-sets { margin-bottom: var(--space-6); }
+  .dt-sets .cx-section__head { margin-bottom: var(--space-3); }
+  .dt-sets .cx-section__title { font-size: var(--text-section); letter-spacing: -0.01em; }
+  .dt-sets .section-head__mascot { display: none; }
+  .dt-tabs { display: flex; flex-wrap: wrap; gap: 0 var(--space-5); margin: 0 0 var(--space-4); border-bottom: var(--border-width) solid var(--color-line); }
+  .dt-tabs__tab { margin-bottom: calc(-1 * var(--border-width)); padding: var(--space-2) 0; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink-muted); text-decoration: none; transition: color var(--motion-fast) var(--ease-standard); }
+  .dt-tabs__tab:hover { color: var(--color-ink); }
+  .dt-tabs__tab[aria-current="true"], .dt-tabs__tab[aria-selected="true"] { color: var(--color-brand-text); box-shadow: inset 0 calc(-1 * var(--desk-rule)) 0 var(--color-brand); }
+  .dt-tabs[role="tablist"] .dt-tabs__tab[aria-selected="true"] { color: var(--color-brand-text); box-shadow: inset 0 calc(-1 * var(--desk-rule)) 0 var(--color-brand); }
+  .dt-panel--all[hidden], .dt-panel--game[hidden] { display: none; }
+  .dt-panel--game:not([hidden]) { display: block; }
+  .dt-sets .cx-sets { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+  .dt-panel--all .cx-sets > li:nth-child(n + 13) { display: none; }
+  .cx-set { gap: 0; height: 100%; padding: 0; overflow: hidden; transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard); }
+  .cx-set:hover { box-shadow: var(--shadow-hover); }
+  .cx-set__pic { display: block; height: var(--desk-set-well); background: var(--color-shelf); }
+  .cx-set__pic:empty { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; }
+  .cx-set__body { padding: var(--space-3) var(--space-4) var(--space-4); }
+  .dt-more { display: block; margin: var(--space-4) 0 0; text-align: center; }
+  .dt-more__link { display: inline-block; padding: var(--space-2) var(--space-4); border: var(--border-width) solid var(--color-line); border-radius: var(--radius); font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); text-decoration: none; transition: border-color var(--motion-fast) var(--ease-standard); }
+  .dt-more__link:hover { border-color: var(--color-brand); color: var(--color-brand-text); }
+}
+@media (min-width: 75rem) {
+  .cx-strip__row, .dt-sets .cx-sets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cx-strip__row > li:nth-child(n + 7) { display: block; }
+  .cx-strip__row > li:nth-child(n + 9) { display: none; }
+}
+@media (min-width: 64rem) and (prefers-reduced-motion: reduce) { .cx-deal__arrow { transition: none; } .cx-deal:hover .cx-deal__arrow { transform: none; } }

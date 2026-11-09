@@ -5,7 +5,7 @@ from django.conf import settings
 from catalogue import referrals
 from guides import state as guides
 
-from . import look, refresh, seasons
+from . import look, navigation, refresh, seasons
 
 # Addresses that are private links: a message thread, the links in stock alert and refer a friend emails (and the
 # Your alerts page they and the watchlist page link to), and the owner's dashboard. analytics.js holds the same pattern.
@@ -50,4 +50,6 @@ def site(request):
         # The refresh dots under the logo (web/refresh.py): the lists' next rebuild, from the clock alone; a product
         # page puts its own shops' next read in their place.
         "refresh": refresh.for_lists(),
+        # The header's Games menu on a desktop screen (web/navigation.py), from the cache alone.
+        "nav_games": navigation.games(),
     }

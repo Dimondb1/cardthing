@@ -5,19 +5,48 @@
 {% block page_class %}page--feed page--compact{% endblock %}
 
 {% block content %}
-{# The home page in the compact layout (web/compact.py): the numbers, today's deals in a strip, the sets people want now. The search box and the games at the foot of a phone, as the feed's (feed_dock.html). #}
+{# The home page in the compact layout (web/compact.py): the numbers, today's deals in a strip, the sets people want now. The search box and the games at the foot of a phone, as the feed's (feed_dock.html). A desktop screen (from 64rem) shows its own short intro and a browse bar in place of the numbers, the deals as a grid and the sets in a tab for each game (desk); the dt- parts are hidden below it and the phone's hero above it. #}
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
-<section class="cx-hero">
+<section class="cx-hero cx-hero--home">
   <h1 class="cx-hero__title"><span class="mark section-head__mascot cx-hero__mark" aria-hidden="true"></span>{% copy "compact.home.title" offers=numbers.offers_text shops=numbers.shops %}</h1>
   <p class="cx-hero__lead">{% copy "compact.home.lead" %}</p>
   {% if numbers.checked %}<p class="cx-checked"><span class="cx-checked__dot" aria-hidden="true"></span>{% copy "compact.checked" ago=numbers.checked|ago %}</p>{% endif %}
 </section>
+<section class="dt-intro" aria-labelledby="dt-intro-title">
+  <div class="dt-intro__text">
+    <h1 id="dt-intro-title" class="dt-intro__title">{% copy "compact.desk.title" %}</h1>
+    <p class="dt-intro__lead">{% copy "compact.desk.lead" %}</p>
+  </div>
+  <ul class="dt-facts">
+    <li class="dt-facts__item"><span class="dt-facts__number">{{ numbers.offers_text }}</span> {% copy "compact.desk.offers" %}</li>
+    <li class="dt-facts__item"><a class="dt-facts__link" href="{% url 'web:shops' %}"><span class="dt-facts__number">{{ numbers.shops }}</span> {% copy "compact.desk.shops" %}</a></li>
+    {% if numbers.checked %}<li class="dt-facts__item dt-facts__item--checked"><span class="cx-checked__dot" aria-hidden="true"></span>{% copy "compact.checked" ago=numbers.checked|ago %}</li>{% endif %}
+  </ul>
+  <form class="dt-browse" action="{% url 'web:search' %}" method="get" aria-labelledby="dt-browse-title">
+    <h2 id="dt-browse-title" class="dt-browse__title">{% copy "compact.desk.browse" %}</h2>
+    <label class="pill dt-browse__field"><span class="visually-hidden">{% copy "compact.desk.game_label" %}</span><select name="game"><option value="">{% copy "compact.desk.any_game" %}</option>{% for item in desk.games %}<option value="{{ item.slug }}">{{ item.label }}</option>{% endfor %}</select></label>
+    <label class="pill dt-browse__field"><span class="visually-hidden">{% copy "compact.desk.type_label" %}</span><select name="type"><option value="">{% copy "compact.desk.any_type" %}</option>{% for kind, heading in desk.types %}<option value="{{ kind }}">{{ heading }}</option>{% endfor %}</select></label>
+    <label class="pill dt-browse__field"><span class="visually-hidden">{% copy "compact.desk.price_label" %}</span><select name="price"><option value="">{% copy "compact.desk.any_price" %}</option>{% for value, label in desk.prices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+    <label class="dt-browse__check"><input type="checkbox" name="in_stock" value="on" checked> {% copy "compact.in_stock" %}</label>
+    <button class="button dt-browse__go" type="submit">{% copy "compact.desk.show" %}</button>
+  </form>
+</section>
 {% include "web/includes/compact_strip.html" %}
 {% if sets %}
-<section class="cx-section" aria-labelledby="cx-sets-title">
+<section class="cx-section dt-sets" aria-labelledby="cx-sets-title" data-desk-tabs>
   <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title cx-section__title--mark"><span class="mark section-head__mascot" aria-hidden="true"></span>{% copy "compact.popular.title" %}</h2><a class="cx-section__all" href="{% url 'web:search' %}">{% copy "compact.all_products" %}</a></div>
-  {% include "web/includes/compact_sets.html" with show_game=True %}
+  {% if desk.tabs %}<nav class="dt-tabs" aria-label="{% copy 'compact.desk.tabs' %}">
+    <a class="dt-tabs__tab" href="{% url 'web:games' %}" data-tab="all" aria-current="true">{% copy "compact.desk.tab_all" %}</a>{% for tab in desk.tabs %}<a class="dt-tabs__tab" href="{{ tab.url }}" data-tab="{{ tab.slug }}">{{ tab.label }}</a>{% endfor %}
+  </nav>{% endif %}
+  <div class="dt-panel dt-panel--all" data-panel="all">
+    {% include "web/includes/compact_sets.html" with show_game=True %}
+    <p class="dt-more"><a class="dt-more__link" href="{% url 'web:games' %}">{% copy "compact.desk.every_game" %}</a></p>
+  </div>
+  {% for tab in desk.tabs %}<div class="dt-panel dt-panel--game" data-panel="{{ tab.slug }}" hidden>
+    {% include "web/includes/compact_sets.html" with sets=tab.sets show_game=False %}
+    <p class="dt-more"><a class="dt-more__link" href="{{ tab.url }}">{% copy "compact.desk.game_sets" game=tab.label %}</a></p>
+  </div>{% endfor %}
 </section>
 {% endif %}
 {% if partners %}

@@ -405,3 +405,21 @@
   --pulse-gap: 0.3rem;
   --pulse-note: 18rem;             /* the widest the tapped line grows */
 }
+
+/* The desktop layout, from 64rem (the owner, 9 Nov 2026: the desktop site "looks like a mobile interface stretched across
+   a desktop screen"): the header's search box and Games menu, and the home page's intro, browse bar and grids. */
+:root {
+  --desk-search: 48rem;            /* the header's search box at its widest */
+  --desk-search-height: 3rem;
+  --desk-menu: 26rem;              /* the Games menu under the header */
+  --desk-intro: 48rem;             /* the home page intro's measure */
+  --desk-field: 12.5rem;           /* a choice in the browse bar */
+  --desk-control: 2.75rem;         /* the browse bar's choices and button, and the set tabs */
+  --desk-deal-well: 12rem;         /* a deal card's picture well */
+  --desk-set-well: 10rem;          /* a set card's picture well */
+  --desk-icon: 1.25rem;            /* an icon beside a header link */
+  --desk-rule: 2px;                /* the line under the place in view, in the row under the header */
+}
+@media (min-width: 64rem) {
+  :root { --page-width: 80rem; }   /* 1280px of content once the screen has room, the header and footer with it */
+}

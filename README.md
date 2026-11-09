@@ -5553,6 +5553,43 @@ the new home page; untick to go back. Staff see it any time with
 The numbers and the set lists are worked out once and kept (`compact.kept`),
 built again by warm_pages every few minutes, so no visitor waits for them.
 
+**On a desktop screen** (from 64rem, 1024px, wide; the owner, 9 Nov 2026:
+"Redesign the desktop homepage ... leaving mobile as it is"). Phones and
+tablets are exactly as above: every desktop rule sits inside one
+`@media (min-width: 64rem)` query in `site.css`, and the desktop-only parts
+are hidden below it.
+
+- The page is wider there: `--page-width` is 80rem (1280px) from 64rem, so
+  the header, every page and the footer use the screen.
+- The header leads with a wide search box (autocomplete as before), keeps
+  Find with Rip and the Watchlist beside it, and moves the places to a row
+  under it: a Games menu, then Deals, Drops, Swipe, Guides (when live) and
+  Shops we compare at the right. The Games menu (`header.html`,
+  `web/navigation.py`) lists every game with products and All games; it is
+  a plain details element, so it opens without script, and site.js closes
+  it on a click elsewhere or Escape. On a game's page it carries the game's
+  name. The games come from the cache alone (`nav:games:v1`), put there by
+  the compact dock and by warm_pages, so no page gains a query; with none
+  kept the menu offers All games alone. The bar of game icons is hidden.
+- The home page (`compact/home.html`) opens with a short intro ("Find your
+  cards. Pay less.", `compact.desk.title`, and its line), the live counts of
+  prices in stock and shops compared, and when prices were checked. Under it
+  a slim browse bar: game, product type (the types in stock now), price
+  band and In stock, sent to the search page as its usual filters
+  (`compact.desk`). The phone's headline is hidden there.
+- Today's best deals are a grid, three cards to a row and four from 75rem
+  (1200px), two rows. Each card adds its game and set, "delivered" by the
+  price, the shop with the cheapest price and how many shops have it, and
+  Compare prices; the deal line is the same evidence as the phone's.
+- Sets people want now are a grid of tiles with their picture in a well,
+  12 of them, with a tab for each of the first five games with sets
+  (`compact.sets_by_game`, kept with the home page's sets, no query per
+  game). Without script each tab is a link to the game's page; with it the
+  tab shows that game's sets in place. Browse all games and All {game} sets
+  lead on.
+- One raptor on the page, on Today's best deals.
+- Wording: the `compact.desk.*` entries in Site copy.
+
 **The new home page** (Admin, **Site look**; `web/look.py`, `web/feed.py`,
 `catalogue.SiteLook`): the marketing team's redesign of 4 Nov 2026
 (`site_redesign/README.md`, their brief) built in beside the usual home

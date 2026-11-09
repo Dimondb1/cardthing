@@ -5193,18 +5193,30 @@ from 9 Nov 2026):
   of this still gets through, a second per page.
 - The data feeds under `/api/` answer a visitor from abroad with no pass
   with 403 and `{"error": "check"}`, never the check page.
+- **What a first visit from abroad does** is the owner's pick in Admin,
+  Visitor check (`VisitorCheck.mode`). Within minutes of going live on 9 Nov
+  2026 the flood passed the sum alone 80 times in 91: its browsers hide
+  that a script drives them. So the default is **Work it out, then tap
+  Continue**: the page works the sum and shows a "Continue to RipRaptor"
+  button, and the answer goes only on a person's own tap or key press
+  (`event.isTrusted`; a click made by a script on the page counts for
+  nothing). A crawler that opens pages by itself never presses a button it
+  has never seen. **Work it out only** is the sum, then straight on.
+  **Turn away** shows "RipRaptor is for UK shoppers" with status 403 and no
+  way on, honours no pass earned before and earns none. Search engines, AI
+  assistants and link previews come in whichever is picked.
 - **Who is online** says how many times the check was shown today and how
-  many times it was passed (kept in the cache for two days, counts only).
+  many times it was passed (or, turned away, how many were) (kept in the cache for two days, counts only).
   A visit stopped by the check never reaches a page, so it is not in the
   list of visitors.
 - The check page is `noindex`, `no-store`, carries no analytics and is not
   counted as a page view. With JavaScript off it asks for it; with cookies
   off it asks for them, rather than checking for ever.
 
-**Admin, Visitor check** has the on switch and the countries never checked
-(two-letter codes, commas between). Both are read from the cache on every
-request, with no query; saving the row puts the new settings there at
-once. With no row yet it is on for GB and IE. The wording is in Site
+**Admin, Visitor check** has the on switch, what a first visit from abroad
+does and the countries never checked (two-letter codes, commas between).
+All are read from the cache on every request, with no query; saving the row puts the new settings there at
+once. With no row yet it is on, asks for a tap, and spares GB and IE. The wording is in Site
 wording under "Visitor check" (`botcheck.*`).
 
 ## Search engines and AI crawlers

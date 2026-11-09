@@ -741,7 +741,8 @@ class PartnerAdmin(admin.ModelAdmin):
 class VisitorCheckAdmin(admin.ModelAdmin):
     """The one row for the visitor check (web/botcheck.py). The list goes straight to it."""
 
-    fields = ("on", "countries")
+    fields = ("on", "mode", "countries")
+    radio_fields = {"mode": admin.VERTICAL}
 
     def has_add_permission(self, request):
         return False   # the list opens the one row, made on first use

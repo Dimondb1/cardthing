@@ -70,6 +70,7 @@ def online_page(request):
         row.source_name = row.source or ""
         row.browser_name = browser_of(row.agent)
     counts, peak = online.day_of_counts(now, hours=CHART_HOURS)
+    check = botcheck.current()
     countries = {}
     for row in people:
         countries[row.country_name or "Unknown"] = countries.get(row.country_name or "Unknown", 0) + 1
@@ -83,7 +84,7 @@ def online_page(request):
         "minutes": online.ONLINE_MINUTES, "keep": online.LIVE_KEEP, "refresh": REFRESH_SECONDS,
         "updated": timezone.localtime(now),
         # The visitor check (web/botcheck.py): how many first visits from abroad it stopped today, and how many passed.
-        "check": botcheck.today_counts(), "check_on": botcheck.current()["on"],
+        "check": botcheck.today_counts(), "check_on": check["on"], "check_mode": check["mode"],
     })
     response["Cache-Control"] = "private, no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"

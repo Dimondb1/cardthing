@@ -2739,4 +2739,5 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .botcheck__body { margin: 0; color: var(--color-ink-muted); }
 .botcheck__status { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
 .botcheck__status--working { animation: feed-breathe var(--motion-slow) var(--ease-standard) infinite alternate; }
+.botcheck__go { margin-top: var(--space-2); }
 @media (prefers-reduced-motion: reduce) { .botcheck__status--working { animation: none; } }

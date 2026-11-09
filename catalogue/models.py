@@ -2710,6 +2710,22 @@ class VisitorCheck(models.Model):
                   "country cannot be told is never checked either.",
     )
 
+    class Mode(models.TextChoices):
+        TAP = "tap", "Work it out, then tap Continue"
+        WORK = "work", "Work it out only"
+        AWAY = "away", "Turn away"
+
+    # On 9 Nov 2026 the flood's browsers passed the sum alone (80 of 91 checks in its first minutes): they run pages
+    # by themselves, so a button they have never seen stops them where a second of work did not.
+    mode = models.CharField(
+        "What a first visit from abroad does", max_length=4, choices=Mode.choices, default=Mode.TAP,
+        help_text="Work it out, then tap Continue: a second of work in the browser and one tap, once a week. Scripts "
+                  "that open pages by themselves stop here. Work it out only: the second of work, then straight on; "
+                  "the flood of 9 Nov 2026 passed this. Turn away: visitors from abroad see a short page saying "
+                  "RipRaptor is for UK shoppers, with no way on. Search engines, AI assistants and link previews come "
+                  "in whichever you pick.",
+    )
+
     class Meta:
         verbose_name = "visitor check"
         verbose_name_plural = "visitor check"

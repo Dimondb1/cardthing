@@ -568,6 +568,14 @@ ENTRIES = [
           "On the visitor check when the browser runs no scripts, which the check needs."),
     Entry("botcheck.old_browser", T, "Visitor check: browser too old", "This browser cannot do the check. Try a newer "
           "one.", "On the visitor check when the browser cannot work out the check."),
+    Entry("botcheck.continue", T, "Visitor check: button", "Continue to RipRaptor",
+          "The button on the visitor check while it asks for a tap (Admin, Visitor check). Says where it goes."),
+    Entry("botcheck.away_title", H, "Visitor check: turned away, heading", "RipRaptor is for UK shoppers",
+          "Heading of the page a visit from abroad sees while Admin, Visitor check is set to turn them away."),
+    Entry("botcheck.away_body", T, "Visitor check: turned away, why",
+          "We compare prices at UK shops for buyers in the UK and Ireland, so the site is closed to visits from "
+          "other countries. In the UK on a VPN? Turn it off to continue.",
+          "Under the heading of the turned away page. Says why and what a UK visitor on a VPN can do."),
     Entry("botcheck.cookies", T, "Visitor check: cookies off", "Turn on cookies to continue to RipRaptor. The check "
           "keeps one cookie, for a week, that holds nothing about you.",
           "On the visitor check when the browser keeps no cookies, so the pass it earns could not be kept."),

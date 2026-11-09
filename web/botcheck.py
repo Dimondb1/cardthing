@@ -20,6 +20,10 @@ Anubis does against AI scrapers:
 * The flood's own browsers ran our pages (catalogue/automated.py), so they can run the sum too. A browser driven by a
   script says so in ways a person's never does (navigator.webdriver, HeadlessChrome and the like): the page does not
   work the sum for one, and an answer from one earns no pass.
+* The owner picks what a first visit from abroad does (VisitorCheck.mode). Tap (the default): the sum, then a tap on
+  Continue, which a crawler that opens pages by itself never makes; within minutes of going live on 9 Nov 2026 the
+  flood passed the sum alone 80 times in 91. Work: the sum, then straight on. Away: a short page saying RipRaptor is
+  for UK shoppers, with no way on and no pass honoured.
 
 The switch and the countries are read from the cache (no query on a page); saving the row in Admin puts the new
 settings there at once. How many were shown the check today and how many passed are kept in the cache too, for Who
@@ -55,12 +59,13 @@ TASK_SALT = "web.botcheck.task"
 PASS_DAYS = 7
 TASK_SECONDS = 600          # a task must be answered within ten minutes of being set
 ZEROS = 4                   # leading zero hex digits the answer's hash needs: 65,536 tries on average
-SETTINGS_KEY = "visitor-check:v1"
+SETTINGS_KEY = "visitor-check:v2"
 VERIFIED_KEY = "visitor-check:crawler:"
 VERIFIED_SECONDS = 24 * 3600
 LOOKUP_SECONDS = 2          # a name lookup that takes longer counts as not proven, so a page never waits on DNS
 UNANSWERED_SECONDS = 600    # and is tried again ten minutes later
 PATH = "/check/"            # where an answer is sent (ripraptor/urls.py)
+TAP, WORK, AWAY = "tap", "work", "away"     # VisitorCheck.Mode
 COUNT_KEY = "visitor-check:count:"
 COUNT_SECONDS = 2 * 24 * 3600
 # A browser that names itself as driven by a script. Never a person's: an answer from one earns no pass.
@@ -100,18 +105,19 @@ NAMED_CRAWLERS = (
 
 
 def current():
-    """{"on", "countries"}: the owner's switch and the countries never checked, from the cache (remember)."""
+    """{"on", "countries", "mode"}: the owner's switch, the countries never checked and what a first visit from
+    abroad does, from the cache (remember)."""
     found = cache.get(SETTINGS_KEY)
     return found if found is not None else remember()
 
 
 def remember():
-    """Read the owner's row (one query) and keep it in the cache. No row yet: on, for the UK and Ireland."""
+    """Read the owner's row (one query) and keep it in the cache. No row yet: on, tap, for the UK and Ireland."""
     from catalogue.models import VisitorCheck
 
     row = VisitorCheck.objects.filter(pk=1).first()
-    found = ({"on": row.on, "countries": sorted(row.country_codes())} if row is not None
-             else {"on": True, "countries": ["GB", "IE"]})
+    found = ({"on": row.on, "countries": sorted(row.country_codes()), "mode": row.mode} if row is not None
+             else {"on": True, "countries": ["GB", "IE"], "mode": VisitorCheck.Mode.TAP.value})
     cache.set(SETTINGS_KEY, found, None)
     return found
 
@@ -224,7 +230,8 @@ def needs_check(request):
     rules = current()
     if not rules["on"] or country in rules["countries"]:
         return False
-    if has_pass(request, ip):
+    # Turned away: a pass earned before counts for nothing.
+    if rules["mode"] != AWAY and has_pass(request, ip):
         return False
     return not let_through(request, ip)
 
@@ -266,11 +273,14 @@ def today_counts(day=None):
 
 
 def challenge(request):
-    """The check page: the task, the work to do and where to send the answer. Never kept or indexed."""
+    """The check page: the task, the work to do and where to send the answer; or, turned away, the page saying the
+    site is for UK shoppers (403). Never kept or indexed."""
+    mode = current()["mode"]
+    away = mode == AWAY
     response = render(request, "web/botcheck.html", {
-        "task": task_for(client_ip(request)), "zeros": ZEROS, "next": request.get_full_path(), "check_url": PATH,
-        "meta_title": "RipRaptor",
-    }, status=200)
+        "away": away, "tap": mode == TAP, "task": "" if away else task_for(client_ip(request)), "zeros": ZEROS,
+        "next": request.get_full_path(), "check_url": PATH, "meta_title": "RipRaptor",
+    }, status=403 if away else 200)
     response["Cache-Control"] = "no-store, private"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
@@ -307,7 +317,7 @@ def answer(request):
     except signing.BadSignature:
         found = None
     driven = DRIVEN.search(request.headers.get("User-Agent", ""))
-    if (driven or not found or found.get("a") != address_key(ip) or not given.isdigit()
+    if (driven or current()["mode"] == AWAY or not found or found.get("a") != address_key(ip) or not given.isdigit()
             or not solves(task, given)):
         return HttpResponseRedirect(target)
     tally("passed")

@@ -1,14 +1,21 @@
 // The visitor check (web/botcheck.py): find the number that, after the task, makes a SHA-256 hash start with the
 // asked-for run of zeros, then send it back. A person's phone does it in about a second, once a week; a crawler on a
 // new address every page does it every page. Hashed in batches so the page stays responsive.
+// With data-tap the answer goes only once the person taps Continue: a crawler that opens pages by itself runs the
+// sum (the flood of 9 Nov 2026 did) but never presses a button it has never seen.
 (async () => {
   const box = document.querySelector("[data-check]");
   if (!box) return;
   const status = box.querySelector("[data-check-status]");
-  // Hidden until now so that with scripts off only the line asking for them shows.
-  if (status) status.hidden = false;
+  const go = box.querySelector("[data-check-go]");
+  const tap = Boolean(go);
+  const working = () => {
+    if (status) status.hidden = false;
+  };
   const stop = (message) => {
+    if (go) go.hidden = true;
     if (!status) return;
+    status.hidden = false;
     status.textContent = message || "";
     status.classList.remove("botcheck__status--working");
   };
@@ -32,8 +39,29 @@
     stop(box.dataset.cookies);
     return;
   }
+
   const task = box.dataset.task;
   const zeros = Number(box.dataset.zeros) || 4;
+  let answer = null;
+  let wanted = !tap;
+  const send = () => {
+    const params = new URLSearchParams({ task, answer: String(answer), next: box.dataset.next || "/" });
+    window.location.replace(`${box.dataset.url}?${params}`);
+  };
+  if (tap) {
+    go.hidden = false;
+    go.addEventListener("click", (event) => {
+      // Only a person's own tap or key press: a click made by a script on the page counts for nothing.
+      if (!event.isTrusted || wanted) return;
+      wanted = true;
+      go.setAttribute("aria-disabled", "true");
+      if (answer === null) working();
+      else send();
+    });
+  } else {
+    working();
+  }
+
   const encoder = new TextEncoder();
   const leads = (buffer) => {
     const bytes = new Uint8Array(buffer);
@@ -51,8 +79,8 @@
     const hashes = await Promise.all(tries);
     const found = hashes.findIndex(leads);
     if (found >= 0) {
-      const params = new URLSearchParams({ task, answer: String(start + found), next: box.dataset.next || "/" });
-      window.location.replace(`${box.dataset.url}?${params}`);
+      answer = start + found;
+      if (wanted) send();
       return;
     }
   }

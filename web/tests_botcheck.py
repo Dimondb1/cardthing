@@ -186,7 +186,8 @@ class CheckTests(TestCase):
         self.client.force_login(owner)
         with override_settings(RIPRAPTOR_TWO_STEP_REQUIRED=False):
             page = self.client.get(reverse("online"))
-            self.assertContains(page, "Visitor check today: shown 2 times to first visits from abroad, passed 1 time.")
+            self.assertContains(page, "Visitor check today (work it out, then tap Continue): shown 2 times to first "
+                                      "visits from abroad, passed 1 time.")
             row = VisitorCheck.load()
             row.on = False
             row.save()
@@ -275,7 +276,7 @@ class CheckTests(TestCase):
         self.assertFalse(self.checked(self.visit()))
 
     def test_the_owner_can_switch_it_off_or_name_more_countries_and_it_applies_at_once(self):
-        self.assertEqual(botcheck.current(), {"on": True, "countries": ["GB", "IE"]})
+        self.assertEqual(botcheck.current(), {"on": True, "countries": ["GB", "IE"], "mode": "tap"})
         row = VisitorCheck.load()
         row.countries = "gb; ie, US"
         row.save()
@@ -285,6 +286,51 @@ class CheckTests(TestCase):
         row.save()
         self.assertFalse(self.checked(self.visit(ip="198.51.100.7")))
         self.assertEqual(self.visit(reverse("web:search_api") + "?q=etb").status_code, 200)
+
+    def set_mode(self, mode):
+        row = VisitorCheck.load()
+        row.mode = mode
+        row.save()
+
+    def test_a_first_visit_from_abroad_taps_continue_after_the_sum_unless_the_owner_says_otherwise(self):
+        html = self.visit().content.decode()
+        self.assertIn('data-check-go hidden>Continue to RipRaptor</button>', html)   # shown by the script
+        from django.contrib.staticfiles import finders
+
+        script = open(finders.find("js/botcheck.js"), encoding="utf-8").read()
+        self.assertIn("event.isTrusted", script)
+        self.set_mode("work")
+        html = self.visit().content.decode()
+        self.assertTrue(self.checked(self.visit()))
+        self.assertNotIn("data-check-go", html)
+        self.assertNotIn("Continue to RipRaptor", html)
+
+    def test_turned_away_a_visit_from_abroad_sees_why_and_no_way_on(self):
+        task = self.task_of(self.visit())
+        self.answer(task, solve(task))                       # a pass earned before the owner turned them away
+        self.set_mode("away")
+        response = self.visit("/games/pokemon/")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response["Cache-Control"], "no-store, private")
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+        html = response.content.decode()
+        self.assertIn("RipRaptor is for UK shoppers", html)
+        self.assertIn("In the UK on a VPN? Turn it off to continue.", html)
+        for absent in ("data-check", "botcheck.js", "data-task", "Continue to RipRaptor"):
+            self.assertNotIn(absent, html)
+        # A right answer earns nothing while they are turned away, and the data feeds stay shut.
+        fresh = botcheck.task_for(US)
+        self.assertNotIn(botcheck.COOKIE, self.answer(fresh, solve(fresh), ip=US).cookies)
+        self.assertEqual(self.visit(reverse("web:search_api") + "?q=etb").status_code, 403)
+        # The UK, staff's countries and the search engines and link previews still come in.
+        self.assertEqual(self.visit(ip="81.2.69.160").status_code, 200)
+        self.assertEqual(self.visit(agent="facebookexternalhit/1.1").status_code, 200)
+        self.assertEqual(botcheck.today_counts()["passed"], 1)
+
+        owner = get_user_model().objects.create_superuser("boss", password="x")
+        self.client.force_login(owner)
+        with override_settings(RIPRAPTOR_TWO_STEP_REQUIRED=False):
+            self.assertContains(self.client.get(reverse("online")), "visits from abroad turned away")
 
     def test_the_check_costs_no_query_once_its_settings_are_kept(self):
         VisitorCheck.load()

@@ -36,23 +36,29 @@
     if (event.detail && event.detail.querySelectorAll) arrows(event.detail);
   });
 
-  // A type tile tapped: while browse.js fetches the list, the tile takes its ring, the rails go and a sketch of the
-  // list waits under the tiles with the type's name, so the tap is seen to land. The list itself takes the sketch's
-  // place when it comes.
+  // A type tile or a set chip tapped: while browse.js fetches the list, the tile takes its ring (a chip its own,
+  // below), the rails go and a sketch of the list waits under the tiles with the type's or the set's name, so the tap
+  // is seen to land at once, however long the list takes to come. The list itself takes the sketch's place.
   document.addEventListener("ripraptor:loading", function (event) {
     var link = event.detail && event.detail.source;
     var feed = link && link.closest && link.closest(".feed");
-    if (!link || !feed || !link.classList.contains("feed-tile__link") || link.hasAttribute("aria-current")) return;
+    if (!link || !feed || link.hasAttribute("aria-current")) return;
+    var tile = link.classList.contains("feed-tile__link");
+    var chip = link.classList.contains("chip") && link.closest(".feed-sets");
+    if (!tile && !chip) return;
     var tiles = feed.querySelector(".feed__tiles");
-    Array.prototype.forEach.call(feed.querySelectorAll(".feed-tile__link[aria-current]"), function (other) {
-      other.removeAttribute("aria-current");
-    });
-    link.setAttribute("aria-current", "page");
+    if (tile) {
+      Array.prototype.forEach.call(feed.querySelectorAll(".feed-tile__link[aria-current]"), function (other) {
+        other.removeAttribute("aria-current");
+      });
+      link.setAttribute("aria-current", "page");
+    }
     feed.classList.add("feed--filtered");
-    Array.prototype.forEach.call(feed.querySelectorAll(".feed__title, .feed__sub, .feed__rail, script"), function (gone) {
+    Array.prototype.forEach.call(feed.querySelectorAll(".feed__title, .feed__sub, .feed__rail, .feed-sketch, script"), function (gone) {
       gone.remove();
     });
-    var label = (link.querySelector(".feed-tile__label") || link).textContent.trim();
+    var named = tile ? link.querySelector(".feed-tile__label") : link.firstChild;
+    var label = ((named && named.textContent) || link.textContent).trim();
     var sketch = document.createElement("section");
     sketch.className = "feed-sketch";
     sketch.setAttribute("aria-busy", "true");
@@ -70,6 +76,11 @@
     sketch.appendChild(status);
     sketch.appendChild(grid);
     feed.appendChild(sketch);
+    // The rest of the old page (its heading, tabs and list) is the old list: out of sight until the new one comes.
+    var region = feed.parentNode;
+    Array.prototype.forEach.call(region ? region.children : [], function (part) {
+      if (part !== feed && !part.matches("script, [hidden]")) part.classList.add("is-leaving");
+    });
   });
 
   // The hints, on every landing (the owner, 9 Nov 2026: "every time I land on the homepage, I need to see them. They

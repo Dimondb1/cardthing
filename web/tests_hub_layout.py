@@ -439,12 +439,13 @@ class SetPageQueryTests(HubLayoutTestCase):
             self.product(other, f"Other {n} Box", (self.a, STOCK))
         many = queries()
         self.assertEqual(len(many), len(few))
-        # The row of the game's sets went with the strip: no query lists them. The game page's row still does.
-        row = '"catalogue_productset"."id" IN (SELECT'
-        self.assertFalse([sql for sql in many if row in sql])
+        # The row of the game's sets went with the strip: no query lists them. The game page's row still does, in one
+        # query (views.game_sets).
+        row = re.compile(r'FROM "catalogue_productset" .*WHERE "catalogue_productset"."id" IN \(')
+        self.assertFalse([sql for sql in many if row.search(sql)])
         with CaptureQueriesContext(connection) as game_page:
             self.client.get(self.game.get_absolute_url())
-        self.assertEqual(len([query for query in game_page.captured_queries if row in query["sql"]]), 1)
+        self.assertEqual(len([query for query in game_page.captured_queries if row.search(query["sql"])]), 1)
 
 
 class HubLayoutCopyStyleTests(HubLayoutTestCase):

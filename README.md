@@ -5409,7 +5409,15 @@ each pictured by one of its own products (`feed.set_tile_rows`, one query).
 So Pokémon, Delta Reign, ETBs is three taps (the owner, 6 Nov 2026: "a
 dynamic way to filter by collection without overwhelming the page", and 9
 Nov 2026: "Pokemon tap, then collections, then type"). With the row there,
-the page's usual row of sets further down is left out. A game's row of
+the page's usual row of sets further down is left out. What every view of
+a game's page shares (its sets with their stock in each type, as one table
+for the game and language, `views.game_sets`, and the game's numbers) is
+kept for as long as a page is (`views.shared_for_game`), filled when
+warm_pages builds the game's page, so a set or a type picked costs only its
+own list: on the live site each set's first tap had taken five to seven
+seconds (the owner, 9 Nov 2026: "Ripraptor isn't working now"). A tapped
+set, like a tapped tile, shows its ring and a sketch of its list at once,
+with the old list out of sight until the new one comes. A game's row of
 tiles leads with an All types tile (`feed.ALL`, `?type=all`), which opens
 the game's whole list (`?set=` alone is a set's whole list, headed by its
 name); a chosen type tile leads back out to all of the set. Then the languages

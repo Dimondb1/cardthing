@@ -2430,6 +2430,8 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-set__list a[aria-current="true"] { color: var(--color-brand-text); background: var(--color-brand-soft); }
 /* The sketch of a list while a tile's list is fetched: the type's name, Loading, and four grey cards that breathe. */
 .feed-sketch { margin-top: var(--space-4); }
+/* While a tapped tile's or set's list comes, the old list under the sketch is out of sight (feed.js). */
+[data-browse] > .is-leaving { display: none; }
 .feed-sketch__title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }
 .feed-sketch__status { margin: var(--space-1) 0 var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .feed-sketch__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }

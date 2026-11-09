@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from functools import wraps
 from urllib.parse import urlencode, urlsplit
@@ -11,6 +11,7 @@ from django.templatetags.static import static
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core import signing
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Case, Count, Exists, F, IntegerField, Max, OuterRef, Prefetch, Q, Subquery, Value, When
@@ -42,7 +43,7 @@ from guides import state as guide_doors
 from guides.access import not_for_editors
 from ripraptor import csp
 
-from . import feed, hubs, listcache, look, partners, refresh, share
+from . import feed, hubs, listcache, look, pagecache, partners, refresh, share
 from . import find as find_steps
 from .pagecache import cached_page
 from .charts import price_chart
@@ -1238,6 +1239,41 @@ def moved(request, target):
     return HttpResponsePermanentRedirect(f"{target}?{query}" if query else target)
 
 
+def shared_for_game(name, build):
+    """What every view of a game's page shares and works out over the whole game (its sets with their stock, its
+    numbers), kept for as long as a page is (web.pagecache), so a set or a type picked on the page costs only its own
+    list. Its row of sets offers every set, and each one's first tap built the game's figures afresh: about five
+    seconds on the live site (the owner, 9 Nov 2026: "Ripraptor isn't working now"). The game's own page, which
+    warm_pages builds every few minutes, fills them. Built each time while pages are not kept (the tests)."""
+    seconds = pagecache.seconds()
+    if seconds <= 0:
+        return build()
+    key = pagecache.key_for(f"game-shared/{name}")
+    found = cache.get(key)
+    if found is None:
+        found = build()
+        cache.set(key, found, seconds)
+    return found
+
+
+def game_sets(game, lang):
+    """{"sets": the game's sets with products in ``lang``, "products" and "stocked": {(set id, type): how many,
+    in stock}, "demand": popularity.set_demand}, for the game page's row of sets in any type: one table each game
+    and language, shared by every view of the page (shared_for_game). Five queries, however many sets."""
+    def build():
+        in_view = apply_languages(Product.objects.active().filter(game=game), [lang])
+        grouped = ("product_set_id", "product_type")
+        products = {(pk, kind): n for pk, kind, n in in_view.order_by().exclude(product_set=None).values_list(*grouped)
+                    .annotate(n=Count("pk"))}
+        stocked = {(pk, kind): n for pk, kind, n in in_view.in_stock().order_by().exclude(product_set=None)
+                   .values_list(*grouped).annotate(n=Count("pk"))}
+        ids = {pk for pk, _kind in products}
+        return {"sets": list(ProductSet.objects.filter(pk__in=ids).select_related("game")), "products": products,
+                "stocked": stocked, "demand": popularity.set_demand(ids)}
+
+    return shared_for_game(f"sets/{game.pk}/{lang}", build)
+
+
 @require_GET
 @cached_page
 def game_detail(request, game_slug):
@@ -1266,16 +1302,23 @@ def game_detail(request, game_slug):
         kind = feed.ALL
     sets = []
     if not pane:
-        stocked = (in_view.in_stock().filter(product_set=OuterRef("pk")).order_by().values("product_set")
-                   .annotate(n=Count("pk")).values("n"))
-        sets = list(
-            ProductSet.objects.filter(game=game, pk__in=in_view.values("product_set_id")).select_related("game")
-            .annotate(in_stock=Coalesce(Subquery(stocked[:1], output_field=IntegerField()), Value(0)))
-            # Undated sets (sports card lines) with the most in stock first, not by name.
-            .order_by(F("release_date").desc(nulls_last=True), "-in_stock", "name")
-        )
-        wanted = popularity.set_demand([item.pk for item in sets])
-        sets.sort(key=lambda item: -wanted.get(item.pk, 0))   # stable: newest first among equals
+        lang = request.GET.get("lang", "")
+        grid = game_sets(game, lang if lang in dict(LANGUAGES) else "")
+        wanted = kind if kind in Product.Type.values else None
+        for item in grid["sets"]:
+            held = [(product_type, n) for (pk, product_type), n in grid["products"].items()
+                    if pk == item.pk and (wanted is None or product_type == wanted)]
+            if not held:
+                continue
+            item.in_stock = sum(grid["stocked"].get((item.pk, product_type), 0) for product_type, _n in held)
+            sets.append(item)
+        # Undated sets (sports card lines) with the most in stock first, not by name; then the ones people want most
+        # this week first (stable: newest first among equals).
+        sets.sort(key=lambda item: item.name)
+        sets.sort(key=lambda item: -item.in_stock)
+        sets.sort(key=lambda item: item.release_date or date.min, reverse=True)
+        sets.sort(key=lambda item: item.release_date is None)
+        sets.sort(key=lambda item: -grid["demand"].get(item.pk, 0))
     feed_on = not pane and look.for_request(request)
     # The row of sets above the type tiles with the new home page on (feed_top.html): every set in the language and
     # type in view, the ones people want most first, each with how many of its products are in stock, as links to
@@ -1294,7 +1337,7 @@ def game_detail(request, game_slug):
         set_options = [{"name": item.name, "url": set_link(item.slug), "in_stock": item.in_stock} for item in sets]
         set_clear_url = set_link("")
     words = hubs.Words(text, request)
-    stats = hubs.HubStats() if pane else hubs.hub_stats(game=game)
+    stats = hubs.HubStats() if pane else shared_for_game(f"stats/{game.pk}", lambda: hubs.hub_stats(game=game))
     meta_title, meta_description = hubs.game_meta(words, game, stats)
     page_url = request.build_absolute_uri(game.get_absolute_url())
     crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url())], page_url=page_url)

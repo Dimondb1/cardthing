@@ -673,6 +673,32 @@ class TypeTileTests(FeedCase):
         self.assertIn('<p class="browse-head__count" role="status">1 product</p>', html)
         self.assertIn(f'<a class="feed-tile__link" href="{url}?type=all&amp;set=prismatic-evolutions" data-browse-link aria-current="page">', html)
 
+    @override_settings(RIPRAPTOR_PAGE_CACHE_SECONDS=300)
+    def test_a_set_tapped_reuses_the_games_figures(self):
+        # The owner, 9 Nov 2026, once the row of sets was live: "Ripraptor isn't working now". Each set's first tap
+        # worked out the whole game's sets and numbers afresh, about seven seconds on the live site. They are kept with
+        # the game's page now, so a set or a type picked costs its own list alone.
+        cache.clear()
+        look.remember()
+        url = self.pokemon.get_absolute_url()
+        self.page(url)   # warm_pages builds this every few minutes
+        for params in ({"set": "prismatic-evolutions"}, {"set": "surging-sparks", "type": "booster_box"}):
+            with self.subTest(params=params), CaptureQueriesContext(connection) as captured:
+                html = self.page(url, **params)
+                sqls = [query["sql"] for query in captured.captured_queries]
+                self.assertFalse([sql for sql in sqls if 'FROM "catalogue_dailypageview"' in sql])   # the sets' demand
+                self.assertFalse([sql for sql in sqls if re.search(r'WHERE "catalogue_productset"."id" IN \(', sql)])
+                self.assertIn("aria-current=\"true\">", self.sets_row(html))
+        # The counts follow the type in view, from the same table: the box's set has one booster box in stock.
+        html = self.page(url, type="booster_box")
+        self.assertIn('href="?type=booster_box&amp;set=surging-sparks" data-browse-link>Surging Sparks<span '
+                      'class="feed-set__count"><span aria-hidden="true">1</span>', html)
+        self.assertNotIn("Prismatic Evolutions<span", self.sets_row(html))
+        # A tap shows a sketch of the list at once, a set's as a tile's, the old list out of sight until it comes.
+        script = open("web/static/js/feed.js", encoding="utf-8").read()
+        self.assertIn('var chip = link.classList.contains("chip") && link.closest(".feed-sets");', script)
+        self.assertIn('part.classList.add("is-leaving");', script)
+
     def test_a_set_chosen_narrows_the_tiles_to_its_own_types_pictured_by_its_own_products(self):
         url = self.pokemon.get_absolute_url()
         html = self.page(url, set="prismatic-evolutions")

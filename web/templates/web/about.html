@@ -7,6 +7,14 @@
   <div class="prose prose--lead">{% copy "about.introduction" %}</div>
   <p class="page-intro">{% copy "about.scale" shops=shops_compared %}</p>
 
+  <section aria-labelledby="why-title">
+    <h2 id="why-title">{% copy "about.why.title" %}</h2>
+    {% copy "about.why.intro" as why_intro %}{% if why_intro %}<p>{{ why_intro }}</p>{% endif %}
+    <dl class="why">{% for point in why %}
+      <div class="why__point"><dt>{{ point.title }}</dt><dd>{{ point.body }}</dd></div>{% endfor %}
+    </dl>
+  </section>
+
   <section aria-labelledby="prices-title">
     <h2 id="prices-title">{% copy "about.prices.title" %}</h2>
     <div class="prose">{% copy "about.prices.body" hours=stale_hours %}</div>

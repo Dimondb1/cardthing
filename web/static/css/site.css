@@ -1742,6 +1742,11 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .prose { color: var(--color-ink-muted); }
 .prose p + p { margin-top: var(--space-4); }
 .prose--lead { font-size: var(--text-lg); color: var(--color-ink); }
+/* Why RipRaptor on the how it works page: a point under another on a phone, two side by side from a tablet up. */
+.why { display: grid; gap: var(--space-4); margin: var(--space-4) 0 0; }
+.why__point dt { font-weight: var(--weight-strong); color: var(--color-ink); }
+.why__point dd { margin: var(--space-1) 0 0; color: var(--color-ink-muted); }
+@media (min-width: 48rem) { .why { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); } }
 /* Shops we compare (web/templates/web/shops.html): a table from a tablet up, a card a shop on a phone. */
 .shops { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
 .shops th, .shops td { padding: var(--space-3) var(--space-2); text-align: left; vertical-align: top; border-bottom: 1px solid var(--color-line); }

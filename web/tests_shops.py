@@ -73,3 +73,30 @@ class ShopsPageTests(TestCase):
         self.assertNotContains(about, "retailer-list")
         self.assertContains(self.client.get("/sitemap.xml"), f"<loc>http://testserver{url}</loc>")
         self.assertContains(self.client.get("/llms.txt"), f"[Shops we compare](http://testserver{url})")
+
+
+class WhyRipRaptorTests(TestCase):
+    """The Why RipRaptor section on the how it works page and in llms.txt (the owner, 9 Nov 2026: what makes
+    RipRaptor better, so search engines and AI assistants can quote it)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        ShopsPageTests.setUpTestData.__func__(cls)
+
+    def test_how_it_works_says_why_with_the_live_numbers(self):
+        html = self.client.get(reverse("web:about")).content.decode()
+        self.assertIn('<h2 id="why-title">Why RipRaptor</h2>', html)
+        for point in ("The price you will pay", "Only stock you can buy", "Prices you can trust", "Honest about deals",
+                      "UK shops side by side", "Alerts that do the waiting", "Independent"):
+            self.assertIn(f"<dt>{point}</dt>", html)
+        self.assertIn("We compare 5 UK shops, each listed on our Shops page", html)
+        self.assertIn("one we have not been able to check for 72 hours stops counting", html)
+        self.assertIn("A shop running a draw or raffle is not shown as in stock", html)
+        # Before How prices are worked out: the first thing after the introduction.
+        self.assertLess(html.index('id="why-title"'), html.index('id="prices-title"'))
+
+    def test_ai_assistants_read_the_same_points(self):
+        text = self.client.get("/llms.txt").content.decode()
+        self.assertIn("## Why RipRaptor", text)
+        self.assertIn("- The price you will pay: Every price includes the shop's standard UK delivery", text)
+        self.assertIn("- UK shops side by side: We compare 5 UK shops", text)

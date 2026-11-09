@@ -1937,12 +1937,25 @@ def about(request):
         "web/about.html",
         {
             "shops_compared": pricing.shops_compared(),
+            "why": why_points(request),
             "contact_email": settings.RIPRAPTOR_CONTACT_EMAIL,
             "stale_hours": settings.RIPRAPTOR_STALE_AFTER_HOURS,
             "meta_title": text(request, "about.title"),
             "canonical_url": request.build_absolute_uri(request.path),
         },
     )
+
+
+WHY_POINTS = ("price", "stock", "trust", "deals", "shops", "alerts", "independent")
+
+
+def why_points(request):
+    """The Why RipRaptor points (title, text), filled with the live shop count and the hours a price counts for,
+    for the how it works page and llms.txt."""
+    store = copy.for_request(request)
+    values = {"shops": pricing.shops_compared(), "hours": settings.RIPRAPTOR_STALE_AFTER_HOURS}
+    return [{"title": copy.get(f"about.why.{key}.title", store=store),
+             "body": copy.get(f"about.why.{key}.body", store=store, **values)} for key in WHY_POINTS]
 
 
 def delivery_line(shop, store):
@@ -3340,6 +3353,10 @@ def llms_txt(request):
         f"Prices are in pounds, include UK delivery, and come from {shops} UK shops. "
         "Each product page lists every shop's price with stock and the time it was checked, "
         "and links to the shop to buy. Nothing is sold here.",
+        "",
+        f"## {text(request, 'about.why.title')}",
+        "",
+        *[f"- {point['title']}: {point['body']}" for point in why_points(request)],
         "",
         "## Games",
         "",

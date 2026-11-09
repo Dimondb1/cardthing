@@ -390,6 +390,15 @@ page too): search engines and AI assistants quote a site's own words, and on
 it and ours no longer did. The How it works page says the number too and
 links here instead of listing the shops itself.
 
+**Why RipRaptor** (the How it works page, first after the introduction): seven
+short points on what the site does that a plain price list does not
+(delivered prices, only stock you can buy, prices you can trust, honest
+deals, UK shops side by side, alerts, independence), each a title and a line
+in Site wording (`about.why.*`), filled with the live shop count and the
+hours a price counts for (`web.views.why_points`). llms.txt carries the same
+points, so AI assistants can quote them. Every claim is one the code makes
+true; change a point's wording only if the behaviour behind it still holds.
+
 **Add shops** (Admin, owner only, `/admin/add-shops/`, `web/add_shops.py`):
 paste shop addresses, one per line. Each is saved once (`ShopToAdd`) and the
 background reader checks waiting shops every 30 seconds in a thread of its

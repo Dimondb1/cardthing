@@ -1,7 +1,7 @@
 {% load sitecopy ripraptor %}{# Today's best deals as a strip in the compact layout (web/compact.py strip: the feed's rail, from its cache): each a small card, its delivered price, its name and why it is a deal, from the evidence the summary holds. Takes strip and game. #}
 {% if strip %}
 <section class="cx-strip" aria-labelledby="cx-strip-title">
-  <div class="cx-strip__head"><h2 id="cx-strip-title" class="cx-strip__title">{% copy "feed.rail.deals" %}</h2><a class="cx-strip__all" href="{% url 'web:deals' %}{% if game %}?game={{ game.slug }}{% endif %}">{% copy "site.see_all" %}</a></div>
+  <div class="cx-strip__head"><h2 id="cx-strip-title" class="cx-strip__title">{% include "web/includes/mark_hunt.html" %}{% copy "feed.rail.deals" %}</h2><a class="cx-strip__all" href="{% url 'web:deals' %}{% if game %}?game={{ game.slug }}{% endif %}">{% copy "site.see_all" %}</a></div>
   <ul class="cx-strip__row">
     {% for card in strip %}<li><a class="cx-deal" href="{{ card.product.get_absolute_url }}" data-compare="feed"><span class="cx-deal__pic">{% product_image card.product "compact" %}</span><span class="cx-deal__body"><span class="cx-deal__price">{{ card.summary.best.shown_price|gbp }}</span><span class="cx-deal__name">{{ card.product.name }}</span><span class="cx-deal__why">{% if card.summary.low_deal %}{% if card.summary.under %}{% copy "feed.card.why_low_under" percent=card.summary.under %}{% else %}{% copy "feed.card.why_low" %}{% endif %}{% elif card.summary.saving and card.summary.second %}{% copy "feed.card.why_save" amount=card.summary.saving|gbp retailer=card.summary.second.retailer.name %}{% endif %}</span></span></a></li>{% endfor %}
   </ul>

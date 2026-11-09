@@ -377,6 +377,18 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     context["compact"] = look.compact_for_request(request)
     if context["compact"]:
         context["dock"] = compact.dock(request, fixed_game or game)
+        context["numbers"] = compact.numbers()
+        # The types as small tiles above the rows, and an In stock switch where the stock tabs do not do that job.
+        context["compact_tiles"] = compact.list_tiles(request, fixed_game or game, product_type)
+        context["compact_switch"] = not tabs
+        context["in_stock_on"] = bool(form.value("in_stock")) and not tabs
+        # What the switch's form carries on: every other choice in force.
+        context["compact_keep"] = [
+            ("q", query), ("game", game.slug if game is not None and fixed_game is None else ""),
+            ("type", product_type), ("sort", request.GET.get("sort", "")), ("price", band),
+            ("lang", form.value("lang") or ""), ("compared", "on" if form.value("compared") else ""),
+            ("set", request.GET.get("set", "")),
+        ]
     context.update(template_context)
     if not (page.object_list or context.get("set_upcoming")):
         # Nothing listed: an alert for products like these would read as a promise about an empty list.
@@ -1438,12 +1450,12 @@ def set_detail(request, game_slug, set_slug):
     # The compact layout (web/compact.py): the set's products as rows under its types. Another choice (a sort, a
     # language) is the usual list, drawn as compact rows.
     if (look.compact_for_request(request) and not request.GET.get("pane")
-            and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS if name != "type")):
+            and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS if name not in ("type", "in_stock"))):
         return compact.set_page(request, product_set, {
             "meta_title": meta_title, "meta_description": meta_description, "canonical_url": page_url,
             "set_facts": facts, "set_upcoming": upcoming, "instead": instead,
             "structured_json": ld_json([crumbs]),
-        }, set_types(request, product_set))
+        })
     return _browse(
         request,
         {

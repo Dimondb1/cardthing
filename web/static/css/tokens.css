@@ -365,7 +365,8 @@
   --feed-more: 2rem;               /* the arrow at the end of a row */
   --feed-cue-max: 16rem;           /* the dock's down arrow with the next heading's name */
   --cx-pic: 3.5rem;                /* the compact layout: a product row's picture */
-  --cx-set-pic: 4.5rem;            /* a set's picture in its row on a phone */
+  --cx-set-pic: 4rem;              /* a set's picture in its row on a phone */
+  --cx-sethead-pic: 7rem;          /* the well with a set's picture at the top of its page */
   --cx-deal: 15rem;                /* a card in the deals strip */
   --cx-deal-pic: 3rem;             /* its picture */
   --feed-spark: 1rem;              /* the fairy's spark on a lit pill or tile */

@@ -9,6 +9,7 @@
 {% if feed %}{# The new home page is on (web/look.py): the page carries the feed's search and game bar, and leads with the feed's top, which a filter change swaps with the list (web/feed.py). #}{% include "web/includes/feed_sprite.svg" %}{% include "web/includes/feed_dock.html" %}{% elif compact %}{# The compact layout (web/compact.py): the same search box and games at the foot, the products as rows. #}{% include "web/includes/feed_sprite.svg" %}{% include "web/includes/feed_dock.html" with feed=dock %}{% endif %}
 <div data-browse>
 {% if feed %}{% include "web/includes/feed_top.html" %}{% endif %}
+{% if compact %}{% include "web/includes/compact_status.html" %}{% endif %}
 {% if query %}<span data-search-query="{{ query }}" hidden></span>{% endif %}
 {% if game %}<span data-visited-game="{{ game.slug }}" hidden></span>{% endif %}
 {% if no_matches %}
@@ -102,8 +103,8 @@
 </div>
 {% endif %}
 
-{# With the new home page on, a game's sets are a row above its type tiles instead (feed_top.html). #}
-{% if sets and not feed %}
+{# With the new home page on, a game's sets are a row above its type tiles instead (feed_top.html); the compact layout lists them on the game's own page (web/compact.py). #}
+{% if sets and not feed and not compact %}
 <nav class="set-nav" id="sets" aria-label="{% copy 'browse.game.sets_title' %}">
   <ul>
     {# Each set with how many of its products are in stock (in the language and type chosen): a dot in the in-stock colour when some are, grey when none. #}
@@ -113,13 +114,19 @@
 </nav>
 {% endif %}
 
-{% if type_nav %}
+{% if type_nav and not compact %}
 {# A set page's types (views.set_types), like the row of sets on a game page: each with how many are in stock, the chosen one marked, a tap on it the whole set again. Plain links, so they work without script. #}
 <nav class="set-nav set-nav--types" aria-label="{% copy 'browse.set.types_title' %}">
   <ul>
     {% for item in type_nav %}<li><a href="{{ item.url }}"{% if item.active %} aria-current="true"{% endif %}>{{ item.label }}<span class="set-nav__count{% if not item.in_stock %} set-nav__count--none{% endif %}"><span aria-hidden="true">{{ item.in_stock }}</span><span class="visually-hidden">, {% copy_count "browse.game.set_stock" item.in_stock %}</span></span>{% if item.active %}<span class="chip__off" aria-hidden="true">×</span><span class="visually-hidden">, {% copy "browse.quick.remove" %}</span>{% endif %}</a></li>{% endfor %}
   </ul>
 </nav>
+{% endif %}
+
+{% if compact %}
+{# The compact layout: the types as small tiles above the rows, and the In stock switch where the stock tabs do not do that job (web/compact.py). #}
+{% include "web/includes/compact_tiles.html" with tiles=compact_tiles %}
+{% if compact_switch %}{% include "web/includes/compact_switch.html" with keep=compact_keep %}{% endif %}
 {% endif %}
 
 {% if instead %}
@@ -148,7 +155,7 @@
   {% if game %}{% include "web/includes/coming_soon.html" %}{% else %}{% include "web/includes/coming_soon.html" with show_game=True %}{% endif %}
 {% endif %}
 
-{% if quick %}
+{% if quick and not compact %}
 {# A search's quick filters (views.quick_filters): plain links, so they work without script and the back button keeps them. #}
 <nav class="chips quick" aria-label="{% copy 'browse.quick.label' %}">
   <ul class="chips__list">
@@ -190,7 +197,7 @@
     <label class="visually-hidden" for="{{ form.lang.id_for_label }}">{{ form.lang.label }}</label>
     {{ form.lang }}
   </div>
-  {% if not stock_tabs %}<label class="toggle">{{ form.in_stock }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.in_stock.label }}</span></label>{% endif %}
+  {% if not stock_tabs %}{% if compact %}{% if form.in_stock.value %}<input type="hidden" name="in_stock" value="on">{% endif %}{% else %}<label class="toggle">{{ form.in_stock }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.in_stock.label }}</span></label>{% endif %}{% endif %}
   <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>
   <div class="filters__actions">
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>

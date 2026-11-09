@@ -1,0 +1,2 @@
+{% load sitecopy ripraptor %}{# One small line under the header of every compact page but the home page (web/compact.py numbers): prices in stock, shops compared and the latest check. Takes numbers. #}
+<p class="cx-status">{% copy "compact.status" offers=numbers.offers_text shops=numbers.shops %}{% if numbers.checked %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy "compact.checked" ago=numbers.checked|ago %}{% endif %}</p>

@@ -44,6 +44,10 @@ class CompactCase(TestCase):
         self.gone = self.item(self.reign, "Mega Evolution Delta Reign Booster Pack", PACK, ["5.00"],
                               availability=Listing.Availability.OUT_OF_STOCK)
         self.sparks = self.item(self.older, "Surging Sparks Booster Pack", PACK, ["4.50"])
+        # Pictures, so the type tiles above a list have products to show (feed.tile_picks skips the unpictured).
+        for product in (self.box, self.etb, self.sparks):
+            product.image_url = f"https://cdn.example/{product.slug}.jpg"
+            product.save()
         switch()
 
     def item(self, product_set, name, kind, prices, availability=Listing.Availability.IN_STOCK, **fields):
@@ -85,8 +89,11 @@ class SwitchTests(CompactCase):
 class HomeTests(CompactCase):
     def test_the_home_page_leads_with_the_numbers_then_the_sets_people_want(self):
         html = self.page("/")
-        self.assertIn('<h1 class="cx-hero__title">4 sealed prices in stock at 2 UK shops.</h1>', html)
+        self.assertIn('<h1 class="cx-hero__title"><span class="mark section-head__mascot cx-hero__mark" aria-hidden="true">'
+                      '</span>4 sealed prices in stock at 2 UK shops.</h1>', html)
+        self.assertIn('class="hunt-mark"', html)   # the hunting raptor on Today's best deals
         self.assertIn("Checked 1 hour ago", html)   # make_listing checks an hour back
+        self.assertNotIn("cx-status", html)   # the headline says it; the other pages carry the small line
         sets = html[html.index('class="cx-sets"'):]
         # Only sets with something to buy, the newest first when nobody has looked yet; the cheapest a pack of each
         # among its products in stock: the box's 36 packs at £180 is £5.00, Surging Sparks' pack £4.50.
@@ -104,6 +111,8 @@ class GamePageTests(CompactCase):
         html = self.page(self.pokemon.get_absolute_url())
         self.assertIn('<h1 class="cx-hero__title">Pokémon</h1>', html)
         self.assertIn("3 in stock across 2 sets at 2 UK shops.", html)
+        self.assertIn('<p class="cx-status">4 prices in stock at 2 UK shops<span aria-hidden="true"> · </span>'
+                      '<span class="visually-hidden">, </span>Checked 1 hour ago</p>', html)
         self.assertLess(html.index("Mega Evolution—Delta Reign"), html.index("Surging Sparks"))
         self.assertIn('href="/search/?game=pokemon">All Pokémon products</a>', html)
         self.assertIn('placeholder="Search Pokémon"', html)
@@ -115,6 +124,9 @@ class GamePageTests(CompactCase):
         self.assertIn('<ul class="crows">', html)
         self.assertIn('<li class="crow">', html)
         self.assertNotIn('<li class="card', html)
+        # The stock tabs do the In stock switch's job here, so there is none; the tiles sit above the rows.
+        self.assertNotIn("cx-tools", html)
+        self.assertIn('class="feed feed--filtered cx-tiles"', html)
 
 
 class SetPageTests(CompactCase):
@@ -139,18 +151,45 @@ class SetPageTests(CompactCase):
         self.assertIn('<li class="crow crow--none">', html)
         self.assertIn('class="feed-dock"', html)
 
-    def test_its_types_are_chips_all_first(self):
+    def test_its_types_are_small_tiles_pictured_by_its_own_products_all_first(self):
+        # The owner, 9 Nov 2026: "product types as icons above".
         html = self.page(self.reign.get_absolute_url())
-        chips = html[html.index('class="cx-types"'):html.index("</nav>", html.index('class="cx-types"'))]
-        self.assertEqual(re.findall(r'<a class="chip" href="([^"]+)"( aria-current="true")?>([^<]+)</a>', chips), [
-            (self.reign.get_absolute_url(), ' aria-current="true"', "All"),
-            ("?type=booster_box", "", "Booster boxes"), ("?type=elite_trainer_box", "", "ETBs"),
-            ("?type=booster_pack", "", "Booster packs"), ("?type=tin", "", "Tins"),
-        ])
+        tiles = html[html.index('class="feed feed--filtered cx-tiles"'):html.index("</ul>", html.index("cx-tiles"))]
+        found = re.findall(r'<a class="feed-tile__link" href="([^"]+)" data-browse-link( aria-current="page")?>'
+                           r'<span class="feed-tile__well" aria-hidden="true">(.*?)</span><span class="feed-tile__label">'
+                           r'([^<]+)</span>', tiles, re.S)
+        self.assertEqual([(url, bool(current), label) for url, current, _well, label in found], [
+            (self.reign.get_absolute_url(), True, "All"), ("?type=booster_box", False, "Booster boxes"),
+            ("?type=elite_trainer_box", False, "ETBs"), ("?type=booster_pack", False, "Booster packs"),
+            ("?type=tin", False, "Tins"),
+        ])   # the game's own order of types, whatever is in stock
+        self.assertIn("#rr-game-all", found[0][2])            # All: the four tiles icon
+        self.assertIn(self.box.image_url, found[1][2])        # each type pictured by one of the set's own
         html = self.page(self.reign.get_absolute_url(), type="elite_trainer_box")
         self.assertEqual(self.rows(html), ["Elite Trainer Box"])
-        self.assertIn('aria-current="true">ETBs</a>', html)
-        self.assertIn(f'<a class="chip" href="{self.reign.get_absolute_url()}">All</a>', html)
+        # The chosen tile, marked, leads back to All; the All tile is no longer marked.
+        self.assertIn(f'<a class="feed-tile__link" href="{self.reign.get_absolute_url()}" data-browse-link aria-current="page">'
+                      '<span class="feed-tile__well" aria-hidden="true"><span class="product-image product-image--tile">', html)
+        self.assertIn(f'<a class="feed-tile__link" href="{self.reign.get_absolute_url()}" data-browse-link><span class="feed-tile__well" '
+                      'aria-hidden="true"><svg class="feed-ic feed-tile__icon"', html)
+
+    def test_the_in_stock_switch_keeps_only_what_a_shop_has_now(self):
+        # The owner, 9 Nov 2026: "I also want a in stock slider".
+        html = self.page(self.reign.get_absolute_url())
+        self.assertIn('<form class="cx-tools" method="get" action="" data-autosubmit>', html)
+        self.assertIn('<label class="toggle"><input type="checkbox" name="in_stock" value="on"><span class="toggle__track" '
+                      'aria-hidden="true"></span><span>In stock</span></label>', html)
+        html = self.page(self.reign.get_absolute_url(), in_stock="on")
+        self.assertEqual(self.rows(html), ["Booster Box", "Elite Trainer Box"])
+        self.assertIn('<input type="checkbox" name="in_stock" value="on" checked>', html)
+        self.assertIn("4 products", html)   # the set's numbers stay the set's
+        # With a type as well, the switch's form carries the type and the tiles carry the switch.
+        html = self.page(self.reign.get_absolute_url(), in_stock="on", type="tin")
+        self.assertEqual(self.rows(html), [])
+        self.assertIn('<input type="hidden" name="type" value="tin">', html)
+        self.assertIn('href="?in_stock=on&amp;type=booster_box" data-browse-link>', html)
+        self.assertIn('href="?in_stock=on" data-browse-link aria-current="page">', html)
+        self.assertIn("Clear filters", html)
 
 
 class SearchTests(CompactCase):
@@ -160,6 +199,27 @@ class SearchTests(CompactCase):
         self.assertIn("Pokémon TCG: Mega Evolution Delta Reign Booster Box", html)   # the full name out of its set
         self.assertIn('class="feed-dock"', html)
         self.assertIn('<body class="feed-look compact-look"', html)
+        self.assertIn('<p class="cx-status">', html)
+        self.assertNotIn('class="chips quick"', html)   # the tiles and the switch do the quick filters' job
+
+    def test_a_list_has_the_type_tiles_and_the_in_stock_switch_keeping_its_choices(self):
+        html = self.page(reverse("web:search"), game="pokemon", sort="price")
+        tiles = html[html.index("cx-tiles"):html.index("</ul>", html.index("cx-tiles"))]
+        self.assertIn('href="?game=pokemon&amp;sort=price" data-browse-link aria-current="page">', tiles)
+        self.assertIn('href="?game=pokemon&amp;sort=price&amp;type=booster_box" data-browse-link>', tiles)
+        self.assertIn('href="?game=pokemon&amp;sort=price&amp;type=elite_trainer_box" data-browse-link>', tiles)
+        form = html[html.index('<form class="cx-tools"'):html.index("</form>", html.index('<form class="cx-tools"'))]
+        self.assertIn('<input type="hidden" name="game" value="pokemon">', form)
+        self.assertIn('<input type="hidden" name="sort" value="price">', form)
+        self.assertNotIn('name="q"', form)
+        self.assertIn('<input type="checkbox" name="in_stock" value="on">', form)
+        # The folded filters keep the switch's choice as a hidden input, not a second switch.
+        self.assertEqual(html.count('name="in_stock"'), 1)
+        html = self.page(reverse("web:search"), game="pokemon", in_stock="on")
+        self.assertIn('<input type="checkbox" name="in_stock" value="on" checked>', html)
+        self.assertEqual(html.count('name="in_stock"'), 2)
+        self.assertNotIn(self.tin.get_absolute_url(), html)   # a pre-order
+        self.assertIn(self.box.get_absolute_url(), html)
 
 
 class NamesTests(CompactCase):
@@ -168,6 +228,16 @@ class NamesTests(CompactCase):
         self.assertEqual(compact.short_name(self.sparks), "Booster Pack")
         odd = make_product(self.older, name="Surging Sparks", slug="odd", product_type=BOX)
         self.assertEqual(compact.short_name(odd), "Surging Sparks")   # nothing left: the whole name
+        # However the set's name is punctuated (the live site, 9 Nov 2026: "Mega Evolution - Delta Reign" against
+        # "Mega Evolution Delta Reign Booster Box"), and by the set's last words alone.
+        self.reign.name = "Mega Evolution - Delta Reign"
+        self.reign.save()
+        self.box.refresh_from_db()
+        self.assertEqual(compact.short_name(self.box), "Booster Box")
+        tin = make_product(self.reign, name="Delta Reign Mini Tin: Charizard", slug="tin-2", product_type=TIN)
+        self.assertEqual(compact.short_name(tin), "Mini Tin: Charizard")
+        other = make_product(self.reign, name="Pokemon Delta Set 3", slug="other-2", product_type=TIN)
+        self.assertEqual(compact.short_name(other), "Pokemon Delta Set 3")   # not the set's words in a row
 
 
 class CompactStyleTests(CompactCase):

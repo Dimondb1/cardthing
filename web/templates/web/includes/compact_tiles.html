@@ -1,0 +1,11 @@
+{% load sitecopy ripraptor %}{# The product types above a list in the compact layout, as the feed's small tiles (web/compact.py type_tiles): All first, then each type pictured by a product of its kind, the chosen one marked. Plain links; on a list page browse.js loads the list in place (data-browse-link) and feed.js shows a sketch while it comes. Takes tiles. #}
+{% if tiles|length > 1 %}
+<div class="feed feed--filtered cx-tiles">
+  <div class="feed__scroller feed__scroller--tiles">
+    <ul class="feed__row feed__tiles" aria-label="{% copy 'browse.set.types_title' %}" data-loading="{% copy 'browse.tabs.loading' %}">
+      {% for tile in tiles %}<li class="feed-tile"><a class="feed-tile__link" href="{{ tile.url }}" data-browse-link{% if tile.current %} aria-current="page"{% endif %}><span class="feed-tile__well" aria-hidden="true">{% if tile.product %}{% product_image tile.product "tile" %}{% else %}<svg class="feed-ic feed-tile__icon" aria-hidden="true" focusable="false"><use href="#rr-game-all"/></svg>{% endif %}</span><span class="feed-tile__label">{{ tile.label }}</span></a></li>{% endfor %}
+    </ul>
+    <button class="feed__more" type="button" hidden aria-label="{% copy 'feed.row.more' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button>
+  </div>
+</div>
+{% endif %}

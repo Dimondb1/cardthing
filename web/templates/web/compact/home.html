@@ -9,14 +9,14 @@
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
 <section class="cx-hero">
-  <h1 class="cx-hero__title">{% copy "compact.home.title" offers=numbers.offers_text shops=numbers.shops %}</h1>
+  <h1 class="cx-hero__title"><span class="mark section-head__mascot cx-hero__mark" aria-hidden="true"></span>{% copy "compact.home.title" offers=numbers.offers_text shops=numbers.shops %}</h1>
   <p class="cx-hero__lead">{% copy "compact.home.lead" %}</p>
   {% if numbers.checked %}<p class="cx-checked"><span class="cx-checked__dot" aria-hidden="true"></span>{% copy "compact.checked" ago=numbers.checked|ago %}</p>{% endif %}
 </section>
 {% include "web/includes/compact_strip.html" %}
 {% if sets %}
 <section class="cx-section" aria-labelledby="cx-sets-title">
-  <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title">{% copy "compact.popular.title" %}</h2><a class="cx-section__all" href="{% url 'web:search' %}">{% copy "compact.all_products" %}</a></div>
+  <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title cx-section__title--mark"><span class="mark section-head__mascot" aria-hidden="true"></span>{% copy "compact.popular.title" %}</h2><a class="cx-section__all" href="{% url 'web:search' %}">{% copy "compact.all_products" %}</a></div>
   {% include "web/includes/compact_sets.html" with show_game=True %}
 </section>
 {% endif %}

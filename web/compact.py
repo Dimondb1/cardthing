@@ -16,6 +16,8 @@ The search box and the games stay fixed to the foot of a phone (feed_dock.html).
 throughout: only the layout is borrowed.
 """
 
+import re
+
 from django.core.cache import cache
 from django.db.models import Count, Max
 from django.shortcuts import render
@@ -24,6 +26,7 @@ from django.urls import reverse
 from catalogue import offers, pricing, popularity
 from catalogue.contents import price_a_pack
 from catalogue.models import Listing, Product, ProductSet
+from catalogue.types import type_choices
 from content import service as copy
 
 from . import feed, pagecache
@@ -155,24 +158,84 @@ def strip(game=None):
     return feed.rail(game)[:STRIP]
 
 
+WORD = re.compile(r"[a-z0-9]+")
+
+
+def words_with_spans(text):
+    """[(word, start, end)]: the plain lowercase words of ``text`` and where each sits in it."""
+    found = []
+    for match in WORD.finditer(text.lower().replace("é", "e").replace("&", " and ")):
+        found.append((match.group(0), match.start(), match.end()))
+    return found
+
+
 def short_name(product):
     """A product's name in its set's list, the set's own name (and anything before it) taken off when the name holds
-    it: "Pokémon TCG: Mega Evolution Delta Reign Elite Trainer Box" is "Elite Trainer Box" under Delta Reign. The full
-    name when that would leave too little."""
+    it, however it is punctuated: "Pokémon TCG: Mega Evolution Delta Reign Elite Trainer Box" is "Elite Trainer Box"
+    under "Mega Evolution - Delta Reign", as under "Mega Evolution—Delta Reign". The set's last words alone count too
+    ("Delta Reign"). The full name when that would leave too little."""
     name = product.name
     product_set = product.product_set
     if product_set is None:
         return name
-    for words in (product_set.name, product_set.name.split("—")[-1], product_set.name.split(":")[-1]):
-        words = words.strip()
-        if len(words) < 3:
+    tokens = words_with_spans(name)
+    plain = [word for word, _start, _end in tokens]
+    tried = [product_set.name] + [part for sep in ("—", "-", ":") for part in product_set.name.split(sep)[1:]]
+    for words in tried:
+        wanted = [word for word, _start, _end in words_with_spans(words)]
+        if not wanted or (len(wanted) == 1 and len(wanted[0]) < 3):
             continue
-        at = name.lower().find(words.lower())
-        if at >= 0:
-            rest = name[at + len(words):].strip(" -–:,")
-            if len(rest) >= 3:
-                return rest
+        for at in range(len(plain) - len(wanted) + 1):
+            if plain[at:at + len(wanted)] == wanted:
+                rest = name[tokens[at + len(wanted) - 1][2]:].strip(" -–—:,")
+                if len(rest) >= 3:
+                    return rest
+                break
     return name
+
+
+def type_tiles(request, rows, chosen, all_label, base=""):
+    """The product types above a list as the feed's small tiles (feed.Tile): All first, then each type in ``rows``
+    ([(type, product pk, count)], feed.tile_picks' or feed.set_tile_rows') pictured by that product, each a link to
+    this page with the type chosen (the chosen one, marked, leads back to All), keeping the other choices. One query
+    for the products."""
+    rows = [row for row in rows if row[0] in feed.TYPE_LABELS][:feed.TILES_SHOWN]
+    products = Product.objects.active().in_bulk([pk for _kind, pk, _n in rows]) if rows else {}
+
+    def link(kind):
+        params = request.GET.copy()
+        for name in ("page", "pane", "tab", "type"):
+            params.pop(name, None)
+        if kind:
+            params["type"] = kind
+        return "?" + params.urlencode() if params else (base or request.path)
+
+    tiles = [feed.Tile(feed.ALL, all_label, None, link(""), not chosen)]
+    for kind, pk, _n in rows:
+        product = products.get(pk)
+        if product is None:
+            continue
+        current = kind == chosen
+        tiles.append(feed.Tile(kind, feed.TYPE_LABELS[kind], product, link("" if current else kind), current))
+    return tiles
+
+
+def in_game_order(game, rows):
+    """``rows`` ([(type, ...)]) in the game's own order of types (catalogue.types), as its players list them."""
+    order = [code for code, _label in type_choices(game.slug)]
+    return sorted(rows, key=lambda row: order.index(row[0]) if row[0] in order else len(order))
+
+
+def list_tiles(request, game, chosen):
+    """type_tiles for a list page (views._browse): the types of ``game``, or of every game."""
+    picks = feed.tile_picks()
+    rows = picks["games"].get(game.pk, []) if game is not None else picks["all"]
+    return type_tiles(request, rows, chosen, copy.get("compact.types.all", store=copy.for_request(request)))
+
+
+def in_stock_asked(request):
+    """Whether the In stock switch is on in the address (``?in_stock=on``, as the filter form sends it)."""
+    return bool(request.GET.get("in_stock"))
 
 
 def product_rows(products):
@@ -219,13 +282,14 @@ def game_page(request, game, extra):
     })
 
 
-def set_page(request, product_set, extra, types):
-    """A set's page in the compact layout: its numbers, its types as chips (views.set_types) and its products as rows.
-    ``extra``: its meta and structured data."""
+def set_page(request, product_set, extra):
+    """A set's page in the compact layout: the numbers, its types as small tiles pictured by its own products, an In
+    stock switch, and its products as rows. ``extra``: its meta and structured data."""
     products = (Product.objects.for_lists().filter(product_set=product_set)
                 .prefetch_related(offers.buyable_prefetch()))
     chosen = request.GET.get("type", "")
-    if chosen in Product.Type.values:
+    chosen = chosen if chosen in Product.Type.values else ""
+    if chosen:
         products = products.filter(product_type=chosen)
     rows = product_rows(products)
     for product, _summary in rows:
@@ -239,16 +303,25 @@ def set_page(request, product_set, extra, types):
             each = pack_price(best.shown_price, product.product_type, product.packs_inside)
             if each is not None and (totals["pack"] is None or each < totals["pack"]):
                 totals["pack"] = each
+    only_in_stock = in_stock_asked(request)
+    if only_in_stock:
+        rows = [(product, summary) for product, summary in rows
+                if summary.best is not None and summary.best.availability == Listing.Availability.IN_STOCK]
     cover = next((product for product, _ in rows if product.image_src), None)
+    store = copy.for_request(request)
     return render(request, "web/compact/set.html", {
         **extra,
         "game": product_set.game,
         "product_set": product_set,
+        "numbers": numbers(),
         "rows": rows,
         "totals": totals,
         "cover": cover,
-        "types": types,
-        "type_chosen": chosen in Product.Type.values,
+        "tiles": type_tiles(request, in_game_order(product_set.game, feed.set_tile_rows(product_set)), chosen,
+                            copy.get("compact.types.all", store=store), base=product_set.get_absolute_url()),
+        "type_chosen": chosen,
+        "type_keep": [("type", chosen)],
+        "in_stock_on": only_in_stock,
         "dock": dock(request, product_set.game),
     })
 

@@ -5362,6 +5362,26 @@ the new home page; untick to go back. Staff see it any time with
   In stock first, cheapest a pack first, then pre-orders, then what no shop
   has.
 - Search and every other list draw their products as the same rows.
+- Every page but the home page carries one small line under the header, as
+  the simpler site does: "14,128 prices in stock at 95 UK shops · Checked 14
+  minutes ago" (`compact.numbers`).
+- Above every list (a set's products, search, All products, a game's
+  filtered list) the product types sit as the feed's small tiles
+  (`compact.type_tiles`, `compact_tiles.html`): All first, then each type
+  pictured by a product of its kind (on a set's page, by one of the set's
+  own, `feed.set_tile_rows`), the chosen one marked and leading back to All;
+  the owner, 9 Nov 2026: "product types as icons above". Under them, at the
+  right, an In stock switch (`compact_switch.html`, `?in_stock=on`, sent as
+  it is flicked and carrying the other choices) keeps only what a shop has
+  now ("I also want a in stock slider"); a game's filtered list, which has
+  the stock tabs, has no switch. The quick filters and the folded panel's
+  own In stock toggle give way to them.
+- A product's name in its set's list drops the set's own name however it is
+  punctuated ("Mega Evolution - Delta Reign" against "Mega Evolution Delta
+  Reign Booster Box": `compact.short_name` matches words, not characters).
+- Small headings and tight rows; the raptor marks stay on the headline, on
+  Today's best deals (the hunting raptor) and on Sets people want now (the
+  owner: "still have the fun ripraptor icons in some respect").
 - The search box and the games stay fixed to the foot of a phone, as the
   feed's. Sets are a row each on a phone, tiles from a tablet up; product rows
   go two across on a desktop.

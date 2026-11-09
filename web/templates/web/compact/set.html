@@ -5,24 +5,21 @@
 {% block page_class %}page--feed page--compact{% endblock %}
 
 {% block content %}
-{# A set's page in the compact layout (web/compact.py): its numbers, its types as chips (views.set_types, plain links), then each product as a row, in stock first. #}
+{# A set's page in the compact layout (web/compact.py): the numbers, back to the game's sets, the set's picture and figures, its types as small tiles, the In stock switch, then each product as a row, in stock first. #}
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
+{% include "web/includes/compact_status.html" %}
 <p class="cx-back"><a href="{{ game.get_absolute_url }}"><span aria-hidden="true">← </span>{% copy "compact.set.back" game=game.display_short %}</a></p>
 <header class="cx-sethead">
-  {% if cover %}<span class="cx-sethead__pic">{% product_image cover "tile" %}</span>{% endif %}
+  <span class="cx-sethead__pic">{% if cover %}{% product_image cover "tile" %}{% endif %}</span>
   <div class="cx-sethead__text">
     <h1 class="cx-sethead__title">{{ product_set.name }}</h1>
     <p class="cx-sethead__meta">{% copy_count "browse.count" totals.products %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy_count "browse.game.set_stock" totals.in_stock %}{% if totals.pack %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span><span class="cx-sethead__pack">{% copy "compact.set.from_pack" each=totals.pack|gbp %}</span>{% endif %}</p>
     {% if set_facts %}<p class="cx-sethead__facts">{% for fact in set_facts %}{{ fact }}{% if not forloop.last %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% endfor %}</p>{% endif %}
   </div>
 </header>
-{% if types %}
-<nav class="cx-types" aria-label="{% copy 'browse.set.types_title' %}">
-  <a class="chip" href="{{ product_set.get_absolute_url }}"{% if not type_chosen %} aria-current="true"{% endif %}>{% copy "compact.types.all" %}</a>
-  {% for item in types %}<a class="chip" href="{{ item.url }}"{% if item.active %} aria-current="true"{% endif %}>{{ item.label }}</a>{% endfor %}
-</nav>
-{% endif %}
+{% include "web/includes/compact_tiles.html" %}
+{% include "web/includes/compact_switch.html" with keep=type_keep %}
 {% if rows %}
 <ul class="crows">{% for product, summary in rows %}{% include "web/includes/compact_row.html" %}{% endfor %}</ul>
 {% else %}

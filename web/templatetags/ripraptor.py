@@ -116,6 +116,14 @@ def short_date(value):
     return date_format(value, "j M Y")
 
 
+@register.filter
+def stamp(value):
+    """A moment as the written answers give it, in UK time: "9 Nov 2026 at 14:05" (web/answers.py)."""
+    from web.answers import stamp as written
+
+    return written(value) if value else ""
+
+
 @register.simple_tag(takes_context=True)
 def copy_count(context, key, count, shown=None, **values):
     """Pick ``key.one`` or ``key.other`` and fill in {count}, written as ``shown`` when given (compact_count)."""

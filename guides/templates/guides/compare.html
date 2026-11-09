@@ -1,0 +1,64 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor static %}
+{% block page_class %}page--guide{% endblock %}
+{% block content %}
+{# How to compare sealed TCG prices in the UK (guides/compare.py, guides/views.compare_guide): the questions and their answers from Site wording, each with what today's prices say and one real example read from the catalogue. Laid out as the guides written in Admin are (guide.html). #}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol><li><a href="{% url 'web:guides' %}">{% copy "guides.title" %}</a></li></ol>
+</nav>
+
+<article class="guide" aria-labelledby="guide-title">
+  <header class="guide-head">
+    <h1 id="guide-title" class="page-title">{{ title }}</h1>
+    <p class="prose--lead guide-head__answer">{{ answer }}</p>
+    {% if checked %}<p class="guide-head__meta">{% copy "guides.compare.checked" checked=checked %}</p>{% endif %}
+  </header>
+
+  <nav class="guide-jump" aria-labelledby="jump-title">
+    <h2 id="jump-title" class="guide-jump__title">{% copy "guides.jump" %}</h2>
+    <ol class="guide-jump__list">{% for section in sections %}<li><a href="#{{ section.anchor }}">{{ section.question }}</a></li>{% endfor %}</ol>
+  </nav>
+
+  {% for section in sections %}
+  <section class="guide-section" id="{{ section.anchor }}" aria-labelledby="{{ section.anchor }}-title">
+    <h2 id="{{ section.anchor }}-title" class="guide-section__title">{{ section.question }}</h2>
+    <div class="guide-short">
+      <p class="eyebrow">{% copy "guides.short" %}</p>
+      <div class="guide-short__text"><p>{{ section.short }}</p></div>
+    </div>
+    <div class="prose guide-body">
+      <p>{{ section.body }}</p>
+      {% if section.numbers %}<p>{{ section.numbers }}</p>{% endif %}
+      {% if section.anchor == "rrp" %}<p><a href="{% url 'web:fair_price' %}">{% copy "guides.checker.title" %}</a></p>{% endif %}
+    </div>
+    {% if section.live %}
+    <div class="guide-box guide-live">
+      <p class="eyebrow">{% copy "guides.compare.live" %}</p>
+      <p>{{ section.live }}</p>
+    </div>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  <footer class="guide-foot">
+    {% if games %}
+    <section class="guide-games" aria-labelledby="guide-games-title">
+      <h2 id="guide-games-title" class="guide-foot__title">{% copy "guides.compare.games" %}</h2>
+      <ul class="guide-games__list">{% for item in games %}<li><a href="{{ item.url }}">{{ item.label }}</a></li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+    <p class="guide-foot__again">{% copy "guides.come_back" %}</p>
+    <p class="small-print">{% copy "guides.commission" %}</p>
+    <section class="guide-share" aria-labelledby="share-title" data-guide-share data-share-url="{{ share_url }}" data-share-title="{{ title }}">
+      <h2 id="share-title" class="guide-foot__title">{% copy "guides.share" %}</h2>
+      <p class="guide-share__buttons">
+        <a class="button button--quiet button--small" href="https://wa.me/?text={{ title|urlencode }}%20{{ share_url|urlencode }}" target="_blank" rel="noopener">{% copy "guides.share.whatsapp" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+        <button class="button button--quiet button--small" type="button" data-copy-link hidden>{% copy "guides.share.copy" %}</button>
+      </p>
+      <p class="guide-share__status" role="status" data-copy-status data-copied="{% copy 'guides.share.copied' %}"></p>
+    </section>
+    <p class="guide-feedback__mistake">{% copy "guides.mistake" %} <a href="{% url 'web:contact' %}">{% copy "guides.mistake.link" %}</a></p>
+  </footer>
+</article>
+{% endblock %}
+{% block scripts %}<script nonce="{{ csp_nonce }}" src="{% static 'js/checker.js' %}" defer></script>{% endblock %}

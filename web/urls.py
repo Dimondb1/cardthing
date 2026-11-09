@@ -64,6 +64,8 @@ urlpatterns = [
     path("shops/", views.shops, name="shops"),
     path("guides/", guides.hub, name="guides"),
     path("guides/fair-price/", guides.fair_price, name="fair_price"),
+    # The guide built from live prices (guides/compare.py), before the guides written in Admin.
+    path("guides/compare-sealed-tcg-prices-uk/", guides.compare_guide, name="guide_compare"),
     path("guides/<slug:slug>/", guides.guide, name="guide"),
     path("guides/<slug:slug>/checklist/", guides.checklist, name="guide_checklist"),
     path("guides/<slug:slug>/feedback/", guides.feedback, name="guide_feedback"),

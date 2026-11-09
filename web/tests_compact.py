@@ -102,8 +102,11 @@ class SwitchTests(CompactCase):
 class HomeTests(CompactCase):
     def test_the_home_page_leads_with_the_numbers_then_the_sets_people_want(self):
         html = self.page("/")
-        self.assertIn('<h1 class="cx-hero__title"><span class="mark section-head__mascot cx-hero__mark" aria-hidden="true">'
-                      '</span>4 sealed prices in stock at 2 UK shops.</h1>', html)
+        self.assertIn('<h1 id="home-title" class="cx-hero__title"><span class="mark section-head__mascot cx-hero__mark" '
+                      'aria-hidden="true"></span><span class="cx-hero__phone">4 sealed prices in stock at 2 UK shops.'
+                      '</span> <span class="dt-intro__title">Find your cards. Pay less.</span></h1>', html)
+        # One heading on the page, whatever the screen (the owner, 9 Nov 2026: the home page had two).
+        self.assertEqual(html.count("<h1"), 1)
         self.assertIn('class="hunt-mark"', html)   # the hunting raptor on Today's best deals
         self.assertIn("Checked 1 hour ago", html)   # make_listing checks an hour back
         self.assertNotIn("cx-status", html)   # the headline says it; the other pages carry the small line
@@ -141,13 +144,14 @@ class DeskTests(CompactCase):
 
     def test_the_desktop_intro_says_what_the_site_does_with_the_live_numbers(self):
         html = self.page("/")
-        self.assertIn('<h1 id="dt-intro-title" class="dt-intro__title">Find your cards. Pay less.</h1>', html)
-        self.assertIn("Compare sealed TCG prices from UK retailers. Delivery included, cheapest first.", html)
+        self.assertIn('<span class="dt-intro__title">Find your cards. Pay less.</span></h1>', html)
+        self.assertIn('<p class="dt-intro__lead">Compare sealed TCG prices from UK retailers. Delivery included, '
+                      'cheapest first.</p>', html)
         self.assertIn('<span class="dt-facts__number">4</span> prices in stock', html)
         self.assertIn(f'<a class="dt-facts__link" href="{reverse("web:shops")}"><span class="dt-facts__number">2</span>'
                       ' UK shops compared</a>', html)
-        # The phone's hero is still there, for the phone.
-        self.assertIn('<section class="cx-hero cx-hero--home">', html)
+        # The phone's numbers are still there, for the phone, in the same heading.
+        self.assertIn('<span class="cx-hero__phone">4 sealed prices in stock at 2 UK shops.</span>', html)
 
     def test_the_browse_bar_offers_only_choices_the_lists_filter_by(self):
         html = self.page("/")
@@ -244,19 +248,25 @@ class DeskTests(CompactCase):
     def test_phone_parts_are_unchanged_and_desktop_parts_hidden_below_64rem(self):
         text = static_text("css/site.css")
         block = text[text.index("/* The home page on a desktop screen"):]
-        self.assertIn(".dt-intro, .dt-tabs, .dt-more, .cx-deal__where, .cx-deal__delivered, .cx-deal__shop, "
-                      ".cx-deal__cta, .dt-panel--game { display: none; }", block)
-        self.assertIn("@media (min-width: 64rem) {\n  .cx-hero--home { display: none; }", block)
+        self.assertIn(".dt-intro__title, .dt-intro__lead, .dt-facts, .dt-browse, .dt-tabs, .dt-more, .cx-deal__where, "
+                      ".cx-deal__delivered, .cx-deal__shop, .cx-deal__cta, .dt-panel--game { display: none; }", block)
+        desktop = block[block.index("@media (min-width: 64rem) {"):]
+        self.assertIn(".cx-hero--home .cx-hero__mark, .cx-hero--home .cx-hero__phone, .cx-hero--home .cx-hero__lead, "
+                      ".cx-hero--home .cx-checked { display: none; }", desktop)
 
 
 class GamePageTests(CompactCase):
     def test_a_game_lists_its_sets_newest_first_and_links_every_product(self):
         html = self.page(self.pokemon.get_absolute_url())
-        self.assertIn('<h1 class="cx-hero__title">Pokémon</h1>', html)
-        self.assertIn("3 in stock across 2 sets at 2 UK shops.", html)
+        # The heading says what the page compares, and the line under it gives the counts its description gives
+        # (web/answers.py): products in stock, the shops with one, every product listed and its sets.
+        self.assertIn('<h1 class="cx-hero__title">Pokémon sealed product prices in the UK</h1>', html)
+        self.assertIn('<p class="cx-hero__lead">3 sealed Pokémon products in stock at 2 UK shops, out of 5 listed '
+                      'across 2 sets. Every price includes UK delivery.</p>', html)
         self.assertIn('<p class="cx-status">4 prices in stock at 2 UK shops<span aria-hidden="true"> · </span>'
                       '<span class="visually-hidden">, </span>Checked 1 hour ago</p>', html)
-        self.assertLess(html.index("Mega Evolution—Delta Reign"), html.index("Surging Sparks"))
+        sets = section(html, '<ul class="cx-sets">', "</ul>")
+        self.assertLess(sets.index("Mega Evolution—Delta Reign"), sets.index("Surging Sparks"))
         self.assertIn('href="/search/?game=pokemon">All Pokémon products</a>', html)
         self.assertIn('placeholder="Search Pokémon"', html)
         self.assertIn('<link rel="canonical" href="http://testserver/games/pokemon/">', html)
@@ -281,9 +291,15 @@ class SetPageTests(CompactCase):
     def test_a_set_lists_its_products_as_rows_in_stock_first(self):
         html = self.page(self.reign.get_absolute_url())
         self.assertIn('<h1 class="cx-sethead__title">Mega Evolution—Delta Reign</h1>', html)
-        self.assertIn("4 products", html)
-        self.assertIn("2 in stock", html)
-        self.assertIn('<span class="cx-sethead__pack">From £5.00 a pack</span>', html)
+        # The whole set says what it holds in a sentence or two (hubs.intro), so the small line gives the price a
+        # pack alone; a narrowed list keeps the counts of what it shows.
+        self.assertIn('<p class="cx-setintro">4 sealed products compared across 2 UK shops, 2 in stock now. Cheapest '
+                      'in stock: <a href="' + self.etb.get_absolute_url() + '">', html)
+        self.assertIn('<p class="cx-sethead__meta"><span class="cx-sethead__pack">From £5.00 a pack</span></p>', html)
+        narrowed = self.page(self.reign.get_absolute_url(), type="booster_box")
+        self.assertNotIn("cx-setintro", narrowed)
+        self.assertIn("1 product", narrowed)
+        self.assertIn("1 in stock", narrowed)
         self.assertIn(f'href="{self.pokemon.get_absolute_url()}"><span aria-hidden="true">← </span>All Pokémon sets</a>', html)
         # The set's own name comes off each product's: in stock first, the cheapest a pack first (the box at £5.00 a
         # pack before the ETB at £7.78), then the pre-order, then what no shop has.

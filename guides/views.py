@@ -28,6 +28,7 @@ from content import service as copy
 from inbox import service as inbox
 
 from . import checker, state, text
+from . import compare as compare_data
 from .models import Guide, Section, Vote
 
 CHOICES = 8          # products offered to choose from on the checker
@@ -123,16 +124,13 @@ def shown_sections(request, guide):
 def guide_json(request, guide, page_url):
     from web.views import breadcrumbs_json
 
-    home = request.build_absolute_uri("/")
     image = (request.build_absolute_uri(guide.share_image.url) if guide.share_image
              else request.build_absolute_uri(static("img/share.png")))
-    organisation = {"@type": "Organization", "name": settings.RIPRAPTOR_SITE_NAME, "url": home,
-                    "logo": {"@type": "ImageObject", "url": request.build_absolute_uri(static("img/logo.png"))}}
     article = {
         "@context": "https://schema.org", "@type": "Article", "@id": page_url + "#article",
         "headline": guide.title[:110], "description": guide.one_line_answer, "url": page_url,
         "mainEntityOfPage": page_url, "inLanguage": "en-GB", "image": image,
-        "author": organisation, "publisher": organisation,
+        "author": organisation(request), "publisher": organisation(request),
     }
     if guide.published_at:
         article["datePublished"] = timezone.localtime(guide.published_at).date().isoformat()
@@ -158,6 +156,153 @@ def staff_notes(request, guide, sections):
     if guide.next_review and guide.next_review < today:
         notes.append(words(request, "guides.staff.review_due", day=f"{guide.next_review:%-d %B %Y}"))
     return notes
+
+
+def organisation(request):
+    return {"@type": "Organization", "name": settings.RIPRAPTOR_SITE_NAME, "url": request.build_absolute_uri("/"),
+            "logo": {"@type": "ImageObject", "url": request.build_absolute_uri(static("img/logo.png"))}}
+
+
+def linked(sentence, marker, product):
+    """``sentence`` as safe HTML with ``marker`` (standing in for the product's name) made a link to its page."""
+    from django.utils.html import escape, format_html
+    from django.utils.safestring import mark_safe
+
+    link = format_html('<a href="{}" data-compare="guide_example">{}</a>', product.get_absolute_url(), product.name)
+    return mark_safe(escape(sentence).replace(escape(marker), link))
+
+
+def compare_sections(request, found):
+    """The comparing guide's sections as the page shows them: each question with its short answer and detail from
+    Site wording, then what today's prices say (``numbers``, plain text) and one real example (``live``, safe HTML
+    with the product linked), each only when the catalogue has it (guides/compare.py)."""
+    from web.answers import stamp
+    from web.hubs import tidy_stops
+    from web.templatetags.ripraptor import gbp
+
+    marker = "\x00product\x00"
+
+    def say(key, **values):
+        return tidy_stops(words(request, f"guides.compare.{key}", **values))
+
+    def delivery_words(cost):
+        return say("delivery.charge", charge=gbp(cost)) if cost else say("delivery.free")
+
+    numbers, live = {}, {}
+    delivery = found["delivery"]
+    charges = []
+    if delivery["free"]:
+        charges.append(say("delivered.free", free=delivery["free"], shops=delivery["shops"]))
+    if delivery["low"] is not None:
+        charges.append(say("delivered.one" if delivery["low"] == delivery["high"] else "delivered.range",
+                           low=gbp(delivery["low"]), high=gbp(delivery["high"])))
+    if charges:
+        numbers["delivered"] = " ".join(charges)
+    if found["delivered"]:
+        example = found["delivered"]
+        low, best = example["low"], example["best"]
+        live["delivered"] = linked(say(
+            "delivered.live", product=marker, low_shop=low["shop"], low_item=gbp(low["price"]),
+            low_delivery=delivery_words(low["delivery"]), low_delivered=gbp(low["delivered"]), best_shop=best["shop"],
+            best_item=gbp(best["price"]), best_delivery=delivery_words(best["delivery"]),
+            best_delivered=gbp(best["delivered"]), saving=gbp(example["saving"])), marker, example["product"])
+    elif found["plain"]:
+        best = found["plain"]["best"]
+        live["delivered"] = linked(say(
+            "delivered.plain", product=marker, shop=best["shop"], item=gbp(best["price"]),
+            delivery=delivery_words(best["delivery"]), delivered=gbp(best["delivered"])), marker, found["plain"]["product"])
+    if delivery["lines"] and delivery["common"] is not None:
+        numbers["threshold"] = say("threshold.numbers", lines=delivery["lines"], shops=delivery["shops"],
+                                   common=gbp(delivery["common"]))
+    if found["threshold"]:
+        offer = found["threshold"]["offer"]
+        live["threshold"] = linked(say(
+            "threshold.live", product=marker, shop=offer["shop"], item=gbp(offer["price"]),
+            gap=gbp(found["threshold"]["gap"]), line=gbp(offer["line"]), delivery=delivery_words(offer["delivery"]),
+            delivered=gbp(offer["delivered"])), marker, found["threshold"]["product"])
+    stock = found["stock"]
+    if stock["listed"]:
+        lines = [say("stock.numbers", in_stock=f"{stock['in_stock']:,}", listed=f"{stock['listed']:,}",
+                     preorder=f"{stock['preorder']:,}")]
+        if stock["lottery"]:
+            lines.append(say(f"stock.lottery.{'one' if stock['lottery'] == 1 else 'other'}", count=f"{stock['lottery']:,}"))
+        numbers["stock"] = " ".join(lines)
+    if found["preorder"]:
+        offer = found["preorder"]
+        live["stock"] = linked(say(
+            "stock.live", product=marker, date=f"{offer.product.product_set.release_date:%-d %B %Y}",
+            price=gbp(offer.delivered_price), shop=offer.retailer.name), marker, offer.product)
+    if found["packs"]:
+        packs = found["packs"]
+        box, pack = packs["box"].listing, packs["pack"]
+        live["packs"] = linked(say(
+            "packs.live", product=marker, packs=packs["packs"], price=gbp(box.delivered_price),
+            shop=box.retailer.name, each=gbp(packs["each"]), pack=pack.product.name, single=gbp(packs["single"]),
+            pack_shop=pack.retailer.name), marker, box.product)
+    if found["rrp"]:
+        example = found["rrp"]
+        best, rrp = example["best"], example["rrp"]
+        percent = round(abs(best["delivered"] - rrp) / rrp * 100)
+        difference = (say("rrp.same") if not percent
+                      else say("rrp.under" if best["delivered"] < rrp else "rrp.over", percent=percent))
+        sentence = say("rrp.live", product=marker, rrp=gbp(rrp), price=gbp(best["delivered"]), shop=best["shop"],
+                       difference=difference)
+        if example["low"] is not None and example["high"] is not None:
+            sentence += " " + say("rrp.history", days=compare_data.HISTORY_DAYS, low=gbp(example["low"]),
+                                  high=gbp(example["high"]))
+        live["rrp"] = linked(sentence, marker, example["product"])
+    if found["language"]:
+        example = found["language"]
+        english, japanese = example["english"], example["japanese"]
+        name = example["game"].display_short
+        numbers["language"] = say("language.numbers", count=f"{example['count']:,}", listed=f"{example['listed']:,}",
+                                  game=name)
+        live["language"] = linked(say(
+            "language.live", game=name, product=marker, price=gbp(english.delivered_price),
+            shop=english.retailer.name, japanese=japanese.product.name, japanese_price=gbp(japanese.delivered_price),
+            japanese_shop=japanese.retailer.name), marker, english.product)
+    markets = found["marketplaces"]
+    numbers["marketplaces"] = say("marketplaces.numbers", feedback=markets["feedback"], ratings=markets["ratings"])
+    if markets["ebay"] or markets["amazon"]:
+        numbers["marketplaces"] += " " + say("marketplaces.now", ebay=f"{markets['ebay']:,}",
+                                             amazon=f"{markets['amazon']:,}")
+    return {
+        "sections": [{"anchor": name, "question": say(f"{name}.q"), "short": say(f"{name}.short"),
+                      "body": say(f"{name}.body"), "numbers": numbers.get(name, ""), "live": live.get(name, "")}
+                     for name in compare_data.SECTIONS],
+        "checked": stamp(found["checked"]) if found["checked"] else "",
+    }
+
+
+@require_GET
+def compare_guide(request):
+    """How to compare sealed TCG prices in the UK (guides/compare.py): open while the Guides pages are."""
+    from web import feed
+    from web.views import breadcrumbs_json, ld_json
+
+    open_or_404(request)
+    found = compare_data.examples()
+    shown = compare_sections(request, found)
+    title, answer = words(request, "guides.compare.title"), words(request, "guides.compare.answer")
+    page_url = request.build_absolute_uri(reverse("web:guide_compare"))
+    article = {
+        "@context": "https://schema.org", "@type": "Article", "@id": page_url + "#article",
+        "headline": title[:110], "description": answer, "url": page_url, "mainEntityOfPage": page_url,
+        "inLanguage": "en-GB", "image": request.build_absolute_uri(static("img/share.png")),
+        "author": organisation(request), "publisher": organisation(request),
+        "datePublished": compare_data.PUBLISHED.isoformat(),
+        "dateModified": compare_data.modified(found).isoformat(),
+    }
+    crumbs = breadcrumbs_json(request, [(words(request, "guides.title"), reverse("web:guides")),
+                                        (title, reverse("web:guide_compare"))])
+    return render(request, "guides/compare.html", {
+        **shown,
+        "title": title, "answer": answer,
+        "games": feed.games_bar(feed.games_with_products()),
+        "meta_title": title, "meta_description": answer, "canonical_url": page_url,
+        "structured_json": ld_json([article, crumbs]),
+        "share_url": page_url,
+    })
 
 
 @require_GET

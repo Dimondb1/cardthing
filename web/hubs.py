@@ -19,6 +19,7 @@ from django.utils.html import escape, format_html
 from django.utils.safestring import mark_safe
 
 from catalogue.models import Listing, Product, stale_cutoff
+from catalogue.pricing import MARKETPLACES
 from catalogue.types import plural_words
 
 # Search engines show about this many characters of a title before the site name, and of a description.
@@ -33,6 +34,9 @@ class HubStats:
     products: int = 0           # active products in the hub
     in_stock: int = 0           # of those, how many a UK shop has in stock now
     preorder: int = 0           # how many no shop has in stock but one takes pre-orders for now
+    # Shops are UK shops, never eBay or Amazon: the count the home page and Shops we compare give (pricing.
+    # shops_compared), so "UK shops" means one thing wherever it is said. A product only an eBay or Amazon seller has
+    # is still in stock (in_stock), with no shop counted for it.
     shops: int = 0              # shops with a current price for any of them (in stock, on pre-order or sold out)
     stock_shops: int = 0        # shops with one of them in stock now
     preorder_shops: int = 0     # shops taking pre-orders for one of them now
@@ -79,7 +83,8 @@ def hub_stats(**scope):
     # whose only listing is stale is not one the page compares. ``listed`` tells "no shop lists it" apart from
     # "no shop has a current price for it".
     current = Q(last_checked__gte=stale_cutoff()) & ~Q(sanity=Listing.Sanity.EXCLUDED)
-    counted = Listing.objects.live().filter(product__is_active=True, **listing_scope).order_by().aggregate(
+    counted = (Listing.objects.live().filter(product__is_active=True, **listing_scope)
+               .exclude(retailer__source_type__in=MARKETPLACES).order_by()).aggregate(
         listed=Count("retailer", distinct=True),
         shops=Count("retailer", distinct=True, filter=current),
         stock_shops=Count("retailer", distinct=True, filter=current & Q(availability=Listing.Availability.IN_STOCK)),
@@ -172,13 +177,25 @@ def money(value):
     return gbp(value)
 
 
+def site_room():
+    """How long a title may be and still be followed by " | RipRaptor" (the with_site_name filter drops the name from
+    a longer one)."""
+    from django.conf import settings
+
+    from .templatetags.ripraptor import TITLE_MAX
+
+    return min(TITLE_LIMIT, TITLE_MAX - len(f" | {settings.RIPRAPTOR_SITE_NAME}"))
+
+
 def game_meta(words, game, stats):
-    """(title, description) for a game page."""
+    """(title, description) for a game page. The title names as many kinds as fit with the site's name after it, so
+    every game's title carries the name (the owner, 9 Nov 2026: Pokémon's was a character too long for it and Magic's
+    was not)."""
     name = game.display_short
-    if stats.in_stock and stats.cheapest is not None:
+    if stats.in_stock and stats.cheapest is not None and stats.stock_shops:
         types = words.types(game.slug, stats.stocked_types)
         title = fit_title(
-            lambda chosen: words("meta.game.title", game=name, types=words.join(chosen)), types,
+            lambda chosen: words("meta.game.title", game=name, types=words.join(chosen)), types, limit=site_room(),
             short=lambda chosen: words("meta.game.title_short", game=name, types=words.join(chosen)),
         ) if types else words("meta.game.title_plain", game=name)
         description = words(
@@ -324,7 +341,7 @@ def set_meta(words, product_set, stats, upcoming, date=""):
     values = {"game": game.display_short}
     # Descriptions give the code too: they are not cut for it, so there is room.
     described = {"set": labels[0], **values}
-    if stats.in_stock and stats.cheapest is not None:
+    if stats.in_stock and stats.cheapest is not None and stats.stock_shops:
         types = words.types(game.slug, stats.stocked_types)
         if types:
             title = set_title(words, labels, ("meta.set.title", "meta.set.title_short"), types, **values)
@@ -379,10 +396,16 @@ def intro(words, stats, date="", undated=False, brief=False):
     if not stats.in_stock:
         line = waiting_line(words, stats, products)
         return escape(f"{line} {words('browse.hub.no_date')}" if undated else line)
-    shops = words.count("browse.hub.shops", stats.shops)
-    if brief:
-        return escape(words("browse.hub.brief", products=products, shops=shops))
-    first = words("browse.hub.intro", products=products, shops=shops, count=f"{stats.in_stock:,}")
+    if not stats.shops:
+        # In stock, but only with an eBay or Amazon seller: no UK shop to count.
+        first = words("browse.hub.intro_market", products=products, count=f"{stats.in_stock:,}")
+        if brief:
+            return escape(first)
+    else:
+        shops = words.count("browse.hub.shops", stats.shops)
+        if brief:
+            return escape(words("browse.hub.brief", products=products, shops=shops))
+        first = words("browse.hub.intro", products=products, shops=shops, count=f"{stats.in_stock:,}")
     if stats.cheapest is None:
         return escape(first)
     # The product's name goes in as a marker, so the sentence is escaped whole and the name then becomes a link.

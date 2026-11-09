@@ -116,8 +116,9 @@ class PageSitemap(Sitemap):
 
 
 class GuideSitemap(Sitemap):
-    """The Guides page, the Fair Price Checker and each published guide, once one is published (before that they
-    are not public). A guide's checklist is a printout of it, so it is left out."""
+    """The Guides page, the Fair Price Checker, the guide built from live prices (guides/compare.py) and each
+    published guide, once one is published (before that they are not public). A guide's checklist is a printout of
+    it, so it is left out."""
 
     def items(self):
         from guides import state
@@ -126,12 +127,20 @@ class GuideSitemap(Sitemap):
         if not state.current()["live"]:
             return []   # read from the cache: no query before a guide is published
         guides = list(Guide.objects.filter(is_published=True).only("slug", "updated_at"))
-        return ["web:guides", "web:fair_price", *guides] if guides else []
+        return ["web:guides", "web:fair_price", "web:guide_compare", *guides] if guides else []
 
     def location(self, item):
         return reverse(item) if isinstance(item, str) else item.get_absolute_url()
 
     def lastmod(self, item):
+        if item == "web:guide_compare":
+            # The day its examples' prices were last checked (from its kept copy: no query when it is warm).
+            from datetime import datetime, time
+
+            from guides import compare
+
+            day = compare.modified(compare.examples())
+            return timezone.make_aware(datetime.combine(day, time.min))
         return None if isinstance(item, str) else item.updated_at
 
 

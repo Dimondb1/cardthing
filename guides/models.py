@@ -15,7 +15,7 @@ from django.urls import reverse
 
 # Addresses under /guides/ that are pages of their own, never a guide's.
 RESERVED = {"fair-price", "gift-finder", "scalper-watch", "feedback", "pokemon", "magic", "one-piece", "lorcana",
-            "yu-gi-oh"}
+            "yu-gi-oh", "compare-sealed-tcg-prices-uk"}
 
 
 def not_reserved(slug):

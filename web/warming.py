@@ -125,6 +125,16 @@ def warm_pages(fresh=False, only=None):
     # Each game's own page, built whole and kept (web.pagecache), so the tap from the home page never waits.
     from web import pagecache
 
+    # The comparing guide's live examples (guides/compare.py), once their kept copy has gone, while the Guides pages
+    # are open: no reader waits for them either.
+    from django.core.cache import cache
+
+    from guides import compare, state
+
+    if pagecache.on() and state.current()["live"] and cache.get(compare.KEY) is None:
+        started = time.monotonic()
+        compare.examples(fresh=True)
+        took["guide examples"] = time.monotonic() - started
     for path in pagecache.game_paths(games):
         if (only is not None and f"page:{path}" not in only) or (not fresh and pagecache.has(path)):
             continue

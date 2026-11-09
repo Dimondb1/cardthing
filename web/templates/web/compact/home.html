@@ -5,19 +5,15 @@
 {% block page_class %}page--feed page--compact{% endblock %}
 
 {% block content %}
-{# The home page in the compact layout (web/compact.py): the numbers, today's deals in a strip, the sets people want now. The search box and the games at the foot of a phone, as the feed's (feed_dock.html). A desktop screen (from 64rem) shows its own short intro and a browse bar in place of the numbers, the deals as a grid and the sets in a tab for each game (desk); the dt- parts are hidden below it and the phone's hero above it. #}
+{# The home page in the compact layout (web/compact.py): the numbers, today's deals in a strip, the sets people want now. The search box and the games at the foot of a phone, as the feed's (feed_dock.html). A desktop screen (from 64rem) shows its own headline, line and a browse bar in place of the numbers, the deals as a grid and the sets in a tab for each game (desk); the dt- parts are hidden below it and the phone's parts of the hero above it. #}
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
-<section class="cx-hero cx-hero--home">
-  <h1 class="cx-hero__title"><span class="mark section-head__mascot cx-hero__mark" aria-hidden="true"></span>{% copy "compact.home.title" offers=numbers.offers_text shops=numbers.shops %}</h1>
+<section class="cx-hero cx-hero--home" aria-labelledby="home-title">
+  {# One heading for every screen (search engines count them): a phone shows the numbers, a desktop screen the headline, and each has its own line under it. #}
+  <h1 id="home-title" class="cx-hero__title"><span class="mark section-head__mascot cx-hero__mark" aria-hidden="true"></span><span class="cx-hero__phone">{% copy "compact.home.title" offers=numbers.offers_text shops=numbers.shops %}</span> <span class="dt-intro__title">{% copy "compact.desk.title" %}</span></h1>
   <p class="cx-hero__lead">{% copy "compact.home.lead" %}</p>
   {% if numbers.checked %}<p class="cx-checked"><span class="cx-checked__dot" aria-hidden="true"></span>{% copy "compact.checked" ago=numbers.checked|ago %}</p>{% endif %}
-</section>
-<section class="dt-intro" aria-labelledby="dt-intro-title">
-  <div class="dt-intro__text">
-    <h1 id="dt-intro-title" class="dt-intro__title">{% copy "compact.desk.title" %}</h1>
-    <p class="dt-intro__lead">{% copy "compact.desk.lead" %}</p>
-  </div>
+  <p class="dt-intro__lead">{% copy "compact.desk.lead" %}</p>
   <ul class="dt-facts">
     <li class="dt-facts__item"><span class="dt-facts__number">{{ numbers.offers_text }}</span> {% copy "compact.desk.offers" %}</li>
     <li class="dt-facts__item"><a class="dt-facts__link" href="{% url 'web:shops' %}"><span class="dt-facts__number">{{ numbers.shops }}</span> {% copy "compact.desk.shops" %}</a></li>

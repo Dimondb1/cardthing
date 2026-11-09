@@ -5,17 +5,33 @@
 {% block page_class %}page--feed page--compact{% endblock %}
 
 {% block content %}
-{# A game's page in the compact layout (web/compact.py): its numbers, its deals strip, then every set it has, newest first. #}
+{# A game's page in the compact layout (web/compact.py): what it compares in words (web/answers.py: the counts, the cheapest of each main kind in stock, each with its shop and when it was checked), its deals strip, every set it has, newest first, then the questions people ask, answered with the same figures. #}
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
 {% include "web/includes/compact_status.html" %}
 <section class="cx-hero cx-hero--game">
-  <h1 class="cx-hero__title">{{ game.name }}</h1>
-  <p class="cx-hero__lead">{% copy "compact.game.lead" in_stock=in_stock sets=sets|length shops=numbers.shops %}</p>
+  <h1 class="cx-hero__title">{% copy "browse.hub.answer.title" game=game.name %}</h1>
+  {% if stock_line %}<p class="cx-hero__lead">{{ stock_line }}</p>{% endif %}
 </section>
+{% if picks %}
+<section class="hub-answer" aria-labelledby="hub-answer-title">
+  <h2 id="hub-answer-title" class="hub-answer__title">{% copy "browse.hub.answer.cheapest" game=game.display_short %}</h2>
+  <ul class="hub-answer__list">
+    {% for pick in picks %}<li class="hub-answer__row"><span class="hub-answer__kind">{{ pick.label }}</span> <a class="hub-answer__product" href="{{ pick.listing.product.get_absolute_url }}">{{ pick.listing.product.name }}</a> <span class="hub-answer__offer"><strong class="hub-answer__price">{{ pick.listing.delivered_price|gbp }}</strong> {% copy "browse.hub.answer.price" shop=pick.listing.retailer.name %}</span> <span class="hub-answer__checked">{% copy "browse.hub.answer.checked" checked=pick.listing.last_checked|stamp %}</span></li>{% endfor %}
+  </ul>
+  <p class="hub-answer__note">{% copy "browse.hub.answer.note" %}</p>
+</section>
+{% endif %}
 {% include "web/includes/compact_strip.html" %}
 <section class="cx-section" aria-labelledby="cx-sets-title">
   <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title">{% copy "compact.game.sets" game=game.display_short %}</h2><a class="cx-section__all" href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a></div>
   {% if sets %}{% include "web/includes/compact_sets.html" %}{% else %}<p class="cx-empty">{% copy "compact.game.no_sets" %} <a href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a></p>{% endif %}
 </section>
+{% if faq %}
+<section class="hub-faq" aria-labelledby="hub-faq-title">
+  <h2 id="hub-faq-title" class="cx-section__title hub-faq__title">{% copy "browse.hub.faq.title" game=game.display_short %}</h2>
+  {% for question, answer in faq %}<div class="hub-faq__item"><h3 class="hub-faq__q">{{ question }}</h3><p class="hub-faq__a">{{ answer }}</p></div>{% endfor %}
+  {% if guides_live %}<p class="hub-faq__more"><a href="{% url 'web:guide_compare' %}">{% copy "browse.hub.answer.guide" %}</a></p>{% endif %}
+</section>
+{% endif %}
 {% endblock %}

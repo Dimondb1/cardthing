@@ -6,7 +6,7 @@
   <p class="page-intro">{% copy "guides.intro" %}</p>
 </div>
 
-{% if guides %}
+{# The guides written in Admin, then the one built from live prices (guides/compare.py). #}
 <ul class="guide-list">
   {% for item in guides %}
   <li class="guide-tile">
@@ -15,10 +15,12 @@
     <p class="guide-tile__meta">{% copy "guides.minutes" minutes=item.minutes %}{% if not item.is_published %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>Draft{% endif %}</p>
   </li>
   {% endfor %}
+  <li class="guide-tile">
+    <h2 class="guide-tile__title"><a href="{% url 'web:guide_compare' %}">{% copy "guides.compare.title" %}</a></h2>
+    <p class="guide-tile__answer">{% copy "guides.compare.answer" %}</p>
+    <p class="guide-tile__meta">{% copy "guides.compare.tile" %}</p>
+  </li>
 </ul>
-{% else %}
-<p class="guide-empty">{% copy "guides.empty" %}</p>
-{% endif %}
 
 <section class="block checker-panel" aria-labelledby="checker-title">
   <h2 id="checker-title" class="section-title">{% copy "guides.checker.title" %}</h2>

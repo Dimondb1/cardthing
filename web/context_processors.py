@@ -15,7 +15,7 @@ PRIVATE_LINK = re.compile(r"^/(?:contact/c|alerts/(?:confirm|stop|manage)|refer/
 # Product pages too: on a phone the card would sit over the buy box, and the buy box comes first.
 NO_REFER_CARD = re.compile(r"^/(?:refer|r|products|swipe|admin|alerts|drops/remind|contact|list-your-shop|dashboard)/")
 
-GUIDE_PAGES = ("guides", "guide", "guide_checklist", "fair_price")
+GUIDE_PAGES = ("guides", "guide", "guide_compare", "guide_checklist", "fair_price")
 
 
 def site(request):

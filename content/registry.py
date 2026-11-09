@@ -596,8 +596,6 @@ ENTRIES = [
           "Heading of the list of sets on the compact home page, the ones people look at and buy most first."),
     Entry("compact.all_products", B, "Compact layout: all products link", "All products",
           "Beside the home page's list of sets: opens every product, in stock first."),
-    Entry("compact.game.lead", T, "Compact layout: game page line", "{in_stock} in stock across {sets} sets at {shops} UK shops.",
-          "Under a game's name on its compact page.", placeholders=("in_stock", "sets", "shops")),
     Entry("compact.game.sets", H, "Compact layout: a game's sets heading", "{game} sets",
           "Heading of the list of a game's sets, newest first.", placeholders=("game",)),
     Entry("compact.game.all_products", B, "Compact layout: a game's products link", "All {game} products",
@@ -1195,6 +1193,133 @@ ENTRIES = [
     Entry("browse.hub.shops.other", T, "Hub shop count (more than one)", "{count} UK shops",
           "In the line under the heading of a game or set page: shops listing any of its products.",
           placeholders=("count",)),
+    # A game's page answers the questions people ask a search engine or an AI assistant (web/answers.py): every figure
+    # is filled in from the catalogue as the page is built, and the questions are given again as FAQPage structured
+    # data word for word, so edit a question or an answer here and both change together.
+    Entry("browse.hub.answer.title", H, "Game page heading", "{game} sealed product prices in the UK",
+          "The heading of a game's page. {game} is the game's full name. Says what the page compares, in the words "
+          "people search with.", placeholders=("game",)),
+    Entry("browse.hub.answer.stock", T, "Game page line: what is in stock",
+          "{products} in stock at {shops}, out of {listed} listed across {sets}. Every price includes UK delivery.",
+          "Under a game's heading while a shop has something in stock. {products} is how many of the game's products "
+          "are in stock now (as 1,901 sealed Pokémon products), {shops} the shops with one in stock, {listed} every "
+          "product listed and {sets} its sets. The search engine description and llms.txt quote the same counts.",
+          placeholders=("products", "shops", "listed", "sets")),
+    Entry("browse.hub.answer.sets.one", T, "Set count (one)", "1 set", "How many sets a game's line counts."),
+    Entry("browse.hub.answer.sets.other", T, "Set count (more than one)", "{count} sets",
+          "How many sets a game's line counts.", placeholders=("count",)),
+    Entry("browse.hub.answer.cheapest", H, "Game page: cheapest of each kind heading", "Cheapest {game} prices in stock now",
+          "Over the short list under a game's heading: the cheapest product of each main kind in stock.",
+          placeholders=("game",)),
+    Entry("browse.hub.answer.price", T, "Game page: a cheapest price", "delivered at {shop}",
+          "After the price in the list of cheapest prices on a game's page.", placeholders=("shop",)),
+    Entry("browse.hub.answer.checked", T, "Game page: when a cheapest price was checked", "Checked {checked}",
+          "After a cheapest price on a game's page. {checked} is the date and time in the UK.",
+          placeholders=("checked",)),
+    Entry("browse.hub.answer.note", T, "Game page: what the cheapest prices cover",
+          "English-language products in stock at UK shops. Prices include UK delivery.",
+          "Under the list of cheapest prices on a game's page."),
+    Entry("browse.hub.answer.guide", B, "Game page: link to the comparing guide",
+          "How to compare sealed TCG prices in the UK",
+          "Under a game's cheapest prices and questions: opens the guide to comparing prices."),
+    Entry("browse.hub.faq.title", H, "Game page: questions heading", "{game} prices: questions and answers",
+          "Heading of the questions at the foot of a game's page.", placeholders=("game",)),
+    Entry("browse.hub.faq.cheapest.q", T, "Game question: cheapest place",
+          "Where is the cheapest place to buy {game} {types} in the UK?",
+          "First question on a game's page. {types} is the game's main kind of product, as booster boxes.",
+          placeholders=("game", "types")),
+    Entry("browse.hub.faq.cheapest.a", T, "Game answer: cheapest place",
+          "Right now the cheapest English-language {game} {type} in stock is {product} at {shop}: {price} delivered, "
+          "checked on {checked}. English-language {game} {types} are in stock at {shops}. The cheapest changes as "
+          "shops sell out and change their prices, so check on the day you buy.",
+          "Answers the first question with the cheapest product of the kind in stock now, its shop, its delivered "
+          "price and when it was checked.",
+          placeholders=("game", "type", "types", "product", "shop", "price", "checked", "shops")),
+    Entry("browse.hub.faq.delivery.q", T, "Game question: delivery", "Do the {game} prices on RipRaptor include delivery?",
+          "A question on a game's page.", placeholders=("game",)),
+    Entry("browse.hub.faq.delivery.a", T, "Game answer: delivery",
+          "Yes. Every price is the delivered price to a UK address: the shop's price plus its standard delivery "
+          "charge, with free delivery counted where the order is big enough to get it. A shop whose delivery charge "
+          "is not known is shown as plus delivery and never counts as the cheapest.",
+          "Answers the delivery question. A live example follows it."),
+    Entry("browse.hub.faq.delivery.a_example", T, "Game answer: delivery example",
+          "For example, {product} at {shop} is {item} plus {delivery} delivery: {price} delivered.",
+          "After the delivery answer, from the cheapest product named on the page, when the shop charges delivery.",
+          placeholders=("product", "shop", "item", "delivery", "price")),
+    Entry("browse.hub.faq.delivery.a_free", T, "Game answer: delivery example, free delivery",
+          "For example, {product} at {shop} is {price} with free delivery.",
+          "After the delivery answer when the shop delivers that product free.",
+          placeholders=("product", "shop", "item", "delivery", "price")),
+    Entry("browse.hub.faq.stock.q", T, "Game question: stock", "How do you know a {game} product is really in stock?",
+          "A question on a game's page.", placeholders=("game",)),
+    Entry("browse.hub.faq.stock.a", T, "Game answer: stock",
+          "A product counts as in stock only when the shop's own website said so at its last check, and every price "
+          "shows when that check was. Pre-orders are labelled as pre-orders. Sold-out listings, and listings a shop "
+          "marks as a raffle or ballot, never count as stock.",
+          "Answers the stock question. The live counts follow it."),
+    Entry("browse.hub.faq.stock.a_now", T, "Game answer: stock now",
+          "Right now {in_stock} of the {listed} sealed {game} products listed are in stock.",
+          "After the stock answer while something is in stock.", placeholders=("game", "in_stock", "listed")),
+    Entry("browse.hub.faq.stock.a_preorder.one", T, "Game answer: pre-orders (one)", "1 more can be pre-ordered.",
+          "After the stock answer when one product no shop has in stock can be pre-ordered."),
+    Entry("browse.hub.faq.stock.a_preorder.other", T, "Game answer: pre-orders (more than one)",
+          "{count} more can be pre-ordered.",
+          "After the stock answer when products no shop has in stock can be pre-ordered.", placeholders=("count",)),
+    Entry("browse.hub.faq.checked.q", T, "Game question: how often", "How often are {game} prices checked?",
+          "A question on a game's page.", placeholders=("game",)),
+    Entry("browse.hub.faq.checked.a", T, "Game answer: how often",
+          "Most shops are checked every hour. A price that has not been checked recently is left out of the "
+          "comparison, and each price on a product page shows when it was last checked.",
+          "Answers how often prices are checked. The latest check follows it."),
+    Entry("browse.hub.faq.checked.a_latest", T, "Game answer: latest check",
+          "The latest check of a {game} price was on {checked}.",
+          "After the how often answer. {checked} is the date and time in the UK.", placeholders=("game", "checked")),
+    Entry("browse.hub.faq.counts.q", T, "Game question: how many",
+          "How many shops and {game} products does RipRaptor compare?",
+          "A question on a game's page.", placeholders=("game",)),
+    Entry("browse.hub.faq.counts.a", T, "Game answer: how many",
+          "{listed} sealed {game} products are listed across {sets}, and {in_stock} of them are in stock now at "
+          "{shops}. Across every game, RipRaptor compares prices from {all_shops}.",
+          "Answers how many, with the same counts as the line under the heading. {all_shops} is every shop compared.",
+          placeholders=("game", "listed", "sets", "in_stock", "shops", "all_shops")),
+    Entry("browse.hub.faq.counts.a_none", T, "Game answer: how many, none in stock",
+          "{listed} sealed {game} products are listed across {sets}. None is in stock right now. Across every "
+          "game, RipRaptor compares prices from {all_shops}.",
+          "The same when no shop has any of the game's products in stock.",
+          placeholders=("game", "listed", "sets", "in_stock", "shops", "all_shops")),
+    Entry("browse.hub.faq.counts.a_market", T, "Game answer: how many, in stock only on eBay or Amazon",
+          "{listed} sealed {game} products are listed across {sets}, and {in_stock} of them are in stock now with "
+          "an eBay or Amazon seller, none at a UK shop. Across every game, RipRaptor compares prices from "
+          "{all_shops}.",
+          "The same when only eBay or Amazon sellers have any of the game's products in stock.",
+          placeholders=("game", "listed", "sets", "in_stock", "shops", "all_shops")),
+    Entry("browse.hub.faq.packs.q", T, "Game question: box or packs",
+          "Is a {game} {box} cheaper per pack than single booster packs?",
+          "A question on a game's page, asked only when a box in stock says how many packs it holds and a single "
+          "pack is in stock too.", placeholders=("game", "box")),
+    Entry("browse.hub.faq.packs.a_yes", T, "Game answer: the box is cheaper a pack",
+          "Yes, at today's prices. The cheapest {box} in stock, {product}, holds {packs} packs: {each} a pack at "
+          "{price} delivered from {shop}. The cheapest single booster pack in stock is {pack} at {single} delivered "
+          "from {pack_shop}.",
+          "Answers the box or packs question when the box works out cheaper a pack.",
+          placeholders=("box", "product", "packs", "each", "price", "shop", "pack", "single", "pack_shop")),
+    Entry("browse.hub.faq.packs.a_no", T, "Game answer: single packs are cheaper",
+          "Not at today's prices. The cheapest {box} in stock, {product}, holds {packs} packs: {each} a pack at "
+          "{price} delivered from {shop}. The cheapest single booster pack in stock is {pack} at {single} delivered "
+          "from {pack_shop}.",
+          "Answers the box or packs question when a single pack costs the same or less.",
+          placeholders=("box", "product", "packs", "each", "price", "shop", "pack", "single", "pack_shop")),
+    Entry("browse.hub.faq.sells.q", T, "Game question: buying from RipRaptor", "Can I buy {game} products from RipRaptor?",
+          "A question on a game's page.", placeholders=("game",)),
+    Entry("browse.hub.faq.sells.a", T, "Game answer: buying from RipRaptor",
+          "No. RipRaptor sells nothing. It compares prices from {all_shops} and links to the shop to buy. It may "
+          "earn a commission when you buy.",
+          "Answers whether RipRaptor sells anything. {all_shops} is every shop compared.",
+          placeholders=("all_shops",)),
+    # A set's page (the compact layout): the heading of its list of products, for people using a screen reader.
+    Entry("browse.hub.set_list", H, "Set page: its list of products heading", "{set} products and prices",
+          "Names the list of products on a set's page for screen readers and search engines. Not shown.",
+          placeholders=("set",)),
     Entry("browse.hub.about.title", H, "Hub about heading", "About {name}",
           "Heading of the short section at the foot of a game or set page giving its facts in full.",
           placeholders=("name",)),
@@ -1218,6 +1343,13 @@ ENTRIES = [
         "Under the heading of a game or set page while a shop has something in stock. {count} is how many are "
         "in stock.",
         placeholders=("products", "shops", "count"),
+    ),
+    Entry(
+        "browse.hub.intro_market", T, "Hub line, in stock only on eBay or Amazon",
+        "{products}, {count} in stock now with an eBay or Amazon seller and none at a UK shop we check.",
+        "Under the heading of a game or set page when only eBay or Amazon sellers have any of it in stock or "
+        "priced: shops are UK shops, so none is counted.",
+        placeholders=("products", "count"),
     ),
     Entry(
         "browse.hub.cheapest_label", T, "Set page cheapest card label",
@@ -4463,6 +4595,185 @@ ENTRIES = [
     Entry("guides.intro", T, "Guides page introduction",
           "Plain advice on buying sealed trading cards, checked against live prices from every UK shop we track.",
           "Under the Guides heading, and its description in search results."),
+    # How to compare sealed TCG prices in the UK (guides/compare.py): a guide whose examples are read from live prices
+    # as the page is built. The words are here; every product, shop, price, count and date is filled in.
+    Entry("guides.compare.title", H, "Comparing guide: title", "How to compare sealed TCG prices in the UK",
+          "Heading of the guide to comparing prices, its title in search results and its link on the Guides page "
+          "and the game pages."),
+    Entry("guides.compare.answer", T, "Comparing guide: one-line answer",
+          "Compare the delivered price from shops that have the product in stock now, not the price on the shop's "
+          "page. Then check the price per pack, the RRP and the language before you buy.",
+          "Under the guide's title, on the Guides page, in search results and in llms.txt."),
+    Entry("guides.compare.checked", T, "Comparing guide: when its examples were checked",
+          "Every example on this page is a real price, last checked on {checked}.",
+          "Under the guide's answer. {checked} is the date and time in the UK.", placeholders=("checked",)),
+    Entry("guides.compare.live", T, "Comparing guide: live example label", "Live example",
+          "Small label over each example taken from today's prices."),
+    Entry("guides.compare.tile", T, "Comparing guide: line on the Guides page", "Live examples from today's prices",
+          "Under the guide on the Guides page, where the others give a reading time."),
+    Entry("guides.compare.games", H, "Comparing guide: links to the games", "Compare prices now",
+          "Heading over the links to each game's prices at the end of the guide."),
+    Entry("guides.compare.delivery.free", T, "Comparing guide: free delivery, in a sentence", "free delivery",
+          "Inside an example when the shop delivers that product free."),
+    Entry("guides.compare.delivery.charge", T, "Comparing guide: a delivery charge, in a sentence", "{charge} delivery",
+          "Inside an example when the shop charges for delivery.", placeholders=("charge",)),
+    Entry("guides.compare.delivered.q", H, "Comparing guide: delivered price question",
+          "Why compare the delivered price and not the list price?", "First question of the guide."),
+    Entry("guides.compare.delivered.short", T, "Comparing guide: delivered price short answer",
+          "Because delivery changes which shop is cheapest. A shop with the lowest price on its page can cost more "
+          "once its delivery charge is added, so compare what you pay in total.",
+          "The short answer to the delivered price question."),
+    Entry("guides.compare.delivered.body", T, "Comparing guide: delivered price detail",
+          "Delivery is added at the checkout, after most people have already chosen a shop. RipRaptor adds each "
+          "shop's standard UK delivery charge to its price before it sorts a list, so the first price you see is "
+          "the cheapest delivered.",
+          "Under the short answer."),
+    Entry("guides.compare.delivered.free", T, "Comparing guide: shops that deliver free",
+          "{free} of the {shops} UK shops RipRaptor compares deliver every order free.",
+          "After the detail, from the shops' own delivery charges. Left out when none does.",
+          placeholders=("free", "shops")),
+    Entry("guides.compare.delivered.range", T, "Comparing guide: what delivery costs",
+          "Where a shop charges, its standard delivery runs from {low} to {high}.",
+          "After it: the lowest and highest standard charge among the shops compared.", placeholders=("low", "high")),
+    Entry("guides.compare.delivered.one", T, "Comparing guide: what delivery costs, one charge",
+          "Where a shop charges, its standard delivery is {low}.",
+          "The same when every shop that charges asks the same.", placeholders=("low", "high")),
+    Entry("guides.compare.delivered.live", T, "Comparing guide: delivered price example",
+          "{product}: {low_shop} has the lowest price on its page, {low_item}, but {low_delivery} makes it "
+          "{low_delivered}. {best_shop} lists it at {best_item} with {best_delivery}, so it costs {best_delivered} "
+          "delivered: {saving} less.",
+          "A product whose lowest list price is not its cheapest delivered price today.",
+          placeholders=("product", "low_shop", "low_item", "low_delivery", "low_delivered", "best_shop", "best_item",
+                        "best_delivery", "best_delivered", "saving")),
+    Entry("guides.compare.delivered.plain", T, "Comparing guide: a price with its delivery",
+          "{product} at {shop} is {item} with {delivery}: {delivered} delivered.",
+          "Shown when no product has a lower list price that costs more delivered today.",
+          placeholders=("product", "shop", "item", "delivery", "delivered")),
+    Entry("guides.compare.threshold.q", H, "Comparing guide: free delivery question",
+          "How do free delivery thresholds change the price?", "A question of the guide."),
+    Entry("guides.compare.threshold.short", T, "Comparing guide: free delivery short answer",
+          "Many shops deliver free once an order passes a set value. A product just under that line costs more "
+          "delivered than its price suggests, so check the line before you choose a shop or add a second item.",
+          "The short answer to the free delivery question."),
+    Entry("guides.compare.threshold.body", T, "Comparing guide: free delivery detail",
+          "RipRaptor counts a shop's free delivery when the product alone reaches the line. If you are buying two "
+          "products from one shop, the pair may cross a line that one does not, so look at the basket total "
+          "before you pay.",
+          "Under the short answer."),
+    Entry("guides.compare.threshold.numbers", T, "Comparing guide: how many shops set a line",
+          "{lines} of the {shops} UK shops RipRaptor compares deliver free once an order passes a set value, most "
+          "often {common}.",
+          "After the detail, from the shops' own delivery rules.", placeholders=("lines", "shops", "common")),
+    Entry("guides.compare.threshold.live", T, "Comparing guide: free delivery example",
+          "{product} at {shop} is {item}, {gap} under the shop's {line} free delivery line, so {delivery} is added: "
+          "{delivered} delivered.",
+          "A product priced just under its shop's free delivery line today.",
+          placeholders=("product", "shop", "item", "gap", "line", "delivery", "delivered")),
+    Entry("guides.compare.stock.q", H, "Comparing guide: stock question",
+          "What is the difference between in stock, pre-order and a raffle?", "A question of the guide."),
+    Entry("guides.compare.stock.short", T, "Comparing guide: stock short answer",
+          "In stock means a shop can post it now. A pre-order is a price for a product that is not out yet, so you "
+          "wait for it. A raffle or ballot is a chance to buy, not a price you can pay today.",
+          "The short answer to the stock question."),
+    Entry("guides.compare.stock.body", T, "Comparing guide: stock detail",
+          "Every price on RipRaptor carries its state and when it was checked. Pre-orders are labelled and never "
+          "shown as the cheapest in stock. Before you pre-order, check the release date and when the shop takes "
+          "payment.",
+          "Under the short answer."),
+    Entry("guides.compare.stock.numbers", T, "Comparing guide: stock counts",
+          "Right now {in_stock} of the {listed} sealed products RipRaptor lists are in stock, and {preorder} more "
+          "can only be pre-ordered.",
+          "After the detail, counted across every game.", placeholders=("in_stock", "listed", "preorder")),
+    Entry("guides.compare.stock.lottery.one", T, "Comparing guide: raffles (one)",
+          "1 listing is a raffle or ballot and counts as neither.", "After the stock counts when one listing is a raffle."),
+    Entry("guides.compare.stock.lottery.other", T, "Comparing guide: raffles (more than one)",
+          "{count} listings are raffles or ballots and count as neither.",
+          "After the stock counts when listings are raffles.", placeholders=("count",)),
+    Entry("guides.compare.stock.live", T, "Comparing guide: pre-order example",
+          "{product} is due out on {date}. It can be pre-ordered now from {price} delivered at {shop}.",
+          "The pre-order whose set comes out soonest, at its cheapest today.",
+          placeholders=("product", "date", "price", "shop")),
+    Entry("guides.compare.packs.q", H, "Comparing guide: price per pack question",
+          "How do I compare price per pack?", "A question of the guide."),
+    Entry("guides.compare.packs.short", T, "Comparing guide: price per pack short answer",
+          "Divide the delivered price by the number of booster packs inside. It is the fairest way to compare a "
+          "booster box, a bundle and an Elite Trainer Box, which hold different numbers of packs.",
+          "The short answer to the price per pack question."),
+    Entry("guides.compare.packs.body", T, "Comparing guide: price per pack detail",
+          "An Elite Trainer Box or a bundle also holds other things, such as card sleeves and dice, so the price "
+          "per pack is a guide and not the whole story. RipRaptor shows the packs inside and the price per pack "
+          "wherever a product says how many it holds.",
+          "Under the short answer."),
+    Entry("guides.compare.packs.live", T, "Comparing guide: price per pack example",
+          "{product} holds {packs} packs and is {price} delivered at {shop}: {each} a pack. A single pack, {pack}, "
+          "is {single} delivered at {pack_shop}.",
+          "A booster box's price a pack beside a single pack's, from today's cheapest of each.",
+          placeholders=("product", "packs", "price", "shop", "each", "pack", "single", "pack_shop")),
+    Entry("guides.compare.rrp.q", H, "Comparing guide: RRP question",
+          "How do I know if a price is fair against the RRP and its history?", "A question of the guide."),
+    Entry("guides.compare.rrp.short", T, "Comparing guide: RRP short answer",
+          "Compare the price with the RRP and with what the product has cost lately. A price well over the RRP on "
+          "a product shops still restock is a reason to wait or look elsewhere.",
+          "The short answer to the RRP question."),
+    Entry("guides.compare.rrp.body", T, "Comparing guide: RRP detail",
+          "RipRaptor keeps the cheapest delivered price of every product each day, so a product page shows whether "
+          "today's price is low or high against the last month. The Fair Price Checker does the same for a price "
+          "you were offered anywhere else.",
+          "Under the short answer. A link to the Fair Price Checker follows it."),
+    Entry("guides.compare.rrp.live", T, "Comparing guide: RRP example",
+          "{product} has an RRP of {rrp}. Its cheapest delivered price in stock today is {price} at {shop}, "
+          "{difference}.",
+          "A product in stock whose RRP is known. {difference} is one of the three wordings below.",
+          placeholders=("product", "rrp", "price", "shop", "difference")),
+    Entry("guides.compare.rrp.under", T, "Comparing guide: under the RRP", "{percent}% under the RRP",
+          "Ends the RRP example when today's price is lower.", placeholders=("percent",)),
+    Entry("guides.compare.rrp.over", T, "Comparing guide: over the RRP", "{percent}% over the RRP",
+          "Ends the RRP example when today's price is higher.", placeholders=("percent",)),
+    Entry("guides.compare.rrp.same", T, "Comparing guide: at the RRP", "the same as the RRP",
+          "Ends the RRP example when today's price is the RRP to the pound."),
+    Entry("guides.compare.rrp.history", T, "Comparing guide: the last month",
+          "Over the last {days} days its cheapest delivered price has run from {low} to {high}.",
+          "After the RRP example, from the product's daily prices.", placeholders=("days", "low", "high")),
+    Entry("guides.compare.language.q", H, "Comparing guide: language question",
+          "Does it matter if a product is English or Japanese?", "A question of the guide."),
+    Entry("guides.compare.language.short", T, "Comparing guide: language short answer",
+          "Yes. A Japanese, Korean or Chinese product is a different product from the English one. It can hold a "
+          "different number of packs and cards and it sells at a different price, so compare like with like.",
+          "The short answer to the language question."),
+    Entry("guides.compare.language.body", T, "Comparing guide: language detail",
+          "A listing that looks far cheaper than the rest is often another language. RipRaptor reads the language "
+          "from each shop's listing, labels the product with it and lets you filter by it.",
+          "Under the short answer."),
+    Entry("guides.compare.language.numbers", T, "Comparing guide: Japanese products counted",
+          "{count} of the {listed} sealed {game} products RipRaptor lists are Japanese-language.",
+          "After the detail, for the biggest game with a Japanese booster box in stock.",
+          placeholders=("count", "listed", "game")),
+    Entry("guides.compare.language.live", T, "Comparing guide: language example",
+          "The cheapest English-language {game} booster box in stock is {product} at {price} delivered from {shop}. "
+          "The cheapest Japanese-language one is {japanese} at {japanese_price} delivered from {japanese_shop}.",
+          "The cheapest English and Japanese booster boxes of one game in stock today.",
+          placeholders=("game", "product", "price", "shop", "japanese", "japanese_price", "japanese_shop")),
+    Entry("guides.compare.marketplaces.q", H, "Comparing guide: eBay and Amazon question",
+          "How should I check an eBay or Amazon seller?", "A question of the guide."),
+    Entry("guides.compare.marketplaces.short", T, "Comparing guide: eBay and Amazon short answer",
+          "Check who is selling, not only the price. On eBay look at the seller's feedback score and how many "
+          "ratings it rests on. On Amazon check that the product is new and who sells and sends it.",
+          "The short answer to the eBay and Amazon question."),
+    Entry("guides.compare.marketplaces.body", T, "Comparing guide: eBay and Amazon detail",
+          "A marketplace price far below every shop's deserves a second look at who is selling. RipRaptor labels "
+          "eBay offers that carry eBay's Authenticity Guarantee or Top Rated Plus mark, or that come from a "
+          "business seller.",
+          "Under the short answer."),
+    Entry("guides.compare.marketplaces.numbers", T, "Comparing guide: what RipRaptor asks of a seller",
+          "RipRaptor only lists eBay offers that are new, buy it now and posted from the UK, from sellers with at "
+          "least {feedback}% positive feedback and {ratings} or more ratings. Amazon prices are for new products "
+          "only.",
+          "After the detail. {feedback} and {ratings} are the limits the site applies.",
+          placeholders=("feedback", "ratings")),
+    Entry("guides.compare.marketplaces.now", T, "Comparing guide: marketplace prices counted",
+          "Right now {ebay} eBay and {amazon} Amazon prices are in the comparison, each labelled with where it is "
+          "from.",
+          "After it, while any eBay or Amazon price is in the comparison.", placeholders=("ebay", "amazon")),
     Entry("guides.empty", T, "Guides page with none published", "No guides are published yet.",
           "Only staff see it: the Guides page is not public until a guide is published."),
     Entry("guides.minutes", T, "Reading time", "{minutes} min read", "Beside each guide.", placeholders=("minutes",)),

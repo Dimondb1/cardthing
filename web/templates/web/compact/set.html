@@ -5,7 +5,7 @@
 {% block page_class %}page--feed page--compact{% endblock %}
 
 {% block content %}
-{# A set's page in the compact layout (web/compact.py): the numbers, back to the game's sets, the set's picture and figures, its types as small tiles, the In stock switch, then each product as a row, in stock first. #}
+{# A set's page in the compact layout (web/compact.py): the numbers, back to the game's sets, the set's picture and figures, a sentence or two on what it holds (the whole set only), its types as small tiles, the In stock switch, then each product as a row, in stock first. #}
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
 {% include "web/includes/compact_status.html" %}
@@ -14,14 +14,16 @@
   <span class="cx-sethead__pic">{% if cover %}{% product_image cover "tile" %}{% endif %}</span>
   <div class="cx-sethead__text">
     <h1 class="cx-sethead__title">{{ product_set.name }}</h1>
-    <p class="cx-sethead__meta">{% copy_count "browse.count" totals.products %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy_count "browse.game.set_stock" totals.in_stock %}{% if totals.pack %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span><span class="cx-sethead__pack">{% copy "compact.set.from_pack" each=totals.pack|gbp %}</span>{% endif %}</p>
+    {% if set_intro %}{# The whole set: the intro under the header counts its products and stock, so this line gives the price a pack alone. #}{% if totals.pack %}<p class="cx-sethead__meta"><span class="cx-sethead__pack">{% copy "compact.set.from_pack" each=totals.pack|gbp %}</span></p>{% endif %}{% else %}<p class="cx-sethead__meta">{% copy_count "browse.count" totals.products %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy_count "browse.game.set_stock" totals.in_stock %}{% if totals.pack %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span><span class="cx-sethead__pack">{% copy "compact.set.from_pack" each=totals.pack|gbp %}</span>{% endif %}</p>{% endif %}
     {% if set_facts %}<p class="cx-sethead__facts">{% for fact in set_facts %}{{ fact }}{% if not forloop.last %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{% endfor %}</p>{% endif %}
   </div>
 </header>
+{% if set_intro %}<p class="cx-setintro">{{ set_intro }}</p>{% endif %}
 {% include "web/includes/compact_tiles.html" %}
 {% include "web/includes/compact_switch.html" with keep=type_keep %}
 {% if rows %}
-<ul class="crows">{% for product, summary in rows %}{% include "web/includes/compact_row.html" %}{% endfor %}</ul>
+<h2 id="set-list-title" class="visually-hidden">{% copy "browse.hub.set_list" set=product_set.name %}</h2>
+<ul class="crows" aria-labelledby="set-list-title">{% for product, summary in rows %}{% include "web/includes/compact_row.html" %}{% endfor %}</ul>
 {% else %}
 <p class="cx-empty">{% copy "browse.no_filtered_results" %} <a href="{{ product_set.get_absolute_url }}">{% copy "browse.filters.clear" %}</a></p>
 {% endif %}

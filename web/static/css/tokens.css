@@ -423,3 +423,6 @@
 @media (min-width: 64rem) {
   :root { --page-width: 80rem; }   /* 1280px of content once the screen has room, the header and footer with it */
 }
+
+/* A game's written answer (web/answers.py): the column that names each kind of product, from a tablet up. */
+:root { --hub-kind: 10rem; }

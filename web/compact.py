@@ -337,24 +337,46 @@ def desk(games, tab_games, tab_sets):
     }
 
 
-def game_page(request, game, extra):
-    """A game's page in the compact layout: its numbers, deals strip and every set. ``extra``: its meta."""
+def game_page(request, game, extra, answer):
+    """A game's page in the compact layout: what it compares in words (web/answers.py: the line of counts, the
+    cheapest of each main kind in stock, the questions), its deals strip and every set. ``extra``: its meta.
+    ``answer``: {"words", "stats", "facts", "crumbs", "page_url"} from the view, the figures the words quote. Its
+    structured data names the products the page shows (ItemList) and gives the questions again (FAQPage)."""
+    from . import answers, hubs
+    from .views import ld_json
+
     sets = with_covers(game_sets(game))
+    deals = strip(game)
+    words, stats, facts, page_url = answer["words"], answer["stats"], answer["facts"], answer["page_url"]
+    faq = answers.game_faq(words, game, stats, facts, len(sets))
+    listed = answers.listed_products(facts["picks"], [card.product for card in deals])
+    structured = [answer["crumbs"], answers.faq_json(page_url, faq)]
+    if listed:
+        structured.insert(1, hubs.item_list_json(request, page_url, extra["meta_title"], extra["meta_description"],
+                                                 answer["crumbs"]["@id"], listed))
     return render(request, "web/compact/game.html", {
         **extra,
         "game": game,
         "numbers": numbers(),
-        "strip": strip(game),
+        "strip": deals,
         "sets": sets,
-        "in_stock": sum(row["in_stock"] for row in sets),
+        "stock_line": answers.stock_line(words, game, stats, len(sets)),
+        "picks": facts["picks"],
+        "faq": faq,
+        "structured_json": ld_json(structured),
         "all_url": f"{reverse('web:search')}?game={game.slug}",
         "dock": dock(request, game),
     })
 
 
-def set_page(request, product_set, extra):
+def set_page(request, product_set, extra, answer):
     """A set's page in the compact layout: the numbers, its types as small tiles pictured by its own products, an In
-    stock switch, and its products as rows. ``extra``: its meta and structured data."""
+    stock switch, and its products as rows. ``extra``: its meta. ``answer``: {"intro", "crumbs", "page_url"} from the
+    view. The whole set (no type, switch or other choice) opens with the intro, a sentence or two of live figures, and
+    its structured data lists its products (ItemList); a narrowed list keeps the counts of what it shows."""
+    from . import hubs
+    from .views import ld_json
+
     products = (Product.objects.for_lists().filter(product_set=product_set)
                 .prefetch_related(offers.buyable_prefetch()))
     chosen = request.GET.get("type", "")
@@ -382,8 +404,16 @@ def set_page(request, product_set, extra):
         rows = for_ripping(rows)
     cover = next((product for product, _ in rows if product.image_src), None)
     store = copy.for_request(request)
+    whole = not (chosen or only_in_stock or rip)
+    structured = [answer["crumbs"]]
+    if whole and rows:
+        structured.append(hubs.item_list_json(request, answer["page_url"], extra["meta_title"],
+                                              extra["meta_description"], answer["crumbs"]["@id"],
+                                              [product for product, _summary in rows]))
     return render(request, "web/compact/set.html", {
         **extra,
+        "set_intro": answer["intro"] if whole else "",
+        "structured_json": ld_json(structured),
         "game": product_set.game,
         "product_set": product_set,
         "numbers": numbers(),

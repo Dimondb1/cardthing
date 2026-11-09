@@ -43,7 +43,7 @@ from guides import state as guide_doors
 from guides.access import not_for_editors
 from ripraptor import csp
 
-from . import compact, feed, hubs, listcache, look, pagecache, partners, refresh, share
+from . import answers, compact, feed, hubs, listcache, look, pagecache, partners, refresh, share
 from . import find as find_steps
 from .pagecache import cached_page
 from .charts import price_chart
@@ -1293,6 +1293,36 @@ def shared_for_game(name, build):
     return found
 
 
+def game_stats(game):
+    """The game's numbers (hubs.HubStats): products listed, in stock, the shops with one in stock, the cheapest. The
+    one count its page's line, its search engine description, its questions and llms.txt all quote, so they agree
+    (the owner, 9 Nov 2026: the description said 1,901 in stock at 101 shops and the page 535 at 130). Kept with the
+    game's other figures (shared_for_game)."""
+    def build():
+        stats = hubs.hub_stats(game=game)
+        # A copy of the three counts with no end date, for llms.txt (game_counts).
+        cache.set(f"{GAME_COUNTS}{game.pk}", (stats.products, stats.in_stock, stats.stock_shops), None)
+        return stats
+
+    return shared_for_game(f"stats/{game.pk}", build)
+
+
+GAME_COUNTS = "game-counts:"
+
+
+def game_counts(game):
+    """(products listed, products in stock, UK shops with one in stock) as the game's page last worked them out
+    (game_stats), for llms.txt: it lists every game, and working each one's numbers out afresh there took seconds a
+    game on the live site. The kept copy has no end date and is written each time a page builds the numbers, every few
+    minutes, so llms.txt says what the pages say. Worked out here only before any page has, and while pages are not
+    kept (the tests)."""
+    found = cache.get(f"{GAME_COUNTS}{game.pk}") if pagecache.on() else None
+    if found is None:
+        stats = game_stats(game)
+        found = (stats.products, stats.in_stock, stats.stock_shops)
+    return found
+
+
 def game_sets(game, lang):
     """{"sets": the game's sets with products in ``lang``, "products" and "stocked": {(set id, type): how many,
     in stock}, "demand": popularity.set_demand}, for the game page's row of sets in any type: one table each game
@@ -1323,14 +1353,16 @@ def game_detail(request, game_slug):
     # The compact layout (web/compact.py): the game's sets as a list. A filtered address (a type, a set, a sort) is the
     # usual list, drawn as compact rows.
     if not pane and look.compact_for_request(request) and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS):
-        stats = shared_for_game(f"stats/{game.pk}", lambda: hubs.hub_stats(game=game))
-        meta_title, meta_description = hubs.game_meta(hubs.Words(text, request), game, stats)
+        # Its written answer and questions (web/answers.py) quote the same counts as its description: one HubStats.
+        words = hubs.Words(text, request)
+        stats = game_stats(game)
+        facts = shared_for_game(f"answers/{game.pk}", lambda: answers.game_facts(game))
+        meta_title, meta_description = hubs.game_meta(words, game, stats)
         page_url = request.build_absolute_uri(game.get_absolute_url())
         crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url())], page_url=page_url)
         return compact.game_page(request, game, {
             "meta_title": meta_title, "meta_description": meta_description, "canonical_url": page_url,
-            "structured_json": ld_json([crumbs]),
-        })
+        }, {"words": words, "stats": stats, "facts": facts, "crumbs": crumbs, "page_url": page_url})
     # The sets people want most this week, newest first when equal, each with how many of its products are in
     # stock: a set everyone is after shows even when it has none, so they can see it and look. Newest first,
     # spelled out: a distinct query keeps the model's order only by chance.
@@ -1385,7 +1417,7 @@ def game_detail(request, game_slug):
         set_options = [{"name": item.name, "url": set_link(item.slug), "in_stock": item.in_stock} for item in sets]
         set_clear_url = set_link("")
     words = hubs.Words(text, request)
-    stats = hubs.HubStats() if pane else shared_for_game(f"stats/{game.pk}", lambda: hubs.hub_stats(game=game))
+    stats = hubs.HubStats() if pane else game_stats(game)
     meta_title, meta_description = hubs.game_meta(words, game, stats)
     page_url = request.build_absolute_uri(game.get_absolute_url())
     crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url())], page_url=page_url)
@@ -1460,11 +1492,12 @@ def set_detail(request, game_slug, set_slug):
     # language) is the usual list, drawn as compact rows.
     if (look.compact_for_request(request) and not request.GET.get("pane")
             and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS if name not in ("type", "in_stock", "rip"))):
+        # The whole set says what it holds in a sentence or two, from the same numbers as its description
+        # (hubs.intro), and names its products for search engines (an ItemList).
         return compact.set_page(request, product_set, {
             "meta_title": meta_title, "meta_description": meta_description, "canonical_url": page_url,
             "set_facts": facts, "set_upcoming": upcoming, "instead": instead,
-            "structured_json": ld_json([crumbs]),
-        })
+        }, {"intro": hubs.intro(words, stats, date=intro_date, undated=undated), "crumbs": crumbs, "page_url": page_url})
     return _browse(
         request,
         {
@@ -3534,9 +3567,24 @@ def llms_txt(request):
         "## Games",
         "",
     ]
+    # Each game's line quotes the numbers its own page does (game_counts: the page's line, its description and its
+    # questions read the same count), each named for what it counts.
     for game in games:
-        lines.append(f"- [{game.name}]({request.build_absolute_uri(game.get_absolute_url())}): {game.product_count} sealed products")
+        listed, in_stock, stock_shops = game_counts(game)
+        if in_stock and stock_shops:
+            stock = f"{in_stock:,} in stock now at {stock_shops:,} UK shop{'' if stock_shops == 1 else 's'}"
+        elif in_stock:
+            stock = f"{in_stock:,} in stock now with an eBay or Amazon seller, none at a UK shop"
+        else:
+            stock = "none in stock now"
+        lines.append(f"- [{game.name}]({request.build_absolute_uri(game.get_absolute_url())}): "
+                     f"{listed:,} sealed product{'' if listed == 1 else 's'} listed, {stock}")
     lines += [
+        "",
+        "Listed counts every sealed product of the game on the site. In stock counts those a seller has now, and the "
+        "shops are the UK shops with one in stock (never eBay or Amazon). Each game's page gives the same figures, the cheapest product of "
+        "each main kind in stock with its shop, delivered price and the time it was checked, and answers to common "
+        "questions about prices, delivery and stock.",
         "",
         "## Pages",
         "",
@@ -3559,6 +3607,8 @@ def llms_txt(request):
         lines += ["## Guides", ""]
         lines += [f"- [{title}]({request.build_absolute_uri(reverse('web:guide', args=[slug]))}): {answer}"
                   for slug, title, answer in guides]
+        lines += [f"- [{text(request, 'guides.compare.title')}]({request.build_absolute_uri(reverse('web:guide_compare'))}): "
+                  f"{text(request, 'guides.compare.answer')}"]
         lines += [f"- [{text(request, 'guides.checker.title')}]({request.build_absolute_uri(reverse('web:fair_price'))}): "
                   f"{text(request, 'guides.checker.intro')}", ""]
     return HttpResponse("\n".join(lines), content_type="text/markdown; charset=utf-8")

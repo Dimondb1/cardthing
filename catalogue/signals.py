@@ -9,7 +9,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from .languages import product_language
-from .models import Game, Listing, Partner, Product, ProductSet, RemovedShop, Retailer, SeasonalThemes, SiteLook
+from .models import Game, Listing, Partner, Product, ProductSet, RemovedShop, Retailer, SeasonalThemes, SiteLook, VisitorCheck
 from .search import SET_INDEX_KEY, build_search_text
 
 HOME_CACHE_KEY = "web:home-lists:v6"
@@ -141,6 +141,14 @@ def shop_added(sender, instance, created=False, raw=False, **kwargs):
     # A shop added again (Admin, discover_shops) is no longer one the owner removed.
     if created and not raw:
         RemovedShop.forget(instance)
+
+
+@receiver(post_save, sender=VisitorCheck)
+def visitor_check_saved(sender, instance, **kwargs):
+    # Read from the cache on every request (web.botcheck): put the new settings there at once.
+    from web import botcheck
+
+    botcheck.remember()
 
 
 @receiver(post_save, sender=SiteLook)

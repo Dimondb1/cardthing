@@ -11,7 +11,7 @@ from django.utils.html import format_html
 from . import pricing, sanity
 from .models import (
     AffiliateSale, CardmarketMatch, CardmarketProduct, ClaudeAsk, DiscordChannel, DiscordPost, DropAlert, DropSpotlight, KeyringClaim, Partner, SearchAlert, SearchAlertSent, ProductAlias, Referral, ReferralSettings, Referrer, FeaturedSettings, DailyLowestPrice, Game, ImportRun, Listing, OutboundClick, Product, ProductSet, Release,
-    RemovedProduct, RemovedShop, Restock, Retailer, SeasonalThemes, ShopProduct, SiteLook, StockAlert, TypeBand,
+    RemovedProduct, RemovedShop, Restock, Retailer, SeasonalThemes, ShopProduct, SiteLook, StockAlert, TypeBand, VisitorCheck,
 )
 
 # A listing field the product page shows. Changing one here stamps the listing's changed_at, the sitemap's
@@ -735,6 +735,25 @@ class PartnerAdmin(admin.ModelAdmin):
         return format_html('<img src="{}" alt="" width="{}" height="{}" style="width:120px;height:auto;padding:20px;'
                            'border:1px solid var(--hairline-color);background:#fff">',
                            obj.logo.url, obj.logo_width or 120, obj.logo_height or 120)
+
+
+@admin.register(VisitorCheck)
+class VisitorCheckAdmin(admin.ModelAdmin):
+    """The one row for the visitor check (web/botcheck.py). The list goes straight to it."""
+
+    fields = ("on", "countries")
+
+    def has_add_permission(self, request):
+        return False   # the list opens the one row, made on first use
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        return HttpResponseRedirect(reverse("admin:catalogue_visitorcheck_change", args=[VisitorCheck.load().pk]))
 
 
 @admin.register(SiteLook)

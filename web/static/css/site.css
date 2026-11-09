@@ -2729,3 +2729,14 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .cx-hero__title { font-size: var(--text-page-title); }
   .cx-sethead__title { font-size: var(--text-page-title); }
 }
+
+/* The visitor check (web/botcheck.py, botcheck.html): a quiet page in the middle of the screen while the browser works
+   for a second, then the page asked for. The line under it breathes while it works. */
+.botcheck-page { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; background: var(--color-paper); }
+.botcheck { display: grid; justify-items: center; gap: var(--space-3); max-width: var(--measure); padding: var(--space-6) var(--gutter); text-align: center; }
+.botcheck__logo { width: var(--botcheck-logo); height: auto; margin-bottom: var(--space-2); }
+.botcheck__title { margin: 0; font-size: var(--text-xl); }
+.botcheck__body { margin: 0; color: var(--color-ink-muted); }
+.botcheck__status { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
+.botcheck__status--working { animation: feed-breathe var(--motion-slow) var(--ease-standard) infinite alternate; }
+@media (prefers-reduced-motion: reduce) { .botcheck__status--working { animation: none; } }

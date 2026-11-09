@@ -4,6 +4,7 @@ from django.urls import include, path, re_path
 from twostep import views as twostep_views
 from twostep.forms import LoginForm
 from web import add_shops as web_add_shops
+from web import botcheck as web_botcheck
 from web import media as web_media
 from web import online as web_online
 from web import views as web_views
@@ -31,5 +32,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     # Uploaded pictures (web/media.py): served here because Caddy hands every request to Django.
     re_path(r"^media/(?P<path>.+)$", web_media.serve_media, name="media"),
+    # The visitor check's answer (web/botcheck.py): never checked itself.
+    path("check/", web_botcheck.answer, name="botcheck"),
     path("", include("web.urls")),
 ]

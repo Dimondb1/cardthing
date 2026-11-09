@@ -1,0 +1,23 @@
+{% load static sitecopy %}<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+  <title>{% copy "botcheck.title" %} | {{ site_name }}</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="{% static 'img/favicon.png' %}" type="image/png">
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+  <script nonce="{{ csp_nonce }}" src="{% static 'js/botcheck.js' %}" defer></script>
+</head>
+{# The visitor check (web/botcheck.py): shown before a first page to a visitor from abroad. No analytics, no other script: the page does its sum and moves on to the page asked for. #}
+<body class="botcheck-page">
+  <main class="botcheck" data-check data-task="{{ task }}" data-zeros="{{ zeros }}" data-next="{{ next }}" data-url="{{ check_url }}" data-old="{% copy 'botcheck.old_browser' %}" data-cookies="{% copy 'botcheck.cookies' %}">
+    <img class="botcheck__logo" src="{% static 'img/logo.png' %}" alt="{{ site_name }}" width="1200" height="304">
+    <h1 class="botcheck__title">{% copy "botcheck.title" %}</h1>
+    <p class="botcheck__body">{% copy "botcheck.body" %}</p>
+    <p class="botcheck__status botcheck__status--working" role="status" data-check-status hidden>{% copy "botcheck.working" %}</p>
+    <noscript><p class="botcheck__status">{% copy "botcheck.noscript" %}</p></noscript>
+  </main>
+</body>
+</html>

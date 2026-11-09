@@ -81,6 +81,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "twostep.middleware.TwoStepMiddleware",
+    # A first visit from abroad does a second of work in the browser before a page (web/botcheck.py).
+    "web.botcheck.VisitorCheckMiddleware",
     "web.middleware.OwnerEditsMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",

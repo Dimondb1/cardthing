@@ -5138,6 +5138,75 @@ data in Excel") is the undoable kind: the other product is switched off
 rather than deleted, its address redirects the same way, and it is listed
 under Sorted for you on Things to check with an Undo that brings it back.
 
+## Visitor check (a first visit from abroad)
+
+The crawler of 5 to 7 November 2026 rented ordinary home connections in
+about fifty countries, opened one page from each address and called itself
+Chrome, so a limit per address never tripped and robots.txt was ignored.
+What it cannot avoid is that each new address has to show a page before it
+can read one. So, the way the free tool Anubis does it (`web/botcheck.py`,
+from 9 Nov 2026):
+
+- A visitor from outside the countries in **Admin, Visitor check** (the UK
+  and Ireland to start with) who has no pass for their address gets a short
+  page first: "Checking your browser". The browser works out a small sum
+  (a SHA-256 hash with four leading zeros, `web/static/js/botcheck.js`) and
+  sends the answer to `/check/`. A right answer, from the same address,
+  within ten minutes, earns the pass and goes on to the page asked for. A
+  wrong, late or altered one is sent back to be checked again.
+- The pass is the `rr_ok` cookie: signed, `HttpOnly`, `SameSite=Lax`, good
+  for 7 days, and bound to the address (the whole IPv4 address, or the /64
+  network of an IPv6 one, which a phone keeps while the end of its address
+  changes). It holds nothing about the person. A person pays about a second
+  once a week; a crawler on a new address every page pays every page, and
+  one that runs no scripts never gets a page.
+- Never checked: visitors from the countries named, a visitor whose country
+  cannot be told (no `RIPRAPTOR_GEOIP_DB`, a local address), so the check
+  fails open; staff who passed two-step sign-in; anything but GET and HEAD;
+  `/static/`, `/media/`, `/admin/`, `/dashboard/`, `/feeds/`,
+  `/.well-known/`, `/check/`, robots.txt, the sitemaps, llms.txt, the
+  favicon, the manifest and any `.txt` file at the top (the IndexNow key).
+- Search engines pass when their address proves who they are: Googlebot
+  and Google's other crawlers, Bingbot and Applebot by a reverse lookup
+  ending in their own names (`.googlebot.com`, `.google.com`,
+  `.search.msn.com`, `.applebot.apple.com`) that looks up back to the same
+  address, IPv4 or IPv6. A plain Google Cloud address
+  (`.googleusercontent.com`) can be rented by anyone, so it proves only
+  Google's site verification and its page speed tests, never Googlebot.
+  The answer is kept for a day. A lookup with no answer in 2 seconds
+  counts as no and is asked again ten minutes later, so no page waits on
+  DNS. Calling itself Googlebot from a home connection gets the check like
+  anyone else.
+- AI assistants and their search (GPTBot, ChatGPT-User, ClaudeBot,
+  PerplexityBot and others), the smaller search engines and the link
+  previews chat and social apps make (Facebook, WhatsApp, Discord, Slack,
+  X, LinkedIn, Telegram and others) pass by name (`NAMED_CRAWLERS`).
+  Naming one gets a crawler past the check only.
+- The flood's browsers ran our pages (`catalogue/automated.py`), so they
+  can run the sum too, at a second of work for every page. A browser
+  driven by a script says so in ways a person's never does
+  (`navigator.webdriver`, HeadlessChrome in its name or brands, PhantomJS,
+  Nightmare, ChromeDriver's marks): the page does not work the sum for one
+  and shows "This browser cannot do the check". An answer sent from a
+  browser whose User-Agent names HeadlessChrome, PhantomJS, Puppeteer,
+  Playwright, Selenium or WebDriver earns no pass. A crawler that hides all
+  of this still gets through, a second per page.
+- The data feeds under `/api/` answer a visitor from abroad with no pass
+  with 403 and `{"error": "check"}`, never the check page.
+- **Who is online** says how many times the check was shown today and how
+  many times it was passed (kept in the cache for two days, counts only).
+  A visit stopped by the check never reaches a page, so it is not in the
+  list of visitors.
+- The check page is `noindex`, `no-store`, carries no analytics and is not
+  counted as a page view. With JavaScript off it asks for it; with cookies
+  off it asks for them, rather than checking for ever.
+
+**Admin, Visitor check** has the on switch and the countries never checked
+(two-letter codes, commas between). Both are read from the cache on every
+request, with no query; saving the row puts the new settings there at
+once. With no row yet it is on for GB and IE. The wording is in Site
+wording under "Visitor check" (`botcheck.*`).
+
 ## Search engines and AI crawlers
 
 Every page carries a canonical link, Open Graph and Twitter sharing tags,

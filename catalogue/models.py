@@ -2692,6 +2692,39 @@ class SeasonalThemes(models.Model):
         return cls.objects.get_or_create(pk=1)[0]
 
 
+class VisitorCheck(models.Model):
+    """The one row of the owner's switch for the visitor check (web/botcheck.py): a first visit from outside the
+    countries named here does a second of work in the browser before a page shows, which a person does once and a
+    crawler renting thousands of addresses must do for every one. Search engines and AI assistants are let through.
+    The owner, 9 Nov 2026: "I thought we could prevent these bots ourselves"."""
+
+    on = models.BooleanField(
+        "Check visitors from abroad", default=True,
+        help_text="Ticked: a first visit from outside the countries below sees a short check (a second of work in "
+                  "the browser) before the page, once a week per address. Google, Bing, ChatGPT and the other search "
+                  "engines and AI assistants are never checked. Untick to let everyone straight in.",
+    )
+    countries = models.CharField(
+        "Countries never checked", max_length=200, default="GB, IE",
+        help_text="Two-letter country codes, separated by commas. Visitors from these see no check. A visitor whose "
+                  "country cannot be told is never checked either.",
+    )
+
+    class Meta:
+        verbose_name = "visitor check"
+        verbose_name_plural = "visitor check"
+
+    def __str__(self):
+        return "Visitor check"
+
+    @classmethod
+    def load(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    def country_codes(self):
+        return {code.strip().upper()[:2] for code in self.countries.replace(";", ",").split(",") if code.strip()}
+
+
 class SiteLook(models.Model):
     """The one row of owner switches for how the site looks (web/look.py). The new home page (the marketing team's
     feed of 4 Nov 2026: today's best prices, product type tiles, a rail of deals and the next drop, with the search

@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from catalogue import insights, online
+from web import botcheck
 from catalogue.traffic import DEVICES
 from guides.access import not_for_editors
 
@@ -81,6 +82,8 @@ def online_page(request):
         "bars": chart(counts, peak), "peak": peak, "hours": CHART_HOURS,
         "minutes": online.ONLINE_MINUTES, "keep": online.LIVE_KEEP, "refresh": REFRESH_SECONDS,
         "updated": timezone.localtime(now),
+        # The visitor check (web/botcheck.py): how many first visits from abroad it stopped today, and how many passed.
+        "check": botcheck.today_counts(), "check_on": botcheck.current()["on"],
     })
     response["Cache-Control"] = "private, no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"

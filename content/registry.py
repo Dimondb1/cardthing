@@ -42,6 +42,7 @@ SECTIONS = [
     ("home", "Home page"),
     ("feed", "New home page (on while Site look says so)"),
     ("compact", "Compact layout (on while Site look says so)"),
+    ("botcheck", "Visitor check (a first visit from abroad)"),
     ("find", "Find with Rip (the guided search)"),
     ("new", "Coming soon sets"),
     ("drops", "Drop tracker and drop reminders"),
@@ -556,6 +557,20 @@ ENTRIES = [
           "words."),
     Entry("feed.hint.types", T, "New home page: first-visit hint at the type tiles", "Pick by type",
           "The same by the product type tiles, after the game bar's. Two or three words."),
+    # The visitor check (web/botcheck.py): a first visit from abroad does a second of work before a page.
+    Entry("botcheck.title", H, "Visitor check: heading", "Checking your browser",
+          "Heading of the short page a first visit from outside the UK and Ireland sees before the site."),
+    Entry("botcheck.body", T, "Visitor check: why", "This keeps automated copying off our prices. It takes a second "
+          "and happens once a week.", "Under the heading of the visitor check page."),
+    Entry("botcheck.working", T, "Visitor check: while it works", "One moment",
+          "Under the visitor check while the browser works it out, before the page asked for opens."),
+    Entry("botcheck.noscript", T, "Visitor check: JavaScript off", "Turn on JavaScript to continue to RipRaptor.",
+          "On the visitor check when the browser runs no scripts, which the check needs."),
+    Entry("botcheck.old_browser", T, "Visitor check: browser too old", "This browser cannot do the check. Try a newer "
+          "one.", "On the visitor check when the browser cannot work out the check."),
+    Entry("botcheck.cookies", T, "Visitor check: cookies off", "Turn on cookies to continue to RipRaptor. The check "
+          "keeps one cookie, for a week, that holds nothing about you.",
+          "On the visitor check when the browser keeps no cookies, so the pass it earns could not be kept."),
     # The compact layout (web/compact.py), while the owner's Compact layout switch is on.
     Entry("compact.home.title", H, "Compact layout: home page headline",
           "{offers} sealed prices in stock at {shops} UK shops.",
@@ -3251,7 +3266,8 @@ ENTRIES = [
         "country, the kind of device and the site that sent you. To protect the site from automated traffic we "
         "keep your internet address for up to 30 minutes after the last page you open, then delete it; it never "
         "goes into our counts. A few small cookies of ours remember only that your browser has visited before, "
-        "read one of our guides or shown one of our pages. They hold nothing about you.\n\n"
+        "read one of our guides or shown one of our pages, or, from outside the UK and Ireland, passed our check "
+        "against automated traffic. They hold nothing about you.\n\n"
         "If you ask to be emailed when a product is back in stock, or with Track price when it is in stock at or "
         "under a price you choose, we keep your email address (and that price and how long to look) for that "
         "alone. Nothing is sent until you confirm by the link we email you. You get one email when a shop has the "

@@ -369,6 +369,7 @@
   --cx-sethead-pic: 7rem;          /* the well with a set's picture at the top of its page */
   --cx-deal: 15rem;                /* a card in the deals strip */
   --cx-deal-pic: 3rem;             /* its picture */
+  --botcheck-logo: 10rem;          /* the logo on the visitor check page */
   --feed-spark: 1rem;              /* the fairy's spark on a lit pill or tile */
   --feed-tile-icon: 2.25rem;       /* 36px: the All types tile's icon in its well */
   --feed-tile-mini: 2.25rem;       /* 36px: the tile's picture once a type is chosen and the row is a line of pills */

@@ -63,6 +63,7 @@ class PageTestCase(TestCase):
             reverse("web:list_shop_thanks"),
             reverse("web:drops"),
             reverse("web:drops") + "?show=out",
+            reverse("web:shops"),
             self.cheap.get_outbound_url(),   # opened away from our pages: the Continue page (web.views.gate)
         ]
 

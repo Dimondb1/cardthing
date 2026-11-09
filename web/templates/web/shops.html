@@ -1,0 +1,23 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{% block content %}{# Shops we compare (web.views.shops): every UK shop with a current price, A to Z, with its delivery, products priced and last check. One query. #}
+<div class="page-head">
+  <h1 class="page-title">{% copy "shops.title" %}</h1>
+  <div class="prose prose--lead">{% copy "shops.intro" shops=shops_compared %}</div>
+</div>
+<table class="shops">
+  <thead><tr><th scope="col">{% copy "shops.column.shop" %}</th><th scope="col">{% copy "shops.column.delivery" %}</th><th scope="col" class="shops__num">{% copy "shops.column.products" %}</th><th scope="col">{% copy "shops.column.checked" %}</th></tr></thead>
+  <tbody>{% for shop in shops %}
+    <tr>
+      <th scope="row" class="shops__shop"><a href="{{ shop.website }}" rel="sponsored nofollow noopener" target="_blank">{{ shop.name }}</a><span class="shops__domain">{{ shop.domain }}</span></th>
+      <td data-label="{% copy 'shops.column.delivery' %}">{{ shop.delivery_line }}</td>
+      <td class="shops__num" data-label="{% copy 'shops.column.products' %}">{{ shop.priced }}</td>
+      <td data-label="{% copy 'shops.column.checked' %}">{% if shop.checked %}{{ shop.checked|ago }}{% endif %}</td>
+    </tr>{% endfor %}
+  </tbody>
+</table>
+<section class="shops__join">
+  <p>{% copy "shops.listshop" %}</p>
+  <p><a class="button button--quiet" href="{% url 'web:list_shop' %}">{% copy "site.nav.listshop" %}</a></p>
+</section>
+{% endblock %}

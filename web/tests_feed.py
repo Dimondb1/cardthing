@@ -174,7 +174,8 @@ class HomeFeedTests(FeedCase):
     def test_it_shows_the_type_tiles_the_rail_and_the_next_drop_from_the_sites_own_prices(self):
         html = self.page()
         self.assertIn('<h1 class="feed__title">Today&#x27;s best prices</h1>', html)
-        self.assertIn('<p class="feed__sub">Cheapest delivered prices from UK shops</p>', html)
+        # The line under the title says how many shops, as the old home page's did (the owner, 9 Nov 2026).
+        self.assertRegex(html, r'<p class="feed__sub">Compare prices from \d+ UK shops, delivery included, checked every hour\.</p>')
         # The tiles: each type with something in stock, the most stocked first, pictured by its cheapest product
         # and opening the search narrowed to that type. The sold-out bundle neither counts nor pictures.
         tiles = re.findall(r'<li class="feed-tile"><a class="feed-tile__link" href="([^"]+)" data-browse-link>.*?'

@@ -53,6 +53,7 @@ SECTIONS = [
     ("product", "Product page"),
     ("info", "Info cards (the ⓘ buttons)"),
     ("about", "How it works page"),
+    ("shops", "Shops we compare page"),
     ("guides", "Guides and the Fair Price Checker"),
     ("contact", "Message us page"),
     ("refer", "Refer a friend keyring offer"),
@@ -118,6 +119,7 @@ PLACEHOLDER_HELP = {
     "types": "the product types in stock, for example booster boxes and ETBs",
     "products": "a number of products, for example 412 sealed products",
     "shops": "a number of shops, for example 18 UK shops",
+    "threshold": "an order value, for example £50.00",
     "code": "the set's code, for example OP-18 or EB05",
     "clock": "a time of day, for example 14:05, or a day and time, for example 18 Oct 14:05",
     "spent": "an amount in US dollars, for example $12.40",
@@ -227,6 +229,8 @@ ENTRIES = [
     Entry("site.refresh.seconds", T, "Refresh dots: seconds", "{s} s",
           "The time in the line, under a minute.", placeholders=("s",)),
     Entry("site.nav.contact", B, "Message us link", "Message us", "Footer link to the Message us page."),
+    Entry("site.nav.shops", B, "Shops link", "Shops we compare",
+          "Footer link to the Shops we compare page, and the button to it on the how it works page."),
     Entry("site.nav.listshop", B, "List your shop link", "List your shop", "Footer link to the List your shop page, and its button on the how it works page."),
     Entry(
         "site.nav.terms", B, "Terms link",
@@ -472,8 +476,8 @@ ENTRIES = [
     # (Admin, Site look; web/look.py).
     Entry("feed.title", H, "New home page headline", "Today's best prices",
           "The new home page's heading. A game's page uses the game's name instead."),
-    Entry("feed.subtitle", T, "New home page line under the headline", "Cheapest delivered prices from UK shops",
-          "Under the heading on the new home page and a game's page."),
+    Entry("feed.subtitle", T, "New home page line under the headline", "Compare prices from {shops} UK shops, delivery included, checked every hour.",
+          "Under the heading on the new home page and a game's page.", placeholders=("shops",)),
     Entry("feed.tiles.label", T, "New home page tiles label", "Browse by product",
           "Read out for the row of product type tiles on the new home page; not shown."),
     Entry("feed.tiles.all", T, "New home page: the All types tile on a game's page", "All types",
@@ -2088,10 +2092,21 @@ ENTRIES = [
         legal=True,
     ),
     Entry(
+        "about.scale", T, "How many shops line",
+        "Today that means {shops} UK shops, with delivery included in every price and each shop checked every hour.",
+        "Under the introduction on the how it works page, with the live count of shops compared.",
+        placeholders=("shops",),
+    ),
+    Entry(
         "about.retailers.title", H, "Retailers heading",
-        "Retailers we check",
-        "Heading above the list of retailers. The list itself comes from the Retailer "
-        "table.",
+        "Shops we compare",
+        "Heading of the short section on the how it works page that links to the Shops we compare page.",
+    ),
+    Entry(
+        "about.retailers.body", T, "Retailers section text",
+        "Every shop we compare is listed on its own page, with its delivery charge, how many products it has a "
+        "current price for and when we last checked it.",
+        "Text of the Shops section on the how it works page, above the link to the Shops we compare page.",
     ),
     Entry(
         "about.retailers.intro", T, "Retailers note",
@@ -3051,6 +3066,41 @@ ENTRIES = [
         "Search engine description for the deals page.",
     ),
 
+    # Shops we compare page ---------------------------------------------------
+    Entry("shops.title", H, "Shops page heading", "Shops we compare", "Heading and page title of the Shops we compare page."),
+    Entry(
+        "shops.intro", P, "Shops page introduction",
+        "RipRaptor compares prices from {shops} UK shops. Every price includes delivery to a UK address, and each "
+        "shop is checked every hour. This page lists them all, with the delivery charge we add, how many products "
+        "each has a current price for and when we last checked it.\n\n"
+        "Being listed here does not mean a shop endorses RipRaptor, and no shop pays to be listed. Shops are "
+        "listed A to Z.",
+        "Under the heading on the Shops we compare page.",
+        placeholders=("shops",),
+    ),
+    Entry("shops.column.shop", T, "Shops page: shop column", "Shop", "Column heading on the Shops we compare page."),
+    Entry("shops.column.delivery", T, "Shops page: delivery column", "Delivery", "Column heading on the Shops we compare page."),
+    Entry("shops.column.products", T, "Shops page: products column", "Products priced",
+          "Column heading on the Shops we compare page."),
+    Entry("shops.column.checked", T, "Shops page: checked column", "Last checked", "Column heading on the Shops we compare page."),
+    Entry("shops.delivery.free_over", T, "Shops page: free over", "{price}, free over {threshold}",
+          "A shop's delivery when it charges under a threshold and is free above it.", placeholders=("price", "threshold")),
+    Entry("shops.delivery.only_free_over", T, "Shops page: only free over", "Free over {threshold}",
+          "A shop's delivery when only its free-delivery threshold is known.", placeholders=("threshold",)),
+    Entry("shops.delivery.free", T, "Shops page: free delivery", "Free", "A shop whose standard delivery is free."),
+    Entry("shops.delivery.up_to", T, "Shops page: charge known up to", "{price} on orders under {threshold}",
+          "A shop whose standard charge is only known for orders under a value.", placeholders=("price", "threshold")),
+    Entry("shops.delivery.unknown", T, "Shops page: delivery unknown", "Not yet known: prices show as plus delivery",
+          "A shop whose delivery charge has not been read yet."),
+    Entry("shops.listshop", T, "Shops page: list your shop line",
+          "Run a UK shop that sells sealed trading card game products and want to be compared?",
+          "Line at the foot of the Shops we compare page, before the List your shop button."),
+    Entry("meta.shops.title", T, "Shops page title", "Shops we compare: {shops} UK shops, delivery included",
+          "Browser tab title of the Shops we compare page. The site name is added after it.", placeholders=("shops",)),
+    Entry("meta.shops.description", T, "Shops page description",
+          "Every UK shop RipRaptor compares sealed trading card game prices from, with its delivery charge, how many "
+          "products it prices and when it was last checked.",
+          "Search engine description for the Shops we compare page."),
     # Terms page ------------------------------------------------------------
     Entry(
         "terms.title", H, "Terms heading",

@@ -14,7 +14,7 @@ from django.core import signing
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Case, Count, Exists, F, IntegerField, Max, OuterRef, Prefetch, Q, Subquery, Value, When
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, Lower
 from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -1936,13 +1936,54 @@ def about(request):
         request,
         "web/about.html",
         {
-            "retailers": Retailer.objects.filter(is_active=True),
+            "shops_compared": pricing.shops_compared(),
             "contact_email": settings.RIPRAPTOR_CONTACT_EMAIL,
             "stale_hours": settings.RIPRAPTOR_STALE_AFTER_HOURS,
             "meta_title": text(request, "about.title"),
             "canonical_url": request.build_absolute_uri(request.path),
         },
     )
+
+
+def delivery_line(shop, store):
+    """What a shop's delivery costs, in the site's words: the standard charge, free over a value, only the value it
+    is free over, free, known only under a value, or not yet known (shown as plus delivery meanwhile)."""
+    cost, free, up_to = shop.delivery_cost, shop.free_delivery_over, shop.delivery_cost_up_to
+    if cost is None and free is None:
+        return copy.get("shops.delivery.unknown", store=store)
+    if cost is not None and cost == 0:
+        return copy.get("shops.delivery.free", store=store)
+    if cost is None:
+        return copy.get("shops.delivery.only_free_over", store=store, threshold=gbp(free))
+    if free is not None:
+        return copy.get("shops.delivery.free_over", store=store, price=gbp(cost), threshold=gbp(free))
+    if up_to is not None:
+        return copy.get("shops.delivery.up_to", store=store, price=gbp(cost), threshold=gbp(up_to))
+    return gbp(cost)
+
+
+@require_GET
+@cached_page
+def shops(request):
+    """Shops we compare: every UK shop with a current price (the shops pricing.shops_compared counts), A to Z, with
+    its delivery, how many products it has a current price for and when it was last checked. One query, so search
+    engines and AI assistants have one page that states the claim the home page makes (the owner, 9 Nov 2026: why
+    ChatGPT names other comparison sites first)."""
+    current = Q(listings__is_active=True, listings__last_checked__gte=stale_cutoff()) & ~Q(listings__sanity=Listing.Sanity.EXCLUDED)
+    rows = list(
+        Retailer.objects.filter(is_active=True).exclude(source_type__in=pricing.MARKETPLACES)
+        .annotate(priced=Count("listings", filter=current, distinct=True), checked=Max("listings__last_checked", filter=current))
+        .filter(priced__gt=0).order_by(Lower("name"))
+    )
+    store = copy.for_request(request)
+    for shop in rows:
+        shop.delivery_line = delivery_line(shop, store)
+    return render(request, "web/shops.html", {
+        "shops": rows, "shops_compared": len(rows),
+        "meta_title": copy.get("meta.shops.title", store=store, shops=len(rows)),
+        "meta_description": copy.get("meta.shops.description", store=store),
+        "canonical_url": request.build_absolute_uri(request.path),
+    })
 
 
 QUICK_RESULTS = 6
@@ -3312,6 +3353,8 @@ def llms_txt(request):
         f"- [Every game and set]({request.build_absolute_uri(reverse('web:games'))})",
         f"- [Upcoming drops with dates and pre-order prices]({request.build_absolute_uri(reverse('web:drops'))})",
         f"- [How it works]({request.build_absolute_uri(reverse('web:about'))})",
+        f"- [Shops we compare]({request.build_absolute_uri(reverse('web:shops'))}): every UK shop with its delivery "
+        "charge, how many products it prices and when it was last checked",
         f"- [Terms and disclosures]({request.build_absolute_uri(reverse('web:terms'))})",
         f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product on sale, coming soon or priced "
         "in the last month, and every game and set",

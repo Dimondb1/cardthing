@@ -374,6 +374,22 @@ round. Their delivery came from each shop's delivery page or a test basket;
 those still unknown show as "plus delivery" until the daily `check_delivery
 --unknown` finds them.
 
+**Shops we compare** (`/shops/`, `web.views.shops`, `web/templates/web/shops.html`):
+a public page listing every UK shop with a current price (the same shops
+`pricing.shops_compared` counts: switched on, not a marketplace, at least one
+listing checked inside the stale cutoff and not kept out as impossible), A to
+Z, with its delivery in the site's words (`delivery_line`: the standard
+charge, free over a value, only the threshold, free, known only under a
+value, or not yet known), how many products it has a current price for and
+when it was last checked. One query, cached like the other list pages, in the
+sitemap, linked from the footer, the How it works page and llms.txt. It
+exists so one page states plainly what the home page claims ("Compare prices
+from N UK shops, delivery included, checked every hour", now on the new home
+page too): search engines and AI assistants quote a site's own words, and on
+9 Nov 2026 ChatGPT named other UK comparison sites first because theirs said
+it and ours no longer did. The How it works page says the number too and
+links here instead of listing the shops itself.
+
 **Add shops** (Admin, owner only, `/admin/add-shops/`, `web/add_shops.py`):
 paste shop addresses, one per line. Each is saved once (`ShopToAdd`) and the
 background reader checks waiting shops every 30 seconds in a thread of its

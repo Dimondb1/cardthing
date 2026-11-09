@@ -61,6 +61,7 @@ urlpatterns = [
     path("go/<int:listing_id>/continue/", views.go_continue, name="go_continue"),
     path("go/search/<slug:slug>/<str:market>/", views.go_search, name="go_search"),
     path("about/", views.about, name="about"),
+    path("shops/", views.shops, name="shops"),
     path("guides/", guides.hub, name="guides"),
     path("guides/fair-price/", guides.fair_price, name="fair_price"),
     path("guides/<slug:slug>/", guides.guide, name="guide"),

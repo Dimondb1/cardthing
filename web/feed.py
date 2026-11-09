@@ -27,7 +27,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import urlencode
 
-from catalogue import offers
+from catalogue import offers, pricing
 from catalogue.models import FeaturedSettings, Game, Listing, OutboundClick, Product
 from content import service as copy
 
@@ -269,6 +269,7 @@ def context(request, game=None, kind="", keep=None, list_title=""):
         search_hint = copy.get("feed.search.placeholder", store=store)
     return {
         "game": game, "show_game": game is None, "title": title, "show_title": not filtered,
+        "shops": pricing.shops_compared() if not filtered else 0,
         # Filtered to a type: the list's heading is the tile's label, and Clear leads back to the page unfiltered.
         "filtered": filtered, "kind": kind if filtered else "",
         "list_title": list_title or (copy.get("browse.all.title", store=store) if kind == ALL else TYPE_LABELS.get(kind, "")),

@@ -1742,6 +1742,21 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .prose { color: var(--color-ink-muted); }
 .prose p + p { margin-top: var(--space-4); }
 .prose--lead { font-size: var(--text-lg); color: var(--color-ink); }
+/* Shops we compare (web/templates/web/shops.html): a table from a tablet up, a card a shop on a phone. */
+.shops { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
+.shops th, .shops td { padding: var(--space-3) var(--space-2); text-align: left; vertical-align: top; border-bottom: 1px solid var(--color-line); }
+.shops thead th { font-size: var(--text-sm); color: var(--color-ink-subtle); font-weight: var(--weight-strong); }
+.shops__shop a { font-weight: var(--weight-strong); }
+.shops__domain { display: block; font-size: var(--text-sm); color: var(--color-ink-subtle); font-weight: var(--weight-body); }
+.shops__num { text-align: right; }
+.shops__join { margin-top: var(--space-6); }
+@media (max-width: 39.99rem) {
+  .shops thead { display: none; }
+  .shops, .shops tbody, .shops tr, .shops th, .shops td { display: block; width: auto; }
+  .shops tr { padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line); }
+  .shops th, .shops td { padding: var(--space-1) 0; border: 0; text-align: left; }
+  .shops td[data-label]::before { content: attr(data-label) ": "; color: var(--color-ink-subtle); }
+}
 .retailer-list { list-style: none; margin-top: var(--space-4); border-top: 1px solid var(--color-line); }
 .retailer-list li { display: grid; padding: var(--space-3) 0; border-bottom: 1px solid var(--color-line); }
 .retailer-list__name { font-weight: var(--weight-strong); }

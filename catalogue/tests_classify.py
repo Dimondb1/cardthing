@@ -713,3 +713,79 @@ class TcgNoteTests(TestCase):
         self.assertEqual(tidy_name("TCG: Ascended Heroes Mini Tin"), "Ascended Heroes Mini Tin")
         # "TCG" that runs into the name is left for clean_name's own rules.
         self.assertEqual(tidy_name("TCG Phantom Revenge Booster Box"), "TCG Phantom Revenge Booster Box")
+
+
+class LiveRipTests(TestCase):
+    """Live rips and breaks are not sealed products (classify.LIVE_RIP). The owner, 9 Nov 2026, after "Vivian's
+    Collectible's YouTube Live Rips" showed among Delta Reign's products: "catch the live rip listings automatically"."""
+
+    RIPS = [
+        "Vivian's Collectible's YouTube Live Rips - Mega Evolution Delta Reign",
+        "Pokemon TCG: Delta Reign Booster Box LIVE RIP",
+        "Pokemon Live Break - Surging Sparks Booster Pack",
+        "Prismatic Evolutions Elite Trainer Box Rip & Ship",
+        "Rip n Ship: Surging Sparks Booster Pack",
+        "Rip 'n' Ship Pokemon 151 Booster Bundle",
+        "Pokemon Box Break Slot - Journey Together Booster Box",
+        "One Piece OP-10 Booster Box Case Break",
+        "Random Pack Break: Paldea Evolved Booster Pack",
+        "Live Opening - Pokemon 151 Booster Bundle",
+        "Twitch Rip - Pokemon Delta Reign Booster Pack",
+        "Whatnot Pack - Pokemon Destined Rivals Booster Pack",
+        "Pokemon Surging Sparks Booster Pack - Opened Live For You",
+        "Pokemon Surging Sparks Booster Pack - we open it on stream",
+        "TikTok Live Pack: Pokemon Journey Together Booster Pack",
+        "Pokemon Pack Opening - Journey Together Booster Pack",
+    ]
+    SEALED = [
+        "Pokémon TCG: Mega Evolution Delta Reign Booster Box",
+        "Magic: The Gathering Outlaws of Thunder Junction Breaking News Collector Booster",
+        "Pokemon Live Grand Prix Booster Box",
+        "Digimon Card Game Breakthrough Booster Box",
+        "Pokemon Ripple Booster Pack",
+        "Star Wars Unlimited Spark of Rebellion Booster Box",
+        "Pokemon Journey Together Booster Bundle",
+    ]
+
+    def test_a_live_rip_or_break_is_never_listed(self):
+        from .classify import LIVE_RIP
+
+        for title in self.RIPS:
+            with self.subTest(title=title):
+                self.assertIsNone(classify(title, price=Decimal("10.00")))
+                self.assertTrue(LIVE_RIP.search(title))
+        for title in self.SEALED:
+            with self.subTest(title=title):
+                self.assertIsNotNone(classify(title, price=Decimal("100.00")))
+                self.assertFalse(LIVE_RIP.search(title))
+
+    def test_the_hourly_tidy_up_takes_one_already_listed_off(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .models import Product, RemovedProduct
+        from .testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        reign = make_set(make_game(), name="Mega Evolution - Delta Reign", slug="delta-reign")
+        shop = make_retailer("Famous Grail")
+        rip = make_product(reign, name="Vivian's Collectible's YouTube Live Rips", slug="vivians-live-rips",
+                           product_type="booster_pack")
+        box = make_product(reign, name="Mega Evolution Delta Reign Booster Box", slug="delta-reign-box",
+                           product_type="booster_box")
+        make_listing(rip, shop, price="9.98")
+        make_listing(box, shop, price="150.00")
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=rip.pk).exists())
+        self.assertTrue(RemovedProduct.objects.filter(slug="vivians-live-rips").exists())   # its page answers 410 Gone
+        self.assertTrue(Product.objects.filter(pk=box.pk).exists())
+
+    def test_ebay_refuses_a_live_rip_that_names_the_product(self):
+        from . import ebay
+        from .testing import make_game, make_product, make_set
+
+        box = make_product(make_set(make_game(), name="Surging Sparks", slug="surging-sparks", code="SSP"),
+                           name="Surging Sparks Booster Box", slug="ssp-box", product_type="booster_box")
+        self.assertTrue(ebay.junk(box, "Pokemon Surging Sparks Booster Box LIVE BREAK slot"))
+        self.assertTrue(ebay.junk(box, "Surging Sparks Booster Box Rip and Ship"))
+        self.assertFalse(ebay.junk(box, "Pokemon Surging Sparks Booster Box 36 Packs Sealed"))

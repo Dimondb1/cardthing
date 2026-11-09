@@ -29,7 +29,7 @@ from django.db.models import Count, F, Min, Q
 from django.utils import timezone
 
 from . import languages
-from .classify import SINGLE_CARD, find_type
+from .classify import LIVE_RIP, SINGLE_CARD, find_type
 from .matching import AUTO_LINK, SUGGEST, contradiction, key_words, match_key, score
 from .models import Listing, Product
 
@@ -455,7 +455,8 @@ def languages_in(text, loose=True):
 def junk(product, title):
     """Is the listing plainly not one sealed unit of this product, whatever its name says?
 
-    A multi-buy, an online code, a part, a single card (classify.SINGLE_CARD), another language, or anything
+    A multi-buy, an online code, a part, a single card (classify.SINGLE_CARD), a live rip (classify.LIVE_RIP), another
+    language, or anything
     matching.contradiction finds (another game or set code, a Pokémon Center edition, a damaged or opened box,
     another unit of sale).
     Checked on every result, including those that name the product word for word, and on known listings.
@@ -469,6 +470,8 @@ def junk(product, title):
     if NOT_THE_THING.search(title) and not NOT_THE_THING.search(product.name):
         return True
     if SINGLE_CARD.search(title) and not SINGLE_CARD.search(product.name):
+        return True
+    if LIVE_RIP.search(title or ""):   # a live rip or break: packs opened on a stream, not the sealed product
         return True
     if product.product_type == "booster_pack" and PACK_COUNT.search(title):
         return True

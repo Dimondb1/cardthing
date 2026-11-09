@@ -144,6 +144,20 @@ and full boxes, and "Starter Decks". A Pokemon promo number ("SVP 066") or a
 plain "Holo" marks a single card. One Piece Illustration Boxes stay out: their
 names are only a code, which names lose, so two would merge.
 
+Live rips and breaks are left out too (`classify.LIVE_RIP`, part of the
+not-sealed rules and read by eBay's matching): a seller opening packs on a
+stream and posting the hits is not a sealed product. "Live rip", "live
+break", "live opening", "rip and ship" (or "rip n ship", "rip & ship"), a box,
+pack, case or group break, a break slot, a pack opening, YouTube, Twitch,
+Whatnot or TikTok Live, "on stream" and "opened live" each mark one. A
+shop's read refuses it, and the hourly tidy-ups take one already listed off
+(its page answers 410 Gone) and drop such a listing from a real product.
+"Breaking News" (a Magic set) and "Live Grand Prix" stay. The owner, 9 Nov
+2026, after "Vivian's Collectible's YouTube Live Rips" showed among Delta
+Reign's products: "catch the live rip listings automatically". Checked
+against 13,536 product and shop titles before it went in: none caught that
+should not be.
+
 Since Impact League TCG joined (15 Oct 2026): a price of nothing but nines
 (£999, £999.99, £9,999) means not for sale and the offer is left out;
 second-hand stock ("trade in", a bracketed "(TRADE)" or "(TRADE/IMPORT)"

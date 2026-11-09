@@ -70,6 +70,19 @@ TYPES = [
     ("booster_pack", ("booster pack", "booster", "pack", "packet", "checklane", "sleeved")),
 ]
 
+# Live rips and breaks: a seller opens packs on a stream and posts what comes out, which is not a sealed product
+# ("Vivian's Collectible's YouTube Live Rips", Famous Grail, filed under Delta Reign; the owner, 9 Nov 2026: "catch the
+# live rip listings automatically"). Part of NOT_SEALED, so a shop's read refuses one and the hourly tidy-ups take one
+# off; ebay.junk reads it too. "Breaking News" (a Magic set) is not a break, nor "Live Grand Prix" a live rip.
+LIVE_RIP_PATTERN = (
+    r"\blive\s*(?:rips?|ripping|breaks?|openings?|opens?|streams?|streaming|sessions?)\b|"
+    r"\b(?:box|pack|case|group|team|random|mystery|personal|hobby)\s*breaks?\b|\bbreak\s*(?:slots?|spots?)\b|"
+    r"\brip(?:s|ping)?\s*(?:&|and|\+|'?n'?)\s*ships?\b|\bpack\s*openings?\b|\b(?:youtube|twitch|whatnot)\b|"
+    r"\btik\s?tok\s+live\b|\b(?:on|via)\s+(?:the\s+)?(?:live\s*)?stream\b|\bopened\s+(?:live|for you|on camera)\b|"
+    r"\bwe\s+(?:open|rip)\b"
+)
+LIVE_RIP = re.compile(LIVE_RIP_PATTERN, re.I)
+
 # A title with any of these is not a sealed product we list. A card number leads a single's title ("OP01-001",
 # "BT22-045", "LOB-001"); "Set 01", "OP 18" and "SV 151" lead a set's name, and a title that goes on to name a
 # box, pack or deck is the sealed product.
@@ -104,6 +117,7 @@ NOT_SEALED = re.compile(
     # Card games the site does not cover, which TCG shops file under a game it does: Kayou's My Little Pony packs sat
     # under Pokémon (the owner, 5 Nov 2026: "my little pony isn't pokemon").
     r"\bmy little pony\b|\bmlp\b|"
+    + LIVE_RIP_PATTERN + "|" +
     # A frame to show a card in ("Center Japan Pikachu Face Card Display Frame", Japan2UK) is an accessory, which
     # the owner saw on a Booster boxes tile on 4 Nov 2026. A sealed box that comes with one ("Umbreon Display Frame
     # Collection Box", "Display Frame Gift Box") says box, set or collection after the frame, so it stays.

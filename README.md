@@ -2944,7 +2944,7 @@ index.
 | `RIPRAPTOR_TWO_STEP`           | on on the server; off with `DJANGO_DEBUG` on | Admin and the dashboard take an authenticator app's code as well as the password (see "Admin sign-in security"). `0` switches it off. |
 | `RIPRAPTOR_GOOGLE_VERIFICATION` |       | The content of Google Search Console's HTML tag. Empty means no tag. |
 | `RIPRAPTOR_BING_VERIFICATION`  |         | The content of Bing Webmaster Tools' HTML tag (`msvalidate.01`). Empty means no tag. |
-| `RIPRAPTOR_INDEXNOW`           | on on the server; off with `DJANGO_DEBUG` on | Each hour, send the product pages that changed to IndexNow (Bing and others). `0` stops it. |
+| `RIPRAPTOR_INDEXNOW`           | on on the server; off with `DJANGO_DEBUG` on | Each hour, send the product pages that changed to IndexNow (Bing and others), and once a day the game, set and guide pages that did. `0` stops it. |
 | `RIPRAPTOR_GA_ID`              | `G-TZW5ZVM9H8` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |
 
 ## Games
@@ -5422,6 +5422,77 @@ redirects.
 
 ## Being found by search engines and AI answers
 
+**Answers on the game and set pages, and a guide built from live prices**
+(9 Nov 2026; the owner, with an AI visibility tracker's tasks: "Make the
+existing Pokémon page answer price, delivery and stock comparison queries
+... Every figure comes from the database at render time. Nothing
+hard-coded."). In the compact layout, which is the one that is live:
+
+- **A game's page** (`web/answers.py`, `compact/game.html`). Its heading
+  says what it compares ("Pokémon sealed product prices in the UK",
+  `browse.hub.answer.title`). Under it, one line of counts and then the
+  cheapest product of each main kind in stock (Pokémon: booster box, Elite
+  Trainer Box, booster bundle; Magic: play booster box, collector booster
+  box, Commander deck, bundle; any other game its first three kinds), each
+  with its delivered price, shop and the date and time it was checked. Only
+  English-language products at UK shops, at a delivered price nothing
+  doubts, are named, never an eBay or Amazon offer (`answers.shop_offers`).
+  At the foot, five to seven questions answered with the same figures
+  (`answers.game_faq`, the `browse.hub.faq.*` wording): the cheapest place
+  to buy, whether prices include delivery (with a real price and its
+  delivery), how stock is known, how often prices are checked, how many
+  shops and products, a box against single packs by the pack (only when a
+  box says how many it holds), and that RipRaptor sells nothing. The
+  questions are one list of strings shown on the page and given again as
+  schema.org FAQPage, so they match word for word; the products named are
+  an ItemList. A game with nothing in stock gets only what is true of it.
+- **One count** (`views.game_stats`, `hubs.HubStats`). The game's line, its
+  search engine description, its questions and its line in `llms.txt` read
+  the one kept count, so they agree: products listed, products in stock,
+  the UK shops with one in stock. Before, the description counted every
+  product in stock, the page only those filed under a set, and `llms.txt`
+  every product listed, each unlabelled. "UK shops" now leaves out eBay and
+  Amazon wherever it is said, as the home page and Shops we compare do; a
+  game or set only a marketplace seller has in stock says so
+  (`browse.hub.intro_market`).
+- **A set's page** opens with a sentence or two of live figures
+  (`hubs.intro`: how many products, at how many shops, how many in stock
+  and the cheapest, linked) and lists its products as an ItemList. A
+  narrowed list (a type, In stock, Best for ripping) keeps the counts of
+  what it shows and no ItemList.
+- **How to compare sealed TCG prices in the UK**
+  (`/guides/compare-sealed-tcg-prices-uk/`, `guides/compare.py`,
+  `guides/compare.html`). Seven questions: delivered against list price,
+  free delivery lines, in stock against pre-order against a raffle, price a
+  pack, RRP and the last month, English against Japanese, and eBay and
+  Amazon sellers. The advice is in Site wording (`guides.compare.*`); under
+  each, what today's prices say and one real example read from the
+  catalogue: a product whose lowest list price is not its cheapest
+  delivered, one just under a shop's free delivery line, and so on. An
+  example that cannot be made from today's prices is left out with its
+  sentence. The examples are kept for an hour and built again by
+  warm_pages. Article structured data gives the day it was published and
+  the day its examples' prices were last checked. It is open while the
+  Guides pages are, and listed on the Guides page, in the sitemap, in
+  `llms.txt` and under each game's questions.
+- **One h1 a page.** The home page's phone and desktop headlines are one
+  heading now. A game's title always leaves room for " | RipRaptor"
+  (`hubs.site_room`).
+- **Proof** (`web/proof.py`, `manage.py visibility_proof`). Fetches the home
+  page, the Pokémon and Magic pages, a set, the guide and the Guides page as
+  Googlebot, Bingbot, GPTBot, ClaudeBot and PerplexityBot and checks the raw
+  HTML: a 200, one h1, every JSON-LD block parses, the FAQ block matches the
+  page word for word, the counts agree across description, page and
+  `llms.txt`, and the guide is in the sitemap and `llms.txt`. Google and
+  Bing are known to the site by their addresses, so a fetch from elsewhere
+  that only uses their name is shown the visitor check, and the report says
+  so; `--inside` asks the machine's own copy with no network, which is what
+  those two are served.
+
+      python manage.py visibility_proof            # the live site
+      python manage.py visibility_proof --inside   # on the server
+
+
 The sitemap, Product structured data, `llms.txt` and a robots.txt that lets
 the AI search crawlers in by name were already in place. Added 31 Oct 2026
 (the owner: RipRaptor lists poorly in Google and ChatGPT):
@@ -5438,6 +5509,12 @@ the AI search crawlers in by name were already in place. Added 31 Oct 2026
   from. The key is a hash of the secret key, served at `/<key>.txt`; nothing
   needs setting up. A refused submission is sent again the next hour.
   `RIPRAPTOR_INDEXNOW=0` stops it; it is off on a development machine.
+  Since 9 Nov 2026 the other pages go too, at most once a day
+  (`indexnow.page_urls`, `PAGES_EVERY`): each game's page with a price that
+  changed, each set's page that changed (the sitemap's own date), the home
+  page, Deals and Drops, and the Guides pages, a guide when it is published
+  or edited. `manage.py indexnow --check` says where the key file is,
+  whether the site serves it and what the last accepted run sent.
 - **About, on game and set pages.** At the foot of each, under "About
   Pokémon": what the hub compares ("RipRaptor compares UK prices for sealed
   Pokémon products: booster boxes, ETBs, ..."; a set page "Surging Sparks is a

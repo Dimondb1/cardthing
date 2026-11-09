@@ -82,15 +82,76 @@ class IndexNowTests(TestCase):
             return mock.MagicMock(__enter__=lambda s: s, __exit__=lambda *a: None, read=lambda: b"")
 
         Listing.objects.filter(pk=self.listing.pk).update(changed_at=timezone.now())
+        site = settings.RIPRAPTOR_SITE_URL
+        # The first run of a day sends the other pages that changed too: the home page, Deals and Drops, the game's
+        # page and the set's (page_urls), then the product.
+        pages = [site + path for path in ("/", "/deals/", "/drops/", self.set.game.get_absolute_url(),
+                                          self.set.get_absolute_url())]
         with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
-            self.assertEqual(indexnow.run(), 1)
-            self.assertEqual(indexnow.run(), 0)   # nothing changed since
+            self.assertEqual(indexnow.run(), len(pages) + 1)
+            self.assertEqual(indexnow.run(), 0)   # nothing changed since, and the other pages went today
         body = sent[0]
         self.assertEqual(body["host"], "ripraptor.com")
         self.assertEqual(body["key"], indexnow.key())
         self.assertEqual(body["keyLocation"], f"https://ripraptor.com/{indexnow.key()}.txt")
-        self.assertEqual(body["urlList"], [settings.RIPRAPTOR_SITE_URL + self.box.get_absolute_url()])
+        self.assertEqual(body["urlList"], pages + [site + self.box.get_absolute_url()])
         self.assertEqual(len(sent), 1)   # no empty submission
+
+    def test_game_set_and_guide_pages_go_once_a_day_and_only_when_they_changed(self):
+        # The owner, 9 Nov 2026: "a throttled ping when pages are published or change materially".
+        from guides.models import Guide
+
+        site = settings.RIPRAPTOR_SITE_URL
+        start = timezone.now()
+        quiet = make_set(make_game(name="Magic: The Gathering", slug="magic-the-gathering"), name="Final Fantasy",
+                         slug="final-fantasy", code="FIN")
+        make_product(quiet, name="Final Fantasy Bundle", slug="final-fantasy-bundle")
+        long_ago = start - timedelta(days=30)
+        quiet.__class__.objects.filter(pk=quiet.pk).update(updated_at=long_ago)
+        Product.objects.filter(product_set=quiet).update(updated_at=long_ago)
+        Listing.objects.filter(pk=self.listing.pk).update(changed_at=start)
+        first = indexnow.page_urls(start - timedelta(days=1), start)
+        self.assertIn(site + self.set.game.get_absolute_url(), first)
+        self.assertIn(site + self.set.get_absolute_url(), first)
+        # A game and a set nothing changed in are left out, and so are the Guides pages until one is published.
+        self.assertNotIn(site + quiet.game.get_absolute_url(), first)
+        self.assertNotIn(site + quiet.get_absolute_url(), first)
+        self.assertFalse([url for url in first if "/guides/" in url])
+        guide = Guide.objects.create(slug="parents", title="A guide", one_line_answer="An answer.", is_published=True)
+        later = indexnow.page_urls(start - timedelta(days=1), timezone.now())
+        for path in ("/guides/", "/guides/compare-sealed-tcg-prices-uk/", guide.get_absolute_url()):
+            self.assertIn(site + path, later)
+        sent = []
+
+        def fake_urlopen(request, timeout):
+            sent.append(json.loads(request.data)["urlList"])
+            return mock.MagicMock(__enter__=lambda s: s, __exit__=lambda *a: None, read=lambda: b"")
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            indexnow.run(now=start)
+            # An hour on, a price changes: the product goes, the game's page waits for tomorrow's batch.
+            Listing.objects.filter(pk=self.listing.pk).update(changed_at=start + timedelta(minutes=30))
+            indexnow.run(now=start + timedelta(hours=1))
+            indexnow.run(now=start + timedelta(hours=25))
+        self.assertIn(site + self.set.game.get_absolute_url(), sent[0])
+        self.assertEqual(sent[1], [site + self.box.get_absolute_url()])
+        self.assertIn(site + self.set.game.get_absolute_url(), sent[2])
+        self.assertNotIn(site + self.box.get_absolute_url(), sent[2])   # it went an hour after it changed
+
+    def test_check_says_where_the_key_is_and_what_the_last_run_sent(self):
+        out = StringIO()
+        served = mock.MagicMock(__enter__=lambda s: s, __exit__=lambda *a: None, read=lambda: indexnow.key().encode())
+        with mock.patch("urllib.request.urlopen", return_value=served):
+            call_command("indexnow", check=True, stdout=out)
+        self.assertIn(f"Key file: https://ripraptor.com/{indexnow.key()}.txt (served by the site).", out.getvalue())
+        self.assertIn("Last accepted run: none recorded yet.", out.getvalue())
+        Listing.objects.filter(pk=self.listing.pk).update(changed_at=timezone.now())
+        with mock.patch("urllib.request.urlopen", return_value=served):
+            sent = indexnow.run()
+            out = StringIO()
+            call_command("indexnow", check=True, stdout=out)
+        self.assertIn(f"{sent} addresses, {sent - 1} of them game, set, guide and list pages.", out.getvalue())
+        self.assertNotIn("not yet", out.getvalue())
 
     def test_a_refused_submission_is_tried_again_next_hour(self):
         import urllib.error
@@ -108,7 +169,7 @@ class IndexNowTests(TestCase):
         self.assertIn("IndexNow is off", out.getvalue())
         out = StringIO()
         call_command("indexnow", dry_run=True, stdout=out)
-        self.assertIn("changed product pages would be sent to IndexNow.", out.getvalue())
+        self.assertIn("changed pages would be sent to IndexNow.", out.getvalue())
 
     def test_the_hourly_cron_runs_it_on_its_own_lock(self):
         line = ("25 * * * * cd {dir} && set -a && . ./.env && set +a && timeout -k 30 300 flock -n "

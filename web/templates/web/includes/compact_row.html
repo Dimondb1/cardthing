@@ -1,0 +1,15 @@
+{% load sitecopy ripraptor %}{# One product as a row in the compact layout (web/compact.py): the whole row is the link to its page. Picture, name, the cheapest shop (or that it is a pre-order, or that no shop has it), then the delivered price, how many shops and the price a pack. Takes product (with for_lists' prices and its offers), summary (offers.Summary) and, in a set's list, product.compact_name. #}
+<li class="crow{% if not summary.best %} crow--none{% endif %}">
+  <a class="crow__link" href="{{ product.get_absolute_url }}">
+    <span class="crow__pic">{% product_image product "compact" %}</span>
+    <span class="crow__body">
+      <span class="crow__name">{{ product.compact_name|default:product.name }}</span>
+      <span class="crow__sub">{% if summary.best %}{% if summary.best.availability == "preorder" %}{% copy "compact.row.preorder" %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endif %}{{ summary.best.retailer.name }}{% elif product.last_price %}{% copy "product.last_seen" price=product.last_price|gbp %}{% else %}{% copy "compact.row.none" %}{% endif %}{% if product.language %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ product.language_name }}{% endif %}</span>
+    </span>
+    {% if summary.best %}<span class="crow__offer">
+      <span class="crow__price">{{ summary.best.shown_price|gbp }}{% if not summary.best.delivery_known %} <small>{% copy "browse.price.plus" %}</small>{% endif %}</span>
+      <span class="crow__meta">{% copy_count "compact.row.shops" product.offers|length %}</span>
+      {% with each=summary.best.shown_price|per_pack:product.packs_inside %}{% if each %}<span class="crow__meta">{% copy "browse.card.each" each=each|gbp %}</span>{% endif %}{% endwith %}
+    </span>{% else %}<span class="crow__offer crow__offer--none">{% copy "compact.row.none" %}</span>{% endif %}
+  </a>
+</li>

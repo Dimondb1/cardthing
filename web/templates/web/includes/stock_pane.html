@@ -5,9 +5,9 @@
   {% if single_list and tab != "in-stock" %}<h2 class="stock-pane__title" id="pane-{{ tab }}">{% if tab == "pre-orders" %}{% copy "browse.list.pre_orders" %}{% else %}{% copy "browse.list.out_of_stock" %}{% endif %}</h2>{% endif %}
   {% if page.object_list %}
     {% if soonest and page.paginator.count > 1 %}<p class="stock-pane__note">{% copy "browse.tabs.soonest" %}</p>{% endif %}
-    <ul class="cards">
+    <ul class="{% if compact %}crows{% else %}cards{% endif %}">
       {% for product, summary in cards %}
-        {% include "web/includes/product_card.html" %}
+        {% if compact %}{% include "web/includes/compact_row.html" %}{% else %}{% include "web/includes/product_card.html" %}{% endif %}
       {% endfor %}
     </ul>
     {% include "web/includes/pagination.html" %}

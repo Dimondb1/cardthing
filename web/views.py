@@ -43,7 +43,7 @@ from guides import state as guide_doors
 from guides.access import not_for_editors
 from ripraptor import csp
 
-from . import feed, hubs, listcache, look, pagecache, partners, refresh, share
+from . import compact, feed, hubs, listcache, look, pagecache, partners, refresh, share
 from . import find as find_steps
 from .pagecache import cached_page
 from .charts import price_chart
@@ -373,6 +373,10 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "feed_chosen": [label for label in (dict(form.fields["price"].choices).get(band) if band else "",
                                             form.fields["compared"].label if form.value("compared") else "") if label],
     }
+    # The compact layout (web/compact.py): the products as rows, with the search box and the games at the foot.
+    context["compact"] = look.compact_for_request(request)
+    if context["compact"]:
+        context["dock"] = compact.dock(request, fixed_game or game)
     context.update(template_context)
     if not (page.object_list or context.get("set_upcoming")):
         # Nothing listed: an alert for products like these would read as a promise about an empty list.
@@ -966,7 +970,14 @@ def game_covers(games):
 def home(request):
     """The money page kept short: search, the games, the visitor's own picks, deals worth having and new
     releases. Savings, price drops, restocks and trending live on the Deals page; every set on Games. While the
-    owner's switch is on (web/look.py), the feed instead (feed_home)."""
+    owner's switch is on (web/look.py), the feed instead (feed_home), or the compact layout (web/compact.py)."""
+    if look.compact_for_request(request):
+        return compact.home(request, {
+            "partners": partners.current(),
+            "meta_full_title": text(request, "meta.home.title", site_name=settings.RIPRAPTOR_SITE_NAME),
+            "canonical_url": request.build_absolute_uri("/"),
+            "structured_json": ld_json(site_json(request)),
+        })
     if look.for_request(request):
         return feed_home(request)
     games = list(
@@ -1239,6 +1250,11 @@ def moved(request, target):
     return HttpResponsePermanentRedirect(f"{target}?{query}" if query else target)
 
 
+# The choices that make a game's page a filtered list: with any of them, the compact layout draws the usual list as rows
+# rather than the game's sets.
+COMPACT_LIST_PARAMS = ("type", "set", "lang", "sort", "page", "price", "compared", "tab", "in_stock")
+
+
 def shared_for_game(name, build):
     """What every view of a game's page shares and works out over the whole game (its sets with their stock, its
     numbers), kept for as long as a page is (web.pagecache), so a set or a type picked on the page costs only its own
@@ -1283,6 +1299,17 @@ def game_detail(request, game_slug):
     # Only the page as people land on it needs the numbers and the sets: a tab's list fetched by script shows
     # none of them.
     pane = bool(request.GET.get("pane"))
+    # The compact layout (web/compact.py): the game's sets as a list. A filtered address (a type, a set, a sort) is the
+    # usual list, drawn as compact rows.
+    if not pane and look.compact_for_request(request) and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS):
+        stats = shared_for_game(f"stats/{game.pk}", lambda: hubs.hub_stats(game=game))
+        meta_title, meta_description = hubs.game_meta(hubs.Words(text, request), game, stats)
+        page_url = request.build_absolute_uri(game.get_absolute_url())
+        crumbs = breadcrumbs_json(request, [(game.name, game.get_absolute_url())], page_url=page_url)
+        return compact.game_page(request, game, {
+            "meta_title": meta_title, "meta_description": meta_description, "canonical_url": page_url,
+            "structured_json": ld_json([crumbs]),
+        })
     # The sets people want most this week, newest first when equal, each with how many of its products are in
     # stock: a set everyone is after shows even when it has none, so they can see it and look. Newest first,
     # spelled out: a distinct query keeps the model's order only by chance.
@@ -1408,6 +1435,15 @@ def set_detail(request, game_slug, set_slug):
     instead = []
     if stats.products and not stats.in_stock and not stats.preorder and not upcoming:
         instead = picks.instead(list(Product.objects.active().filter(product_set=product_set)[:SET_INSTEAD_FROM]))
+    # The compact layout (web/compact.py): the set's products as rows under its types. Another choice (a sort, a
+    # language) is the usual list, drawn as compact rows.
+    if (look.compact_for_request(request) and not request.GET.get("pane")
+            and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS if name != "type")):
+        return compact.set_page(request, product_set, {
+            "meta_title": meta_title, "meta_description": meta_description, "canonical_url": page_url,
+            "set_facts": facts, "set_upcoming": upcoming, "instead": instead,
+            "structured_json": ld_json([crumbs]),
+        }, set_types(request, product_set))
     return _browse(
         request,
         {

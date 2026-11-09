@@ -364,6 +364,10 @@
   --feed-image-inset: 0.25rem;     /* the breath between a picture and its well's edge */
   --feed-more: 2rem;               /* the arrow at the end of a row */
   --feed-cue-max: 16rem;           /* the dock's down arrow with the next heading's name */
+  --cx-pic: 3.5rem;                /* the compact layout: a product row's picture */
+  --cx-set-pic: 4.5rem;            /* a set's picture in its row on a phone */
+  --cx-deal: 15rem;                /* a card in the deals strip */
+  --cx-deal-pic: 3rem;             /* its picture */
   --feed-spark: 1rem;              /* the fairy's spark on a lit pill or tile */
   --feed-tile-icon: 2.25rem;       /* 36px: the All types tile's icon in its well */
   --feed-tile-mini: 2.25rem;       /* 36px: the tile's picture once a type is chosen and the row is a line of pills */

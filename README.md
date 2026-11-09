@@ -5334,6 +5334,41 @@ offers to count a handful: it now finds them from plain values in one query and
 loads only those (`checks.gap_candidates`). The owner, 7 Nov 2026: "look at why
 it takes so long to open the dashboard".
 
+**The compact layout** (Admin, **Site look**, Compact layout; `web/compact.py`,
+`web/templates/web/compact/`, `catalogue.SiteLook.compact`): a short list at
+every step, after a simpler site the owner liked (9 Nov 2026: "the layout and
+speed of the site just makes sense ... Can we retain the bottom product search
+bar we have, but can we emulate their layout as much as possible please do
+this a version I can turn on and off in admin"). Only the layout is borrowed:
+RipRaptor's own colours, words and prices throughout. While ticked it wins over
+the new home page; untick to go back. Staff see it any time with
+`?look=compact` (the Site look page links it). With it on:
+
+- The home page leads with the numbers ("14,128 sealed prices in stock at 95
+  UK shops."), a line that delivery is in every price, and a green Checked
+  14 minutes ago (the latest check). Then Today's best deals as a strip of
+  small cards (the feed's rail, from its cache), then the sets people want
+  now across every game (`popularity.set_demand`, then the newest), each with
+  the cheapest price a pack among its products in stock.
+- A game's page: its name, how many products are in stock across how many
+  sets, its deals strip, then every set it has, newest first, and All
+  products. A filtered address (a type, a sort) is the usual list drawn as
+  rows.
+- A set's page: back to the game's sets, its picture and numbers (products,
+  in stock, from a price a pack), its types as chips with All first, then
+  each product as one row: picture, name without the set's own name ("Elite
+  Trainer Box" under Delta Reign), the cheapest shop (or Pre-order, or Last
+  seen at), then the delivered price, how many shops and the price a pack.
+  In stock first, cheapest a pack first, then pre-orders, then what no shop
+  has.
+- Search and every other list draw their products as the same rows.
+- The search box and the games stay fixed to the foot of a phone, as the
+  feed's. Sets are a row each on a phone, tiles from a tablet up; product rows
+  go two across on a desktop.
+
+The numbers and the set lists are worked out once and kept (`compact.kept`),
+built again by warm_pages every few minutes, so no visitor waits for them.
+
 **The new home page** (Admin, **Site look**; `web/look.py`, `web/feed.py`,
 `catalogue.SiteLook`): the marketing team's redesign of 4 Nov 2026
 (`site_redesign/README.md`, their brief) built in beside the usual home

@@ -112,6 +112,12 @@ def warm_pages(fresh=False, only=None):
     views.type_covers()
     # And the feed's tiles, each type's cheapest product in stock (three queries when due).
     feed.tile_picks()
+    # The compact layout's numbers and set lists, while it is on (web/compact.py).
+    from web import compact
+
+    started = time.monotonic()
+    if compact.warm(games):
+        took["compact"] = time.monotonic() - started
     # Each game's own page, built whole and kept (web.pagecache), so the tap from the home page never waits.
     from web import pagecache
 

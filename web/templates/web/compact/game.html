@@ -1,0 +1,21 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{% block scripts %}{% include "web/compact/_scripts.html" %}{% endblock %}
+{% block body_class %}feed-look compact-look{% endblock %}
+{% block page_class %}page--feed page--compact{% endblock %}
+
+{% block content %}
+{# A game's page in the compact layout (web/compact.py): its numbers, its deals strip, then every set it has, newest first. #}
+{% include "web/includes/feed_sprite.svg" %}
+{% include "web/includes/feed_dock.html" with feed=dock %}
+<section class="cx-hero cx-hero--game">
+  <h1 class="cx-hero__title">{{ game.name }}</h1>
+  <p class="cx-hero__lead">{% copy "compact.game.lead" in_stock=in_stock sets=sets|length shops=numbers.shops %}</p>
+  {% if numbers.checked %}<p class="cx-checked"><span class="cx-checked__dot" aria-hidden="true"></span>{% copy "compact.checked" ago=numbers.checked|ago %}</p>{% endif %}
+</section>
+{% include "web/includes/compact_strip.html" %}
+<section class="cx-section" aria-labelledby="cx-sets-title">
+  <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title">{% copy "compact.game.sets" game=game.display_short %}</h2><a class="cx-section__all" href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a></div>
+  {% if sets %}{% include "web/includes/compact_sets.html" %}{% else %}<p class="cx-empty">{% copy "compact.game.no_sets" %} <a href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a></p>{% endif %}
+</section>
+{% endblock %}

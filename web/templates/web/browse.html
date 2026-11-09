@@ -1,12 +1,12 @@
 {% extends "web/base.html" %}
 {% load sitecopy ripraptor static %}
-{% block body_class %}{% if feed %}feed-look{% endif %}{% endblock %}
-{% block page_class %}{% if feed %}page--feed{% endif %}{% endblock %}
+{% block body_class %}{% if feed %}feed-look{% elif compact %}feed-look compact-look{% endif %}{% endblock %}
+{% block page_class %}{% if feed %}page--feed{% elif compact %}page--feed page--compact{% endif %}{% endblock %}
 
 {% block content %}
 {% include "web/includes/share_dialog.html" %}
 {# Everything a filter can change: browse.js fetches the page a change names and swaps this region in, so the share sheet above and the rest of the page stay put. #}
-{% if feed %}{# The new home page is on (web/look.py): the page carries the feed's search and game bar, and leads with the feed's top, which a filter change swaps with the list (web/feed.py). #}{% include "web/includes/feed_sprite.svg" %}{% include "web/includes/feed_dock.html" %}{% endif %}
+{% if feed %}{# The new home page is on (web/look.py): the page carries the feed's search and game bar, and leads with the feed's top, which a filter change swaps with the list (web/feed.py). #}{% include "web/includes/feed_sprite.svg" %}{% include "web/includes/feed_dock.html" %}{% elif compact %}{# The compact layout (web/compact.py): the same search box and games at the foot, the products as rows. #}{% include "web/includes/feed_sprite.svg" %}{% include "web/includes/feed_dock.html" with feed=dock %}{% endif %}
 <div data-browse>
 {% if feed %}{% include "web/includes/feed_top.html" %}{% endif %}
 {% if query %}<span data-search-query="{{ query }}" hidden></span>{% endif %}
@@ -216,9 +216,9 @@
 </div>
 </div>
 {% elif page.object_list %}
-  <ul class="cards">
+  <ul class="{% if compact %}crows{% else %}cards{% endif %}">
     {% for product, summary in cards %}
-      {% include "web/includes/product_card.html" %}
+      {% if compact %}{% include "web/includes/compact_row.html" %}{% else %}{% include "web/includes/product_card.html" %}{% endif %}
     {% endfor %}
   </ul>
   {% include "web/includes/pagination.html" %}
@@ -241,4 +241,4 @@
 {% endblock %}
 
 {# tabs.js on every page with stock tabs, not only one with a tab row: a filter change can bring the row in. #}
-{% block scripts %}{% if stock_tabs %}<script nonce="{{ csp_nonce }}" src="{% static 'js/tabs.js' %}" defer></script>{% endif %}<script nonce="{{ csp_nonce }}" src="{% static 'js/browse.js' %}" defer></script><script nonce="{{ csp_nonce }}" src="{% static 'js/share.js' %}" defer></script>{% if feed %}<script nonce="{{ csp_nonce }}" src="{% static 'js/feed.js' %}" defer></script><style>@view-transition { navigation: auto; }</style><script nonce="{{ csp_nonce }}" type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".feed-game"}, "eagerness": "moderate"}]}</script>{% endif %}{% endblock %}
+{% block scripts %}{% if stock_tabs %}<script nonce="{{ csp_nonce }}" src="{% static 'js/tabs.js' %}" defer></script>{% endif %}<script nonce="{{ csp_nonce }}" src="{% static 'js/browse.js' %}" defer></script><script nonce="{{ csp_nonce }}" src="{% static 'js/share.js' %}" defer></script>{% if compact and not feed %}<script nonce="{{ csp_nonce }}" src="{% static 'js/feed.js' %}" defer></script>{% endif %}{% if feed %}<script nonce="{{ csp_nonce }}" src="{% static 'js/feed.js' %}" defer></script><style>@view-transition { navigation: auto; }</style><script nonce="{{ csp_nonce }}" type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".feed-game"}, "eagerness": "moderate"}]}</script>{% endif %}{% endblock %}

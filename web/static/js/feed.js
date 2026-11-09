@@ -224,8 +224,9 @@
       });
     };
     var placeOf = function (heading) { return heading.getBoundingClientRect().top + window.scrollY - margin; };
+    // The next heading not yet in the top part of the screen: one already in plain view is not where a tap goes.
     var next = function () {
-      var here = window.scrollY + margin;
+      var here = window.scrollY + margin + window.innerHeight * 0.4;
       return stops().filter(function (heading) { return placeOf(heading) > here; })[0] || null;
     };
     var previous = function () {

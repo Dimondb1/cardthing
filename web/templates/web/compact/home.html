@@ -1,0 +1,34 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{% block scripts %}{% include "web/compact/_scripts.html" %}{% endblock %}
+{% block body_class %}feed-look compact-look{% endblock %}
+{% block page_class %}page--feed page--compact{% endblock %}
+
+{% block content %}
+{# The home page in the compact layout (web/compact.py): the numbers, today's deals in a strip, the sets people want now. The search box and the games at the foot of a phone, as the feed's (feed_dock.html). #}
+{% include "web/includes/feed_sprite.svg" %}
+{% include "web/includes/feed_dock.html" with feed=dock %}
+<section class="cx-hero">
+  <h1 class="cx-hero__title">{% copy "compact.home.title" offers=numbers.offers_text shops=numbers.shops %}</h1>
+  <p class="cx-hero__lead">{% copy "compact.home.lead" %}</p>
+  {% if numbers.checked %}<p class="cx-checked"><span class="cx-checked__dot" aria-hidden="true"></span>{% copy "compact.checked" ago=numbers.checked|ago %}</p>{% endif %}
+</section>
+{% include "web/includes/compact_strip.html" %}
+{% if sets %}
+<section class="cx-section" aria-labelledby="cx-sets-title">
+  <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title">{% copy "compact.popular.title" %}</h2><a class="cx-section__all" href="{% url 'web:search' %}">{% copy "compact.all_products" %}</a></div>
+  {% include "web/includes/compact_sets.html" with show_game=True %}
+</section>
+{% endif %}
+{% if partners %}
+<section class="home-section partners" aria-labelledby="partners-title">
+  <div class="section-head"><h2 id="partners-title" class="section-head__title">{% copy "home.partners.title" %}</h2></div>
+  <p class="section-head__note">{% copy "home.partners.note" %}</p>
+  <ul class="partners__list">
+    {% for partner in partners %}
+    <li><a class="partners__link" href="{{ partner.url }}" target="_blank" rel="sponsored nofollow noopener"><img class="partners__logo" src="{{ partner.logo }}" alt="{{ partner.name }}" {% if partner.width and partner.height %}width="{{ partner.width }}" height="{{ partner.height }}" {% endif %}loading="lazy" decoding="async"><span class="visually-hidden"> (opens in a new tab)</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

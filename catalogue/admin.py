@@ -741,7 +741,7 @@ class PartnerAdmin(admin.ModelAdmin):
 class SiteLookAdmin(admin.ModelAdmin):
     """The one row for the site's look (web/look.py): the new home page's switch. The list goes straight to it."""
 
-    fields = ("feed_home", "preview")
+    fields = ("feed_home", "compact", "preview")
     readonly_fields = ("preview",)
 
     def has_add_permission(self, request):
@@ -762,10 +762,11 @@ class SiteLookAdmin(admin.ModelAdmin):
         from django.utils.html import format_html
 
         return format_html(
-            '<a href="{}?look=feed" target="_blank" rel="noopener">The new home page</a> and '
+            '<a href="{}?look=compact" target="_blank" rel="noopener">The compact layout</a>, '
+            '<a href="{}?look=feed" target="_blank" rel="noopener">the new home page</a> and '
             '<a href="{}?look=classic" target="_blank" rel="noopener">the usual one</a>, whichever is switched on. '
             "Only staff see a preview; visitors see the one ticked above.",
-            reverse("web:home"), reverse("web:home"))
+            reverse("web:home"), reverse("web:home"), reverse("web:home"))
 
 
 @admin.register(SeasonalThemes)

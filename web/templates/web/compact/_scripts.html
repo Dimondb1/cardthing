@@ -1,0 +1,4 @@
+{% load static %}<script nonce="{{ csp_nonce }}" src="{% static 'js/feed.js' %}" defer></script>
+{# Switching games: Chrome cross-fades one page into the next and fetches a game's page as the finger lands on it. #}
+<style>@view-transition { navigation: auto; }</style>
+<script nonce="{{ csp_nonce }}" type="speculationrules">{"prefetch": [{"where": {"selector_matches": ".feed-game, .cx-set"}, "eagerness": "moderate"}]}</script>

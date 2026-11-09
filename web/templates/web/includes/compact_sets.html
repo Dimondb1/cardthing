@@ -1,0 +1,11 @@
+{% load sitecopy ripraptor %}{# Sets as a list in the compact layout (web/compact.py set_rows): a row each on a phone, a tile each from a tablet up. Each pictured by one of its own products, with the cheapest price a pack (or the cheapest product, or a pre-order's), and its game where the list holds more than one (show_game). Takes sets. #}
+<ul class="cx-sets">
+  {% for row in sets %}<li><a class="cx-set" href="{{ row.set.get_absolute_url }}">
+    <span class="cx-set__pic">{% if row.cover %}{% product_image row.cover "tile" %}{% endif %}</span>
+    <span class="cx-set__body">
+      <span class="cx-set__name">{{ row.set.name }}</span>
+      {% if show_game %}<span class="cx-set__game">{{ row.set.game.display_short }}</span>{% endif %}
+      {% if row.pack %}<span class="cx-set__meta">{% copy "compact.set.from_pack" each=row.pack|gbp %}</span>{% elif row.from %}<span class="cx-set__meta">{% copy "compact.set.from" price=row.from|gbp %}</span>{% elif row.from_preorder %}<span class="cx-set__meta">{% copy "compact.set.preorder_from" price=row.from_preorder|gbp %}</span>{% else %}<span class="cx-set__meta cx-set__meta--none">{% copy "compact.set.none" %}</span>{% endif %}
+    </span>
+  </a></li>{% endfor %}
+</ul>

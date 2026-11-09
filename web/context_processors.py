@@ -44,8 +44,9 @@ def site(request):
         "guide_pages": GUIDE_PAGES,
         # Today's seasonal theme (web/seasons.py), from the cache alone; staff can preview one with ?theme=.
         "season": seasons.for_request(request),
-        # Find with Rip in the header (web/find.py) while the new home page is on (web/look.py, from the cache alone).
-        "find_link": look.for_request(request),
+        # Find with Rip in the header (web/find.py) while the new home page or the compact layout is on (web/look.py,
+        # from the cache alone).
+        "find_link": look.mode(request) in (look.FEED, look.COMPACT),
         # The refresh dots under the logo (web/refresh.py): the lists' next rebuild, from the clock alone; a product
         # page puts its own shops' next read in their place.
         "refresh": refresh.for_lists(),

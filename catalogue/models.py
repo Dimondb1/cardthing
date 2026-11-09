@@ -2697,13 +2697,22 @@ class SiteLook(models.Model):
     feed of 4 Nov 2026: today's best prices, product type tiles, a rail of deals and the next drop, with the search
     box and the games fixed to the foot of a phone; web/feed.py) is off until the owner switches it on here, and comes
     off again the same way, so a look can be tried and rolled back without a deploy. The owner, 4 Nov 2026: "can we
-    easily roll this back if I don't like it"."""
+    easily roll this back if I don't like it". The compact layout (web/compact.py) is the owner's of 9 Nov 2026, after
+    a simpler site: "can we emulate their layout as much as possible ... a version I can turn on and off in admin"."""
 
     feed_home = models.BooleanField(
         "New home page", default=False,
         help_text="Ticked: the home page and each game's page lead with the feed (today's best prices, product "
                   "types, the next drop) with search and the games at the foot of a phone. Unticked: the usual home "
                   "page. Staff can see either any time by adding ?look=feed or ?look=classic to the address.",
+    )
+    compact = models.BooleanField(
+        "Compact layout", default=False,
+        help_text="Ticked: the simple layout, a short list at every step: the home page leads with the numbers, "
+                  "today's deals in a strip and the sets people want, each game's page lists its sets, each set its "
+                  "products as plain rows, with search and the games at the foot of a phone. It wins over the new "
+                  "home page while ticked. Untick to go back. Staff can see it any time by adding ?look=compact to "
+                  "the address.",
     )
 
     class Meta:

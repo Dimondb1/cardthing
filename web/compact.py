@@ -24,7 +24,7 @@ from django.shortcuts import render
 from django.urls import reverse
 
 from catalogue import offers, pricing, popularity
-from catalogue.contents import price_a_pack
+from catalogue.contents import cards_total, price_a_card, price_a_pack
 from catalogue.models import Listing, Product, ProductSet
 from catalogue.types import type_choices
 from content import service as copy
@@ -240,6 +240,23 @@ def in_stock_asked(request):
     return bool(request.GET.get("in_stock"))
 
 
+def rip_asked(request):
+    """Whether the Best for ripping switch is on in the address (``?rip=on``)."""
+    return bool(request.GET.get("rip"))
+
+
+def for_ripping(rows):
+    """``rows`` with only the products you open (their cards can be counted, catalogue/contents.py), the ones a shop
+    has first and among them the cheapest a card first: the Best for ripping switch."""
+    def each(row):
+        product, summary = row
+        best = summary.best
+        return price_a_card(best.shown_price, product) if best is not None else None
+
+    rows = [row for row in rows if cards_total(row[0])]
+    return sorted(rows, key=lambda row: (row[1].best is None, each(row) is None, each(row) or 0, row[0].name))
+
+
 def product_rows(products):
     """[(product, summary)] in a set's order: in stock first, then pre-orders, then the rest; within each the cheapest
     a pack first where that is known, then the cheapest. ``products`` carry for_lists' prices."""
@@ -309,6 +326,9 @@ def set_page(request, product_set, extra):
     if only_in_stock:
         rows = [(product, summary) for product, summary in rows
                 if summary.best is not None and summary.best.availability == Listing.Availability.IN_STOCK]
+    rip = rip_asked(request)
+    if rip:
+        rows = for_ripping(rows)
     cover = next((product for product, _ in rows if product.image_src), None)
     store = copy.for_request(request)
     return render(request, "web/compact/set.html", {
@@ -324,6 +344,8 @@ def set_page(request, product_set, extra):
         "type_chosen": chosen,
         "type_keep": [("type", chosen)],
         "in_stock_on": only_in_stock,
+        "stock_switch": True,
+        "rip_on": rip,
         "dock": dock(request, product_set.game),
     })
 

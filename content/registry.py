@@ -617,6 +617,15 @@ ENTRIES = [
           "One small line under the header of every compact page but the home page, before when prices were "
           "checked. {offers} is how many shop prices are in stock now, {shops} how many shops we compare.",
           placeholders=("offers", "shops")),
+    Entry("compact.rip", B, "Compact layout: Best for ripping switch", "Best for ripping",
+          "The switch beside In stock above a list. On, the list keeps the products you open, the cheapest a card first, "
+          "each with its Price check. Two or three words."),
+    Entry("compact.rip_note", T, "Compact layout: Best for ripping, what it shows",
+          "Products you open, cheapest a card first. The coloured Price check says how today's price compares.",
+          "Under the switches while Best for ripping is on. Says what the list holds and what the coloured chips mean."),
+    Entry("compact.row.packs", T, "Compact layout: packs in a box and the price of each", "{packs} packs, {each} each",
+          "On a row for a box, bundle or anything else that holds packs: how many, and the price shared over them. "
+          "{packs} is the count, {each} the price a pack.", placeholders=("packs", "each")),
     Entry("compact.in_stock", B, "Compact layout: the In stock switch", "In stock",
           "The switch above a list that keeps only products a shop has in stock now."),
     Entry("compact.row.shops.one", T, "Compact layout: shops on a row (one)", "1 shop",

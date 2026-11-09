@@ -158,6 +158,12 @@ Reign's products: "catch the live rip listings automatically". Checked
 against 13,536 product and shop titles before it went in: none caught that
 should not be.
 
+A clear plastic case to stand a box in ("Acrylic Booster Box Display",
+which led Booster boxes at £19.98 on 9 Nov 2026) is not a box either: an
+"acrylic" display, case, stand, holder or frame is not sealed, unless it
+comes after a plus or "with" (a box sold with one, which "case" already
+marks).
+
 Football boots and trainers are left out the same way: a sports shop that
 sells cards too names them "adidas F50 ... World Cup Pack UK 10", and on 9
 Nov 2026 they were 332 pages, one for each shoe size, read as booster
@@ -5502,8 +5508,23 @@ the new home page; untick to go back. Staff see it any time with
   right, an In stock switch (`compact_switch.html`, `?in_stock=on`, sent as
   it is flicked and carrying the other choices) keeps only what a shop has
   now ("I also want a in stock slider"); a game's filtered list, which has
-  the stock tabs, has no switch. The quick filters and the folded panel's
-  own In stock toggle give way to them.
+  the stock tabs, has no In stock switch. The quick filters and the folded
+  panel's own In stock toggle give way to them.
+- Beside it on every list, Best for ripping (`?rip=on`; the owner, 9 Nov
+  2026: "a search filter 'best for ripping' cheapest per card ... could we
+  colour code based on price rating? ... a slider in that row ... so users
+  can slide it on to see if they are picking a good one"). On, the list
+  keeps the products you open (their cards can be counted,
+  `ordering.CARDS_KNOWN`), the cheapest a card first (on a set's page
+  `compact.for_ripping`, the ones a shop has first), and each row shows its
+  price a card and its Price check chip, green for a good price or the
+  lowest yet and red for a high one, as on the product page. A line under
+  the switches says what the list holds and what the colours mean
+  (`compact.rip_note`). The folded panel carries the switch, and a game's
+  page with it on is that game's list.
+- A row for anything that holds packs says how many and the price of each
+  ("36 packs, £5.00 each", `compact.row.packs`; the owner, 9 Nov 2026: "when
+  I looking up booster boxes, I would like to see the pack count").
 - A product's name in its set's list drops the set's own name however it is
   punctuated ("Mega Evolution - Delta Reign" against "Mega Evolution Delta
   Reign Booster Box": `compact.short_name` matches words, not characters).

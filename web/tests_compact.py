@@ -131,8 +131,10 @@ class GamePageTests(CompactCase):
         self.assertIn('<ul class="crows">', html)
         self.assertIn('<li class="crow">', html)
         self.assertNotIn('<li class="card', html)
-        # The stock tabs do the In stock switch's job here, so there is none; the tiles sit above the rows.
-        self.assertNotIn("cx-tools", html)
+        # The stock tabs do the In stock switch's job here, so only Best for ripping is there; the tiles sit above.
+        tools = html[html.index('<form class="cx-tools"'):html.index("</form>", html.index('<form class="cx-tools"'))]
+        self.assertIn('name="rip"', tools)
+        self.assertNotIn('name="in_stock"', tools)
         self.assertIn('class="feed feed--filtered cx-tiles"', html)
 
 
@@ -153,7 +155,8 @@ class SetPageTests(CompactCase):
         box = html[html.index("Booster Box</span>"):]
         self.assertIn('<span class="crow__price">£180.00</span>', box)
         self.assertIn("2 shops", box[:box.index("</li>")])
-        self.assertIn("£5.00 a pack", box[:box.index("</li>")])
+        # How many packs a box holds and the price of each (the owner, 9 Nov 2026: "I would like to see the pack count").
+        self.assertIn('<span class="crow__meta">36 packs, £5.00 each</span>', box[:box.index("</li>")])
         self.assertIn("Pre-order", html[html.index("Mini Tin</span>"):html.index("Booster Pack</span>")])
         self.assertIn('<li class="crow crow--none">', html)
         self.assertIn('class="feed-dock"', html)
@@ -259,3 +262,60 @@ class CompactStyleTests(CompactCase):
                 with self.subTest(url=url, phrase=phrase):
                     self.assertNotIn(phrase, visible)
             self.assertNotIn("!", visible)
+
+
+class RipTests(CompactCase):
+    """Best for ripping, the switch beside In stock (the owner, 9 Nov 2026: "a search filter 'best for ripping' cheapest
+    per card ... could we colour code based on price rating? ... a slider in that row ... so users can slide it on to
+    see if they are picking a good one"): the products you open, the cheapest a card first, each with its Price
+    check."""
+
+    def setUp(self):
+        super().setUp()
+        for product, cards in ((self.box, 10), (self.etb, 10), (self.gone, 10), (self.sparks, 10)):
+            product.cards_per_pack = cards
+            product.save()
+        Product.objects.filter(pk=self.box.pk).update(price_band=4)       # Good price
+        Product.objects.filter(pk=self.etb.pk).update(price_band=1)       # High price
+
+    def rows(self, html):
+        return re.findall(r'<span class="crow__name">([^<]+)</span>', html)
+
+    def test_a_list_keeps_what_you_open_cheapest_a_card_first_with_its_price_check(self):
+        url = reverse("web:search")
+        html = self.page(url, game="pokemon")
+        self.assertIn('<input type="checkbox" name="rip" value="on"><span class="toggle__track" aria-hidden="true">'
+                      '</span><span>Best for ripping</span>', html)
+        self.assertNotIn("fair--small", html)          # the chips only with the switch on
+        html = self.page(url, game="pokemon", rip="on")
+        self.assertIn('<input type="checkbox" name="rip" value="on" checked>', html)
+        # The tin holds no cards anyone has counted, so it goes; the pack at 45p a card, the box at 50p, the ETB at
+        # 78p, then the pack no shop has.
+        names = re.findall(r'<span class="crow__name">([^<]+)</span>', html)
+        self.assertEqual(names, [self.sparks.name, self.box.name, self.etb.name, self.gone.name])
+        self.assertIn('<span class="crow__meta crow__meta--card">50p a card</span>', html)
+        self.assertIn('<span class="crow__meta crow__meta--card">45p a card</span>', html)
+        box = html[html.index(f'<span class="crow__name">{self.box.name}</span>'):]
+        box = box[:box.index("</li>")]
+        self.assertIn('class="fair fair--good fair--small"', box)
+        self.assertIn("Good price", box)
+        etb = html[html.index(f'<span class="crow__name">{self.etb.name}</span>'):]
+        self.assertIn('class="fair fair--high fair--small"', etb[:etb.index("</li>")])
+        self.assertIn("Products you open, cheapest a card first.", html)
+        # The folded filters carry the switch, and the switch's form the other choices.
+        self.assertIn('<input type="hidden" name="rip" value="on">', html)
+        self.assertIn("Best for ripping", html[html.index("filter-bar"):])
+
+    def test_a_set_page_ripping_order(self):
+        html = self.page(self.reign.get_absolute_url(), rip="on")
+        self.assertEqual(self.rows(html), ["Booster Box", "Elite Trainer Box", "Booster Pack"])
+        self.assertIn('<input type="checkbox" name="rip" value="on" checked>', html)
+        self.assertIn('<input type="checkbox" name="in_stock" value="on">', html)
+        self.assertIn("Good price", html)
+        # With In stock as well, the pack no shop has goes.
+        html = self.page(self.reign.get_absolute_url(), rip="on", in_stock="on")
+        self.assertEqual(self.rows(html), ["Booster Box", "Elite Trainer Box"])
+        # A game's page with the switch on is its list, as with any other choice.
+        html = self.page(self.pokemon.get_absolute_url(), rip="on")
+        self.assertNotIn("cx-hero", html)
+        self.assertIn('<input type="checkbox" name="rip" value="on" checked>', html)

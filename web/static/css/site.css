@@ -2702,7 +2702,11 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 /* The types as the feed's small tiles above a list (compact_tiles.html borrows the feed's filtered-row styles), and
    the In stock switch under them, at the right. */
 .cx-tiles { margin-bottom: var(--space-2); }
-.cx-tools { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-3); margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.cx-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-strong); }
+/* Best for ripping on: what the list holds and what its coloured chips mean, under the switches. */
+.cx-rip-note { margin: calc(-1 * var(--space-2)) 0 var(--space-3); font-size: var(--text-xs); color: var(--color-ink-muted); text-align: right; }
+.crow__check { display: flex; }
+.crow__meta--card { font-weight: var(--weight-strong); color: var(--color-ink); }
 .compact-look .browse-head { margin-bottom: var(--space-2); }
 .compact-look .browse-head__title { font-size: var(--text-xl); }
 .compact-look .browse-head__count, .compact-look .browse-head__intro { font-size: var(--text-xs); }

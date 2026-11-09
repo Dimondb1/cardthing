@@ -28,7 +28,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from catalogue import (alerts, clicks, fair_price, images, insights, languages, mail, offers, picks, popularity, pricing,
                        referrals, sports, traffic)
 from catalogue.contents import cards_total, price_a_card
-from catalogue.ordering import LANGUAGES, SORTS, apply_languages, order_products, order_products_default
+from catalogue.ordering import CARDS_KNOWN, LANGUAGES, SORTS, apply_languages, order_products, order_products_default
 from catalogue.models import (
     DailyPageView, DropSpotlight, FeaturedSettings, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
     Retailer, StockAlert, stale_cutoff,
@@ -88,6 +88,9 @@ class FilterForm(forms.Form):
     )
     sort = forms.ChoiceField(label="Sort by", choices=SEARCH_SORTS, required=False)
     in_stock = forms.BooleanField(label="In stock", required=False)
+    # The products you open, the cheapest a card first, each with its Price check (the owner, 9 Nov 2026: "a search
+    # filter 'best for ripping' cheapest per card ... colour code based on price rating ... a slider in that row").
+    rip = forms.BooleanField(label="Best for ripping", required=False)
     compared = forms.BooleanField(label="2+ shops", required=False)
     price = forms.ChoiceField(label="Price", choices=PRICE_BANDS, required=False)
     lang = forms.ChoiceField(label="Language", choices=[("", "Language")] + LANGUAGES, required=False)
@@ -255,6 +258,9 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         products = products.filter(lowest_price__gte=low)
         if high:
             products = products.filter(lowest_price__lt=high)
+    rip = bool(form.value("rip"))
+    if rip:
+        products = products.filter(CARDS_KNOWN)
     languages = [form.value("lang")] if form.value("lang") else []
     # A type's list on the new home page (web/feed.py) offers the languages it holds as chips, ready to tap: from the
     # list before the language choice, so a chip never leads to an empty list. One query, only there.
@@ -276,7 +282,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         tab = asked or opening
         products = products.filter(stock_tab(tab, compared))
 
-    sort = form.value("sort", form.default_sort)
+    sort = "card" if rip else form.value("sort", form.default_sort)
     if sort == "best" and not terms:
         sort = "newest"
     if tab == "pre-orders" and sort == "newest":
@@ -300,7 +306,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     cards = [(product, offers.summarise(product, week_lows)) for product in page.object_list]
 
     filters_besides_type = bool(
-        game or (form.value("in_stock") and not tabs) or form.value("compared") or band or languages
+        game or (form.value("in_stock") and not tabs) or form.value("compared") or band or languages or rip
         or sort not in (form.default_sort, "soonest") or narrow is not None
     )
     filters_active = filters_besides_type or bool(product_type)
@@ -321,7 +327,9 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         alert_url = reverse("web:watchlist") + "?" + urlencode(params) + "#alert"
     # The choices in force, named on the folded Sort and filter button so the list says what it holds.
     chosen = []
-    if sort not in (form.default_sort, "soonest"):
+    if rip:
+        chosen.append(form.fields["rip"].label)
+    elif sort not in (form.default_sort, "soonest"):
         chosen.append(dict(form.fields["sort"].choices).get(sort))
     for name, value in (("type", "" if type_row else product_type), ("price", band), ("lang", form.value("lang"))):
         if value:
@@ -368,6 +376,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         # One list and no tab row: a list other than In stock says what it is in a heading.
         "single_list": tabs and len(shown_tabs) == 1,
         "soonest": sort == "soonest",
+        "rip_on": rip,
         "lang_chips": lang_chips,
         # Named on the Filters pill of a type's list: the price band and 2+ shops, the choices its panel holds.
         "feed_chosen": [label for label in (dict(form.fields["price"].choices).get(band) if band else "",
@@ -378,16 +387,18 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     if context["compact"]:
         context["dock"] = compact.dock(request, fixed_game or game)
         context["numbers"] = compact.numbers()
-        # The types as small tiles above the rows, and an In stock switch where the stock tabs do not do that job.
+        # The types as small tiles above the rows, then the switches: Best for ripping on every list, In stock where
+        # the stock tabs do not do that job.
         context["compact_tiles"] = compact.list_tiles(request, fixed_game or game, product_type)
-        context["compact_switch"] = not tabs
+        context["compact_switch"] = True
+        context["stock_switch"] = not tabs
         context["in_stock_on"] = bool(form.value("in_stock")) and not tabs
-        # What the switch's form carries on: every other choice in force.
+        # What the switches' form carries on: every other choice in force.
         context["compact_keep"] = [
             ("q", query), ("game", game.slug if game is not None and fixed_game is None else ""),
             ("type", product_type), ("sort", request.GET.get("sort", "")), ("price", band),
             ("lang", form.value("lang") or ""), ("compared", "on" if form.value("compared") else ""),
-            ("set", request.GET.get("set", "")),
+            ("set", request.GET.get("set", "")), ("tab", asked),
         ]
     context.update(template_context)
     if not (page.object_list or context.get("set_upcoming")):
@@ -1067,7 +1078,7 @@ PER_CARD_KEY = "home:per-card:v1"
 
 def per_card_ids():
     """The products in stock with the cheapest price per card, cheapest first."""
-    from catalogue.ordering import CARDS_KNOWN, with_card_price
+    from catalogue.ordering import with_card_price
 
     ranked = (with_card_price(Product.objects.for_lists().in_stock().filter(CARDS_KNOWN))
               .filter(price_per_card__isnull=False).order_by("price_per_card", "pk"))
@@ -1213,8 +1224,6 @@ def cheapest_per_card(request):
     """Cheapest per card: every sealed product in stock whose cards can be counted, ranked by its cheapest delivered
     price shared over them (the owner, 2 Nov 2026: "for those who just like ripping packs"), with the usual filters.
     The counts are the owner's figures or the ones shops' descriptions agree on (catalogue/contents.py)."""
-    from catalogue.ordering import CARDS_KNOWN
-
     heading = text(request, "browse.percard.title")
     return _browse(
         request,
@@ -1264,7 +1273,7 @@ def moved(request, target):
 
 # The choices that make a game's page a filtered list: with any of them, the compact layout draws the usual list as rows
 # rather than the game's sets.
-COMPACT_LIST_PARAMS = ("type", "set", "lang", "sort", "page", "price", "compared", "tab", "in_stock")
+COMPACT_LIST_PARAMS = ("type", "set", "lang", "sort", "page", "price", "compared", "tab", "in_stock", "rip")
 
 
 def shared_for_game(name, build):
@@ -1450,7 +1459,7 @@ def set_detail(request, game_slug, set_slug):
     # The compact layout (web/compact.py): the set's products as rows under its types. Another choice (a sort, a
     # language) is the usual list, drawn as compact rows.
     if (look.compact_for_request(request) and not request.GET.get("pane")
-            and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS if name not in ("type", "in_stock"))):
+            and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS if name not in ("type", "in_stock", "rip"))):
         return compact.set_page(request, product_set, {
             "meta_title": meta_title, "meta_description": meta_description, "canonical_url": page_url,
             "set_facts": facts, "set_upcoming": upcoming, "instead": instead,

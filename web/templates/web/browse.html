@@ -197,6 +197,7 @@
     <label class="visually-hidden" for="{{ form.lang.id_for_label }}">{{ form.lang.label }}</label>
     {{ form.lang }}
   </div>
+  {% if form.rip.value %}<input type="hidden" name="rip" value="on">{% endif %}
   {% if not stock_tabs %}{% if compact %}{% if form.in_stock.value %}<input type="hidden" name="in_stock" value="on">{% endif %}{% else %}<label class="toggle">{{ form.in_stock }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.in_stock.label }}</span></label>{% endif %}{% endif %}
   <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>
   <div class="filters__actions">

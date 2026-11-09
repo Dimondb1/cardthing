@@ -158,6 +158,34 @@ Reign's products: "catch the live rip listings automatically". Checked
 against 13,536 product and shop titles before it went in: none caught that
 should not be.
 
+Football boots and trainers are left out the same way: a sports shop that
+sells cards too names them "adidas F50 ... World Cup Pack UK 10", and on 9
+Nov 2026 they were 332 pages, one for each shoe size, read as booster
+packs. A name led by a sportswear maker (adidas, Nike, New Balance, Puma, A
+Bathing Ape and others) with no box, booster, tin, deck, collection,
+display or bundle in it, "laceless", "football boots" or a shoe size with
+its EU size marks one, and those makers and shoe categories are refused as
+vendors and product types.
+
+Some shops add the same mark to every name, which made a second page for a
+product already listed (`matching.shop_marks_off`; the owner, 9 Nov 2026,
+with "Delta Reign Booster Pack (MARKET)" at Impact beside the same pack at
+eight shops: "Other duplicates are getting through probably"). Matching and
+new names leave them out: a shop's web address (TCG Shop UK's page titles
+end "tcgshopuk.co.uk": 350 pages, 128 with a twin), a marketplace tag
+("(MARKET)") and a till's "One Size" with the year and game it puts in
+front ("2026 Pokemon Mega Evolution Pitch Black Elite Trainer Box One
+Size"; a year with no such mark stays, so 2024's holiday calendar is not
+2025's). Series names some shops put in front go too, within their game:
+Pokémon's "Base Set" after a series ("Mega Evolution Base Set Booster Box";
+1999's Base Set stays), "Star Wars" in front of a Star Wars Unlimited set,
+and Vanguard's DivineZ, overDress and will+Dress. The hourly tidy-up renames
+the pages already listed and folds each into its twin, whose address the
+old one redirects to, and each merge can be undone under Things to check.
+"Delta Reign 3 Pack Blister Seel" stays apart from "Delta Reign 3 Pack
+Blister": Seel names the promo card inside, which a shop that leaves it out
+may or may not mean.
+
 Since Impact League TCG joined (15 Oct 2026): a price of nothing but nines
 (£999, £999.99, £9,999) means not for sale and the offer is left out;
 second-hand stock ("trade in", a bracketed "(TRADE)" or "(TRADE/IMPORT)"
@@ -4876,8 +4904,12 @@ set, so a small card asks: Allow analytics or No analytics, equally plain.
 Until a visitor allows it no Google Analytics script loads and nothing is
 stored but the answer, which is kept in the browser (`ripraptor.analytics`)
 and asked again after six months. The swipe page fills a phone's screen,
-so there the card waits for the next page. Analytics cookies at the foot
-of the site's pages shows the card again. No analytics deletes Google's
+so there the card waits for the next page. Answered as it first comes up,
+the page goes back to its top (the owner, 9 Nov 2026: "After you click
+accept on the cookies send the page back up to the top again"), where the
+home page's hints then show. Analytics cookies at the foot
+of the site's pages shows the card again, and an answer given there leaves
+the page where it is. No analytics deletes Google's
 cookies, and a page whose tag is already running reloads without it, as
 do the visitor's other open tabs and a page kept for the Back button.
 Google signals and advertising features are off.
@@ -5149,7 +5181,8 @@ from 9 Nov 2026):
 
 - A visitor from outside the countries in **Admin, Visitor check** (the UK
   and Ireland to start with) who has no pass for their address gets a short
-  page first: "Checking your browser". The browser works out a small sum
+  page first with one line, "Checking to make sure you are a human 😊".
+  The browser works out a small sum
   (a SHA-256 hash with four leading zeros, `web/static/js/botcheck.js`) and
   sends the answer to `/check/`. A right answer, from the same address,
   within ten minutes, earns the pass and goes on to the page asked for. A
@@ -5516,12 +5549,15 @@ own games forward, in the browser, as on the usual home page. On every
 landing `feed.js` shows quiet hints in turn, each for a couple of seconds
 while the things it points at light up one after another, ended early by
 any tap or scroll: on the home page Pick by game by the bar and Pick by
-type by the tiles; on a game's page Pick a set by its row of sets and Or
+type by the tiles (in the compact layout, Pick by game by the bar); on a game's page Pick a set by its row of sets and Or
 pick a type by the tiles; and once a set is picked, as its list comes in,
 Now pick a type by the tiles. Nothing is remembered between landings (the
 owner, 9 Nov 2026: "every time I land on the homepage, I need to see them.
 They can go ... I don't need to see them after that"). The wording is
-`feed.hint.*` in the registry. Each step lands with a little movement: a
+`feed.hint.*` in the registry. On a first visit the cookie card covers the
+foot of the screen, where the game bar is, so the hints wait for its answer
+and the page's return to the top, then show; a tap elsewhere first skips
+them. Each step lands with a little movement: a
 set chip wears its ring the moment it is tapped, the set or type just
 picked settles into place, and the list's heading rises in under the tiles
 (transform and opacity only, none with reduced motion). On a phone two
@@ -5529,7 +5565,9 @@ small arrows sit on the dock's edge: down while a section heading is below,
 which takes the page to it and names it beside the arrow ("Today's best
 deals", "About Pokémon"), and up once the page has moved, which takes it to
 the heading before, or the top. A product card's name is not a stop, so
-the arrow goes section to section, not down a list product by product. The
+the arrow goes section to section, not down a list product by product.
+Partners is not a stop either (the owner, 9 Nov 2026: "Down arrow doesn't
+need to go to partners section"). The
 down arrow bobs until the page first moves, waits while the hints show, and
 both go while the search box has the keyboard up. The owner, 6 Nov 2026:
 "the little down arrow when pressed should pop the user down to the next

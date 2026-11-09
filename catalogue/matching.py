@@ -45,6 +45,32 @@ CHOSEN = re.compile(r"^(?P<before>[^()]*/[^()]*?)\s*\((?P<chosen>[^()/]+)\)\s*$"
 # The variant a shop's system names when a product has only one ("Default", "Default Title"), or the plain one
 # beside a damaged one ("Normal"): never part of it.
 DEFAULT_VARIANT = re.compile(r"\s*[\[(]\s*(?:default(?: title)?|normal)\s*[\])]\s*$|\s*[-–:|]\s*default title\s*$", re.I)
+# What some shops add to every name, which never says which product it is (the owner, 9 Nov 2026: "Other duplicates
+# are getting through probably"). The shop's own web address: TCG Shop UK's page titles end "tcgshopuk.co.uk", and
+# 351 pages carried it, many a second page for a product already listed. A marketplace tag: Impact's "Delta Reign
+# Booster Pack (MARKET)" was a page of its own beside the same pack at eight shops.
+SHOP_ADDRESS = re.compile(
+    r"(?<![\w.-])(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.(?:co\.uk|org\.uk|com|net|org|uk|shop|store)(?![\w.-])", re.I
+)
+MARKET_TAG = re.compile(r"[\[(]\s*market(?:place)?\s*[\])]", re.I)
+# A sports shop's till names every product "<year> <game> <name> One Size" ("2026 Pokemon Mega Evolution Pitch Black
+# Elite Trainer Box One Size", 177 pages). With that mark the year and the game in front say nothing either. Without
+# it a year can name the product ("2024 Holiday Calendar" is not 2025's), so it stays.
+ONE_SIZE = re.compile(r"\s*(?:[\[(]\s*one size\s*[\])]|[-–:|]?\s*\bone size)\s*$", re.I)
+TILL_HEAD = re.compile(
+    r"^\s*20\d\d\s+(?:pok[eé]mon|one piece|riftbound(?: league of legends)?|disney lorcana(?: ravensburger)?|lorcana|"
+    r"magic(?::? the gathering)?|yu-?gi-?oh!?|dragon ball super|digimon|star wars unlimited|union arena|gundam)\b\s*",
+    re.I,
+)
+
+
+def shop_marks_off(text):
+    """The name without the marks some shops add to every name: their web address, a marketplace tag and a till's
+    "<year> <game> ... One Size"."""
+    text = text or ""
+    if ONE_SIZE.search(text):
+        text = TILL_HEAD.sub("", ONE_SIZE.sub("", text))
+    return re.sub(r"\s+", " ", MARKET_TAG.sub(" ", SHOP_ADDRESS.sub(" ", text))).strip(" :,-–|")
 # Notes a shop adds to a name that never say which product it is: how many each customer may buy ("*1pp limit*",
 # "WEBSTORE 1 PER CUSTOMER", "Limit 2"), and when it comes out or came back ("(Releases 27.03.26)", "February
 # Restock", "Final Drop", "Wave 2"), and that it is a pre-order ("(Pre Order)", "Pre-Order", "Preorder"): "Gem Pack
@@ -81,8 +107,9 @@ def without_notes(text, game=""):
 
 
 def chosen_option(name):
-    """The name with only the chosen one of a shop's options, and without a "(Default)" variant."""
-    name = DEFAULT_VARIANT.sub("", name or "")
+    """The name with only the chosen one of a shop's options, and without a "(Default)" variant or the marks some
+    shops add to every name (shop_marks_off)."""
+    name = DEFAULT_VARIANT.sub("", shop_marks_off(name))
     found = CHOSEN.match(name)
     if not found:
         return name
@@ -216,6 +243,8 @@ SET_CODE = re.compile(r"^(?:(?:sv|swsh|sm|xy|bw|dp|hgss)(?:\d{1,2}(?:\.5)?)?|(?:
                       r"(?:(?:op|eb|prb)[ck]?|st|bt|ex|lm|pb|b|fb|fs|sd|led)\d{1,3}[a-z]?)$")
 POKEMON_SET_CODE = re.compile(r"^(?:me(?:\d{1,2}(?:\.5)?)?|m\d{1,2}[a-z]{0,2}|s\d{1,2}[a-z]{0,2})$")
 POKEMON = "pokemon"
+STAR_WARS_UNLIMITED = "star-wars-unlimited"
+VANGUARD = "cardfight-vanguard"
 YUGIOH = "yu-gi-oh"
 # Yu-Gi-Oh!'s Legendary Duelists sets are numbered by their code: "Legendary Duelists 9: Duels From the Deep" is LED9,
 # whose name Konami gives without the number ("Legendary Duelists: Duels From the Deep"). Shops write it either way
@@ -323,6 +352,18 @@ def key_text(text, game=""):
     if game == YUGIOH:
         expanded = LEGENDARY_DUELISTS_NUMBER.sub(lambda m: f"{m.group(1)} led{int(m.group(2))}", expanded)
     expanded = SERIES.sub(_series_code, _spaced(expanded))
+    if game == POKEMON:
+        # A series' first set is named after the series, and shops add "Base Set" to it or not: "Mega Evolution Base
+        # Set Booster Box" is the Mega Evolution Booster Box. 1999's Base Set, with no series before it, stays.
+        expanded = re.sub(r"\b(me|sv|swsh|sm|xy|bw) base(?: set)?\b", r"\1", expanded)
+    if game == STAR_WARS_UNLIMITED:
+        # Every product of the game is Star Wars, and shops put it in front or not ("Star Wars Booster Box Shadows
+        # of the Galaxy").
+        expanded = re.sub(r"\bstar wars\b", " ", expanded)
+    if game == VANGUARD:
+        # Vanguard's series names, which shops put in front of a set's name or not ("DivineZ Envoys of the Crimson
+        # Moon Booster Box", "overDress Record of Ragnarok Trial Deck").
+        expanded = re.sub(r"\b(?:divine ?z|over ?dress|will ?\+? ?dress)\b", " ", expanded)
     # Codes before counts: "PRB 02 Booster Pack" is the second Premium Booster, and "(csv9.5) Booster Pack" a
     # pack of csv9.5, not five packs. Pokémon's "ex" is a kind of card ("Charizard ex"), never a code.
     expanded = SET_CODES.sub(lambda m: m.group(0) if game == POKEMON and m.group(1) == "ex" else _set_code(m), expanded)

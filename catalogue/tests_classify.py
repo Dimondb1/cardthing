@@ -789,3 +789,125 @@ class LiveRipTests(TestCase):
         self.assertTrue(ebay.junk(box, "Pokemon Surging Sparks Booster Box LIVE BREAK slot"))
         self.assertTrue(ebay.junk(box, "Surging Sparks Booster Box Rip and Ship"))
         self.assertFalse(ebay.junk(box, "Pokemon Surging Sparks Booster Box 36 Packs Sealed"))
+
+
+class FootwearTests(TestCase):
+    """Football boots and trainers a sports shop names "... World Cup Pack ... UK 10" are not cards: 330 pages on
+    9 Nov 2026, one for each shoe size (classify.NOT_SEALED)."""
+
+    SHOES = [
+        "adidas F50 Hyperfast Elite Laceless FG Chaos vs Control World Cup Pack UK 10",
+        "adidas Samba BAPE World Cup Pack White Forest UK 9",
+        "A Bathing Ape BAPE STA KidSuper World Cup Pack England UK 7",
+        "New Balance FuelCell Ohtani 1 TF Shohei Ohtani International Baseball Pack Navy UK 8",
+        "2015 Nike Basketball Class of 97 Pack UK 7.5 US 8.5 EU 42",
+        "Nike SB Zoom Tennis Classic World Cup Pack Hyper Pink UK 6 EU 39",
+    ]
+    CARDS = [
+        "Topps Chrome UEFA Champions League Hobby Box",
+        "2024 Panini Prizm FIFA World Cup Hobby Box",
+        "2025-26 Topps UK Edition Football Hobby Box",
+        "Mega Evolution Delta Reign Elite Trainer Box",
+    ]
+
+    def test_boots_and_trainers_are_never_listed_and_card_boxes_are(self):
+        from .classify import NOT_SEALED
+
+        for title in self.SHOES:
+            with self.subTest(title=title):
+                self.assertTrue(NOT_SEALED.search(title))
+                self.assertIsNone(classify(title, price=Decimal("180.00")))
+        for title in self.CARDS:
+            with self.subTest(title=title):
+                self.assertFalse(NOT_SEALED.search(title))
+
+    def test_the_hourly_tidy_up_takes_the_boots_already_listed_off(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .models import Product, RemovedProduct
+        from .testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        cards = make_set(make_game("Sports Cards", slug="sports-cards"), name="Topps", slug="topps")
+        boot = make_product(cards, name=self.SHOES[0], slug="adidas-f50-world-cup-pack-uk-10",
+                            product_type="booster_pack")
+        make_listing(boot, make_retailer("Kit Room"), price="249.99")
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=boot.pk).exists())
+        self.assertTrue(RemovedProduct.objects.filter(slug="adidas-f50-world-cup-pack-uk-10").exists())
+
+
+class ShopMarkTests(TestCase):
+    """Marks some shops add to every name make no second page (matching.shop_marks_off). The owner, 9 Nov 2026,
+    with "Delta Reign Booster Pack (MARKET)" at Impact beside "Delta Reign Booster Pack" at eight shops: "Other
+    duplicates are getting through probably"."""
+
+    def test_new_names_come_without_the_marks(self):
+        for title, name in [
+            ("Delta Reign Booster Pack (MARKET)", "Delta Reign Booster Pack"),
+            ("Hidden Fates Elite Trainer Box - TCGShopUK.co.uk", "Hidden Fates Elite Trainer Box"),
+            ("Hidden Fates Elite Trainer Box | tcgshopuk.co.uk", "Hidden Fates Elite Trainer Box"),
+            ("2026 Pokemon Mega Evolution Pitch Black Elite Trainer Box One Size",
+             "Mega Evolution Pitch Black Elite Trainer Box"),
+            ("Winterspell Booster Box - One Size", "Winterspell Booster Box"),
+        ]:
+            with self.subTest(title=title):
+                self.assertEqual(tidy_name(title), name)
+        # A year with no till's mark, and a word that only contains "market", stay.
+        self.assertEqual(tidy_name("2024 Pokemon Holiday Calendar"), "2024 Pokemon Holiday Calendar")
+        self.assertIn("Aftermarket", tidy_name("Aftermarket World Championships Deck"))
+
+    def test_names_that_differ_only_by_the_marks_or_a_series_name_share_a_key(self):
+        from .management.commands.merge_duplicates import merge_key
+
+        same = [
+            ("Delta Reign Booster Pack (MARKET)", "Delta Reign Booster Pack", "pokemon"),
+            ("Adventures in the Forgotten Realms Collector Booster Box - tcgshopuk.co.uk",
+             "Adventures in the Forgotten Realms Collector Booster Box", "magic-the-gathering"),
+            ("2026 Disney Lorcana Ravensburger Wilds Unknown Illumineers Trove One Size",
+             "Wilds Unknown Illumineers Trove", "lorcana"),
+            ("Mega Evolution Base Set Booster Box", "Mega Evolution Booster Box", "pokemon"),
+            ("Scarlet & Violet Base Set Booster Pack", "Scarlet & Violet Booster Pack", "pokemon"),
+            ("Star Wars Booster Box Shadows of the Galaxy", "Shadows of the Galaxy Booster Box", "star-wars-unlimited"),
+            ("DivineZ Envoys of the Crimson Moon Booster Box", "Envoys of the Crimson Moon Booster Box",
+             "cardfight-vanguard"),
+        ]
+        apart = [
+            ("2024 Pokemon Holiday Calendar", "2025 Pokemon Holiday Calendar", "pokemon"),
+            ("Base Set Booster Pack", "Base Set 2 Booster Pack", "pokemon"),
+            ("Delta Reign 3 Pack Blister Seel", "Delta Reign 3 Pack Blister", "pokemon"),
+            ("Aftermarket World Championships Deck", "World Championships Deck", "magic-the-gathering"),
+        ]
+        for a, b, game in same:
+            with self.subTest(a=a):
+                self.assertEqual(merge_key(a, game), merge_key(b, game))
+        for a, b, game in apart:
+            with self.subTest(a=a):
+                self.assertNotEqual(merge_key(a, game), merge_key(b, game))
+
+    def test_the_hourly_tidy_up_folds_a_marked_page_into_its_twin(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .models import Product, ProductAlias
+        from .testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        reign = make_set(make_game(), name="Mega Evolution - Delta Reign", slug="delta-reign")
+        pack = make_product(reign, name="Delta Reign Booster Pack", slug="delta-reign-booster-pack",
+                            product_type="booster_pack")
+        market = make_product(reign, name="Delta Reign Booster Pack (MARKET)", slug="delta-reign-booster-pack-market",
+                              product_type="booster_pack")
+        for n, shop in enumerate(("Harbour Games", "Kestrel Cards")):
+            make_listing(pack, make_retailer(shop), price=f"5.{49 + n}")
+        impact = make_listing(market, make_retailer("Impact"), price="6.49", delivery="5.99")
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=market.pk, is_active=True).exists())
+        impact.refresh_from_db()
+        self.assertEqual(impact.product_id, pack.pk)
+        self.assertEqual(pack.listings.count(), 3)
+        # The old address leads to the one page.
+        self.assertTrue(ProductAlias.objects.filter(slug="delta-reign-booster-pack-market", product=pack).exists())
+        self.assertRedirects(self.client.get("/products/delta-reign-booster-pack-market/"), pack.get_absolute_url(),
+                             status_code=301, fetch_redirect_response=False)

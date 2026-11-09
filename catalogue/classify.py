@@ -117,6 +117,12 @@ NOT_SEALED = re.compile(
     # Card games the site does not cover, which TCG shops file under a game it does: Kayou's My Little Pony packs sat
     # under Pokémon (the owner, 5 Nov 2026: "my little pony isn't pokemon").
     r"\bmy little pony\b|\bmlp\b|"
+    # Football boots and trainers, which a sports shop that sells cards too names "... World Cup Pack ... UK 10": 330
+    # pages on 9 Nov 2026, one for each shoe size, read as booster packs. A card product never leads with a
+    # sportswear maker or gives a shoe size.
+    r"^\s*(?:\d{4}\s+)?(?:adidas|nike|new balance|puma|a bathing ape|bape|reebok|asics|mizuno|under armour|skechers|"
+    r"converse)\b(?!.*\b(?:booster|box|tins?|decks?|collection|display|bundle)\b)|\blaceless\b|\bfootball boots?\b|"
+    r"\b(?:kids\s+)?uk\s*\d{1,2}(?:\.5)?k?\s*(?:[-/|]\s*)?(?:us\s*\d{1,2}(?:\.5)?\s*(?:[-/|]\s*)?)?eu\s*\d{2}\b|"
     + LIVE_RIP_PATTERN + "|" +
     # A frame to show a card in ("Center Japan Pikachu Face Card Display Frame", Japan2UK) is an accessory, which
     # the owner saw on a Booster boxes tile on 4 Nov 2026. A sealed box that comes with one ("Umbreon Display Frame
@@ -206,7 +212,9 @@ def label_kind(label):
 # Makers of merchandise and accessories, not cards. Nothing from them is a sealed TCG product.
 NOT_SEALED_VENDORS = {"gb posters", "gb eye", "difuzed", "funko", "loungefly", "paladone", "ultra pro", "ultra-pro", "gamegenic",
                       "dragon shield", "ultimate guard", "bandai spirits", "jazwares", "mattel", "hasbro", "lego",
-                      "wizkids", "games workshop", "vallejo", "the noble collection", "pyramid international", "cinereplicas"}
+                      "wizkids", "games workshop", "vallejo", "the noble collection", "pyramid international", "cinereplicas",
+                      # Sportswear (football boots named "... World Cup Pack", 9 Nov 2026).
+                      "adidas", "nike", "new balance", "puma", "a bathing ape", "bape", "reebok", "asics", "mizuno"}
 # One shop listing that covers several kinds at once ("Booster Pack / Booster
 # Box", "Pack Box Case") carries only the cheapest kind's price, so it cannot
 # be priced as any one product.
@@ -217,7 +225,8 @@ VARIANT_MENU = re.compile(
 )
 NOT_SEALED_TYPES = {"single", "single card", "singles", "pokemon single", "playmat", "deck box", "card sleeves", "sleeves", "binder",
                     "event", "events", "life counter", "zip binder", "oversized card", "accessory", "accessories", "dice",
-                    "board games", "board game", "miniatures", "rpg", "books", "toys", "plush", "apparel", "supplies", "storage"}
+                    "board games", "board game", "miniatures", "rpg", "books", "toys", "plush", "apparel", "supplies", "storage",
+                    "footwear", "shoes", "trainers", "boots", "football boots", "sneakers"}
 
 # Words removed from the start or end of a title when building the clean name.
 PREFIXES = re.compile(

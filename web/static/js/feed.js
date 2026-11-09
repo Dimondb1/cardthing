@@ -1,7 +1,7 @@
 // The feed (web/feed.py). The page works without this: every item is a plain link, each row scrolls by itself and the
 // search box is a plain form. This adds: the chosen game brought into the bar's view; an arrow at the end of each row
-// while there is more to see, which scrolls the row on; two hints on the first visits; and search by voice where the
-// browser can listen. A type
+// while there is more to see, which scrolls the row on; the hints on each landing; the dock's arrows, the down one
+// naming where it goes; and search by voice where the browser can listen. A type
 // tile's list loading in under the tiles is browse.js's work (data-browse-link).
 // No exclamation marks: the copy tests read script as page text.
 (function () {
@@ -72,70 +72,92 @@
     feed.appendChild(sketch);
   });
 
-  // The two hints: Pick by game by the bar, then Pick by type by the tiles, each on for a moment and gone. They show on
-  // the first landing of each day: a newcomer who did not take them in gets them again, a regular is nudged once a day
-  // at most, for a few seconds. (Three landings in all was too few: the owner had landed many more times than that
-  // checking the page, and asked where they had gone.) #hints on the address shows them any time. Any tap, scroll or
-  // key once they are showing ends them early: the visitor is already going.
-  var hints = document.querySelectorAll(".feed-hint");
-  var hintsUntil = 0;   // when the hints are over, in ms from now: the dock's arrow waits for them (it shares their spot)
-  var HINTS_KEY = "ripraptor.hints";
-  var today = new Date().toISOString().slice(0, 10);
-  var last = "";
-  try { last = localStorage.getItem(HINTS_KEY) || ""; } catch (e) { last = ""; }
-  if (hints.length && (last !== today || window.location.hash === "#hints")) {
-    try { localStorage.setItem(HINTS_KEY, today); } catch (e) { /* storage off: shown this once */ }
+  // The hints, on every landing (the owner, 9 Nov 2026: "every time I land on the homepage, I need to see them. They
+  // can go ... I don't need to see them after that"): the home page's Pick by game by the bar, then Pick by type by the
+  // tiles; a game's page's Pick a set by its row of sets, then Or pick a type by the tiles; and, once a set is picked,
+  // Now pick a type by the tiles. Each is on for a moment and gone while the items it points at light up one after
+  // another, left to right. Any tap, scroll or key once they are showing ends them early: the visitor is already going.
+  var TARGETS = { games: ".feed-game__pill", types: ".feed-tile__well", sets: ".feed-sets .feed-filters__row > .chip" };
+  // What a hint sits beside on a wide screen: the last of those items, or for the sets the row's last thing, All sets.
+  var BESIDE = { sets: ".feed-sets .feed-filters__row > *" };
+  var targetOf = function (hint) {
+    for (var name in TARGETS) { if (hint.classList.contains("feed-hint--" + name)) return TARGETS[name]; }
+    return "";
+  };
+  var hintsOver = false;
+  var afterHints = [];   // waiting for the hints to be over: the dock's arrow shares their spot
+  var whenHintsOver = function (fn) { if (hintsOver) fn(); else afterHints.push(fn); };
+  var runHints = function (hints, onEnd) {
     var timers = [];
-    // On a wide screen the bar and the tiles sit at the left with room beside them, so each hint goes to the right of
-    // the last item, vertically centred on it, with its caret pointing left; on a phone the stylesheet places them.
+    var ended = false;
+    // On a wide screen the bar, the sets and the tiles sit at the left with room beside them, so each hint goes to
+    // the right of the last item, vertically centred on it, with its caret pointing left; on a phone the stylesheet
+    // places them.
     if (window.matchMedia && window.matchMedia("(min-width: 48rem)").matches) {
-      var beside = function (hint, selector, within) {
-        var items = document.querySelectorAll(selector);
+      Array.prototype.forEach.call(hints, function (hint) {
+        var within = hint.closest(".feed-dock, .feed-sets, .feed__scroller");
+        var beside = hint.classList.contains("feed-hint--sets") ? BESIDE.sets : targetOf(hint);
+        var items = within ? within.querySelectorAll(beside) : [];
         var last = items[items.length - 1];
-        if (!last || !within) return;
+        if (!last) return;
         var box = within.getBoundingClientRect();
         var edge = last.getBoundingClientRect();
+        // A row that runs on past the screen's edge keeps its hint under it, where it can be seen.
+        if (edge.right + 12 > Math.min(box.right, window.innerWidth)) return;
         hint.classList.add("feed-hint--side");
         hint.style.left = Math.round(edge.right - box.left + 12) + "px";
         hint.style.top = Math.round(edge.top - box.top + edge.height / 2) + "px";
-      };
-      Array.prototype.forEach.call(hints, function (hint) {
-        if (hint.classList.contains("feed-hint--games")) beside(hint, ".feed-game__pill", hint.closest(".feed-dock"));
-        else beside(hint, ".feed-tile__well", hint.closest(".feed__scroller"));
       });
     }
     var show = function (hint) { hint.hidden = false; hint.getBoundingClientRect(); hint.classList.add("is-on"); };
     var hide = function (hint) { hint.classList.remove("is-on"); timers.push(setTimeout(function () { hint.hidden = true; }, reduced ? 0 : 260)); };
     var end = function () {
+      if (ended) return;
+      ended = true;
       timers.forEach(clearTimeout);
       Array.prototype.forEach.call(document.querySelectorAll(".is-lit"), function (item) { item.classList.remove("is-lit"); });
       Array.prototype.forEach.call(hints, function (hint) { if (!hint.hidden) hide(hint); });
       ["pointerdown", "scroll", "keydown"].forEach(function (name) { window.removeEventListener(name, end, true); });
+      if (onEnd) onEnd();
     };
     var at = function (ms, fn) { timers.push(setTimeout(fn, ms)); };
     // The fairy's pass: as a hint shows, the items it points at light up one after another, left to right.
     var pass = function (selector) {
-      if (reduced) return;
+      if (reduced || !selector) return;
       Array.prototype.forEach.call(document.querySelectorAll(selector), function (item, i) {
         at(i * 110, function () { item.classList.add("is-lit"); });
         at(i * 110 + 520, function () { item.classList.remove("is-lit"); });
       });
     };
     Array.prototype.forEach.call(hints, function (hint, i) {
-      at(700 + i * 2600, function () {
-        show(hint);
-        pass(hint.classList.contains("feed-hint--games") ? ".feed-game__pill" : ".feed-tile__well");
-      });
+      at(700 + i * 2600, function () { show(hint); pass(targetOf(hint)); });
       at(700 + i * 2600 + 2200, function () { hide(hint); });
     });
-    hintsUntil = 700 + hints.length * 2600;
-    at(hintsUntil, end);
+    at(700 + hints.length * 2600, end);
     // Listened for from the first hint on, not from the page's load: the browser's own scroll as it settles (the
     // address bar, a restored position) must not end them before they start.
     at(650, function () {
       ["pointerdown", "scroll", "keydown"].forEach(function (name) { window.addEventListener(name, end, true); });
     });
-  }
+  };
+  var landing = document.querySelectorAll(".feed-hint");
+  var overNow = function () {
+    hintsOver = true;
+    afterHints.splice(0).forEach(function (fn) { fn(); });
+  };
+  if (landing.length) runHints(landing, overNow);
+  else overNow();
+  // A set picked brings its list in place (browse.js): the tiles' Now pick a type, with their pass.
+  document.addEventListener("ripraptor:content", function (event) {
+    var fresh = event.detail;
+    var next = fresh && fresh.querySelectorAll ? fresh.querySelectorAll(".feed-hint--next") : [];
+    if (next.length) runHints(next);
+  });
+  // A set chip tapped is seen to land at once, before its list comes.
+  document.addEventListener("ripraptor:loading", function (event) {
+    var link = event.detail && event.detail.source;
+    if (link && link.closest && link.closest(".feed-sets") && link.classList.contains("chip")) link.classList.add("is-picking");
+  });
 
   // The Set picker's find box on a type's list of a game (views.game_detail): shown only here, where there is script
   // to work it, it narrows the sets as you type. Set up again for a list browse.js brings in.
@@ -167,11 +189,27 @@
     if (!cues || !dock || getComputedStyle(dock).position !== "fixed") return;
     var up = cues.querySelector(".feed-dock__cue--up");
     var down = cues.querySelector(".feed-dock__cue--down");
+    // The down arrow names where it goes (the owner, 9 Nov 2026): the next heading's words beside the arrow, read
+    // out after the arrow's own, and a soft fade as they change.
+    var where = down.querySelector(".feed-dock__where");
+    var said = down.getAttribute("data-label") || down.getAttribute("aria-label") || "";
+    var named = "";
+    var name = function (heading) {
+      var words = heading ? heading.textContent.replace(/\s+/g, " ").trim() : "";
+      if (!where || words === named) return;
+      named = words;
+      where.textContent = words;
+      down.setAttribute("aria-label", words ? said + ": " + words : said);
+      where.classList.remove("is-new");
+      void where.offsetWidth;
+      where.classList.add("is-new");
+    };
     var margin = 16;    // a heading lands this far under the top of the screen
     var stops = function () {
-      // Every heading on the page a reader can see, in order; the feed's own title is read out but not shown.
+      // Every section heading on the page a reader can see, in order; the feed's own title is read out but not shown.
+      // Not a product card's name: the arrow goes section to section, not product to product down a list.
       return Array.prototype.filter.call(document.querySelectorAll("main h1, main h2"), function (heading) {
-        return heading.offsetHeight > 4 && !heading.closest("[hidden]");
+        return heading.offsetHeight > 4 && !heading.closest("[hidden], .card");
       });
     };
     var placeOf = function (heading) { return heading.getBoundingClientRect().top + window.scrollY - margin; };
@@ -190,6 +228,7 @@
       // The page can only move as far as its foot: a heading nearer than that still counts while it is out of sight.
       var limit = document.documentElement.scrollHeight - window.innerHeight;
       down.hidden = quiet || !below || Math.min(placeOf(below), limit) <= window.scrollY + 1;
+      if (!down.hidden) name(below);
       up.hidden = quiet || window.scrollY <= margin;
     };
     var settled = function () {
@@ -209,13 +248,15 @@
       if (event.target && event.target.matches && event.target.matches("input")) { quiet = false; showCues(); }
     });
     window.addEventListener("resize", showCues);
-    // After the hints, if they are showing: Pick by game sits on the same spot of the dock's edge.
-    setTimeout(function () {
+    // After the hints, if they are showing: Pick by game sits on the same spot of the dock's edge. A list brought in
+    // place (browse.js) has headings of its own.
+    whenHintsOver(function () {
       if (window.scrollY <= margin) down.classList.add("is-new");
       showCues();
       window.addEventListener("scroll", showCues, { passive: true });
       window.addEventListener("scroll", settled, { passive: true });
-    }, hintsUntil);
+      document.addEventListener("ripraptor:content", function () { setTimeout(showCues, 0); });
+    });
   })();
 
   // Search by voice: the browser listens (Chrome on a phone can, Firefox cannot), the words go in the box and the

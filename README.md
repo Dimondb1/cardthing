@@ -5362,20 +5362,29 @@ disclosure line and the Featured deals setting, less the products on the
 rail above), the next drop with its pre-order price, the partners' row,
 and, fixed to the foot of a phone, the search box and a bar of the games.
 The two rails carry hidden spares and `interest.js` brings the visitor's
-own games forward, in the browser, as on the usual home page. On a
-visitor's first landing each day `feed.js` shows two quiet hints in turn,
-Pick by game by the bar and Pick by type by the tiles, each for a couple of
-seconds while the pills or the tiles light up one after another, ended
-early by any tap or scroll (`ripraptor.hints` holds the day; `#hints` on
-the address shows them any time); the wording is `feed.hint.*` in the
-registry. On a phone two small arrows sit on the dock's edge: down while a
-heading is below, which takes the page to the next heading (every visible
-h1 or h2 in the page, in order), and up once the page has moved, which
-takes it to the heading before, or the top. The down arrow bobs until the
-page first moves, as the hint it began as, and both go while the search
-box has the keyboard up. The owner, 6 Nov 2026: "the little down arrow
-when pressed should pop the user down to the next heading and then maybe
-an up one to pop them back up".
+own games forward, in the browser, as on the usual home page. On every
+landing `feed.js` shows quiet hints in turn, each for a couple of seconds
+while the things it points at light up one after another, ended early by
+any tap or scroll: on the home page Pick by game by the bar and Pick by
+type by the tiles; on a game's page Pick a set by its row of sets and Or
+pick a type by the tiles; and once a set is picked, as its list comes in,
+Now pick a type by the tiles. Nothing is remembered between landings (the
+owner, 9 Nov 2026: "every time I land on the homepage, I need to see them.
+They can go ... I don't need to see them after that"). The wording is
+`feed.hint.*` in the registry. Each step lands with a little movement: a
+set chip wears its ring the moment it is tapped, the set or type just
+picked settles into place, and the list's heading rises in under the tiles
+(transform and opacity only, none with reduced motion). On a phone two
+small arrows sit on the dock's edge: down while a section heading is below,
+which takes the page to it and names it beside the arrow ("Today's best
+deals", "About Pokémon"), and up once the page has moved, which takes it to
+the heading before, or the top. A product card's name is not a stop, so
+the arrow goes section to section, not down a list product by product. The
+down arrow bobs until the page first moves, waits while the hints show, and
+both go while the search box has the keyboard up. The owner, 6 Nov 2026:
+"the little down arrow when pressed should pop the user down to the next
+heading and then maybe an up one to pop them back up"; 9 Nov 2026: it
+should show where a tap goes.
 `feed.js` adds an arrow at the end of each row while there is more to see,
 and a microphone to the search box where the browser can listen (Chrome on
 a phone), which searches for what was said. The dock's search box shows

@@ -18,6 +18,7 @@
         </div>
       </details>{% endif %}
     </div>
+    {% if feed.hints == "game" %}<span class="feed-hint feed-hint--sets" hidden aria-hidden="true">{% copy "feed.hint.sets" %}</span>{% endif %}
   </nav>
   {% endif %}
   {% if feed.tiles %}
@@ -27,7 +28,7 @@
       {% for tile in feed.tiles %}<li class="feed-tile"><a class="feed-tile__link" href="{{ tile.url }}" data-browse-link{% if tile.current %} aria-current="page"{% endif %}><span class="feed-tile__well" aria-hidden="true">{% if tile.product %}{% product_image tile.product "tile" %}{% else %}<svg class="feed-ic feed-tile__icon" aria-hidden="true" focusable="false"><use href="#rr-game-all"/></svg>{% endif %}</span><span class="feed-tile__label">{{ tile.label }}</span></a></li>{% endfor %}
     </ul>
     <button class="feed__more" type="button" hidden aria-label="{% copy 'feed.row.more' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg></button>
-    {% if feed.hints %}<span class="feed-hint feed-hint--types" hidden aria-hidden="true">{% copy "feed.hint.types" %}</span>{% endif %}
+    {% if feed.hints == "home" %}<span class="feed-hint feed-hint--types" hidden aria-hidden="true">{% copy "feed.hint.types" %}</span>{% elif feed.hints == "game" %}<span class="feed-hint feed-hint--types" hidden aria-hidden="true">{% copy "feed.hint.then_type" %}</span>{% elif chosen_set and feed.kind == "all" %}<span class="feed-hint feed-hint--types feed-hint--next" hidden aria-hidden="true">{% copy "feed.hint.set_type" %}</span>{% endif %}
   </div>
   {% endif %}
   {% if feed.rail %}

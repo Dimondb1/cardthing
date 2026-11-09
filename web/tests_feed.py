@@ -238,12 +238,13 @@ class HomeFeedTests(FeedCase):
         self.assertIn('<div class="feed-dock__cues"><button class="feed-dock__cue feed-dock__cue--up" type="button" hidden '
                       'aria-label="Back up"><svg class="feed-ic" aria-hidden="true" focusable="false">'
                       '<use href="#rr-chevron-right"/></svg></button><button class="feed-dock__cue feed-dock__cue--down" '
-                      'type="button" hidden aria-label="Next heading"><svg class="feed-ic" aria-hidden="true" '
-                      'focusable="false"><use href="#rr-chevron-right"/></svg></button></div>\n</div>', dock)
+                      'type="button" hidden aria-label="Next heading" data-label="Next heading"><svg class="feed-ic" '
+                      'aria-hidden="true" focusable="false"><use href="#rr-chevron-right"/></svg><span class="feed-dock__where" '
+                      'aria-hidden="true"></span></button></div>\n</div>', dock)
         css = open("web/static/css/site.css", encoding="utf-8").read()
         self.assertIn(".feed-dock__cue .feed-ic { width: var(--icon-button); height: var(--icon-button); transform: rotate(90deg); }", css)
         self.assertIn(".feed-dock__cue--up .feed-ic { transform: rotate(-90deg); }", css)
-        self.assertIn("@media (prefers-reduced-motion: reduce) { .feed-dock__cue--down.is-new { animation: none; } }", css)
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .feed-dock__cue--down.is-new, .feed-dock__where.is-new { animation: none; } }", css)
         self.assertIn(".feed-search, .feed-dock .live, .feed-dock__cues { display: none; }", css)   # a tablet up has no dock
         script = open("web/static/js/feed.js", encoding="utf-8").read()
         self.assertIn('getComputedStyle(dock).position !== "fixed") return;', script)   # a phone's dock only
@@ -745,29 +746,48 @@ class TypeTileTests(FeedCase):
                       "overflow: hidden; clip: rect(0 0 0 0);", phone[:phone.index("}")])
         self.assertIn('<h1 class="feed__title">Today&#x27;s best prices</h1>', self.page())
 
-    def test_the_home_feed_alone_carries_the_two_first_visit_hints(self):
+    def test_the_hints_show_on_every_landing_and_lead_from_game_to_set_to_type(self):
         # The owner, 5 Nov 2026: "a small, little highlight ... pick by game, pick by type ... just comes on, goes away".
-        # And, having seen the first version once: "couldn't seem to see the guide highlighter thing. Nothing happens",
-        # then, after three landings were spent: "didn't you accidentally remove the highlighted games and type thing":
-        # the first landing of each day, and #hints to see them any time.
+        # Then once a day; and 9 Nov 2026: "every time I land on the homepage, I need to see them. They can go ... I
+        # don't need to see them after that", with "subtle flow animations to help people jump from bit to bit".
         html = self.page()
         self.assertIn('<span class="feed-hint feed-hint--games" hidden aria-hidden="true">Pick by game</span>', html)
         self.assertIn('<span class="feed-hint feed-hint--types" hidden aria-hidden="true">Pick by type</span>', html)
         self.assertLess(html.index("feed-hint--games"), html.index('<nav class="feed-games"'))
         self.assertLess(html.index("feed-hint--types"), html.index("feed-rail-title"))
-        for url, params in ((self.pokemon.get_absolute_url(), {}), (reverse("web:search"), {"type": "booster_box"})):
-            with self.subTest(url=url):
+        # A game's page: Pick a set by its row of sets, then Or pick a type by the tiles; no game bar hint.
+        html = self.page(self.pokemon.get_absolute_url())
+        self.assertNotIn("feed-hint--games", html)
+        self.assertIn('<span class="feed-hint feed-hint--sets" hidden aria-hidden="true">Pick a set</span>', html)
+        self.assertIn('<span class="feed-hint feed-hint--types" hidden aria-hidden="true">Or pick a type</span>', html)
+        self.assertLess(html.index("feed-hint--sets"), html.index("feed-hint--types"))
+        # A set picked: Now pick a type by the tiles, run as its list comes in place. A type picked too: none.
+        html = self.page(self.pokemon.get_absolute_url(), set="prismatic-evolutions")
+        self.assertIn('<span class="feed-hint feed-hint--types feed-hint--next" hidden aria-hidden="true">Now pick a type</span>', html)
+        self.assertNotIn("feed-hint--sets", html)
+        for url, params in ((self.pokemon.get_absolute_url(), {"set": "prismatic-evolutions", "type": "tin"}),
+                            (self.pokemon.get_absolute_url(), {"type": "tin"}), (reverse("web:search"), {"type": "booster_box"})):
+            with self.subTest(params=params):
                 self.assertNotIn("feed-hint", self.page(url, **params))
         script = open("web/static/js/feed.js", encoding="utf-8").read()
-        self.assertIn('var HINTS_KEY = "ripraptor.hints";', script)
-        self.assertIn('var today = new Date().toISOString().slice(0, 10);', script)
-        self.assertIn('if (hints.length && (last !== today || window.location.hash === "#hints")) {', script)
-        self.assertIn("localStorage.setItem(HINTS_KEY, today);", script)
-        self.assertNotIn("HINTS_LANDINGS", script)
-        self.assertNotIn("ripraptor.hinted", script)
+        # On every landing: nothing remembers that they were seen.
+        self.assertNotIn("localStorage", script[:script.index("// The Set picker's find box")])
+        self.assertIn("if (landing.length) runHints(landing, overNow);", script)
+        self.assertIn('fresh.querySelectorAll(".feed-hint--next")', script)
         self.assertIn('["pointerdown", "scroll", "keydown"]', script)
         css = open("web/static/css/site.css", encoding="utf-8").read()
         self.assertIn("@media (prefers-reduced-motion: reduce) { .feed-hint { transition: none;", css)
+        self.assertIn("@media (prefers-reduced-motion: no-preference) {\n  .feed-sets .chip[aria-current=\"true\"]", css)
+
+    def test_the_docks_down_arrow_names_where_it_goes(self):
+        # The owner, 9 Nov 2026: the down arrow "should turn into an icon that shows" where a tap goes.
+        html = self.page()
+        self.assertIn('<button class="feed-dock__cue feed-dock__cue--down" type="button" hidden aria-label="Next heading" '
+                      'data-label="Next heading"><svg class="feed-ic" aria-hidden="true" focusable="false"><use '
+                      'href="#rr-chevron-right"/></svg><span class="feed-dock__where" aria-hidden="true"></span></button>', html)
+        script = open("web/static/js/feed.js", encoding="utf-8").read()
+        self.assertIn('down.setAttribute("aria-label", words ? said + ": " + words : said);', script)
+        self.assertIn('!heading.closest("[hidden], .card")', script)   # section to section, not product to product
 
     def test_the_filtered_pages_keep_the_house_style(self):
         for url, params in ((reverse("web:search"), {"type": "booster_box"}), (self.pokemon.get_absolute_url(), {"type": "tin"})):

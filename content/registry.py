@@ -555,6 +555,14 @@ ENTRIES = [
           "words."),
     Entry("feed.hint.types", T, "New home page: first-visit hint at the type tiles", "Pick by type",
           "The same by the product type tiles, after the game bar's. Two or three words."),
+    Entry("feed.hint.sets", T, "Game page: hint at the row of sets", "Pick a set",
+          "A small label that shows for a moment by the row of sets on each landing on a game's page, then goes. Two "
+          "or three words."),
+    Entry("feed.hint.then_type", T, "Game page: hint at the type tiles", "Or pick a type",
+          "The same by the type tiles, after the sets' hint, on a game's page. Two or three words."),
+    Entry("feed.hint.set_type", T, "Game page: hint once a set is picked", "Now pick a type",
+          "Shows for a moment by the type tiles once a set is picked on a game's page, as the tiles light up one by "
+          "one. Two or three words."),
     Entry("feed.set.chip", B, "New home page: the Set picker on a type's list of a game", "Set",
           "The chip that opens the sets holding the chosen type, on a game's page. One short word."),
     Entry("feed.set.find", T, "New home page: the Set picker's find box", "Find a set",
@@ -571,7 +579,7 @@ ENTRIES = [
           placeholders=("game",)),
     Entry("feed.dock.more", B, "New home page: the down arrow on the dock", "Next heading",
           "Read out for the small down arrow on the dock's edge, shown while a heading is below: a tap takes the page "
-          "to it."),
+          "to it. The arrow shows that heading's name beside it, read out after these words."),
     Entry("feed.dock.back", B, "New home page: the up arrow on the dock", "Back up",
           "Read out for the small up arrow on the dock's edge, shown once the page has moved down: a tap takes it to "
           "the heading before, or the top."),

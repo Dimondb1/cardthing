@@ -293,8 +293,9 @@ def context(request, game=None, kind="", keep=None, list_title="", product_set=N
         # Filtered to a type: the list's heading is the tile's label, and Clear leads back to the page unfiltered.
         "filtered": filtered, "kind": kind if filtered else "",
         "list_title": list_title or (copy.get("browse.all.title", store=store) if kind == ALL else TYPE_LABELS.get(kind, "")),
-        # The two quiet hints the first visits get (feed.js): only the home page, unfiltered, has them in its markup.
-        "hints": game is None and not filtered,
+        # The quiet hints each landing gets (feed.js): by the game bar and the tiles on the home page, by the sets and
+        # the tiles on a game's page; none on a filtered list, where the tiles get theirs once a set is picked.
+        "hints": ("home" if game is None else "game") if not filtered else "",
         "clear_url": game.get_absolute_url() if game is not None else reverse("web:home"),
         "tiles": tiles(game, current=kind, keep=keep, all_label=copy.get("feed.tiles.all", store=store),
                        product_set=product_set),

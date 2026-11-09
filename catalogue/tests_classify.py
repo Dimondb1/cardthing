@@ -911,3 +911,20 @@ class ShopMarkTests(TestCase):
         self.assertTrue(ProductAlias.objects.filter(slug="delta-reign-booster-pack-market", product=pack).exists())
         self.assertRedirects(self.client.get("/products/delta-reign-booster-pack-market/"), pack.get_absolute_url(),
                              status_code=301, fetch_redirect_response=False)
+
+
+class AcrylicDisplayTests(TestCase):
+    """A clear plastic case to stand a box in is an accessory: "Acrylic Booster Box Display Japanese Pokémon Booster
+    Box" led the Booster boxes list at £19.98 on 9 Nov 2026."""
+
+    def test_a_case_for_a_box_is_not_a_box(self):
+        from .classify import NOT_SEALED
+
+        for title in ("Acrylic Booster Box Display Japanese Pokémon Booster Box", "Acrylic Display Case for Booster Boxes",
+                      "Acrylic ETB Case"):
+            with self.subTest(title=title):
+                self.assertTrue(NOT_SEALED.search(title))
+                self.assertIsNone(classify(title, price=Decimal("19.98")))
+        for title in ("Mega Evolution Delta Reign Booster Box", "Brilliant Illusions csv8 C Simplified Chinese Slim Booster Box"):
+            with self.subTest(title=title):
+                self.assertFalse(NOT_SEALED.search(title))

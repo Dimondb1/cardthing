@@ -127,7 +127,12 @@ NOT_SEALED = re.compile(
     # A frame to show a card in ("Center Japan Pikachu Face Card Display Frame", Japan2UK) is an accessory, which
     # the owner saw on a Booster boxes tile on 4 Nov 2026. A sealed box that comes with one ("Umbreon Display Frame
     # Collection Box", "Display Frame Gift Box") says box, set or collection after the frame, so it stays.
-    r"\bdisplay frames?\s*(?:\([^)]*\))?\s*$",
+    r"\bdisplay frames?\s*(?:\([^)]*\))?\s*$|"
+    # A clear plastic case to stand a box in ("Acrylic Booster Box Display Japanese Pokémon Booster Box", Card Galaxy,
+    # £19.98 at the top of Booster boxes on 9 Nov 2026): a display for a box, not one. A sealed product sold with one
+    # says so after a plus or "with" ("Elite Trainer Box + Acrylic Case Bundle"), and "case" already marks that.
+    r"(?<!\+ )(?<!with )\bacrylic\s+(?:(?:booster\s+box|booster\s+pack|etb|elite\s+trainer\s+box|card|pack|box)\s+)?"
+    r"(?:display|case|protector|stand|holder|frame|box)s?\b",
     re.I,
 )
 # What only a single card's title says: a card number ("Eevee 133/165", not a date), a Pokémon promo number

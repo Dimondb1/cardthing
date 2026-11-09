@@ -667,4 +667,4 @@ class ReturningReaderTests(PageCase):
 
     def test_the_terms_page_says_so(self):
         self.assertContains(self.client.get(reverse("web:terms")),
-                            "another only that it has read one of our guides, so we can count readers who come back")
+                            "read one of our guides or shown one of our pages")

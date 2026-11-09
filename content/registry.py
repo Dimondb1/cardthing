@@ -604,13 +604,17 @@ ENTRIES = [
     ),
     Entry(
         "home.featured.note", T, "Featured deals note",
-        "Every deal in Rip's Deals has evidence behind it: its lowest delivered price in 30 days by our own daily record and clearly under its average, or a saving of at least 5% on the next shop when that shop's price is in line with the market. One unusually dear listing never makes a saving. We favour shops that pay us a commission when choosing them, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
+        "Every deal in Rip's Deals is a real low price or saving, judged against our own record of each product's "
+        "prices. We favour shops that pay us a commission when choosing them, and each product page still shows "
+        "every shop's price. Deals for games you have looked at come first, worked out in your browser.",
         "On the terms page, under Independence. Says how the home page's featured deals row is chosen.",
         legal=True,
     ),
     Entry(
         "home.featured.note_paying", T, "Featured deals note, paying shops only",
-        "Every deal in Rip's Deals has evidence behind it: its lowest delivered price in 30 days by our own daily record and clearly under its average, or a saving of at least 5% on the next shop when that shop's price is in line with the market. One unusually dear listing never makes a saving. Rip's Deals come only from shops that pay us a commission, and each product page still shows every shop's price. Deals for games you have looked at come first, worked out in your browser.",
+        "Every deal in Rip's Deals is a real low price or saving, judged against our own record of each product's "
+        "prices. Rip's Deals come only from shops that pay us a commission, and each product page still shows "
+        "every shop's price. Deals for games you have looked at come first, worked out in your browser.",
         "Replaces the Featured deals note on the terms page while Featured deals settings has Only shops that "
         "pay ticked.",
         legal=True,
@@ -3086,42 +3090,29 @@ ENTRIES = [
     Entry("terms.data.title", H, "Data heading", "Your data", "Heading on the terms page."),
     Entry(
         "terms.data.body", P, "Data explanation",
-        "RipRaptor does not ask you to create an account. Products you save, "
-        "products you view, games you browse and searches you make are kept in your browser, not "
-        "by us, and you can clear them from the home page. Your browser uses them to put your games "
-        "first on the home page, without telling us. Our own count of clicks to retailers "
-        "does not record who clicked. We count visits to our pages under a code made from your connection and "
-        "browser that changes every day and cannot be traced back to you, with your country, the kind of device "
-        "and the site that sent you. Each page also tells our server once, with only its own address, that your "
-        "browser showed it, so we can tell people from automated visits. While you are on the site, and for 30 "
-        "minutes after the last page you open, we also keep your internet address with your country, device and the "
-        "page you are on, so we can see who is visiting now and keep automated visits out. It is then deleted, and "
-        "it is never kept with our counts. One small cookie of ours remembers only that your browser "
-        "has visited before, so we can count returning visitors, another only that it has read one of our "
-        "guides, so we can count readers who come back, and a third, for a day, only that it has shown one of our "
-        "pages, so your clicks to retailers count as a person's. Each holds nothing about you.\n\n"
-        "If you ask to be emailed when a product is back in stock, or with Track price when it is "
-        "in stock at or under a price you choose, we keep your email address (and that price and "
-        "how long to look) for that alone. Nothing is sent until you confirm by the link we email "
-        "you. You get one email when a shop has the product (at or under your price, for Track "
-        "price), and your address is then deleted. A Track price request is also deleted when the "
-        "time you chose is up. Unconfirmed requests are deleted after a week and any still waiting "
-        "after six months are deleted too. Every email has a link that deletes your "
-        "request at once. The emails are sent through Zoho ZeptoMail.\n\n"
-        "If you ask for a reminder about a drop on the drop tracker, we keep your email "
-        "address with that set for that alone. Nothing is sent until you confirm by the link "
-        "we email you. You then hear from us only about that set: when a UK shop opens "
-        "pre-orders, the day before it comes out (again if its date moves) and on the day. "
-        "Your address is deleted after the last one, or once the drop has passed. If you ask for every alert "
-        "for a drop on our home page, you also hear from us for 30 days after it comes out, whenever a UK shop has "
-        "one of its products in stock again at a fair price, at most once an hour, and your address is deleted "
-        "when those 30 days are up. Unconfirmed requests are deleted after a week and "
-        "any still waiting after a year are deleted too. Every email has a link that deletes "
-        "your request at once. These emails go through Zoho ZeptoMail too.\n\n"
-        "If you message us, we keep your message, and your name and email address if you "
-        "give them, to answer you and for nothing else. Your conversation is deleted six "
-        "months after its last message. A cookie in your browser remembers the private "
-        "link to your conversation.",
+        "RipRaptor does not ask you to create an account. Products you save, products you view, games you browse "
+        "and searches you make are kept in your browser, not by us, and you can clear them from the home page. We "
+        "count visits and clicks to shops without recording who you are: our counts hold only the day, your "
+        "country, the kind of device and the site that sent you. To protect the site from automated traffic we "
+        "keep your internet address for up to 30 minutes after the last page you open, then delete it; it never "
+        "goes into our counts. A few small cookies of ours remember only that your browser has visited before, "
+        "read one of our guides or shown one of our pages. They hold nothing about you.\n\n"
+        "If you ask to be emailed when a product is back in stock, or with Track price when it is in stock at or "
+        "under a price you choose, we keep your email address (and that price and how long to look) for that "
+        "alone. Nothing is sent until you confirm by the link we email you. You get one email when a shop has the "
+        "product (at or under your price, for Track price), and your address is then deleted. A Track price "
+        "request is also deleted when the time you chose is up. Unconfirmed requests are deleted after a week and "
+        "any still waiting after six months are deleted too. Every email has a link that deletes your request at "
+        "once. Our emails are sent for us by an email delivery service, which holds them only to deliver them.\n\n"
+        "If you ask for a reminder about a drop, we keep your email address with that set for that alone. Nothing "
+        "is sent until you confirm by the link we email you. You then hear from us only about that set: when "
+        "pre-orders open, the day before it comes out and on the day, and, if you asked for every alert, for 30 "
+        "days after release when a UK shop has it in stock again. Your address is deleted after the last email. "
+        "Unconfirmed requests are deleted after a week and any still waiting after a year are deleted too. Every "
+        "email has a link that deletes your request at once.\n\n"
+        "If you message us, we keep your message, and your name and email address if you give them, to answer you "
+        "and for nothing else. Your conversation is deleted six months after its last message. A cookie in your "
+        "browser remembers the private link to your conversation.",
         "Data section of the terms page.",
         legal=True,
     ),
@@ -3148,16 +3139,15 @@ ENTRIES = [
         "referral and ask where to post your keyring, and your name and postal address only to post it. We never "
         "email a friend on your behalf: each person gives us their own address, and an address typed into the "
         "offer is sent only emails asking its owner to confirm it, at most three a day, and nothing else until "
-        "they do. We keep a "
-        "one-way fingerprint of the connection each form was sent from, to tell people from automated sign-ups, "
-        "and delete it with the rest.\n\n"
+        "they do. We also keep a short anonymised record of the connection each form was sent from, to tell people "
+        "from automated sign-ups, and delete it with the rest.\n\n"
         "Unconfirmed sign-ups are deleted after 14 days. A link that brings no completed referral is deleted 90 "
         "days after it was confirmed. Address links last 30 days and an unused one is deleted 14 days after that. "
         "Your email address, name and postal address are deleted 60 days after your keyring is posted, 90 days "
         "after you sent your address if it has not been posted by then, or 14 days after a referral is "
-        "cancelled; a cancelled referral's postal address is deleted at once. So nobody takes part twice, we keep a one-way fingerprint of each email "
-        "address, postal address and postcode that has had a keyring; it cannot be turned back into the address. Every email has a "
-        "link to delete your details.",
+        "cancelled; a cancelled referral's postal address is deleted at once. So nobody takes part twice, we keep "
+        "an anonymised record of each email address, postal address and postcode that has had a keyring, which "
+        "cannot be turned back into the address. Every email has a link to delete your details.",
         "Data section of the terms page, shown while the keyring offer runs or has people in it.",
         legal=True,
     ),
@@ -3166,18 +3156,16 @@ ENTRIES = [
         "If you set up an alert on the watchlist page, we keep your email address with what you described (the "
         "game, and the type, language and price if you chose them) for that alone. Nothing is sent until you "
         "confirm by the link we email you. We then email you when products that match are in stock at a UK shop, "
-        "and keep a list of the products we have emailed you about so we do not send them again. Unconfirmed "
+        "and keep a list of the products we have told you about so we do not send them again. Unconfirmed "
         "requests are deleted after a week, and alerts are deleted six months after you confirmed them, with that "
-        "list. Every email has a link that deletes your alert at once. To stop too many requests we count them "
-        "under a one-way fingerprint of your connection and of your address, kept for a day at most. These "
-        "emails go through Zoho ZeptoMail too.",
+        "list. Every email has a link that deletes your alert at once. We limit how many requests one connection "
+        "or address can make in a day.",
         "Data section of the terms page, after the main explanation: what a search alert keeps.",
         legal=True,
     ),
     Entry(
         "terms.data.manage", P, "Your alerts data",
-        "You can see and stop all your alerts from the watchlist page, using a link we email you, and we count "
-        "requests for that link under the same one-way fingerprints.",
+        "You can see and stop all your alerts from the watchlist page, using a link we email you.",
         "Data section of the terms page, after the search alerts: the Your alerts link.",
         legal=True,
     ),
@@ -3191,25 +3179,21 @@ ENTRIES = [
     ),
     Entry(
         "terms.data.shops", P, "Shop and affiliate cookies",
-        "When you follow a link to a shop, the shop or the affiliate network it uses (Amazon Associates, "
-        "eBay Partner Network, Awin or Rakuten Advertising) may set its own cookies to record that you came "
-        "from RipRaptor, so it can pay us a commission if you buy. Our pages also load a script from Awin that "
-        "can turn shop links into Awin affiliate links. These companies do not tell us who you are, and their "
-        "own privacy policies apply to what they collect.",
+        "When you follow a link to a shop, the shop or the affiliate network it works with may set its own cookies "
+        "to record that you came from RipRaptor, so it can pay us a commission if you buy. Some of our pages also "
+        "load a script from one of these networks for the same purpose. These companies do not tell us who you "
+        "are, and their own privacy policies apply to what they collect.",
         "Data section of the terms page, after the main explanation: the cookies shops and affiliate networks set.",
         legal=True,
     ),
     Entry(
         "terms.analytics", P, "Analytics explanation",
-        "We use Google Analytics only if you allow it, on the card that asks you. It tells us how many "
-        "people visit, which pages and searches they use and how often they go to a shop. Google then "
-        "receives the address of each page you open, including your searches and watchlist, and sets "
-        "cookies that last up to two years to tell visits apart. Google says it does not store your IP "
-        "address. It keeps the detailed records for at most 14 months and may process them in the "
-        "United States. We have turned off Google signals and advertising features. Links to your "
-        "messages and stock alerts are private and are never sent to Google. Without your permission "
-        "Google Analytics does not load. To change your answer, use Analytics cookies at the foot of "
-        "the site's pages.",
+        "We use Google Analytics only if you allow it, on the card that asks you. It tells us how many people "
+        "visit, which pages and searches they use and how often they go on to a shop. Google receives the address "
+        "of each page you open and sets cookies that last up to two years to tell visits apart. It may process "
+        "this outside the UK under its own privacy policy, and we have turned off its advertising features. Links "
+        "to your messages and alerts are private and are never sent to Google. Without your permission Google "
+        "Analytics does not load. To change your answer, use Analytics cookies at the foot of the site's pages.",
         "Data section of the terms page, shown while Google Analytics is set up.",
         legal=True,
     ),

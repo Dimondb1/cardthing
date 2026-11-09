@@ -124,11 +124,13 @@ class LiveTests(SiteCase):
     def test_counts_are_taken_once_every_five_minutes(self):
         self.open_page()
         self.open_page(agent=DESKTOP, address="192.0.2.7", report=False)
-        now = timezone.now()
+        # Pinned to the start of the minute, so ten seconds on is always the same five-minute slot (a run that
+        # straddled 00:10 on 9 Nov 2026 saw a second count).
+        now = timezone.now().replace(second=0, microsecond=0)
         first = online.sample(now)
         self.assertEqual((first.people, first.automated), (1, 1))
         self.assertIsNone(online.sample(now + timedelta(seconds=10)))
-        self.assertEqual(OnlineCount.objects.count(), 1 if (now + timedelta(seconds=10)).minute // 5 == now.minute // 5 else 2)
+        self.assertEqual(OnlineCount.objects.count(), 1)
 
 
 class PageTests(SiteCase):
@@ -179,7 +181,7 @@ class PageTests(SiteCase):
         self.assertContains(self.client.get(reverse("admin:index")), f'<a href="{reverse("online")}" class="section">Who is online</a>', html=False)
         self.assertContains(self.client.get(reverse("web:dashboard")), f'<a href="{reverse("online")}">See who is online</a>')
         terms = self.client.get(reverse("web:terms")).content.decode()
-        self.assertIn("for 30 minutes after the last page you open, we also keep your internet address", terms)
+        self.assertIn("keep your internet address for up to 30 minutes after the last page you open, then delete it", terms)
 
 
 class DashboardWarmTests(SiteCase):

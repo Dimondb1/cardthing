@@ -139,7 +139,10 @@ class StockAlertTests(TestCase):
         self.assertIn("alert=limit", response["Location"])
 
     def test_terms_explain_what_is_kept_and_robots_keep_alert_links_private(self):
-        self.assertContains(self.client.get(reverse("web:terms")), "Zoho ZeptoMail")
+        terms = self.client.get(reverse("web:terms"))
+        # The service that sends the emails is described, never named (the owner, 9 Nov 2026).
+        self.assertContains(terms, "sent for us by an email delivery service")
+        self.assertNotContains(terms, "Zoho")
         self.assertContains(self.client.get("/robots.txt"), "Disallow: /alerts/")
 
 

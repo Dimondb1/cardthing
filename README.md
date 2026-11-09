@@ -464,6 +464,21 @@ itself while any wait, and a shop not added can be checked again.
 
 ## Delivery charges
 
+**Shop delivery** (Admin home, or Set their delivery on the dashboard's Shops
+health card; `web/delivery.py`, `/admin/shop-delivery/`) lists every shop
+whose prices lack a delivery charge, most prices first, with two boxes each:
+the standard UK charge for one item (0 or "free" for free delivery) and the
+order value it goes free from. One Save sets every shop typed in and applies
+the charges to their prices at once (`pricing.apply_delivery_rules`, as a
+save on the shop's own page does); a box left empty changes nothing, and a
+typing slip ("3.9.9", or a charge over £50) is named and saves nothing for
+that shop. eBay and Amazon are left out: their delivery comes with each
+listing. The dashboard's Shops health card says how many shops and prices
+lack a charge (one query), in red, with the link. The owner, 9 Nov 2026: "I
+need an easy way on dashboard to see how many shops don't have delivery and
+an easy way to update them at once". The daily check below fills in what it
+can read first; the page holds what it could not.
+
 ```sh
 python manage.py check_delivery            # report what each shop says
 python manage.py check_delivery --apply    # and save it

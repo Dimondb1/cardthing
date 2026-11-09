@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+{# Shop delivery (web/delivery.py): every shop whose prices lack a delivery charge, with its charge and free-delivery value to type in and one Save for them all. #}
+{% block title %}Shop delivery | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .shop-delivery { display: grid; gap: 20px; max-width: 64rem; }
+  .shop-delivery h2 { margin: 0 0 4px; }
+  .shop-delivery p { margin: 0 0 8px; }
+  .shop-delivery .note { color: var(--body-quiet-color); }
+  .shop-delivery .big { font-size: 1.6rem; font-weight: 600; margin: 0; }
+  .shop-delivery table { width: 100%; }
+  .shop-delivery td, .shop-delivery th { vertical-align: middle; }
+  .shop-delivery input[type="text"] { width: 6.5rem; }
+  .shop-delivery .money { white-space: nowrap; }
+  .shop-delivery .save { position: sticky; bottom: 0; padding: 12px 0; background: var(--body-bg); border-top: 1px solid var(--hairline-color); }
+  /* A phone: each shop is a card of lines rather than a table wider than the screen. */
+  @media (max-width: 63.99rem) {
+    .shop-delivery table thead { display: none; }
+    .shop-delivery table, .shop-delivery tbody, .shop-delivery tr, .shop-delivery td { display: block; width: auto; }
+    .shop-delivery tr { padding: 10px 0; border-bottom: 1px solid var(--hairline-color); }
+    .shop-delivery td { padding: 3px 0; border: 0; }
+    .shop-delivery td.first { font-weight: 600; }
+    .shop-delivery td[data-label]::before { content: attr(data-label); display: inline-block; min-width: 9.5rem; margin-right: 6px; color: var(--body-quiet-color); }
+  }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Shop delivery</div>{% endblock %}
+{% block content %}
+<div class="shop-delivery">
+  <section>
+    <p class="big">{{ shops|length }} shop{{ shops|length|pluralize }} without a delivery charge</p>
+    <p>{% if shops %}{{ prices }} of their price{{ prices|pluralize }} show as plus delivery, so they never count as the cheapest delivered. {% endif %}The daily delivery check reads each shop's charges from its own pages; these are the ones it could not read. Open a shop, find its standard UK delivery, type it in, and Save once for them all.</p>
+    <p class="note">Standard delivery: the charge for one item to a UK address, like 3.99, or 0 for free. Free over: the order value from which delivery is free, like 50; leave it empty if there is none. A box left empty changes nothing. Each charge is applied to the shop's prices at once.{% if marketplaces %} eBay and Amazon are not here: their delivery comes with each listing.{% endif %}</p>
+  </section>
+
+  {% if shops %}
+  <form method="post">{% csrf_token %}
+    <table>
+      <thead><tr><th>Shop</th><th>Prices without delivery</th><th>Standard delivery (£)</th><th>Free over (£)</th><th></th></tr></thead>
+      <tbody>{% for shop in shops %}<tr>
+        <td class="first"><input type="hidden" name="shop" value="{{ shop.pk }}">{% if shop.website %}<a href="{{ shop.website }}" target="_blank" rel="noopener noreferrer">{{ shop.name }}</a>{% else %}{{ shop.name }}{% endif %}</td>
+        <td data-label="Prices without delivery:">{{ shop.unknown }}</td>
+        <td data-label="Standard delivery (£):" class="money"><input type="text" inputmode="decimal" name="cost-{{ shop.pk }}" value="{% if shop.delivery_cost is not None %}{{ shop.delivery_cost }}{% endif %}" placeholder="e.g. 3.99" aria-label="Standard delivery for {{ shop.name }}, in pounds" autocomplete="off"></td>
+        <td data-label="Free over (£):" class="money"><input type="text" inputmode="decimal" name="free-{{ shop.pk }}" value="{% if shop.free_delivery_over is not None %}{{ shop.free_delivery_over }}{% endif %}" placeholder="e.g. 50" aria-label="Free delivery over, for {{ shop.name }}, in pounds" autocomplete="off"></td>
+        <td class="note">{% if shop.delivery_cost_up_to is not None %}Charge known only up to £{{ shop.delivery_cost_up_to }}: dearer items show plus delivery. <a href="{% url 'admin:catalogue_retailer_change' shop.pk %}">Change in the shop's page</a>{% else %}<a href="{% url 'admin:catalogue_retailer_change' shop.pk %}">Shop's page</a>{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table>
+    <div class="save"><button type="submit" class="button default">Save delivery for every shop typed in</button></div>
+  </form>
+  {% else %}
+  <p class="note">Every shop's prices include delivery.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -556,7 +556,11 @@ def shops_section(now, store):
                 for key in ("fresh", "ok", "paused", "late")]
     worker = crawl.worker_status(state, now)
     last = crawl.last_finished()
+    # Shops whose prices lack a delivery charge, set on one page (web/delivery.py; the owner, 9 Nov 2026: "an easy
+    # way on dashboard to see how many shops don't have delivery and an easy way to update them at once").
+    no_delivery = checks.unknown_delivery_shops()
     return {
+        "no_delivery": len(no_delivery), "no_delivery_prices": sum(shop.unknown for shop in no_delivery),
         "total": total, "fresh": counts["fresh"], "segments": segments, "problems": problems[:FAILING_SHOWN],
         "more_problems": max(0, len(problems) - FAILING_SHOWN), "all_paused": everything_paused, "worker": worker,
         "stopped_at": insights.clock(state.heartbeat_at, now) if worker["known"] and not worker["alive"] else "",
@@ -903,6 +907,7 @@ def admin_links():
         "insights_searches": reverse("insights") + "?days=7#searches",
         "clicks": reverse(changelist("outboundclick")) + "?suspect__exact=0",
         "checks": reverse("checks"),
+        "delivery": reverse("shop_delivery"),
         "crawl": reverse("crawl"),
         "runs": reverse(changelist("importrun")),
         "drops": reverse(changelist("dropalert")) + "?confirmed_at__isnull=False",

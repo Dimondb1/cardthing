@@ -18,6 +18,7 @@
   {% else %}
   <p class="dash-empty">{% copy "dashboard.no_data" %}</p>
   {% endif %}
+  {% if shops.no_delivery %}<p class="dash-card__line dash-card__line--bad">{% copy_count "dashboard.shops.no_delivery" shops.no_delivery prices=shops.no_delivery_prices|number %} <a href="{{ links.delivery }}">{% copy "dashboard.shops.no_delivery_link" %}</a></p>{% else %}<p class="dash-card__line">{% copy "dashboard.shops.delivery_all" %}</p>{% endif %}
   <p class="dash-card__line{% if shops.stopped_at %} dash-card__line--bad{% endif %}">{% if not shops.worker.known %}{% copy "dashboard.shops.worker_never" %}{% elif shops.worker.alive %}{% copy "dashboard.shops.worker_on" clock=shops.worker.heartbeat %}{% else %}{% copy "dashboard.shops.worker_off" clock=shops.stopped_at %}{% endif %}</p>
   {% if shops.last_finished %}<p class="dash-card__line">{% copy "dashboard.shops.last_read" clock=shops.last_finished %}</p>{% endif %}
   <p class="dash-card__more"><a href="{{ links.crawl }}">{% copy "dashboard.shops.more" %}</a> <a href="{{ links.runs }}">{% copy "dashboard.shops.runs" %}</a></p>

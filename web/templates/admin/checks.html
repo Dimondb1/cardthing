@@ -324,7 +324,7 @@
 
   <section>
     <h2>Unknown delivery charges ({{ shops|length }})</h2>
-    <p class="note">Open the shop and enter its standard UK delivery charge.</p>
+    <p class="note">Open the shop and enter its standard UK delivery charge, or <a href="{% url 'shop_delivery' %}">type them all in on one page</a>.</p>
     {% if shops %}<ul>
       {% for shop in shops %}
       <li class="item"><b><a href="{% url 'admin:catalogue_retailer_change' shop.pk %}">{{ shop.name }}</a></b>

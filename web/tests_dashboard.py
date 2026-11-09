@@ -610,8 +610,8 @@ class CacheTests(DashboardCase):
         # One more for a staff login that is not the owner: its groups are read, so a Guide editor is kept out
         # (guides.access). The owner's own login is a superuser and skips it. One for On the site now.
         # The products wanted read five, the searches made most two, those that found nothing two, the games at
-        # each shop two, and this login's layout one.
-        self.assertLessEqual(len(many), 72)
+        # each shop two, this login's layout one, and the shops whose prices lack a delivery charge one (shops_section).
+        self.assertLessEqual(len(many), 73)
         # Within the minute the page reads its parts from the cache: the session, the user and the wording, and the
         # sign-in renews itself (SESSION_SAVE_EVERY_REQUEST: a transaction round one update), and this staff login's
         # groups (guides.access, above). On the site now is read fresh each time, in one query with nobody on, and

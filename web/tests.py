@@ -3214,7 +3214,7 @@ class SocialLinksTests(TestCase):
         self.assertIn("<p class=\"site-footer__follow-title\">Follow us</p>", footer)
         for href, name in (
             ("https://www.instagram.com/ripraptor_uk/", "Instagram"),
-            ("https://www.facebook.com/ripraptor", "Facebook"),
+            ("https://www.facebook.com/profile.php?id=61595165932722", "Facebook"),
             ("https://www.tiktok.com/@ripraptoruk", "TikTok"),
         ):
             with self.subTest(name=name):

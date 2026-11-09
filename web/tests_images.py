@@ -407,7 +407,7 @@ class OrganizationTests(TestCase):
         organization = next(block for block in blocks if block["@type"] == "Organization")
         self.assertEqual(organization["sameAs"], [
             "https://www.instagram.com/ripraptor_uk/",
-            "https://www.facebook.com/ripraptor",
+            "https://www.facebook.com/profile.php?id=61595165932722",
             "https://www.tiktok.com/@ripraptoruk",
         ])
         self.assertNotIn("LocalBusiness", body)

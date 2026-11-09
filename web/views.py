@@ -1454,7 +1454,7 @@ def breadcrumbs_json(request, crumbs, page_url=None):
 # The site's own social accounts, as linked in the footer.
 SOCIAL_PROFILES = (
     "https://www.instagram.com/ripraptor_uk/",
-    "https://www.facebook.com/ripraptor",
+    "https://www.facebook.com/profile.php?id=61595165932722",
     "https://www.tiktok.com/@ripraptoruk",
 )
 

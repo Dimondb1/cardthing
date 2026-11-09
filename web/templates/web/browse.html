@@ -89,6 +89,12 @@
 {% endif %}
 {% else %}
 <div class="browse-head">
+  {% if search_path %}
+  {# The game, set and type the search names, as links (views.search_path): "pokemon delta reign etb" leads to the set's ETBs in a tap. #}
+  <nav class="breadcrumbs" aria-label="{% copy 'browse.search.path' %}">
+    <ol>{% for name, url in search_path %}<li><a href="{{ url }}">{{ name }}</a></li>{% endfor %}</ol>
+  </nav>
+  {% endif %}
   {% if game %}
   <nav class="breadcrumbs" aria-label="Breadcrumb">
     <ol>
@@ -112,6 +118,15 @@
     {# Each set with how many of its products are in stock (in the language and type chosen): a dot in the in-stock colour when some are, grey when none. #}
     {% for item in sets %}<li><a href="{{ item.get_absolute_url }}{{ set_query }}">{{ item.name }}<span class="set-nav__count{% if not item.in_stock %} set-nav__count--none{% endif %}"><span aria-hidden="true">{{ item.in_stock }}</span><span class="visually-hidden">, {% copy_count "browse.game.set_stock" item.in_stock %}</span></span></a></li>{% endfor %}
     {% if more_sets %}<li><a class="set-nav__all" href="{% url 'web:games' %}#game-{{ game.slug }}">{% copy "browse.game.all_sets" %}</a></li>{% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+{% if type_nav %}
+{# A set page's types (views.set_types), like the row of sets on a game page: each with how many are in stock, the chosen one marked, a tap on it the whole set again. Plain links, so they work without script. #}
+<nav class="set-nav set-nav--types" aria-label="{% copy 'browse.set.types_title' %}">
+  <ul>
+    {% for item in type_nav %}<li><a href="{{ item.url }}"{% if item.active %} aria-current="true"{% endif %}>{{ item.label }}<span class="set-nav__count{% if not item.in_stock %} set-nav__count--none{% endif %}"><span aria-hidden="true">{{ item.in_stock }}</span><span class="visually-hidden">, {% copy_count "browse.game.set_stock" item.in_stock %}</span></span>{% if item.active %}<span class="chip__off" aria-hidden="true">×</span><span class="visually-hidden">, {% copy "browse.quick.remove" %}</span>{% endif %}</a></li>{% endfor %}
   </ul>
 </nav>
 {% endif %}
@@ -172,10 +187,10 @@
     {{ form.game }}
   </div>
   {% endif %}
-  <div class="pill">
+  {% if type_row %}{% if form.type.value %}<input type="hidden" name="type" value="{{ form.type.value }}">{% endif %}{% else %}<div class="pill">
     <label class="visually-hidden" for="{{ form.type.id_for_label }}">{{ form.type.label }}</label>
     {{ form.type }}
-  </div>
+  </div>{% endif %}
   <div class="pill">
     <label class="visually-hidden" for="{{ form.price.id_for_label }}">{{ form.price.label }}</label>
     {{ form.price }}
@@ -188,11 +203,11 @@
   <label class="toggle">{{ form.compared }}<span class="toggle__track" aria-hidden="true"></span><span>{{ form.compared.label }}</span></label>
   <div class="filters__actions">
     <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
-    {% if filters_active and not fold_filters %}<a class="filters__clear" href="{{ clear_url }}"{% if stock_tabs %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
+    {% if show_clear and not fold_filters %}<a class="filters__clear" href="{{ clear_url }}"{% if stock_tabs %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
   </div>
 </form>
 {% if fold_filters %}</details>
-{% if filters_active %}<a class="filters__clear filter-bar__clear" href="{{ clear_url }}"{% if stock_tabs %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
+{% if show_clear %}<a class="filters__clear filter-bar__clear" href="{{ clear_url }}"{% if stock_tabs %} data-tab-link{% endif %}>{% copy "browse.filters.clear" %}</a>{% endif %}
 </div>{% endif %}
 {% endif %}
 

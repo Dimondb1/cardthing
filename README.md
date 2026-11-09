@@ -1596,7 +1596,8 @@ vanish... the new top card flashes faded for a frame".
 ## Search results
 
 **Best match.** The words as typed first (a name that starts with them, then
-one that holds them), then products with a price, then everyday products ahead
+one that holds them), then the products with more of the words whole, so "set
+3" leads with Set 3 and not Set 30, then products with a price, then everyday products ahead
 of bulk lots, then the products more shops list, then the newest. A bulk lot
 is a display of bundles, tins or ETBs, a case, or a count such as "(10
 Bundles)" or "6x Booster Box" (`catalogue/search.py`, `BULK_PHRASES` and
@@ -1613,6 +1614,31 @@ change the list show: English while the results hold other languages too,
 In stock while some are not in stock. The full Sort and filter choices stay
 below. Every result card names its language, English too.
 
+**Game, set and type** (the owner, 9 Nov 2026: "We should search game
+(pokemon) - sets (delta reign) - the type"). `catalogue/search.py`
+`understand` reads what a search names: a game when every word of its name,
+short name or an alias is in it; a type by its name, the words people use for
+it (ETB, display) or its tile's name; a set when the words left over are all
+whole words of exactly one set's name or code (of the named game, if any).
+Above the results, small links lead to each: "pokemon delta reign etb" shows
+Pokémon / Delta Reign / ETBs, the last the set's page with
+ETBs chosen. Nothing shows for a game alone. The sets and games are read once
+into a cached index (`set_index`, ten minutes, dropped when a set or game is
+saved), so understanding a search costs no query.
+
+**Set pages** have a row of their types under the heading, styled like the
+row of sets on a game page: each type the set holds in the language in view,
+in the game's order, with how many are in stock (`web/views.py` `set_types`,
+one query). A tap chooses the type; a tap on the chosen one shows the whole
+set again. The type then leaves the Sort and filter panel, and a type alone
+needs no Clear filters. So Pokémon, Delta Reign, ETBs is three taps: the game
+bar, the game page's row of sets, the set page's row of types.
+
+**Cards.** A card shows the two cheapest shops as rows only when there are
+two: one shop's row repeated the price line above it. One link leads to the
+comparison: Compare N shops when more than one shop lists it, else Check
+prices.
+
 Not done yet: mini tin artworks and other cosmetic variants are still one
 result each. Grouping them needs a "variant of" link between products.
 
@@ -1622,7 +1648,11 @@ The search box shows results while the visitor types, with the cheapest
 delivered price and stock for each, from `/api/search/`. The form still
 submits to the full results page, so search works with JavaScript off. The
 "Checking lowest prices" message and the "All results" link are editable in
-admin.
+admin. A set the words name comes first (`suggest_sets`, two at most, from the
+same cached index): "pokemon delta re" offers the Delta Reign set, and
+"delta reign etb" opens its page with ETBs chosen. A set needs a word of its
+own name, three letters at least while half typed, so "pokemon" alone offers
+no sets.
 
 ## Project layout
 

@@ -10,7 +10,7 @@ from django.dispatch import receiver
 
 from .languages import product_language
 from .models import Game, Listing, Partner, Product, ProductSet, RemovedShop, Retailer, SeasonalThemes, SiteLook
-from .search import build_search_text
+from .search import SET_INDEX_KEY, build_search_text
 
 HOME_CACHE_KEY = "web:home-lists:v6"
 DEALS_CACHE_KEY = "web:deals:v3"
@@ -84,6 +84,13 @@ def clear_list_caches_now(force=False, hard=False):
 @receiver([post_save, post_delete], sender=ProductSet)
 def clear_home_lists(sender, **kwargs):
     clear_list_caches()
+
+
+@receiver([post_save, post_delete], sender=ProductSet)
+@receiver([post_save, post_delete], sender=Game)
+def clear_set_index(sender, **kwargs):
+    """A set or game renamed, added or gone: search understands it at once (catalogue/search.py set_index)."""
+    cache.delete(SET_INDEX_KEY)
 
 
 def _refresh(products):

@@ -390,7 +390,8 @@ class DeckTests(PageTestCase):
     def test_search_cards_show_rank_and_badge(self):
         response = self.client.get(reverse("web:search"), {"q": "etb"})
         self.assertContains(response, "Best in 7 days")
-        self.assertContains(response, "Check prices")
+        # One link to the comparison: Compare 2 shops, not Check prices as well (the owner, 9 Nov 2026: declutter).
+        self.assertNotContains(response, "Check prices")
         self.assertContains(response, "Compare 2 shops")
         # The two cheapest shops as rows: the cheapest flagged, the dearer in red with an arrow.
         self.assertContains(response, '<span class="shops__name">Harbour Games</span><span class="shops__flag">Cheapest</span><span class="shops__price">£54.99</span>')
@@ -2527,7 +2528,7 @@ class RedesignTests(PageTestCase):
         make_listing(make_product(later, name="Surging Sparks Booster Box", slug="ssp-box", product_type="booster_box"), self.harbour, price="120.00")
         # A set page links back to its game once, quietly, and lists no other sets.
         set_page = self.client.get(self.pre.get_absolute_url()).content.decode()
-        self.assertNotIn("set-nav", set_page)
+        self.assertNotIn('id="sets"', set_page)
         self.assertNotIn(f'href="{later.get_absolute_url()}"', set_page)
         self.assertIn('<a href="/games/pokemon/">All Pokémon products</a>', set_page)
         # The game page's row of sets is named for screen readers (no heading on screen), none marked as chosen,

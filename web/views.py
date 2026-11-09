@@ -32,7 +32,7 @@ from catalogue.models import (
     DailyPageView, DropSpotlight, FeaturedSettings, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
     Retailer, StockAlert, stale_cutoff,
 )
-from catalogue.search import apply_search
+from catalogue.search import apply_search, suggest_sets, understand
 from catalogue.types import DEFAULT as DEFAULT_TYPES, GAME_TYPES, plural_words, type_choices, type_label
 from content import service as copy
 from inbox import service as inbox
@@ -141,6 +141,34 @@ def types_for(game, queryset):
     """The type filter's choices: this game's words, only for types the list holds."""
     present = set(queryset.order_by().values_list("product_type", flat=True).distinct())
     return type_choices(game.slug if game else None, present=present)
+
+
+def set_types(request, product_set):
+    """The row of types on a set page (the owner, 9 Nov 2026: "game (pokemon) - sets (delta reign) - the type"):
+    each type the set holds in the language in view, in the game's order, as a link with how many are in stock,
+    like the row of sets on a game page. The chosen one is marked and a tap on it shows the whole set again. Keeps
+    the language, sort, price and 2+ shops; opens on the first stock tab with products. None for a set of one type.
+    One query."""
+    in_view = apply_languages(Product.objects.active().filter(product_set=product_set), [request.GET.get("lang", "")])
+    cutoff = stale_cutoff()
+    stocked = Q(listings__is_active=True, listings__retailer__is_active=True, listings__last_checked__gte=cutoff,
+                listings__availability=Listing.Availability.IN_STOCK, listings__sanity__in=Listing.COUNTED)
+    counts = dict(in_view.order_by().values_list("product_type").annotate(n=Count("pk", filter=stocked, distinct=True)))
+    present = [code for code, _label in type_choices(product_set.game.slug, present=set(counts))]
+    if len(present) < 2:
+        return []
+    chosen = request.GET.get("type", "")
+
+    def link(code):
+        params = request.GET.copy()
+        for name in ("page", "pane", "tab", "type"):
+            params.pop(name, None)
+        if code != chosen:
+            params["type"] = code
+        return "?" + params.urlencode() if params else product_set.get_absolute_url()
+
+    return [{"code": code, "label": type_heading(code), "url": link(code), "in_stock": counts[code],
+             "active": code == chosen} for code in present]
 
 
 # The stock tabs on game and set pages, in the order they sit side by side: what can be bought now
@@ -268,10 +296,15 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     week_lows = offers.week_low_map([p.pk for p in page.object_list])
     cards = [(product, offers.summarise(product, week_lows)) for product in page.object_list]
 
-    filters_active = bool(
-        game or product_type or (form.value("in_stock") and not tabs) or form.value("compared") or band or languages
+    filters_besides_type = bool(
+        game or (form.value("in_stock") and not tabs) or form.value("compared") or band or languages
         or sort not in (form.default_sort, "soonest") or narrow is not None
     )
+    filters_active = filters_besides_type or bool(product_type)
+    # A set page's row of types (set_types) chooses and clears the type itself: Sort and filter leaves it out, and
+    # a type alone neither opens the filters on a short list nor needs Clear filters.
+    type_row = bool(template_context.get("type_nav"))
+    panel_active = filters_besides_type if type_row else filters_active
     # The Alert me form on the watchlist page, filled in with this list's game, type, language and price band.
     alert_url = ""
     if (fixed_game or game) is not None and mail.enabled():
@@ -287,7 +320,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     chosen = []
     if sort not in (form.default_sort, "soonest"):
         chosen.append(dict(form.fields["sort"].choices).get(sort))
-    for name, value in (("type", product_type), ("price", band), ("lang", form.value("lang"))):
+    for name, value in (("type", "" if type_row else product_type), ("price", band), ("lang", form.value("lang"))):
         if value:
             chosen.append(dict(form.fields[name].choices).get(value))
     if form.value("compared"):
@@ -315,7 +348,9 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "set_query": "?" + urlencode(kept) if kept else "",
         "clear_url": "?" + urlencode(clear),
         # A short list on a game or set page needs no sort or filters; a longer one folds them away.
-        "show_filters": not tabs or filters_active or paginator.count >= FILTERS_FROM,
+        "show_filters": not tabs or panel_active or paginator.count >= FILTERS_FROM,
+        "show_clear": panel_active,
+        "type_row": type_row,
         "fold_filters": tabs,
         "no_matches": bool(query) and not filters_active and paginator.count == 0,
         "quick": quick,
@@ -1093,6 +1128,22 @@ def drop_spotlight(request, today=None):
     }
 
 
+def search_path(query):
+    """[(name, url)]: the game, set and type a search names (catalogue.search.understand), as links to the game's
+    page, the set's page and that page with the type chosen. Only when it names a game and more: "pokemon delta reign
+    etb" leads Pokémon / Delta Reign / ETBs; "pokemon" alone, nothing."""
+    found = understand(query)
+    game, product_set, kind = found["game"], found["set"], found["type"]
+    if game is None:
+        return []
+    path = [(game["name"], game["url"])]
+    if product_set is not None:
+        path.append((product_set["name"], product_set["url"]))
+    if kind:
+        path.append((type_heading(kind), f"{(product_set or game)['url']}?{urlencode({'type': kind})}"))
+    return path if len(path) > 1 else []
+
+
 @require_GET
 def search(request):
     query = request.GET.get("q", "").strip()
@@ -1108,6 +1159,8 @@ def search(request):
         request,
         {
             "heading": heading, "meta_title": heading, "noindex": True, "is_search": True,
+            # Where the products searched for live, game / set / type, as links (search_path).
+            "search_path": search_path(query) if query else [],
             # The sort and filters fold under one button, as on a game's page, so the list is in reach on a phone.
             "fold_filters": True,
             # With the new home page on (web/look.py), a type's list leads with its tiles, the chosen one marked, so a
@@ -1321,6 +1374,8 @@ def set_detail(request, game_slug, set_slug):
             "intro": hubs.intro(words, stats, date=intro_date, undated=undated, brief=True),
             "about": hubs.about(words, stats, game, product_set),
             "cheapest_card": stats.cheapest if stats.in_stock else None,
+            # The set's types as a row of links, so a type is one tap from the set (set_types).
+            "type_nav": [] if request.GET.get("pane") else set_types(request, product_set),
             "meta_title": meta_title,
             "meta_description": meta_description,
             "canonical_url": page_url,
@@ -2014,6 +2069,20 @@ def search_api(request):
         if terms:
             products = products.order_by("name_rank", F("lowest_price").asc(nulls_last=True), "name")
         store = copy.for_request(request)
+        # A set the words name comes first, opening its page (with the type named, if one is): the way from game
+        # to set to type as it is typed (catalogue.search.suggest_sets, from a cached index: no query).
+        sets, kind = suggest_sets(query)
+        for entry in sets:
+            count = entry["products"]
+            results.append({
+                "name": entry["name"],
+                "url": entry["url"] + (f"?{urlencode({'type': kind})}" if kind else ""),
+                "meta": copy.get("browse.live.set", store, game=entry["game_short"]),
+                "price": "",
+                "stock": copy.get("browse.count." + ("one" if count == 1 else "other"), store, count=count),
+                "state": "set",
+                "type": "",
+            })
         for product in products[:QUICK_RESULTS]:
             if product.in_stock_count:
                 stock = copy.get("browse.availability.in_stock." + ("one" if product.in_stock_count == 1 else "other"), store, count=product.in_stock_count)

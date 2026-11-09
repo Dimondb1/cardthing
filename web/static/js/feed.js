@@ -153,10 +153,45 @@
   };
   var landing = document.querySelectorAll(".feed-hint");
   var overNow = function () {
+    if (hintsOver) return;
     hintsOver = true;
     afterHints.splice(0).forEach(function (fn) { fn(); });
   };
-  if (landing.length) runHints(landing, overNow);
+  // A first visit has the cookie card over the foot of the screen, where the game bar is: the hints wait for its
+  // answer and the page's return to the top (analytics.js), then show. Moving on before answering skips them.
+  var asking = function () {
+    var card = document.querySelector("[data-consent]");
+    return Boolean(card && !card.hidden);
+  };
+  var whenTop = function (fn) {
+    var waited = 0;
+    var check = function () {
+      if (window.scrollY <= 1 || waited >= 1500) { fn(); return; }
+      waited += 100;
+      setTimeout(check, 100);
+    };
+    check();
+  };
+  var land = function () {
+    if (!asking()) { runHints(landing, overNow); return; }
+    var skip = function () {
+      document.removeEventListener("ripraptor:consent", answered);
+      ["pointerdown", "keydown"].forEach(function (name) { window.removeEventListener(name, moved, true); });
+      overNow();
+    };
+    var moved = function (event) {
+      if (event.target && event.target.closest && event.target.closest("[data-consent]")) return;
+      skip();
+    };
+    var answered = function () {
+      ["pointerdown", "keydown"].forEach(function (name) { window.removeEventListener(name, moved, true); });
+      whenTop(function () { runHints(landing, overNow); });
+    };
+    document.addEventListener("ripraptor:consent", answered, { once: true });
+    ["pointerdown", "keydown"].forEach(function (name) { window.addEventListener(name, moved, true); });
+  };
+  // analytics.js comes first in the page, so the cookie card is up by now if it is coming.
+  if (landing.length) land();
   else overNow();
   // A set picked brings its list in place (browse.js): the tiles' Now pick a type, with their pass.
   document.addEventListener("ripraptor:content", function (event) {
@@ -219,8 +254,9 @@
     var stops = function () {
       // Every section heading on the page a reader can see, in order; the feed's own title is read out but not shown.
       // Not a product card's name: the arrow goes section to section, not product to product down a list.
+      // Not Partners either (the owner, 9 Nov 2026: "Down arrow doesn't need to go to partners section").
       return Array.prototype.filter.call(document.querySelectorAll("main h1, main h2"), function (heading) {
-        return heading.offsetHeight > 4 && !heading.closest("[hidden], .card");
+        return heading.offsetHeight > 4 && !heading.closest("[hidden], .card, .partners");
       });
     };
     var placeOf = function (heading) { return heading.getBoundingClientRect().top + window.scrollY - margin; };

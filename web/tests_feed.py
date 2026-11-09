@@ -798,7 +798,10 @@ class TypeTileTests(FeedCase):
         script = open("web/static/js/feed.js", encoding="utf-8").read()
         # On every landing: nothing remembers that they were seen.
         self.assertNotIn("localStorage", script[:script.index("// The Set picker's find box")])
-        self.assertIn("if (landing.length) runHints(landing, overNow);", script)
+        self.assertIn("if (landing.length) land();", script)
+        # A first visit's cookie card covers the game bar: the hints wait for its answer and the page's return to
+        # the top (analytics.js sends ripraptor:consent), and a tap elsewhere first skips them.
+        self.assertIn('document.addEventListener("ripraptor:consent", answered, { once: true });', script)
         self.assertIn('fresh.querySelectorAll(".feed-hint--next")', script)
         self.assertIn('["pointerdown", "scroll", "keydown"]', script)
         css = open("web/static/css/site.css", encoding="utf-8").read()
@@ -813,7 +816,8 @@ class TypeTileTests(FeedCase):
                       'href="#rr-chevron-right"/></svg><span class="feed-dock__where" aria-hidden="true"></span></button>', html)
         script = open("web/static/js/feed.js", encoding="utf-8").read()
         self.assertIn('down.setAttribute("aria-label", words ? said + ": " + words : said);', script)
-        self.assertIn('!heading.closest("[hidden], .card")', script)   # section to section, not product to product
+        # Section to section, not product to product, and never to Partners (the owner, 9 Nov 2026).
+        self.assertIn('!heading.closest("[hidden], .card, .partners")', script)
 
     def test_the_filtered_pages_keep_the_house_style(self):
         for url, params in ((reverse("web:search"), {"type": "booster_box"}), (self.pokemon.get_absolute_url(), {"type": "tin"})):

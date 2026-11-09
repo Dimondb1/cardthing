@@ -558,10 +558,9 @@ ENTRIES = [
     Entry("feed.hint.types", T, "New home page: first-visit hint at the type tiles", "Pick by type",
           "The same by the product type tiles, after the game bar's. Two or three words."),
     # The visitor check (web/botcheck.py): a first visit from abroad does a second of work before a page.
-    Entry("botcheck.title", H, "Visitor check: heading", "Checking your browser",
-          "Heading of the short page a first visit from outside the UK and Ireland sees before the site."),
-    Entry("botcheck.body", T, "Visitor check: why", "This keeps automated copying off our prices. It takes a second "
-          "and happens once a week.", "Under the heading of the visitor check page."),
+    # The owner, 9 Nov 2026: "just say checking to make sure you are a human 😊. That's all."
+    Entry("botcheck.title", H, "Visitor check: heading", "Checking to make sure you are a human 😊",
+          "The one line on the short page a first visit from outside the UK and Ireland sees before the site."),
     Entry("botcheck.working", T, "Visitor check: while it works", "One moment",
           "Under the visitor check while the browser works it out, before the page asked for opens."),
     Entry("botcheck.noscript", T, "Visitor check: JavaScript off", "Turn on JavaScript to continue to RipRaptor.",

@@ -105,6 +105,13 @@ class HomeTests(CompactCase):
         self.assertIn('class="feed-dock"', html)
         self.assertIn('placeholder="Search any product"', html)
 
+    def test_each_landing_on_the_home_page_hints_at_the_games(self):
+        # The owner, 9 Nov 2026: the highlights of the games on landing were gone in this layout; "just want a subtle
+        # way of showing someone what to do". feed.js shows it and lights the games one by one.
+        self.assertIn('<span class="feed-hint feed-hint--games" hidden aria-hidden="true">Pick by game</span>',
+                      self.page("/"))
+        self.assertNotIn("feed-hint", self.page(self.pokemon.get_absolute_url()))
+
 
 class GamePageTests(CompactCase):
     def test_a_game_lists_its_sets_newest_first_and_links_every_product(self):

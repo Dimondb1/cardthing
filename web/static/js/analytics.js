@@ -91,15 +91,24 @@
     document.documentElement.style.scrollPaddingBottom = "";
     if (hadFocus && again) again.focus();
   };
+  // Answered as the card first came up, the page goes back to its top (the owner, 9 Nov 2026: "After you click accept
+  // on the cookies send the page back up to the top again"), where the home page's hints then show (feed.js listens
+  // for ripraptor:consent). Answered from the footer's link, the page stays where the reader is.
+  let landing = false;
   card.querySelectorAll("[data-consent-choice]").forEach((button) => button.addEventListener("click", () => {
     answer = button.dataset.consentChoice;
     store(answer);
     hide();
     apply();
+    if (!landing) return;
+    landing = false;
+    const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: still ? "auto" : "smooth" });
+    document.dispatchEvent(new CustomEvent("ripraptor:consent", { detail: answer }));
   }));
   if (again) {
     again.hidden = false;
-    again.addEventListener("click", () => show(true));
+    again.addEventListener("click", () => { landing = false; show(true); });
   }
 
   // An answer given in another tab, or after this page was kept for the Back button, applies here too.
@@ -115,5 +124,8 @@
 
   apply();
   // The swipe page fills a phone's screen and the card would cover Skip and Save: it asks on the next page.
-  if (answer === null && !document.body.classList.contains("body--deck")) show(false);
+  if (answer === null && !document.body.classList.contains("body--deck")) {
+    landing = true;
+    show(false);
+  }
 })();

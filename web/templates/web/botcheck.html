@@ -22,7 +22,6 @@
   <main class="botcheck" data-check data-task="{{ task }}" data-zeros="{{ zeros }}" data-next="{{ next }}" data-url="{{ check_url }}" data-old="{% copy 'botcheck.old_browser' %}" data-cookies="{% copy 'botcheck.cookies' %}">
     <img class="botcheck__logo" src="{% static 'img/logo.png' %}" alt="{{ site_name }}" width="1200" height="304">
     <h1 class="botcheck__title">{% copy "botcheck.title" %}</h1>
-    <p class="botcheck__body">{% copy "botcheck.body" %}</p>
     {% if tap %}<button class="button botcheck__go" type="button" data-check-go hidden>{% copy "botcheck.continue" %}</button>{% endif %}
     <p class="botcheck__status botcheck__status--working" role="status" data-check-status hidden>{% copy "botcheck.working" %}</p>
     <noscript><p class="botcheck__status">{% copy "botcheck.noscript" %}</p></noscript>

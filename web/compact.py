@@ -145,12 +145,14 @@ def popular_sets(limit=POPULAR, fresh=False):
     return kept("popular", build, fresh)
 
 
-def dock(request, game=None):
-    """What the dock at the foot (feed_dock.html) needs: the search box's words and the bar of games, no hints."""
+def dock(request, game=None, hints=""):
+    """What the dock at the foot (feed_dock.html) needs: the search box's words and the bar of games, and on the home
+    page the hint by the games (feed.js), which lights them one by one on each landing (the owner, 9 Nov 2026: "just
+    want a subtle way of showing someone what to do")."""
     store = copy.for_request(request)
     hint = (copy.get("feed.search.placeholder_game", store=store, game=game.display_short) if game is not None
             else copy.get("feed.search.placeholder", store=store))
-    return {"game": game, "games": feed.games_bar(feed.games_with_products()), "search_hint": hint, "hints": ""}
+    return {"game": game, "games": feed.games_bar(feed.games_with_products()), "search_hint": hint, "hints": hints}
 
 
 def strip(game=None):
@@ -263,7 +265,7 @@ def home(request, extra):
         "numbers": numbers(),
         "strip": strip(),
         "sets": with_covers(popular_sets()),
-        "dock": dock(request),
+        "dock": dock(request, hints="home"),
     })
 
 

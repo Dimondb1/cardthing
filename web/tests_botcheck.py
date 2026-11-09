@@ -72,7 +72,9 @@ class CheckTests(TestCase):
         self.assertEqual(response["Cache-Control"], "no-store, private")
         self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
         html = response.content.decode()
-        self.assertIn("Checking your browser", html)
+        # One line, the owner's (9 Nov 2026): "just say checking to make sure you are a human 😊. That's all."
+        self.assertIn('<h1 class="botcheck__title">Checking to make sure you are a human 😊</h1>', html)
+        self.assertNotIn("botcheck__body", html)
         self.assertIn('data-next="/games/pokemon/?type=booster_box"', html)
         self.assertIn(f'data-zeros="{botcheck.ZEROS}"', html)
         self.assertRegex(html, r'<script nonce="[^"]+" src="[^"]*botcheck\.js"')

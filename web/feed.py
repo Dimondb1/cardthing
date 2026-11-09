@@ -103,15 +103,35 @@ def tile_picks(fresh=False):
     return picks
 
 
-def tiles(game=None, current="", keep=None, all_label=""):
+def set_tile_rows(product_set):
+    """[(type, product pk, products)] for the tiles once a set is chosen: only the types the set holds, most products
+    first, each pictured by one of the set's own (one with a picture when it has one). One query."""
+    rows = (Product.objects.active().filter(product_set=product_set, product_type__in=list(TYPE_LABELS))
+            .order_by("pk").values_list("product_type", "pk", "image", "image_url"))
+    found = {}
+    for kind, pk, image, image_url in rows:
+        count, pick, pictured = found.get(kind, (0, pk, bool(image or image_url)))
+        if not pictured and (image or image_url):
+            pick, pictured = pk, True
+        found[kind] = (count + 1, pick, pictured)
+    return sorted(((kind, pick, count) for kind, (count, pick, _pictured) in found.items()),
+                  key=lambda row: (-row[2], row[0]))
+
+
+def tiles(game=None, current="", keep=None, all_label="", product_set=None):
     """The product type tiles for ``game`` (or every game): TILES_SHOWN at most, each pictured by a real product and
     opening the list of that type. A game's row leads with an All types tile (ALL, no picture: the four tiles icon),
     which opens the whole list, where a set can be picked on its own (the owner, 6 Nov 2026: "select all and then
     set, as if I wanted to find all the Delta Reign stuff available"). With ``current`` (the type the list is
     filtered to) that tile is marked and leads back out: to the page unfiltered, or, with a set kept, to all of that
-    set. ``keep`` is a dict of parameters every tile's link carries on (the set). One query for the products."""
-    picks = tile_picks()
-    rows = picks["games"].get(game.pk, []) if game is not None else picks["all"]
+    set. ``keep`` is a dict of parameters every tile's link carries on (the set). With ``product_set`` (the set
+    chosen in the row above), only the set's own types, pictured by its own products (set_tile_rows). One query for
+    the products."""
+    if product_set is not None:
+        rows = set_tile_rows(product_set)
+    else:
+        picks = tile_picks()
+        rows = picks["games"].get(game.pk, []) if game is not None else picks["all"]
     rows = [row for row in rows if row[0] in TYPE_LABELS][:TILES_SHOWN]
     products = Product.objects.active().in_bulk([pk for _kind, pk, _n in rows]) if rows else {}
     base = game.get_absolute_url() if game is not None else reverse("web:search")
@@ -242,12 +262,12 @@ def games_bar(games=None):
              "url": game.get_absolute_url()} for game in games]
 
 
-def context(request, game=None, kind="", keep=None, list_title=""):
+def context(request, game=None, kind="", keep=None, list_title="", product_set=None):
     """Everything the feed's templates show for the home page (``game`` None), a game's page, or, with ``kind`` a
     product type (or ALL on a game's page), the list filtered to that type: then only the tiles show, the chosen one
     marked and the row stuck to the top, and the list sits right under them with the type as its heading (or
     ``list_title``: the set's name, when a set alone narrows a game's whole list), so the feed's title is left out.
-    ``keep`` as for tiles()."""
+    ``keep`` and ``product_set`` as for tiles()."""
     from web import views
 
     store = copy.for_request(request)
@@ -276,7 +296,8 @@ def context(request, game=None, kind="", keep=None, list_title=""):
         # The two quiet hints the first visits get (feed.js): only the home page, unfiltered, has them in its markup.
         "hints": game is None and not filtered,
         "clear_url": game.get_absolute_url() if game is not None else reverse("web:home"),
-        "tiles": tiles(game, current=kind, keep=keep, all_label=copy.get("feed.tiles.all", store=store)),
+        "tiles": tiles(game, current=kind, keep=keep, all_label=copy.get("feed.tiles.all", store=store),
+                       product_set=product_set),
         "rail": shown, "rail_spares": spares,
         "rail_title": copy.get("feed.rail.deals", store=store), "rail_url": rail_url,
         "deals": deal_rows, "deals_spares": deal_spares,

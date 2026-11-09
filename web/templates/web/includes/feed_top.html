@@ -2,6 +2,24 @@
 <div class="feed{% if feed.filtered %} feed--filtered{% endif %}">
   {% if feed.show_title %}<h1 class="feed__title">{{ feed.title }}</h1>
   <p class="feed__sub">{% copy "feed.subtitle" shops=feed.shops %}</p>{% endif %}
+  {% if set_options or chosen_set %}
+  {# A game's sets above its types (views.game_detail set_options; the owner, 9 Nov 2026: "Pokemon tap, then collections, then type"): the sets people want most as chips, each with how many are in stock, the rest under All sets with a box to find one (feed.js). A set chosen is one chip that clears it, and the tiles below hold only its types. Only on a game's page. Plain links browse.js loads in place. #}
+  <nav class="feed-filters feed-sets" aria-label="{% copy 'browse.game.sets_title' %}">
+    <div class="feed-filters__row">
+      {% if chosen_set %}<a class="chip" href="{{ set_clear_url }}" data-browse-link aria-current="true">{{ chosen_set.name }}<span class="chip__off" aria-hidden="true">×</span><span class="visually-hidden">, {% copy "browse.quick.remove" %}</span></a>
+      {% else %}{% for item in set_options|slice:sets_in_row %}<a class="chip" href="{{ item.url }}" data-browse-link>{{ item.name }}<span class="feed-set__count{% if not item.in_stock %} feed-set__count--none{% endif %}"><span aria-hidden="true">{{ item.in_stock }}</span><span class="visually-hidden">, {% copy_count "browse.game.set_stock" item.in_stock %}</span></span></a>{% endfor %}{% endif %}
+      {% if chosen_set or set_options|length > sets_in_row %}<details class="feed-filters__more feed-set">
+        <summary class="chip chip--more"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-set"/></svg>{% copy "browse.game.all_sets" %}</summary>
+        <div class="feed-set__panel">
+          {% if set_options|length > 6 %}<input class="feed-set__find" type="search" placeholder="{% copy 'feed.set.find' %}" aria-label="{% copy 'feed.set.find' %}" autocomplete="off" hidden data-set-find>{% endif %}
+          <ul class="feed-set__list" aria-label="{% copy 'browse.game.sets_title' %}">
+            {% for item in set_options %}<li><a href="{{ item.url }}"{% if chosen_set and item.name == chosen_set.name %} aria-current="true"{% endif %}>{{ item.name }}<span class="feed-set__count{% if not item.in_stock %} feed-set__count--none{% endif %}"><span aria-hidden="true">{{ item.in_stock }}</span><span class="visually-hidden">, {% copy_count "browse.game.set_stock" item.in_stock %}</span></span></a></li>{% endfor %}
+          </ul>
+        </div>
+      </details>{% endif %}
+    </div>
+  </nav>
+  {% endif %}
   {% if feed.tiles %}
   {# Each type pictured by a product of its kind the most shops sell, so the tile stays current; the whole tile opens that type's list, which browse.js loads in under the tiles (data-browse-link). Filtered to a type, the row sticks to the top and the chosen tile, marked, leads back out. #}
   <div class="feed__scroller feed__scroller--tiles">

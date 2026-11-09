@@ -180,6 +180,8 @@ FILTERS_FROM = 12
 # Sets in the row on a game page, the ones people want most this week first (popularity.set_demand), newest first
 # when equal, then the most in stock; All sets opens the game's whole list on the Games page.
 GAME_PAGE_SETS = 8
+# Sets in the row above the type tiles on a game's page with the new home page on; the rest are under All sets.
+FEED_SETS = 8
 # A sold-out set page's In stock instead row looks for products like this many of the set's own.
 SET_INSTEAD_FROM = 12
 
@@ -1275,12 +1277,12 @@ def game_detail(request, game_slug):
         wanted = popularity.set_demand([item.pk for item in sets])
         sets.sort(key=lambda item: -wanted.get(item.pk, 0))   # stable: newest first among equals
     feed_on = not pane and look.for_request(request)
-    # The Set picker on a type's list with the new home page on (web/feed.py): every set that holds the type, in the
-    # row's order, each with how many of its products of the type are in stock, as links to this page that keep the
-    # other choices; the chosen set's chip clears it. The owner, 6 Nov 2026: "a dynamic way to filter by collection
-    # without overwhelming the page".
+    # The row of sets above the type tiles with the new home page on (feed_top.html): every set in the language and
+    # type in view, the ones people want most first, each with how many of its products are in stock, as links to
+    # this page that keep the other choices; the chosen set's chip clears it. The owner, 6 Nov 2026: "a dynamic way to
+    # filter by collection without overwhelming the page", and 9 Nov 2026: "Pokemon tap, then collections, then type".
     set_options, set_clear_url = [], ""
-    if feed_on and kind:
+    if feed_on:
         def set_link(slug):
             params = request.GET.copy()
             for name in ("page", "pane", "set"):
@@ -1311,9 +1313,11 @@ def game_detail(request, game_slug):
             "coming_soon": coming_soon_sets(game),
             # With the new home page on (web/look.py), the game's page leads with the feed's top (web/feed.py).
             "feed": (feed.context(request, game, kind=kind, keep={"set": chosen_set.slug} if chosen_set else None,
-                                  list_title=chosen_set.name if chosen_set and kind == feed.ALL else "")
+                                  list_title=chosen_set.name if chosen_set and kind == feed.ALL else "",
+                                  product_set=chosen_set)
                      if feed_on else None),
             "chosen_set": chosen_set, "set_options": set_options, "set_clear_url": set_clear_url,
+            "sets_in_row": FEED_SETS,
         },
         base_queryset=Product.objects.for_lists().filter(game=game),
         fixed_game=game,

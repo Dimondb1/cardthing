@@ -941,7 +941,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .set-nav ul { list-style: none; display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-1); scrollbar-width: none; margin-inline: calc(-1 * var(--page-gutter)); padding-inline: var(--page-gutter); }
 .set-nav ul::-webkit-scrollbar { display: none; }
 @media (min-width: 60rem) { .set-nav ul { flex-wrap: wrap; overflow: visible; margin-inline: 0; padding-inline: 0; } }
-.set-nav a { flex: none; display: inline-block; padding: 0.4em 0.9em; border: 1px solid var(--color-line); border-radius: var(--radius-pill); text-decoration: none; color: var(--color-ink-muted); font-size: var(--text-sm); white-space: nowrap; }
+.set-nav a { position: relative; flex: none; display: inline-block; padding: 0.4em 0.9em; border: 1px solid var(--color-line); border-radius: var(--radius-pill); text-decoration: none; color: var(--color-ink-muted); font-size: var(--text-sm); white-space: nowrap; }
 .set-nav a:hover { border-color: var(--color-brand); color: var(--color-brand-text); }
 /* How many of the set's products are in stock, after its name: a dot in the in-stock colour, grey at none. Positioned so
    the words read out stay inside the row that scrolls, not stretching the page. */
@@ -2402,6 +2402,16 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-set__count::before { content: ""; width: var(--stock-dot); height: var(--stock-dot); border-radius: 50%; background: var(--color-in-stock); }
 .feed-set__count--none::before { background: var(--color-line-strong); }
 @media (min-width: 48rem) { .feed-set__panel { right: auto; width: var(--feed-set-width); } }
+/* A closed picker's panel takes no room: at the end of a long row it would widen the page. */
+.feed-set:not([open]) .feed-set__panel { display: none; }
+/* A game's sets above its type tiles (feed_top.html): the in-stock count sits a space after the set's name. */
+.feed-sets { margin-top: var(--space-2); }
+.feed-sets .chip .feed-set__count { margin-left: var(--space-2); }
+/* Each chip holds its own words for screen readers: placed against the row's box, those of a chip far along the row
+   would widen the page. The All sets panel still drops from the row's box, outside the sideways scroll. */
+.feed-sets .chip { position: relative; }
+@media (min-width: 60rem) { .feed-sets .feed-filters__row { flex-wrap: wrap; overflow: visible; } }
+.feed-set__list a[aria-current="true"] { color: var(--color-brand-text); background: var(--color-brand-soft); }
 /* The sketch of a list while a tile's list is fetched: the type's name, Loading, and four grey cards that breathe. */
 .feed-sketch { margin-top: var(--space-4); }
 .feed-sketch__title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }

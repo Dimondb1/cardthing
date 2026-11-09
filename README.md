@@ -5387,18 +5387,23 @@ feels like one screen changing. A type tile is a link to the list of that
 type (`/search/?type=` from the home page, `/games/<game>/?type=` from a
 game's page); with the feed on, those pages lead with the tiles, the chosen
 one marked and the row stuck to the top, and the list right under them with
-the type as its heading, its count, the sort and Clear, then, on a game's
-page, a Set picker (`views.game_detail`, `?set=`): one chip that opens the
-sets holding that type, newest and most wanted first, each with how many of
-its products of the type are in stock, as links that narrow the list in
-place; with more than six sets a find box on top narrows them as you type
-(`feed.js`); the chosen set is a chip that clears it, and the sort, the
-filters and the type tiles keep it (the owner, 6 Nov 2026: "a dynamic way
-to filter by collection without overwhelming the page"). A game's row of
+the type as its heading, its count, the sort and Clear. A game's page has a
+row of its sets above the type tiles (`feed_top.html`, `views.game_detail`
+`set_options`, `?set=`), never the home page: the eight people want most
+this week as chips, newest first among equals, each with how many of its
+products (of the type chosen, if one is) are in stock, then All sets, which
+opens every set with a find box on top that narrows them as you type
+(`feed.js`). A chip narrows the list in place; the chosen set is a chip that
+clears it, All sets beside it changes it, and the sort, the filters and the
+type tiles keep it. Once a set is chosen the tiles hold only its own types,
+each pictured by one of its own products (`feed.set_tile_rows`, one query).
+So Pokémon, Delta Reign, ETBs is three taps (the owner, 6 Nov 2026: "a
+dynamic way to filter by collection without overwhelming the page", and 9
+Nov 2026: "Pokemon tap, then collections, then type"). With the row there,
+the page's usual row of sets further down is left out. A game's row of
 tiles leads with an All types tile (`feed.ALL`, `?type=all`), which opens
-the game's whole list with the picker, so a set can be picked on its own
-(`?set=` alone means the same, headed by the set's name); a chosen type
-tile leads back out to all of the set. Then the languages
+the game's whole list (`?set=` alone is a set's whole list, headed by its
+name); a chosen type tile leads back out to all of the set. Then the languages
 the list holds as chips ready to tap (`views.language_chips`, one query) and
 a Filters pill that folds the price band and 2+ shops away. The feed's region is
 `data-browse`, so `browse.js` loads a tile's list in place (a sketch of the

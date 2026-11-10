@@ -208,6 +208,27 @@ def inside(site):
     return fetch
 
 
+def cache_owner():
+    """The name of the user who owns the shared cache folder when it is not the user running this process, else "".
+    The checks build pages and keep them; kept by another user, the site could not read them (ripraptor/filecache.py
+    now treats those as missing, and this stops them being written at all)."""
+    import os
+    import pwd
+
+    from django.conf import settings
+
+    try:
+        owner = os.stat(settings.RIPRAPTOR_CACHE_DIR).st_uid
+    except (OSError, TypeError, AttributeError):
+        return ""
+    if owner == os.geteuid():
+        return ""
+    try:
+        return pwd.getpwuid(owner).pw_name
+    except KeyError:
+        return str(owner)
+
+
 def a_set():
     """A Pokémon set with something in stock, from this machine's catalogue, or "" without one."""
     from catalogue.models import ProductSet

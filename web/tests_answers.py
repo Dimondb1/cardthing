@@ -562,3 +562,34 @@ class VisibilityPageTests(ProofTests):
         self.assertIn("of them game, set, guide and list pages.", html)
         self.assertIn("Game, set and guide pages last sent:", html)
         self.assertNotIn("none on record yet", html)
+
+
+class InsideAsTheSitesUserTests(TestCase):
+    def test_inside_refuses_to_run_as_another_user_than_the_caches_owner(self):
+        # On 10 Nov 2026 the owner ran it on the console as root, as he was told to: the pages it built and kept were
+        # root's files, which the site could not read, and the Pokémon and Magic pages answered 500.
+        from io import StringIO
+        from unittest import mock
+
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with mock.patch("web.proof.cache_owner", return_value="ripraptor"):
+            with self.assertRaisesMessage(CommandError, "--inside must run as the site's own user (ripraptor)"):
+                call_command("visibility_proof", inside=True, site="http://testserver", stdout=StringIO())
+
+    def test_the_caches_owner_is_named_only_when_it_is_someone_else(self):
+        import os
+        import tempfile
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from web import proof
+
+        with tempfile.TemporaryDirectory() as folder, override_settings(RIPRAPTOR_CACHE_DIR=folder):
+            self.assertEqual(proof.cache_owner(), "")   # ours
+            with mock.patch("os.geteuid", return_value=os.stat(folder).st_uid + 4242):
+                self.assertNotEqual(proof.cache_owner(), "")
+        with override_settings(RIPRAPTOR_CACHE_DIR="/no/such/folder"):
+            self.assertEqual(proof.cache_owner(), "")

@@ -6,6 +6,10 @@ their own process. A cache kept in memory belongs to one process, so a
 restock written by an import could not clear what the web workers had
 cached. A folder of cache files is shared by all of them: a clear in one
 process is seen by every other at once.
+
+Every process that writes to it should run as the site's own user (the cron lines and the installer do): a file
+another user writes is one the site cannot read. It is then treated as missing and rebuilt, not an error
+(ripraptor/filecache.py).
 """
 
 import logging
@@ -47,5 +51,6 @@ def shared_caches(directory):
             "so imports cannot clear what the site has cached.", directory, exc,
         )
         return {"default": dict(MEMORY_CACHE)}
-    return {"default": {"BACKEND": "django.core.cache.backends.filebased.FileBasedCache", "LOCATION": str(directory),
+    # Django's file cache, where an entry another user wrote is a miss and not an error (ripraptor/filecache.py).
+    return {"default": {"BACKEND": "ripraptor.filecache.SharedFileCache", "LOCATION": str(directory),
                         "OPTIONS": {"MAX_ENTRIES": FILE_CACHE_MAX_ENTRIES}}}

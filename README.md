@@ -5489,8 +5489,12 @@ hard-coded."). In the compact layout, which is the one that is live:
   so; `--inside` asks the machine's own copy with no network, which is what
   those two are served.
 
-      python manage.py visibility_proof            # the live site
-      python manage.py visibility_proof --inside   # on the server
+      python manage.py visibility_proof            # the live site, from anywhere
+
+  On the server use the Admin page below. `--inside` does the same from the
+  console and must run as the site's own user (`sudo -u ripraptor ...`): it
+  builds pages and keeps them, and the command refuses to run as anyone
+  else.
 
   **Search visibility** in Admin (`/admin/visibility/`, `web/visibility.py`,
   staff only) runs the same checks on the machine's own copy and shows them
@@ -5499,6 +5503,18 @@ hard-coded."). In the compact layout, which is the one that is live:
   and what the last accepted run sent (the owner, 10 Nov 2026: "On mobile I
   can't copy from console"). Opening it builds each page once more, a few
   seconds; nothing is changed or sent.
+
+  **A cache file the site cannot read is a miss, not an error**
+  (`ripraptor/filecache.py`, the shared cache's backend). Django's file
+  cache writes each entry as a file only its writer may read, and lets a
+  PermissionError through when another user reads one. On 10 Nov 2026 the
+  owner was told to run `visibility_proof --inside` on the console, which
+  he does as root: it kept the Pokémon and Magic pages as root's files, and
+  those two pages and `llms.txt` answered 500 until the next update emptied
+  the cache. Now such a file is treated as not there, so the site builds
+  its own copy and writes it over the other user's. Run commands that
+  build pages as the site's user all the same, as the cron lines and the
+  installer do.
 
 
 The sitemap, Product structured data, `llms.txt` and a robots.txt that lets

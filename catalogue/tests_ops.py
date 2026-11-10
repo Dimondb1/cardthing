@@ -678,3 +678,80 @@ class CommandMethodTests(TestCase):
     def test_check_delivery_runs_with_djangos_checks(self):
         out = StringIO()
         call_command("check_delivery", "no-such-shop", skip_checks=False, stdout=out, stderr=StringIO())
+
+
+class SharedFileCacheTests(TestCase):
+    """The shared cache's backend (ripraptor/filecache.py): a cache file this process may not read is a miss, not an
+    error. On 10 Nov 2026 a command run on the console as root kept the Pokémon and Magic pages as root's files, and
+    the site, which runs as its own user, answered 500 for them until the next update emptied the cache."""
+
+    def setUp(self):
+        from ripraptor.filecache import SharedFileCache
+
+        self.folder = tempfile.mkdtemp(prefix="ripraptor-shared-cache-test-")
+        self.addCleanup(shutil.rmtree, self.folder, True)
+        self.cache = SharedFileCache(self.folder, {})
+
+    def unreadable(self, key):
+        """Reads of ``key``'s file fail as they do for a file another user wrote (mode 600): the tests may run as
+        root, who can read anything, so the refusal is put in by hand."""
+        import builtins
+
+        path, real = self.cache._key_to_file(key), builtins.open
+
+        def refuse(name, mode="r", *args, **kwargs):
+            if name == path and ("r" in mode or "+" in mode):
+                raise PermissionError(13, "Permission denied", name)
+            return real(name, mode, *args, **kwargs)
+
+        return mock.patch("builtins.open", side_effect=refuse)
+
+    def test_the_site_uses_it_for_the_shared_folder(self):
+        from ripraptor.caching import shared_caches
+        from ripraptor.filecache import SharedFileCache
+
+        found = shared_caches(self.folder)["default"]
+        self.assertEqual(found["BACKEND"], "ripraptor.filecache.SharedFileCache")
+        from django.core.cache.backends.filebased import FileBasedCache
+
+        self.assertTrue(issubclass(SharedFileCache, FileBasedCache))   # web/listcache.py looks for the file cache
+
+    def test_an_entry_it_cannot_read_is_missing_and_django_would_have_raised(self):
+        from django.core.cache.backends.filebased import FileBasedCache
+
+        self.cache.set("page:/games/pokemon/", {"body": "kept by root"}, 300)
+        with self.unreadable("page:/games/pokemon/"):
+            with self.assertRaises(PermissionError):
+                FileBasedCache(self.folder, {}).get("page:/games/pokemon/")   # what took the pages down
+            self.assertIsNone(self.cache.get("page:/games/pokemon/"))
+            self.assertEqual(self.cache.get("page:/games/pokemon/", "built again"), "built again")
+            self.assertFalse(self.cache.has_key("page:/games/pokemon/"))
+            self.assertFalse(self.cache.touch("page:/games/pokemon/", 300))
+
+    def test_the_site_then_writes_its_own_copy_over_it(self):
+        self.cache.set("game-counts:1", (5772, 1901, 101), None)
+        with self.unreadable("game-counts:1"):
+            # A miss, so the page builds the entry and keeps it: add and set replace the file.
+            self.assertTrue(self.cache.add("game-counts:1", (5772, 1909, 100), None))
+        self.assertEqual(self.cache.get("game-counts:1"), (5772, 1909, 100))
+
+    @skipUnless(hasattr(__import__("os"), "geteuid") and __import__("os").geteuid() != 0,
+                "root can read any file, so there is nothing to refuse")
+    def test_a_file_only_its_writer_may_read_for_real(self):
+        import os
+
+        self.cache.set("key", "kept by another user", 300)
+        path = self.cache._key_to_file("key")
+        os.chmod(path, 0)
+        self.addCleanup(os.chmod, path, 0o600)
+        self.assertIsNone(self.cache.get("key"))
+        self.assertFalse(self.cache.has_key("key"))
+
+    def test_entries_it_can_read_work_as_ever(self):
+        self.cache.set("a", [1, 2, 3], 300)
+        self.assertEqual(self.cache.get("a"), [1, 2, 3])
+        self.assertTrue(self.cache.has_key("a"))
+        self.assertTrue(self.cache.touch("a", 300))
+        self.assertIsNone(self.cache.get("missing"))
+        self.cache.delete("a")
+        self.assertIsNone(self.cache.get("a"))

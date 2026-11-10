@@ -1601,7 +1601,8 @@ class SharedCacheTests(PageTestCase):
         folder = Path(tempfile.mkdtemp(prefix="ripraptor-cache-test-"))
         self.addCleanup(shutil.rmtree, folder, True)
         caches = shared_caches(folder / "cache")
-        self.assertEqual(caches["default"]["BACKEND"], "django.core.cache.backends.filebased.FileBasedCache")
+        # Django's file cache, where a file another user wrote is a miss and not an error (ripraptor/filecache.py).
+        self.assertEqual(caches["default"]["BACKEND"], "ripraptor.filecache.SharedFileCache")
         self.assertEqual(caches["default"]["LOCATION"], str(folder / "cache"))
         self.assertGreaterEqual(caches["default"]["OPTIONS"]["MAX_ENTRIES"], 10000)   # the lists are not culled
         self.assertEqual(os.listdir(folder / "cache"), [])  # the write check leaves nothing behind

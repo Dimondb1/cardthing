@@ -132,9 +132,19 @@ NOT_SEALED = re.compile(
     # £19.98 at the top of Booster boxes on 9 Nov 2026): a display for a box, not one. A sealed product sold with one
     # says so after a plus or "with" ("Elite Trainer Box + Acrylic Case Bundle"), and "case" already marks that.
     r"(?<!\+ )(?<!with )\bacrylic\s+(?:(?:booster\s+box|booster\s+pack|etb|elite\s+trainer\s+box|card|pack|box)\s+)?"
-    r"(?:display|case|protector|stand|holder|frame|box)s?\b",
+    r"(?:display|case|protector|stand|holder|frame|box)s?\b|"
+    # Stationery and homeware from the Pokémon Center and the like, which a shop files beside its cards: "Center Japan
+    # Pikachu Desktop File" came in as a booster box on 10 Nov 2026, with notebooks and a plate collection. A card file
+    # set ("Pokémon GO Card File Set") is a sealed product and stays.
+    r"\b(?:desktop|clear|a4|a5)\s+files?\b|\bnotebooks?\b|\bplate\s+collection\b|\bmelamine\b|"
+    # Model kits and their stands ("Grand Ship Collection Going Merry ... Display Stand").
+    r"\bdisplay\s+stands?\b|\bgrand\s+ship\s+collection\b|\bmodel\s+kits?\b|\bplastic\s+models?\b",
     re.I,
 )
+# A shop category of things that are not cards, however it goes on: "Storage File Display" (Japan2UK) put a desktop file
+# among the booster boxes. NOT_SEALED_TYPES matches a whole category; this matches a word in one.
+NOT_SEALED_CATEGORY = re.compile(r"\b(?:storage|stationery|accessor(?:y|ies)|merch(?:andise)?|homeware|apparel|"
+                                 r"clothing)\b", re.I)
 # What only a single card's title says: a card number ("Eevee 133/165", not a date), a Pokémon promo number
 # ("SVP 066"), a rarity, a grade or a card's condition. A marketplace title that says one sells cards from a
 # product, not the product: "*SEALED* Pokémon TCG 2025 Holiday Calendar Eevee 133/165 Pikachu 025/165" on eBay
@@ -278,11 +288,17 @@ def game_word(slug):
 SET_NUMBER = re.compile(r"\b(?:set|chapter) \d{1,2}\b")
 
 
+# A shop category that is one of these and nothing more names booster boxes; "display" inside a longer category does
+# not ("Storage File Display", "Card Display Frames"), though "Booster Display" and "Display Box" still do.
+DISPLAY_CATEGORIES = {"display", "displays", "booster display", "booster displays"}
+
+
 def find_type(title, shop_type=""):
     text = " " + SET_NUMBER.sub(" ", expand(title)) + " "
     shop_type = (shop_type or "").lower()
     for kind, words in TYPES:
-        if any(w.lower() in shop_type for w in words if len(w) > 3) and kind != "booster_pack":
+        named = [w for w in words if len(w) > 3 and (w != "display" or shop_type.strip() in DISPLAY_CATEGORIES)]
+        if any(w.lower() in shop_type for w in named) and kind != "booster_pack":
             return kind
     for kind, words in TYPES:
         if any(f" {w} " in text or text.strip().endswith(" " + w) for w in words):
@@ -500,7 +516,7 @@ def classify(title, shop_type="", vendor="", tags=(), price=None):
     """Return a Sealed description, or None if this is not a sealed product we list."""
     if price is not None and (price <= 0 or PLACEHOLDER_PRICE.match(str(price))):
         return None
-    if (shop_type or "").lower() in NOT_SEALED_TYPES:
+    if (shop_type or "").lower() in NOT_SEALED_TYPES or NOT_SEALED_CATEGORY.search(shop_type or ""):
         return None
     if (vendor or "").lower().strip() in NOT_SEALED_VENDORS:
         return None

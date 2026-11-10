@@ -58,6 +58,17 @@ DESCRIPTIONS = [
  ("Pokemon 25th Anniversary Celebrations Booster Pack", None, None),
  ("1st Edition booster pack", None, None),
  ("The 2nd booster pack of the year", None, None),
+ # The owner, 10 Nov 2026: "not 7 packs". A number that names a release (a volume, a series, a season) is never a count.
+ ("Gem Vol 7 Sealed Simplified Chinese Booster Pack (CBB7 C)", None, None),
+ ("Pokemon Gem Pack Vol.7 Simplified Chinese booster pack", None, None),
+ ("Scarlet & Violet Gym Promo Vol. 10 Japanese Booster Pack", None, None),
+ ("Gem Pack Volume 3 Booster Pack. 4 cards per pack.", None, 4),
+ ("Special Series 15 The Legendary Vanguards Booster Pack", None, None),
+ ("Legendary Duelists Season 3 1st Edition Booster Pack", None, None),
+ ("Kaiju No. 8 Booster Pack", None, None),
+ ("Oshi no Ko Vol 3 Japanese Booster Box. 10 packs per box.", 10, None),
+ ("Gem Pack Vol 5 Booster Pack Bundle: 10 booster packs", 10, None),
+ ("Ascended Heroes Collection 2 Pack Blister", 2, None),
  ("", None, None),
 ]
 
@@ -145,8 +156,26 @@ class RefreshTests(TestCase):
         self.assertEqual((pack.packs_found, pack.cards_found), (None, 10))
         self.assertEqual((three.packs_found, three.cards_found), (3, 10))
         for name, packs, several in (("Booster Pack x3", 3, True), ("30th Celebration Booster Pack", 30, False),
-                                     ("Surging Sparks 3 Booster Packs", 6, False), ("Booster Pack", 1, False)):
+                                     ("Surging Sparks 3 Booster Packs", 6, False), ("Booster Pack", 1, False),
+                                     ("Gem Vol 7 Sealed Simplified Chinese Booster Pack (CBB7 C)", 7, False),
+                                     ("Scarlet & Violet Gym Promo Vol 10 Japanese Booster Pack", 10, False)):
             self.assertEqual(contents.names_several_packs(name, packs), several, name)
+
+    def test_a_volume_number_never_makes_a_pack_several(self):
+        # The owner, 10 Nov 2026: "Gem Vol 7 ... Booster Pack" showed "7 packs, £0.73 a pack" because its name and its
+        # shops' descriptions both said "Vol 7". It is one pack, and the price a pack and a card go with the count.
+        gem = make_product(self.box.product_set, name="Gem Vol 7 Sealed Simplified Chinese Booster Pack (CBB7 C)",
+                           product_type="booster_pack")
+        for shop in self.shops[:2]:
+            listing = make_listing(gem, shop)
+            type(listing).objects.filter(pk=listing.pk).update(
+                description="Pokemon Gem Pack Vol 7 Simplified Chinese booster pack. 4 cards per pack.")
+        Product.objects.filter(pk=gem.pk).update(packs_found=7)   # as the live site had it
+        contents.refresh_contents()
+        gem.refresh_from_db()
+        self.assertEqual((gem.packs_found, gem.cards_found), (None, 4))
+        self.assertIsNone(gem.packs_inside)
+        self.assertIsNone(contents.price_a_pack("5.08", gem.packs_inside))   # no "£0.73 a pack"
 
     def test_one_read_of_the_descriptions_and_one_write(self):
         for shop in self.shops:

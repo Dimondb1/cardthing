@@ -928,3 +928,70 @@ class AcrylicDisplayTests(TestCase):
         for title in ("Mega Evolution Delta Reign Booster Box", "Brilliant Illusions csv8 C Simplified Chinese Slim Booster Box"):
             with self.subTest(title=title):
                 self.assertFalse(NOT_SEALED.search(title))
+
+
+class StationeryAndModelTests(TestCase):
+    """Things a card shop sells that are not cards: "Center Japan Pikachu Desktop File" (Japan2UK, filed under "Storage
+    File Display") came in as a booster box on 10 Nov 2026, beside Pokémon Center notebooks, a plate collection and
+    One Piece model ships."""
+
+    def test_stationery_homeware_and_model_kits_are_not_sealed(self):
+        from .classify import NOT_SEALED
+
+        for title in ("Pokemon Center Japan - Pikachu Desktop File", "Pokemon Center Japan Clear File Set",
+                      "Center Japan Mix Fruit Campus Notebook (A 5 Book Pack)", "A5 Notebook Star Wars BB-8",
+                      "Center Japan What's Your Charm Point Plate Collection",
+                      "Bandai One Piece Grand Ship Collection Going Merry Classic Display Stand MK57427",
+                      "Grand Ship Collection Red Force Model Kit", "Plastic Model Collection Quick 14 Tepig"):
+            with self.subTest(title=title):
+                self.assertTrue(NOT_SEALED.search(title))
+                self.assertIsNone(classify(title, price=Decimal("24.99")))
+
+    def test_sealed_products_with_near_words_stay(self):
+        from .classify import NOT_SEALED
+
+        for title in ("Pokemon Sword & Shield Pokemon GO Japanese Card File Set", "Scarlet & Violet N Korean Collection File Set",
+                      "The Hobbit Scene Box: Crack the Plates", "Umbreon Display Frame Collection Box",
+                      "One Piece OP-11 Booster Display"):
+            with self.subTest(title=title):
+                self.assertFalse(NOT_SEALED.search(title))
+
+    def test_a_shop_category_of_storage_or_stationery_is_not_cards(self):
+        self.assertIsNone(classify("Pokemon Center Japan - Pikachu Desktop", shop_type="Storage File Display",
+                                   vendor="Pokemon Center", price=Decimal("24.99")))
+        for category in ("Card Storage", "Stationery", "Pokemon Accessories", "Merchandise"):
+            with self.subTest(category=category):
+                self.assertIsNone(classify("Pokemon Pikachu Booster Box", shop_type=category, price=Decimal("50")))
+
+    def test_display_alone_names_booster_boxes_but_not_inside_a_longer_category(self):
+        from .classify import find_type
+
+        for category in ("Display", "Displays", "Booster Display", "Booster Displays", "Display Box"):
+            with self.subTest(category=category):
+                self.assertEqual(find_type("Pokemon Stellar Crown", category), "booster_box")
+        for category in ("Storage File Display", "Card Display Frames"):
+            with self.subTest(category=category):
+                self.assertIsNone(find_type("Pokemon Pikachu", category))
+        # The title still decides when it names the kind.
+        self.assertEqual(find_type("Stellar Crown Booster Box", "Card Display Frames"), "booster_box")
+
+    def test_the_hourly_tidy_up_takes_them_off(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .models import Product, RemovedProduct
+        from .testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        product_set = make_set(make_game())
+        desk = make_product(product_set, name="Center Japan Pikachu Desktop File", slug="center-japan-pikachu-desktop-file",
+                            product_type="booster_box")
+        box = make_product(product_set, name="Prismatic Evolutions Booster Box", slug="prismatic-evolutions-booster-box",
+                           product_type="booster_box")
+        shop = make_retailer("Japan2UK")
+        for product in (desk, box):
+            make_listing(product, shop, price="24.99")
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=desk.pk).exists())
+        self.assertTrue(RemovedProduct.objects.filter(slug="center-japan-pikachu-desktop-file").exists())
+        self.assertTrue(Product.objects.filter(pk=box.pk).exists())

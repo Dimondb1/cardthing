@@ -34,8 +34,9 @@ NUMBER_ALONE = re.compile(NUMBER)
 PACK_WORD = re.compile(
     r"\b(?:booster\s+packs?|packs?|(?:play|draft|set|collector|jumpstart|premium|sleeved)\s+boosters?|boosters)\b", re.I)
 # Where a clause ends, so a count is only ever read from the clause its pack word is in. Not a colon: "Pokémon TCG:"
-# is in the middle of most pack names. Nor the point in a price (£2.50).
-BREAK = re.compile(r"[.,](?!\d)|[;!?\n•|()\[\]]|\s[-–]\s")
+# is in the middle of most pack names. Nor the point in a price (£2.50), nor the one in "Vol." and "No.", which name a
+# release (NAMES_RELEASE).
+BREAK = re.compile(r"(?<!\bno)(?<!\bvol)[.,](?!\d)|[;!?\n•|()\[\]]|\s[-–]\s", re.I)
 # Words, never a number, between a count and what it counts.
 WORDS = r"(?:[^\W\d][\w'’:-]*\s+)"
 # A number that counts something else: cards ("1 full-art foil promo card", "10 cards per pack"), or boxes and the like
@@ -44,6 +45,10 @@ COUNTS_OTHER = re.compile(r"\s*(?:x|×)?\s*" + WORDS + r"{0,4}?(?:cards?|box|box
                           r"cases?|sleeves|dice|coins?)\b", re.I)
 # A share ("1 of 36 packs", "1 from 4 promo cards"): neither number is the count.
 SHARE = re.compile(r"\s+(?:of|from)\s+" + NUMBER, re.I)
+# A number that names a release, not a count: "Gem Pack Vol 7 Booster Pack" and "Gym Promo Vol. 10 Booster Pack" are one
+# pack each (the owner, 10 Nov 2026: "not 7 packs"), as are "Special Series 15", "Season 3", "Kaiju No. 8". Not
+# "Collection": "Ascended Heroes Collection 2 Pack Blister" holds two packs.
+NAMES_RELEASE = re.compile(r"\b(?:vol|volume|series|season|wave|part|chapter|no)\.?\s*#?\s*$|#\s*$", re.I)
 LOOK_BACK = 120
 CARDS = (
     # "10 cards per pack", "5 cards in each pack", "14 Magic cards per Play Booster".
@@ -80,14 +85,15 @@ def several_boxes(text):
 
 
 def count_before(clause):
-    """The first number in ``clause`` that counts packs, or None: counts of other things and shares are passed over."""
+    """The first number in ``clause`` that counts packs, or None: counts of other things, shares and a release's number
+    ("Vol 7") are passed over."""
     numbers = list(NUMBER_ALONE.finditer(clause))
     skip = set()
     for i, number in enumerate(numbers):
         after = clause[number.end():]
         if SHARE.match(after):
             skip.update({i, i + 1})
-        if i in skip or COUNTS_OTHER.match(after):
+        if i in skip or COUNTS_OTHER.match(after) or NAMES_RELEASE.search(clause[:number.start()]):
             continue
         count = int(number.group(1))
         return count if 1 <= count <= MOST_PACKS else None

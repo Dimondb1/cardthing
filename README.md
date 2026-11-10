@@ -164,6 +164,19 @@ which led Booster boxes at £19.98 on 9 Nov 2026) is not a box either: an
 comes after a plus or "with" (a box sold with one, which "case" already
 marks).
 
+Stationery, homeware and model kits that card shops sell beside their
+cards are not sealed either (10 Nov 2026: "Center Japan Pikachu Desktop
+File" showed as a booster box): a desktop, clear, A4 or A5 file, a
+notebook, a plate collection, melamine, a display stand, a model kit or
+plastic model, and Bandai's Grand Ship Collection. A card file set stays.
+A shop category with storage, stationery, accessories, merchandise,
+homeware, apparel or clothing in it is not cards (`NOT_SEALED_CATEGORY`;
+Japan2UK's "Storage File Display" is how the file came in), and "display"
+names booster boxes only as a whole category ("Display", "Booster
+Displays"), not inside a longer one. Checked against the live sitemap
+before it went in: 37 pages go, all model kits, notebooks, the plate
+collection and the file.
+
 Football boots and trainers are left out the same way: a sports shop that
 sells cards too names them "adidas F50 ... World Cup Pack UK 10", and on 9
 Nov 2026 they were 332 pages, one for each shoe size, read as booster
@@ -5156,7 +5169,10 @@ everywhere.
 
 The hourly merge only joins names whose numbers agree. A volume or set
 number is never read as a pack count ("Gem Pack Vol 4 Booster Pack" and
-"Vol 6" are two products), and two names with different numbers ("Mystery
+"Vol 6" are two products; the pack counts on product pages read the same
+way since 10 Nov 2026, when "Gem Vol 7 ... Booster Pack" showed "7 packs":
+a number after Vol, Volume, Series, Season, Wave, Part, Chapter, No. or #
+is never a count, `contents.NAMES_RELEASE`), and two names with different numbers ("Mystery
 Bundle 5 Sealed Booster Packs" and "10"), different booster kinds ("Set
 Booster Box" and "Booster Box"), different set codes ("M1L" and "M1S"),
 series ("Scarlet & Violet Base Set" and "Mega Evolution Base Set") or a word

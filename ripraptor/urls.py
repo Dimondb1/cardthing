@@ -8,6 +8,7 @@ from web import botcheck as web_botcheck
 from web import delivery as web_delivery
 from web import media as web_media
 from web import online as web_online
+from web import visibility as web_visibility
 from web import views as web_views
 
 admin.site.site_header = "RipRaptor admin"
@@ -26,6 +27,7 @@ urlpatterns = [
     path("admin/online/", web_online.online_page, name="online"),
     path("admin/add-shops/", web_add_shops.add_shops_page, name="add_shops"),
     path("admin/shop-delivery/", web_delivery.delivery_page, name="shop_delivery"),
+    path("admin/visibility/", web_visibility.visibility_page, name="visibility"),
     path("admin/data/", web_views.data_page, name="data"),
     path("admin/data/download/<int:pk>/", web_views.data_download, name="data_download"),
     path("admin/data/upload/<int:pk>/", web_views.data_import_page, name="data_import"),

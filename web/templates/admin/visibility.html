@@ -1,0 +1,49 @@
+{% extends "admin/base_site.html" %}
+{# Search visibility (web/visibility.py): the checks manage.py visibility_proof runs, on this machine's own copy of the site as each crawler, and IndexNow's last run. One short page, so a screenshot of it says what the console would. #}
+{% block title %}Search visibility | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .visibility { display: grid; gap: 18px; max-width: 52rem; }
+  .visibility h2 { margin: 0 0 6px; }
+  .visibility p { margin: 0 0 6px; }
+  .visibility .note { color: var(--body-quiet-color); }
+  .visibility .big { font-size: 1.5rem; font-weight: 600; margin: 0 0 4px; }
+  .visibility .good { color: #1a7f37; }
+  .visibility .bad { color: #b42318; }
+  .visibility ul { margin: 0; padding: 0; list-style: none; }
+  .visibility li { padding: 8px 0; border-bottom: 1px solid var(--hairline-color); list-style: none; }
+  .visibility li strong { word-break: break-all; }
+  .visibility .why { display: block; margin-top: 2px; }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Search visibility</div>{% endblock %}
+{% block content %}
+<div class="visibility">
+  <section>
+    {% if failed %}<p class="big bad">{{ failed }} of {{ checks }} checks failed</p>{% else %}<p class="big good">All {{ checks }} checks passed</p>{% endif %}
+    <p class="note">{{ site }}, checked {{ now|date:"j M Y H:i" }}. Each page was read as {{ crawlers|join:", " }}: the raw HTML, before any script runs.</p>
+  </section>
+
+  <section>
+    <h2>Pages</h2>
+    <ul>
+      {% for page in pages %}
+      <li>
+        <strong>{{ page.path }}</strong>
+        {% if page.failed %}<span class="bad">{{ page.failed|length }} check{{ page.failed|length|pluralize }} failed</span>
+          {% for check in page.failed %}<span class="why bad">{{ check.name }}{% if check.crawlers %} ({{ check.crawlers|join:", " }}){% endif %}{% if check.detail %}: {{ check.detail }}{% endif %}</span>{% endfor %}
+        {% else %}<span class="good">passed</span> <span class="note">{{ page.checks }} check{{ page.checks|pluralize }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="note">A game's page: one heading that says what it compares, the cheapest of each kind in stock, 5 to 7 questions, the FAQ data matching the page word for word, a list of its products, and the same counts in its description, on the page and in llms.txt. A set's page: its intro and its list of products. The guide: its seven questions, live examples and its two dates. Every page: one main heading and structured data that parses.</p>
+  </section>
+
+  <section>
+    <h2>IndexNow</h2>
+    <p>{% if indexnow.on %}<span class="good">On.</span>{% else %}<span class="bad">Off</span> (RIPRAPTOR_INDEXNOW=0).{% endif %}
+       Key file: {% if indexnow.served %}<span class="good">served by the site.</span>{% else %}<span class="bad">not served by the site.</span>{% endif %}</p>
+    <p>{% if indexnow.last %}Last accepted run: {{ indexnow.last.at|date:"j M Y H:i" }}, {{ indexnow.last.sent }} address{{ indexnow.last.sent|pluralize:"es" }}, {{ indexnow.last.pages }} of them game, set, guide and list pages.{% else %}Last accepted run: none on record yet. It runs at 25 past each hour, and the record starts again after an update.{% endif %}</p>
+    <p>{% if indexnow.pages_sent %}Game, set and guide pages last sent: {{ indexnow.pages_sent|date:"j M Y H:i" }}. They go at most once a day.{% else %}Game, set and guide pages: not sent yet. They go with the next run.{% endif %}</p>
+  </section>
+</div>
+{% endblock %}

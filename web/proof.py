@@ -12,13 +12,18 @@ script runs:
 * every page: one h1, and every JSON-LD block parses;
 * llms.txt and the sitemap name the guide.
 
-The checks are plain functions over text, so the tests run them on the test site's pages (web/tests_answers.py) and the
-command runs them on the live one.
+The checks are plain functions over text, so the tests run them on the test site's pages (web/tests_answers.py), the
+command runs them on the live one, and the Search visibility page in Admin (web/visibility.py) runs them on the
+machine's own copy and shows the result, for an owner on a phone who cannot copy from a console.
 """
 
 import html as html_text
 import json
 import re
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 # The crawlers a page is fetched as. Google and Bing are known to the site by their addresses (web/botcheck.py), so a
 # fetch that only uses their name from another address abroad is shown the visitor check: VERIFIED says which.
@@ -155,3 +160,103 @@ def sitemap(text, site):
 def llms_line(text, path):
     """The line of llms.txt for the game at ``path``, or ""."""
     return next((line for line in text.splitlines() if line.startswith("- [") and f"{path})" in line), "")
+
+
+# Running them all -------------------------------------------------------------------------------------------------
+
+GAMES = ("/games/pokemon/", "/games/magic-the-gathering/")
+TIMEOUT = 40
+
+
+@dataclass
+class Row:
+    path: str
+    crawler: str      # "" for llms.txt and the sitemap, which are read once
+    name: str
+    passed: bool
+    detail: str = ""
+
+
+def over_network(site):
+    """A fetcher: (status, text) of a path of ``site`` asked for over the internet as a crawler."""
+    def fetch(path, crawler):
+        request = urllib.request.Request(site + path, headers={"User-Agent": CRAWLERS[crawler], "Accept": "text/html,*/*"})
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                return response.status, response.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as exc:
+            return exc.code, ""
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            return 0, exc.__class__.__name__
+
+    return fetch
+
+
+def inside(site):
+    """A fetcher that asks this machine's own copy of the site, with no network: what the site serves a crawler it
+    knows, whatever address asks. ``site`` gives the host and scheme the pages are built for."""
+    from django.test import Client
+
+    parts = urlsplit(site)
+
+    def fetch(path, crawler):
+        client = Client(HTTP_USER_AGENT=CRAWLERS[crawler], HTTP_HOST=parts.netloc)
+        response = client.get(path, secure=parts.scheme == "https")
+        body = b"".join(response.streaming_content) if getattr(response, "streaming", False) else response.content
+        return response.status_code, body.decode("utf-8", "replace")
+
+    return fetch
+
+
+def a_set():
+    """A Pokémon set with something in stock, from this machine's catalogue, or "" without one."""
+    from catalogue.models import ProductSet
+
+    from . import hubs
+
+    stocked = hubs.in_stock_listings().values("product__product_set")
+    found = (ProductSet.objects.filter(game__slug="pokemon", game__is_active=True, pk__in=stocked)
+             .select_related("game").order_by("-release_date", "pk").first())
+    return found.get_absolute_url() if found else ""
+
+
+def run(fetch, site, set_path="", known_by_address=False):
+    """Every check on every page as every crawler: [Row]. ``fetch`` is over_network(site) or inside(site).
+    ``known_by_address``: the fetch is over the internet from an address that is not Google's or Bing's, so those two
+    are shown the visitor check, as they should be; that row passes and says so."""
+    rows = []
+    llms_text = fetch("/llms.txt", "ClaudeBot")[1]
+    rows += [Row("/llms.txt", "", *check) for check in llms(llms_text, site)]
+    rows += [Row("/sitemap.xml", "", *check) for check in sitemap(fetch("/sitemap.xml", "ClaudeBot")[1], site)]
+    pages = [("/", home)]
+    pages += [(path, lambda html, path=path: game(html, llms_line(llms_text, path))) for path in GAMES]
+    if set_path:
+        pages.append((set_path, product_set))
+    pages += [(GUIDE, guide), ("/guides/", guides_index)]
+    for path, check in pages:
+        for crawler in CRAWLERS:
+            status, html = fetch(path, crawler)
+            if status == 200 and is_check_page(html):
+                expected = known_by_address and crawler in VERIFIED
+                rows.append(Row(path, crawler, "visitor check shown", expected,
+                                "expected: this address is not the crawler's own" if expected
+                                else "the page was not served"))
+                continue
+            rows.append(Row(path, crawler, "answers 200", status == 200, f"status {status}, {len(html):,} bytes"))
+            if status == 200:
+                rows += [Row(path, crawler, *found) for found in check(html)]
+    return rows
+
+
+def by_page(rows):
+    """[{"path", "checks", "failed": [(name, [crawlers], detail)]}] in the order run: one line a page for the Admin
+    page, with each failing check once and the crawlers it failed for."""
+    pages = {}
+    for row in rows:
+        page = pages.setdefault(row.path, {"path": row.path, "checks": 0, "failed": {}})
+        page["checks"] += 1
+        if not row.passed:
+            found = page["failed"].setdefault(row.name, {"name": row.name, "crawlers": [], "detail": row.detail})
+            if row.crawler:
+                found["crawlers"].append(row.crawler)
+    return [{**page, "failed": list(page["failed"].values())} for page in pages.values()]

@@ -5492,6 +5492,14 @@ hard-coded."). In the compact layout, which is the one that is live:
       python manage.py visibility_proof            # the live site
       python manage.py visibility_proof --inside   # on the server
 
+  **Search visibility** in Admin (`/admin/visibility/`, `web/visibility.py`,
+  staff only) runs the same checks on the machine's own copy and shows them
+  on one short page, a line a page with any failing check named once, and
+  under them whether IndexNow is on, whether the site serves its key file
+  and what the last accepted run sent (the owner, 10 Nov 2026: "On mobile I
+  can't copy from console"). Opening it builds each page once more, a few
+  seconds; nothing is changed or sent.
+
 
 The sitemap, Product structured data, `llms.txt` and a robots.txt that lets
 the AI search crawlers in by name were already in place. Added 31 Oct 2026

@@ -126,6 +126,16 @@ def run(now=None, dry_run=False):
     return len(urls)
 
 
+def status():
+    """What the last accepted run sent: {"at", "sent", "pages"} or None when none is on record."""
+    return cache.get(STATUS_KEY)
+
+
+def pages_sent():
+    """When the game, set and guide pages last went, or None."""
+    return cache.get(PAGES_KEY)
+
+
 def check():
     """What --check prints: where the key file is, whether the site serves it there, and the last accepted run.
     {"key_url", "served" (True, False, or None when the site could not be reached), "last": STATUS_KEY's or None,
@@ -140,4 +150,4 @@ def check():
         served = False
     except (urllib.error.URLError, TimeoutError, OSError):
         served = None
-    return {"key_url": key_url, "served": served, "last": cache.get(STATUS_KEY), "pages_sent": cache.get(PAGES_KEY)}
+    return {"key_url": key_url, "served": served, "last": status(), "pages_sent": pages_sent()}

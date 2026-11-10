@@ -497,3 +497,68 @@ class KeptCountsTests(AnswersCase):
             self.assertIn("6 sealed products listed, 5 in stock now at 3 UK shops", llms)
             self.assertFalse([query for query in asked if "catalogue_listing" in query["sql"]
                               and "COUNT" in query["sql"] and "product_type" in query["sql"]])
+
+
+class VisibilityPageTests(ProofTests):
+    """Search visibility in Admin (web/visibility.py): the proof and IndexNow's record on a page, for an owner on a
+    phone (10 Nov 2026: "On mobile I can't copy from console")."""
+
+    def staff(self):
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.create_user("owner", password="pw", is_staff=True, is_superuser=True)
+        self.client.force_login(user)
+
+    def test_only_staff_can_open_it_and_the_admin_home_links_it(self):
+        url = reverse("visibility")
+        self.assertEqual(url, "/admin/visibility/")
+        self.assertEqual(self.client.get(url).status_code, 302)
+        self.staff()
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["X-Robots-Tag"], "noindex, nofollow")
+        self.assertIn(f'<a href="{url}" class="section">Search visibility</a>',
+                      self.client.get(reverse("admin:index")).content.decode())
+
+    def test_it_shows_every_page_passing_as_every_crawler(self):
+        self.staff()
+        html = self.client.get(reverse("visibility")).content.decode()
+        self.assertRegex(html, r'<p class="big good">All \d+ checks passed</p>')
+        self.assertIn("Each page was read as Googlebot, Bingbot, GPTBot, ClaudeBot, PerplexityBot", html)
+        for path in ("/llms.txt", "/sitemap.xml", "/", "/games/pokemon/", "/games/magic-the-gathering/",
+                     "/games/pokemon/surging-sparks/", GUIDE, "/guides/"):
+            with self.subTest(path=path):
+                self.assertRegex(html, rf'<strong>{re.escape(path)}</strong>\s*<span class="good">passed</span>')
+        self.assertNotIn('class="bad"', section(html, "<h2>Pages</h2>", "</section>"))
+
+    def test_a_fault_is_named_once_with_the_crawlers_it_failed_for(self):
+        self.staff()
+        Guide.objects.all().delete()   # the Guides pages close, so the guide is gone from everywhere
+        cache.clear()
+        switch()
+        html = self.client.get(reverse("visibility")).content.decode()
+        self.assertRegex(html, r'<p class="big bad">\d+ of \d+ checks failed</p>')
+        page = html[html.index(f"<strong>{GUIDE}</strong>"):]
+        page = page[:page.index("</li>")]
+        self.assertIn("1 check failed", page)
+        self.assertIn("answers 200 (Googlebot, Bingbot, GPTBot, ClaudeBot, PerplexityBot): status 404", shown_text(page))
+        self.assertIn("llms.txt names the guide", html)
+
+    def test_it_says_what_indexnow_last_sent(self):
+        from unittest import mock
+
+        from catalogue import indexnow
+
+        self.staff()
+        html = shown_text(self.client.get(reverse("visibility")).content.decode())
+        self.assertIn("Key file: served by the site.", html)
+        self.assertIn("Last accepted run: none on record yet. It runs at 25 past each hour", html)
+        self.assertIn("Game, set and guide pages: not sent yet.", html)
+        accepted = mock.MagicMock(__enter__=lambda s: s, __exit__=lambda *a: None, read=lambda: b"")
+        with mock.patch("urllib.request.urlopen", return_value=accepted):
+            sent = indexnow.run()
+        html = shown_text(self.client.get(reverse("visibility")).content.decode())
+        self.assertIn(f"{sent} addresses, ", html)
+        self.assertIn("of them game, set, guide and list pages.", html)
+        self.assertIn("Game, set and guide pages last sent:", html)
+        self.assertNotIn("none on record yet", html)

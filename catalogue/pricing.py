@@ -334,6 +334,16 @@ def update_daily_lowest(product, date=None):
     return record
 
 
+def forget_low(product_id, price):
+    """Take ``price`` out of a product's daily record: a price that was never one a visitor could pay (a shop's
+    members or collection only, found after the fact). Its days are removed, today worked out again from what still
+    counts. As tidy_listings does for a wrong eBay price; a day another shop matched it to the penny goes too, which
+    the next day's low puts right."""
+    today = timezone.localdate()
+    DailyLowestPrice.objects.filter(product_id=product_id, price=price).exclude(date=today).delete()
+    correct_daily_lowest(product_id, today)
+
+
 def correct_daily_lowest(product_id, date=None):
     """Set the product's row for ``date`` to its current cheapest counted price, even when that is higher.
 

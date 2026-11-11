@@ -793,6 +793,13 @@ class Listing(models.Model):
 
     BUYABLE = [Availability.IN_STOCK, Availability.PREORDER]
 
+    class Closed(models.TextChoices):
+        """Why the shop's own words say it cannot be bought online now (importers.closed_reason): the listing is out
+        of stock, and its row says this in place of "Out of stock"."""
+        MEMBERS = "members", "Shop members only"
+        COLLECTION = "collection", "Collection only"
+        CLOSED = "closed", "Draw closed"
+
     class Sanity(models.TextChoices):
         OK = "ok", "OK"
         DOUBTFUL = "doubtful", "Doubtful"
@@ -843,6 +850,10 @@ class Listing(models.Model):
         max_length=12, blank=True, default="", choices=SellerNote.choices,
         help_text="eBay listings only: what eBay says of the item or seller (Authenticity Guarantee, Top Rated Plus, a "
                   "business seller). Set by each eBay read.")
+    closed_why = models.CharField(
+        max_length=10, blank=True, default="", choices=Closed.choices,
+        help_text="Why the shop's own description, tags or title say it cannot be bought online now, though its "
+                  "stock flag says it can. Set by each read; such a listing is out of stock.")
     availability = models.CharField(
         max_length=20, choices=Availability.choices, default=Availability.IN_STOCK, db_index=True
     )

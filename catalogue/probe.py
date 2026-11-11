@@ -96,7 +96,8 @@ def ask(listing, fetch=None, today=None):
         # once put such a box back in stock every ten minutes after each hourly read took it out. The owner,
         # 6 Nov 2026, with Eclipse's VIP-only Delta Reign ETB: "VIP product is back messing up listings".
         description = importers.clean_description(data.get("description")) if "description" in data else ""
-        if importers.closed_reason(description):
+        # Its tags and title too: TCG Group marks a box for its members with a tag alone (closed_reason).
+        if importers.closed_reason(description, data.get("tags") or (), data.get("title", "")):
             return price, Listing.Availability.OUT_OF_STOCK
         # An open draw is not stock.
         if importers.says_lottery(data.get("title", ""), data.get("tags") or ()):

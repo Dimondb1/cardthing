@@ -128,3 +128,101 @@ class ProbeTests(TestCase):
         answer = {"title": "Delta Reign Elite Trainer Box", "tags": [], "variants": [{"id": 1, "price": 4999, "available": True}]}
         self.assertEqual(probe.ask(self.listing, fetch=lambda url: json.dumps(answer).encode())[1],
                          Listing.Availability.IN_STOCK)
+
+
+class CollectionOnlyTests(TestCase):
+    """A product kept for the shop's members or sold for collection only, told by a tag or wording a description, title
+    or tag carries. TCG Group, 11 Nov 2026: its Delta Reign booster box was tagged "tier1_only_pokemon" with nothing in
+    its description, so the site led with its £150 as the cheapest delivered and "Lowest yet". The owner: "This product
+    is collection only"."""
+
+    def test_the_shops_tags_say_members_or_collection_only(self):
+        for tags, why in ((("tier1_only_pokemon",), "members"), (("Tier 1 Only",), "members"), (("tier2_only",), "members"),
+                          (("VIP_only",), "members"), (("members-only",), "members"), (("Collection Only",), "collection"),
+                          (("instore_only",), "collection"), (("Click & Collect Only",), "collection"),
+                          (("local pickup only",), "collection")):
+            with self.subTest(tags=tags):
+                self.assertEqual(closed_reason("", tags), why)
+        for tags in (("pokemon", "booster box", "Delta Reign"), ("premium collection",), ("tier1",), ("collection",)):
+            with self.subTest(tags=tags):
+                self.assertEqual(closed_reason("", tags), "")
+
+    def test_the_shops_words_say_collection_only(self):
+        for text in ("Collection in store only.", "Available for collection only from our Leeds shop.",
+                     "In-store pick-up only.", "This item is not available for delivery.", "This item cannot be posted."):
+            with self.subTest(text=text):
+                self.assertEqual(closed_reason(text), "collection")
+        for text in ("Pokemon 151 Ultra Premium Collection only one per customer.", "Premium Collection box with 6 packs.",
+                     "Free collection in store, or delivery from £3.99."):
+            with self.subTest(text=text):
+                self.assertEqual(closed_reason(text), "")
+        self.assertEqual(closed_reason("", (), "Delta Reign Booster Box (Collection Only)"), "collection")
+        self.assertEqual(closed_reason("", (), "Delta Reign Premium Collection"), "")
+
+
+class CollectionReadTests(TestCase):
+    def setUp(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .models import DailyLowestPrice
+
+        self.box = make_product(make_set(make_game(), name="Delta Reign", slug="delta-reign"), name="Delta Reign Booster Box",
+                                slug="delta-box", product_type="booster_box")
+        self.group = make_retailer("TCG Group", source_type=Retailer.Source.SHOPIFY, source_url="https://group.example/",
+                                   delivery_cost=Decimal("0"))
+        self.other = make_retailer("Moor Toys", delivery_cost=Decimal("0"))
+        self.listing = make_listing(self.box, self.group, price="150.00", delivery="0",
+                                    url="https://group.example/products/delta-box")
+        make_listing(self.box, self.other, price="164.99", delivery="0")
+        today = timezone.localdate()
+        # Three days the members-only £150 was the day's low, and one before it at another shop's price.
+        for days, price in ((3, "150.00"), (2, "150.00"), (1, "150.00"), (5, "159.99")):
+            DailyLowestPrice.objects.create(product=self.box, date=today - timedelta(days=days), price=Decimal(price))
+        DailyLowestPrice.objects.create(product=self.box, date=today, price=Decimal("150.00"))
+        self.DailyLowestPrice, self.today = DailyLowestPrice, today
+
+    def read(self, tags=("pokemon", "tier1_only_pokemon")):
+        [offer] = product_offers("https://group.example", page("", tags=tags, title="Delta Reign Booster Box"))
+        offer.product_pk = self.box.pk
+        apply_offers(self.group, [offer], complete=False)
+        self.listing.refresh_from_db()
+
+    def test_a_tagged_box_is_not_stock_says_why_and_leaves_the_record(self):
+        self.read()
+        self.assertEqual((self.listing.availability, self.listing.closed_why),
+                         (Listing.Availability.OUT_OF_STOCK, "members"))
+        record = dict(self.DailyLowestPrice.objects.filter(product=self.box).values_list("date", "price"))
+        self.assertNotIn(Decimal("150.00"), record.values())
+        # Today is worked out again from what anyone can buy: Moor Toys at £164.99. The earlier day stays.
+        self.assertEqual(record[self.today], Decimal("164.99"))
+        self.assertIn(Decimal("159.99"), record.values())
+
+    def test_the_product_page_leads_with_a_shop_anyone_can_buy_from_and_says_why_not_the_other(self):
+        self.read()
+        page_html = self.client.get(self.box.get_absolute_url()).content.decode()
+        self.assertIn("at Moor Toys", page_html)
+        self.assertIn("Shop members only", page_html)
+
+    def test_the_tag_going_puts_it_back_in_stock(self):
+        self.read()
+        self.read(tags=("pokemon",))
+        self.assertEqual((self.listing.availability, self.listing.closed_why), (Listing.Availability.IN_STOCK, ""))
+
+    def test_the_record_is_cleaned_once_even_when_the_probe_took_it_out_first(self):
+        Listing.objects.filter(pk=self.listing.pk).update(availability=Listing.Availability.OUT_OF_STOCK)
+        self.read()
+        self.assertFalse(self.DailyLowestPrice.objects.filter(product=self.box, price=Decimal("150.00")).exists())
+        # A later read changes nothing more: a new day at £150 from another shop would stay.
+        self.DailyLowestPrice.objects.create(product=self.box, date=self.today - __import__("datetime").timedelta(days=9),
+                                             price=Decimal("150.00"))
+        self.read()
+        self.assertTrue(self.DailyLowestPrice.objects.filter(product=self.box, price=Decimal("150.00")).exists())
+
+
+class CollectionProbeTests(ProbeTests):
+    def test_a_tag_keeps_it_out_of_stock_every_ten_minutes(self):
+        self.assertEqual(self.ask("<p>36 booster packs.</p>", tags=("tier1_only_pokemon",))[1],
+                         Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(self.ask("<p>36 booster packs.</p>", tags=("pokemon",))[1], Listing.Availability.IN_STOCK)

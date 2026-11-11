@@ -104,10 +104,11 @@ class Offer:
         # An open draw is not stock, from whichever source the offer came.
         if self.availability in Listing.BUYABLE and says_lottery(self.title, self.tags):
             self.availability = Listing.Availability.LOTTERY
-        # A draw that has closed, or a product kept for the shop's members, cannot be bought today whatever the
-        # shop's button says (closed_reason); a page that calls the product a pre-order is one, whatever its flag.
+        # A draw that has closed, or a product kept for the shop's members or sold only for collection, cannot be
+        # bought online today whatever the shop's button says (closed_reason); a page that calls the product a
+        # pre-order is one, whatever its flag.
         if self.availability in (*Listing.BUYABLE, Listing.Availability.LOTTERY):
-            self.closed = closed_reason(self.description)
+            self.closed = closed_reason(self.description, self.tags, self.title)
             if self.closed:
                 self.availability = Listing.Availability.OUT_OF_STOCK
         if self.availability == Listing.Availability.IN_STOCK and description_says_preorder(self.description):
@@ -485,21 +486,51 @@ MEMBERS_ONLY = re.compile(
     r"|\b(?:will\s+)?not\s+be\s+available\s+(?:to|for)\s+purchase\b",
     re.I,
 )
-CLOSED, MEMBERS = "closed", "members"
+# Sold only for collection at the shop, never posted: the shop's description or title says so. "Premium Collection"
+# is a kind of box, so the word counts only beside "only", "in store" or a refusal to post.
+COLLECTION_ONLY = re.compile(
+    r"\b(?:collection|pick[\s-]?up|click\s*(?:and|&)\s*collect)\s+(?:in[\s-]?store\s+)?only\b(?!\s+(?:one|1)\b)"
+    r"|\bin[\s-]?store\s+(?:collection|pick[\s-]?up|purchase)\s+only\b"
+    r"|\bnot\s+available\s+(?:for|by)\s+(?:delivery|post(?:age)?|shipping)\b"
+    r"|\b(?:can\s*not|cannot|will\s+not|won't)\s+be\s+(?:posted|shipped|delivered)\b",
+    re.I,
+)
+# A tag a shop puts on a product it keeps for members or for collection. TCG Group, 11 Nov 2026: "tier1_only_pokemon"
+# on its Delta Reign booster box, whose page says Tier 1 members only, collection in store only, while the feed said
+# in stock at £150, so the site led with it as the cheapest and "Lowest yet". The owner: "This product is collection
+# only". A tag is the shop's own word, so it counts where a description says nothing.
+# Tags join words with "_" or "-" as often as spaces ("tier1_only_pokemon"), so a word ends at any of them.
+_START, _END = r"(?:^|[^a-z0-9])", r"(?=$|[^a-z0-9])"
+RESTRICTED_TAG = re.compile(
+    rf"{_START}tier[\s_-]*\d+[\s_-]*only{_END}|{_START}(?:vip|members?)[\s_-]*only{_END}"
+    rf"|{_START}(?:collection|collect|pick[\s_-]*up|in[\s_-]*store|instore|local[\s_-]*pick[\s_-]*up)[\s_-]*only{_END}"
+    rf"|{_START}click[\s_-]*(?:and|&|n)?[\s_-]*collect[\s_-]*only{_END}",
+    re.I,
+)
+COLLECT_WORD = re.compile(r"collect|pick|store", re.I)
+CLOSED, MEMBERS, COLLECTION = "closed", "members", "collection"
 # A description that says the product itself is a pre-order, for a shop whose stock flag says in stock while its
 # page says pre-order. Only the product's own standing: "pre-order bonus" or "pre-order now" in passing is not it.
 PREORDER_TEXT = re.compile(r"\b(?:this|it)\s+is\s+an?\s+pre[\s-]?order\b|\bpre[\s-]?order\s+(?:product|item|listing)\b", re.I)
 
 
-def closed_reason(description):
-    """Why a shop's description says its product cannot be bought today, or "": CLOSED for a draw that has ended,
-    MEMBERS for a product kept for the shop's members."""
-    if not description:
-        return ""
-    if CLOSED_DRAW.search(description):
-        return CLOSED
-    if MEMBERS_ONLY.search(description):
-        return MEMBERS
+def closed_reason(description, tags=(), title=""):
+    """Why a shop's own words say its product cannot be bought online today, or "": CLOSED for a draw that has ended,
+    MEMBERS for a product kept for the shop's members, COLLECTION for one sold only for collection at the shop. Read
+    on the description, then the shop's tags, then the title."""
+    if description:
+        if CLOSED_DRAW.search(description):
+            return CLOSED
+        if MEMBERS_ONLY.search(description):
+            return MEMBERS
+        if COLLECTION_ONLY.search(description):
+            return COLLECTION
+    for tag in tags or ():
+        found = RESTRICTED_TAG.search(str(tag))
+        if found:
+            return COLLECTION if COLLECT_WORD.search(found.group(0)) else MEMBERS
+    if title and COLLECTION_ONLY.search(title):
+        return COLLECTION
     return ""
 
 
@@ -1812,9 +1843,13 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
         # change on the page: the Price check takes it up at the next hourly refresh.
         list_price = listing.list_price if offer.list_price is None else (offer.list_price or None)
         seller_note = listing.seller_note if offer.seller_note is None else offer.seller_note
+        # The first read to find the shop's words saying no visitor can buy it online (members or collection only):
+        # its price comes out of the daily record, whichever reader took it out of stock first.
+        newly_closed = bool(offer.closed) and not created and listing.closed_why != offer.closed and listing.delivery_known
+        closed_price = listing.delivered_price
         if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
                 or deal != held or listing.description != description or listing.list_price != list_price
-                or listing.seller_note != seller_note):
+                or listing.seller_note != seller_note or listing.closed_why != offer.closed):
             # The page shows the multi-buy and links to the shop's page: a new one of either is a change. Another
             # variant of the same page is not.
             shown = not created and listing.is_active and (deal != held or page_key(listing.url) != page_key(offer.url))
@@ -1832,6 +1867,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
             if listing.seller_note != seller_note:
                 listing.seller_note = seller_note
                 fields.append("seller_note")
+            if listing.closed_why != offer.closed:
+                listing.closed_why = offer.closed
+                fields.append("closed_why")
             if published:
                 listing.shop_published_at = published
                 fields.append("shop_published_at")
@@ -1844,6 +1882,8 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
         delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)
         if not created and unchanged(listing, offer, delivery):
             to_stamp.append(listing.pk)
+            if newly_closed:
+                pricing.forget_low(listing.product_id, closed_price)
             return
         pricing.record_check(
             listing,
@@ -1853,6 +1893,10 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
             checked_at=checked_at,
             new=created,
         )
+        # A price no visitor could buy online: the days it was the product's low are taken out of the record, so no
+        # Price check or chart rests on it.
+        if newly_closed:
+            pricing.forget_low(listing.product_id, closed_price)
 
     def write_pending():
         # Popped one at a time, so one that fails is not tried again when the read's failure writes the rest.

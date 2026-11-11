@@ -1558,6 +1558,23 @@ day it did, every ten minutes after each hourly read took Eclipse's
 VIP-only Delta Reign ETB out. The owner, 6 Nov 2026: "VIP product is back
 messing up listings".
 
+**Members and collection only** (`closed_reason` reads the description, then
+the shop's tags, then the title): a tag such as `tier1_only_pokemon`,
+`vip_only`, `members-only`, `collection only`, `instore_only` or `click &
+collect only` (an underscore or hyphen joins words as a space does), or
+words such as "collection in store only", "in-store pick-up only", "not
+available for delivery" or "cannot be posted", make the listing out of
+stock, as a VIP-only description does; "Premium Collection" as a kind of
+box never counts. The reason is kept on the listing (`Listing.closed_why`)
+and its row says "Shop members only", "Collection only" or "Draw closed" in
+place of "Out of stock". The first read to find it takes that price out of
+the daily record (`pricing.forget_low`: its past days removed, today worked
+out again from what anyone can buy), so no "Lowest yet" or chart rests on
+a price no visitor could pay; the probe reads tags and title too. TCG
+Group, 11 Nov 2026: its Delta Reign booster box, tagged `tier1_only_pokemon`
+with nothing in its description, led the page at £150 as "Lowest yet". The
+owner: "This product is collection only".
+
 A listing for one variant of a Shopify product (an address
 ending `?variant=...`, for example a case rather than a box) takes that
 variant's price and stock, never the cheapest on the page, and is left as

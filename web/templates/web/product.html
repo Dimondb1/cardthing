@@ -1,7 +1,7 @@
 {% extends "web/base.html" %}
 {% load sitecopy ripraptor %}
 
-{% block scripts %}{% load static %}<script nonce="{{ csp_nonce }}" src="{% static 'js/product.js' %}" defer></script><script nonce="{{ csp_nonce }}" src="{% static 'js/share.js' %}" defer></script>{% endblock %}
+{% block scripts %}{% load static %}<script nonce="{{ csp_nonce }}" src="{% static 'js/product.js' %}" defer></script><script nonce="{{ csp_nonce }}" src="{% static 'js/share.js' %}" defer></script>{% if ask.open %}<script nonce="{{ csp_nonce }}" src="{% static 'js/ask.js' %}" defer></script>{% endif %}<script nonce="{{ csp_nonce }}" src="{% static 'js/list.js' %}" defer></script>{% endblock %}
 {% block page_class %}page--product{% endblock %}
 {% block content %}
 <nav class="breadcrumbs" aria-label="Breadcrumb">
@@ -84,7 +84,8 @@
     <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.shown_price %}{% if track_on %}
       {# Links to the panels below, so they open without script (:target); product.js opens them in place. #}
       <a class="button button--quiet button--panel" href="#track" aria-controls="track" data-panel-open>{% copy "alerts.track.button" %}<span class="visually-hidden"> {{ product.name }}</span></a>{% endif %}
-      <a class="button button--quiet button--panel button--share" href="#share" aria-controls="share" data-panel-open>{% include "web/includes/share/icon.svg" %}{% copy "product.share.button" %}<span class="visually-hidden"> {{ product.name }}</span></a></div>
+      <a class="button button--quiet button--panel button--share" href="#share" aria-controls="share" data-panel-open>{% include "web/includes/share/icon.svg" %}{% copy "product.share.button" %}<span class="visually-hidden"> {{ product.name }}</span></a>
+      {% include "web/includes/list_button.html" with list_count=list_slugs|length %}</div>
     {% if track_on %}{% include "web/includes/track_form.html" %}{% endif %}
     {% include "web/includes/share_box.html" %}
     {% if guide_door %}<p class="buybox__guide"><a href="{{ guide_door.url }}">{{ guide_door.line }}</a></p>{% endif %}
@@ -158,6 +159,7 @@
   <p class="small-print">{% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
 </section>
 {% endif %}
+{% if ask %}{% include "web/includes/ask_rip.html" %}{% endif %}
 
 <div class="block product-lower">
   {% if chart or has_listings %}

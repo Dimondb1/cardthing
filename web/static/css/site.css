@@ -1650,6 +1650,50 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .history__empty { margin-top: var(--space-4); color: var(--color-ink-muted); }
 .restock-note { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
 
+/* Add to list in the price box: a form, laid out as the buttons beside it are. */
+.list-button { display: flex; flex: 1 1 auto; }
+.list-button__form { display: flex; flex: 1 1 auto; }
+.list-button .button { flex: 1 1 auto; padding-inline: var(--space-3); color: var(--color-ink-muted); }
+.list-button .is-listed { color: var(--color-brand-text); border-color: var(--color-brand-line); background: var(--color-brand-soft); }
+@media (prefers-reduced-motion: no-preference) {
+  .list-button .is-added { animation: fade-in var(--motion-normal) var(--ease-out) both; }
+}
+
+/* The shopping list (web/shopping.py): the total and saving first, then one plain list per shop's order. */
+.plan { display: grid; gap: var(--space-2); padding: var(--space-4) var(--card-pad); border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-brand-soft); }
+.plan .section-title { margin: 0; }
+.plan__total { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); font-weight: var(--weight-strong); }
+.plan__shops { font-size: var(--text-sm); color: var(--color-ink-muted); }
+.plan__saving { font-weight: var(--weight-strong); color: var(--color-price); }
+.plan__note { font-size: var(--text-sm); color: var(--color-ink-muted); }
+.plan-order { margin-top: var(--rhythm-section); }
+.plan-order__head { display: grid; gap: var(--space-1); margin-bottom: var(--space-2); }
+.plan-order__shop { font-size: var(--text-lg); }
+.plan-order__seller { font-size: var(--text-sm); font-weight: var(--weight-body); color: var(--color-ink-muted); }
+.plan-order__sum { font-size: var(--text-sm); color: var(--color-ink-muted); }
+/* A product's price in the plan is what that shop asks, not always its cheapest alone, so it is not green. */
+.plan-order .price { color: var(--color-ink); }
+.plan-clear { margin-top: var(--space-4); }
+
+/* Ask Rip: a plain panel under the price list (web/askrip.py). The answer fades in, as feedback that it came. */
+.ask { display: grid; gap: var(--space-3); padding: var(--space-4) var(--card-pad); border: 1px solid var(--color-line); border-radius: var(--radius-card); scroll-margin-top: var(--space-6); }
+.ask .section-title { margin: 0; }
+/* Lines no longer than running text anywhere else, however wide the screen. */
+.ask > * { max-width: var(--measure); }
+.ask__intro { color: var(--color-ink-muted); }
+.ask__form { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ask__input { flex: 1 1 var(--field-short); min-width: 0; min-height: var(--tap); padding: 0 var(--space-3); border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-paper); font: inherit; font-size: var(--text-base); color: var(--color-ink); }
+.ask__input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
+.ask__answer { display: grid; gap: var(--space-2); }
+.ask__answer:focus, .ask__state:focus { outline: none; }
+.ask__who { font-weight: var(--weight-strong); }
+.ask__state { font-weight: var(--weight-strong); }
+.ask__small { font-size: var(--text-xs); color: var(--color-ink-muted); }
+.ask__small[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .ask__answer, .ask__state { animation: fade-in var(--motion-normal) var(--ease-out) both; }
+}
+
 /* Pick up where you left off ---------------------------------------------- */
 
 .resume[hidden] { display: none; }

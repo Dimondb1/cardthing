@@ -28,16 +28,20 @@ def ask(kind, cost=0, held=0, days_ago=0, outcome=ClaudeAsk.Outcome.ANSWERED, re
 
 class JobTests(Base):
     def test_every_kind_of_question_belongs_to_one_job_and_the_page_names_them_the_same(self):
-        from web.views import CLAUDE_JOBS
+        from web.views import CLAUDE_JOBS, SHOPPER_JOBS
 
         self.assertEqual(set(judge.JOB_OF_KIND), set(Kind.values))
-        self.assertEqual(list(CLAUDE_JOBS), list(judge.JOBS))
-        for name, (_link, title, _does) in CLAUDE_JOBS.items():
+        # The Claude page lists the jobs that sort the list, then Ask Rip, which answers shoppers.
+        self.assertEqual(list(CLAUDE_JOBS) + list(SHOPPER_JOBS), list(judge.JOBS))
+        for name, (_link, title, _does) in {**CLAUDE_JOBS, **SHOPPER_JOBS}.items():
             self.assertEqual(title, judge.JOBS[name][0])
 
     def test_a_job_is_on_with_no_limit_of_its_own_until_set_and_reading_never_writes(self):
         jobs = judge.job_settings()
-        self.assertTrue(all(job.on and job.monthly_budget_usd is None for job in jobs.values()))
+        self.assertTrue(all(job.on for job in jobs.values()))
+        # Only Ask Rip starts with a limit of its own: the owner's £25, as $30.
+        self.assertEqual({name: job.monthly_budget_usd for name, job in jobs.items() if job.monthly_budget_usd is not None},
+                         {"ask": Decimal("30.00")})
         self.assertFalse(ClaudeJob.objects.exists())
         self.assertEqual(judge.job_room(Kind.PAIR, 5_000_000), "")
 

@@ -55,10 +55,12 @@ def error(cls, status, kind="error", message="no"):
 
 
 def without_nonce(body):
-    """A page's body with the response's own script nonce (ripraptor/csp.py) taken out, so two can be compared."""
+    """A page's body with the response's own script nonce (ripraptor/csp.py) and form tokens (Django masks the CSRF
+    token afresh on every page, and Add to list is a form) taken out, so two can be compared."""
     import re
 
-    return re.sub(rb'nonce="[A-Za-z0-9_-]+"', b'nonce=""', body)
+    body = re.sub(rb'nonce="[A-Za-z0-9_-]+"', b'nonce=""', body)
+    return re.sub(rb'name="csrfmiddlewaretoken" value="[A-Za-z0-9]+"', b'name="csrfmiddlewaretoken" value=""', body)
 
 class FakeClient:
     """Answers each request through ``answer(row_key, params)``, which returns a reply or raises."""

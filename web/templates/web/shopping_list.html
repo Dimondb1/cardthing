@@ -1,0 +1,78 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{% copy "list.title" %}</h1>
+  <p class="page-intro">{% copy "list.intro" %}</p>
+</div>
+{% if plan.products %}
+{% if plan.orders %}
+<section class="plan" aria-labelledby="plan-title">
+  <h2 id="plan-title" class="section-title">{% copy "list.plan.title" %}</h2>
+  <p class="plan__total">{% price plan.total size="lg" %} <span class="plan__shops">{% copy_count "list.plan.shops" plan.shops %}</span></p>
+  {% if plan.saving %}<p class="plan__saving">{% copy "list.plan.saving" saving=plan.saving|gbp was=plan.separately|gbp %}</p>
+  {% elif plan.separately is not None %}<p class="plan__note">{% copy "list.plan.same" %}</p>{% endif %}
+  {% if plan.unknown %}<p class="plan__note">{% copy_count "list.plan.unknown" plan.unknown %}</p>{% endif %}
+  <p class="plan__note">{% copy "list.plan.checked" start=plan.oldest|stamp end=plan.newest|stamp %}</p>
+</section>
+{% for order in plan.orders %}
+<section class="plan-order" aria-labelledby="order-{{ forloop.counter }}">
+  <div class="plan-order__head">
+    <h2 class="plan-order__shop" id="order-{{ forloop.counter }}">{{ order.retailer.name }}{% if order.marketplace %} <span class="plan-order__seller">{% copy "list.order.seller" %}</span>{% endif %}</h2>
+    <p class="plan-order__sum">{% if order.delivery is None %}{% copy "list.order.unknown" subtotal=order.subtotal|gbp %}{% elif order.delivery %}{% copy "list.order.delivery" subtotal=order.subtotal|gbp delivery=order.delivery|gbp price=order.total|gbp %}{% else %}{% copy "list.order.free" subtotal=order.subtotal|gbp %}{% endif %}{% if order.delivery and order.retailer.free_delivery_over and not order.marketplace %} {% copy "list.order.free_over" threshold=order.retailer.free_delivery_over|gbp %}{% endif %}</p>
+  </div>
+  <ul class="watch">
+    {% for listing in order.listings %}{% with product=listing.product %}
+    <li class="watch__item">
+      <a class="watch__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "row" %}
+        <span class="watch__body">
+          <span class="watch__name">{{ product.name }}</span>
+          <span class="watch__meta">{{ product.game.display_short }} · {{ product.type_name }}{% if listing.availability == "preorder" %} · {{ listing.get_availability_display }}{% endif %}</span>
+        </span>
+      </a>
+      <div class="watch__prices">
+        <p class="watch__now">{% price listing.price size="md" %}</p>
+        <p class="watch__checked">{% copy "product.last_checked" time=listing.last_checked|ago %}</p>
+      </div>
+      <div class="watch__actions">
+        <a class="button button--buy button--card" {% go_link listing "list" product %} target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/buy_mark.svg" %}{% if listing.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ listing.retailer.name }} (opens in a new tab)</span></a>
+        <form method="post" action="{% url 'web:list_remove' product.slug %}">{% csrf_token %}<button class="button button--quiet button--small" type="submit">{% copy "list.remove" %}<span class="visually-hidden"> {{ product.name }}</span></button></form>
+      </div>
+    </li>{% endwith %}
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% endif %}
+{% if plan.missing %}
+<section class="plan-order" aria-labelledby="missing-title">
+  <div class="plan-order__head">
+    <h2 class="plan-order__shop" id="missing-title">{% copy "list.missing.title" %}</h2>
+    <p class="plan-order__sum">{% copy "list.missing.note" %}</p>
+  </div>
+  <ul class="watch">
+    {% for product in plan.missing %}
+    <li class="watch__item">
+      <a class="watch__link" href="{{ product.get_absolute_url }}">
+        {% product_image product "row" %}
+        <span class="watch__body"><span class="watch__name">{{ product.name }}</span><span class="watch__meta">{{ product.game.display_short }} · {{ product.type_name }}</span></span>
+      </a>
+      <div class="watch__prices">{% include "web/includes/availability.html" %}</div>
+      <div class="watch__actions"><form method="post" action="{% url 'web:list_remove' product.slug %}">{% csrf_token %}<button class="button button--quiet button--small" type="submit">{% copy "list.remove" %}<span class="visually-hidden"> {{ product.name }}</span></button></form></div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+<form class="plan-clear" method="post" action="{% url 'web:list_clear' %}">{% csrf_token %}<button class="button button--quiet button--small" type="submit">{% copy "list.clear" %}</button></form>
+<p class="small-print">{% copy "list.note" count=max_items %} {% copy "product.small_print" %} <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a></p>
+{% else %}
+<div class="empty">
+  <div class="raptor-says"><div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span></div>{% copy "list.empty.raptor" as says %}{% if says %}<p class="raptor-says__line">{{ says }}</p>{% endif %}</div>
+  <h2 class="empty__title">{% copy "list.empty.title" %}</h2>
+  <p>{% copy "list.empty.body" %}</p>
+  <p class="empty__action"><a class="button" href="{% url 'web:deals' %}">{% copy "watchlist.empty.button" %}</a></p>
+</div>
+{% endif %}
+{% endblock %}

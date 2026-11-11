@@ -43,7 +43,7 @@ from guides import state as guide_doors
 from guides.access import not_for_editors
 from ripraptor import csp
 
-from . import answers, compact, feed, hubs, listcache, look, pagecache, partners, refresh, share
+from . import answers, askrip, compact, feed, hubs, listcache, look, pagecache, partners, refresh, share, shopping
 from . import find as find_steps
 from .pagecache import cached_page
 from .charts import price_chart
@@ -1873,6 +1873,7 @@ def product_detail(request, slug):
         else:
             meta_description = hubs.fit_description(text(request, "meta.product.description", product=search_name))
     breadcrumbs = breadcrumbs_json(request, crumbs, page_url=page_url)
+    list_slugs = shopping.read(request)
     # The page itself: a page about one item, whose main entity is the Product above (when there is one).
     item_page = {
         "@context": "https://schema.org",
@@ -1902,6 +1903,12 @@ def product_detail(request, slug):
             # sending went (report_listing).
             "report_listing": next((listing for listing in listings if str(listing.pk) == request.GET.get("report")), None),
             "report_state": request.GET.get("report_state") if request.GET.get("report_state") in REPORT_STATES else "",
+            # Add to list, or See your list (web/shopping.py): the visitor's list is their cookie.
+            "list_slugs": list_slugs,
+            "on_list": product.slug in list_slugs,
+            "list_full": len(list_slugs) >= shopping.MAX_ITEMS,
+            # Ask Rip's box (web/askrip.py), with the answer or what happened when a question came back here.
+            "ask": askrip.box(request, product, request.GET.get("ask_state", ""), request.GET.get("ask", "")),
             "cheapest": cheapest,
             "cheaper_preorder": cheaper_preorder,
             # The refresh dots under the logo: the next read of one of this product's shops (web/refresh.py).
@@ -2988,6 +2995,86 @@ def track_price(raw):
     return value if value.is_finite() and MIN_PRICE <= value <= MAX_PRICE else None
 
 
+@require_GET
+def shopping_list(request):
+    """The shopping list (web/shopping.py): the products on it and the cheapest way to buy the lot, delivery included,
+    against buying each on its own. The list is the visitor's cookie, so the page is theirs alone and never cached or
+    indexed. Three queries."""
+    found = shopping.plan(shopping.read(request))
+    response = render(request, "web/shopping_list.html", {
+        "plan": found, "meta_title": text(request, "meta.shopping_list.title"), "noindex": True,
+        "max_items": shopping.MAX_ITEMS,
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+def list_box(request, product, slugs):
+    """Add to list, or See your list once it is on it, for the price box."""
+    from django.template.loader import render_to_string
+
+    return render_to_string("web/includes/list_button.html", {
+        "product": product, "on_list": product.slug in slugs, "list_count": len(slugs),
+        "list_full": len(slugs) >= shopping.MAX_ITEMS}, request=request)
+
+
+@require_POST
+def list_add(request, slug):
+    """Add to list on a product page. Without script the browser goes back to the product, whose button then says See
+    your list; list.js sends X-List and gets the new button as JSON instead."""
+    product = get_object_or_404(Product.objects.active(), slug=slug)
+    slugs = shopping.added(shopping.read(request), product.slug)
+    if request.headers.get("X-List") == "1":
+        response = JsonResponse({"count": len(slugs), "html": list_box(request, product, slugs)})
+    else:
+        response = HttpResponseRedirect(product.get_absolute_url())
+        response.status_code = 303
+    response["Cache-Control"] = "no-store"
+    return shopping.write(response, slugs, secure=request.is_secure())
+
+
+@require_POST
+def list_remove(request, slug):
+    """Remove on the shopping list: back to the list without it."""
+    response = HttpResponseRedirect(reverse("web:shopping_list"))
+    response.status_code = 303
+    return shopping.write(response, shopping.removed(shopping.read(request), slug), secure=request.is_secure())
+
+
+@require_POST
+def list_clear(request):
+    response = HttpResponseRedirect(reverse("web:shopping_list"))
+    response.status_code = 303
+    return shopping.write(response, [], secure=request.is_secure())
+
+
+@require_POST
+def ask_rip(request, slug):
+    """Ask Rip (web/askrip.py): put a visitor's question about this product to Claude and show the answer. Without
+    script the browser is sent back to the product page, which shows the answer from the cache under its code (?ask=)
+    or what happened instead (?ask_state=). ask.js sends X-Ask-Rip and gets the box alone, as JSON, to swap in."""
+    from django.template.loader import render_to_string
+
+    from . import askrip
+
+    product = get_object_or_404(Product.objects.active().select_related("game", "product_set"), slug=slug)
+    back = product.get_absolute_url()
+    if request.POST.get("website"):
+        return HttpResponseRedirect(back)   # the hidden field is only ever filled by robots
+    asked = askrip.ask(request, product, request.POST.get("question", ""))
+    if request.headers.get("X-Ask-Rip") == "1":
+        box = askrip.box(request, product, asked.state, asked.token)
+        html = render_to_string("web/includes/ask_rip.html", {"ask": box, "product": product}, request=request) if box else ""
+        response = JsonResponse({"state": asked.state, "html": html})
+    else:
+        query = urlencode({"ask": asked.token} if asked.token else {"ask_state": asked.state})
+        response = HttpResponseRedirect(f"{back}?{query}#ask")
+        response.status_code = 303
+    response["Cache-Control"] = "no-store"
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
+
 REPORT_STATES = ("sent", "busy", "reason")
 
 
@@ -3533,7 +3620,7 @@ def admin_manifest(request):
 @require_GET
 def robots_txt(request):
     private = ["Disallow: /admin/", "Disallow: /go/", "Disallow: /search/", "Disallow: /api/", "Disallow: /swipe/", "Disallow: /watchlist/",
-               "Disallow: /alerts/", "Disallow: /contact/c/", "Disallow: /refer/", "Disallow: /r/",
+               "Disallow: /shopping-list/", "Disallow: /alerts/", "Disallow: /contact/c/", "Disallow: /refer/", "Disallow: /r/",
                "Disallow: /dashboard/"]
     lines = ["User-agent: *", *private, ""]
     # Named so a crawler that only honours its own section still gets the same answer.
@@ -3820,6 +3907,12 @@ CLAUDE_JOBS = {
              "Looks for the RRP of products that have none on the publisher's site and the UK shops' pages. It keeps "
              "one only when a quoted page calls it the RRP of that product."),
 }
+# Claude's jobs for shoppers rather than the list: on the Claude page with the rest, not in What Claude sorts.
+SHOPPER_JOBS = {
+    "ask": ("", "Ask Rip",
+            "Answers shoppers' questions on product pages from the page's own prices and facts, 5 a person a day, on "
+            "Claude Haiku 5.5. Untick to hide the box at once. Switch Claude off does not stop it; this tick does."),
+}
 
 
 def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_count, releases):
@@ -3905,7 +3998,7 @@ def claude_page(request):
     settings_ = judge.job_settings()
     none = (0, 0, 0, 0)
     jobs = []
-    for name, (link, title, does) in CLAUDE_JOBS.items():
+    for name, (link, title, does) in {**CLAUDE_JOBS, **SHOPPER_JOBS}.items():
         kinds = judge.JOBS[name][1]
         asked_month = sum(month.get(kind, none)[0] for kind in kinds)
         spent_month = sum(month.get(kind, none)[1] for kind in kinds)
@@ -3957,6 +4050,7 @@ def save_claude_jobs(request):
         wanted[name] = (f"on_{name}" in request.POST, cap)
     for name, (on, cap) in wanted.items():
         ClaudeJob.objects.update_or_create(name=name, defaults={"on": on, "monthly_budget_usd": cap})
+    askrip.reopen()   # Ask Rip's box shows or hides at once, not within the minute
     off = [judge.JOBS[name][0] for name, (on, _cap) in wanted.items() if not on]
     messages.success(request, "Claude's jobs are saved." + (f" Switched off: {', '.join(off)}." if off else ""))
 

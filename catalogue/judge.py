@@ -421,7 +421,12 @@ JOBS = {
     "retail": ("Sets sold only at events", (Ask.Kind.RETAIL,)),
     "market": ("Cardmarket matches", (Ask.Kind.MARKET,)),
     "rrps": ("RRPs", (Ask.Kind.RRP,)),
+    "ask": ("Ask Rip", (Ask.Kind.ASK,)),
 }
+# A job's own monthly limit until the owner saves one on the Claude page. Ask Rip (web/askrip.py) starts at $30: the
+# owner, 11 Nov 2026, "I don't want it to spend anymore than £25 at the start". $30 is under £25 while a pound buys
+# more than $1.20.
+JOB_DEFAULT_LIMITS = {"ask": Decimal("30.00")}
 JOB_OF_KIND = {kind: name for name, (_title, kinds) in JOBS.items() for kind in kinds}
 
 
@@ -434,12 +439,13 @@ def job_title(kind):
 
 
 def job_settings():
-    """{name: ClaudeJob} for every job: the saved row, or the defaults unsaved (on, no limit of its own). One query,
-    and never writes."""
+    """{name: ClaudeJob} for every job: the saved row, or the defaults unsaved (on, with no limit of its own but
+    JOB_DEFAULT_LIMITS'). One query, and never writes."""
     from .models import ClaudeJob
 
     saved = {row.name: row for row in ClaudeJob.objects.filter(name__in=list(JOBS))}
-    return {name: saved.get(name) or ClaudeJob(name=name) for name in JOBS}
+    return {name: saved.get(name) or ClaudeJob(name=name, monthly_budget_usd=JOB_DEFAULT_LIMITS.get(name))
+            for name in JOBS}
 
 
 def job_on(kind, jobs=None):
@@ -2174,7 +2180,9 @@ def page_status(now=None):
     now = now or timezone.now()
     state = ClaudeJudge.current()
     spent = spent_this_month(now)
-    month = Ask.objects.filter(asked_at__gte=month_start(now)).exclude(outcome=Ask.Outcome.ERROR)
+    # Shoppers' questions (Ask Rip) are the Claude page's to show, not this box's.
+    month = Ask.objects.filter(asked_at__gte=month_start(now)).exclude(outcome=Ask.Outcome.ERROR).exclude(
+        kind=Ask.Kind.ASK)
     answers = month.count()
     agreement = Ask.objects.filter(verdict__in=["same", "different"], owner_answer__in=["same", "different"]).aggregate(
         agreed=Count("pk", filter=Q(verdict="same", owner_answer="same") | Q(verdict="different", owner_answer="different")),
@@ -2212,7 +2220,7 @@ def page_status(now=None):
         "now": now_line(state, now, has_key, stopped, asked),
         "key_line": key_line(state, has_key),
         "runs": runs,
-        "recent": list(Ask.objects.order_by("-pk")[:ANSWERS_SHOWN]),
+        "recent": list(Ask.objects.exclude(kind=Ask.Kind.ASK).order_by("-pk")[:ANSWERS_SHOWN]),
         "state": state, "status": status, "has_key": has_key, "server_on": settings.RIPRAPTOR_CLAUDE,
         "env_key": bool(settings.RIPRAPTOR_CLAUDE_API_KEY),
         "spent": dollars(spent), "limit": dollars(limit), "answers": answers,

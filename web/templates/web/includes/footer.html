@@ -21,6 +21,7 @@
       <a href="{% url 'web:per_card' %}">{% copy "site.nav.percard" %}</a>
       {% if guides_live %}<a href="{% url 'web:guides' %}">{% copy "site.nav.guides" %}</a>{% endif %}
       <a href="{% url 'web:watchlist' %}" data-watch-link="{% url 'web:watchlist' %}">{% copy "site.nav.watchlist" %}</a>
+      <a href="{% url 'web:shopping_list' %}" rel="nofollow">{% copy "site.nav.shopping_list" %}</a>
       <a href="{% url 'web:games' %}">{% copy "site.nav.games" %}</a>
       <a href="{% url 'web:contact' %}">{% copy "site.nav.contact" %}</a>
       {% if refer_advertised %}<a href="{% url 'web:refer' %}">{% copy "refer.nav" %}</a>{% endif %}

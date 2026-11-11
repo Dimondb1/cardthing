@@ -1,0 +1,26 @@
+{% load sitecopy ripraptor %}{# Ask Rip (web/askrip.py): a question about this product, answered from this page's facts. The form posts, so it works without script; ask.js swaps the answer in without a reload. #}<section class="block ask" id="ask" aria-labelledby="ask-title" data-ask>
+  <h2 id="ask-title" class="section-title">{% copy "product.ask.title" %}</h2>
+  {% if ask.shown %}
+  <div class="ask__answer" tabindex="-1" data-ask-answer>
+    <p class="ask__line"><span class="ask__who">{% copy "product.ask.you" %}</span> {{ ask.shown.question }}</p>
+    <p class="ask__line"><span class="ask__who">{% copy "product.ask.rip" %}</span> {{ ask.shown.answer }}</p>
+    {% if ask.shown.checked %}<p class="ask__small">{% copy "product.ask.basis" clock=ask.shown.checked|stamp %}</p>{% endif %}
+  </div>
+  {% elif ask.state == "limit" %}
+  <p class="ask__state" role="status" tabindex="-1" data-ask-answer>{% copy "product.ask.limit" count=ask.per_person hours=ask.hours %}</p>
+  {% elif ask.state_key %}
+  <p class="ask__state" role="status" tabindex="-1" data-ask-answer>{% copy ask.state_key %}</p>
+  {% endif %}
+  {% if ask.open and ask.left %}
+  {% if not ask.shown %}<p class="ask__intro">{% copy "product.ask.intro" %}</p>{% endif %}
+  <form class="ask__form" method="post" action="{% url 'web:ask_rip' product.slug %}" data-ask-form>
+    {% csrf_token %}
+    <label class="visually-hidden" for="ask-question">{% copy "product.ask.label" product=product.name %}</label>
+    <input id="ask-question" class="ask__input" type="text" name="question" required minlength="3" maxlength="{{ ask.max_length }}" autocomplete="off" enterkeyhint="send" placeholder="{% copy 'product.ask.placeholder' %}">
+    <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="button" type="submit">{% copy "product.ask.button" %}</button>
+  </form>
+  <p class="ask__small" role="status" data-ask-status hidden>{% copy "product.ask.thinking" %}</p>
+  <p class="ask__small">{% copy_count "product.ask.left" ask.left %} {% copy "product.ask.note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.terms" %}</a></p>
+  {% endif %}
+</section>

@@ -27,6 +27,11 @@ urlpatterns = [
     path("watchlist/", views.watchlist, name="watchlist"),
     path("watchlist/alert/", views.search_alert_ask, name="search_alert_ask"),
     path("watchlist/manage/", views.manage_ask, name="manage_ask"),
+    # The shopping list (web/shopping.py): the visitor's cookie, changed only by these forms.
+    path("shopping-list/", views.shopping_list, name="shopping_list"),
+    path("shopping-list/add/<slug:slug>/", views.list_add, name="list_add"),
+    path("shopping-list/remove/<slug:slug>/", views.list_remove, name="list_remove"),
+    path("shopping-list/clear/", views.list_clear, name="list_clear"),
     # Under /alerts/confirm/, /alerts/stop/ and /alerts/manage/, so they are private links like the stock
     # alerts' (no third-party script, kept out of search engines by robots.txt).
     path("alerts/manage/<str:token>/", views.alerts_manage, name="alerts_manage"),
@@ -54,6 +59,7 @@ urlpatterns = [
     path("products/<slug:slug>/", views.product_detail, name="product"),
     # The Report link's form on a product page posts here; it sends the visitor back to the product.
     path("products/<slug:slug>/report/", views.report_listing, name="report_listing"),
+    path("products/<slug:slug>/ask/", views.ask_rip, name="ask_rip"),
     # Share as post: the caption and the picture's address, and the picture itself (web/share.py).
     path("products/<slug:slug>/post/", views.product_post, name="product_post"),
     path("products/<slug:slug>/post.png", views.product_post_image, name="product_post_image"),

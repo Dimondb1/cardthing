@@ -1005,9 +1005,9 @@ switch it on in the **Claude** box at the top of Things to check.
 
 **Claude's jobs and spending** (Admin, **Claude**, `/admin/claude/`;
 `web/views.py claude_page`, `catalogue.ClaudeJob`, `judge.JOBS`): Claude has
-eight jobs: new pages, doubtful prices and wrong matches, possible
+nine jobs: new pages, doubtful prices and wrong matches, possible
 duplicates, found at another shop, announced sets, sets sold only at events,
-Cardmarket matches and RRPs. The page shows what each asked and spent this
+Cardmarket matches, RRPs and Ask Rip (shoppers' questions, below). The page shows what each asked and spent this
 month and today, and lets you switch each off or give it a monthly limit of
 its own within the shared one (empty means none of its own). Every run asks
 the same gate before each question (`judge.job_room`): a job switched off is
@@ -1023,6 +1023,43 @@ what changes the price. Sort everything, and Claude itself, can be switched
 off from the same page; the model, effort, shared limit and key stay under Claude settings and
 key on Things to check. The owner, 3 Nov 2026, with Sort everything through
 $67 in three days: "control and set what it does in a settings menu".
+
+**Ask Rip** (`web/askrip.py`, `/products/<slug>/ask/`, `web:ask_rip`): a
+question box under the price list on every product page. A shopper types a
+question and Claude Haiku 5.5 answers in Rip's voice, in up to three short
+sentences, from that page's facts alone: each shop's price, delivery, total
+and stock with when it was checked, free delivery thresholds, what is
+inside, the RRP and our own price record. No account is needed. The owner,
+11 Nov 2026: "limit to 5 queries per user per 24 hours ... I don't want it
+to spend anymore than £25 at the start ... Make sure we can disable it when
+we need to."
+
+- Each person (their internet address, kept only as a one-way hash in the
+  cache for 24 hours) gets 5 questions a day; the same question on the same
+  product, while its prices are unchanged, is answered free from the cache
+  and does not count. A question that fails on our side does not count.
+- Spending: it is the Claude page's **Ask Rip** job, with a monthly limit
+  of its own of $30 until you save another (`judge.JOB_DEFAULT_LIMITS`),
+  under £25 while a pound buys more than $1.20, and inside Claude's shared
+  monthly limit. Each answer costs about a fiftieth of a US cent (thinking
+  off, at most 400 output tokens), so $30 is over 100,000 answers. The
+  site also stops at 500 questions a day, whoever asks them.
+- Switching it off: untick **Ask Rip** on the Claude page and Save jobs; the
+  box goes from every product page at once. **Switch Claude off** does not
+  stop it (that switch is for the background jobs). It also hides itself
+  with no key, with `RIPRAPTOR_CLAUDE=0`, at either limit, and for an hour
+  after Anthropic refuses the key or reports no credit.
+- An answer that names a price the page does not show (or the sum or gap
+  of two it does) is not shown; dashes, exclamation marks and formatting are
+  taken out. Email addresses, phone numbers and links are taken out of the
+  question before it is sent or kept.
+- One question goes to Anthropic at a time, with a 20 second limit, so one
+  of the two web workers is always free for everyone else.
+- Without JavaScript the form posts and the page comes back with the answer
+  (`?ask=<code>#ask`); `ask.js` swaps it in without a reload.
+- Every question is a `ClaudeAsk` row (kind "Ask Rip question", the
+  question and answer, tokens and cost), listed in Admin under Claude
+  answers, and kept out of the Claude box's own answer list.
 
 For prices, found pages and duplicates, Claude only says whether two things
 the site already holds are the same product: a found shop page and our
@@ -4725,6 +4762,35 @@ on an entry to go back to the default. When a shop
 asks, set it to Do not email: the page then shows no drafts and Mark as
 sent records nothing. Rows cannot be deleted, so that answer is kept.
 Only a business address is stored, typed by you or found on the shop's own site (Update and badge emails, below), and only to write to them.
+
+## Shopping list
+
+A product page's price box has **Add to list** (`web/shopping.py`,
+`/shopping-list/`, `web:shopping_list`). The list is a cookie of ours
+(`rr_list`, the products' addresses only, HttpOnly, 90 days, up to 20
+products), so it works with JavaScript off: Add to list is a form, and the
+button then reads "See your list (3)". `list.js` sends it without a reload.
+The page shows the cheapest way to buy the lot, delivery included, against
+buying each product on its own at its page's cheapest delivered price, and
+the saving in green when there is one.
+
+- Each shop's delivery is charged once on the whole order under its own
+  rules: free over its threshold, otherwise its standard charge
+  (`Retailer.delivery_for` on the order's total). A shop with no standard
+  charge but a known charge on every item is counted at the sum of those
+  charges, never less than it will ask.
+- eBay and Amazon offers are each their own order. Only in-stock offers
+  count, or pre-orders for a product nobody has in stock; doubtful prices
+  are left out. Products nobody has are listed under Not in stock now.
+- An offer whose delivery is unknown is used only when nothing else has the
+  product; the total then says delivery at that shop is extra, and no
+  saving is claimed.
+- Every plan is tried for a short list (up to 6,000 combinations); a longer
+  one is searched by moving products between shops until nothing is cheaper.
+- Buy links go through `/go/` with the button "list", so the Shop
+  performance report and Insights count them. The page is private, `no-store`,
+  `noindex` and disallowed in robots.txt. Three queries, however long the
+  list.
 
 ## Watchlist
 

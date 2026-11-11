@@ -1183,6 +1183,7 @@ class OutboundClick(models.Model):
         DROP_OFFER = "drop_offer", "A shop on a drop card"
         COMING = "coming", "Buy on a Coming soon row"
         WATCHLIST = "watchlist", "Buy on the watchlist"
+        SHOPPING_LIST = "list", "Buy on the shopping list"
         SWIPE = "swipe", "Buy on the swipe page"
         AMAZON = "amazon", "Amazon search button"
         EBAY = "ebay", "eBay search button"
@@ -2182,6 +2183,7 @@ class ClaudeAsk(models.Model):
         MARKET = "market", "Cardmarket match"
         PAGE = "page", "New page"
         RRP = "rrp", "RRP"
+        ASK = "ask", "Ask Rip question"
 
     class Outcome(models.TextChoices):
         SENT = "sent", "Sent"
@@ -2265,6 +2267,8 @@ class ClaudeAsk(models.Model):
             return f"whether UK shops sell {e.get('set_name', '')} for {e.get('game', '')}"
         if self.kind == self.Kind.RRP:
             return f"the RRP of {e.get('name', '')}"
+        if self.kind == self.Kind.ASK:
+            return f'a shopper asked about {e.get("product", "")}: "{e.get("question", "")}"'
         ours =(e.get("ours") or {}).get("name", "")
         if self.kind == self.Kind.PAGE:
             shops = ", ".join(shop.get("shop", "") for shop in e.get("shops") or [])

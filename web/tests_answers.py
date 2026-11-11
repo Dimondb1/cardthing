@@ -106,6 +106,15 @@ class GameAnswerTests(AnswersCase):
         self.assertIn('<p class="cx-hero__lead">5 sealed Pokémon products in stock at 3 UK shops, out of 6 listed across '
                       '1 set. Every price includes UK delivery.</p>', html)
 
+    def test_the_listings_come_before_the_words_for_search_engines(self):
+        """The owner, 11 Nov 2026: the cheapest block "is hiding the actual listings". The deals strip and the sets
+        come first; the cheapest of each kind follows them, then the questions."""
+        html = self.page(self.pokemon.get_absolute_url())
+        sets, cheapest, faq = (html.index('aria-labelledby="cx-sets-title"'), html.index('<section class="hub-answer"'),
+                               html.index('<section class="hub-faq"'))
+        self.assertLess(sets, cheapest)
+        self.assertLess(cheapest, faq)
+
     def test_the_cheapest_of_each_main_kind_is_named_with_its_shop_price_and_check(self):
         html = self.page(self.pokemon.get_absolute_url())
         block = section(html, '<section class="hub-answer"', "</section>")

@@ -5,13 +5,18 @@
 {% block page_class %}page--feed page--compact{% endblock %}
 
 {% block content %}
-{# A game's page in the compact layout (web/compact.py): what it compares in words (web/answers.py: the counts, the cheapest of each main kind in stock, each with its shop and when it was checked), its deals strip, every set it has, newest first, then the questions people ask, answered with the same figures. #}
+{# A game's page in the compact layout (web/compact.py): the counts in a line, its deals strip and every set it has, newest first, so the listings come first; then, for search engines and readers who want it in words (web/answers.py), the cheapest of each main kind in stock, each with its shop and when it was checked, and the questions people ask, answered with the same figures. The owner, 11 Nov 2026: the cheapest block "is hiding the actual listings". #}
 {% include "web/includes/feed_sprite.svg" %}
 {% include "web/includes/feed_dock.html" with feed=dock %}
 {% include "web/includes/compact_status.html" %}
 <section class="cx-hero cx-hero--game">
   <h1 class="cx-hero__title">{% copy "browse.hub.answer.title" game=game.name %}</h1>
   {% if stock_line %}<p class="cx-hero__lead">{{ stock_line }}</p>{% endif %}
+</section>
+{% include "web/includes/compact_strip.html" %}
+<section class="cx-section" aria-labelledby="cx-sets-title">
+  <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title">{% copy "compact.game.sets" game=game.display_short %}</h2><a class="cx-section__all" href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a></div>
+  {% if sets %}{% include "web/includes/compact_sets.html" %}{% else %}<p class="cx-empty">{% copy "compact.game.no_sets" %} <a href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a></p>{% endif %}
 </section>
 {% if picks %}
 <section class="hub-answer" aria-labelledby="hub-answer-title">
@@ -22,11 +27,6 @@
   <p class="hub-answer__note">{% copy "browse.hub.answer.note" %}</p>
 </section>
 {% endif %}
-{% include "web/includes/compact_strip.html" %}
-<section class="cx-section" aria-labelledby="cx-sets-title">
-  <div class="cx-section__head"><h2 id="cx-sets-title" class="cx-section__title">{% copy "compact.game.sets" game=game.display_short %}</h2><a class="cx-section__all" href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a></div>
-  {% if sets %}{% include "web/includes/compact_sets.html" %}{% else %}<p class="cx-empty">{% copy "compact.game.no_sets" %} <a href="{{ all_url }}">{% copy "compact.game.all_products" game=game.display_short %}</a></p>{% endif %}
-</section>
 {% if faq %}
 <section class="hub-faq" aria-labelledby="hub-faq-title">
   <h2 id="hub-faq-title" class="cx-section__title hub-faq__title">{% copy "browse.hub.faq.title" game=game.display_short %}</h2>

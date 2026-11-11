@@ -205,6 +205,29 @@ class CollectionReadTests(TestCase):
         self.assertIn("at Moor Toys", page_html)
         self.assertIn("Shop members only", page_html)
 
+    def test_the_hourly_read_finds_the_page_by_its_link_and_takes_it_out(self):
+        """The whole read, as the worker runs it: the shop's products.json, the page matched to the box by the
+        listing's own link rather than handed over. TCG Group's data on 11 Nov 2026, the day the owner found it still
+        leading the page: the tag, an empty-ish description and a variant that says available."""
+        from .importers import ImportError_, run_import
+
+        product = page("<p>A display of 36 Delta Reign booster packs.</p><p>Pre-order: available from Friday 6th "
+                       "November 2026.</p>", tags=("game_pokemon", "sealed", "tier1_only_pokemon", "vat_standard"))
+
+        def fetch(url):
+            if "products.json" in url:
+                return json.dumps({"products": [product] if url.endswith("page=1") else []}).encode()
+            if url.endswith("/meta.json"):
+                return b'{"currency": "GBP"}'
+            raise ImportError_(f"no answer for {url}")
+
+        run = run_import(self.group, fetch=fetch)
+        self.listing.refresh_from_db()
+        self.assertEqual(run.error, "")
+        self.assertEqual((self.listing.availability, self.listing.closed_why),
+                         (Listing.Availability.OUT_OF_STOCK, "members"))
+        self.assertFalse(self.DailyLowestPrice.objects.filter(product=self.box, price=Decimal("150.00")).exists())
+
     def test_the_tag_going_puts_it_back_in_stock(self):
         self.read()
         self.read(tags=("pokemon",))

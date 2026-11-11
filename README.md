@@ -3159,7 +3159,13 @@ category can be wrong (a pack filed under "Booster Boxes"), so a name that
 plainly says another type wins (`plain_type` in `catalogue/classify.py`):
 booster pack, booster box, Elite Trainer Box, bundle or tin. Names that
 say two types, or that no rule reads safely (checklane, double pack set,
-starter pack, mystery box), keep their type. This is applied when a
+starter pack, mystery box), keep their type. A few names settle their own
+type whatever else they say (`SETTLED_KINDS`): a mini tin is a tin, even
+from a shop's "display" of them, and a single pack blister (one pack and a
+promo) is a booster pack, not a bundle. The owner, 11 Nov 2026, found
+"Mini Tins Assorted Display 30th Celebration 1 At Random" among the booster
+boxes and "Pitch Black Single Pack Blister (Slowpoke)" among the bundles.
+This is applied when a
 product is made from a shop title, by `python manage.py set_types` (the
 update runs it; `--dry-run` lists what would change), and every hour by
 `tidy_all`. A type you set in Django Admin is never changed, and a product

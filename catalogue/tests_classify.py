@@ -995,3 +995,51 @@ class StationeryAndModelTests(TestCase):
         self.assertFalse(Product.objects.filter(pk=desk.pk).exists())
         self.assertTrue(RemovedProduct.objects.filter(slug="center-japan-pikachu-desktop-file").exists())
         self.assertTrue(Product.objects.filter(pk=box.pk).exists())
+
+
+class SettledKindTests(TestCase):
+    """Names that settle their own kind (classify.SETTLED_KINDS). The owner, 11 Nov 2026, with the Pokémon page: a mini
+    tin was a Booster box and a single pack blister a Booster bundle."""
+
+    def test_a_mini_tin_from_a_display_is_a_tin(self):
+        from .classify import find_type, plain_type
+
+        for title in ("Mini Tins Assorted Display 30th Celebration 1 At Random", "Paldean Fates Mini Tin Display",
+                      "Ascended Heroes Mini Tin (Pikachu)"):
+            with self.subTest(title=title):
+                self.assertEqual(find_type(title, "Booster Display"), "tin")
+                self.assertEqual(classify(title, "", "", ("Pokemon",), Decimal("12")).product_type, "tin")
+        self.assertEqual(plain_type("Mini Tins Assorted Display 30th Celebration 1 At Random", "booster_box"), "tin")
+        # A booster display, and a Mega Tin (a collection box), keep theirs.
+        self.assertEqual(find_type("Surging Sparks Booster Display"), "booster_box")
+        self.assertEqual(find_type("Mega Tin Collection"), "collection_box")
+
+    def test_a_single_pack_blister_is_a_pack_and_three_packs_a_bundle(self):
+        from .classify import find_type, plain_type
+
+        for title in ("Pitch Black Single Pack Blister (Slowpoke)", "Delta Reign 1 Pack Blister", "Single Booster Pack Blister"):
+            with self.subTest(title=title):
+                self.assertEqual(find_type(title), "booster_pack")
+        sealed = classify("Pitch Black Single Pack Blister (Slowpoke)", "Booster Packs", "Clifford TCG", ("Pokemon",),
+                          Decimal("7.25"))
+        self.assertEqual(sealed.product_type, "booster_pack")
+        self.assertEqual(plain_type("Pitch Black Single Pack Blister (Slowpoke)", "bundle"), "booster_pack")
+        self.assertIsNone(plain_type("Pitch Black Single Pack Blister (Slowpoke)", "booster_pack"))
+        self.assertEqual(find_type("Pitch Black 3 Pack Blister (Binacle)"), "bundle")
+
+    def test_the_ones_already_on_the_site_are_retyped_at_the_next_update(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .models import Product
+        from .testing import make_game, make_product, make_set
+
+        pset = make_set(make_game())
+        tin = make_product(pset, name="Mini Tins Assorted Display 30th Celebration 1 At Random", slug="mini-tins",
+                           product_type="booster_box")
+        blister = make_product(pset, name="Pitch Black Single Pack Blister (Slowpoke)", slug="slowpoke-blister",
+                               product_type="bundle")
+        call_command("set_types", stdout=StringIO())
+        self.assertEqual(Product.objects.get(pk=tin.pk).product_type, "tin")
+        self.assertEqual(Product.objects.get(pk=blister.pk).product_type, "booster_pack")

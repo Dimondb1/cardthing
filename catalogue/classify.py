@@ -292,8 +292,28 @@ SET_NUMBER = re.compile(r"\b(?:set|chapter) \d{1,2}\b")
 # not ("Storage File Display", "Card Display Frames"), though "Booster Display" and "Display Box" still do.
 DISPLAY_CATEGORIES = {"display", "displays", "booster display", "booster displays"}
 
+# Names that settle their own kind, whatever other kind word they carry or the shop files them under. A mini tin from
+# a shop's display of them is a tin, not the display: "Mini Tins Assorted Display 30th Celebration 1 At Random" was a
+# Booster box on the Pokémon page. A single pack blister is one pack and a promo, not a bundle of packs: "Pitch Black
+# Single Pack Blister (Slowpoke)" was a Booster bundle. The owner, 11 Nov 2026, asked for both to be fixed.
+SETTLED_KINDS = (
+    (re.compile(r"\bmini[\s-]*tins?\b", re.I), "tin"),
+    (re.compile(r"\b(?:single|one|1)[\s-]*(?:booster[\s-]*)?pack[\s-]*blisters?\b", re.I), "booster_pack"),
+)
+
+
+def settled_kind(title):
+    """The kind a name settles by itself (SETTLED_KINDS), or None."""
+    for pattern, kind in SETTLED_KINDS:
+        if pattern.search(title or ""):
+            return kind
+    return None
+
 
 def find_type(title, shop_type=""):
+    settled = settled_kind(title)
+    if settled:
+        return settled
     text = " " + SET_NUMBER.sub(" ", expand(title)) + " "
     shop_type = (shop_type or "").lower()
     for kind, words in TYPES:
@@ -332,8 +352,12 @@ def plain_type(name, current):
     """The type a product's name plainly states when it is not ``current``, or None.
 
     A shop files a pack under "Booster Boxes" and the product is made a booster box. The type filter
-    then shows a pack among the boxes. A name that says one kind plainly, and not ``current``, wins.
+    then shows a pack among the boxes. A name that says one kind plainly, and not ``current``, wins, and a name
+    that settles its own kind (settled_kind) wins over every other kind word in it.
     """
+    settled = settled_kind(name)
+    if settled:
+        return None if settled == current else settled
     kind = find_type(box_contents(name))
     if kind not in PLAIN_KINDS or kind == current or says_kind(name, current) or UNSURE_KIND.search(name):
         return None

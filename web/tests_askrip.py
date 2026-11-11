@@ -242,14 +242,20 @@ class SwitchTests(AskRipCase):
         cache.clear()
         self.assertNotContains(self.client.get(self.box.get_absolute_url()), 'id="ask"')
 
-    def test_the_price_box_says_where_it_is(self):
-        page = self.client.get(self.box.get_absolute_url())
-        self.assertContains(page, '<a href="#ask">Ask Rip a question about this</a>')
+    def test_it_sits_in_the_price_box_on_the_first_screen(self):
+        """The owner, 11 Nov 2026: "ask rip in its current location is pointless I want it incorporated in a more
+        visible place". It is in the price box, before the price list, and there is no second box further down."""
+        page = self.client.get(self.box.get_absolute_url()).content.decode()
+        buybox = page.index('class="buybox')
+        self.assertLess(buybox, page.index('id="ask"'))
+        self.assertLess(page.index('id="ask"'), page.index('id="offers-title"'))
+        self.assertEqual(page.count('id="ask"'), 1)
+        self.assertNotIn('href="#ask"', page)
 
     def test_the_claude_page_says_whether_shoppers_see_it(self):
         owner = get_user_model().objects.create_superuser("owner", "o@example.com", "pw")
         self.client.force_login(owner)
-        self.assertContains(self.client.get(reverse("claude")), "Showing on every product page, under the price list.")
+        self.assertContains(self.client.get(reverse("claude")), "Showing on every product page, in the price box.")
         ClaudeJob.objects.create(name="ask", on=False)
         cache.clear()
         self.assertContains(self.client.get(reverse("claude")), "Hidden: switched off here.")
@@ -325,6 +331,122 @@ class FactTests(AskRipCase):
         self.assertNotIn("total", offer)
 
 
+class PriceCheckTests(AskRipCase):
+    """Rip is told the page's Price check, so he can say whether a price is good. The owner, 11 Nov 2026: "At present
+    it couldnt tell if something was a good price and it literally had a good price badge on that product"."""
+
+    def record(self, prices):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from catalogue.models import DailyLowestPrice
+
+        today = timezone.localdate()
+        for days_ago, price in enumerate(prices, start=1):
+            DailyLowestPrice.objects.create(product=self.box, date=today - timedelta(days=days_ago), price=Decimal(price))
+
+    def test_he_is_told_the_verdict_the_badge_shows_with_its_numbers(self):
+        self.record(["160.00"] * 19 + ["135.00"])
+        self.assertContains(self.client.get(self.box.get_absolute_url()), "Good price")
+        found, amounts, _checked = askrip.facts(self.box)
+        check = found["price_check"]
+        self.assertEqual(check["verdict"], "Good price")
+        self.assertEqual(check["todays_cheapest_delivered"], "£140.00")
+        self.assertEqual(check["lowest_delivered"], "£135.00")
+        self.assertEqual(check["over_days_recorded"], 20)
+        self.assertIn("Lowest yet, Good price, Fair price, Above average, High price", check["scale"])
+        self.assertIn(Decimal("135.00"), amounts)
+        self.assertIn(Decimal(check["average_delivered"].lstrip("£")), amounts)
+
+    def test_the_verdict_is_in_the_registrys_words(self):
+        from content.models import SiteContent
+        from content.registry import Kind
+
+        SiteContent.objects.update_or_create(key="product.fair.verdict_good", defaults={
+            "label": "Price check: good", "section": "product", "kind": Kind.TEXT, "content": "Decent price"})
+        cache.clear()
+        self.record(["160.00"] * 19 + ["135.00"])
+        found, _amounts, _checked = askrip.facts(self.box)
+        self.assertEqual(found["price_check"]["verdict"], "Decent price")
+
+    def test_without_a_price_check_he_is_told_nothing_to_judge_by(self):
+        found, _amounts, _checked = askrip.facts(self.box)
+        self.assertNotIn("price_check", found)
+
+    def test_his_instructions_have_him_answer_good_price_from_the_price_check(self):
+        self.assertIn('"price_check"', askrip.SYSTEM_PROMPT)
+        self.assertNotIn("Do not call a price good", askrip.SYSTEM_PROMPT)
+        self.assertIn("Never contradict the Price check", askrip.SYSTEM_PROMPT)
+
+    def test_the_price_a_month_ago(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from catalogue.models import DailyLowestPrice
+
+        DailyLowestPrice.objects.create(product=self.box, date=timezone.localdate() - timedelta(days=30),
+                                        price=Decimal("155.00"))
+        found, amounts, _checked = askrip.facts(self.box)
+        self.assertEqual(found["cheapest_about_30_days_ago"], "£155.00")
+        self.assertIn(Decimal("155.00"), amounts)
+
+    def test_each_offer_has_its_price_per_pack(self):
+        found, amounts, _checked = askrip.facts(self.box)
+        harbour = next(offer for offer in found["offers"] if offer["shop"] == "Harbour Games")
+        self.assertEqual(harbour["per_pack"], "£3.89")   # £140.00 delivered for 36 packs
+        self.assertIn(Decimal("3.89"), amounts)
+
+    def test_the_rest_of_the_set_for_sale_cheapest_first_with_its_price_per_pack(self):
+        bundle = make_product(self.box.product_set, name="Surging Sparks Booster Bundle", slug="surging-sparks-bundle",
+                              product_type="booster_bundle", packs=6)
+        make_listing(bundle, self.harbour, price="27.00")
+        tin = make_product(self.box.product_set, name="Surging Sparks Tin", slug="surging-sparks-tin",
+                           product_type="tin", packs=3)
+        make_listing(tin, self.harbour, price="18.00")
+        gone = make_product(self.box.product_set, name="Surging Sparks Elite Trainer Box", slug="surging-sparks-etb")
+        make_listing(gone, self.harbour, price="45.00", availability=Listing.Availability.OUT_OF_STOCK)
+        found, amounts, _checked = askrip.facts(self.box)
+        rows = found["same_set_for_sale"]
+        self.assertEqual([row["product"] for row in rows], ["Surging Sparks Tin", "Surging Sparks Booster Bundle"])
+        self.assertEqual(rows[1]["per_pack"], "£4.50")
+        self.assertIn(Decimal("4.50"), amounts)
+
+    def test_suggested_questions_under_the_box(self):
+        page = self.client.get(self.box.get_absolute_url())
+        for line in ("Is this a good price?", "Where is it cheapest with delivery?",
+                     "Is there better value per pack in this set?"):
+            self.assertContains(page, f'name="suggested" value="{line}"')
+        html = page.content.decode()
+        # Under Rip's line and before the typed question, in a form of its own, so Enter still sends what was typed.
+        self.assertLess(html.index('class="ask__chips"'), html.index('id="ask-question"'))
+        self.assertEqual(html.count("data-ask-form"), 2)
+
+    def test_no_value_question_without_packs(self):
+        Product = type(self.box)
+        Product.objects.filter(pk=self.box.pk).update(packs=None)
+        page = self.client.get(self.box.get_absolute_url())
+        self.assertContains(page, 'value="Is this a good price?"')
+        self.assertNotContains(page, "better value per pack")
+
+    def test_a_tapped_question_is_the_one_sent_and_is_not_offered_again(self):
+        response = self.client.post(reverse("web:ask_rip", args=[self.box.slug]),
+                                    {"suggested": "Is this a good price?", "question": ""},
+                                    REMOTE_ADDR="203.0.113.7", HTTP_X_ASK_RIP="1")
+        self.assertEqual(response.json()["state"], "answered")
+        self.assertIn("<question>Is this a good price?</question>", self.fake.sent[0]["messages"][0]["content"])
+        html = response.json()["html"]
+        self.assertNotIn('value="Is this a good price?"', html)
+        self.assertIn('value="Where is it cheapest with delivery?"', html)
+
+    def test_a_tapped_question_works_without_script(self):
+        response = self.client.post(reverse("web:ask_rip", args=[self.box.slug]),
+                                    {"suggested": "Where is it cheapest with delivery?"}, REMOTE_ADDR="203.0.113.7")
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("?ask=", response["Location"])
+
+
 class RipTests(AskRipCase):
     """Rip's face follows the chat (rip_bot.html, posed by data-mood in site.css)."""
 
@@ -340,7 +462,8 @@ class RipTests(AskRipCase):
         self.assertEqual(self.mood(page), "idle")
         self.assertIn('class="rip"', page)
         self.assertIn("I'm Rip.", page)
-        self.assertIn('data-thinking="Let me check this page."', page)
+        self.assertIn('data-thinking="Let me check the prices."', page)
+        self.assertIn("if this is a good price", page)
 
     def test_an_answer_makes_him_glad(self):
         self.assertEqual(self.mood(self.ask().json()["html"]), "happy")

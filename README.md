@@ -1040,11 +1040,17 @@ key on Things to check. The owner, 3 Nov 2026, with Sort everything through
 $67 in three days: "control and set what it does in a settings menu".
 
 **Ask Rip** (`web/askrip.py`, `/products/<slug>/ask/`, `web:ask_rip`): a
-question box under the price list on every product page. A shopper types a
-question and Claude Haiku 5.5 answers in Rip's voice, in up to three short
-sentences, from that page's facts alone: each shop's price, delivery, total
-and stock with when it was checked, free delivery thresholds, what is
-inside, the RRP and our own price record. No account is needed. The owner,
+question box in the price box of every product page. A shopper types a
+question, or taps a suggested one, and Claude Haiku 5.5 answers in Rip's
+voice, in up to four short sentences, from that page's facts alone: each
+shop's price, delivery, total, price per pack and stock with when it was
+checked, free delivery thresholds, multi-buys and discount codes, what is
+inside, the RRP, our own price record, the cheapest about 30 days ago, the
+page's **Price check** with its numbers (`views.price_check`, the same
+verdict the badge shows, so Rip never contradicts it), and the rest of the
+set for sale with each one's price per pack. He leads with the answer ("Yes,
+that's a Good price ...") and points out what saves money. No account is
+needed. The owner,
 11 Nov 2026: "limit to 5 queries per user per 24 hours ... I don't want it
 to spend anymore than £25 at the start ... Make sure we can disable it when
 we need to."
@@ -1068,9 +1074,16 @@ we need to."
   Anthropic refuses the key or reports no credit (a background job's own
   fault does not hide it). The Ask Rip row on the Claude page says whether
   shoppers see it now and, if not, why (`askrip.CLOSED_WORDS`).
-- Where: under the price list on every product page, with an "Ask Rip a
-  question about this" link under the price box that goes to it. The owner,
-  11 Nov 2026: "Can't actually find where this is meant to be on the site".
+- Where: in the price box on every product page, under Save, Track price
+  and Share, so it is on the first screen beside the price it talks about.
+  Under the box are one-tap questions (`askrip.suggestions`, worded in the
+  registry under `product.ask.suggest.*`): "Is this a good price?", "Where
+  is it cheapest with delivery?" and, for a product of several packs in a
+  set, "Is there better value per pack in this set?". The owner, 11 Nov
+  2026: "ask rip in its current location is pointless I want it
+  incorporated in a more visible place and have some actual use. At present
+  it couldnt tell if something was a good price and it literally had a good
+  price badge on that product."
 - An answer that names a price the page does not show (or the sum or gap
   of two it does) is not shown; dashes, exclamation marks and formatting are
   taken out. Email addresses, phone numbers and links are taken out of the

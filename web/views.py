@@ -1692,6 +1692,22 @@ def buy_order(listings):
     )
 
 
+def price_check(product, listings, cheapest, today):
+    """The Price check a product page shows (fair_price.Verdict), or None: today's cheapest delivered price against
+    our own daily record, which counts only UK shops (not eBay or Amazon searches). None without enough days, when the
+    delivery cost is unknown, or when the cheapest price is doubtful: it may not be this product. Ask Rip is given the
+    same (web/askrip.py), so what he says and the badge never differ."""
+    uk_shops = len({listing.retailer_id for listing in listings if listing.sanity != Listing.Sanity.EXCLUDED
+                    and listing.retailer.source_type not in pricing.MARKETPLACES})
+    fair = (fair_price.verdict(product, cheapest.delivered_price, today, shops=uk_shops)
+            if cheapest and cheapest.delivery_known and cheapest.sanity != Listing.Sanity.DOUBTFUL else None)
+    # The owner: never "High price" beside a shop that pays a commission, whatever the price. The check is left
+    # off, not softened, so nothing on the page calls the price better than it is; the Terms page says so.
+    if fair is not None and fair.band == fair_price.HIGH_PRICE and cheapest.retailer.pays_commission:
+        fair = None
+    return fair
+
+
 def lead_shop(slug):
     """The id of the shop a product's page leads with now, or None: for a view counted after the page was built
     (a page rendered ahead of a tap, note_api). One query."""
@@ -1762,17 +1778,7 @@ def product_detail(request, slug):
     month_ago = pricing.previous_price_map([product.pk], days=30, today=today).get(product.pk)
     last_known = None if cheapest else pricing.last_known_price(product)
     restocks = pricing.restock_summary(product) if listings else None
-    # Price check: today's cheapest delivered price against our own daily record, which counts only UK shops
-    # (not eBay or Amazon searches). None without enough days, when the delivery cost is unknown, or when the
-    # cheapest price is doubtful: it may not be this product.
-    uk_shops = len({listing.retailer_id for listing in listings if listing.sanity != Listing.Sanity.EXCLUDED
-                    and listing.retailer.source_type not in pricing.MARKETPLACES})
-    fair = (fair_price.verdict(product, cheapest.delivered_price, today, shops=uk_shops)
-            if cheapest and cheapest.delivery_known and cheapest.sanity != Listing.Sanity.DOUBTFUL else None)
-    # The owner: never "High price" beside a shop that pays a commission, whatever the price. The check is left
-    # off, not softened, so nothing on the page calls the price better than it is; the Terms page says so.
-    if fair is not None and fair.band == fair_price.HIGH_PRICE and cheapest.retailer.pays_commission:
-        fair = None
+    fair = price_check(product, listings, cheapest, today)
 
     # Nothing to buy here: the closest products shops have in stock, so a visitor hunting a sold-out product
     # has somewhere to go.
@@ -3061,7 +3067,8 @@ def ask_rip(request, slug):
     back = product.get_absolute_url()
     if request.POST.get("website"):
         return HttpResponseRedirect(back)   # the hidden field is only ever filled by robots
-    asked = askrip.ask(request, product, request.POST.get("question", ""))
+    # A suggested question (the buttons under the box) is sent instead of whatever was typed.
+    asked = askrip.ask(request, product, request.POST.get("suggested") or request.POST.get("question", ""))
     if request.headers.get("X-Ask-Rip") == "1":
         box = askrip.box(request, product, asked.state, asked.token)
         html = render_to_string("web/includes/ask_rip.html", {"ask": box, "product": product}, request=request) if box else ""

@@ -1660,7 +1660,6 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .code-chip__copy[hidden] { display: none; }
 .offer__code { grid-column: 1 / -1; }
 .buybox__code { margin-top: var(--space-2); }
-.buybox__ask { margin-top: var(--space-3); font-size: var(--text-sm); }
 .plan-order__code, .shop-table__code { display: block; }
 .shop-table__code { margin-top: var(--space-1); font-weight: var(--weight-body); }
 
@@ -1740,18 +1739,22 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @keyframes rip-chat { from { transform: rotate(var(--rip-jaw-shut)); } to { transform: rotate(var(--rip-jaw-open)); } }
 @keyframes rip-dot { from { opacity: var(--opacity-waiting); } to { opacity: 1; } }
 
-/* Ask Rip: a chat with Rip under the price list (web/askrip.py). Rip speaks in a bubble beside him, the question sits
-   in its own bubble on the right, and each new line fades in, as feedback that it came. */
-.ask { display: grid; gap: var(--space-3); padding: var(--space-4) var(--card-pad); border: 1px solid var(--color-line); border-radius: var(--radius-card); scroll-margin-top: var(--space-6); }
-.ask .section-title { margin: 0; }
-/* Lines no longer than running text anywhere else, however wide the screen. */
-.ask > * { max-width: var(--measure); }
+/* Ask Rip: a chat with Rip in the price box (web/askrip.py), under a rule of its own. Rip speaks in a bubble beside
+   him, the question sits in its own bubble on the right, and each new line fades in, as feedback that it came. The
+   owner, 11 Nov 2026: "ask rip in its current location is pointless I want it incorporated in a more visible place". */
+.ask { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--color-line); scroll-margin-top: var(--space-6); }
+.ask__title { margin: 0; font-size: var(--text-base); font-weight: var(--weight-strong); }
+.ask p { margin: 0; }
 .ask__chat { display: flex; align-items: center; gap: var(--space-3); }
+.ask .rip { width: var(--rip-size-box); height: var(--rip-size-box); }
 .ask__bubble { position: relative; flex: 1 1 auto; min-width: 0; display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-brand-soft); }
 .ask__bubble::before { content: ""; position: absolute; top: 50%; left: calc(var(--rip-bubble-tail) / -2); width: var(--rip-bubble-tail); height: var(--rip-bubble-tail); border: solid var(--color-brand-line); border-width: 0 0 1px 1px; background: var(--color-brand-soft); transform: translateY(-50%) rotate(45deg); }
 .ask__bubble:focus { outline: none; }
 .ask__you { justify-self: end; max-width: min(85%, var(--measure)); padding: var(--space-2) var(--space-4); border-radius: var(--radius-card); background: var(--color-shelf); }
-.ask__form { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ask__row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* The suggested questions under Rip's line: the site's chips, as buttons, wrapping inside the box at any width. */
+.ask__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ask__chip { max-width: 100%; background: none; font-family: inherit; line-height: var(--leading-snug); white-space: normal; text-align: left; cursor: pointer; }
 .ask__input { flex: 1 1 var(--field-short); min-width: 0; min-height: var(--tap); padding: 0 var(--space-3); border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-paper); font: inherit; font-size: var(--text-base); color: var(--color-ink); }
 .ask__input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
 .ask__small { font-size: var(--text-xs); color: var(--color-ink-muted); }

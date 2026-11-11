@@ -435,6 +435,7 @@
 :root {
   --rip-size: 4.75rem;             /* Rip beside the bubble on a phone */
   --rip-size-wide: 6rem;           /* and from a tablet up */
+  --rip-size-box: 4.25rem;         /* in the price box, beside the price and Buy now, at every width */
   --rip-rock: 1.8s;                /* one sway while waiting */
   --rip-rock-busy: 0.4s;           /* one quicker sway while thinking */
   --rip-rock-sleepy: 3.2s;         /* one slow sway once the day's questions are used */

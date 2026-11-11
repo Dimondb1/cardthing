@@ -1,8 +1,9 @@
 // Ask Rip (web/askrip.py) with Rip's face (rip_bot.html, posed by the box's data-mood in site.css). Here Rip looks at the
 // box while a question is typed (listening), thinks while the answer is on its way, and stands still while off screen.
 // The question is sent without leaving the page and the box the server sends back, with Rip's answer and face, is
-// swapped in; focus moves to the answer so a screen reader reads it. Without this file the form posts and the page
-// comes back with the same answer and face. Anything unexpected falls back to that plain post.
+// swapped in; focus moves to the answer so a screen reader reads it. A suggested question is a button in a form of its
+// own (name "suggested"), sent in place of whatever was typed. Without this file the form posts and the page comes
+// back with the same answer and face. Anything unexpected falls back to that plain post.
 (() => {
   const BOX = "[data-ask]";
 
@@ -36,12 +37,14 @@
     if (!form || form.dataset.sending) return;
     event.preventDefault();
     const box = form.closest(BOX);
-    const input = form.querySelector("input[name=question]");
-    const question = (input ? input.value : "").trim();
+    const input = box.querySelector("input[name=question]");
+    const chosen = event.submitter && event.submitter.name === "suggested" ? event.submitter : null;
+    const question = (chosen ? chosen.value : input ? input.value : "").trim();
+    const data = new FormData(form);
+    if (chosen) data.set(chosen.name, chosen.value);
     form.dataset.sending = box.dataset.sending = "1";
     box.dataset.mood = "thinking";
-    const button = form.querySelector("button");
-    if (button) button.disabled = true;
+    box.querySelectorAll("form[data-ask-form] button").forEach((button) => { button.disabled = true; });
     // The question in its own bubble at once, and Rip's bubble saying he is on it.
     let you = box.querySelector("[data-ask-you]");
     if (!you) {
@@ -59,7 +62,7 @@
     const status = box.querySelector("[data-ask-status]");
     if (status) status.textContent = box.dataset.thinking || "";
     fetch(form.action, {
-      method: "POST", body: new FormData(form), credentials: "same-origin",
+      method: "POST", body: data, credentials: "same-origin",
       headers: { "X-Ask-Rip": "1", "Accept": "application/json" },
     })
       .then((response) => (response.ok ? response.json() : Promise.reject(response.status)))
@@ -77,8 +80,15 @@
         if (answer) answer.focus({ preventScroll: true });
       })
       .catch(() => {
-        // Let the browser post it the plain way, which always works.
+        // Let the browser post it the plain way, which always works, carrying the suggested question if one was tapped.
         delete form.dataset.sending;
+        if (chosen) {
+          const carry = document.createElement("input");
+          carry.type = "hidden";
+          carry.name = chosen.name;
+          carry.value = chosen.value;
+          form.append(carry);
+        }
         form.submit();
       });
   });

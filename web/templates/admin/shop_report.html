@@ -1,0 +1,89 @@
+{% extends "admin/base_site.html" %}
+{# Shop performance (web/shop_report.py): the shops that pay a commission, listed, shown, clicked and bought from over the period chosen, with the spreadsheet to download. A row each; on a phone each shop is a card of lines. #}
+{% load ripraptor %}
+{% block title %}Shop performance | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .shop-report { display: grid; gap: 18px; max-width: 80rem; }
+  .shop-report h2 { margin: 0 0 6px; }
+  .shop-report p { margin: 0 0 6px; }
+  .shop-report .note { color: var(--body-quiet-color); }
+  .shop-report .periods { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .shop-report .periods a { padding: 6px 12px; border: 1px solid var(--hairline-color); border-radius: 6px; text-decoration: none; }
+  .shop-report .periods a[aria-current="page"] { font-weight: 600; border-color: var(--link-fg); }
+  .shop-report .download { display: inline-block; padding: 10px 16px; border-radius: 6px; background: var(--button-bg); color: var(--button-fg); font-weight: 600; text-decoration: none; }
+  .shop-report .figures { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .shop-report .figures li { padding: 10px; border: 1px solid var(--hairline-color); border-radius: 6px; list-style: none; }
+  .shop-report h3 { margin: 12px 0 4px; font-size: 1rem; }
+  .shop-report .figures strong { display: block; font-size: 1.4rem; }
+  .shop-report table { width: 100%; }
+  .shop-report td.num, .shop-report th.num { text-align: right; white-space: nowrap; }
+  .shop-report .off { color: var(--body-quiet-color); }
+  @media (max-width: 63.99rem) {
+    .shop-report table thead { display: none; }
+    .shop-report table, .shop-report tbody, .shop-report tr, .shop-report td { display: block; width: auto; }
+    .shop-report tr { padding: 10px 0; border-bottom: 1px solid var(--hairline-color); }
+    .shop-report td { padding: 2px 0; border: 0; text-align: left !important; }
+    .shop-report td.first { font-weight: 600; }
+    .shop-report td[data-label]::before { content: attr(data-label); display: inline-block; min-width: 10rem; margin-right: 6px; color: var(--body-quiet-color); }
+  }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Shop performance</div>{% endblock %}
+{% block content %}
+{% with total=report.total %}
+<div class="shop-report">
+  <section>
+    <p class="periods">Last {% for days in periods %}<a href="?days={{ days }}"{% if days == report.days %} aria-current="page"{% endif %}>{{ days }} days</a>{% endfor %}</p>
+    <p class="note">{{ report.first|date:"j M Y" }} to {{ report.last|date:"j M Y" }}. Shops that pay a commission (an affiliate link, eBay and Amazon), people only.</p>
+    <p><a class="download" href="{% url 'shop_report_download' %}?days={{ report.days }}">Download spreadsheet</a></p>
+    <p class="note">Summary, each shop, each shop's products, each day, and what every figure counts.</p>
+  </section>
+
+  <section>
+    <h2>All {{ report.shops|length }} shop{{ report.shops|length|pluralize }}</h2>
+    <ul class="figures">
+      <li><strong>{{ total.listed }}</strong>products listed now, {{ total.in_stock }} in stock</li>
+      <li><strong>{{ total.cheapest }}</strong>product pages lead with one of them now</li>
+      <li><strong>{{ total.views }}</strong>views of product pages listing them</li>
+      <li><strong>{{ total.shown }}</strong>times shown first (Buy now){% if report.lead_from %}, since {{ report.lead_from|date:"j M" }}{% endif %}</li>
+      <li><strong>{{ total.clicks }}</strong>clicks, {{ total.buy }} of them Buy now</li>
+      <li><strong>{% if total.click_rate is not None %}{{ total.click_rate|floatformat:1 }}%{% else %}none yet{% endif %}</strong>product page click rate (Buy now and price list clicks per 100 page views)</li>
+      <li><strong>{% if total.buy_rate is not None %}{{ total.buy_rate|floatformat:1 }}%{% else %}none yet{% endif %}</strong>Buy now rate (per 100 times shown first)</li>
+      <li><strong>{{ total.sales }}</strong>sales reported, {{ total.commission|gbp }} approved, {{ total.pending|gbp }} pending</li>
+    </ul>
+    {% if not report.lead_from %}<p class="note">Shown first starts counting with the next product page viewed after this update.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Each shop</h2>
+    {% if report.shops %}
+    <table>
+      <thead><tr><th>Shop</th><th class="num">Listed</th><th class="num">In stock</th><th class="num">Cheapest now</th><th class="num">Page views</th><th class="num">Shown first</th><th class="num">Clicks</th><th class="num">Buy now</th><th class="num">Page click rate</th><th class="num">Sales</th><th class="num">Commission</th></tr></thead>
+      <tbody>
+        {% for shop in report.shops %}
+        <tr>
+          <td class="first">{{ shop.name }}{% if not shop.active %} <span class="off">(switched off)</span>{% endif %}<br><span class="note">{{ shop.network }}</span></td>
+          <td class="num" data-label="Listed now">{{ shop.listed }}</td>
+          <td class="num" data-label="In stock now">{{ shop.in_stock }}</td>
+          <td class="num" data-label="Cheapest now">{{ shop.cheapest }}</td>
+          <td class="num" data-label="Page views">{{ shop.views }}</td>
+          <td class="num" data-label="Shown first">{{ shop.shown }}</td>
+          <td class="num" data-label="Clicks">{{ shop.clicks }}</td>
+          <td class="num" data-label="Buy now clicks">{{ shop.buy }}</td>
+          <td class="num" data-label="Page click rate">{% if shop.click_rate is not None %}{{ shop.click_rate|floatformat:1 }}%{% else %}-{% endif %}</td>
+          <td class="num" data-label="Sales">{{ shop.sales }}</td>
+          <td class="num" data-label="Commission">{{ shop.commission|gbp }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p>No shop that pays a commission has listings or clicks in this period.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>What the figures count</h2>
+    {% for heading, lines in notes %}<h3>{{ heading }}</h3>{% for line in lines %}<p class="note">{{ line }}</p>{% endfor %}{% endfor %}
+  </section>
+</div>
+{% endwith %}
+{% endblock %}

@@ -6090,6 +6090,37 @@ wording is in Site wording under "Dashboard page (owner only)"; its styles
 are `web/static/css/dashboard.css`, from the dashboard tokens in
 `tokens.css`.
 
+## Shop performance
+
+Admin, **Shop performance** (`/admin/shop-report/`, `web/shop_report.py`,
+staff only, never for editors): how the shops that pay a commission (an
+affiliate link format, eBay and Amazon) are listed, shown, clicked and
+bought from over the last 7, 30 or 90 days, with **Download spreadsheet**
+(Summary, Shops, Products, Daily and Notes sheets). The owner, 11 Nov 2026:
+"produce a listings and performance report to show how much our affiliate
+stores products are being shown, clicked on, clicked buy ... a report to
+export". For each shop:
+
+- listed now, in stock now, and cheapest now: products whose page leads
+  with it today, its Buy now (in stock first, then the cheapest delivered,
+  as the product page orders them: `views.buy_order`);
+- page views: people's views of product pages that list it now;
+- shown first: views of a product page that led with it. Each counted
+  product page view now also counts the shop it led with (DailyPageView
+  kind `lead`, keyed "shop id:product slug", `insights.record_view`), from
+  11 Nov 2026; a page rendered ahead of a tap counts it when shown
+  (`views.lead_shop`);
+- people's clicks to it, split into Buy now, price list, cards and lists,
+  and the eBay and Amazon search buttons; the product page click rate
+  (Buy now and price list clicks per 100 page views) and the Buy now rate
+  (Buy now clicks per 100 times shown first);
+- sales the networks report, not declined, with commission approved and
+  pending.
+
+Not counted, and said in the Notes sheet: how often a product card in a
+list showed a shop's price, and page views are matched to today's listings.
+Eight queries however many shops.
+
 ## Insights
 
 Admin, Insights (`/admin/insights/`) shows what visitors do: page views

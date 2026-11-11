@@ -59,8 +59,10 @@ FEW_MIN_PAGES = 200
 # user agent check, so a script that follows Buy now links counts. Such days are left out of the usual clicks
 # per person, which the Buy links checks expect, but their people still count.
 CLICKS_PER_PERSON_MAX = 1.0
-# Page totals by kind leave out the rows that are not pages anyone opened, as the By day table does.
-NOT_PAGES = [DailyPageView.Kind.WATCHED, DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS]
+# Page totals by kind leave out the rows that are not pages anyone opened, as the By day table does: watchlist rows,
+# home screen and alert events, and the shop each product page led with (counted beside its view, for Shop
+# performance).
+NOT_PAGES = [DailyPageView.Kind.WATCHED, DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS, DailyPageView.Kind.LEAD]
 
 # A change is noise below the largest of these: 5 people, 15%, or two Poisson standard deviations.
 NOISE_MIN = 5

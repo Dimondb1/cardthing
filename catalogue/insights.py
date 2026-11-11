@@ -227,13 +227,22 @@ def mark_browser(request, kind="", key="", path=""):
             online.seen(request, token, day, page=changes.get("last_page", ""), path=path, browser=True)
 
 
-def record_view(request, kind, key=""):
+def record_view(request, kind, key="", lead=None):
+    """Count a person's view of a page. ``lead``, for a product page: the shop it led with (its Buy now), as a
+    retailer id or a function giving one, counted beside the view (DailyPageView kind LEAD) and only when the view
+    is. Returns whether the view was counted."""
+    counted = False
     if request.method == "GET" and not is_bot(request):
         # The first count that finds the database locked ends counting for this page, so a visitor
         # waits at most one busy timeout, never one per count.
         with drop_if_locked("Page view"):
             if record_visitor(request, kind, key):
                 bump(DailyPageView, kind=kind, key=key[:220])
+                counted = True
+                shop = lead() if callable(lead) else lead
+                if shop:
+                    bump(DailyPageView, kind=DailyPageView.Kind.LEAD, key=f"{shop}:{key}"[:220])
+    return counted
 
 
 # Searches that are a scanner testing the site, not someone looking for cards: markup, script, template and
@@ -268,8 +277,11 @@ def report(days=30):
     searches = DailySearch.objects.filter(date__gte=since)
 
     visitors = DailyVisitor.objects.filter(date__gte=since)
-    # Watchlist rows and home screen events are counts of their own, not pages anyone opened.
-    pages = views.exclude(kind__in=[DailyPageView.Kind.WATCHED, DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS])
+    # Watchlist rows, home screen events and the shop each product page led with are counts of their own, not pages
+    # anyone opened (traffic.NOT_PAGES).
+    from .traffic import NOT_PAGES
+
+    pages = views.exclude(kind__in=NOT_PAGES)
     by_day = {row["date"]: row for row in pages.values("date").annotate(hits=Sum("hits")).order_by("date")}
     # Direct hits: sent on to the shop without tracking and left out of every other click count.
     week_since = today - timedelta(days=6)
@@ -437,7 +449,7 @@ def report(days=30):
     total_views = sum(d["views"] for d in days_out)
     total_clicks = sum(d["clicks"] for d in days_out)
     product_page_views = sum(product_views.values())
-    kinds = {row["kind"]: row["hits"] for row in views.exclude(kind__in=[DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS]).values("kind").annotate(hits=Sum("hits"))}
+    kinds = {row["kind"]: row["hits"] for row in views.exclude(kind__in=[DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS, DailyPageView.Kind.LEAD]).values("kind").annotate(hits=Sum("hits"))}
     capped = visitors.filter(views__gte=VIEWS_PER_VISITOR_CAP).count()
     install_rows = dict(
         views.filter(kind=DailyPageView.Kind.INSTALL).values_list("key").annotate(hits=Sum("hits")).values_list("key", "hits")
@@ -469,7 +481,7 @@ def report(days=30):
         "total_clicks": total_clicks,
         "click_rate": round(100 * total_clicks / product_page_views, 1) if product_page_views else 0,
         "kinds": [(label, kinds.get(code, 0)) for code, label in DailyPageView.Kind.choices
-                  if code not in (DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS)],
+                  if code not in (DailyPageView.Kind.INSTALL, DailyPageView.Kind.ALERTS, DailyPageView.Kind.LEAD)],
         "alerts": alert_counts,
         "install": install,
         "top_products": top_products,

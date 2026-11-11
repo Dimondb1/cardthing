@@ -8,6 +8,7 @@ from web import botcheck as web_botcheck
 from web import delivery as web_delivery
 from web import media as web_media
 from web import online as web_online
+from web import shop_report as web_shop_report
 from web import visibility as web_visibility
 from web import views as web_views
 
@@ -28,6 +29,8 @@ urlpatterns = [
     path("admin/add-shops/", web_add_shops.add_shops_page, name="add_shops"),
     path("admin/shop-delivery/", web_delivery.delivery_page, name="shop_delivery"),
     path("admin/visibility/", web_visibility.visibility_page, name="visibility"),
+    path("admin/shop-report/", web_shop_report.report_page, name="shop_report"),
+    path("admin/shop-report/download/", web_shop_report.report_download, name="shop_report_download"),
     path("admin/data/", web_views.data_page, name="data"),
     path("admin/data/download/<int:pk>/", web_views.data_download, name="data_download"),
     path("admin/data/upload/<int:pk>/", web_views.data_import_page, name="data_import"),

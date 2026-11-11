@@ -146,7 +146,9 @@ class AheadOfATapTests(TestCase):
         self.client.get(note + "?what=view&path=/admin/", HTTP_USER_AGENT=BROWSER)
         self.client.get(note + f"?what=view&path={url}", HTTP_USER_AGENT=BROWSER, HTTP_SEC_PURPOSE="prefetch")
         self.assertEqual(DailyPageView.objects.get(kind="game", key=self.game.slug).hits, 1)
-        self.assertEqual(DailyPageView.objects.count(), 2)
+        # The product's view, the game's, and the shop the product's page led with when it was shown (Shop performance).
+        self.assertEqual(DailyPageView.objects.exclude(kind="lead").count(), 2)
+        self.assertLessEqual(DailyPageView.objects.filter(kind="lead").count(), 1)
 
     def test_a_search_fetched_ahead_is_not_recorded(self):
         self.client.get(reverse("web:search") + "?q=box", HTTP_USER_AGENT=BROWSER, HTTP_SEC_PURPOSE="prefetch")

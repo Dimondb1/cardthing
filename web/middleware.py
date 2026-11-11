@@ -52,7 +52,8 @@ class PageViewMiddleware:
         fetched_ahead = prefetching(request) or bool(request.GET.get("pane"))
         if (response.status_code == 200 and match and match.namespace == "web" and match.url_name in KINDS
                 and not fetched_ahead):
-            record_view(request, KINDS[match.url_name], view_key(match))
+            # A product page notes the shop it led with (views.product_detail), counted with the view.
+            record_view(request, KINDS[match.url_name], view_key(match), lead=getattr(request, "lead_shop", None))
             if request.method == "GET" and not is_bot(request) and RETURN_COOKIE not in request.COOKIES:
                 response.set_cookie(
                     RETURN_COOKIE, "1", max_age=RETURN_COOKIE_DAYS * 24 * 3600,

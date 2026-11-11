@@ -1676,6 +1676,30 @@ def product_gone(request, gone):
     }, status=410)
 
 
+IN_STOCK_FIRST = {Listing.Availability.IN_STOCK: 0, Listing.Availability.PREORDER: 1}
+
+
+def buy_order(listings):
+    """The buyable ``listings`` (each with its retailer) in the order a product page gives them: in stock first, then
+    the cheapest delivered. The page leads with the cheapest shop that has the product now, as a card and a post do
+    (in_stock_offers, share.post_lead), and a cheaper pre-order follows under its own label. The owner, 6 Nov 2026,
+    after a card showing a shop's in-stock price opened a page leading with a cheaper pre-order: "I want to click the
+    one I just clicked on, otherwise it's confusing." """
+    return sorted(
+        (listing for listing in listings if listing.is_buyable),
+        key=lambda listing: (IN_STOCK_FIRST.get(listing.availability, 2), *offers.offer_order(listing),
+                             listing.retailer.name),
+    )
+
+
+def lead_shop(slug):
+    """The id of the shop a product's page leads with now, or None: for a view counted after the page was built
+    (a page rendered ahead of a tap, note_api). One query."""
+    listings = Listing.objects.filter(product__slug=slug, product__is_active=True).live().select_related("retailer")
+    found = buy_order(listings)
+    return found[0].retailer_id if found else None
+
+
 @require_GET
 def product_detail(request, slug):
     product = Product.objects.active().select_related("game", "product_set").filter(slug=slug).first()
@@ -1693,19 +1717,7 @@ def product_detail(request, slug):
         .select_related("retailer")
         .order_by("-delivery_known", "delivered_price", "retailer__name")
     )
-    # In stock first, then the cheapest delivered: the page leads with the cheapest shop that has the product now,
-    # as a card and a post do (in_stock_offers, share.post_lead), and a cheaper pre-order follows under its own
-    # label. The owner, 6 Nov 2026, after a card showing a shop's in-stock price opened a page leading with a
-    # cheaper pre-order: "I want to click the one I just clicked on, otherwise it's confusing."
-    in_stock_first = {Listing.Availability.IN_STOCK: 0, Listing.Availability.PREORDER: 1}
-    current = sorted(
-        (listing for listing in listings if listing.is_buyable),
-        key=lambda listing: (
-            in_stock_first.get(listing.availability, 2),
-            *offers.offer_order(listing),
-            listing.retailer.name,
-        ),
-    )
+    current = buy_order(listings)
     unavailable = [listing for listing in listings if not listing.is_buyable]
     # Open draws at shops we read: listed with the prices under their own label, never as stock.
     lotteries = [
@@ -1714,6 +1726,8 @@ def product_detail(request, slug):
         and not listing.is_stale and listing.sanity != Listing.Sanity.EXCLUDED
     ]
     cheapest = current[0] if current else None
+    # The shop the page leads with, its Buy now, counted with the view (web.middleware, insights.record_view).
+    request.lead_shop = cheapest.retailer_id if cheapest else None
     # The cheapest pre-order under the lead's price, when the lead is in stock: the page then calls the lead the
     # cheapest in stock, not the cheapest, and the list says it is in stock first.
     cheaper_preorder = next((listing for listing in current if listing.availability == Listing.Availability.PREORDER
@@ -2836,7 +2850,9 @@ def note_api(request):
 
         match = page_match(request.GET.get("path", ""))
         if match is not None and match.namespace == "web" and match.url_name in KINDS:
-            insights.record_view(request, KINDS[match.url_name], view_key(match))
+            key = view_key(match)
+            lead = (lambda: lead_shop(key)) if match.url_name == "product" else None
+            insights.record_view(request, KINDS[match.url_name], key, lead=lead)
             insights.mark_browser(request, KINDS[match.url_name], view_key(match), path=request.GET.get("path", ""))
             ran = True
     elif event == "here" and not clicks.prefetching(request):

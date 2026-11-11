@@ -1835,6 +1835,10 @@ class DailyPageView(models.Model):
         ALERTS = "alerts", "Stock alerts"     # keyed by event: asked, confirmed, sent, stopped
         TAPS = "taps", "Compare taps"         # keyed "where:page": a Compare prices link pressed (catalogue/clicks.py)
         GUIDE = "guide", "Guides"             # keyed by guide address; "" the Guides page (guides/views.py)
+        # The shop a counted product page led with, its Buy now (from 11 Nov 2026), keyed "shop id:product slug", for
+        # the Shop performance report (web/shop_report.py). The owner: "how much our affiliate stores products are
+        # being shown, clicked on, clicked buy".
+        LEAD = "lead", "Shown first"
         OTHER = "other", "Other"
 
     date = models.DateField(db_index=True)

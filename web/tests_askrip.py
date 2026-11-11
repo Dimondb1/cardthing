@@ -168,7 +168,7 @@ class LimitTests(AskRipCase):
             self.assertEqual(self.ask(f"Question number {n}?").json()["state"], "answered")
         response = self.ask("And a sixth?")
         self.assertEqual(response.json()["state"], "limit")
-        self.assertIn("That is your 5 questions for today.", response.json()["html"])
+        self.assertIn("That&#x27;s your 5 questions for today.", response.json()["html"])
         self.assertNotIn("<form", response.json()["html"])
         self.assertEqual(len(self.fake.sent), 5)
         # Someone else still can.
@@ -292,3 +292,54 @@ class FactTests(AskRipCase):
         offer = next(offer for offer in found["offers"] if offer["shop"] == "Kestrel Cards")
         self.assertEqual(offer["delivery"], "not known, check at the shop")
         self.assertNotIn("total", offer)
+
+
+class RipTests(AskRipCase):
+    """Rip's face follows the chat (rip_bot.html, posed by data-mood in site.css)."""
+
+    def mood(self, html):
+        import re
+
+        return re.search(r'data-mood="(\w+)"', html).group(1)
+
+    def test_rip_waits_beside_his_first_line(self):
+        from html import unescape
+
+        page = unescape(self.client.get(self.box.get_absolute_url()).content.decode())
+        self.assertEqual(self.mood(page), "idle")
+        self.assertIn('class="rip"', page)
+        self.assertIn("I'm Rip.", page)
+        self.assertIn('data-thinking="Let me check this page."', page)
+
+    def test_an_answer_makes_him_glad(self):
+        self.assertEqual(self.mood(self.ask().json()["html"]), "happy")
+
+    def test_no_answer_puzzles_him(self):
+        self.fake.answer = "It usually sells for £99.00 elsewhere."
+        self.assertEqual(self.mood(self.ask().json()["html"]), "puzzled")
+        self.assertEqual(self.mood(self.ask("  ").json()["html"]), "puzzled")
+
+    def test_used_up_for_the_day_he_is_sleepy_and_says_why(self):
+        for n in range(askrip.PER_PERSON):
+            self.ask(f"Question number {n}?")
+        from html import unescape
+
+        page = unescape(self.client.get(self.box.get_absolute_url(), REMOTE_ADDR="203.0.113.7").content.decode())
+        self.assertEqual(self.mood(page), "sleepy")
+        self.assertIn("That's your 5 questions for today.", page)
+        self.assertNotIn('name="question"', page)
+
+    def test_without_script_the_answer_page_shows_him_glad(self):
+        response = self.ask(script=False)
+        self.assertEqual(self.mood(self.client.get(response["Location"]).content.decode()), "happy")
+
+    def test_every_colour_and_move_is_a_token(self):
+        from pathlib import Path
+
+        css = (Path(__file__).parent / "static/css/site.css").read_text()
+        rules = css[css.index("/* Rip (rip_bot.html)"):css.index("/* Ask Rip: a chat with Rip")]
+        import re
+
+        # No hex colours, and no lengths or durations outside the drawing's own tokens.
+        self.assertIsNone(re.search(r"#[0-9a-fA-F]{3,6}\b", rules))
+        self.assertIsNone(re.search(r"(?<![\w-])\d+(\.\d+)?(px|rem|ms|s|deg)\b", rules.replace("48rem", "")))

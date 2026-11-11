@@ -68,6 +68,10 @@ ANSWER_SECONDS = 24 * 3600
 
 # The states the page shows after a question (product.ask.<state> in content/registry.py).
 STATES = ("answered", "limit", "busy", "closed", "empty", "failed", "declined")
+# Rip's face for each (rip_bot.html, posed in site.css): glad with an answer, sleepy when done for the day or switched
+# off, puzzled when it could not answer. ask.js adds listening while the box is typed in and thinking while it waits.
+MOODS = {"answered": "happy", "limit": "sleepy", "closed": "sleepy", "busy": "puzzled", "empty": "puzzled",
+         "failed": "puzzled", "declined": "puzzled"}
 
 SYSTEM_PROMPT = """You are Rip, the raptor who answers shoppers' questions on RipRaptor, a UK site that compares the prices of sealed trading card game products at UK shops.
 
@@ -479,9 +483,11 @@ def box(request, product, state="", token=""):
         return None
     left = left_for(request)
     state = "answered" if shown else "" if state == "answered" else state
+    if not state and left == 0:
+        state = "limit"   # back later the same day: Rip says why the box is gone
     return {
         "open": is_open, "state": state, "state_key": f"product.ask.{state}" if state else "", "shown": shown,
-        "left": left,
+        "left": left, "mood": MOODS.get(state, "idle"),
         "per_person": PER_PERSON, "hours": hours_left(request) if left == 0 else 0,
         "max_length": QUESTION_MAX,
     }

@@ -1057,6 +1057,18 @@ we need to."
   of the two web workers is always free for everyone else.
 - Without JavaScript the form posts and the page comes back with the answer
   (`?ask=<code>#ask`); `ask.js` swaps it in without a reload.
+- It reads as a chat with **Rip**, the site's own raptor from the owner's
+  `rip_bot` pack (`web/static/img/rip/`: the layered master, the five faces
+  as avatars and full marks, and the separate head, jaw and eye layers). He
+  sits beside a speech bubble and rocks gently; his face follows the chat
+  (`data-mood`): the logo's own eye while waiting, leaning in while a
+  question is typed, eyes up with thought dots while he works on it, a grin
+  with his jaw chattering as the answer comes, a tilted head and question
+  mark when he cannot answer, and closed eyes with zs once the day's
+  questions are used. The angles are the pack's own. The drawing is one
+  inline SVG built from the pack by `python scripts/build_rip.py` (run it
+  again after the pack changes), every colour a token; the sways pause off
+  screen and stop for reduced motion.
 - Every question is a `ClaudeAsk` row (kind "Ask Rip question", the
   question and answer, tokens and cost), listed in Admin under Claude
   answers, and kept out of the Claude box's own answer list.

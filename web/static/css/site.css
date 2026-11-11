@@ -1675,23 +1675,75 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .plan-order .price { color: var(--color-ink); }
 .plan-clear { margin-top: var(--space-4); }
 
-/* Ask Rip: a plain panel under the price list (web/askrip.py). The answer fades in, as feedback that it came. */
+/* Rip (rip_bot.html): the owner's raptor (web/static/img/rip/), posed by the box's data-mood with the pack's own angles:
+   which eye shows, how far the head tilts and the jaw opens, and the marks above. The rock, the blink and the jaw's
+   chatter are the owner's asked for character; every move is a transform or an opacity, and the whole of it stands
+   still for reduced motion. Angles turn about the pack's points: the head about 628 602, the jaw about 472 418. */
+.rip { flex: none; width: var(--rip-size); height: var(--rip-size); overflow: visible; }
+@media (min-width: 48rem) { .rip { width: var(--rip-size-wide); height: var(--rip-size-wide); } }
+.rip__fill-brand { fill: var(--color-brand); }
+.rip__fill-paper { fill: var(--color-paper); }
+.rip__line-brand, .rip__line-paper { fill: none; }
+.rip__line-brand { stroke: var(--color-brand); }
+.rip__line-paper { stroke: var(--color-paper); }
+.rip__body, .rip__pose, .rip__jaw { transform-box: view-box; }
+.rip__body { transform-origin: var(--rip-rock-point); }
+.rip__pose { transform-origin: var(--rip-head-point); transform: rotate(var(--rip-pose-tilt)); }
+.rip__jaw { transform-origin: var(--rip-jaw-point); transform: rotate(var(--rip-pose-jaw)); }
+.rip__eye { transform-box: fill-box; transform-origin: center; }
+.rip__eye, .rip__marks { opacity: 0; }
+/* The face for each mood: idle and listening use the logo's own eye. */
+[data-mood="idle"] .rip__eye--normal, [data-mood="listening"] .rip__eye--normal,
+[data-mood="thinking"] .rip__eye--thinking, [data-mood="thinking"] .rip__marks--thinking,
+[data-mood="happy"] .rip__eye--happy,
+[data-mood="puzzled"] .rip__eye--puzzled, [data-mood="puzzled"] .rip__marks--puzzled,
+[data-mood="sleepy"] .rip__eye--sleepy, [data-mood="sleepy"] .rip__marks--sleepy { opacity: 1; }
+[data-mood="listening"] { --rip-pose-tilt: var(--rip-listening-tilt); --rip-pose-jaw: var(--rip-listening-jaw); }
+[data-mood="thinking"] { --rip-pose-tilt: var(--rip-thinking-tilt); --rip-pose-jaw: var(--rip-jaw-shut); }
+[data-mood="happy"] { --rip-pose-jaw: var(--rip-jaw-open); }
+[data-mood="puzzled"] { --rip-pose-tilt: var(--rip-puzzled-tilt); --rip-pose-jaw: var(--rip-puzzled-jaw); }
+[data-mood="sleepy"] { --rip-pose-tilt: var(--rip-sleepy-tilt); --rip-pose-jaw: var(--rip-jaw-shut); }
+@media (prefers-reduced-motion: no-preference) {
+  .rip__pose, .rip__jaw { transition: transform var(--motion-slow) var(--ease-out); }
+  .rip__eye, .rip__marks { transition: opacity var(--motion-fast) var(--ease-standard); }
+  .rip__body { animation: rip-rock var(--rip-rock) var(--ease-standard) infinite alternate; }
+  [data-mood="thinking"] .rip__body { --rip-tilt: var(--rip-tilt-busy); animation-duration: var(--rip-rock-busy); }
+  [data-mood="sleepy"] .rip__body { animation-duration: var(--rip-rock-sleepy); }
+  [data-mood="puzzled"] .rip__body { animation: none; }
+  [data-mood="idle"] .rip__eye--normal, [data-mood="listening"] .rip__eye--normal { animation: rip-blink var(--rip-blink) linear infinite; }
+  /* An answer: Rip says it, his jaw chattering a moment before it rests in a grin. */
+  [data-mood="happy"] .rip__jaw { animation: rip-chat var(--rip-chat) var(--ease-standard) 3 alternate; }
+  [data-mood="thinking"] .rip__marks--thinking > * { animation: rip-dot var(--rip-dot) var(--ease-standard) infinite alternate; }
+  .rip__marks--thinking > :nth-child(2) { animation-delay: calc(var(--rip-dot) / 3); }
+  .rip__marks--thinking > :nth-child(3) { animation-delay: calc(var(--rip-dot) * 2 / 3); }
+  [data-mood="sleepy"] .rip__marks--sleepy > * { animation: rip-dot var(--rip-drift) var(--ease-standard) infinite alternate; }
+  .rip__marks--sleepy > :nth-child(2) { animation-delay: calc(var(--rip-drift) / 3); }
+  .rip__marks--sleepy > :nth-child(3) { animation-delay: calc(var(--rip-drift) * 2 / 3); }
+  .is-away .rip, .is-away .rip * { animation-play-state: paused; }
+}
+@keyframes rip-rock { from { transform: rotate(calc(var(--rip-tilt) * -1)); } to { transform: rotate(var(--rip-tilt)); } }
+@keyframes rip-blink { 0%, 95%, 100% { transform: scaleY(1); } 97.5% { transform: scaleY(var(--rip-blink-shut)); } }
+@keyframes rip-chat { from { transform: rotate(var(--rip-jaw-shut)); } to { transform: rotate(var(--rip-jaw-open)); } }
+@keyframes rip-dot { from { opacity: var(--opacity-waiting); } to { opacity: 1; } }
+
+/* Ask Rip: a chat with Rip under the price list (web/askrip.py). Rip speaks in a bubble beside him, the question sits
+   in its own bubble on the right, and each new line fades in, as feedback that it came. */
 .ask { display: grid; gap: var(--space-3); padding: var(--space-4) var(--card-pad); border: 1px solid var(--color-line); border-radius: var(--radius-card); scroll-margin-top: var(--space-6); }
 .ask .section-title { margin: 0; }
 /* Lines no longer than running text anywhere else, however wide the screen. */
 .ask > * { max-width: var(--measure); }
-.ask__intro { color: var(--color-ink-muted); }
+.ask__chat { display: flex; align-items: center; gap: var(--space-3); }
+.ask__bubble { position: relative; flex: 1 1 auto; min-width: 0; display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-brand-soft); }
+.ask__bubble::before { content: ""; position: absolute; top: 50%; left: calc(var(--rip-bubble-tail) / -2); width: var(--rip-bubble-tail); height: var(--rip-bubble-tail); border: solid var(--color-brand-line); border-width: 0 0 1px 1px; background: var(--color-brand-soft); transform: translateY(-50%) rotate(45deg); }
+.ask__bubble:focus { outline: none; }
+.ask__you { justify-self: end; max-width: min(85%, var(--measure)); padding: var(--space-2) var(--space-4); border-radius: var(--radius-card); background: var(--color-shelf); }
 .ask__form { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .ask__input { flex: 1 1 var(--field-short); min-width: 0; min-height: var(--tap); padding: 0 var(--space-3); border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-paper); font: inherit; font-size: var(--text-base); color: var(--color-ink); }
 .ask__input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
-.ask__answer { display: grid; gap: var(--space-2); }
-.ask__answer:focus, .ask__state:focus { outline: none; }
-.ask__who { font-weight: var(--weight-strong); }
-.ask__state { font-weight: var(--weight-strong); }
 .ask__small { font-size: var(--text-xs); color: var(--color-ink-muted); }
-.ask__small[hidden] { display: none; }
+.ask__thinking { color: var(--color-ink-muted); }
 @media (prefers-reduced-motion: no-preference) {
-  .ask__answer, .ask__state { animation: fade-in var(--motion-normal) var(--ease-out) both; }
+  .ask__bubble > *, .ask__you { animation: fade-in var(--motion-normal) var(--ease-out) both; }
 }
 
 /* Pick up where you left off ---------------------------------------------- */

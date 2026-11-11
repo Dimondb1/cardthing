@@ -426,3 +426,37 @@
 
 /* A game's written answer (web/answers.py): the column that names each kind of product, from a tablet up. */
 :root { --hub-kind: 10rem; }
+
+/* Rip, the Ask Rip character (web/templates/web/includes/rip_bot.html), from the owner's rip_bot pack. The owner, 11 Nov
+   2026: "a ripraptor bot character that moves (rocks back and forth) ... thinking smiling and expressions depending on
+   the status of the chat". The sways are longer than the usual 400ms because the owner asked for a rock, not a twitch;
+   each is a transform alone, and none runs for a visitor who asks for less motion. Points are in the drawing's own
+   units; the angles for each face are the pack's. */
+:root {
+  --rip-size: 4.75rem;             /* Rip beside the bubble on a phone */
+  --rip-size-wide: 6rem;           /* and from a tablet up */
+  --rip-rock: 1.8s;                /* one sway while waiting */
+  --rip-rock-busy: 0.4s;           /* one quicker sway while thinking */
+  --rip-rock-sleepy: 3.2s;         /* one slow sway once the day's questions are used */
+  --rip-tilt: 3deg;                /* how far a sway leans either way */
+  --rip-tilt-busy: 2deg;
+  --rip-blink: 4s;                 /* from one blink to the next */
+  --rip-blink-shut: 0.1;           /* the eye at the bottom of a blink */
+  --rip-chat: 0.28s;               /* one move of the jaw as an answer comes */
+  --rip-dot: 0.9s;                 /* a thought dot's pulse */
+  --rip-drift: 1.6s;               /* a sleepy z's pulse */
+  --rip-rock-point: 640px 960px;   /* the sway turns about the cut under the head */
+  --rip-head-point: 628px 602px;   /* the pack's tilt for each face turns here */
+  --rip-jaw-point: 472px 418px;    /* the jaw's hinge */
+  --rip-pose-tilt: 0deg;           /* the head and jaw at rest, the logo's own; each mood sets its own below */
+  --rip-pose-jaw: 0deg;
+  --rip-jaw-shut: -6deg;           /* thinking and sleepy */
+  --rip-jaw-open: 7deg;            /* happy */
+  --rip-puzzled-jaw: 3deg;
+  --rip-puzzled-tilt: -6deg;
+  --rip-thinking-tilt: 3deg;
+  --rip-sleepy-tilt: 7deg;
+  --rip-listening-tilt: -2deg;     /* leaning in while a question is typed */
+  --rip-listening-jaw: 3deg;
+  --rip-bubble-tail: 0.7rem;       /* the speech bubble's point */
+}

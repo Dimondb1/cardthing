@@ -471,6 +471,21 @@ class Retailer(models.Model):
         blank=True,
         help_text="Orders of this value or more are delivered free. Leave empty if never.",
     )
+    # A discount code the shop gave for RipRaptor shoppers, shown beside its prices (never taken off them: a code's
+    # terms, such as a first order only, are the shop's to apply). The owner, 11 Nov 2026, adding Topaz Cards with
+    # RIPRAPTOR5: "include compatability for discount codes".
+    discount_code = models.CharField(
+        max_length=40, blank=True,
+        help_text="A code the shop gave for RipRaptor shoppers, shown beside its prices, for example RIPRAPTOR5. "
+                  "To stop showing one, set its last day below rather than emptying it: a code the shop list sets "
+                  "comes back when emptied.")
+    discount_terms = models.CharField(
+        max_length=120, blank=True,
+        help_text="What the code gives, as the shop puts it, for example “5% off your first order”. Shown after the "
+                  "code.")
+    discount_ends = models.DateField(
+        null=True, blank=True,
+        help_text="The last day the code works, if the shop gave one. It disappears from the site after that day.")
 
     class Source(models.TextChoices):
         MANUAL = "manual", "Entered by hand"
@@ -657,6 +672,13 @@ class Retailer(models.Model):
         if error:
             self.last_error = error[:300]
         self.save(update_fields=["error_streak", "backoff_until", "failing_since", "last_error"])
+
+    @property
+    def discount(self):
+        """(code, terms) to show beside the shop's prices now, or None: no code, or one past its last day."""
+        if not self.discount_code or (self.discount_ends and self.discount_ends < timezone.localdate()):
+            return None
+        return self.discount_code, self.discount_terms
 
     def delivery_for(self, price):
         """Delivery charge for one item at ``price`` under this retailer's rules, or None when not known.

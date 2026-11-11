@@ -45,6 +45,7 @@
         <svg class="buy-now__arrow" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12h15m-6-6.5 6.5 6.5-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span class="visually-hidden">{{ cheapest.shown_price|gbp }} (opens in a new tab)</span>
       </a>
+      {% with code=cheapest.retailer.discount %}{% if code %}<p class="buybox__code">{% include "web/includes/discount_code.html" %}</p>{% endif %}{% endwith %}
       </div>
     {% elif has_listings %}
       <p class="buybox__none">{% copy "product.out_of_stock.message" %}</p>
@@ -88,6 +89,7 @@
       {% include "web/includes/list_button.html" with list_count=list_slugs|length %}</div>
     {% if track_on %}{% include "web/includes/track_form.html" %}{% endif %}
     {% include "web/includes/share_box.html" %}
+    {% if ask %}<p class="buybox__ask"><a href="#ask">{% copy "product.ask.jump" %}</a></p>{% endif %}
     {% if guide_door %}<p class="buybox__guide"><a href="{{ guide_door.url }}">{{ guide_door.line }}</a></p>{% endif %}
     {% if amazon_search and cheapest %}
       <div class="buybox__amazon">

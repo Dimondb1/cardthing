@@ -234,6 +234,10 @@ class RetailerAdmin(admin.ModelAdmin):
                                 "error_streak", "backoff_until", "last_error", "reading_paused",
                                 "collections_polled_at", "collections_ok")}),
         ("Links", {"fields": ("affiliate_url_template",)}),
+        ("Discount code", {"fields": ("discount_code", "discount_terms", "discount_ends"),
+                           "description": "Shown beside this shop's prices, in the price box when it leads, on the "
+                                          "shopping list and the Shops page, with a Copy button. The prices "
+                                          "compared stay without it: the shop decides who it applies to."}),
     )
 
     @admin.display(description="Affiliate link", boolean=True)

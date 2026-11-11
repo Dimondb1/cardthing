@@ -393,3 +393,21 @@ document.addEventListener("ripraptor:content", (event) => {
     pick(tabs[0], false);
   }
 }
+
+// A shop's discount code (discount_code.html): Copy is shown only where this browser can copy, and says Copied for a
+// moment once it has. Without it the code is there to read and type.
+(() => {
+  if (!navigator.clipboard || !window.isSecureContext) return;
+  const show = () => document.querySelectorAll("[data-copy-code][hidden]").forEach((button) => { button.hidden = false; });
+  show();
+  document.addEventListener("ripraptor:content", show);
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-copy-code]");
+    if (!button) return;
+    navigator.clipboard.writeText(button.dataset.copyCode).then(() => {
+      if (!button.dataset.label) button.dataset.label = button.innerHTML;
+      button.textContent = button.dataset.copied || "";
+      setTimeout(() => { button.innerHTML = button.dataset.label; }, 2000);
+    }).catch(() => {});
+  });
+})();

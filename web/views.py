@@ -3911,7 +3911,8 @@ CLAUDE_JOBS = {
 SHOPPER_JOBS = {
     "ask": ("", "Ask Rip",
             "Answers shoppers' questions on product pages from the page's own prices and facts, 5 a person a day, on "
-            "Claude Haiku 5.5. Untick to hide the box at once. Switch Claude off does not stop it; this tick does."),
+            "Claude Haiku 5.5. Untick to hide the box at once. Only its own limit applies: Switch Claude off and the "
+            "shared limit leave it on."),
 }
 
 
@@ -4010,6 +4011,9 @@ def claude_page(request):
         cap = judge.job_cap_micros(job)
         jobs.append({
             "name": name, "title": title, "does": does, "on": job.on, "cap": job.monthly_budget_usd,
+            # Whether shoppers see Ask Rip now, and if not why (the owner, 11 Nov 2026: "Can't actually find where
+            # this is meant to be on the site").
+            "status": askrip.CLOSED_WORDS.get(askrip.work_out_closed(now), "") if name == "ask" else "",
             "asked_month": asked_month, "spent_month": judge.dollars(spent_month),
             "asked_today": asked_today, "spent_today": judge.dollars(spent_today),
             "cached": round(100 * read / all_input) if all_input else None,

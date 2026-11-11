@@ -20,6 +20,7 @@
   <div class="plan-order__head">
     <h2 class="plan-order__shop" id="order-{{ forloop.counter }}">{{ order.retailer.name }}{% if order.marketplace %} <span class="plan-order__seller">{% copy "list.order.seller" %}</span>{% endif %}</h2>
     <p class="plan-order__sum">{% if order.delivery is None %}{% copy "list.order.unknown" subtotal=order.subtotal|gbp %}{% elif order.delivery %}{% copy "list.order.delivery" subtotal=order.subtotal|gbp delivery=order.delivery|gbp price=order.total|gbp %}{% else %}{% copy "list.order.free" subtotal=order.subtotal|gbp %}{% endif %}{% if order.delivery and order.retailer.free_delivery_over and not order.marketplace %} {% copy "list.order.free_over" threshold=order.retailer.free_delivery_over|gbp %}{% endif %}</p>
+    {% with code=order.retailer.discount %}{% if code %}<p class="plan-order__code">{% include "web/includes/discount_code.html" %}</p>{% endif %}{% endwith %}
   </div>
   <ul class="watch">
     {% for listing in order.listings %}{% with product=listing.product %}

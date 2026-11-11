@@ -54,7 +54,7 @@
       <thead><tr><th>Job</th><th>On</th><th class="num">This month</th><th class="num">Today</th><th class="num">From cache</th><th class="num">Own limit ($)</th></tr></thead>
       <tbody>{% for job in jobs %}
         <tr data-job="{{ job.name }}">
-          <td><label for="on_{{ job.name }}"><b>{{ job.title }}</b></label><span class="does">{{ job.does }}</span></td>
+          <td><label for="on_{{ job.name }}"><b>{{ job.title }}</b></label><span class="does">{{ job.does }}</span>{% if job.status %}<span class="does"><b>{{ job.status }}</b></span>{% endif %}</td>
           <td data-label="On"><input type="checkbox" id="on_{{ job.name }}" name="on_{{ job.name }}"{% if job.on %} checked{% endif %}></td>
           <td class="num" data-label="This month">{{ job.spent_month }}, {{ job.asked_month|number }} asked{% if job.at_limit %} <span class="at">(at its limit)</span>{% endif %}</td>
           <td class="num" data-label="Today">{{ job.spent_today }}, {{ job.asked_today|number }} asked</td>

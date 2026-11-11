@@ -2099,6 +2099,12 @@ ENTRIES = [
         "Button on the Amazon row at the foot of the price list.",
     ),
     # Report a problem with a listing (web/views.py report_listing, includes/report_form.html).
+    Entry("product.code.label", T, "Discount code label", "Code",
+          "Before a shop's discount code, beside its prices, in the price box, on the shopping list and Shops page."),
+    Entry("product.code.copy", B, "Copy code button", "Copy code", "Copies the shop's discount code."),
+    Entry("product.code.copied", T, "Code copied", "Copied", "Shown on the button once the code is copied."),
+    Entry("product.ask.jump", B, "Ask Rip link in the price box", "Ask Rip a question about this",
+          "Under the price box: goes to the Ask Rip box further down the page."),
     Entry("product.ask.title", H, "Ask Rip: heading", "Ask Rip", "Heading of the question box under the price list."),
     Entry("product.ask.intro", T, "Ask Rip: what it is",
           "I'm Rip. Ask me about this product's prices, stock, delivery or what is inside, and I'll answer from this "
@@ -3635,6 +3641,13 @@ ENTRIES = [
         "terms.data.manage", P, "Your alerts data",
         "You can see and stop all your alerts from the watchlist page, using a link we email you.",
         "Data section of the terms page, after the search alerts: the Your alerts link.",
+        legal=True,
+    ),
+    Entry(
+        "terms.codes", P, "Discount codes",
+        "Some shops give a discount code for RipRaptor shoppers, which we show beside their prices. The shop sets the "
+        "code and its terms and decides whether it applies to your order. The prices we compare are before any code.",
+        "Terms page, under Using RipRaptor: what a discount code beside a shop's prices means.",
         legal=True,
     ),
     Entry(

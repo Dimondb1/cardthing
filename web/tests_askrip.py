@@ -225,11 +225,34 @@ class SwitchTests(AskRipCase):
         self.assertNotContains(self.client.get(self.box.get_absolute_url()), 'id="ask"')
         self.assertEqual(self.ask().json()["state"], "closed")
 
-    def test_claudes_shared_limit_stops_it_too(self):
+    def test_the_background_jobs_shared_limit_leaves_it_on(self):
+        """Its own limit is its only one: a busy month of sorting never takes it off the site (the owner, 11 Nov
+        2026: "Can't actually find where this is meant to be on the site")."""
         ClaudeJudge.objects.update_or_create(pk=1, defaults={"monthly_budget_usd": Decimal("1.00")})
         ClaudeAsk.objects.create(kind="offer", row_key="offer:1", fingerprint="x", model_asked="claude-opus-5-5",
                                  effort="medium", outcome="answered", cost_micros=1_000_000)
-        self.assertEqual(self.ask().json()["state"], "closed")
+        self.assertEqual(self.ask().json()["state"], "answered")
+
+    def test_a_background_jobs_fault_leaves_it_on_but_no_credit_hides_it(self):
+        from django.utils import timezone
+
+        ClaudeJudge.objects.update_or_create(pk=1, defaults={"problem": "bug", "problem_at": timezone.now()})
+        self.assertContains(self.client.get(self.box.get_absolute_url()), 'id="ask"')
+        ClaudeJudge.objects.filter(pk=1).update(problem="credit")
+        cache.clear()
+        self.assertNotContains(self.client.get(self.box.get_absolute_url()), 'id="ask"')
+
+    def test_the_price_box_says_where_it_is(self):
+        page = self.client.get(self.box.get_absolute_url())
+        self.assertContains(page, '<a href="#ask">Ask Rip a question about this</a>')
+
+    def test_the_claude_page_says_whether_shoppers_see_it(self):
+        owner = get_user_model().objects.create_superuser("owner", "o@example.com", "pw")
+        self.client.force_login(owner)
+        self.assertContains(self.client.get(reverse("claude")), "Showing on every product page, under the price list.")
+        ClaudeJob.objects.create(name="ask", on=False)
+        cache.clear()
+        self.assertContains(self.client.get(reverse("claude")), "Hidden: switched off here.")
 
     def test_switch_claude_off_leaves_ask_rip_on(self):
         ClaudeJudge.objects.update_or_create(pk=1, defaults={"enabled": False})
@@ -285,6 +308,14 @@ class FactTests(AskRipCase):
         found, _amounts, _checked = askrip.facts(self.box)
         self.assertEqual(found["not_for_sale_now_at"], ["Moor Toys"])
         self.assertNotIn("Moor Toys", [offer["shop"] for offer in found["offers"]])
+
+    def test_a_shops_discount_code_is_told_with_its_terms(self):
+        Retailer.objects.filter(pk=self.kestrel.pk).update(discount_code="RIPRAPTOR5", discount_terms="5% off your first order")
+        found, _amounts, _checked = askrip.facts(self.box)
+        offer = next(offer for offer in found["offers"] if offer["shop"] == "Kestrel Cards")
+        self.assertEqual(offer["discount_code"], "RIPRAPTOR5, 5% off your first order, the shop's own offer; not taken "
+                                                 "off the price")
+        self.assertNotIn("discount_code", found["offers"][0])
 
     def test_unknown_delivery_is_said_plainly(self):
         Listing.objects.filter(retailer=self.kestrel).update(delivery_known=False)

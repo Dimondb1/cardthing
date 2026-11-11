@@ -8,8 +8,9 @@ to spend anymore than £25 at the start ... Make sure we can disable it when we 
   count their questions (PER_PERSON in WINDOW). The same is said on the Terms page.
 * Each question goes to Claude Haiku 5.5, the cheapest model, with thinking off and a short answer: about a
   fiftieth of a US cent each. It is the Claude page's Ask Rip job (catalogue/judge.py JOBS), so the owner switches it
-  off there, and it has a monthly limit of its own, $30 until the owner saves another (judge.JOB_DEFAULT_LIMITS), inside
-  Claude's shared limit. It is not stopped by Switch Claude off, which is for the background jobs.
+  off there, and it has a monthly limit of its own, $30 until the owner saves another (judge.JOB_DEFAULT_LIMITS). That
+  is its only limit: the background jobs' shared one, Switch Claude off and a background job's fault leave it be, so a
+  busy month of sorting never takes it off the site. Only a refused key or no credit hides it (ACCOUNT_PROBLEMS).
 * Claude is sent only what the page shows (facts): the shops' prices, delivery and stock, each with when it was
   checked, what is inside, the RRP and our own price record. It is told to answer from those alone, and an answer
   naming a price that is not among them, or the sum or gap of two of them, is not shown (unknown_amounts).
@@ -100,6 +101,20 @@ def worst_micros(characters):
 TYPICAL_WORST = worst_micros(len(SYSTEM_PROMPT) + 6000)
 
 
+# The Claude box's problems that stop Ask Rip too: the key Anthropic refused, or no credit left on the account.
+ACCOUNT_PROBLEMS = ("key", "credit")
+# What the Claude page says of Ask Rip for each reason it takes no questions (claude_page).
+CLOSED_WORDS = {
+    "": "Showing on every product page, under the price list.",
+    "server_off": "Hidden: Claude is switched off in the server settings.",
+    "no_key": "Hidden: Claude has no key. Save one under Claude settings and key on Things to check.",
+    "stopped": "Hidden: Anthropic refused the key or reported no credit left. It shows again once they accept it.",
+    "off": "Hidden: switched off here. Tick it and Save jobs to show it.",
+    "job": "Hidden: it reached its own monthly limit. Raise it here, or it shows again next month.",
+    "day": "Hidden for today: 500 questions were asked. It shows again tomorrow.",
+}
+
+
 def work_out_closed(now):
     """Why Rip takes no questions now, or "". A few queries."""
     if not settings.RIPRAPTOR_CLAUDE:
@@ -108,13 +123,15 @@ def work_out_closed(now):
         return "no_key"
     if cache.get(STOPPED_KEY):
         return "stopped"
+    # Only what stops every question to Anthropic: a refused key or no credit. A fault in a background job, or the
+    # background jobs reaching their shared monthly limit, leaves Ask Rip to its own limit (the owner's £25).
     state = ClaudeJudge.current()
-    if judge.is_stopped(state, now):
+    if state.problem in ACCOUNT_PROBLEMS and judge.is_stopped(state, now):
         return "stopped"
+    if not judge.job_on(KIND):
+        return "off"
     if judge.job_room(KIND, TYPICAL_WORST, now):
-        return "job"   # switched off on the Claude page, or at its own monthly limit
-    if judge.spent_this_month(now) + TYPICAL_WORST > judge.monthly_limit_micros(state):
-        return "limit"
+        return "job"   # at its own monthly limit
     if (cache.get(day_key(now)) or 0) >= PER_DAY:
         return "day"
     return ""
@@ -248,6 +265,10 @@ def facts(product, now=None):
             offer["marketplace"] = "a seller on a marketplace, not a UK shop we read"
         if listing.has_deal:
             offer["multi_buy"] = f"{listing.deal_quantity} for {money(listing.deal_price)}"
+        if retailer.discount:
+            code, terms = retailer.discount
+            offer["discount_code"] = f"{code}, {terms}, the shop's own offer; not taken off the price" if terms \
+                else f"{code}, the shop's own offer; not taken off the price"
         offers.append(offer)
     others = sorted({listing.retailer.name for listing in listings if not listing.is_buyable
                      and listing.sanity != Listing.Sanity.EXCLUDED} - {offer["shop"] for offer in offers})
@@ -428,8 +449,7 @@ def ask(request, product, question, now=None, client=None):
 def send(product, question, found, amounts, checked, token, print_, now, client=None):
     params = request_params(found, question)
     worst = worst_micros(len(SYSTEM_PROMPT) + len(params["messages"][0]["content"]))
-    state = ClaudeJudge.current()
-    if judge.job_room(KIND, worst, now) or judge.spent_this_month(now) + worst > judge.monthly_limit_micros(state):
+    if judge.job_room(KIND, worst, now):
         reopen()
         return "closed"
     ask = Ask.objects.create(

@@ -475,6 +475,21 @@ its own data, with its delivery unknown until the daily delivery check reads
 it. The page lists every shop pasted with the result and why, refreshes
 itself while any wait, and a shop not added can be checked again.
 
+**Discount codes** (Admin, a shop's page, Discount code: `discount_code`,
+`discount_terms`, `discount_ends`; `Retailer.discount`): a code a shop gives
+for RipRaptor shoppers is shown beside its prices in the price list, in the
+price box when it leads, on the shopping list and on the Shops page, with a
+Copy button where the browser can copy. It disappears after its last day.
+The prices compared stay without it, since the shop decides who it applies
+to (a first order only, say); the Terms say so, and Ask Rip is told the
+code with its terms. A code in `setup_shops.DISCOUNTS` is set on a shop
+with no code, terms or last day; one changed in Admin stays. To stop
+showing a code, set its last day to yesterday rather than emptying it: an
+emptied code from the list comes back at the next update. The owner,
+11 Nov 2026, adding Topaz Cards (Squarespace, read as a Website shop, £3.99
+one fee per order) with RIPRAPTOR5, 5% off a first order: "include
+compatability for discount codes".
+
 ## Delivery charges
 
 **Shop delivery** (Admin home, or Set their delivery on the dashboard's Shops
@@ -1040,15 +1055,22 @@ we need to."
   and does not count. A question that fails on our side does not count.
 - Spending: it is the Claude page's **Ask Rip** job, with a monthly limit
   of its own of $30 until you save another (`judge.JOB_DEFAULT_LIMITS`),
-  under £25 while a pound buys more than $1.20, and inside Claude's shared
-  monthly limit. Each answer costs about a fiftieth of a US cent (thinking
-  off, at most 400 output tokens), so $30 is over 100,000 answers. The
-  site also stops at 500 questions a day, whoever asks them.
+  under £25 while a pound buys more than $1.20. That is its only limit: the
+  background jobs' shared monthly limit does not hide it, so a busy month of
+  sorting never takes it off the site. Each answer costs about a fiftieth of
+  a US cent (thinking off, at most 400 output tokens), so $30 is over
+  100,000 answers. The site also stops at 500 questions a day, whoever asks
+  them.
 - Switching it off: untick **Ask Rip** on the Claude page and Save jobs; the
   box goes from every product page at once. **Switch Claude off** does not
   stop it (that switch is for the background jobs). It also hides itself
-  with no key, with `RIPRAPTOR_CLAUDE=0`, at either limit, and for an hour
-  after Anthropic refuses the key or reports no credit.
+  with no key, with `RIPRAPTOR_CLAUDE=0`, at its own limit, and while
+  Anthropic refuses the key or reports no credit (a background job's own
+  fault does not hide it). The Ask Rip row on the Claude page says whether
+  shoppers see it now and, if not, why (`askrip.CLOSED_WORDS`).
+- Where: under the price list on every product page, with an "Ask Rip a
+  question about this" link under the price box that goes to it. The owner,
+  11 Nov 2026: "Can't actually find where this is meant to be on the site".
 - An answer that names a price the page does not show (or the sum or gap
   of two it does) is not shown; dashes, exclamation marks and formatting are
   taken out. Email addresses, phone numbers and links are taken out of the

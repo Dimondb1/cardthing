@@ -327,7 +327,17 @@ SHOPS = [
      "Delivery charge not yet confirmed"),
     ("lennies-toys", "Lennies Toys", "https://lennies.com/", S.SHOPIFY, None, "50",
      "Free over £50 (delivery page); standard charge not yet confirmed, read 8 Nov 2026"),
+    # Asked to be listed through List your shop, 11 Nov 2026. A Squarespace shop: its sitemap's product pages carry
+    # the price and stock (the Website source), as the Add shops check found.
+    ("topaz-cards", "Topaz Cards", "https://topaz-cards.co.uk/", S.WEBSITE, "3.99", None,
+     "Royal Mail Tracked 48 £3.99, one fixed fee per order whatever its size (delivery page), read 11 Nov 2026"),
 ]
+
+# Discount codes shops gave for RipRaptor shoppers (Retailer.discount_code): (code, what it gives). Set on a shop with
+# no code, terms or last day; a code changed in admin, or ended there with a last day, stays as it is.
+DISCOUNTS = {
+    "topaz-cards": ("RIPRAPTOR5", "5% off your first order"),   # the shop's own offer, 11 Nov 2026
+}
 
 # Added only once the Amazon API keys are set. Delivery figures are Amazon's
 # published standard rates for items it dispatches; sellers' own charges vary.
@@ -453,6 +463,9 @@ class Command(BaseCommand):
                 if cost is None and existing.delivery_cost == 0:
                     existing.delivery_cost = None
                     changed.append("delivery_cost")
+                if slug in DISCOUNTS and not (existing.discount_code or existing.discount_terms or existing.discount_ends):
+                    existing.discount_code, existing.discount_terms = DISCOUNTS[slug]
+                    changed += ["discount_code", "discount_terms"]
                 up_to = DELIVERY_UP_TO.get(slug)
                 if up_to and existing.delivery_cost_up_to is None:
                     existing.delivery_cost_up_to = Decimal(up_to)
@@ -473,6 +486,7 @@ class Command(BaseCommand):
                 delivery_cost=Decimal(cost) if cost is not None else None,
                 delivery_cost_up_to=Decimal(DELIVERY_UP_TO[slug]) if slug in DELIVERY_UP_TO else None,
                 free_delivery_over=Decimal(free) if free else None, delivery_note=note,
+                discount_code=DISCOUNTS.get(slug, ("", ""))[0], discount_terms=DISCOUNTS.get(slug, ("", ""))[1],
             )
             self.stdout.write(f"{name}: added")
         self.set_cadence()

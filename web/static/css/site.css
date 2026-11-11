@@ -1650,6 +1650,20 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .history__empty { margin-top: var(--space-4); color: var(--color-ink-muted); }
 .restock-note { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
 
+/* A shop's discount code (discount_code.html): a saving, so green, the code itself in a fixed-width face so it reads
+   exactly, with Copy beside it once site.js can copy. Beside the shop's prices, never taken off them. */
+.code-chip { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-2); font-size: var(--text-sm); color: var(--color-price); }
+.code-chip__label { font-weight: var(--weight-strong); }
+.code-chip__code { padding: 0 var(--space-2); border: var(--border-width) dashed var(--color-price); border-radius: var(--radius-sm); background: var(--color-price-soft); font-family: var(--font-code); font-weight: var(--weight-strong); color: var(--color-price); }
+.code-chip__terms { flex-basis: 100%; color: var(--color-ink-muted); }
+.code-chip__copy { min-height: var(--tap); padding: 0 var(--space-1); border: 0; background: none; font: inherit; font-weight: var(--weight-strong); color: var(--color-brand-text); text-decoration: underline; cursor: pointer; }
+.code-chip__copy[hidden] { display: none; }
+.offer__code { grid-column: 1 / -1; }
+.buybox__code { margin-top: var(--space-2); }
+.buybox__ask { margin-top: var(--space-3); font-size: var(--text-sm); }
+.plan-order__code, .shop-table__code { display: block; }
+.shop-table__code { margin-top: var(--space-1); font-weight: var(--weight-body); }
+
 /* Add to list in the price box: a form, laid out as the buttons beside it are. */
 .list-button { display: flex; flex: 1 1 auto; }
 .list-button__form { display: flex; flex: 1 1 auto; }

@@ -338,6 +338,9 @@ RIPRAPTOR_EBAY_DAILY_LIMIT = int(os.environ.get("RIPRAPTOR_EBAY_DAILY_LIMIT", "4
 # Price imports may record a retailer's product image for products that have
 # no uploaded image. Turn off if you would rather upload every image yourself.
 RIPRAPTOR_USE_FEED_IMAGES = env_bool("RIPRAPTOR_USE_FEED_IMAGES", default=True)
+# The hourly picture check (catalogue/pictures.py) asks shops whether their pictures are still there. Off in the
+# tests, which never reach the internet; a test turns it on with a fake answer.
+RIPRAPTOR_CHECK_PICTURES = env_bool("RIPRAPTOR_CHECK_PICTURES", default=not TESTING)
 
 # Price imports may add sealed products they find in shops to the catalogue.
 RIPRAPTOR_AUTO_CATALOGUE = env_bool("RIPRAPTOR_AUTO_CATALOGUE", default=True)

@@ -90,6 +90,18 @@ class Command(BaseCommand):
             self.stdout.write(f"{done['direct'] + done['flood']} automated visitors and {done['clicks']} clicks "
                               f"marked, {online.forget()} gone visitors' addresses deleted.")
 
+        # Pictures a shop has deleted or renamed, taken off before a list shows them broken (catalogue/pictures.py).
+        from django.conf import settings
+
+        if settings.RIPRAPTOR_CHECK_PICTURES:
+            from catalogue import pictures
+
+            self.stdout.write("== pictures")
+            done = pictures.check(dry_run=dry_run, log=self.stdout.write if dry_run else None)
+            self.stdout.write(f"{done['checked']} product pictures checked, {done['gone']} found gone and "
+                              f"{'would be ' if dry_run else ''}taken off ({done['replaced']} given another shop's "
+                              "picture).")
+
         # Counted here, never while the Insights page waits: a big shop's list runs to thousands of lines.
         from catalogue.insights import count_left_out
 

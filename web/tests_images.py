@@ -413,3 +413,30 @@ class OrganizationTests(TestCase):
         self.assertNotIn("LocalBusiness", body)
         for absent in ("twitter.com", "x.com/", "linkedin.com", "youtube.com", "fbq(", "connect.facebook.net"):
             self.assertNotIn(absent, body)
+
+
+class PictureOutlineTests(TestCase):
+    """A shop's picture that will not load at all gives way to its type's outline (site.js outline, from the page's
+    one set of them, picture_outlines.html). The owner, 11 Nov 2026, with broken pictures in the sets on the home
+    page: "Why are these products got broken picture links"."""
+
+    def setUp(self):
+        self.box = make_product(make_set(make_game()), name="Pitch Black Booster Box", slug="pitch-black-box",
+                                product_type="booster_box")
+        Product.objects.filter(pk=self.box.pk).update(image_url="https://shop.example/files/pitch-black.png")
+        make_listing(self.box, make_retailer("Harbour Games"), price="150.00")
+
+    def test_each_picture_names_its_type_and_the_page_carries_every_outline_once(self):
+        body = self.client.get(self.box.get_absolute_url()).content.decode()
+        self.assertIn('data-type="booster_box"', body)
+        self.assertEqual(body.count("<template data-outlines>"), 1)
+        outlines = body[body.index("<template data-outlines>"):body.index("</template>", body.index("<template data-outlines>"))]
+        for kind, _label in Product.Type.choices:
+            with self.subTest(kind=kind):
+                self.assertIn(f'data-outline="{kind}"', outlines)
+        self.assertIn('class="placeholder"', outlines)
+
+    def test_the_script_puts_the_outline_in_a_broken_pictures_place(self):
+        script = (Path(__file__).parent / "static" / "js" / "site.js").read_text()
+        self.assertIn('document.querySelector("template[data-outlines]")', script)
+        self.assertIn("img.replaceWith(shape.cloneNode(true))", script)

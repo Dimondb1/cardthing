@@ -49,6 +49,7 @@
   {% include "web/includes/install.html" %}
   {% block refer_card %}{% if refer_asked %}<script nonce="{{ csp_nonce }}" src="{% static 'js/refer-card.js' %}" data-refer-asked defer></script>{% elif refer_card %}{% include "web/includes/refer_card.html" %}{% endif %}{% endblock %}
   {% if ga_id and not private_link %}{% include "web/includes/consent.html" %}{% endif %}
+  {% picture_outlines %}
   {% if awin_publisher_id and not private_link %}<script nonce="{{ csp_nonce }}" src="https://www.dwin2.com/pub.{{ awin_publisher_id }}.min.js"></script>{% endif %}
 </body>
 </html>

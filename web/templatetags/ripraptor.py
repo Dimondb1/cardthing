@@ -289,6 +289,22 @@ def product_image(product, size="thumb"):
     )
 
 
+@register.simple_tag
+def picture_outlines():
+    """Every product type's outline, once a page, in a template for site.js (picture_outlines.html). The same on every
+    page, so it is drawn once a process."""
+    global _OUTLINES
+    if _OUTLINES is None:
+        from catalogue.models import Product
+
+        _OUTLINES = mark_safe(render_to_string("web/includes/picture_outlines.html",
+                                               {"kinds": [kind for kind, _label in Product.Type.choices]}))
+    return _OUTLINES
+
+
+_OUTLINES = None
+
+
 @register.filter
 def link_email(text, email):
     """Escape ``text`` and turn ``email`` inside it into a mailto link."""

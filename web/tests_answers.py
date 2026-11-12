@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.db.models import Max
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -364,7 +365,10 @@ class CompareGuideTests(AnswersCase):
         self.assertEqual(article["headline"], "How to compare sealed TCG prices in the UK")
         self.assertEqual(article["datePublished"], "2026-11-09")
         self.assertGreaterEqual(article["dateModified"], article["datePublished"])
-        self.assertEqual(article["dateModified"], max(date(2026, 11, 9), timezone.localdate()).isoformat())
+        # The day its examples' prices were last checked (guides.compare.modified): an hour ago in these tests, which
+        # is yesterday in the first hour after midnight.
+        latest = Listing.objects.aggregate(latest=Max("last_checked"))["latest"]
+        self.assertEqual(article["dateModified"], max(date(2026, 11, 9), timezone.localtime(latest).date()).isoformat())
         self.assertEqual(article["mainEntityOfPage"], f"http://testserver{GUIDE}")
         self.assertEqual(article["publisher"]["name"], "RipRaptor")
         (crumbs,) = of_type(html, "BreadcrumbList")

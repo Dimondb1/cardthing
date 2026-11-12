@@ -238,6 +238,10 @@ class Product(models.Model):
         help_text="Filled in by price imports when no image has been uploaded. An uploaded "
         "image always takes priority.",
     )
+    # The picture check (catalogue/pictures.py): when the shop's picture was last looked at, and the last address
+    # found gone, which no read puts back.
+    image_checked_at = models.DateTimeField("picture checked", null=True, blank=True, editable=False)
+    image_failed = models.URLField("picture found gone", max_length=1000, blank=True, editable=False)
     ean = models.CharField("barcode", max_length=20, blank=True, db_index=True)
     amazon_asin = models.CharField(
         "Amazon product id", max_length=20, blank=True,

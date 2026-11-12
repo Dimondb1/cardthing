@@ -272,9 +272,24 @@ if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: re
 // Product images settle in once loaded rather than popping, in the page and in lists added later
 // (the stock tabs send ripraptor:content with the new list).
 // A resized copy the shop's CDN cannot make (the shop replaced the file) falls back to the address we hold.
+// A picture that will not load at all (the shop deleted or renamed it) gives way to its product type's outline,
+// from the page's one set of them (picture_outlines.html), as a product with no picture shows: never a broken
+// picture with the product's name spilling out. The owner, 11 Nov 2026, with two sets on the home page.
+function outline(img) {
+  const kit = document.querySelector("template[data-outlines]");
+  const kind = img.dataset.type || "";
+  const holder = kit && (kit.content.querySelector(`[data-outline="${kind.replace(/[^a-z_]/g, "")}"]`)
+    || kit.content.querySelector("[data-outline]"));
+  const shape = holder && holder.firstElementChild;
+  if (shape) img.replaceWith(shape.cloneNode(true));
+  else img.hidden = true;
+}
 function fullSize(img) {
   const full = img.dataset.full;
-  if (!full || img.getAttribute("src") === full) return;
+  if (!full || img.getAttribute("src") === full) {
+    outline(img);
+    return;
+  }
   img.removeAttribute("srcset");
   img.removeAttribute("sizes");
   img.src = full;

@@ -1723,7 +1723,20 @@ network is the way in for all of these.
    not be matched, so you can add the missing barcodes.
 4. **Images.** Price imports keep the retailer's product image for any
    product without one (`RIPRAPTOR_USE_FEED_IMAGES`, on by default). An
-   uploaded image always wins. Admin > Products can be filtered by image and
+   uploaded image always wins. The picture is the shop's own, linked, so a
+   shop that deletes or renames the file leaves it dead: every hour
+   `tidy_all` asks shops whether their pictures are still there (HEAD
+   requests, those on sale first, each again after a week; `catalogue/pictures.py`,
+   `RIPRAPTOR_CHECK_PICTURES`). A picture the shop says is gone (404 or 410,
+   or a page in its place) is taken off and kept aside, another shop's
+   picture of the product goes in when one is known and loads, and otherwise
+   the next read of any shop that lists it gives it that shop's picture now,
+   never the gone one. Meanwhile, and for any picture that will not load in
+   a visitor's browser, `site.js` shows the product type's outline (from
+   `picture_outlines.html`, once a page) instead of a broken picture: a small
+   copy the shop cannot make falls back to the original first. The owner,
+   11 Nov 2026, found broken pictures on two sets on the home page.
+   Admin > Products can be filtered by image and
    by barcode, and barcodes can be edited in the list or loaded in bulk with
    `python manage.py import_barcodes barcodes.csv` (columns `ean` and `slug`
    or `name`).
@@ -3018,6 +3031,7 @@ index.
 | `RIPRAPTOR_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page, and is emailed when a refer a friend referral completes (see "Refer a friend"). When set, List your shop enquiries are emailed here instead of to `RIPRAPTOR_INBOX_NOTIFY_EMAIL`. |
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
+| `RIPRAPTOR_CHECK_PICTURES`     | on      | Ask shops every hour whether product pictures are still there, and take gone ones off (off in the tests). |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How old the cached page lists may grow before the background jobs build them again. Imports and edits mark them stale sooner. |
 | `RIPRAPTOR_PAGE_CACHE_SECONDS` | 300     | How long a built game or set page (each tab and set of filters under its own address) is served whole from the shared cache. 0 turns it off. |
 | `RIPRAPTOR_LIST_MAX_STALE_SECONDS` | 600 | A cached page list is never served once its build started longer ago than this: the visitor who finds it builds it first. |

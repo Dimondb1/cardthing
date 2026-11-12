@@ -1878,7 +1878,7 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
                 fields.append("changed_at")
             listing.save(update_fields=fields)
         if offer.image and getattr(settings, "RIPRAPTOR_USE_FEED_IMAGES", True):
-            images_by_product.setdefault(product_pk, offer.image)
+            images_by_product.setdefault(product_pk, []).append(offer.image)
         delivery = offer.delivery if offer.delivery is not None else retailer.delivery_for(offer.price)
         if not created and unchanged(listing, offer, delivery):
             to_stamp.append(listing.pk)
@@ -2077,8 +2077,12 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
     # Fill in images for products that have none.
     if images_by_product:
         for product in Product.objects.filter(pk__in=images_by_product, image="", image_url=""):
-            product.image_url = images_by_product[product.pk][:1000]
-            product.save(update_fields=["image_url"])
+            # Never the picture the picture check found gone (catalogue/pictures.py): a shop's feed can name a
+            # file it has deleted.
+            fresh = next((url for url in images_by_product[product.pk] if url[:1000] != product.image_failed), "")
+            if fresh:
+                product.image_url = fresh[:1000]
+                product.save(update_fields=["image_url"])
 
     if not_sealed:
         remove_not_sealed(pk for pk, url in Listing.objects.filter(retailer=retailer).values_list("pk", "url")

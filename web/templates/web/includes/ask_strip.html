@@ -1,0 +1,6 @@
+{% load sitecopy %}{# Ask Rip at the top of the product page (web/askrip.py): "Not sure? Ask Rip" and the one-tap questions (askrip.SUGGESTED), under the product's name, where everyone sees them before the price box. A tap asks Rip at once: ask.js sends it to the box in the price box and scrolls there; without script the form posts and the page comes back at the answer (#ask). Showing the questions costs nothing; only a tap asks Claude. The owner, 12 Nov 2026: "bring Ask Rip to the forefront of that page ... giving people prompts as to what they could use it for ... without spending the tokens". #}<form class="ask-strip" method="post" action="{% url 'web:ask_rip' product.slug %}" data-ask-form data-ask-strip aria-labelledby="ask-strip-label">
+  {% csrf_token %}
+  <span class="mark ask-strip__mark" aria-hidden="true"></span>
+  <p class="ask-strip__label" id="ask-strip-label">{% copy "product.ask.strip" %}</p>
+  <div class="ask-strip__chips">{% for line in ask.suggestions %}<button class="chip ask-strip__chip" type="submit" name="suggested" value="{{ line }}">{{ line }}</button>{% endfor %}</div>
+</form>

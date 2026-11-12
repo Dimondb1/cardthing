@@ -3,6 +3,7 @@ owner, 11 Nov 2026: "limit to 5 queries per user per 24 hours ... I don't want i
 start ... Make sure we can disable it when we need to"."""
 
 import json
+import re
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest import mock
@@ -413,38 +414,82 @@ class PriceCheckTests(AskRipCase):
         self.assertEqual(rows[1]["per_pack"], "£4.50")
         self.assertIn(Decimal("4.50"), amounts)
 
-    def test_suggested_questions_under_the_box(self):
-        page = self.client.get(self.box.get_absolute_url())
-        for line in ("Is this a good price?", "Where is it cheapest with delivery?",
-                     "Is there better value per pack in this set?"):
-            self.assertContains(page, f'name="suggested" value="{line}"')
-        html = page.content.decode()
-        # Under Rip's line and before the typed question, in a form of its own, so Enter still sends what was typed.
-        self.assertLess(html.index('class="ask__chips"'), html.index('id="ask-question"'))
-        self.assertEqual(html.count("data-ask-form"), 2)
+    def test_the_questions_sit_under_the_products_name_before_the_price_box(self):
+        """The owner, 12 Nov 2026: "bring Ask Rip to the forefront of that page ... giving people prompts as to what
+        they could use it for ... without spending the tokens"."""
+        from html import unescape
 
-    def test_no_value_question_without_packs(self):
-        Product = type(self.box)
-        Product.objects.filter(pk=self.box.pk).update(packs=None)
         page = self.client.get(self.box.get_absolute_url())
-        self.assertContains(page, 'value="Is this a good price?"')
-        self.assertNotContains(page, "better value per pack")
+        html = unescape(page.content.decode())
+        strip = html[html.index('class="ask-strip"'):html.index("</form>", html.index('class="ask-strip"'))]
+        self.assertIn("Not sure? Ask Rip", strip)
+        self.assertEqual(re.findall(r'name="suggested" value="([^"]+)"', strip),
+                         ["What's inside?", "Is it good value?", "Buy now or wait?", "Is it right for me?"])
+        self.assertIn("data-ask-form", strip)
+        self.assertLess(html.index('class="ask-strip"'), html.index('class="buybox'))
+        self.assertLess(html.index('class="product-title"'), html.index('class="ask-strip"'))
+        # The picture on a phone gives up the room, so the price stays on the first screen.
+        self.assertIn("product-head--rip", html)
+        # Before a question the box itself offers none: they are at the top. Showing them asks nothing.
+        box = html[html.index('id="ask"'):]
+        self.assertNotIn('class="ask__chips"', box[:box.index("</section>")])
+        self.assertEqual(self.fake.sent, [])
 
-    def test_a_tapped_question_is_the_one_sent_and_is_not_offered_again(self):
+    def test_no_questions_at_the_top_once_the_days_are_used_or_rip_is_off(self):
+        for address in ("203.0.113.9",) * askrip.PER_PERSON:
+            self.ask(address=address, question=f"Question {len(self.fake.sent)} about stock?")
+        page = self.client.get(self.box.get_absolute_url(), REMOTE_ADDR="203.0.113.9")
+        self.assertNotContains(page, 'class="ask-strip"')
+        self.assertNotContains(page, "product-head--rip")
+
+    def test_a_tapped_question_is_the_one_sent_and_the_others_follow_the_answer(self):
+        from html import unescape
+
         response = self.client.post(reverse("web:ask_rip", args=[self.box.slug]),
-                                    {"suggested": "Is this a good price?", "question": ""},
+                                    {"suggested": "What's inside?", "question": ""},
                                     REMOTE_ADDR="203.0.113.7", HTTP_X_ASK_RIP="1")
         self.assertEqual(response.json()["state"], "answered")
-        self.assertIn("<question>Is this a good price?</question>", self.fake.sent[0]["messages"][0]["content"])
-        html = response.json()["html"]
-        self.assertNotIn('value="Is this a good price?"', html)
-        self.assertIn('value="Where is it cheapest with delivery?"', html)
+        self.assertIn("<question>What's inside?</question>", self.fake.sent[0]["messages"][0]["content"])
+        html = unescape(response.json()["html"])
+        self.assertIn('class="ask__chips"', html)
+        self.assertNotIn('value="What\'s inside?"', html)
+        self.assertIn('value="Buy now or wait?"', html)
 
     def test_a_tapped_question_works_without_script(self):
         response = self.client.post(reverse("web:ask_rip", args=[self.box.slug]),
-                                    {"suggested": "Where is it cheapest with delivery?"}, REMOTE_ADDR="203.0.113.7")
+                                    {"suggested": "Is it good value?"}, REMOTE_ADDR="203.0.113.7")
         self.assertEqual(response.status_code, 303)
         self.assertIn("?ask=", response["Location"])
+        self.assertTrue(response["Location"].endswith("#ask"))
+
+
+class KnowsWhatItIsTests(AskRipCase):
+    """What Rip is told so he can say what a product is, what is inside and who it suits."""
+
+    def test_he_is_told_what_this_kind_of_product_is_in_the_sites_own_words(self):
+        found, _amounts, _checked = askrip.facts(self.box)
+        self.assertTrue(found["what_this_kind_of_product_is"].startswith("A sealed box of booster packs"))
+
+    def test_he_is_told_one_shops_description_without_its_prices(self):
+        Listing.objects.filter(retailer=self.harbour).update(
+            description="36 Surging Sparks booster packs, 10 cards each. RRP £160.00, now £140! Ships in 2 days.")
+        found, amounts, _checked = askrip.facts(self.box)
+        self.assertEqual(found["shop_description"]["shop"], "Harbour Games")
+        text = found["shop_description"]["text"]
+        self.assertIn("36 Surging Sparks booster packs, 10 cards each.", text)
+        self.assertNotIn("£", text)
+        self.assertNotIn(Decimal("160.00"), amounts)
+
+    def test_no_description_none_sent(self):
+        found, _amounts, _checked = askrip.facts(self.box)
+        self.assertNotIn("shop_description", found)
+
+    def test_his_instructions_cover_the_four_questions_and_never_guess(self):
+        prompt = askrip.SYSTEM_PROMPT
+        for words in ('"what_this_kind_of_product_is"', '"shop_description"', "Whether to buy now or wait",
+                      "Never guess what will happen", "Whether it is right for them"):
+            with self.subTest(words=words):
+                self.assertIn(words, prompt)
 
 
 class RipTests(AskRipCase):
@@ -462,8 +507,8 @@ class RipTests(AskRipCase):
         self.assertEqual(self.mood(page), "idle")
         self.assertIn('class="rip"', page)
         self.assertIn("I'm Rip.", page)
-        self.assertIn('data-thinking="Let me check the prices."', page)
-        self.assertIn("if this is a good price", page)
+        self.assertIn('data-thinking="Let me check this page."', page)
+        self.assertIn("whether it's good value", page)
 
     def test_an_answer_makes_him_glad(self):
         self.assertEqual(self.mood(self.ask().json()["html"]), "happy")

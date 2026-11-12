@@ -38,6 +38,7 @@ from django.utils.formats import date_format
 
 from catalogue import insights, judge, pricing
 from catalogue.models import ClaudeAsk, ClaudeJudge, DailyLowestPrice, Listing, Product
+from content.registry import REGISTRY
 
 from .answers import stamp
 from .templatetags.ripraptor import gbp
@@ -56,6 +57,10 @@ QUESTION_MIN, QUESTION_MAX = 3, 200
 ANSWER_MAX = 700
 # The facts sent: at most this many offers, shops without one and other products of the set.
 OFFERS_SENT, OTHERS_SENT, SET_SENT = 12, 10, 8
+# At most this much of one shop's description is sent, with its prices taken out: an amount Rip quoted from it would be
+# none of the page's, and his answer would not be shown.
+DESCRIPTION_SENT = 600
+PRICE_IN_TEXT = re.compile(r"[£$€]\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*(?:\.\d{2})?\s?(?:GBP|pounds?|p)\b", re.I)
 # The Price check's verdicts, cheapest first, as Rip is told them.
 VERDICT_SCALE = ("lowest", "good", "fair", "above", "high")
 
@@ -87,6 +92,9 @@ How to answer:
 - Prices are in pounds. An offer's "total" includes delivery; without a total, delivery is not known and must be checked at the shop. When you name a price, name the shop.
 - Name a price only as the facts give it, or the sum or the gap between two prices in the facts. Prices per pack are in the facts where they can be worked out.
 - Point out what saves money when the facts show it: a cheaper shop once delivery is added, a free delivery threshold, a multi-buy, a discount code with its terms (prices do not include it), or a cheaper price per pack on another product in the same set.
+- What is inside, or what the product is: answer from the packs and cards in the facts, what this kind of product is ("what_this_kind_of_product_is", the site's own words) and the shop's own description ("shop_description"), saying that a detail comes from that shop's page. Never add contents the facts do not give.
+- Whether to buy now or wait: say what the facts show today (the Price check, today's price against the lowest and the average in our record and against about 30 days ago, how many shops have it in stock, restocks) and that the choice is theirs. Never guess what will happen.
+- Whether it is right for them: say who this kind of product suits from the site's own words, what they get for the money (packs, cards, price per pack), and name a product in the same set that suits a smaller or bigger budget when the facts give one.
 - Past prices in the facts may be described. Never say a price will rise or fall, what the product will be worth later, what is likely to be in a pack, or the odds of any card.
 - Do not recommend products or shops that are not in the facts, and do not give links.
 - If the question is not about this product, its set or buying it, say you can only help with this product.
@@ -334,6 +342,17 @@ def facts(product, now=None):
     if ago is not None:
         found["cheapest_about_30_days_ago"] = money(ago)
     # The rest of the set for sale now, cheapest first, so Rip can say which is the better buy per pack.
+    # What this kind of product is, in the site's own words (the ⓘ card after the type on the page), and one shop's
+    # own description of it, without its prices, so Rip can say what is inside and who it suits.
+    kind_key = f"info.type.{product.product_type}"
+    kind = copy.get(kind_key) if kind_key in REGISTRY else ""
+    if kind:
+        found["what_this_kind_of_product_is"] = kind
+    described = (Listing.objects.filter(product=product).live().exclude(description="")
+                 .order_by("-delivery_known", "delivered_price").values_list("retailer__name", "description").first())
+    if described:
+        text = PRICE_IN_TEXT.sub("(a price)", described[1])[:DESCRIPTION_SENT].rsplit(" ", 1)[0]
+        found["shop_description"] = {"shop": described[0], "text": text}
     if product.product_set_id:
         others_in_set = []
         for other in (Product.objects.for_lists().filter(product_set_id=product.product_set_id, lowest_known__isnull=False)
@@ -555,16 +574,20 @@ def box(request, product, state="", token=""):
     }
 
 
+# The questions offered as one tap, in the order shown: what the product is and holds, whether it is good value, whether
+# to buy now, and whether it suits. The owner, 12 Nov 2026: "giving people ideas of like, you know, is this the right
+# product for me? What is this product? ... is it a good value? ... Should I buy it now?".
+SUGGESTED = ("product.ask.suggest.inside", "product.ask.suggest.value", "product.ask.suggest.when",
+             "product.ask.suggest.fit")
+
+
 def suggestions(product, shown=None):
-    """The questions offered as one tap under the box, in the registry's words: whether the price is good and where
-    it is cheapest delivered, and for a product of several packs in a set, which of the set is the best buy per pack.
-    Not the one just answered. The same words each time, so a kept answer is reused while the facts hold."""
+    """The questions offered as one tap (SUGGESTED), in the registry's words, at the top of the product page and under
+    an answer. Not the one just answered. The same words each time, so a kept answer is reused while the facts
+    hold."""
     from content import service as copy
 
-    keys = ["product.ask.suggest.price", "product.ask.suggest.cheapest"]
-    packs = product.packs_inside
-    if product.product_set_id and packs and packs > 1:
-        keys.append("product.ask.suggest.value")
+    keys = list(SUGGESTED)
     asked = tidy_question(shown["question"]).casefold() if shown else ""
     lines = [copy.get(key) for key in keys]
     return [line for line in lines if line and tidy_question(line).casefold() != asked]

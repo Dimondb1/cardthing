@@ -1074,16 +1074,30 @@ we need to."
   Anthropic refuses the key or reports no credit (a background job's own
   fault does not hide it). The Ask Rip row on the Claude page says whether
   shoppers see it now and, if not, why (`askrip.CLOSED_WORDS`).
-- Where: in the price box on every product page, under Save, Track price
-  and Share, so it is on the first screen beside the price it talks about.
-  Under the box are one-tap questions (`askrip.suggestions`, worded in the
-  registry under `product.ask.suggest.*`): "Is this a good price?", "Where
-  is it cheapest with delivery?" and, for a product of several packs in a
-  set, "Is there better value per pack in this set?". The owner, 11 Nov
-  2026: "ask rip in its current location is pointless I want it
-  incorporated in a more visible place and have some actual use. At present
-  it couldnt tell if something was a good price and it literally had a good
-  price badge on that product."
+- Where: two places on every product page. At the top, under the
+  product's name, "Not sure? Ask Rip" and four one-tap questions
+  (`ask_strip.html`, `askrip.SUGGESTED`, worded in the registry under
+  `product.ask.suggest.*`): "What's inside?", "Is it good value?", "Buy now
+  or wait?" and "Is it right for me?". Showing them costs nothing; a tap
+  asks Rip, and the page scrolls to his box in the price box, under Save,
+  Track price and Share, where the answer comes (without script the form
+  posts and the page comes back at the answer). Under an answer the box
+  offers the other three as follow-ups. On a phone the picture gives up the
+  row's height (`--product-media-rip`), so the price and Buy now stay on
+  the first screen. The row goes once the day's questions are used. The
+  owner, 11 Nov 2026: "ask rip in its current location is pointless I want
+  it incorporated in a more visible place", and 12 Nov: "bring Ask Rip to
+  the forefront of that page ... giving people prompts as to what they could
+  use it for ... is this the right product for me? What is this product?".
+- For those questions Rip is also told what this kind of product is, in
+  the site's own words (the ⓘ card after the type, `info.type.*`), and one
+  shop's own description of it (the cheapest's that has one, its prices
+  taken out, at most 600 characters), and his instructions say how to
+  answer each: what is inside from the packs, cards and those words, naming
+  the shop for anything from its description; whether to buy now from
+  today's Price check, record, price 30 days ago and stock, never guessing
+  what will happen; and who it suits, with another product of the set for
+  another budget.
 - An answer that names a price the page does not show (or the sum or gap
   of two it does) is not shown; dashes, exclamation marks and formatting are
   taken out. Email addresses, phone numbers and links are taken out of the

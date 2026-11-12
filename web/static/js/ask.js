@@ -2,7 +2,8 @@
 // box while a question is typed (listening), thinks while the answer is on its way, and stands still while off screen.
 // The question is sent without leaving the page and the box the server sends back, with Rip's answer and face, is
 // swapped in; focus moves to the answer so a screen reader reads it. A suggested question is a button in a form of its
-// own (name "suggested"), sent in place of whatever was typed. Without this file the form posts and the page comes
+// own (name "suggested"), sent in place of whatever was typed. The same questions at the top of the page
+// (ask_strip.html) are sent to the box too, after a scroll to it. Without this file the form posts and the page comes
 // back with the same answer and face. Anything unexpected falls back to that plain post.
 (() => {
   const BOX = "[data-ask]";
@@ -35,8 +36,14 @@
   document.addEventListener("submit", (event) => {
     const form = event.target.closest("form[data-ask-form]");
     if (!form || form.dataset.sending) return;
+    // A question from the top of the page goes to the box in the price box, which comes into view first.
+    const box = form.closest(BOX) || document.querySelector(BOX);
+    if (!box) return;
     event.preventDefault();
-    const box = form.closest(BOX);
+    if (!form.closest(BOX)) {
+      const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      box.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+    }
     const input = box.querySelector("input[name=question]");
     const chosen = event.submitter && event.submitter.name === "suggested" ? event.submitter : null;
     const question = (chosen ? chosen.value : input ? input.value : "").trim();
@@ -44,7 +51,7 @@
     if (chosen) data.set(chosen.name, chosen.value);
     form.dataset.sending = box.dataset.sending = "1";
     box.dataset.mood = "thinking";
-    box.querySelectorAll("form[data-ask-form] button").forEach((button) => { button.disabled = true; });
+    document.querySelectorAll("form[data-ask-form] button").forEach((button) => { button.disabled = true; });
     // The question in its own bubble at once, and Rip's bubble saying he is on it.
     let you = box.querySelector("[data-ask-you]");
     if (!you) {
@@ -70,6 +77,13 @@
         const holder = document.createElement("div");
         holder.innerHTML = data.html || "";
         const fresh = holder.querySelector(BOX);
+        // The questions at the top are ready again, or go once Rip takes no more today.
+        const more = !!(fresh && fresh.querySelector("form[data-ask-form]"));
+        document.querySelectorAll("form[data-ask-strip]").forEach((strip) => {
+          delete strip.dataset.sending;
+          strip.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+          strip.hidden = !more;
+        });
         if (!fresh) {
           box.remove();
           return;

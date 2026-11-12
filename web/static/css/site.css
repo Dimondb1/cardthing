@@ -1173,10 +1173,13 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .product-facts { font-size: var(--text-sm); color: var(--color-ink-muted); }
 .product-media { grid-area: media; position: relative; display: grid; place-items: center; border-radius: var(--radius-card); background: var(--color-shelf); overflow: hidden; }
 @media (max-width: 59.99rem) {
-  .product-media { height: var(--product-media-phone); }
-  .product-head--long .product-media { height: var(--product-media-phone-long); }
-  .product-head--note .product-media { height: calc(var(--product-media-phone) - var(--product-media-note)); }
-  .product-head--long.product-head--note .product-media { height: calc(var(--product-media-phone-long) - var(--product-media-note)); }
+  /* The picture's well gives up the room a long name, the delivery note and Ask Rip's questions take, so the price
+     and Buy now stay on the first screen; never shorter than --product-media-least. */
+  .product-head { --media-well: var(--product-media-phone); }
+  .product-head--long { --media-well: var(--product-media-phone-long); }
+  .product-head--note { --media-note: var(--product-media-note); }
+  .product-head--rip { --media-rip: var(--product-media-rip); }
+  .product-media { height: max(var(--product-media-least), calc(var(--media-well) - var(--media-note, 0rem) - var(--media-rip, 0rem))); }
 }
 /* The picture is square and as tall as the well, so it keeps its proportions at any width. */
 .product-media .product-image--large { width: auto; height: 100%; max-width: 100%; background: transparent; }
@@ -1738,6 +1741,18 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @keyframes rip-blink { 0%, 95%, 100% { transform: scaleY(1); } 97.5% { transform: scaleY(var(--rip-blink-shut)); } }
 @keyframes rip-chat { from { transform: rotate(var(--rip-jaw-shut)); } to { transform: rotate(var(--rip-jaw-open)); } }
 @keyframes rip-dot { from { opacity: var(--opacity-waiting); } to { opacity: 1; } }
+
+/* Ask Rip's questions under the product's name (ask_strip.html): a tap asks him in the price box. In his speech
+   bubble's colours, so they read as his. One row that scrolls sideways on a phone, so the price stays in view; they
+   wrap from a tablet up. */
+.ask-strip { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "mark label" "mark chips"; align-items: center; gap: 0 var(--space-2); min-width: 0; margin-top: var(--space-1); }
+.ask-strip__mark { grid-area: mark; --mark-size: var(--mark-sm); color: var(--color-brand); }
+.ask-strip__label { grid-area: label; margin: 0; font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
+.ask-strip__chips { grid-area: chips; display: flex; gap: var(--space-2); min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-block: var(--space-1); }
+.ask-strip__chips::-webkit-scrollbar { display: none; }
+.ask-strip__chip { flex: none; border-color: var(--color-brand-line); background: var(--color-brand-soft); font-family: inherit; cursor: pointer; }
+.ask-strip__chip:disabled { opacity: var(--opacity-waiting); cursor: progress; }
+@media (min-width: 48rem) { .ask-strip__chips { flex-wrap: wrap; overflow-x: visible; } }
 
 /* Ask Rip: a chat with Rip in the price box (web/askrip.py), under a rule of its own. Rip speaks in a bubble beside
    him, the question sits in its own bubble on the right, and each new line fades in, as feedback that it came. The

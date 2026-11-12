@@ -1,4 +1,4 @@
-{% load sitecopy ripraptor %}{# Ask Rip (web/askrip.py), in the buy box: a question about this product, answered from this page's facts and its Price check, as a chat with Rip (rip_bot.html), whose face follows data-mood. The suggested questions are a form of their own, under Rip's line, so one tap asks and Enter in the box still sends what was typed. The form posts, so it works without script; ask.js swaps the answer in without a reload and shows Rip listening and thinking. #}<section class="ask" id="ask" aria-labelledby="ask-title" data-ask data-mood="{{ ask.mood }}" data-thinking="{% copy 'product.ask.thinking' %}">
+{% load sitecopy ripraptor %}{# Ask Rip (web/askrip.py), in the buy box: a question about this product, answered from this page's facts and its Price check, as a chat with Rip (rip_bot.html), whose face follows data-mood. The suggested questions are a form of their own, under an answer, so one tap asks a follow-up and Enter in the box still sends what was typed; before a question they sit at the top of the page (ask_strip.html). The form posts, so it works without script; ask.js swaps the answer in without a reload and shows Rip listening and thinking. #}<section class="ask" id="ask" aria-labelledby="ask-title" data-ask data-mood="{{ ask.mood }}" data-thinking="{% copy 'product.ask.thinking' %}">
   <h2 id="ask-title" class="ask__title">{% copy "product.ask.title" %}</h2>
   {% if ask.shown %}<p class="ask__you" data-ask-you><span class="visually-hidden">{% copy "product.ask.you" %} </span>{{ ask.shown.question }}</p>{% endif %}
   <div class="ask__chat">
@@ -14,7 +14,7 @@
   </div>
   <p class="visually-hidden" role="status" data-ask-status></p>
   {% if ask.open and ask.left %}
-  {% if ask.suggestions %}<form class="ask__chips" method="post" action="{% url 'web:ask_rip' product.slug %}" data-ask-form aria-label="{% copy 'product.ask.suggest.label' %}">
+  {% if ask.suggestions and ask.shown %}<form class="ask__chips" method="post" action="{% url 'web:ask_rip' product.slug %}" data-ask-form aria-label="{% copy 'product.ask.suggest.label' %}">
     {% csrf_token %}{% for line in ask.suggestions %}
     <button class="chip ask__chip" type="submit" name="suggested" value="{{ line }}">{{ line }}</button>{% endfor %}
   </form>{% endif %}

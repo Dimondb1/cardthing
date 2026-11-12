@@ -5,7 +5,10 @@ The owner, 11 Nov 2026: "don't do the verified users just limit to 5 queries per
 to spend anymore than £25 at the start ... Make sure we can disable it when we need to."
 
 * No accounts. A person is their internet address, kept only as a one-way hash in the shared cache for a day, to
-  count their questions (PER_PERSON in WINDOW). The same is said on the Terms page.
+  count their questions (PER_PERSON in WINDOW), and their browser, which keeps the count in a signed cookie
+  (COUNT_COOKIE) holding only how many and when the day ends. The higher of the two counts: a phone on mobile data
+  gets a new address often, and the owner found his 5 starting again (12 Nov 2026: "the 5 uses resets every time I
+  change browser or reopen the page"). The same is said on the Terms page.
 * Each question goes to Claude Haiku 5.5, the cheapest model, with thinking off and a short answer: about a
   fiftieth of a US cent each. It is the Claude page's Ask Rip job (catalogue/judge.py JOBS), so the owner switches it
   off there, and it has a monthly limit of its own, $30 until the owner saves another (judge.JOB_DEFAULT_LIMITS). That
@@ -31,13 +34,14 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
+from django.core import signing
 from django.core.cache import cache
 from django.db.models import Avg, Count, Min
 from django.utils import timezone
 from django.utils.formats import date_format
 
 from catalogue import insights, judge, pricing
-from catalogue.models import ClaudeAsk, ClaudeJudge, DailyLowestPrice, Listing, Product
+from catalogue.models import CardmarketMatch, ClaudeAsk, ClaudeJudge, DailyLowestPrice, Listing, Product
 from content.registry import REGISTRY
 
 from .answers import stamp
@@ -52,6 +56,10 @@ TIMEOUT_SECONDS = 20.0
 
 PER_PERSON = 5
 WINDOW = timedelta(hours=24)
+# The browser's own count of its questions: {"n", "until"} signed, so it cannot be lowered by hand, only deleted, and
+# then the address still counts.
+COUNT_COOKIE = "rip_asked"
+COUNT_SALT = "web.askrip.count"
 PER_DAY = 500
 QUESTION_MIN, QUESTION_MAX = 3, 200
 ANSWER_MAX = 700
@@ -95,6 +103,7 @@ How to answer:
 - What is inside, or what the product is: answer from the packs and cards in the facts, what this kind of product is ("what_this_kind_of_product_is", the site's own words) and the shop's own description ("shop_description"), saying that a detail comes from that shop's page. Never add contents the facts do not give.
 - Whether to buy now or wait: say what the facts show today (the Price check, today's price against the lowest and the average in our record and against about 30 days ago, how many shops have it in stock, restocks) and that the choice is theirs. Never guess what will happen.
 - Whether it is right for them: say who this kind of product suits from the site's own words, what they get for the money (packs, cards, price per pack), and name a product in the same set that suits a smaller or bigger budget when the facts give one.
+- Red flags, or whether something is a scam, fake, real or a scalper's price: answer from the warning signs in the facts ("warning_signs" on an offer, "product_warning_signs"), with the shop or seller each belongs to, and say what to check before buying, such as the listing's photos and title, the seller's ratings and the RRP. Never call a shop, seller or listing a scam, a scammer, fake, a fraud or a scalper, and never say a purchase is safe or guaranteed. With no warning signs, say nothing we check looks wrong, name what was checked (UK shops we check, the price against the RRP and the other shops, the seller's ratings), and that they should still check the listing. Never add warning signs the facts do not give.
 - Past prices in the facts may be described. Never say a price will rise or fall, what the product will be worth later, what is likely to be in a pack, or the odds of any card.
 - Do not recommend products or shops that are not in the facts, and do not give links.
 - If the question is not about this product, its set or buying it, say you can only help with this product.
@@ -177,13 +186,27 @@ def day_key(now):
     return f"askrip:day:{timezone.localdate(now).isoformat()}"
 
 
+def browser_count(request, now_ts):
+    """(questions the browser's cookie says it asked in its window, when that ends), or (0, None) without a cookie we
+    signed or once its window is over. A window never runs past a day from now."""
+    try:
+        kept = signing.loads(getattr(request, "COOKIES", {}).get(COUNT_COOKIE, ""), salt=COUNT_SALT)
+    except signing.BadSignature:
+        return 0, None
+    n, until = (kept.get("n"), kept.get("until")) if isinstance(kept, dict) else (None, None)
+    if not isinstance(n, int) or not isinstance(until, (int, float)) or until <= now_ts:
+        return 0, None
+    return max(0, n), min(until, now_ts + WINDOW.total_seconds())
+
+
 def person_count(request, now_ts=None):
-    """(questions asked in the visitor's window, when the window ends as a Unix time or None)."""
+    """(questions asked in the visitor's window, when the window ends as a Unix time or None): the higher of their
+    address's count and their browser's."""
     now_ts = now_ts or time.time()
     kept = cache.get(person_key(request))
-    if not isinstance(kept, dict) or kept.get("until", 0) <= now_ts:
-        return 0, None
-    return kept.get("n", 0), kept["until"]
+    by_address = (kept.get("n", 0), kept["until"]) if isinstance(kept, dict) and kept.get("until", 0) > now_ts \
+        else (0, None)
+    return max(by_address, browser_count(request, now_ts), key=lambda found: found[0])
 
 
 def left_for(request):
@@ -205,8 +228,19 @@ def count_question(request, now, give_back=False):
     until = until or now_ts + WINDOW.total_seconds()
     n = max(0, n + (-1 if give_back else 1))
     cache.set(key, {"n": n, "until": until}, max(1, int(until - now_ts)))
+    request.askrip_count = {"n": n, "until": math.ceil(until)}   # for the browser's cookie (keep_count)
     day = day_key(now)
     cache.set(day, max(0, (cache.get(day) or 0) + (-1 if give_back else 1)), 2 * 86400)
+
+
+def keep_count(request, response):
+    """Put the visitor's count, as count_question left it, in their browser's cookie until their window ends."""
+    kept = getattr(request, "askrip_count", None)
+    if kept is None:
+        return
+    response.set_cookie(COUNT_COOKIE, signing.dumps(kept, salt=COUNT_SALT),
+                        max_age=max(1, int(kept["until"] - time.time())), secure=request.is_secure(), httponly=True,
+                        samesite="Lax")
 
 
 # The question and the facts ---------------------------------------------------------------------------------------
@@ -242,6 +276,69 @@ STOCK_WORDS = {
 }
 
 
+# Red flags: warning signs our own code finds in each offer and in the product, put to Rip as facts, so he never judges
+# a listing from what he knows elsewhere. The owner, 12 Nov 2026: "Can ask rip check if the product is a scam or likely
+# to be a scalper ... Is the product a real produxt is the listing name dodgy?". He states them; he never calls a shop
+# or seller a scam, a scammer, fake or a scalper (SYSTEM_PROMPT).
+# Over the RRP by more than the Price check's fair share of it (fair_price.RRP_FAIR), or dearer than the cheapest UK
+# shop we read by more than this.
+OVER_SHOPS = Decimal("1.35")
+# An eBay seller with fewer ratings or less positive feedback than this is worth a closer look. Sellers under
+# ebay.MIN_RATINGS and MIN_FEEDBACK are never shown at all.
+FEW_RATINGS = 200
+LOW_FEEDBACK = 98.0
+# Words in a listing's own title that say it may not be the maker's sealed product. Not "weighed", "searched",
+# "opened" or "fake": sellers write "not weighed", "never opened" and "not fake" to reassure.
+DODGY_WORDS = re.compile(
+    r"\brepack(?:ed|s)?\b|\bre-?seal(?:ed)?\b|\bunsealed\b|\bnot sealed\b|\bno (?:shrink ?wrap|cellophane)\b|"
+    r"\bloose packs?\b|\bunofficial\b|\breplica\b|\bcustom\b|\bbootleg\b|\bproxy\b|\bmystery\b", re.I)
+# "not resealed", "never repacked": a word straight after one of these says the opposite.
+DENIED = re.compile(r"\b(?:not|no|never|non)[\s-]+$", re.I)
+
+
+def dodgy_words(title, name):
+    """The DODGY_WORDS in a listing's own ``title``, lower case, without those it denies or the product's own ``name``
+    has (Magic's Mystery Booster is the maker's)."""
+    name = name.lower()
+    return sorted({match.group(0).lower() for match in DODGY_WORDS.finditer(title or "")
+                   if not DENIED.search(title[:match.start()]) and match.group(0).lower() not in name})
+
+
+def percent_over(price, reference):
+    return int(((price / reference) - 1) * 100)
+
+
+def warning_signs(listing, product, rrp, cheapest_uk, released):
+    """What a shopper should check about one offer before buying, in plain words: a price well over the RRP or the
+    cheapest UK shop we read, words in its title, a language other than the product's, an eBay seller with few
+    ratings or weaker feedback, in stock before the release date, a price far from the others. [] when nothing."""
+    from catalogue import fair_price, languages
+
+    signs = []
+    if rrp and listing.price and listing.price > rrp * fair_price.RRP_FAIR:
+        signs.append(f"its price is {percent_over(listing.price, rrp)}% over the RRP")
+    if (cheapest_uk is not None and listing.delivery_known and listing.pk != cheapest_uk.pk
+            and listing.delivered_price > cheapest_uk.delivered_price * OVER_SHOPS):
+        signs.append(f"it costs {percent_over(listing.delivered_price, cheapest_uk.delivered_price)}% more delivered "
+                     "than the cheapest UK shop we check")
+    words = dodgy_words(listing.title, product.name)
+    if words:
+        signs.append("the listing's own title says " + ", ".join(f'"{word}"' for word in words))
+    said = languages.language_of(listing.title or "", product.game.slug) if listing.title else ""
+    if said and said != (product.language or ""):
+        signs.append(f"the listing's own title says {languages.name(said)}, but this product is "
+                     f"{languages.name(product.language or '')}")
+    if listing.seller_ratings is not None and listing.seller_ratings < FEW_RATINGS:
+        signs.append(f"the seller has fewer than {FEW_RATINGS} ratings")
+    if listing.seller_feedback is not None and float(listing.seller_feedback) < LOW_FEEDBACK:
+        signs.append(f"the seller's positive feedback is under {LOW_FEEDBACK:g}%")
+    if released is False and listing.availability == Listing.Availability.IN_STOCK:
+        signs.append("it is listed as in stock before the release date")
+    if listing.sanity == Listing.Sanity.DOUBTFUL:
+        signs.append("its price is far from the others, so it may not be this product")
+    return signs
+
+
 def facts(product, now=None):
     """(what Claude is sent about ``product``: what its page shows, every price a string as the page gives it; the
     amounts named in it, as Decimals; when its prices were last checked, or None). About ten queries, at a question."""
@@ -262,6 +359,12 @@ def facts(product, now=None):
     listings = list(Listing.objects.filter(product=product).live().select_related("retailer")
                     .order_by("-delivery_known", "delivered_price", "retailer__name"))
     current = buy_order(listings)
+    rrp = product.rrp_now
+    release = product.effective_release_date
+    released = release <= today if release else None
+    cheapest_uk = min((listing for listing in current if listing.delivery_known
+                       and listing.retailer.source_type not in pricing.MARKETPLACES),
+                      key=lambda listing: listing.delivered_price, default=None)
     offers = []
     for listing in current[:OFFERS_SENT]:
         retailer = listing.retailer
@@ -278,6 +381,12 @@ def facts(product, now=None):
             offer["free_delivery_over"] = money(retailer.free_delivery_over)
         if retailer.source_type in pricing.MARKETPLACES:
             offer["marketplace"] = "a seller on a marketplace, not a UK shop we read"
+            # The seller's own title, without its prices: an amount in it is none of the page's.
+            if listing.title:
+                offer["listing_title"] = PRICE_IN_TEXT.sub("(a price)", listing.title)
+        signs = warning_signs(listing, product, rrp[0] if rrp else None, cheapest_uk, released)
+        if signs:
+            offer["warning_signs"] = signs
         # Who the eBay seller is and their standing, as eBay gives them, so Rip can say who a buyer would deal with.
         if listing.seller_name or listing.seller_feedback is not None:
             standing = {"name": listing.seller_name or None}
@@ -307,15 +416,24 @@ def facts(product, now=None):
     }
     if product.product_set_id:
         found["set"] = product.product_set.name + (f" ({product.product_set.code})" if product.product_set.code else "")
-    release = product.effective_release_date
     if release:
         found["release_date"] = date_format(release, "j M Y")
-        found["released"] = release <= today
+        found["released"] = released
+    # Whether the product is a real one: the UK shops we read that list it, in stock or not, and whether Cardmarket
+    # sells the same product. A product only marketplace searches found is one no shop confirms.
+    uk_shops = len({listing.retailer_id for listing in listings if listing.sanity != Listing.Sanity.EXCLUDED
+                    and listing.retailer.source_type not in pricing.MARKETPLACES})
+    found["uk_shops_we_check_listing_it"] = uk_shops
+    if not uk_shops:
+        found["product_warning_signs"] = ["no UK shop we check lists this product; its prices come only from "
+                                          "marketplace sellers, so no shop confirms it"]
+    if CardmarketMatch.objects.filter(product=product, status__in=CardmarketMatch.USED,
+                                      cardmarket__isnull=False).exists():
+        found["cardmarket_sells_the_same_product"] = True
     if product.packs_inside:
         found["packs_inside"] = product.packs_inside
     if product.cards_inside:
         found["cards_in_each_pack"] = product.cards_inside
-    rrp = product.rrp_now
     if rrp is not None:
         found["rrp"] = money(rrp[0])
     if others:
@@ -588,7 +706,7 @@ def box(request, product, state="", token=""):
 # to buy now, and whether it suits. The owner, 12 Nov 2026: "giving people ideas of like, you know, is this the right
 # product for me? What is this product? ... is it a good value? ... Should I buy it now?".
 SUGGESTED = ("product.ask.suggest.inside", "product.ask.suggest.value", "product.ask.suggest.when",
-             "product.ask.suggest.fit")
+             "product.ask.suggest.fit", "product.ask.suggest.flags")
 
 
 def suggestions(product, shown=None):

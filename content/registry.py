@@ -2143,6 +2143,10 @@ ENTRIES = [
     Entry("product.ask.suggest.fit", B, "Ask Rip: one-tap question on whether it suits", "Is it right for me?",
           "A one-tap question under the product name and under an answer. Rip says who this kind of product suits "
           "and what else in the set fits another budget."),
+    Entry("product.ask.suggest.flags", B, "Ask Rip: one-tap question on red flags", "Any red flags?",
+          "A one-tap question under the product name and under an answer. Rip names the warning signs the site's own "
+          "checks find (a price well over the RRP or the other shops, words like repack in a listing's title, an eBay "
+          "seller with few ratings) and never calls a shop or seller a scam."),
     Entry("product.ask.label", T, "Ask Rip: box label, read out", "Your question about {product}",
           "Read out by screen readers for the question box.", placeholders=("product",)),
     Entry("product.ask.placeholder", T, "Ask Rip: example in the box", "Any free delivery?",
@@ -3583,6 +3587,10 @@ ENTRIES = [
     Entry("askrip.ask.fit", T, "Ask Rip page: right for me",
           "Who this kind of product suits, what you get for the money and what else in the set fits another budget.",
           "Beside the Is it right for me? question."),
+    Entry("askrip.ask.flags", T, "Ask Rip page: red flags",
+          "Warning signs our own checks find: a price well over the RRP or the other shops, a listing title that says "
+          "repack or resealed, an eBay seller with few ratings, or a product no UK shop we check sells.",
+          "Beside the Any red flags? question."),
     Entry("askrip.ask.own", T, "Ask Rip page: your own question",
           "Or type your own question about the product, such as whether a shop has free delivery.",
           "Under the one-tap questions."),
@@ -3622,6 +3630,13 @@ ENTRIES = [
     Entry("askrip.faq.price.a", T, "Ask Rip FAQ: good price, answer",
           "Yes. He uses the page's Price check, which compares today's cheapest delivered price with the lowest and the "
           "average in our record, the RRP and Cardmarket's price.", "Its answer."),
+    Entry("askrip.faq.flags.q", T, "Ask Rip FAQ: red flags, question", "Can Rip tell if a listing is dodgy?",
+          "A question on the Ask Rip page."),
+    Entry("askrip.faq.flags.a", T, "Ask Rip FAQ: red flags, answer",
+          "He points out the warning signs our own checks find, such as a price well over the RRP or a listing title "
+          "that says repack. He never calls a shop or seller a scam, and no warning signs is not a promise, so check "
+          "the listing before you buy.",
+          "Its answer."),
     Entry("askrip.faq.wrong.q", T, "Ask Rip FAQ: wrong, question", "Can Rip be wrong?", "A question on the Ask Rip page."),
     Entry("askrip.faq.wrong.a", T, "Ask Rip FAQ: wrong, answer",
           "Yes. Answers are written by AI and can be wrong, so check the price and stock at the shop before you buy.",
@@ -3773,7 +3788,8 @@ ENTRIES = [
         "AI provider to write the answer. We first take out anything that looks like an email address, phone number "
         "or link, and we keep the question and its answer, without anything that says who asked, to improve Rip. To "
         "limit each person to 5 questions a day, we keep a code made from your internet address for 24 hours. It "
-        "cannot be turned back into the address.",
+        "cannot be turned back into the address. A small cookie of ours in your browser also keeps how many you "
+        "have asked and when the day ends, and nothing else.",
         "Data section of the terms page, after search alerts: what Ask Rip sends and keeps.",
         legal=True,
     ),

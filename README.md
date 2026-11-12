@@ -1066,10 +1066,18 @@ needed. The owner,
 to spend anymore than £25 at the start ... Make sure we can disable it when
 we need to."
 
-- Each person (their internet address, kept only as a one-way hash in the
-  cache for 24 hours) gets 5 questions a day; the same question on the same
+- Each person gets 5 questions a day; the same question on the same
   product, while its prices are unchanged, is answered free from the cache
   and does not count. A question that fails on our side does not count.
+  A person is counted twice over, and the higher count holds: by their
+  internet address (kept only as a one-way hash in the cache for 24 hours)
+  and by their browser, in a signed cookie (`rip_asked`) holding only how
+  many they asked and when their day ends. A phone on mobile data gets a
+  new address often, so by address alone its 5 started again (the owner,
+  12 Nov 2026: "the 5 uses resets every time I change browser or reopen
+  the page"). A new browser on a new address still starts again; no limit
+  without accounts stops that, and the daily and monthly limits below cap
+  what it can cost. The Terms page says what the cookie holds.
 - Spending: it is the Claude page's **Ask Rip** job, with a monthly limit
   of its own of $30 until you save another (`judge.JOB_DEFAULT_LIMITS`),
   under £25 while a pound buys more than $1.20. That is its only limit: the
@@ -1086,14 +1094,14 @@ we need to."
   fault does not hide it). The Ask Rip row on the Claude page says whether
   shoppers see it now and, if not, why (`askrip.CLOSED_WORDS`).
 - Where: two places on every product page. At the top, under the
-  product's name, "Not sure? Ask Rip" and four one-tap questions
+  product's name, "Not sure? Ask Rip" and five one-tap questions
   (`ask_strip.html`, `askrip.SUGGESTED`, worded in the registry under
   `product.ask.suggest.*`): "What's inside?", "Is it good value?", "Buy now
-  or wait?" and "Is it right for me?". Showing them costs nothing; a tap
+  or wait?", "Is it right for me?" and "Any red flags?". Showing them costs nothing; a tap
   asks Rip, and the page scrolls to his box in the price box, under Save,
   Track price and Share, where the answer comes (without script the form
   posts and the page comes back at the answer). Under an answer the box
-  offers the other three as follow-ups. On a phone the picture gives up the
+  offers the others as follow-ups. On a phone the picture gives up the
   row's height (`--product-media-rip`), so the price and Buy now stay on
   the first screen. The row goes once the day's questions are used. The
   owner, 11 Nov 2026: "ask rip in its current location is pointless I want
@@ -1109,6 +1117,26 @@ we need to."
   today's Price check, record, price 30 days ago and stock, never guessing
   what will happen; and who it suits, with another product of the set for
   another budget.
+- Any red flags? Our own code finds the warning signs and Rip states them
+  (`askrip.warning_signs`, sent as each offer's `warning_signs`): a price
+  more than 15% over the RRP, a delivered price more than 35% over the
+  cheapest UK shop we read, words in a marketplace or shop listing's own
+  title such as repack, resealed, unsealed, replica, custom or proxy
+  (`DODGY_WORDS`; not when the seller denies it, "not resealed", or the
+  product's own name has it, Magic's Mystery Booster), another language
+  named in the title, an eBay seller with fewer than 200 ratings or under
+  98% positive (sellers under 50 or 95% are never shown), in stock before
+  the release date, and a doubtful price. For the product he is told how
+  many UK shops we read list it and whether Cardmarket sells the same
+  product; a product only marketplace sellers list carries "no shop
+  confirms it". Marketplace offers also send the seller's own title, its
+  prices taken out. He never calls a shop, seller or listing a scam, fake
+  or a scalper, and never says a purchase is safe: with no signs he says
+  nothing we check looks wrong and to check the listing. This applies to
+  eBay listings too, though the Price check chip never says High price
+  beside a shop that pays a commission: the shopper asked. The owner, 12
+  Nov 2026: "Can ask rip check if the product is a scam or likely to be a
+  scalper ... Is the product a real produxt is the listing name dodgy?".
 - Its own page, `/ask-rip/` (`web:ask_rip_about`, wording under `askrip.*`
   in the registry), says what Rip answers, where his answers come from,
   what he will not do and the questions people ask about him, given again

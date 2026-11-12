@@ -172,8 +172,41 @@ class LimitTests(AskRipCase):
         self.assertIn("That&#x27;s your 5 questions for today.", response.json()["html"])
         self.assertNotIn("<form", response.json()["html"])
         self.assertEqual(len(self.fake.sent), 5)
-        # Someone else still can.
+        # Someone else, in their own browser, still can.
+        self.client = self.client_class()
         self.assertEqual(self.ask("And a sixth?", address="198.51.100.4").json()["state"], "answered")
+
+    def test_a_new_address_in_the_same_browser_does_not_start_the_count_again(self):
+        # The owner, 12 Nov 2026, on a phone on mobile data: "the 5 uses resets every time I change browser or
+        # reopen the page". A phone gets a new address often; its browser keeps the count.
+        for n in range(5):
+            self.assertEqual(self.ask(f"Question number {n}?", address=f"203.0.113.{n + 10}").json()["state"],
+                             "answered")
+        self.assertEqual(self.ask("And a sixth?", address="192.0.2.50").json()["state"], "limit")
+        page = self.client.get(self.box.get_absolute_url(), REMOTE_ADDR="192.0.2.51")
+        self.assertContains(page, "That&#x27;s your 5 questions for today.")
+        # Another browser on the last address is counted by the address.
+        self.client = self.client_class()
+        self.assertEqual(self.ask("And a sixth?", address="203.0.113.14").json()["state"], "limit")
+        self.assertEqual(len(self.fake.sent), 5)
+
+    def test_the_cookie_holds_only_the_count_and_cannot_be_lowered(self):
+        from django.core import signing
+
+        response = self.ask()
+        cookie = response.cookies[askrip.COUNT_COOKIE]
+        kept = signing.loads(cookie.value, salt=askrip.COUNT_SALT)
+        self.assertEqual(set(kept), {"n", "until"})
+        self.assertEqual(kept["n"], 1)
+        self.assertTrue(cookie["httponly"])
+        self.assertLessEqual(int(cookie["max-age"]), 24 * 3600)
+        # A cookie written by hand is not believed, and the address still counts.
+        self.client.cookies[askrip.COUNT_COOKIE] = signing.dumps({"n": 0, "until": kept["until"]}, salt="other")
+        for n in range(4):
+            self.ask(f"Question number {n}?")
+        self.assertEqual(self.ask("And a sixth?").json()["state"], "limit")
+        # A question answered from the cache sets nothing: it was not counted.
+        self.assertNotIn(askrip.COUNT_COOKIE, self.ask("Question number 0?").cookies)
 
     def test_a_failure_on_our_side_does_not_count(self):
         import anthropic
@@ -424,7 +457,8 @@ class PriceCheckTests(AskRipCase):
         strip = html[html.index('class="ask-strip"'):html.index("</form>", html.index('class="ask-strip"'))]
         self.assertIn("Not sure? Ask Rip", strip)
         self.assertEqual(re.findall(r'name="suggested" value="([^"]+)"', strip),
-                         ["What's inside?", "Is it good value?", "Buy now or wait?", "Is it right for me?"])
+                         ["What's inside?", "Is it good value?", "Buy now or wait?", "Is it right for me?",
+                          "Any red flags?"])
         self.assertIn("data-ask-form", strip)
         self.assertLess(html.index('class="ask-strip"'), html.index('class="buybox'))
         self.assertLess(html.index('class="product-title"'), html.index('class="ask-strip"'))
@@ -490,6 +524,85 @@ class KnowsWhatItIsTests(AskRipCase):
                       "Never guess what will happen", "Whether it is right for them"):
             with self.subTest(words=words):
                 self.assertIn(words, prompt)
+
+
+class RedFlagTests(AskRipCase):
+    """Any red flags? Our own code finds the warning signs; Rip states them and never calls anyone a scam. The owner,
+    12 Nov 2026: "Can ask rip check if the product is a scam or likely to be a scalper ... Is the product a real
+    produxt is the listing name dodgy?"."""
+
+    def ebay_offer(self, title, price="230.00", feedback="99.9", ratings=12000, **extra):
+        ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
+        listing = make_listing(self.box, ebay, price=price, delivery="0.00", **extra)
+        Listing.objects.filter(pk=listing.pk).update(title=title, seller_name="cardking", seller_ratings=ratings,
+                                                     seller_feedback=Decimal(feedback))
+        found, amounts, _checked = askrip.facts(self.box)
+        return next(offer for offer in found["offers"] if offer["shop"] == "eBay"), found, amounts
+
+    def test_a_clean_uk_shop_offer_has_no_warning_signs(self):
+        found, _amounts, _checked = askrip.facts(self.box)
+        self.assertEqual([offer.get("warning_signs") for offer in found["offers"]], [None, None])
+        self.assertEqual(found["uk_shops_we_check_listing_it"], 2)
+        self.assertNotIn("product_warning_signs", found)
+
+    def test_a_scalpers_price_and_a_repack_title_are_named(self):
+        self.box.rrp = Decimal("150.00")
+        self.box.save()
+        offer, _found, _amounts = self.ebay_offer("Pokemon Surging Sparks Booster Box REPACK 36 packs £230")
+        self.assertEqual(offer["warning_signs"], [
+            "its price is 53% over the RRP",
+            "it costs 64% more delivered than the cheapest UK shop we check",
+            'the listing\'s own title says "repack"',
+        ])
+        # The seller's own title is sent, without the price in it: an amount in it is none of the page's.
+        self.assertEqual(offer["listing_title"], "Pokemon Surging Sparks Booster Box REPACK 36 packs (a price)")
+
+    def test_a_word_the_seller_denies_or_the_products_own_name_has_is_no_sign(self):
+        self.assertEqual(askrip.dodgy_words("Booster Box sealed, not resealed, never repacked", "Booster Box"), [])
+        self.assertEqual(askrip.dodgy_words("Mystery Booster 2 Box", "Mystery Booster 2 Booster Box"), [])
+        self.assertEqual(askrip.dodgy_words("Booster Box resealed custom", "Booster Box"), ["custom", "resealed"])
+
+    def test_a_seller_with_few_ratings_or_weaker_feedback(self):
+        offer, _found, _amounts = self.ebay_offer("Surging Sparks Booster Box", price="140.00", feedback="96.5",
+                                                   ratings=80)
+        self.assertEqual(offer["warning_signs"], ["the seller has fewer than 200 ratings",
+                                                  "the seller's positive feedback is under 98%"])
+
+    def test_another_language_in_the_title_and_in_stock_before_release(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        self.box.release_date = timezone.localdate() + timedelta(days=10)
+        self.box.save()
+        offer, found, _amounts = self.ebay_offer("Surging Sparks Booster Box Japanese", price="140.00")
+        self.assertIn("the listing's own title says Japanese, but this product is English", offer["warning_signs"])
+        self.assertIn("it is listed as in stock before the release date", offer["warning_signs"])
+        self.assertIs(found["released"], False)
+
+    def test_a_product_no_uk_shop_lists_is_one_no_shop_confirms(self):
+        Listing.objects.filter(product=self.box).delete()
+        _offer, found, _amounts = self.ebay_offer("Surging Sparks Booster Box", price="140.00")
+        self.assertEqual(found["uk_shops_we_check_listing_it"], 0)
+        self.assertEqual(found["product_warning_signs"], [
+            "no UK shop we check lists this product; its prices come only from marketplace sellers, so no shop "
+            "confirms it"])
+
+    def test_his_instructions_never_let_him_call_anyone_a_scam(self):
+        prompt = askrip.SYSTEM_PROMPT
+        for words in ('"warning_signs"', '"product_warning_signs"', "Never call a shop, seller or listing a scam",
+                      "never say a purchase is safe or guaranteed", "Never add warning signs the facts do not give"):
+            with self.subTest(words=words):
+                self.assertIn(words, prompt)
+
+    def test_the_red_flags_question_is_sent_with_the_signs(self):
+        self.ebay_offer("Surging Sparks Booster Box resealed")
+        response = self.client.post(reverse("web:ask_rip", args=[self.box.slug]), {"suggested": "Any red flags?"},
+                                    REMOTE_ADDR="203.0.113.7", HTTP_X_ASK_RIP="1")
+        self.assertEqual(response.json()["state"], "answered")
+        content = self.fake.sent[0]["messages"][0]["content"]
+        self.assertIn("<question>Any red flags?</question>", content)
+        self.assertIn('the listing\'s own title says \\"resealed\\"', content)
 
 
 class RipTests(AskRipCase):
@@ -578,7 +691,7 @@ class AskRipPageTests(AskRipCase):
         html = self.page()
         blocks = self.blocks(html)
         faq = next(block for block in blocks if block["@type"] == "FAQPage")
-        self.assertEqual(len(faq["mainEntity"]), 5)
+        self.assertEqual(len(faq["mainEntity"]), 6)
         for question in faq["mainEntity"]:
             with self.subTest(question=question["name"]):
                 self.assertIn(f"<dt>{question['name']}</dt>", html)

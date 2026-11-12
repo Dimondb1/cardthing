@@ -2222,10 +2222,10 @@ def shops(request):
     })
 
 
-# Ask Rip's page: the four one-tap questions he is asked most (askrip.SUGGESTED, each with what he answers from) and
+# Ask Rip's page: the one-tap questions he is asked most (askrip.SUGGESTED, each with what he answers from) and
 # the questions people ask about him.
-ASK_RIP_QUESTIONS = ("inside", "value", "when", "fit")
-ASK_RIP_FAQ = ("what", "free", "source", "price", "wrong")
+ASK_RIP_QUESTIONS = ("inside", "value", "when", "fit", "flags")
+ASK_RIP_FAQ = ("what", "free", "source", "price", "flags", "wrong")
 
 
 def ask_rip_about(request):
@@ -3114,6 +3114,7 @@ def ask_rip(request, slug):
         query = urlencode({"ask": asked.token} if asked.token else {"ask_state": asked.state})
         response = HttpResponseRedirect(f"{back}?{query}#ask")
         response.status_code = 303
+    askrip.keep_count(request, response)
     response["Cache-Control"] = "no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response

@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from . import contents
-from .models import Product, Retailer
+from .models import Listing, Product, Retailer
 from .testing import make_game, make_listing, make_product, make_retailer, make_set
 
 # (a shop's description, the packs it says, the cards a pack it says). Written the way UK shops write them.
@@ -214,22 +214,34 @@ class ProductPageTests(TestCase):
     def test_the_price_box_gives_the_price_a_pack_and_the_details_what_is_inside(self):
         Product.objects.filter(pk=self.box.pk).update(packs_found=36, cards_found=10)
         html = self.page()
-        self.assertIn('<p class="buybox__packs">36 packs inside, £2.42 a pack</p>', html)
+        self.assertIn('<p class="buybox__packs">36 packs, £2.42 each<span aria-hidden="true"> · </span>', html)
         self.assertIn("<dt>Inside</dt><dd>36 packs of 10 cards <span class=\"muted\">(from the shops&#x27; descriptions)</span></dd>", html)
         self.assertLess(html.index("buybox__packs"), html.index('class="buy-now"'))
-        # And under the name, so a set of several packs never reads as one.
+        # Not under the name as well: the price box says it (the owner, 12 Nov 2026, clearing clutter).
+        facts = html[html.index('<p class="product-facts">'):html.index("</p>", html.index('<p class="product-facts">'))]
+        self.assertNotIn("36 packs", facts)
+
+    def test_with_no_price_the_packs_are_under_the_name(self):
+        """So a set of several packs never reads as one, though no shop prices it now."""
+        Product.objects.filter(pk=self.box.pk).update(packs_found=36)
+        Listing.objects.filter(product=self.box).update(availability=Listing.Availability.OUT_OF_STOCK)
+        html = self.page()
+        self.assertNotIn("buybox__packs", html)
         self.assertRegex(html, r'<p class="product-facts">[^<]*<[^\n]*· 36 packs · English')
 
     def test_the_owners_figures_need_no_source(self):
         Product.objects.filter(pk=self.box.pk).update(packs=24, packs_found=36)
         html = self.page()
-        self.assertIn("24 packs inside, £3.63 a pack", html)
+        self.assertIn("24 packs, £3.63 each", html)
         self.assertIn("<dt>Inside</dt><dd>24 packs</dd>", html)
 
     def test_one_pack_has_no_price_a_pack_and_nothing_known_shows_nothing(self):
         Product.objects.filter(pk=self.box.pk).update(packs_found=1, cards_found=10)
         html = self.page()
-        self.assertNotIn("buybox__packs", html)
+        # One pack: the price a card on the line, and no price a pack.
+        line = html[html.index('class="buybox__packs"'):html.index("</p>", html.index('class="buybox__packs"'))]
+        self.assertIn("10 cards inside", line)
+        self.assertNotIn("each", line)
         self.assertIn("1 pack of 10 cards", html)
         Product.objects.filter(pk=self.box.pk).update(packs_found=None, cards_found=None)
         html = self.page()

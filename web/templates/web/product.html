@@ -14,7 +14,7 @@
 <div class="product-head{% if product.name|length > 60 %} product-head--long{% endif %}{% if cheapest and not cheapest.delivery_known %} product-head--note{% endif %}{% if ask.open and ask.left %} product-head--rip{% endif %}" data-viewed-slug="{{ product.slug }}" data-viewed-name="{{ product.name }}" data-viewed-game="{{ product.game.slug }}">
   <div class="product-intro">
     <h1 class="product-title">{{ product.name }}</h1>
-    <p class="product-facts">{{ product.type_name }}{% info "type" product.product_type product.type_name %}{% if product.packs_inside and product.packs_inside > 1 %} · {% copy "product.facts.packs" packs=product.packs_inside %}{% endif %} · {{ product.language_name|default:"English" }}{% if product.language %}{% info "lang" product.language product.language_name game=product.game.slug %}{% endif %}</p>
+    <p class="product-facts">{{ product.type_name }}{% info "type" product.product_type product.type_name %}{% if product.packs_inside and product.packs_inside > 1 and not per_pack %} · {% copy "product.facts.packs" packs=product.packs_inside %}{% endif %} · {{ product.language_name|default:"English" }}{% if product.language %}{% info "lang" product.language product.language_name game=product.game.slug %}{% endif %}</p>
     {% if ask.open and ask.left %}{% include "web/includes/ask_strip.html" %}{% endif %}
   </div>
 
@@ -33,8 +33,8 @@
         <p class="buybox__price"><span class="buybox__amount"><span class="money" data-price-for="{{ cheapest.pk }}">{% price cheapest.shown_price size="lg" %}</span> <span class="delivered">{% include "web/includes/price_basis.html" with listing=cheapest %}</span></span>{% if fair %}{% include "web/includes/fair_price.html" %}{% endif %}</p>
         <p class="buybox__delivered"><span class="money" data-note-for="{{ cheapest.pk }}">{% include "web/includes/price_note.html" with listing=cheapest %}</span>{% if not cheapest.delivery_known %} {% copy "product.delivery.unknown_check" %}{% endif %}</p>
         {% if rrp_line %}{% include "web/includes/rrp_line.html" with line=rrp_line %}{% endif %}
-        {% if per_pack %}<p class="buybox__packs">{% copy "product.packs.each" packs=product.packs_inside each=per_pack|gbp %}</p>{% endif %}
-        {% if per_card %}<p class="buybox__cards"><a href="{% url 'web:per_card' %}">{% copy "product.cards.each" cards=cards_total each=per_card|pence %}</a></p>{% endif %}
+        {# Packs and the price of each, and the price a card, on one line (the owner, 12 Nov 2026: "make sure there's not too much clutter"). #}
+        {% if per_pack or per_card %}<p class="buybox__packs">{% if per_pack %}{% copy "product.packs.each" packs=product.packs_inside each=per_pack|gbp %}{% if per_card %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span><a href="{% url 'web:per_card' %}">{% copy "product.cards.short" each=per_card|pence %}</a>{% endif %}{% else %}<a href="{% url 'web:per_card' %}">{% copy "product.cards.each" cards=cards_total each=per_card|pence %}</a>{% endif %}</p>{% endif %}
       </div>
       {# The cheapest offer a visitor can buy now, through /go/ so the click is counted and the shop's tracking applies. #}
       <a class="buy-now" {% go_link cheapest "buy_now" product %} target="_blank" rel="sponsored nofollow noopener" data-buy-now>
@@ -74,7 +74,6 @@
     {% endif %}
     {% if cheapest %}
       {% with deal=summary.deal %}{% if deal %}<p class="buybox__deal">{% copy "product.deal.better" quantity=deal.deal_quantity price=deal.deal_price|gbp retailer=deal.retailer.name each=deal.deal_each|gbp %}</p>{% endif %}{% endwith %}
-      <div class="buybox__rank">{% include "web/includes/rank_row.html" %}</div>
       <p class="buybox__summary">
         <span class="stock-inline stock-inline--{{ cheapest.availability }}">{{ cheapest.get_availability_display }}</span>
         {% if in_stock_count %}{% copy_count "product.availability.in_stock" in_stock_count %}{% elif preorder_count %}{% copy_count "product.availability.preorder" preorder_count %}{% endif %}
@@ -85,7 +84,7 @@
     {% if alerts_on %}{% include "web/includes/alert_form.html" %}{% endif %}
     <div class="buybox__save">{% include "web/includes/save_link.html" with price=cheapest.shown_price %}{% if track_on %}
       {# Links to the panels below, so they open without script (:target); product.js opens them in place. #}
-      <a class="button button--quiet button--panel" href="#track" aria-controls="track" data-panel-open>{% copy "alerts.track.button" %}<span class="visually-hidden"> {{ product.name }}</span></a>{% endif %}
+      <a class="button button--quiet button--panel" href="#track" aria-controls="track" data-panel-open>{% include "web/includes/icons/bell.svg" %}{% copy "alerts.track.button" %}<span class="visually-hidden"> {{ product.name }}</span></a>{% endif %}
       <a class="button button--quiet button--panel button--share" href="#share" aria-controls="share" data-panel-open>{% include "web/includes/share/icon.svg" %}{% copy "product.share.button" %}<span class="visually-hidden"> {{ product.name }}</span></a>
       {% include "web/includes/list_button.html" with list_count=list_slugs|length %}</div>
     {% if track_on %}{% include "web/includes/track_form.html" %}{% endif %}

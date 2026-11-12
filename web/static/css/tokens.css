@@ -71,6 +71,7 @@
   --icon-social: 1.25rem;        /* the Instagram, Facebook and TikTok icons in the footer */
   --icon-nav: 1.5rem;            /* the Swipe and Watchlist icons in the phone header */
   --icon-button: 1.1rem;         /* an icon beside a button's words: Save's bookmark, Share's nodes */
+  --icon-tool: 1.25rem;          /* an icon over a button's word: the price box's Save, Track price, Share, Add to list */
   --share-logo: 3rem;            /* the round logos in a product page's Share panel */
   --share-mark: 1.5rem;          /* the mark inside a round logo */
 

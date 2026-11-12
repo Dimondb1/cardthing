@@ -77,7 +77,8 @@ class PerCardTests(TestCase):
 
     def test_the_product_page_says_what_each_card_costs(self):
         response = self.client.get(self.box.get_absolute_url())
-        self.assertContains(response, '<a href="/cheapest-per-card/">360 cards inside, 30p a card</a>')
+        # After the packs and the price of each, on the same line.
+        self.assertContains(response, '<a href="/cheapest-per-card/">30p a card</a>')
         self.assertNotContains(self.client.get(self.tin.get_absolute_url()), "a card</a>")
 
     def test_the_home_page_leads_with_the_cheapest_per_card(self):

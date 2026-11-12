@@ -178,7 +178,10 @@ class PageTests(PageTestCase):
         self.assertContains(response, "£52.00 plus £2.99 delivery")
         self.assertContains(response, "Buy now")
         self.assertContains(response, "Best in 7 days")
-        self.assertContains(response, 'rank__pos--2">#2</span><span class="rank__name">Northgate Cards')
+        # The second shop is in the price list under Compare prices, not ranked again in the price box (the owner,
+        # 12 Nov 2026, clearing clutter from the price box).
+        self.assertNotContains(response, 'class="buybox__rank"')
+        self.assertContains(response, "Northgate Cards")
         self.assertContains(response, "2 retailers have this in stock.")
         # The time under the headline price is that shop's, not the newest check of any shop.
         self.assertContains(response, "Price checked at Harbour Games 1 hour ago.")

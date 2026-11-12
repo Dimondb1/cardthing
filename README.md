@@ -1949,6 +1949,17 @@ Where two columns sit side by side (the product picture beside the price
 box, the price history beside the details, a card's picture beside its
 text column) they split 61.8 to 38.2 (`--split-major`, `--split-minor`).
 On a card the Save button keeps its own width outside that split.
+The price box keeps to what helps a decision (the owner, 12 Nov 2026: "make
+sure there's not too much clutter on there ... as long as it looks nice and
+tidy"): the price and its Price check, delivery, the RRP, one line for the
+packs, the price of each and the price a card ("36 packs, £4.23 each · 42p
+a card"), Buy now, the shop's code, Compare prices, stock and when the price
+was checked, then Save, Track price, Share and Add to list as one row of
+equal buttons, each its icon over its word, and Ask Rip. The second shop is
+not ranked again in the box (the price list under Compare prices has every
+shop), and the packs are said under the product's name only when the box
+cannot say them (no shop prices it now).
+
 Every rounded card, the price box included, has the same inner edge
 (`--card-pad`).
 
@@ -4867,7 +4878,7 @@ A product page's price box has **Add to list** (`web/shopping.py`,
 `/shopping-list/`, `web:shopping_list`). The list is a cookie of ours
 (`rr_list`, the products' addresses only, HttpOnly, 90 days, up to 20
 products), so it works with JavaScript off: Add to list is a form, and the
-button then reads "See your list (3)". `list.js` sends it without a reload.
+button then reads "Your list (3)". `list.js` sends it without a reload.
 The page shows the cheapest way to buy the lot, delivery included, against
 buying each product on its own at its page's cheapest delivered price, and
 the saving in green when there is one.

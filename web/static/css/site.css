@@ -1216,7 +1216,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .buybox__price .price { font-size: var(--text-price-hero); }
 .buybox__price .delivered { font-weight: var(--weight-strong); color: var(--color-price); }
 .buybox__delivered { font-size: var(--text-sm); color: var(--color-ink-muted); }
-.buybox__packs, .buybox__cards { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
+.buybox__packs { font-size: var(--text-sm); font-weight: var(--weight-strong); color: var(--color-ink); }
 /* The RRP and how far the price is from it: green under, red over, as every saving and dearer price on the site. */
 .buybox__rrp { display: flex; flex-wrap: wrap; gap: 0 var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
 .buybox__rrp-gap { font-weight: var(--weight-strong); color: var(--color-ink); }
@@ -1224,9 +1224,14 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .buybox__rrp-gap--over { color: var(--color-more); }
 .buybox__deal { font-size: var(--text-sm); color: var(--color-ink); }
 .buybox__summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-sm); color: var(--color-ink-muted); }
-.buybox__save { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-2); }
-/* Save, Track price and Share share the row evenly; on a narrow phone the last one takes a row of its own. */
-.buybox__save > .button { flex: 1 1 auto; padding-inline: var(--space-3); }
+/* Save, Track price, Share and Add to list: one row of equal tools, each its icon over its word, on every screen. The
+   owner, 12 Nov 2026, of the row that wrapped onto two lines on a phone: "as long as it looks nice and tidy". */
+.buybox__save { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-2); }
+/* The icons in a line at the top, so a word that needs two lines on a narrow phone leaves them where they are. */
+.buybox .buybox__save .button { width: 100%; min-width: 0; flex-direction: column; justify-content: flex-start; gap: var(--space-1); padding: var(--space-2) 0; font-size: var(--text-xs); line-height: var(--leading-snug); text-align: center; overflow-wrap: anywhere; }
+.buybox__save .icon-save, .buybox__save .icon-share, .buybox__save .icon-tool { width: var(--icon-tool); height: var(--icon-tool); flex: none; }
+@media (min-width: 48rem) { .buybox .buybox__save .button { font-size: var(--text-sm); } }
+.icon-tool { width: var(--icon-button); height: var(--icon-button); flex: none; }
 
 /* Buy now: the raptor holding a bag, the words, and an arrow. One wide button to the cheapest shop. */
 .buy-now {

@@ -1628,13 +1628,16 @@ ENTRIES = [
     Entry("browse.card.each", T, "Card: price per pack", "{each} a pack",
           "After the shop under a product card's price: the price shared over the packs.", placeholders=("each",)),
     Entry(
-        "product.packs.each", T, "Price per pack", "{packs} packs inside, {each} a pack",
+        "product.packs.each", T, "Price per pack", "{packs} packs, {each} each",
         "Under the cheapest price on a product page, when it holds two or more packs and the number is known: the "
         "cheapest price shared over the packs.", placeholders=("packs", "each"),
     ),
+    Entry("product.cards.short", T, "Price per card after the packs", "{each} a card",
+          "After the packs and the price of each, on the same line under the cheapest price. Links to the Cheapest per "
+          "card page.", placeholders=("each",)),
     Entry("product.cards.each", T, "Price per card", "{cards} cards inside, {each} a card",
-          "Under the cheapest price on a product page, when the cards inside can be counted: the cheapest price shared "
-          "over every card. Links to the Cheapest per card page.", placeholders=("cards", "each")),
+          "Under the cheapest price on a product page holding one pack, when its cards can be counted: the cheapest "
+          "price shared over every card. Links to the Cheapest per card page.", placeholders=("cards", "each")),
     Entry("product.rrp.owner", T, "RRP under the price", "RRP {rrp}",
           "Under the cheapest price on a product page, when you have typed its RRP in Admin.", placeholders=("rrp",)),
     Entry("product.rrp.shops", T, "RRP from shops under the price", "RRP {rrp} from {count} UK shops",
@@ -2968,9 +2971,9 @@ ENTRIES = [
           "The cheapest way to buy everything on your list, with each shop's delivery charged once.",
           "Under the shopping list heading."),
     Entry("list.add", B, "Add to list button", "Add to list", "In a product's price box: puts it on the shopping list."),
-    Entry("list.see", B, "See your list button", "See your list ({count})",
+    Entry("list.see", B, "See your list button", "Your list ({count})",
           "In a product's price box once it is on the shopping list: opens the list.", placeholders=("count",)),
-    Entry("list.full", B, "Full list button", "Your list is full ({count})",
+    Entry("list.full", B, "Full list button", "List full ({count})",
           "In a product's price box when the list holds as many as it can: opens the list.", placeholders=("count",)),
     Entry("list.remove", B, "Remove from list button", "Remove", "Beside each product on the shopping list."),
     Entry("list.clear", B, "Clear list button", "Clear the list", "Under the shopping list: removes everything."),

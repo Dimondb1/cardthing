@@ -163,5 +163,6 @@ class ProductPageTests(TestCase):
         self.assertIn("Cheapest price", box)
         self.assertNotIn("Cheapest in stock", box)
         self.assertIn("2 shops, cheapest delivered first", box)
-        self.assertIn("rank__price--more", box)
+        # The dearer pre-order is in the price list, not ranked again in the box.
+        self.assertNotIn("rank__price", box)
         self.assertIn('class="offer__flag"', html)

@@ -419,7 +419,7 @@ class TrackPriceTests(TestCase):
 
     def test_track_price_sits_next_to_save_and_its_form_works_without_script(self):
         page = self.client.get(self.product.get_absolute_url())
-        self.assertContains(page, 'href="#track" aria-controls="track" data-panel-open>Track price')
+        self.assertContains(page, 'href="#track" aria-controls="track" data-panel-open><svg class="icon-tool"')
         self.assertContains(page, 'id="track"')
         self.assertContains(page, "It is £7.98 delivered now.")
         self.assertContains(page, '<option value="30" selected>1 month</option>', html=False)
@@ -433,7 +433,7 @@ class TrackPriceTests(TestCase):
         ebay = make_listing(self.product, make_retailer("eBay", source_type=Retailer.Source.EBAY), price="10.48",
                             delivery="2.70")
         page = self.client.get(self.product.get_absolute_url())
-        self.assertContains(page, 'href="#track" aria-controls="track" data-panel-open>Track price')
+        self.assertContains(page, 'href="#track" aria-controls="track" data-panel-open><svg class="icon-tool"')
         self.assertContains(page, "It is £13.18 delivered now.")
         self.assertContains(page, "Email me when it is back in stock")
         # Only Amazon: never a price alert on Amazon's price (its Associates rules).

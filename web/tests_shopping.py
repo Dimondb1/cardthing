@@ -181,14 +181,14 @@ class PageTests(ListCase):
         self.assertEqual(response.cookies[shopping.COOKIE].value, self.box.slug)
         self.assertTrue(response.cookies[shopping.COOKIE]["httponly"])
         page = self.client.get(self.box.get_absolute_url())
-        self.assertContains(page, "See your list (1)")
+        self.assertContains(page, "Your list (1)")
         self.assertNotContains(page, reverse("web:list_add", args=[self.box.slug]))
 
     def test_add_to_list_with_script_gets_the_new_button(self):
         self.on_list(self.etb)
         response = self.client.post(reverse("web:list_add", args=[self.box.slug]), HTTP_X_LIST="1")
         self.assertEqual(response.json()["count"], 2)
-        self.assertIn("See your list (2)", response.json()["html"])
+        self.assertIn("Your list (2)", response.json()["html"])
         self.assertEqual(response.cookies[shopping.COOKIE].value, f"{self.etb.slug}.{self.box.slug}")
 
     def test_the_list_page_shows_the_plan_and_the_saving(self):

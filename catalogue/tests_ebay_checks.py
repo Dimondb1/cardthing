@@ -87,17 +87,47 @@ class CheckTests(WorkerTestCase):
     def test_an_ended_listing_a_poor_seller_or_junk_is_out_of_stock_at_its_last_price(self):
         gone = FakeEbay([])
         self.assertEqual(self.check(gone), {self.row.pk: (Decimal("82.00"), Listing.Availability.OUT_OF_STOCK, Decimal("3.89"))})
+        self.assertIn("v1|123|0", ebay.ended_items())
+        ebay.forget_live()
         poor = FakeEbay([item(123, feedback="90.0")])
         self.assertEqual(self.check(poor)[self.row.pk][1], Listing.Availability.OUT_OF_STOCK)
         junk = FakeEbay([item(123, title="Surging Sparks Booster Box x 3 Multibuy")])
         self.assertEqual(self.check(junk)[self.row.pk][1], Listing.Availability.OUT_OF_STOCK)
-        # One ended listing in a batch of two: eBay refuses the batch, so each is asked for on its own.
+        # One ended listing in a batch of two: eBay refuses the batch, so each half is asked for.
+        ebay.forget_live()
         other = self.other_listing()
         api = FakeEbay([item(456, price="51.00", postage="0.00", title="Other Box")])
         found = self.check(api, self.row, other)
         self.assertEqual(found[self.row.pk][1], Listing.Availability.OUT_OF_STOCK)
         self.assertEqual(found[other.pk], (Decimal("51.00"), Listing.Availability.IN_STOCK, Decimal("0.00")))
         self.assertEqual(len(api.lookups()), 3)
+
+    def test_an_item_ebay_says_has_ended_is_never_asked_about_again(self):
+        """The owner, 12 Nov 2026: "ebay hasn't updated in 8 hours". Every check of a batch holding an ended item asked
+        about each of its twenty alone, again and again, and the day's allowance ran out."""
+        self.check(FakeEbay([]))
+        api = FakeEbay([item(123)])
+        found = self.check(api)
+        self.assertEqual(found[self.row.pk][1], Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(api.lookups(), [])
+        # Nor is it planned: the reader leaves it to the daily run, which searches for a new listing.
+        reader = self.make_worker(ebay_request=api)
+        self.assertEqual(reader.plan(self.clock()), [])
+
+    def test_one_ended_item_in_twenty_costs_about_ten_lookups_not_twenty_one(self):
+        rows, items = [], []
+        for n in range(20):
+            product = self.product(f"box-{n}", views=3)
+            Product.objects.filter(pk=product.pk).update(name=f"Box {n}")
+            rows.append(self.listing(product, self.ebay, 120, price="50.00", url=f"https://www.ebay.co.uk/itm/{1000 + n}"))
+            if n != 7:
+                items.append(item(1000 + n, title=f"Box {n}"))
+        api = FakeEbay(items)
+        found = self.check(api, *rows)
+        self.assertEqual(found[rows[7].pk][1], Listing.Availability.OUT_OF_STOCK)
+        self.assertEqual(sum(1 for pk, (_p, stock, _d) in found.items() if stock == Listing.Availability.IN_STOCK), 19)
+        self.assertLessEqual(len(api.lookups()), 10)
+        self.assertEqual(set(ebay.ended_items()), {"v1|1007|0"})
 
     def test_the_days_allowance_is_left_to_the_daily_run(self):
         with self.assertRaises(ebay.AllowanceUsed):
@@ -119,14 +149,21 @@ class CheckTests(WorkerTestCase):
         self.assertEqual((usage["searches"], usage["lookups"]), (4000, 4610))
         self.assertTrue(usage["asked_at"])
 
-    def test_an_ebay_listing_nobody_is_looking_at_is_still_checked_every_six_hours(self):
+    def test_an_ebay_listing_nobody_is_looking_at_is_still_checked_every_two_hours(self):
+        """Twice inside the four hours an eBay price counts for (the owner, 12 Nov 2026: "This sort of time to update
+        is not good enough")."""
         box = self.product("cold-box")
         self.listing(box, self.shop("Other Shop"), 5, price="21.00")   # two shops sell it and nobody looks: cold
-        cold = self.listing(box, self.ebay, 5 * 60, price="20.00", url="https://www.ebay.co.uk/itm/789")
+        cold = self.listing(box, self.ebay, 90, price="20.00", url="https://www.ebay.co.uk/itm/789")
         reader = self.make_worker(ebay_request=FakeEbay([item(123), item(789, title="Cold Box", price="19.00", postage="0.00")]))
         [task] = reader.plan(self.clock())
-        self.assertEqual(task.listings, [self.row.pk])   # the hot one; the cold one is not due for another hour
-        Listing.objects.filter(pk=cold.pk).update(last_checked=self.clock() - timedelta(hours=7))
+        self.assertEqual(task.listings, [self.row.pk])   # the hot one; the cold one is not due for half an hour
+        # Out of stock, it is not shown as buyable: asked about every six hours, not two.
+        Listing.objects.filter(pk=cold.pk).update(last_checked=self.clock() - timedelta(hours=3),
+                                                  availability=Listing.Availability.OUT_OF_STOCK)
+        [task] = reader.plan(self.clock())
+        self.assertEqual(task.listings, [self.row.pk])
+        Listing.objects.filter(pk=cold.pk).update(availability=Listing.Availability.IN_STOCK)
         [task] = reader.plan(self.clock())
         self.assertEqual(task.listings, [self.row.pk, cold.pk])   # one job for eBay, the hot listing first
         now = self.clock()

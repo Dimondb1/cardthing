@@ -25,6 +25,7 @@ import urllib.request
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Count, F, Min, Q
 from django.utils import timezone
 
@@ -77,9 +78,41 @@ BULK_PAUSE = 10 * 60
 _live = {"token": "", "token_until": 0.0, "bulk_left": None, "bulk_asked": None, "bulk_spent": 0}
 
 
+# Items eBay says have ended: never looked up again, since an ended item never comes back (a relisting has a new
+# number, which the daily run's search finds). Kept in the shared cache by item number for ENDED_DAYS. Before this,
+# every check of a batch holding one asked again about each of its twenty items alone, and kept doing so every half
+# hour to six hours, which ran the day's allowance out (the owner, 12 Nov 2026: "ebay hasn't updated in 8 hours").
+ENDED_KEY = "ebay:ended-items"
+ENDED_DAYS = 30
+
+
+def ended_items():
+    """{item id: when eBay said it had ended, as a Unix time} for the last ENDED_DAYS."""
+    found = cache.get(ENDED_KEY)
+    return found if isinstance(found, dict) else {}
+
+
+def note_ended(item_ids):
+    """Remember that eBay has ended these items."""
+    if not item_ids:
+        return
+    now = time.time()
+    kept = {item: at for item, at in ended_items().items() if now - at < ENDED_DAYS * 86400}
+    kept.update({item: now for item in item_ids})
+    cache.set(ENDED_KEY, kept, None)
+
+
+def halves(batch):
+    """A batch eBay refused because one of its items has ended, as two halves to ask about instead: about ten
+    lookups find the ended one in twenty, where asking for each alone took twenty-one."""
+    half = len(batch) // 2
+    return [batch[:half], batch[half:]]
+
+
 def forget_live():
-    """Drop the kept token and allowance (tests, and a run that got a new keyset)."""
+    """Drop the kept token, allowance and ended items (tests, and a run that got a new keyset)."""
     _live.update(token="", token_until=0.0, bulk_left=None, bulk_asked=None)
+    cache.delete(ENDED_KEY)
 
 
 class EbayError(Exception):
@@ -176,6 +209,10 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
         if item_id:
             wanted.setdefault(item_id, []).append(listing)
     results = {}
+    ended = ended_items()
+    for item_id in [item_id for item_id in wanted if item_id in ended]:
+        for listing in wanted.pop(item_id):
+            results[listing.pk] = (listing.price, Listing.Availability.OUT_OF_STOCK, listing.delivery_cost)
     if not wanted:
         return results
     headers = headers_for(token_for(request=request, clock=clock), credentials()[2])
@@ -203,11 +240,12 @@ def check_listings(listings, request=None, clock=None, pause=None, sleep=None, s
         except EbayError as exc:
             spend_bulk()
             if "11001" in str(exc) or "404" in str(exc):
-                # eBay refuses the whole batch when one listing has ended: ask for each on its own.
+                # eBay refuses the whole batch when one listing has ended: ask for each half.
                 if len(batch) > 1:
-                    batches[done:done + 1] = [[item_id] for item_id in batch]
+                    batches[done:done + 1] = halves(batch)
                 else:
                     gone(batch[0])
+                    note_ended(batch)
                     done += 1
                 continue
             if "429" in str(exc):
@@ -385,9 +423,10 @@ def fill_titles(request=None, pause=None):
     rows = Listing.objects.filter(retailer__source_type="ebay", is_active=True, title="").exclude(
         availability=Listing.Availability.OUT_OF_STOCK
     )
+    ended = ended_items()
     for listing in rows:
         item_id = item_id_of(listing.url)
-        if item_id:
+        if item_id and item_id not in ended:
             untitled.setdefault(item_id, []).append(listing.pk)
     if not untitled:
         return 0
@@ -403,9 +442,10 @@ def fill_titles(request=None, pause=None):
             spend_bulk()
         except EbayError as exc:
             if ("11001" in str(exc) or "404" in str(exc)) and len(batch) > 1:
-                batches[:0] = [[item_id] for item_id in batch]   # one ended listing refuses the batch
+                batches[:0] = halves(batch)   # one ended listing refuses the batch
                 continue
             if "11001" in str(exc) or "404" in str(exc):
+                note_ended(batch)
                 continue   # ended: the next eBay run searches for it again
             logger.warning("eBay: title lookup stopped: %s", exc)
             break
@@ -685,13 +725,14 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
         # One eBay listing is one product: an item already another product's is never taken for a second
         # (one Future Flash SV4M box was on both our Scarlet ex SV1S and Violet ex SV1V boxes).
         taken = {}
+        ended = ended_items()
         for product in known:
             item_id = item_id_of(existing[product.pk].url)
-            if item_id and item_id not in by_item:
+            if item_id and item_id not in by_item and item_id not in ended:
                 by_item[item_id] = product
                 taken[item_id] = product.pk
             else:
-                gone.append(product)
+                gone.append(product)   # searched again below, with no lookup spent on an item known to have ended
         ids = list(by_item)
         batches = [ids[start:start + BULK] for start in range(0, len(ids), BULK)]
         done = 0
@@ -714,12 +755,13 @@ def iter_ebay_offers(retailer, limit=None, request=None, pause=None, run=None, c
                 if bulk_left is not None:
                     bulk_left -= 1
                 if "11001" in str(exc) or "404" in str(exc):
-                    # eBay refuses the whole batch when one listing has ended. Ask for each on its own,
-                    # so one ended listing does not stop the rest being refreshed.
+                    # eBay refuses the whole batch when one listing has ended. Ask for each half, so one ended
+                    # listing does not stop the rest being refreshed.
                     if len(batch) > 1:
-                        batches[done:done + 1] = [[item_id] for item_id in batch]
+                        batches[done:done + 1] = halves(batch)
                     else:
                         gone.append(by_item[batch[0]])
+                        note_ended(batch)
                         done += 1
                     continue
                 if "429" in str(exc):

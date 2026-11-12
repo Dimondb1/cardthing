@@ -229,9 +229,11 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     has_query = bool(request.GET.get("q", "").strip())
     chosen_game = fixed_game or Game.objects.filter(slug=request.GET.get("game", "")).first()
     scope = base_queryset.filter(game=chosen_game) if chosen_game and fixed_game is None else base_queryset
+    # Best for ripping orders the list cheapest a card first, and the sort menu says so; a sort chosen after the
+    # switch is on is used instead. The owner, 12 Nov 2026: the menu said Lowest price over a list in card order.
     form = FilterForm(
         request.GET or None, fixed_game=fixed_game, has_query=has_query, type_options=types_for(chosen_game, scope),
-        default_sort=default_sort,
+        default_sort=default_sort or ("card" if request.GET.get("rip") else None),
     )
     form.is_valid()
 
@@ -282,7 +284,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         tab = asked or opening
         products = products.filter(stock_tab(tab, compared))
 
-    sort = "card" if rip else form.value("sort", form.default_sort)
+    sort = form.value("sort", form.default_sort)
     if sort == "best" and not terms:
         sort = "newest"
     if tab == "pre-orders" and sort == "newest":
@@ -377,6 +379,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "single_list": tabs and len(shown_tabs) == 1,
         "soonest": sort == "soonest",
         "rip_on": rip,
+        # Best for ripping with another order chosen in the sort menu: the note under the switch says so.
+        "rip_chosen_order": rip and sort != "card",
         "lang_chips": lang_chips,
         # Named on the Filters pill of a type's list: the price band and 2+ shops, the choices its panel holds.
         "feed_chosen": [label for label in (dict(form.fields["price"].choices).get(band) if band else "",

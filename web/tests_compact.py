@@ -278,7 +278,7 @@ class GamePageTests(CompactCase):
         self.assertIn('<li class="crow">', html)
         self.assertNotIn('<li class="card', html)
         # The stock tabs do the In stock switch's job here, so only Best for ripping is there; the tiles sit above.
-        tools = html[html.index('<form class="cx-tools"'):html.index("</form>", html.index('<form class="cx-tools"'))]
+        tools = html[html.index('<div class="cx-tools">'):html.index("</div>", html.index('<div class="cx-tools">'))]
         self.assertIn('name="rip"', tools)
         self.assertNotIn('name="in_stock"', tools)
         self.assertIn('class="feed feed--filtered cx-tiles"', html)
@@ -338,7 +338,8 @@ class SetPageTests(CompactCase):
     def test_the_in_stock_switch_keeps_only_what_a_shop_has_now(self):
         # The owner, 9 Nov 2026: "I also want a in stock slider".
         html = self.page(self.reign.get_absolute_url())
-        self.assertIn('<form class="cx-tools" method="get" action="" data-autosubmit>', html)
+        tools = html[html.index('<div class="cx-tools">'):html.index("</div>", html.index('<div class="cx-tools">'))]
+        self.assertEqual(tools.count('<form method="get" action="" data-autosubmit>'), 2)   # a form for each switch
         self.assertIn('<label class="toggle"><input type="checkbox" name="in_stock" value="on"><span class="toggle__track" '
                       'aria-hidden="true"></span><span>In stock</span></label>', html)
         html = self.page(self.reign.get_absolute_url(), in_stock="on")
@@ -370,7 +371,8 @@ class SearchTests(CompactCase):
         self.assertIn('href="?game=pokemon&amp;sort=price" data-browse-link aria-current="page">', tiles)
         self.assertIn('href="?game=pokemon&amp;sort=price&amp;type=booster_box" data-browse-link>', tiles)
         self.assertIn('href="?game=pokemon&amp;sort=price&amp;type=elite_trainer_box" data-browse-link>', tiles)
-        form = html[html.index('<form class="cx-tools"'):html.index("</form>", html.index('<form class="cx-tools"'))]
+        tools = html[html.index('<div class="cx-tools">'):html.index("</div>", html.index('<div class="cx-tools">'))]
+        form = tools.split("</form>")[1]   # In stock's own form, after Best for ripping's
         self.assertIn('<input type="hidden" name="game" value="pokemon">', form)
         self.assertIn('<input type="hidden" name="sort" value="price">', form)
         self.assertNotIn('name="q"', form)
@@ -379,7 +381,8 @@ class SearchTests(CompactCase):
         self.assertEqual(html.count('name="in_stock"'), 1)
         html = self.page(reverse("web:search"), game="pokemon", in_stock="on")
         self.assertIn('<input type="checkbox" name="in_stock" value="on" checked>', html)
-        self.assertEqual(html.count('name="in_stock"'), 2)
+        # The switch, and the choice carried by Best for ripping's form and by the folded filters.
+        self.assertEqual(html.count('name="in_stock"'), 3)
         self.assertNotIn(self.tin.get_absolute_url(), html)   # a pre-order
         self.assertIn(self.box.get_absolute_url(), html)
 
@@ -471,3 +474,55 @@ class RipTests(CompactCase):
         html = self.page(self.pokemon.get_absolute_url(), rip="on")
         self.assertNotIn("cx-hero", html)
         self.assertIn('<input type="checkbox" name="rip" value="on" checked>', html)
+
+
+class RipSortTests(RipTests):
+    """The sort menu says what Best for ripping does, and a sort chosen after it is on is used. The owner, 12 Nov 2026,
+    with the switch on and the menu saying Lowest price: "Filter and switch aren't putting best for ripping products
+    in lowest to highest order"."""
+
+    def selected(self, html):
+        return re.search(r'<option value="(\w+)" selected>', html[html.index('name="sort"'):]).group(1)
+
+    def by_price(self, html):
+        """The rows' names put in order of the price each row shows, the ones no shop has last."""
+        rows = re.findall(r'<span class="crow__name">([^<]+)</span>.*?(?:<span class="crow__price">[^£]*£([\d,.]+)|</li>)',
+                          html, re.S)
+        return [name for name, _price in sorted(rows, key=lambda row: (not row[1], float(row[1].replace(",", "") or 0)))]
+
+    def test_the_menu_says_cheapest_per_card_while_the_switch_orders_the_list(self):
+        html = self.page(reverse("web:search"), game="pokemon", rip="on")
+        self.assertEqual(self.selected(html), "card")
+        self.assertEqual(self.rows(html), [self.sparks.name, self.box.name, self.etb.name, self.gone.name])
+        self.assertIn("Products you open, cheapest a card first.", html)
+
+    def test_turning_it_on_leaves_an_earlier_sort_behind(self):
+        html = self.page(reverse("web:search"), game="pokemon", sort="price")
+        switches = html[html.index('class="cx-tools"'):html.index("</div>", html.index('class="cx-tools"'))]
+        rip_form, stock_form = switches.split("</form>")[:2]
+        self.assertIn('name="rip"', rip_form)
+        self.assertNotIn('name="sort"', rip_form)
+        # The In stock switch keeps it.
+        self.assertIn('name="in_stock"', stock_form)
+        self.assertIn('<input type="hidden" name="sort" value="price">', stock_form)
+
+    def test_a_sort_chosen_with_the_switch_on_is_used_and_kept_when_it_goes_off(self):
+        # Three times the cards in each of the box's packs: the cheapest a card now, though the pack costs less.
+        Product.objects.filter(pk=self.box.pk).update(cards_per_pack=30)
+        html = self.page(reverse("web:search"), game="pokemon", rip="on")
+        by_card = self.rows(html)
+        self.assertEqual(by_card[:2], [self.box.name, self.sparks.name])
+        html = self.page(reverse("web:search"), game="pokemon", rip="on", sort="price")
+        self.assertEqual(self.selected(html), "price")
+        names = self.rows(html)
+        self.assertEqual(sorted(names), sorted([self.sparks.name, self.box.name, self.etb.name, self.gone.name]))
+        self.assertEqual(names, self.by_price(html))
+        self.assertNotEqual(names, by_card)
+        self.assertEqual(names[0], self.sparks.name)
+        self.assertIn("Products you open, in the order you chose.", html)
+        self.assertNotIn("cheapest a card first", html)
+        # Still only the products you open, each with its Price check.
+        self.assertIn("Good price", html)
+        rip_form = html[html.index('class="cx-tools"'):]
+        rip_form = rip_form[:rip_form.index("</form>")]
+        self.assertIn('<input type="hidden" name="sort" value="price">', rip_form)

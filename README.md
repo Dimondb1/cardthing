@@ -5804,6 +5804,15 @@ the new home page; untick to go back. Staff see it any time with
   the switches says what the list holds and what the colours mean
   (`compact.rip_note`). The folded panel carries the switch, and a game's
   page with it on is that game's list.
+- The sort menu says what the switch does: with it on, the menu reads
+  Cheapest per card. Turning it on leaves any earlier sort behind (each
+  switch has its own form, and Best for ripping's carries the sort only
+  while it is on), and a sort chosen while it is on is used: the list keeps
+  only the products you open, in that order, and the line under the
+  switches says so (`compact.rip_note_chosen`). The owner, 12 Nov 2026,
+  with the menu saying Lowest price over a list in card order: "Filter and
+  switch aren't putting best for ripping products in lowest to highest
+  order".
 - A row for anything that holds packs says how many and the price of each
   ("36 packs, £5.00 each", `compact.row.packs`; the owner, 9 Nov 2026: "when
   I looking up booster boxes, I would like to see the pack count").

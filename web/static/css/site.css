@@ -2816,6 +2816,8 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
    the In stock switch under them, at the right. */
 .cx-tiles { margin-bottom: var(--space-2); }
 .cx-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-strong); }
+/* A form for each switch, laid out as one row. */
+.cx-tools > form { display: contents; }
 /* Best for ripping on: what the list holds and what its coloured chips mean, under the switches. */
 .cx-rip-note { margin: calc(-1 * var(--space-2)) 0 var(--space-3); font-size: var(--text-xs); color: var(--color-ink-muted); text-align: right; }
 .crow__check { display: flex; }

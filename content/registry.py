@@ -626,11 +626,14 @@ ENTRIES = [
           "checked. {offers} is how many shop prices are in stock now, {shops} how many shops we compare.",
           placeholders=("offers", "shops")),
     Entry("compact.rip", B, "Compact layout: Best for ripping switch", "Best for ripping",
-          "The switch beside In stock above a list. On, the list keeps the products you open, the cheapest a card first, "
-          "each with its Price check. Two or three words."),
+          "The switch beside In stock above a list. On, the list keeps the products you open, the cheapest a card first "
+          "unless another order is chosen in the sort menu, each with its Price check. Two or three words."),
     Entry("compact.rip_note", T, "Compact layout: Best for ripping, what it shows",
           "Products you open, cheapest a card first. The coloured Price check says how today's price compares.",
           "Under the switches while Best for ripping is on. Says what the list holds and what the coloured chips mean."),
+    Entry("compact.rip_note_chosen", T, "Compact layout: Best for ripping, another order chosen",
+          "Products you open, in the order you chose. The coloured Price check says how today's price compares.",
+          "Under the switches while Best for ripping is on and another order is chosen in the sort menu."),
     Entry("compact.row.packs", T, "Compact layout: packs in a box and the price of each", "{packs} packs, {each} each",
           "On a row for a box, bundle or anything else that holds packs: how many, and the price shared over them. "
           "{packs} is the count, {each} the price a pack.", placeholders=("packs", "each")),

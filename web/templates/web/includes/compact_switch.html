@@ -1,8 +1,16 @@
-{% load sitecopy %}{# The switches above a list in the compact layout: Best for ripping (the owner, 9 Nov 2026: "a search filter 'best for ripping' cheapest per card ... a slider in that row"), which keeps the products you open, the cheapest a card first, each with its Price check; and In stock (8 Nov: "I also want a in stock slider") where the stock tabs do not do that job (stock_switch). A plain form that keeps the other choices (the hidden inputs), sent as a switch is flicked (site.js data-autosubmit; browse.js loads a list page in place), with a Show button where no script runs. Takes rip_on, in_stock_on, stock_switch and keep (the (name, value) pairs to carry). #}
-<form class="cx-tools" method="get" action="" data-autosubmit>
-  {% for name, value in keep %}{% if value %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endif %}{% endfor %}
-  <label class="toggle"><input type="checkbox" name="rip" value="on"{% if rip_on %} checked{% endif %}><span class="toggle__track" aria-hidden="true"></span><span>{% copy "compact.rip" %}</span></label>
-  {% if stock_switch %}<label class="toggle"><input type="checkbox" name="in_stock" value="on"{% if in_stock_on %} checked{% endif %}><span class="toggle__track" aria-hidden="true"></span><span>{% copy "compact.in_stock" %}</span></label>{% elif in_stock_on %}<input type="hidden" name="in_stock" value="on">{% endif %}
-  <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
-</form>
-{% if rip_on %}<p class="cx-rip-note">{% copy "compact.rip_note" %}</p>{% endif %}
+{% load sitecopy %}{# The switches above a list in the compact layout: Best for ripping (the owner, 9 Nov 2026: "a search filter 'best for ripping' cheapest per card ... a slider in that row"), which keeps the products you open, the cheapest a card first unless another order is chosen in the sort menu, each with its Price check; and In stock (8 Nov: "I also want a in stock slider") where the stock tabs do not do that job (stock_switch). A plain form for each, keeping the other choices (the hidden inputs), sent as its switch is flicked (site.js data-autosubmit; browse.js loads a list page in place), with a Show button where no script runs. Turning Best for ripping on leaves the sort behind, so the list and the menu go to cheapest a card first; turning it off keeps another sort chosen meanwhile (the owner, 12 Nov 2026: the menu said Lowest price over a list in card order). Takes rip_on, rip_chosen_order, in_stock_on, stock_switch and keep (the (name, value) pairs to carry). #}
+<div class="cx-tools">
+  <form method="get" action="" data-autosubmit>
+    {% for name, value in keep %}{% if value %}{% if name != "sort" or rip_on and value != "card" %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endif %}{% endif %}{% endfor %}
+    {% if in_stock_on %}<input type="hidden" name="in_stock" value="on">{% endif %}
+    <label class="toggle"><input type="checkbox" name="rip" value="on"{% if rip_on %} checked{% endif %}><span class="toggle__track" aria-hidden="true"></span><span>{% copy "compact.rip" %}</span></label>
+    <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
+  </form>
+  {% if stock_switch %}<form method="get" action="" data-autosubmit>
+    {% for name, value in keep %}{% if value %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endif %}{% endfor %}
+    {% if rip_on %}<input type="hidden" name="rip" value="on">{% endif %}
+    <label class="toggle"><input type="checkbox" name="in_stock" value="on"{% if in_stock_on %} checked{% endif %}><span class="toggle__track" aria-hidden="true"></span><span>{% copy "compact.in_stock" %}</span></label>
+    <button class="button button--quiet button--small" type="submit" data-autosubmit-hide>{% copy "browse.filters.apply" %}</button>
+  </form>{% endif %}
+</div>
+{% if rip_on %}<p class="cx-rip-note">{% if rip_chosen_order %}{% copy "compact.rip_note_chosen" %}{% else %}{% copy "compact.rip_note" %}{% endif %}</p>{% endif %}

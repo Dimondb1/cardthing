@@ -41,6 +41,7 @@
     {% if form.price.value %}<input type="hidden" name="price" value="{{ form.price.value }}">{% endif %}
     {% if form.compared.value %}<input type="hidden" name="compared" value="on">{% endif %}
     {% if form.in_stock.value and not stock_tabs %}<input type="hidden" name="in_stock" value="on">{% endif %}
+    {% if form.rip.value %}<input type="hidden" name="rip" value="on">{% endif %}
     {% if tab %}<input type="hidden" name="tab" value="{{ tab_asked }}" data-tab-input>{% endif %}
     <div class="pill pill--sort">
       <label class="visually-hidden" for="{{ form.sort.id_for_label }}">{{ form.sort.label }}</label>

@@ -54,6 +54,32 @@ class VerdictTests(TestCase):
             with self.subTest(price=price):
                 self.assertEqual(fair_price.verdict(self.etb, Decimal(price), self.today).key, key)
 
+    def test_a_few_pence_over_the_lowest_and_well_under_the_average_is_a_good_price(self):
+        # The owner's box, 12 Nov 2026: £36.99 against a lowest of £36.94 and an average of £38.86, 4.8% under it,
+        # was called fair. Near the lowest (within 2%) and at least 2.5% under the average is good.
+        record(self.etb, ["44.98"] * 4 + ["38.98"] * 4 + ["36.94"] + ["37.98"] * 13 + ["38.28"] * 20, self.today)
+        verdict = fair_price.verdict(self.etb, Decimal("36.99"), self.today)
+        self.assertEqual((verdict.average, verdict.low), (Decimal("38.86"), Decimal("36.94")))
+        self.assertEqual((verdict.key, sum(verdict.signal)), ("good", 3))
+        # "Lowest yet" still means at or under the lowest, never near it.
+        self.assertEqual(fair_price.verdict(self.etb, Decimal("36.94"), self.today).key, "good")
+        cases = [
+            ("37.67", "good"),   # 1.98% over the lowest, 3.1% under the average
+            ("37.69", "fair"),   # 2.03% over the lowest: no longer near it
+        ]
+        for price, key in cases:
+            with self.subTest(price=price):
+                self.assertEqual(fair_price.verdict(self.etb, Decimal(price), self.today).key, key)
+
+    def test_a_price_that_barely_moves_stays_fair_at_its_own_lowest(self):
+        # Near its lowest every day, but never clearly under its average: nothing to call good.
+        record(self.etb, ["40.00"] * 10 + ["39.50"] * 10, self.today)
+        for price in ("39.50", "39.00"):
+            with self.subTest(price=price):
+                self.assertEqual(fair_price.verdict(self.etb, Decimal(price), self.today).key, "fair")
+        # Under its lowest and 2.6% under its average (39.75): good, though not the 5% under that "Lowest yet" needs.
+        self.assertEqual(fair_price.verdict(self.etb, Decimal("38.70"), self.today).key, "good")
+
     def test_the_verdict_names_its_figures_in_three_queries(self):
         record(self.etb, ["45.00", "45.00"] + ["50.00"] * 16 + ["45.00", "55.00"], self.today)
         # Its Cardmarket match (none here), the summary of our record, and the day of the low.

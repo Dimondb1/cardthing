@@ -2286,7 +2286,8 @@ ENTRIES = [
     Entry("product.fair.verdict_lowest", T, "Price check: lowest", "Lowest yet",
           "Beside the cheapest price when it is at or below the lowest we have recorded for the product."),
     Entry("product.fair.verdict_good", T, "Price check: good", "Good price",
-          "Beside the cheapest price when it is at least 5% under the product's average."),
+          "Beside the cheapest price when it is at least 5% under the product's average, or within 2% of the "
+          "lowest we have recorded and at least 2.5% under the average."),
     Entry("product.fair.verdict_fair", T, "Price check: fair", "Fair price",
           "Beside the cheapest price when it is within 5% of the product's average."),
     Entry("product.fair.verdict_above", T, "Price check: above", "Above average",

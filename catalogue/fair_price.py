@@ -5,12 +5,18 @@ one row a day (DailyLowestPrice), which the site keeps whatever happens to any s
 Today's cheapest delivered price is set against the days before today, back up to WINDOW_DAYS:
 
     5  lowest   Lowest yet          at least GOOD under their average, and at or below the lowest of those days
-    4  good     Good price          at least GOOD under their average
+    4  good     Good price          at least GOOD under their average, or within NEAR_LOW of the lowest of those
+                                    days and at least half GOOD under their average
     3  fair     Fair price          within GOOD of it
     2  above    Above average       up to HIGH over it
     1  high     High price          more than HIGH over it
 
 A price that has never moved is its own lowest every day: that is a fair price, never "Lowest yet".
+
+Close to the lowest is a good price too, when it is also clearly under the average (the owner, 12 Nov 2026, on a
+box at £36.99 against a lowest of £36.94 and an average of £38.86, called fair for being 4.8% under it, not 5%:
+"This is only 5p more expensive ... it's pretty good still. Can we look at the rules and make it fairer").
+"Lowest yet" still means at or below the lowest, never near it.
 
 Our own record counts only with MIN_SHOPS UK shops listing the product: one shop's prices measured against its
 own past say nothing about the market, so a lone £1,199.99 listing is never called a good price by it. eBay and
@@ -55,6 +61,7 @@ WINDOW_DAYS = 365
 MIN_DAYS = 14
 MIN_SHOPS = 2
 GOOD = Decimal("0.05")
+NEAR_LOW = Decimal("0.02")   # band_for: within this of the lowest recorded is near it
 HIGH = Decimal("0.15")
 LOW_DAYS = 90       # at_lowest: the lowest of this many days back
 MARKET_GOOD, MARKET_FAIR, MARKET_ABOVE = Decimal("1.00"), Decimal("1.15"), Decimal("1.35")
@@ -104,6 +111,10 @@ class Verdict:
 def band_for(price, average, low):
     if price <= average * (1 - GOOD):
         return LOWEST if price <= low else GOOD_PRICE
+    # Near the lowest and clearly under the average: a good price, so a few pence over the best day is not
+    # "Fair". The second test keeps a price that barely moves, always near its own lowest, at fair.
+    if price <= low * (1 + NEAR_LOW) and price <= average * (1 - GOOD / 2):
+        return GOOD_PRICE
     if price <= average * (1 + GOOD):
         return FAIR
     if price <= average * (1 + HIGH):

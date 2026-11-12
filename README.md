@@ -3773,7 +3773,7 @@ up to a year back and not counting today:
 | Band | Shown as | When |
 | --- | --- | --- |
 | 5 | Lowest yet | at least 5% under the average and at or below the lowest recorded |
-| 4 | Good price | at least 5% under the average |
+| 4 | Good price | at least 5% under the average, or within 2% of the lowest recorded and at least 2.5% under the average |
 | 3 | Fair price | within 5% of the average |
 | 2 | Above average | up to 15% over it |
 | 1 | High price | more than 15% over it |
@@ -3807,6 +3807,12 @@ product page (`web.views.product_detail`) and on a card led by that shop
 - A price that has never moved is its own lowest every day. That is a fair
   price, never "Lowest yet": the lowest band also needs the price to be 5%
   under the average.
+- A few pence over the lowest is a good price when the price is also
+  clearly under the average (`NEAR_LOW`). A box at £36.99 against a lowest
+  of £36.94 and an average of £38.86 was called fair for being 4.8% under
+  the average, not 5%. "Lowest yet" still means at or below the lowest. A
+  price that barely moves, always near its own lowest but never 2.5% under
+  its average, stays fair.
 - A wrong price does not stay in the record. A day's low under a quarter
   of the median of the product's lows in the window, lasting at most three
   recorded days before a normal price follows, was a wrong price (a pack

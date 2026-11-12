@@ -96,14 +96,14 @@ You are given the facts the product page shows, between <facts> tags, and one qu
 How to answer:
 - Give the answer in your first sentence (yes or no, the shop, the price), then the one or two facts that back it.
 - Use only the facts given. Never use what you know from elsewhere about the product, the game, the shops or prices. If the facts do not answer the question, say so plainly and say what the page does show that helps.
-- Whether a price is good: answer from the site's Price check in the facts ("price_check"). Say its verdict in its own words, for example "Good price" or "Lowest yet", and back it with its numbers: today's cheapest against the average and the lowest in our record, and the RRP or Cardmarket price where the facts give them. With no Price check in the facts, say there is not enough price history to judge yet and give the numbers there are. Never contradict the Price check.
+- Whether a price is good: with a Price check in the facts ("price_check"), say its verdict in its own words, for example "Good price" or "Lowest yet", and back it with its numbers: today's cheapest against the average and the lowest in our record, and the RRP or Cardmarket price where the facts give them. Never contradict the Price check. Without one, answer from the quick value check ("quick_value_check"): give its lean in your first sentence, for example "It looks good value", with the comparison it rests on, then add the page's badges ("page_badges") or how it compares with the other UK shops. Say the site's Price check has no verdict yet only in passing, with its reason ("price_check_missing_because"). Never say you cannot tell whether it is good value when the facts give a quick value check or page badges; only with neither, say there is not enough to judge yet and give the prices there are.
 - Prices are in pounds. An offer's "total" includes delivery; without a total, delivery is not known and must be checked at the shop. When you name a price, name the shop.
 - Name a price only as the facts give it, or the sum or the gap between two prices in the facts. Prices per pack are in the facts where they can be worked out.
 - Point out what saves money when the facts show it: a cheaper shop once delivery is added, a free delivery threshold, a multi-buy, a discount code with its terms (prices do not include it), or a cheaper price per pack on another product in the same set.
 - What is inside, or what the product is: answer from the packs and cards in the facts, what this kind of product is ("what_this_kind_of_product_is", the site's own words) and the shop's own description ("shop_description"), saying that a detail comes from that shop's page. Never add contents the facts do not give.
 - Whether to buy now or wait: say what the facts show today (the Price check, today's price against the lowest and the average in our record and against about 30 days ago, how many shops have it in stock, restocks) and that the choice is theirs. Never guess what will happen.
 - Whether it is right for them: say who this kind of product suits from the site's own words, what they get for the money (packs, cards, price per pack), and name a product in the same set that suits a smaller or bigger budget when the facts give one.
-- Red flags, or whether something is a scam, fake, real or a scalper's price: answer from the warning signs in the facts ("warning_signs" on an offer, "product_warning_signs"), with the shop or seller each belongs to, and say what to check before buying, such as the listing's photos and title, the seller's ratings and the RRP. Never call a shop, seller or listing a scam, a scammer, fake, a fraud or a scalper, and never say a purchase is safe or guaranteed. With no warning signs, say nothing we check looks wrong, name what was checked (UK shops we check, the price against the RRP and the other shops, the seller's ratings), and that they should still check the listing. Never add warning signs the facts do not give.
+- Red flags, or whether something is a scam, fake, real or a scalper's price: answer from the warning signs in the facts ("warning_signs" on an offer, "product_warning_signs"), with the shop or seller each belongs to, and say what to check before buying, such as the listing's photos and title, the seller's ratings and the RRP. Never call a shop, seller or listing a scam, a scammer, fake, a fraud or a scalper, and never say a purchase is safe or guaranteed. With no warning signs ("red_flag_check"), say so in your first sentence with how many offers were checked, then give the two or three strongest reasons for confidence from its trust signs and the offers' own ("trust_signs"), and name the offer with the fewest doubts with its price. With warning signs, name them first, then that offer. End by saying to check the listing before buying. Never add warning signs or trust signs the facts do not give.
 - Past prices in the facts may be described. Never say a price will rise or fall, what the product will be worth later, what is likely to be in a pack, or the odds of any card.
 - Do not recommend products or shops that are not in the facts, and do not give links.
 - If the question is not about this product, its set or buying it, say you can only help with this product.
@@ -339,6 +339,101 @@ def warning_signs(listing, product, rrp, cheapest_uk, released):
     return signs
 
 
+# The quick value check: what Rip judges value from when the page has no Price check, worked out here from today's
+# prices so his answer rests on the site's numbers, not his. The owner, 12 Nov 2026, after Rip said he could not tell:
+# "it needs to be able to find out if something's good value ... This has to be a useful tool, otherwise we'll get rid
+# of it". A price at least GOOD_UNDER under a reference leans good, more than DEAR_OVER over one leans dear (the Price
+# check's RRP ceiling); against the same kind of product a pack, TYPICAL_GOOD under and TYPICAL_DEAR over, wider since
+# sets differ. The typical price a pack needs TYPICAL_MIN products of the same game, kind and language.
+GOOD_UNDER = Decimal("0.05")
+DEAR_OVER = Decimal("0.15")
+TYPICAL_GOOD, TYPICAL_DEAR = Decimal("0.10"), Decimal("0.20")
+TYPICAL_MIN = 5
+LEANS = {"good": "looks good value", "usual": "about usual", "dear": "looks dear"}
+
+
+def gap_words(price, reference):
+    """How far ``price`` is from ``reference``: "12% under", "8% over" or "the same"."""
+    gap = int(((price / reference) - 1) * 100)
+    return f"{-gap}% under" if gap < 0 else f"{gap}% over" if gap > 0 else "the same"
+
+
+def lean_against(price, reference, good=GOOD_UNDER, dear=DEAR_OVER):
+    if price <= reference * (1 - good):
+        return "good"
+    return "dear" if price > reference * (1 + dear) else "usual"
+
+
+def typical_price_a_pack(product):
+    """(the median cheapest delivered price a pack of the other products of the same game, kind and language at UK
+    shops we read, how many) or None with fewer than TYPICAL_MIN. One query."""
+    from statistics import median
+
+    rows = (Listing.objects.buyable().filter(delivery_known=True, product__is_active=True, product__game=product.game_id,
+                                             product__product_type=product.product_type,
+                                             product__language=product.language or "")
+            .exclude(product=product).exclude(sanity=Listing.Sanity.DOUBTFUL)
+            .exclude(retailer__source_type__in=pricing.MARKETPLACES)
+            .order_by().values("product_id").annotate(low=Min("delivered_price"))
+            .values_list("low", "product__packs", "product__packs_found"))
+    each = [low / (packs or found) for low, packs, found in rows if (packs or found or 0) > 1]
+    if len(each) < TYPICAL_MIN:
+        return None
+    return Decimal(median(each)).quantize(Decimal("0.01")), len(each)
+
+
+def quick_value(product, cheapest, current, rrp, market, money):
+    """The quick value check (see GOOD_UNDER): today's cheapest delivered price against the RRP, Cardmarket, the other
+    UK shops with it in stock and the typical price a pack of the same kind, with a lean when one of the first two or
+    the typical price a pack gives one. {} without a confirmed delivered price, or when it may not be this product."""
+    if cheapest is None or not cheapest.delivery_known or cheapest.sanity == Listing.Sanity.DOUBTFUL:
+        return {}
+    price = cheapest.delivered_price
+    found, leans = {}, []
+    if rrp:
+        found["against_the_rrp"] = f"{gap_words(price, rrp)} the RRP of {money(rrp)}"
+        leans.append(lean_against(price, rrp))
+    if market is not None:
+        found["against_cardmarket"] = f"{gap_words(price, market.gbp)} Cardmarket's price of {money(market.gbp)}"
+        leans.append(lean_against(price, market.gbp))
+    others = [listing.delivered_price for listing in current if listing.pk != cheapest.pk and listing.delivery_known
+              and listing.availability == Listing.Availability.IN_STOCK
+              and listing.retailer.source_type not in pricing.MARKETPLACES]
+    if others:
+        average = (sum(others) / len(others)).quantize(Decimal("0.01"))
+        found["against_other_uk_shops"] = (f"{gap_words(price, average)} the average of the other {len(others)} UK "
+                                           f"shops with it in stock, {money(average)}")
+    packs = product.packs_inside
+    typical = typical_price_a_pack(product) if packs and packs > 1 else None
+    if typical is not None:
+        a_pack = (price / packs).quantize(Decimal("0.01"))
+        found["against_the_same_kind_a_pack"] = (
+            f"{money(a_pack)} a pack, {gap_words(a_pack, typical[0])} the typical {money(typical[0])} a pack across "
+            f"{typical[1]} other {product.language_name or 'English'} {product.game.name} products of the same kind "
+            f"({product.type_name.lower()}) on RipRaptor")
+        if not leans:   # the RRP and Cardmarket say more about this product than other sets do
+            leans.append(lean_against(a_pack, typical[0], TYPICAL_GOOD, TYPICAL_DEAR))
+    if leans:
+        # As the Price check settles: neither reference can make a dear price look good.
+        found["lean"] = LEANS["dear" if "dear" in leans else "good" if set(leans) == {"good"} else "usual"]
+    return found
+
+
+def trust_signs(listing, rrp):
+    """What backs one offer: a UK shop we read, a seller eBay vouches for or with a long record, at or under the
+    RRP. [] when nothing."""
+    signs = []
+    if listing.retailer.source_type not in pricing.MARKETPLACES:
+        signs.append("a UK shop we check")
+    if listing.seller_note:
+        signs.append(f"eBay gives it {listing.get_seller_note_display()}")
+    if listing.seller_ratings and listing.seller_ratings >= 1000 and (listing.seller_feedback or 0) >= 99:
+        signs.append(f"the seller has {listing.seller_feedback}% positive feedback from {listing.seller_ratings} ratings")
+    if rrp and listing.delivery_known and listing.delivered_price <= rrp:
+        signs.append("at or under the RRP with delivery")
+    return signs
+
+
 def facts(product, now=None):
     """(what Claude is sent about ``product``: what its page shows, every price a string as the page gives it; the
     amounts named in it, as Decimals; when its prices were last checked, or None). About ten queries, at a question."""
@@ -365,7 +460,7 @@ def facts(product, now=None):
     cheapest_uk = min((listing for listing in current if listing.delivery_known
                        and listing.retailer.source_type not in pricing.MARKETPLACES),
                       key=lambda listing: listing.delivered_price, default=None)
-    offers = []
+    offers, checked_offers = [], []
     for listing in current[:OFFERS_SENT]:
         retailer = listing.retailer
         offer = {
@@ -387,6 +482,10 @@ def facts(product, now=None):
         signs = warning_signs(listing, product, rrp[0] if rrp else None, cheapest_uk, released)
         if signs:
             offer["warning_signs"] = signs
+        backing = trust_signs(listing, rrp[0] if rrp else None)
+        if backing:
+            offer["trust_signs"] = backing
+        checked_offers.append((listing, offer))
         # Who the eBay seller is and their standing, as eBay gives them, so Rip can say who a buyer would deal with.
         if listing.seller_name or listing.seller_feedback is not None:
             standing = {"name": listing.seller_name or None}
@@ -427,9 +526,36 @@ def facts(product, now=None):
     if not uk_shops:
         found["product_warning_signs"] = ["no UK shop we check lists this product; its prices come only from "
                                           "marketplace sellers, so no shop confirms it"]
-    if CardmarketMatch.objects.filter(product=product, status__in=CardmarketMatch.USED,
-                                      cardmarket__isnull=False).exists():
+    sold_in_europe = CardmarketMatch.objects.filter(product=product, status__in=CardmarketMatch.USED,
+                                                    cardmarket__isnull=False).exists()
+    if sold_in_europe:
         found["cardmarket_sells_the_same_product"] = True
+    # Any red flags? What was checked, how many warning signs were found, what backs the product, and the offer to buy
+    # with the fewest doubts: the cheapest with no warning sign from a UK shop we read, else one eBay vouches for.
+    # The owner, 12 Nov 2026, on Rip saying only that nothing was flagged: "which is not that useful on a product".
+    backing = []
+    if uk_shops >= 2:
+        backing.append(f"{uk_shops} UK shops we check list it")
+    if sold_in_europe:
+        backing.append("Cardmarket sells the same product")
+    source = product.rrp_from if rrp else None
+    if source and source[0] == "shops":
+        backing.append(f"{source[1]} UK shops give the same RRP")
+    elif source and source[0] == "found":
+        backing.append(f"its RRP is given on {source[1]}")
+    if released:
+        backing.append("it is out now")
+    clean = [(listing, offer) for listing, offer in checked_offers if "warning_signs" not in offer]
+    safest = next((offer for listing, offer in clean if listing.retailer.source_type not in pricing.MARKETPLACES),
+                  None) or next((offer for listing, offer in clean if listing.seller_note), None)
+    red_flags = {"offers_checked": len(checked_offers),
+                 "warning_signs_found": sum(len(offer.get("warning_signs", ())) for offer in offers)}
+    if backing:
+        red_flags["trust_signs"] = backing
+    if safest is not None:
+        red_flags["offer_with_fewest_doubts"] = {key: safest[key] for key in ("shop", "total", "price", "stock")
+                                                 if key in safest}
+    found["red_flag_check"] = red_flags
     if product.packs_inside:
         found["packs_inside"] = product.packs_inside
     if product.cards_inside:
@@ -466,6 +592,41 @@ def facts(product, now=None):
             verdict["cardmarket_price_in_pounds"] = money(check.market.gbp)
             verdict["cardmarket_checked"] = date_format(check.market.date, "j M Y")
         found["price_check"] = verdict
+    # The page's own badges beside the cheapest price (offers.summarise), in its words.
+    from catalogue import fair_price
+    from catalogue import offers as offer_rules
+
+    product.offers, product.listing_count = current, len({listing.retailer_id for listing in listings
+                                                          if listing.sanity != Listing.Sanity.EXCLUDED})
+    summary = offer_rules.summarise(product, offer_rules.week_low_map([product.pk], today=today))
+    badges = []
+    if summary.saving:
+        badges.append(f"{money(summary.saving)} ({summary.percent}%) cheaper than the next shop")
+    if summary.badge:
+        badges.append(copy.get(f"product.badge.{summary.badge}"))
+    if badges:
+        found["page_badges"] = badges
+    cheapest = current[0] if current else None
+    if check is None and cheapest is not None:
+        # Why the page shows no Price check, so Rip can say so plainly.
+        if not cheapest.delivery_known:
+            why = "the cheapest shop's delivery cost is not known"
+        elif cheapest.sanity == Listing.Sanity.DOUBTFUL:
+            why = "the cheapest price may not be this product"
+        elif uk_shops < fair_price.MIN_SHOPS:
+            why = "fewer than 2 UK shops we check list it, so there is nothing to compare its price history with"
+        elif (record["days"] or 0) < fair_price.MIN_DAYS:
+            why = f"we have {record['days'] or 0} days of prices and the Price check needs {fair_price.MIN_DAYS}"
+        else:
+            why = ""
+        if why:
+            found["price_check_missing_because"] = why
+    quick = quick_value(product, cheapest, current, rrp[0] if rrp else None,
+                        fair_price.market_reference(product, today), money)
+    if check is not None:
+        quick.pop("lean", None)   # the Price check's verdict is the page's; Rip never gives another
+    if quick:
+        found["quick_value_check"] = quick
     ago = pricing.previous_price_map([product.pk], days=30, today=today).get(product.pk)
     if ago is not None:
         found["cheapest_about_30_days_ago"] = money(ago)

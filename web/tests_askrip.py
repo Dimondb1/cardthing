@@ -591,7 +591,8 @@ class RedFlagTests(AskRipCase):
     def test_his_instructions_never_let_him_call_anyone_a_scam(self):
         prompt = askrip.SYSTEM_PROMPT
         for words in ('"warning_signs"', '"product_warning_signs"', "Never call a shop, seller or listing a scam",
-                      "never say a purchase is safe or guaranteed", "Never add warning signs the facts do not give"):
+                      "never say a purchase is safe or guaranteed", "Never add warning signs or trust signs the facts do not give",
+                      "name the offer with the fewest doubts"):
             with self.subTest(words=words):
                 self.assertIn(words, prompt)
 
@@ -603,6 +604,144 @@ class RedFlagTests(AskRipCase):
         content = self.fake.sent[0]["messages"][0]["content"]
         self.assertIn("<question>Any red flags?</question>", content)
         self.assertIn('the listing\'s own title says \\"resealed\\"', content)
+
+
+class RedFlagUsefulTests(AskRipCase):
+    """With nothing wrong, Rip still says what backs the product and which offer has the fewest doubts. The owner,
+    12 Nov 2026: "He said it doesn't seem to be like flagged for any issues or whatever, which is not that useful"."""
+
+    def test_what_was_checked_what_backs_it_and_the_offer_with_the_fewest_doubts(self):
+        found, _amounts, _checked = askrip.facts(self.box)
+        check = found["red_flag_check"]
+        self.assertEqual((check["offers_checked"], check["warning_signs_found"]), (2, 0))
+        self.assertIn("2 UK shops we check list it", check["trust_signs"])
+        self.assertEqual(check["offer_with_fewest_doubts"]["shop"], "Harbour Games")
+        self.assertEqual(found["offers"][0]["trust_signs"], ["a UK shop we check"])
+
+    def test_an_ebay_seller_ebay_vouches_for_is_backed(self):
+        ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
+        listing = make_listing(self.box, ebay, price="120.00", delivery="0.00")
+        Listing.objects.filter(pk=listing.pk).update(seller_name="cardking", seller_ratings=25000,
+                                                     seller_feedback=Decimal("99.8"),
+                                                     seller_note=Listing.SellerNote.TOP_RATED)
+        found, _amounts, _checked = askrip.facts(self.box)
+        offer = next(offer for offer in found["offers"] if offer["shop"] == "eBay")
+        self.assertEqual(offer["trust_signs"], ["eBay gives it Top Rated Plus",
+                                                "the seller has 99.8% positive feedback from 25000 ratings"])
+        # A UK shop we check still comes first among the offers without a doubt.
+        self.assertEqual(found["red_flag_check"]["offer_with_fewest_doubts"]["shop"], "Harbour Games")
+
+
+class QuickValueTests(AskRipCase):
+    """Is it good value? always has an answer from the site's own numbers. The owner, 12 Nov 2026: "it needs to be
+    able to find out if something's good value ... This has to be a useful tool, otherwise we'll get rid of it"."""
+
+    def same_kind(self, prices):
+        for n, price in enumerate(prices):
+            other = make_product(self.box.product_set, name=f"Other Booster Box {n}", slug=f"other-box-{n}",
+                                 product_type="booster_box", packs=36)
+            make_listing(other, self.harbour, price=price, delivery="0.00")
+
+    def test_without_a_price_check_the_lean_rests_on_the_typical_price_a_pack(self):
+        self.same_kind(["180.00"] * 5)   # £5.00 a pack; the box is £140.00, £3.89 a pack
+        found, amounts, _checked = askrip.facts(self.box)
+        self.assertNotIn("price_check", found)
+        self.assertEqual(found["price_check_missing_because"],
+                         "we have 0 days of prices and the Price check needs 14")
+        quick = found["quick_value_check"]
+        self.assertEqual(quick["lean"], "looks good value")
+        self.assertEqual(quick["against_the_same_kind_a_pack"],
+                         "£3.89 a pack, 22% under the typical £5.00 a pack across 5 other English Pokémon products of "
+                         "the same kind (booster box) on RipRaptor")
+        self.assertEqual(quick["against_other_uk_shops"],
+                         "9% under the average of the other 1 UK shops with it in stock, £153.99")
+        self.assertTrue({Decimal("3.89"), Decimal("5.00"), Decimal("153.99")} <= amounts)
+
+    def test_dearer_a_pack_than_the_same_kind_leans_dear(self):
+        self.same_kind(["100.00"] * 5)   # £2.78 a pack against the box's £3.89
+        quick = askrip.facts(self.box)[0]["quick_value_check"]
+        self.assertEqual(quick["lean"], "looks dear")
+
+    def test_an_rrp_gives_the_page_a_price_check_and_rip_says_its_verdict(self):
+        self.same_kind(["180.00"] * 5)
+        self.box.rrp = Decimal("110.00")
+        self.box.save()
+        found = askrip.facts(self.box)[0]
+        self.assertEqual(found["price_check"]["verdict"], "Above average")
+        self.assertEqual(found["quick_value_check"]["against_the_rrp"], "27% over the RRP of £110.00")
+        self.assertNotIn("lean", found["quick_value_check"])
+
+    def test_a_doubtful_cheapest_price_gets_no_quick_check(self):
+        self.same_kind(["180.00"] * 5)
+        Listing.objects.filter(retailer=self.harbour, product=self.box).update(sanity=Listing.Sanity.DOUBTFUL)
+        found = askrip.facts(self.box)[0]
+        self.assertNotIn("quick_value_check", found)
+        self.assertEqual(found["price_check_missing_because"], "the cheapest price may not be this product")
+
+    def test_too_few_of_the_same_kind_gives_no_typical_price(self):
+        self.same_kind(["180.00"] * 4)
+        quick = askrip.facts(self.box)[0]["quick_value_check"]
+        self.assertNotIn("against_the_same_kind_a_pack", quick)
+        self.assertNotIn("lean", quick)
+
+    def test_with_a_price_check_its_verdict_is_the_only_one(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from catalogue.models import DailyLowestPrice
+
+        self.same_kind(["180.00"] * 5)
+        today = timezone.localdate()
+        for back in range(1, 21):
+            DailyLowestPrice.objects.create(product=self.box, date=today - timedelta(days=back), price=Decimal("160.00"))
+        found = askrip.facts(self.box)[0]
+        self.assertIn("price_check", found)
+        self.assertNotIn("price_check_missing_because", found)
+        self.assertNotIn("lean", found["quick_value_check"])
+        self.assertIn("against_the_same_kind_a_pack", found["quick_value_check"])
+
+    def test_the_pages_own_badges_are_sent(self):
+        Listing.objects.filter(retailer=self.kestrel).update(price=Decimal("150.00"), delivery_cost=Decimal("3.99"))
+        found = askrip.facts(self.box)[0]
+        self.assertEqual(found["page_badges"], ["£13.99 (9%) cheaper than the next shop"])
+
+    def test_his_instructions_never_let_him_say_he_cannot_tell(self):
+        prompt = askrip.SYSTEM_PROMPT
+        for words in ('"quick_value_check"', '"page_badges"', '"price_check_missing_because"',
+                      "Never say you cannot tell whether it is good value", "Never contradict the Price check"):
+            with self.subTest(words=words):
+                self.assertIn(words, prompt)
+
+
+class HideConversationTests(AskRipCase):
+    """The owner, 12 Nov 2026: "I need to have a button floating around the bottom of that conversation saying hide
+    conversation ... It just gets it out of the way"."""
+
+    def test_once_rip_has_answered_hide_conversation_floats_at_the_foot_of_the_box(self):
+        from html import unescape
+
+        html = unescape(self.ask().json()["html"])
+        foot = html[html.index('class="ask__fold"'):]
+        self.assertIn('data-ask-hide>Hide conversation</a>', foot)
+        self.assertLess(html.index('class="ask__small"'), html.index('class="ask__fold"'))
+        # Without script: the page without the answer, at the shops' prices.
+        self.assertIn(f'href="{self.box.get_absolute_url()}#offers-title"', foot)
+        # Show conversation waits, hidden, under the heading for ask.js to show.
+        self.assertIn('data-ask-show hidden>Show conversation</button>', html)
+        from django.contrib.staticfiles import finders
+        with open(finders.find("css/site.css"), encoding="utf-8") as handle:
+            css = handle.read()
+        self.assertIn(".ask__fold { position: sticky; bottom: var(--space-3);", css)
+        self.assertIn("body:has(.buy-bar) .ask__fold { bottom: calc(var(--space-3) + var(--buy-bar-space)", css)
+        with open(finders.find("js/ask.js"), encoding="utf-8") as handle:
+            script = handle.read()
+        self.assertIn('box.classList.toggle("is-folded", !!hide)', script)
+
+    def test_no_button_before_a_question(self):
+        page = self.client.get(self.box.get_absolute_url())
+        self.assertNotContains(page, "data-ask-hide")
+        self.assertNotContains(page, "data-ask-show")
 
 
 class RipTests(AskRipCase):

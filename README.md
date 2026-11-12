@@ -1137,6 +1137,33 @@ we need to."
   beside a shop that pays a commission: the shopper asked. The owner, 12
   Nov 2026: "Can ask rip check if the product is a scam or likely to be a
   scalper ... Is the product a real produxt is the listing name dodgy?".
+- Is it good value? always has an answer. With the page's Price check he
+  gives its verdict. Without one he gives the quick value check our own
+  code works out (`askrip.quick_value`): today's cheapest delivered price
+  against the RRP, Cardmarket, the other UK shops with it in stock, and
+  the typical price a pack of at least 5 other products of the same game,
+  kind and language at UK shops we read (one query), with a lean: looks
+  good value (at least 5% under the RRP and Cardmarket, or 10% under the
+  typical price a pack when neither is known), looks dear (more than 15%
+  over either, or 20% over the typical price a pack) or about usual. He is
+  also told the page's own badges (cheaper than the next shop, Lowest in
+  30 days, Best in 7 days) and why the Price check is missing (too few
+  days or shops, delivery unknown). A doubtful cheapest price gets no
+  quick check. The owner, 12 Nov 2026: "it needs to be able to find out
+  if something's good value ... This has to be a useful tool, otherwise
+  we'll get rid of it".
+- With no red flags he still says something useful (`red_flag_check`):
+  how many offers were checked, what backs the product (how many UK shops
+  list it, Cardmarket, where the RRP comes from, out now), each offer's
+  own trust signs (a UK shop we check, Top Rated Plus or Authenticity
+  Guarantee, 99% positive from 1,000 ratings or more, at or under the RRP
+  with delivery) and the offer with the fewest doubts: the cheapest
+  without a warning sign from a UK shop we check, else one eBay vouches
+  for.
+- Hide conversation: once Rip has answered, a button floats at the foot
+  of the box while it is on screen (sticky, above the phone's buy bar).
+  `ask.js` folds the box to its heading and Show conversation; without
+  script it is a link to the page without the answer, at All prices.
 - Its own page, `/ask-rip/` (`web:ask_rip_about`, wording under `askrip.*`
   in the registry), says what Rip answers, where his answers come from,
   what he will not do and the questions people ask about him, given again

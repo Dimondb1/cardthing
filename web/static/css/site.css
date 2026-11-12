@@ -1592,6 +1592,9 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 /* Report: a quiet link in each shop's row; its form opens under the price list (includes/report_form.html). */
 /* What eBay says of an eBay row's item or seller ("Top Rated Plus"): plain words, never coloured. */
 .offer__seller { font-size: var(--text-xs); color: var(--color-ink-muted); }
+/* The eBay seller and their standing (ebay_seller.html), a line of its own under the name. */
+.offer__trust { flex-basis: 100%; font-size: var(--text-xs); color: var(--color-ink-muted); }
+.buybox__seller { font-size: var(--text-sm); color: var(--color-ink-muted); }
 .offer__report { font-size: var(--text-xs); color: var(--color-ink-subtle); }
 @media (hover: hover) { .offer__report:hover { color: var(--color-brand-text); } }
 .report { margin-top: var(--space-4); padding: var(--space-4) var(--card-pad); border: 1px solid var(--color-line); border-radius: var(--radius-card); }

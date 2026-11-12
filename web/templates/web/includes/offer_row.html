@@ -4,6 +4,7 @@
     <span class="offer__name">{{ listing.retailer.name }}</span>
     {% if listing.seller_note %}<span class="offer__seller">{{ listing.get_seller_note_display }}</span>{% endif %}
     {% if cheapest_row and listing.delivery_known and not cheaper_preorder %}<span class="offer__flag">{% copy "product.compare.cheapest" %}</span>{% endif %}
+    {% if listing.seller_name or listing.seller_feedback is not None %}<span class="offer__trust">{% include "web/includes/ebay_seller.html" %}</span>{% endif %}
   </div>
   <div class="offer__stock">
     {% if listing.kept_out_by_band %}<span class="stock-inline stock-inline--stale">{% copy "product.price.kept_out_band" %}</span>{% elif listing.sanity == "excluded" %}<span class="stock-inline stock-inline--stale">{% copy "product.price.kept_out" %}</span>{% elif listing.closed_why %}<span class="stock-inline stock-inline--out_of_stock">{{ listing.get_closed_why_display }}</span>{% elif listing.is_stale %}<span class="stock-inline stock-inline--stale">{% copy "product.compare.stale" date=listing.last_checked|short_date %}</span>{% else %}<span class="stock-inline stock-inline--{{ listing.availability }}">{{ listing.get_availability_display }}</span>{% endif %}

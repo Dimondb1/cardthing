@@ -278,6 +278,16 @@ def facts(product, now=None):
             offer["free_delivery_over"] = money(retailer.free_delivery_over)
         if retailer.source_type in pricing.MARKETPLACES:
             offer["marketplace"] = "a seller on a marketplace, not a UK shop we read"
+        # Who the eBay seller is and their standing, as eBay gives them, so Rip can say who a buyer would deal with.
+        if listing.seller_name or listing.seller_feedback is not None:
+            standing = {"name": listing.seller_name or None}
+            if listing.seller_feedback is not None:
+                standing["positive_feedback_percent"] = float(listing.seller_feedback)
+            if listing.seller_ratings:
+                standing["ratings"] = listing.seller_ratings
+            if listing.seller_note:
+                standing["ebay_says"] = listing.get_seller_note_display()
+            offer["seller"] = standing
         if listing.has_deal:
             offer["multi_buy"] = f"{listing.deal_quantity} for {money(listing.deal_price)}"
         packs = product.packs_inside

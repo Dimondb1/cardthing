@@ -2086,6 +2086,14 @@ ENTRIES = [
         "Product page price box when no shop has stock, under the Amazon and eBay buttons.",
         legal=True,
     ),
+    Entry("product.ebay.sold_by", T, "eBay row: the seller", "Sold by {name}",
+          "On an eBay row of the price list, and under Buy now when eBay is the cheapest: the seller's eBay name.",
+          placeholders=("name",)),
+    Entry("product.ebay.feedback", T, "eBay row: the seller's feedback", "{percent}% positive from {ratings} ratings",
+          "After the seller's name on an eBay row: their positive feedback and how many ratings it comes from, as "
+          "eBay gives them.", placeholders=("percent", "ratings")),
+    Entry("product.ebay.feedback_only", T, "eBay row: the seller's feedback, no count", "{percent}% positive",
+          "After the seller's name on an eBay row when eBay gave no count of ratings.", placeholders=("percent",)),
     Entry("product.ebay.button", B, "eBay button", "Search eBay", "Product page price box when no shop has stock. Opens an eBay UK search for new, buy it now listings."),
     Entry(
         "product.amazon.button", B, "Amazon button",

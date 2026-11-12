@@ -551,6 +551,19 @@ def item_offer(item, product, Offer):
         product_pk=product.pk,
         description=item_description(item),
         seller_note=seller_note(item),
+        seller=seller_standing(seller),
+    )
+
+
+def seller_standing(seller):
+    """(name, positive feedback % to one place, number of ratings) of an eBay seller, as eBay's answer gives them; a
+    part eBay left out is empty. Shown on the row (offer_row.html), never made up."""
+    feedback = money(seller.get("feedbackPercentage"))
+    ratings = money(seller.get("feedbackScore"))
+    return (
+        str(seller.get("username") or "")[:80],
+        feedback.quantize(Decimal("0.1")) if feedback is not None and 0 <= feedback <= 100 else None,
+        int(ratings) if ratings is not None and ratings >= 0 else None,
     )
 
 

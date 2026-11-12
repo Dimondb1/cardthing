@@ -698,6 +698,17 @@ return, posted within a day, a top rated seller) or Business seller
 it, and nothing is shown that eBay did not say. It never changes which
 listing is kept: the cheapest delivered price still wins.
 
+The seller's eBay name, positive feedback and number of ratings, as eBay's
+answer gives them (`ebay.seller_standing`; `Listing.seller_name`,
+`seller_feedback`, `seller_ratings`), are kept too and shown on the eBay
+row, "Sold by pikachu_cards · 99.6% positive from 4,210 ratings"
+(`ebay_seller.html`), and under Buy now with eBay's note when eBay is the
+cheapest. Ask Rip is told them as well. Only sellers with at least 95%
+positive and 50 ratings are listed at all (`MIN_FEEDBACK`, `MIN_RATINGS`).
+The owner, 12 Nov 2026: "are we putting the seller reputation in the list
+so that people feel happy ... we're making people feel good about buying
+from those links".
+
 eBay sellers pad titles with the game's name and selling words, so a
 result counts as our product when every word of our name is in its title,
 it is the same kind of product in the same language, it is one of it (not

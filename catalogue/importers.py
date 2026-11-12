@@ -97,6 +97,9 @@ class Offer:
     # What eBay says of the item or its seller (Listing.SellerNote): "" when it says nothing, None when the read is
     # not eBay's, which leaves the listing's as it was.
     seller_note: str | None = None
+    # The eBay seller's name, positive feedback (%) and number of ratings, from eBay's own answer: None when the read is
+    # not eBay's, which leaves the listing's as they were.
+    seller: tuple | None = None
     # Why the shop's description says it cannot be bought today (closed_reason), or "": set on reading.
     closed: str = ""
 
@@ -1843,13 +1846,15 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
         # change on the page: the Price check takes it up at the next hourly refresh.
         list_price = listing.list_price if offer.list_price is None else (offer.list_price or None)
         seller_note = listing.seller_note if offer.seller_note is None else offer.seller_note
+        held_seller = (listing.seller_name, listing.seller_feedback, listing.seller_ratings)
+        seller = held_seller if offer.seller is None else offer.seller
         # The first read to find the shop's words saying no visitor can buy it online (members or collection only):
         # its price comes out of the daily record, whichever reader took it out of stock first.
         newly_closed = bool(offer.closed) and not created and listing.closed_why != offer.closed and listing.delivery_known
         closed_price = listing.delivered_price
         if (created or listing.url != offer.url or listing.title != title or listing.shop_ean != shop_ean or published
                 or deal != held or listing.description != description or listing.list_price != list_price
-                or listing.seller_note != seller_note or listing.closed_why != offer.closed):
+                or listing.seller_note != seller_note or seller != held_seller or listing.closed_why != offer.closed):
             # The page shows the multi-buy and links to the shop's page: a new one of either is a change. Another
             # variant of the same page is not.
             shown = not created and listing.is_active and (deal != held or page_key(listing.url) != page_key(offer.url))
@@ -1867,6 +1872,9 @@ def apply_offers(retailer, offers, checked_at=None, run=None, complete=True, sho
             if listing.seller_note != seller_note:
                 listing.seller_note = seller_note
                 fields.append("seller_note")
+            if seller != held_seller:
+                listing.seller_name, listing.seller_feedback, listing.seller_ratings = seller
+                fields += ["seller_name", "seller_feedback", "seller_ratings"]
             if listing.closed_why != offer.closed:
                 listing.closed_why = offer.closed
                 fields.append("closed_why")

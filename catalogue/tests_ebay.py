@@ -976,3 +976,62 @@ class SellerTests(TestCase):
         self.assertIn('<span class="offer__name">eBay</span>\n    <span class="offer__seller">Authenticity Guarantee</span>',
                       html)
         self.assertEqual(html.count('class="offer__seller"'), 1)   # never on a shop's row
+
+
+@override_settings(**KEYS)
+class SellerStandingTests(TestCase):
+    """The eBay seller's name, positive feedback and ratings, from eBay's own answer, on the row and under Buy now. The
+    owner, 12 Nov 2026: "are we putting the seller reputation in the list so that people feel happy ... we're making
+    people feel good about buying from those links"."""
+
+    setUp = SellerTests.setUp
+    offer = SellerTests.offer
+
+    def test_the_offer_carries_the_sellers_standing_as_eBay_gives_it(self):
+        offer = self.offer(seller={"username": "cardshop", "feedbackPercentage": "99.84", "feedbackScore": 12345})
+        self.assertEqual(offer.seller, ("cardshop", Decimal("99.8"), 12345))
+        offer = self.offer(seller={"username": "", "feedbackPercentage": None})
+        self.assertEqual(offer.seller, ("", None, None))
+
+    def test_the_read_saves_it_and_a_shops_read_leaves_it(self):
+        found = item("Pokemon Prismatic Evolutions Elite Trainer Box", price="79.99", postage="3.49")
+        found["seller"].update({"username": "pikachu_cards", "feedbackPercentage": "99.6", "feedbackScore": 4210})
+        with mock.patch.object(ebay, "http", FakeApi([found])), mock.patch.object(ebay, "PAUSE", 0):
+            run_import(self.retailer)
+        listing = Listing.objects.get(retailer=self.retailer, product=self.product)
+        self.assertEqual((listing.seller_name, listing.seller_feedback, listing.seller_ratings),
+                         ("pikachu_cards", Decimal("99.6"), 4210))
+        from .importers import apply_offers
+
+        apply_offers(self.retailer, [Offer(title=listing.title, url=listing.url, price=Decimal("79.99"),
+                                           delivery=Decimal("3.49"), product_pk=self.product.pk)])   # not eBay's: left
+        listing.refresh_from_db()
+        self.assertEqual(listing.seller_name, "pikachu_cards")
+
+    def test_the_row_and_the_price_box_say_who_sells_it_and_how_they_are_rated(self):
+        from .testing import make_retailer
+
+        listing = make_listing(self.product, self.retailer, price="70.00")
+        Listing.objects.filter(pk=listing.pk).update(seller_name="pikachu_cards", seller_feedback=Decimal("99.6"),
+                                                     seller_ratings=4210, seller_note=Listing.SellerNote.TOP_RATED)
+        make_listing(self.product, make_retailer("Harbour Games"), price="80.00")
+        cache.clear()
+        html = self.client.get(self.product.get_absolute_url()).content.decode()
+        words = 'Sold by pikachu_cards<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>' \
+                '99.6% positive from 4,210 ratings'
+        row = html[html.index('<span class="offer__name">eBay</span>'):]
+        self.assertIn(words, row[:row.index("</li>")])
+        box = html[html.index('class="buybox__seller"'):]
+        self.assertIn(words, box[:box.index("</p>")])
+        self.assertIn("Top Rated Plus", box[:box.index("</p>")])
+        self.assertEqual(html.count('class="offer__trust"'), 1)   # never on a shop's row
+
+    def test_rip_is_told_who_the_seller_is(self):
+        from web import askrip
+
+        listing = make_listing(self.product, self.retailer, price="70.00")
+        Listing.objects.filter(pk=listing.pk).update(seller_name="pikachu_cards", seller_feedback=Decimal("99.6"),
+                                                     seller_ratings=4210)
+        found, _amounts, _checked = askrip.facts(self.product)
+        self.assertEqual(found["offers"][0]["seller"],
+                         {"name": "pikachu_cards", "positive_feedback_percent": 99.6, "ratings": 4210})

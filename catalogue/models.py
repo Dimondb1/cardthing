@@ -854,6 +854,13 @@ class Listing(models.Model):
         max_length=12, blank=True, default="", choices=SellerNote.choices,
         help_text="eBay listings only: what eBay says of the item or seller (Authenticity Guarantee, Top Rated Plus, a "
                   "business seller). Set by each eBay read.")
+    # eBay listings only: the seller and their standing, as eBay's own answer gives them (ebay.item_offer), shown on the
+    # row so a buyer can see who they are buying from. The owner, 12 Nov 2026: "make sure that, you know, we're making
+    # people feel good about buying from those links".
+    seller_name = models.CharField("eBay seller", max_length=80, blank=True, default="")
+    seller_feedback = models.DecimalField("seller's positive feedback (%)", max_digits=4, decimal_places=1, null=True,
+                                          blank=True)
+    seller_ratings = models.PositiveIntegerField("seller's feedback ratings", null=True, blank=True)
     closed_why = models.CharField(
         max_length=10, blank=True, default="", choices=Closed.choices,
         help_text="Why the shop's own description, tags or title say it cannot be bought online now, though its "

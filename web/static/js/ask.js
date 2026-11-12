@@ -32,6 +32,27 @@
     if (box && box.dataset.rest) box.dataset.mood = box.dataset.rest;
   });
 
+  // Hide conversation folds the box to its heading and Show conversation; the page stays where the box is. Without
+  // this file Hide conversation is a link to the page without the answer.
+  document.addEventListener("click", (event) => {
+    const hide = event.target.closest && event.target.closest("[data-ask-hide]");
+    const show = event.target.closest && event.target.closest("[data-ask-show]");
+    const box = (hide || show) && (hide || show).closest(BOX);
+    if (!box) return;
+    event.preventDefault();
+    box.classList.toggle("is-folded", !!hide);
+    const again = box.querySelector("[data-ask-show]");
+    if (again) again.hidden = !hide;
+    if (hide) {
+      const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      box.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "nearest" });
+      if (again) again.focus({ preventScroll: true });
+    } else {
+      const answer = box.querySelector("[data-ask-answer]");
+      if (answer) answer.focus({ preventScroll: true });
+    }
+  });
+
   if (!window.fetch || !window.FormData) return;
   document.addEventListener("submit", (event) => {
     const form = event.target.closest("form[data-ask-form]");

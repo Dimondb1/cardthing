@@ -1333,6 +1333,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   /* The footer ends above the bar, and the cards that come up from the foot of the screen sit above it too. */
   body:has(.buy-bar) .site-footer { padding-bottom: calc(var(--buy-bar-space) + env(safe-area-inset-bottom, 0px)); }
   body:has(.buy-bar) { --card-bottom: calc(var(--gutter) + var(--buy-bar-space) + env(safe-area-inset-bottom, 0px)); }
+  /* Hide conversation floats above the bar, not behind it. */
+  body:has(.buy-bar) .ask__fold { bottom: calc(var(--space-3) + var(--buy-bar-space) + env(safe-area-inset-bottom, 0px)); }
 }
 @media (min-width: 60rem) { .buy-bar { display: none; } }
 
@@ -1800,6 +1802,11 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .ask__input { flex: 1 1 var(--field-short); min-width: 0; min-height: var(--tap); padding: 0 var(--space-3); border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-paper); font: inherit; font-size: var(--text-base); color: var(--color-ink); }
 .ask__input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
 .ask__small { font-size: var(--text-xs); color: var(--color-ink-muted); }
+/* Hide conversation: floats at the foot of the screen while the box is on it, and stays inside the box. */
+.ask__fold { position: sticky; bottom: var(--space-3); z-index: 2; justify-self: center; }
+.ask .ask__hide { background: var(--color-paper); box-shadow: var(--shadow-lift); }
+.ask__show { justify-self: start; }
+.ask.is-folded > :not(.ask__title):not(.ask__show) { display: none; }
 .ask__thinking { color: var(--color-ink-muted); }
 @media (prefers-reduced-motion: no-preference) {
   .ask__bubble > *, .ask__you { animation: fade-in var(--motion-normal) var(--ease-out) both; }

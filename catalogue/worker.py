@@ -86,15 +86,18 @@ RELEASE_KEY = -1
 # Reads go before every other job (plan). Among reads, and among the rest, priority is weight times minutes
 # overdue, so nothing waits for ever behind something heavier.
 WEIGHTS = {SHOP_READ: 500, "hot": 1000, "warm": 100, "cold": 10, PULSE: 300, FINDER: 50, RELEASE_SCAN: 20}
-# eBay's listings of the products nobody is looking at are still checked this often through the bulk item lookup:
-# cheap (twenty a request), and an eBay price otherwise waits a day for the next daily run.
-EBAY_EVERY = timedelta(hours=6)
-# eBay listings on the products people are looking at are checked less often than a shop's: every lookup is one of
-# the day's 5,000, twenty listings at a time, and ten-minute checks of the busiest ran the allowance out by early
-# afternoon on 6 Nov 2026 (eBay then answered 429). Half an hour for the hot tier, two hours for the warm, six for
-# the rest keeps a day's checks a fraction of it.
+# eBay's listings in stock are checked through the bulk item lookup (twenty a request) at least every EBAY_EVERY, so
+# each is asked about twice inside the RIPRAPTOR_EBAY_STALE_AFTER_HOURS after which its price stops counting. Every
+# lookup is one of the day's 5,000: ten-minute checks of the busiest ran the allowance out by early afternoon on 6 Nov
+# 2026 (eBay then answered 429), and items that had ended, each asked about alone with every other item of its batch,
+# ran it out on 12 Nov. Ended items are no longer asked about (ebay.ended_items), so half an hour for the hot tier, an
+# hour for the warm and two for the rest is a fraction of it. A listing out of stock is asked about every
+# EBAY_OUT_EVERY: it is not shown as buyable, and only a seller restocking the same item brings it back. The owner,
+# 12 Nov 2026: "This sort of time to update is not good enough".
+EBAY_EVERY = timedelta(hours=2)
 EBAY_HOT_EVERY = timedelta(minutes=30)
-EBAY_WARM_EVERY = timedelta(hours=2)
+EBAY_WARM_EVERY = timedelta(hours=1)
+EBAY_OUT_EVERY = timedelta(hours=6)
 # A shop never read before has no next read; it counts as an hour overdue.
 NEVER_READ_MINUTES = 60
 
@@ -539,12 +542,15 @@ class Worker:
             .exclude(retailer__source_type__in=probe.NEVER_CHECKED)
             .exclude(retailer_id__in=skip)
             .filter(Q(retailer__backoff_until__isnull=True) | Q(retailer__backoff_until__lte=now))
-            .values_list("pk", "product_id", "retailer_id", "retailer__source_type", "retailer__name", "last_checked", "url")
+            .values_list("pk", "product_id", "retailer_id", "retailer__source_type", "retailer__name", "last_checked", "url",
+                         "availability")
         )
+        ended = ebay.ended_items()
         hot, warm, cold = [], [], []
         for row in rows:
-            # An eBay listing is checked through eBay's item lookup, which needs the item's id from its address.
-            if row[3] == Retailer.Source.EBAY and not ebay.item_id_of(row[6]):
+            # An eBay listing is checked through eBay's item lookup, which needs the item's id from its address, and
+            # never once eBay has said the item ended.
+            if row[3] == Retailer.Source.EBAY and (not ebay.item_id_of(row[6]) or ebay.item_id_of(row[6]) in ended):
                 continue
             points = scores.get(row[1], 0)
             if points >= heat.HOT:
@@ -559,8 +565,10 @@ class Worker:
         by_shop = {}
         ebay_every = {"hot": EBAY_HOT_EVERY, "warm": EBAY_WARM_EVERY, "cold": EBAY_EVERY}
         for tier, every, items in (("hot", heat.HOT_EVERY, hot), ("warm", heat.WARM_EVERY, warm), ("cold", EBAY_EVERY, cold)):
-            for _points, (pk, _product, retailer_id, source_type, name, checked, _url) in items:
-                wait = ebay_every[tier] if source_type == Retailer.Source.EBAY else every
+            for _points, (pk, _product, retailer_id, source_type, name, checked, _url, availability) in items:
+                wait = every
+                if source_type == Retailer.Source.EBAY:
+                    wait = ebay_every[tier] if availability in Listing.BUYABLE else EBAY_OUT_EVERY
                 overdue = now - checked - wait
                 if overdue < timedelta(0):
                     continue

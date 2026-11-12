@@ -108,7 +108,7 @@ class PageSitemap(Sitemap):
 
     def items(self):
         return ["web:home", "web:deals", "web:per_card", "web:drops", "web:drops?show=out", "web:games", "web:about",
-                "web:shops", "web:list_shop", "web:terms"]
+                "web:shops", "web:ask_rip_about", "web:list_shop", "web:terms"]
 
     def location(self, name):
         name, _, query = name.partition("?")

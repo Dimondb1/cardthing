@@ -1109,6 +1109,17 @@ we need to."
   today's Price check, record, price 30 days ago and stock, never guessing
   what will happen; and who it suits, with another product of the set for
   another budget.
+- Its own page, `/ask-rip/` (`web:ask_rip_about`, wording under `askrip.*`
+  in the registry), says what Rip answers, where his answers come from,
+  what he will not do and the questions people ask about him, given again
+  to search engines as schema.org FAQPage with a WebPage and breadcrumb. It
+  is in the sitemap, in llms.txt (its own line under Pages, and an Ask Rip
+  point in Why RipRaptor, which the how it works page shows too), linked
+  from every page's footer and from the small print under the question
+  box ("How Rip answers"). While Rip takes no questions the page says so.
+  The owner, 12 Nov 2026: "add something in the site that helps Google and
+  other search engines and AI pick up the fact that we have an intelligent
+  Ask Rip feature".
 - An answer that names a price the page does not show (or the sum or gap
   of two it does) is not shown; dashes, exclamation marks and formatting are
   taken out. Email addresses, phone numbers and links are taken out of the

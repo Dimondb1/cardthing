@@ -1,0 +1,39 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block content %}{# Ask Rip explained (web.views.ask_rip_about): what Rip answers on every product page, where from, what he will not do, and the questions people ask about him (given again as FAQPage). For shoppers and for search engines and AI assistants. Wording from the registry (askrip.*). #}
+<div class="page-head askrip-head" data-mood="happy">
+  <div class="askrip-head__text">
+    <h1 class="page-title">{% copy "askrip.title" %}</h1>
+    <div class="prose prose--lead">{% copy "askrip.intro" count=per_person %}</div>
+    {% if closed %}<p class="askrip-head__note" role="status">{% copy "askrip.closed" %}</p>{% endif %}
+  </div>
+  {% include "web/includes/rip_bot.html" %}
+</div>
+
+<section class="block askrip-part" aria-labelledby="askrip-ask">
+  <h2 id="askrip-ask" class="section-title">{% copy "askrip.ask.title" %}</h2>
+  <ul class="askrip-questions">{% for item in questions %}
+    <li class="askrip-questions__item"><span class="chip askrip-questions__chip">{{ item.question }}</span><span class="askrip-questions__answer">{{ item.answer }}</span></li>{% endfor %}
+  </ul>
+  <p class="askrip-part__note">{% copy "askrip.ask.own" %}</p>
+</section>
+
+<section class="block askrip-part" aria-labelledby="askrip-source">
+  <h2 id="askrip-source" class="section-title">{% copy "askrip.source.title" %}</h2>
+  <div class="prose">{% copy "askrip.source.body" %}</div>
+</section>
+
+<section class="block askrip-part" aria-labelledby="askrip-limits">
+  <h2 id="askrip-limits" class="section-title">{% copy "askrip.limits.title" %}</h2>
+  <div class="prose">{% copy "askrip.limits.body" count=per_person %}</div>
+</section>
+
+<section class="block askrip-part" aria-labelledby="askrip-faq" id="faq">
+  <h2 id="askrip-faq" class="section-title">{% copy "askrip.faq.title" %}</h2>
+  <dl class="askrip-faq">{% for question, answer in faq %}
+    <div class="askrip-faq__item"><dt>{{ question }}</dt><dd>{{ answer }}</dd></div>{% endfor %}
+  </dl>
+</section>
+
+<p class="block askrip-cta"><a class="button" href="{% url 'web:search' %}">{% copy "askrip.cta" %}</a></p>
+{% endblock %}

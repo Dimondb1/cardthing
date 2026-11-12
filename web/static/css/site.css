@@ -1750,6 +1750,25 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @keyframes rip-chat { from { transform: rotate(var(--rip-jaw-shut)); } to { transform: rotate(var(--rip-jaw-open)); } }
 @keyframes rip-dot { from { opacity: var(--opacity-waiting); } to { opacity: 1; } }
 
+/* The Ask Rip page (ask_rip_about.html): Rip beside the heading, glad to see you; the four questions as his chips,
+   each with what he answers from; then where his answers come from, his limits and the questions about him. Lines no
+   longer than running text elsewhere. */
+.askrip-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); max-width: var(--measure); }
+.askrip-part { max-width: var(--measure); }
+.askrip-part .section-title { margin-bottom: var(--space-3); }
+.askrip-head__note { margin-top: var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
+.askrip-questions { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.askrip-questions__item { display: grid; gap: var(--space-1); }
+.askrip-questions__chip { justify-self: start; border-color: var(--color-brand-line); background: var(--color-brand-soft); white-space: normal; }
+.askrip-questions__answer { color: var(--color-ink-muted); }
+.askrip-part__note { margin-top: var(--space-4); color: var(--color-ink-muted); }
+.askrip-faq { display: grid; gap: var(--space-4); margin: 0; }
+.askrip-faq dt { font-weight: var(--weight-strong); color: var(--color-ink); }
+.askrip-faq dd { margin: var(--space-1) 0 0; color: var(--color-ink-muted); }
+@media (min-width: 48rem) {
+  .askrip-questions__item { grid-template-columns: var(--askrip-question-col) minmax(0, 1fr); align-items: baseline; gap: var(--space-4); }
+}
+
 /* Ask Rip's questions under the product's name (ask_strip.html): a tap asks him in the price box. In his speech
    bubble's colours, so they read as his. One row that scrolls sideways on a phone, so the price stays in view; they
    wrap from a tablet up. */

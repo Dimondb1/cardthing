@@ -27,6 +27,6 @@
       <button class="button" type="submit">{% copy "product.ask.button" %}</button>
     </div>
   </form>
-  <p class="ask__small">{% copy_count "product.ask.left" ask.left %} {% copy "product.ask.note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.terms" %}</a></p>
+  <p class="ask__small">{% copy_count "product.ask.left" ask.left %} {% copy "product.ask.note" %} <a href="{% url 'web:ask_rip_about' %}">{% copy "product.ask.howto" %}</a> · <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.terms" %}</a></p>
   {% endif %}
 </section>

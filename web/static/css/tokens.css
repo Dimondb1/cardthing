@@ -247,6 +247,7 @@
   --product-media-note: 1.25rem;
   --product-media-rip: 4rem;        /* Ask Rip's questions under the name, given up by the picture on a phone */
   --product-media-least: 5rem;      /* the picture on a phone is never shorter */
+  --askrip-question-col: 12rem;     /* the Ask Rip page: the question chips' column from a tablet up */
   --product-media-min: 22rem;       /* the picture well beside the price box on wide screens: at least this tall, and as tall as the box */
   --partner-logo: 7.5rem;           /* a partner's logo on the home page: 120px, over 31mm wide, past the 17mm brands usually ask for */
   --partner-logo-min: 4.5rem;       /* never drawn smaller than this, 72px: over 19mm */

@@ -2169,7 +2169,7 @@ def about(request):
     )
 
 
-WHY_POINTS = ("price", "stock", "trust", "deals", "shops", "alerts", "independent")
+WHY_POINTS = ("price", "stock", "trust", "deals", "askrip", "shops", "alerts", "independent")
 
 
 def why_points(request):
@@ -2219,6 +2219,39 @@ def shops(request):
         "meta_title": copy.get("meta.shops.title", store=store, shops=len(rows)),
         "meta_description": copy.get("meta.shops.description", store=store),
         "canonical_url": request.build_absolute_uri(request.path),
+    })
+
+
+# Ask Rip's page: the four one-tap questions he is asked most (askrip.SUGGESTED, each with what he answers from) and
+# the questions people ask about him.
+ASK_RIP_QUESTIONS = ("inside", "value", "when", "fit")
+ASK_RIP_FAQ = ("what", "free", "source", "price", "wrong")
+
+
+def ask_rip_about(request):
+    """Ask Rip explained, for shoppers and for search engines and AI assistants: what he answers on every product page,
+    where his answers come from, what he will not do, and the questions people ask about him, given again as
+    schema.org FAQPage. The owner, 12 Nov 2026: "add something in the site that helps Google and other search engines
+    and AI pick up the fact that we have an intelligent Ask Rip feature". Wording only: no query."""
+    store = copy.for_request(request)
+    page_url = request.build_absolute_uri(request.path)
+    values = {"count": askrip.PER_PERSON}
+    questions = [{"question": copy.get(f"product.ask.suggest.{key}", store=store),
+                  "answer": copy.get(f"askrip.ask.{key}", store=store)} for key in ASK_RIP_QUESTIONS]
+    faq = [(copy.get(f"askrip.faq.{key}.q", store=store), copy.get(f"askrip.faq.{key}.a", store=store, **values))
+           for key in ASK_RIP_FAQ]
+    title = copy.get("meta.askrip.title", store=store)
+    description = copy.get("meta.askrip.description", store=store)
+    crumbs = breadcrumbs_json(request, [(copy.get("askrip.title", store=store), request.path)], page_url=page_url)
+    page = {
+        "@context": "https://schema.org", "@type": "WebPage", "@id": page_url + "#webpage", "url": page_url,
+        "name": title, "description": description, "breadcrumb": {"@id": crumbs["@id"]},
+        "mainEntity": {"@id": page_url + "#faq"},
+    }
+    return render(request, "web/ask_rip_about.html", {
+        "questions": questions, "faq": faq, "per_person": askrip.PER_PERSON, "closed": askrip.closed_reason() != "",
+        "meta_title": title, "meta_description": description, "canonical_url": page_url,
+        "structured_json": ld_json([page, crumbs, answers.faq_json(page_url, faq)]),
     })
 
 
@@ -3707,6 +3740,7 @@ def llms_txt(request):
         f"- [How it works]({request.build_absolute_uri(reverse('web:about'))})",
         f"- [Shops we compare]({request.build_absolute_uri(reverse('web:shops'))}): every UK shop with its delivery "
         "charge, how many products it prices and when it was last checked",
+        f"- [Ask Rip]({request.build_absolute_uri(reverse('web:ask_rip_about'))}): {text(request, 'meta.askrip.description')}",
         f"- [Terms and disclosures]({request.build_absolute_uri(reverse('web:terms'))})",
         f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product on sale, coming soon or priced "
         "in the last month, and every game and set",

@@ -542,3 +542,63 @@ class RipTests(AskRipCase):
         # No hex colours, and no lengths or durations outside the drawing's own tokens.
         self.assertIsNone(re.search(r"#[0-9a-fA-F]{3,6}\b", rules))
         self.assertIsNone(re.search(r"(?<![\w-])\d+(\.\d+)?(px|rem|ms|s|deg)\b", rules.replace("48rem", "")))
+
+
+class AskRipPageTests(AskRipCase):
+    """The Ask Rip page, for shoppers and for search engines and AI assistants. The owner, 12 Nov 2026: "add something in
+    the site that helps Google and other search engines and AI pick up the fact that we have an intelligent Ask Rip
+    feature"."""
+
+    def page(self):
+        from html import unescape
+
+        response = self.client.get(reverse("web:ask_rip_about"))
+        self.assertEqual(response.status_code, 200)
+        return unescape(response.content.decode())
+
+    def blocks(self, html):
+        import json
+
+        found = []
+        for match in re.finditer(r'<script type="application/ld\+json">(.*?)</script>', html, re.S):
+            data = json.loads(match.group(1))
+            found.extend(data if isinstance(data, list) else [data])
+        return found
+
+    def test_it_says_what_rip_answers_where_from_and_what_he_will_not_do(self):
+        html = self.page()
+        for words in ("<h1 class=\"page-title\">Ask Rip</h1>", "What's inside?", "Is it good value?", "Buy now or wait?",
+                      "Is it right for me?", "Where his answers come from", "What he will not do",
+                      "you can ask 5 questions a day", "Search products"):
+            with self.subTest(words=words):
+                self.assertIn(words, html)
+        self.assertNotIn("not answering questions right now", html)
+
+    def test_search_engines_get_the_page_and_its_questions_as_the_page_shows_them(self):
+        html = self.page()
+        blocks = self.blocks(html)
+        faq = next(block for block in blocks if block["@type"] == "FAQPage")
+        self.assertEqual(len(faq["mainEntity"]), 5)
+        for question in faq["mainEntity"]:
+            with self.subTest(question=question["name"]):
+                self.assertIn(f"<dt>{question['name']}</dt>", html)
+                self.assertIn(question["acceptedAnswer"]["text"], html)
+        page = next(block for block in blocks if block["@type"] == "WebPage")
+        self.assertEqual(page["mainEntity"], {"@id": faq["@id"]})
+        self.assertIn("Ask Rip", page["name"])
+
+    def test_it_is_in_the_sitemap_llms_txt_the_footer_and_how_it_works(self):
+        address = reverse("web:ask_rip_about")
+        self.assertContains(self.client.get("/sitemap.xml"), address)
+        llms = self.client.get(reverse("web:llms")).content.decode()
+        self.assertIn(f"[Ask Rip](http://testserver{address})", llms)
+        self.assertIn("- Ask Rip: On every product page, Rip answers your questions", llms)
+        product = self.client.get(self.box.get_absolute_url()).content.decode()
+        self.assertIn(f'<a href="{address}">Ask Rip</a>', product)            # the footer
+        self.assertIn(f'<a href="{address}">How Rip answers</a>', product)    # under the question box
+        self.assertContains(self.client.get(reverse("web:about")), "Rip answers your questions from that page")
+
+    def test_while_rip_is_off_the_page_says_so(self):
+        ClaudeJob.objects.create(name="ask", on=False)
+        cache.clear()
+        self.assertIn("Rip is not answering questions right now.", self.page())

@@ -56,6 +56,7 @@ class PageTestCase(TestCase):
             self.sold_out.get_absolute_url(),
             self.unpriced.get_absolute_url(),
             reverse("web:about"),
+            reverse("web:ask_rip_about"),
             reverse("web:watchlist"),
             reverse("web:watchlist") + f"?p={self.etb.slug},{self.sold_out.slug}",
             reverse("web:contact"),

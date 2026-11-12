@@ -235,6 +235,9 @@ RIPRAPTOR_CONTACT_EMAIL = os.environ.get("RIPRAPTOR_CONTACT_EMAIL", "")
 # date. It still appears on the product page but is never used as the
 # cheapest price.
 RIPRAPTOR_STALE_AFTER_HOURS = int(os.environ.get("RIPRAPTOR_STALE_AFTER_HOURS", "72"))
+# An eBay price not confirmed for this long is not shown as buyable until it is checked again (catalogue/models.py
+# ebay_stale_cutoff): eBay items sell out in hours.
+RIPRAPTOR_EBAY_STALE_AFTER_HOURS = int(os.environ.get("RIPRAPTOR_EBAY_STALE_AFTER_HOURS", "4"))
 
 # Window used for "Price drops this week" and "Popular this week".
 RIPRAPTOR_TRENDING_DAYS = 7

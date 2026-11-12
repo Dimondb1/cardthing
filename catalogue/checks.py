@@ -22,7 +22,7 @@ from django.utils import timezone
 
 from . import offers
 from .models import (
-    CheckAnswer, Listing, OutboundClick, Product, Release, ReleaseSourceState, Retailer, ShopProduct, stale_cutoff,
+    CheckAnswer, Listing, OutboundClick, Product, Release, ReleaseSourceState, Retailer, ShopProduct, fresh,
 )
 from .pricing import MARKETPLACES
 
@@ -164,7 +164,7 @@ def gap_candidates(doubtful_too=False):
     and offers are loaded only for these: loading every priced product to count a handful took two seconds and more
     on every dashboard build (the owner, 7 Nov 2026: "look at why it takes so long to open the dashboard")."""
     rows = (
-        Listing.objects.filter(is_active=True, retailer__is_active=True, last_checked__gte=stale_cutoff(),
+        Listing.objects.filter(fresh(), is_active=True, retailer__is_active=True,
                                availability__in=Listing.BUYABLE, product__is_active=True)
         .exclude(sanity=Listing.Sanity.EXCLUDED)
         .order_by("product_id", "-delivery_known", "delivered_price", "retailer__name")

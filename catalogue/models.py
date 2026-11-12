@@ -22,6 +22,40 @@ def stale_cutoff(now=None):
     return (now or timezone.now()) - timedelta(hours=hours)
 
 
+# An eBay item sells out in hours, and eBay's own allowance can hold checks back, so its price counts for
+# RIPRAPTOR_EBAY_STALE_AFTER_HOURS, not the days a shop's does: unconfirmed for longer, it is not shown as buyable
+# until it is checked again. The owner, 12 Nov 2026: "As ebay hasn't updated in 8 hours ... most things become out of
+# stock and th site doesn't know ... This sort of time to update is not good enough".
+EBAY = "ebay"   # Retailer.Source.EBAY, which is defined below
+
+
+def ebay_stale_cutoff(now=None):
+    """eBay listings checked before this moment are out of date (never later than stale_cutoff)."""
+    hours = min(settings.RIPRAPTOR_EBAY_STALE_AFTER_HOURS, settings.RIPRAPTOR_STALE_AFTER_HOURS)
+    return (now or timezone.now()) - timedelta(hours=hours)
+
+
+def listing_stale_cutoff(listing, now=None, loaded_only=False):
+    """The moment before which this listing's last check is out of date: eBay's shorter window for an eBay one. With
+    ``loaded_only`` its shop is looked at only when already loaded, so a shop's import, writing hundreds of listings,
+    asks for no shop row each (the background reader's eBay checks load it)."""
+    if loaded_only and not Listing.retailer.is_cached(listing):
+        return stale_cutoff(now)
+    return ebay_stale_cutoff(now) if listing.retailer.source_type == EBAY else stale_cutoff(now)
+
+
+def fresh(prefix="", now=None):
+    """A Q for a listing checked recently enough for its price to count: within the shops' window, and an eBay one
+    within eBay's. ``prefix`` is the way to the listing ("listings__" from a product). Only positive conditions, so
+    from a product every part of it is about the same listing."""
+    cutoff, ebay_cutoff = stale_cutoff(now), ebay_stale_cutoff(now)
+    if ebay_cutoff <= cutoff:
+        return Q(**{f"{prefix}last_checked__gte": cutoff})
+    others = [value for value in Retailer.Source.values if value != EBAY]
+    return (Q(**{f"{prefix}last_checked__gte": ebay_cutoff})
+            | Q(**{f"{prefix}last_checked__gte": cutoff, f"{prefix}retailer__source_type__in": others}))
+
+
 def shown_change(at):
     """Listing.changed_at for a queryset update: ``at`` on a listing the page shows, unchanged on a hidden one,
     whose changes the page does not show (hiding it was stamped when it happened)."""
@@ -130,10 +164,8 @@ class ProductQuerySet(models.QuerySet):
 
     def with_prices(self):
         """Annotate the cheapest current delivered price and stock counts."""
-        cutoff = stale_cutoff()
         live = Q(listings__is_active=True, listings__retailer__is_active=True)
-        buyable = live & Q(
-            listings__last_checked__gte=cutoff,
+        buyable = live & fresh("listings__") & Q(
             listings__availability__in=Listing.BUYABLE,
             listings__sanity__in=Listing.COUNTED,
         )
@@ -176,8 +208,8 @@ class ProductQuerySet(models.QuerySet):
         """
         return self.filter(models.Exists(
             Listing.objects.order_by().filter(
-                product=models.OuterRef("pk"), is_active=True, retailer__is_active=True,
-                last_checked__gte=stale_cutoff(), availability__in=availability, sanity__in=Listing.COUNTED,
+                fresh(), product=models.OuterRef("pk"), is_active=True, retailer__is_active=True,
+                availability__in=availability, sanity__in=Listing.COUNTED,
             )
         ))
 
@@ -770,7 +802,7 @@ class ListingQuerySet(models.QuerySet):
         return self.filter(is_active=True, retailer__is_active=True)
 
     def current(self):
-        return self.live().filter(last_checked__gte=stale_cutoff())
+        return self.live().filter(fresh())
 
     def buyable(self):
         """Current, in stock or on pre-order, and not kept out of the comparison as impossible."""
@@ -984,7 +1016,7 @@ class Listing(models.Model):
 
     @property
     def is_stale(self):
-        return self.last_checked < stale_cutoff()
+        return self.last_checked < listing_stale_cutoff(self)
 
     @property
     def is_buyable(self):

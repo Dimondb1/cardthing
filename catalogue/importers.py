@@ -44,8 +44,8 @@ from .matching import (
     naming_words, same_product, score, set_codes, shop_title,
 )
 from .models import (
-    Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, shown_change,
-    stale_cutoff,
+    Game, ImportRun, Listing, Product, ProductAlias, Retailer, RetailerCollection, ShopPage, ShopProduct, ebay_stale_cutoff,
+    shown_change, stale_cutoff,
 )
 from .sanity import judge_product, trust_expiry
 
@@ -1706,12 +1706,16 @@ def stamp_checked(pks, checked_at):
     A listing in stock or on pre-order that was out of date until now gets its buy button back on the
     page, so the same stamp also records that as a change (changed_at, the sitemap's lastmod).
     """
+    # Out of date until now: past the shops' window, or past eBay's for an eBay listing.
     cutoff = stale_cutoff(checked_at)
-    back = Q(is_active=True, availability__in=Listing.BUYABLE) & (Q(last_checked__lt=cutoff) | Q(last_checked__isnull=True))
+    # By the shop's id in a subquery, not a join: the stamp's UPDATE reads it too.
+    ebay_shops = Retailer.objects.filter(source_type=Retailer.Source.EBAY).values("pk")
+    was_stale = Q(last_checked__lt=cutoff) | Q(last_checked__lt=ebay_stale_cutoff(checked_at), retailer_id__in=ebay_shops)
+    back = Q(is_active=True, availability__in=Listing.BUYABLE) & (was_stale | Q(last_checked__isnull=True))
     again = (
         ~Q(sanity=Listing.Sanity.OK)
         | Q(trusted_at__lt=trust_expiry(checked_at))
-        | Q(last_checked__lt=cutoff, availability__in=Listing.BUYABLE)
+        | (was_stale & Q(availability__in=Listing.BUYABLE))
     )
     for start in range(0, len(pks), STAMP_CHUNK):
         chunk = pks[start:start + STAMP_CHUNK]

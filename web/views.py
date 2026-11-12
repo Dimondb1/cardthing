@@ -33,6 +33,7 @@ from catalogue.models import (
     DailyPageView, DropSpotlight, FeaturedSettings, Game, Listing, OutboundClick, Product, ProductAlias, ProductSet, Referral, ReferralSettings, Referrer, RemovedProduct,
     Retailer, StockAlert, stale_cutoff,
 )
+from catalogue.models import fresh as fresh_listing
 from catalogue.search import apply_search, suggest_sets, understand
 from catalogue.types import DEFAULT as DEFAULT_TYPES, GAME_TYPES, plural_words, type_choices, type_label
 from content import service as copy
@@ -154,9 +155,9 @@ def set_types(request, product_set):
     the language, sort, price and 2+ shops; opens on the first stock tab with products. None for a set of one type.
     One query."""
     in_view = apply_languages(Product.objects.active().filter(product_set=product_set), [request.GET.get("lang", "")])
-    cutoff = stale_cutoff()
-    stocked = Q(listings__is_active=True, listings__retailer__is_active=True, listings__last_checked__gte=cutoff,
-                listings__availability=Listing.Availability.IN_STOCK, listings__sanity__in=Listing.COUNTED)
+    stocked = fresh_listing("listings__") & Q(listings__is_active=True, listings__retailer__is_active=True,
+                                      listings__availability=Listing.Availability.IN_STOCK,
+                                      listings__sanity__in=Listing.COUNTED)
     counts = dict(in_view.order_by().values_list("product_type").annotate(n=Count("pk", filter=stocked, distinct=True)))
     present = [code for code, _label in type_choices(product_set.game.slug, present=set(counts))]
     if len(present) < 2:
@@ -756,9 +757,8 @@ def latest_drops_queryset():
         seen_since = max(seen_since, first + timedelta(days=2))
     on_preorder = Exists(
         Listing.objects.filter(
-            product=OuterRef("pk"), is_active=True, retailer__is_active=True,
-            last_checked__gte=stale_cutoff(), availability=Listing.Availability.PREORDER,
-            sanity__in=Listing.COUNTED,
+            fresh_listing(), product=OuterRef("pk"), is_active=True, retailer__is_active=True,
+            availability=Listing.Availability.PREORDER, sanity__in=Listing.COUNTED,
         )
     )
     upcoming = Q(release__gt=today) | Q(on_preorder=True)

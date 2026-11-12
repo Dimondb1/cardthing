@@ -19,7 +19,8 @@ from django.db.models import Count, DecimalField, Exists, ExpressionWrapper, F, 
 from django.utils import timezone
 
 from .models import (
-    DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, Restock, Retailer, shown_change, stale_cutoff,
+    DailyLowestPrice, Listing, OutboundClick, PreorderOpen, Product, Restock, Retailer, fresh, listing_stale_cutoff,
+    shown_change,
 )
 from .offers import MAX_REAL_PERCENT
 
@@ -140,7 +141,8 @@ def record_check(listing, *, price, delivery_cost, availability, checked_at=None
     repriced = not new and (
         listing.price != price or listing.delivery_known != (delivery_cost is not None) or listing.delivery_cost != cost
     )
-    stale = listing.last_checked is not None and listing.last_checked < stale_cutoff(checked_at)
+    stale = (listing.last_checked is not None
+             and listing.last_checked < listing_stale_cutoff(listing, checked_at, loaded_only=True))
     changed = new or repriced or (
         listing.availability != availability
         or listing.sanity != Listing.Sanity.OK
@@ -433,8 +435,8 @@ def snapshot_all(date=None):
 def doubtful_low():
     """The cheapest current delivered price that is doubtful (Listing.Sanity.DOUBTFUL), to annotate a product
     list with: a cheapest price no lower than it is confirmed, so news of a low can wait until it is."""
-    return Min("listings__delivered_price", filter=Q(
-        listings__is_active=True, listings__retailer__is_active=True, listings__last_checked__gte=stale_cutoff(),
+    return Min("listings__delivered_price", filter=fresh("listings__") & Q(
+        listings__is_active=True, listings__retailer__is_active=True,
         listings__availability__in=Listing.BUYABLE, listings__delivery_known=True,
         listings__sanity=Listing.Sanity.DOUBTFUL,
     ))

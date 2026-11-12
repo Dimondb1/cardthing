@@ -12,7 +12,7 @@ from django.db.models.functions import Cast, Coalesce
 from django.utils import timezone
 
 from . import languages
-from .models import DailyLowestPrice, Listing, stale_cutoff
+from .models import DailyLowestPrice, Listing, fresh
 
 # Language choices, from each product's stored language (catalogue/languages.py). "English" means
 # nothing in its name or set says otherwise.
@@ -72,8 +72,8 @@ def order_products(products, sort, first=None):
         ordering = [F("lowest_price").asc(nulls_last=True), "name"]
     elif sort == "saving":
         buyable = Listing.objects.filter(
-            product=OuterRef("pk"), is_active=True, retailer__is_active=True,
-            last_checked__gte=stale_cutoff(), availability__in=Listing.BUYABLE, sanity__in=Listing.COUNTED,
+            fresh(), product=OuterRef("pk"), is_active=True, retailer__is_active=True,
+            availability__in=Listing.BUYABLE, sanity__in=Listing.COUNTED,
         ).order_by("delivered_price").values("delivered_price")
         money = DecimalField(max_digits=9, decimal_places=2)
         products = products.annotate(

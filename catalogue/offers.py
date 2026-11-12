@@ -28,7 +28,7 @@ from django.conf import settings
 from django.db.models import Prefetch
 from django.utils import timezone
 
-from .models import DailyLowestPrice, Listing, stale_cutoff
+from .models import DailyLowestPrice, Listing, fresh
 
 LOW_30 = "low_30"
 BEST_WEEK = "best_week"
@@ -46,9 +46,9 @@ def buyable_prefetch():
     return Prefetch(
         "listings",
         queryset=Listing.objects.filter(
+            fresh(),
             is_active=True,
             retailer__is_active=True,
-            last_checked__gte=stale_cutoff(),
             availability__in=Listing.BUYABLE,
         )
         .exclude(sanity=Listing.Sanity.EXCLUDED)

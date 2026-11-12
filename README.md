@@ -2496,12 +2496,24 @@ that keeps prices fresh all day:
   (`ebay.check_listings`, twenty a request, up to a hundred a job): the
   item's price, postage and whether it is still live, so no eBay price
   waits a day for the next daily run (the owner, 6 Nov 2026: "20 hours ago
-  isn't good enough"). eBay's listings keep their own, slower cadence than
-  a shop's, since every lookup is one of the day's 5,000: every half hour
-  for the products people are looking at, every two hours for the warm
-  tier and every six for the rest (`EBAY_HOT_EVERY`, `EBAY_WARM_EVERY`,
-  `EBAY_EVERY`). Ten-minute checks of the busiest ran the allowance out by
-  early afternoon on 6 Nov 2026. The lookup's own daily allowance is asked
+  isn't good enough"). eBay's listings keep their own cadence, since every
+  lookup is one of the day's 5,000: in stock, every half hour for the
+  products people are looking at, every hour for the warm tier and every
+  two for the rest (`EBAY_HOT_EVERY`, `EBAY_WARM_EVERY`, `EBAY_EVERY`), so
+  each is asked about twice inside the four hours its price counts for
+  (below); out of stock, every six (`EBAY_OUT_EVERY`). Ten-minute checks of
+  the busiest ran the allowance out by early afternoon on 6 Nov 2026.
+  Ended items ran it out on 12 Nov: eBay refuses a whole batch of twenty
+  when one item has ended, and each check asked about all twenty alone,
+  then asked about the same ended item again at every check. Now an item
+  eBay says has ended is remembered for 30 days (`ebay.ended_items`, in
+  the shared cache by item number) and never asked about again by the
+  checks, the daily run's refresh or the title filler; the daily run
+  searches for a new listing for its product. A refused batch is asked
+  about in halves (`ebay.halves`), about ten lookups for one ended item in
+  twenty instead of twenty-one. The owner, 12 Nov 2026: "As ebay hasn't
+  updated in 8 hours ... most things become out of stock and th site
+  doesn't know". The lookup's own daily allowance is asked
   about hourly, and again after every hundred lookups counted down in the
   process (the daily run's refresh and the title filler count theirs too),
   and 400 of it are left for the daily run; when it is down to that the
@@ -2514,6 +2526,15 @@ that keeps prices fresh all day:
   off like a failed read. An ended listing, or one whose
   seller or postage no longer passes, is out of stock at its last price
   until the daily run searches again.
+- **An eBay price counts for four hours** (`RIPRAPTOR_EBAY_STALE_AFTER_HOURS`),
+  not the 72 a shop's does: an eBay item sells out in hours, and eBay's
+  allowance can hold the checks back. Unconfirmed for longer, it is not
+  buyable, not the cheapest and not Buy now anywhere on the site
+  (`models.fresh`, used wherever a current price is chosen, and
+  `Listing.is_stale`); its row on the product page says "Not checked since"
+  until a check brings it back. If eBay ever refuses us for hours, its
+  offers drop off the site for that time rather than send people to items
+  that have sold.
 - **The pre-order pulse** for each Shopify shop every 15 minutes (see
   Pre-order pulse below).
 - **Release sources**, one at a time, every 6 hours (Scryfall once a day),
@@ -3132,6 +3153,7 @@ index.
 | `DJANGO_SQLITE_PATH`           | `db.sqlite3` | |
 | `RIPRAPTOR_CONTACT_EMAIL`      |         | Shows the "Report a problem" section on the how it works page, and is emailed when a refer a friend referral completes (see "Refer a friend"). When set, List your shop enquiries are emailed here instead of to `RIPRAPTOR_INBOX_NOTIFY_EMAIL`. |
 | `RIPRAPTOR_STALE_AFTER_HOURS`  | 72      | |
+| `RIPRAPTOR_EBAY_STALE_AFTER_HOURS` | 4   | How long an eBay price counts before it must be checked again to be shown as buyable. Never more than `RIPRAPTOR_STALE_AFTER_HOURS`. |
 | `RIPRAPTOR_USE_FEED_IMAGES`    | on      | Keep retailer images for products without one. |
 | `RIPRAPTOR_CHECK_PICTURES`     | on      | Ask shops every hour whether product pictures are still there, and take gone ones off (off in the tests). |
 | `RIPRAPTOR_HOME_CACHE_SECONDS` | 300     | How old the cached page lists may grow before the background jobs build them again. Imports and edits mark them stale sooner. |

@@ -21,7 +21,7 @@ from datetime import timedelta
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from .models import DailyPageView, Listing, OutboundClick, Product, StockAlert, stale_cutoff
+from .models import DailyPageView, Listing, OutboundClick, Product, StockAlert, fresh
 
 VIEW_POINTS, VIEW_CAP = 4, 20
 WATCHED_POINTS, WATCHED_DAYS = 6, 2
@@ -65,8 +65,8 @@ def heat_scores(now=None):
     alerts = set(StockAlert.objects.filter(confirmed_at__isnull=False).values_list("product_id", flat=True).distinct())
     # 4. Every active product with what its listings say.
     buyable = (
-        Q(listings__is_active=True, listings__retailer__is_active=True, listings__last_checked__gte=stale_cutoff(now),
-          listings__availability__in=Listing.BUYABLE)
+        Q(listings__is_active=True, listings__retailer__is_active=True, listings__availability__in=Listing.BUYABLE)
+        & fresh("listings__", now)
         & ~Q(listings__sanity=Listing.Sanity.EXCLUDED)
     )
     products = (

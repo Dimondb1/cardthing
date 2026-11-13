@@ -1958,6 +1958,8 @@ def product_detail(request, slug):
             # Track price: a price alert, next to Save wherever the back-in-stock form is not shown, and beside it
             # when only eBay has it in stock: a price alert follows eBay's price (alerts.NOT_PRICE_ALERTED).
             "track_on": mail.enabled() and bool(current) and (not alerts_on or track_listing is not None),
+            # Rip's offer of a price alert (?track=95#track, without script): the price filled in.
+            "track_prefill": track_price(request.GET.get("track", "")) if request.GET.get("track") else None,
             "track_now": track_listing.delivered_price if track_listing else None,
             "track_days": alerts.TRACK_DAYS,
             "track_default": alerts.TRACK_DEFAULT_DAYS,
@@ -2997,6 +2999,19 @@ def product_post(request, slug):
 
 
 @require_GET
+def ask_rip_card(request, slug):
+    """Rip's answer as a card to share (web/share.py rip_card), PNG, while the answer is kept (?ask=)."""
+    product = get_object_or_404(Product.objects.active(), slug=slug)
+    kept = askrip.answer_for(product, request.GET.get("ask", ""))
+    if kept is None:
+        raise Http404("That answer is no longer kept.")
+    response = HttpResponse(share.rip_card(product, kept, copy.for_request(request)), content_type="image/png")
+    response["X-Robots-Tag"] = "noindex"
+    response["Cache-Control"] = f"private, max-age={askrip.ANSWER_SECONDS}"
+    return response
+
+
+@require_GET
 def product_post_image(request, slug):
     """Share as post: the square picture, PNG."""
     product, summary = post_product(slug)
@@ -3113,7 +3128,8 @@ def ask_rip(request, slug):
     asked = askrip.ask(request, product, request.POST.get("suggested") or request.POST.get("question", ""))
     if request.headers.get("X-Ask-Rip") == "1":
         box = askrip.box(request, product, asked.state, asked.token)
-        html = render_to_string("web/includes/ask_rip.html", {"ask": box, "product": product}, request=request) if box else ""
+        html = render_to_string("web/includes/ask_rip.html", {"ask": box, "product": product, "track_on": True},
+                                request=request) if box else ""
         response = JsonResponse({"state": asked.state, "html": html})
     else:
         query = urlencode({"ask": asked.token} if asked.token else {"ask_state": asked.state})

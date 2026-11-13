@@ -185,10 +185,27 @@ class LimitTests(AskRipCase):
         self.assertEqual(self.ask("And a sixth?", address="192.0.2.50").json()["state"], "limit")
         page = self.client.get(self.box.get_absolute_url(), REMOTE_ADDR="192.0.2.51")
         self.assertContains(page, "That&#x27;s your 5 questions for today.")
-        # Another browser on the last address is counted by the address.
-        self.client = self.client_class()
-        self.assertEqual(self.ask("And a sixth?", address="203.0.113.14").json()["state"], "limit")
         self.assertEqual(len(self.fake.sent), 5)
+
+    def test_other_people_on_the_same_address_never_take_your_five(self):
+        """A review, 13 Nov 2026: "The page offered 5 questions, but after the first one it said only 1 was left".
+        Many people share one address (a phone network, an office); each has their own 5."""
+        for n in range(4):
+            self.client = self.client_class()
+            self.ask(f"Someone else's question {n}?", address="203.0.113.99")
+        self.client = self.client_class()
+        response = self.ask("My first question?", address="203.0.113.99")
+        self.assertEqual(response.json()["state"], "answered")
+        self.assertIn("You can ask 4 more questions today.", response.json()["html"])
+
+    def test_an_address_has_a_backstop_of_fifteen_a_day(self):
+        for n in range(askrip.PER_ADDRESS):
+            if n % askrip.PER_PERSON == 0:
+                self.client = self.client_class()   # a new browser each five, as someone clearing cookies would
+            self.assertEqual(self.ask(f"Question number {n}?", address="203.0.113.98").json()["state"], "answered")
+        self.client = self.client_class()
+        self.assertEqual(self.ask("One more?", address="203.0.113.98").json()["state"], "limit")
+        self.assertEqual(self.ask("One more?", address="203.0.113.97").json()["state"], "answered")
 
     def test_the_cookie_holds_only_the_count_and_cannot_be_lowered(self):
         from django.core import signing
@@ -200,11 +217,12 @@ class LimitTests(AskRipCase):
         self.assertEqual(kept["n"], 1)
         self.assertTrue(cookie["httponly"])
         self.assertLessEqual(int(cookie["max-age"]), 24 * 3600)
-        # A cookie written by hand is not believed, and the address still counts.
+        # A cookie written by hand is not believed: it counts as none, and the address's backstop still holds.
         self.client.cookies[askrip.COUNT_COOKIE] = signing.dumps({"n": 0, "until": kept["until"]}, salt="other")
+        forged = SimpleNamespace(COOKIES={askrip.COUNT_COOKIE: self.client.cookies[askrip.COUNT_COOKIE].value})
+        self.assertEqual(askrip.browser_count(forged, 0), (0, None))
         for n in range(4):
             self.ask(f"Question number {n}?")
-        self.assertEqual(self.ask("And a sixth?").json()["state"], "limit")
         # A question answered from the cache sets nothing: it was not counted.
         self.assertNotIn(askrip.COUNT_COOKIE, self.ask("Question number 0?").cookies)
 
@@ -213,8 +231,11 @@ class LimitTests(AskRipCase):
         import httpx2
 
         self.fake.answer = anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com"))
-        self.assertEqual(self.ask().json()["state"], "failed")
-        self.assertEqual(askrip.person_count(SimpleNamespace(META={"REMOTE_ADDR": "203.0.113.7"}))[0], 0)
+        response = self.ask()
+        self.assertEqual(response.json()["state"], "failed")
+        self.assertEqual(askrip.address_count(SimpleNamespace(META={"REMOTE_ADDR": "203.0.113.7"}), 0)[0], 0)
+        from django.core import signing
+        self.assertEqual(signing.loads(response.cookies[askrip.COUNT_COOKIE].value, salt=askrip.COUNT_SALT)["n"], 0)
 
     def test_the_internet_address_is_never_kept(self):
         self.ask()
@@ -742,6 +763,140 @@ class HideConversationTests(AskRipCase):
         page = self.client.get(self.box.get_absolute_url())
         self.assertNotContains(page, "data-ask-hide")
         self.assertNotContains(page, "data-ask-show")
+
+
+class VerdictTests(AskRipCase):
+    """Every answer opens with a verdict as a badge, the explanation under it. A review, 13 Nov 2026: "Start every
+    answer with a one-word verdict. Show something like FAIR PRICE or 2 WARNING SIGNS as a coloured badge"."""
+
+    def tap(self, key):
+        from content import service as copy
+
+        return self.client.post(reverse("web:ask_rip", args=[self.box.slug]), {"suggested": copy.get(key)},
+                                REMOTE_ADDR="203.0.113.7", HTTP_X_ASK_RIP="1").json()
+
+    def badge(self, html):
+        from html import unescape
+
+        found = re.search(r'<p class="ask__verdict ask__verdict--(\w+)">.*?</span>(.*?)</p>', unescape(html))
+        return (found.group(2), found.group(1)) if found else None
+
+    def test_red_flags_take_the_sites_count_whatever_rip_writes_first(self):
+        """The review: "It starts 'No, I checked 3 offers and found 2 warning signs.'"."""
+        ebay = make_retailer("eBay", source_type=Retailer.Source.EBAY)
+        listing = make_listing(self.box, ebay, price="230.00", delivery="0.00")
+        Listing.objects.filter(pk=listing.pk).update(title="Surging Sparks Booster Box resealed custom",
+                                                     seller_ratings=40)
+        self.fake.answer = "VERDICT: No\nNo, I checked 3 offers and found 2 warning signs."
+        answer = self.tap("product.ask.suggest.flags")
+        self.assertEqual(self.badge(answer["html"]), ("3 warning signs", "warn"))
+        self.assertNotIn("VERDICT", answer["html"])
+        # His instructions: the count first, never yes or no.
+        self.assertIn("Start with how many warning signs were found, never with yes or no", askrip.SYSTEM_PROMPT)
+
+    def test_no_warning_signs_is_green(self):
+        self.fake.answer = "VERDICT: No warning signs\nI checked 2 offers from UK shops we check."
+        self.assertEqual(self.badge(self.tap("product.ask.suggest.flags")["html"]), ("No warning signs", "good"))
+
+    def test_value_takes_the_price_checks_verdict_or_the_quick_checks_lean(self):
+        self.fake.answer = "VERDICT: Bargain\nHarbour Games has it at £140.00 delivered."
+        # No Price check and nothing to lean on: Rip's own line, in grey.
+        self.assertEqual(self.badge(self.tap("product.ask.suggest.value")["html"]), ("Bargain", "usual"))
+        cache.clear()
+        for n in range(5):
+            other = make_product(self.box.product_set, name=f"Other Booster Box {n}", slug=f"other-box-{n}",
+                                 product_type="booster_box", packs=36)
+            make_listing(other, self.harbour, price="180.00", delivery="0.00")
+        self.assertEqual(self.badge(self.tap("product.ask.suggest.value")["html"]), ("Looks good value", "good"))
+
+    def test_a_question_of_their_own_shows_rips_verdict_line(self):
+        self.fake.answer = "VERDICT: Free delivery\nHarbour Games delivers free over £100.00."
+        response = self.ask("Any free delivery?")
+        self.assertEqual(self.badge(response.json()["html"]), ("Free delivery", "usual"))
+        self.assertIn("Harbour Games delivers free over £100.00.", response.json()["html"])
+
+    def test_a_verdict_naming_a_price_the_page_does_not_show_is_not_shown(self):
+        self.fake.answer = "VERDICT: Under £90\nHarbour Games has it at £140.00 delivered."
+        self.assertEqual(self.ask("Is it cheap?").json()["state"], "declined")
+
+    def test_an_answer_without_a_verdict_line_is_still_shown(self):
+        response = self.ask()
+        self.assertEqual(response.json()["state"], "answered")
+        self.assertIsNone(self.badge(response.json()["html"]))
+
+    def test_answers_are_short(self):
+        self.assertIn("at most three short sentences and under 50 words", askrip.SYSTEM_PROMPT)
+
+
+@override_settings(RIPRAPTOR_ZEPTOMAIL_TOKEN="test-token", RIPRAPTOR_MAIL_FROM="rip@example.com")
+class AlertOfferTests(AskRipCase):
+    """A review, 13 Nov 2026: "Add a button like 'Tell me if it drops below £95' that connects to your existing price
+    tracking. It turns a no into a sign-up instead of someone leaving"."""
+
+    def test_an_answer_offers_an_alert_at_a_good_price_and_track_price_takes_it(self):
+        from html import unescape
+
+        page_html = self.client.get(self.box.get_absolute_url()).content.decode()
+        if 'id="track"' not in page_html:
+            self.skipTest("Track price is not on this page")
+        html = unescape(self.ask().json()["html"])
+        # 5% under £140.00, the price an alert compares with: £133.
+        self.assertIn('data-ask-track="133">', html)
+        self.assertIn("Tell me if it drops to £133", html)
+        self.assertIn(f'href="{self.box.get_absolute_url()}?track=133#track"', html)
+        # Without script the link opens the page with Track price filled in.
+        page = self.client.get(f"{self.box.get_absolute_url()}?track=133")
+        self.assertContains(page, 'name="price" data-panel-focus required inputmode="decimal" autocomplete="off" '
+                                  'maxlength="9" value="133"')
+
+    def test_at_the_good_price_of_our_record_when_there_is_one(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from catalogue.models import DailyLowestPrice
+
+        today = timezone.localdate()
+        for back in range(1, 21):
+            DailyLowestPrice.objects.create(product=self.box, date=today - timedelta(days=back), price=Decimal("145.00"))
+        # Average £145.00: good at £137.75, which rounds to £138, under £140.00.
+        self.assertEqual(askrip.alert_price(self.box, timezone.now()), Decimal("138"))
+
+    def test_no_offer_when_the_price_is_already_good(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from catalogue.models import DailyLowestPrice
+
+        today = timezone.localdate()
+        for back in range(1, 21):
+            DailyLowestPrice.objects.create(product=self.box, date=today - timedelta(days=back), price=Decimal("170.00"))
+        self.assertNotIn("data-ask-track", self.ask().json()["html"])
+
+
+class ShareCardTests(AskRipCase):
+    """A review, 13 Nov 2026: "Let people share Rip's verdict as a card ... Every share would carry ripraptor.com"."""
+
+    def test_an_answer_can_be_shared_as_a_card_with_the_words_and_a_link(self):
+        from html import unescape
+
+        self.fake.answer = "VERDICT: 2 shops\nHarbour Games has it at £140.00 delivered. Kestrel Cards is dearer."
+        html = unescape(self.ask("Who has it?").json()["html"])
+        share = html[html.index("data-ask-share"):]
+        self.assertIn('data-share-text="Rip says: Harbour Games has it at £140.00 delivered."', share)
+        self.assertIn(f'data-share-url="{askrip.share.rip_url(self.box)}"', share)
+        self.assertTrue(askrip.share.rip_url(self.box).endswith(f"{self.box.get_absolute_url()}?utm_source=rip_share"))
+        card = re.search(r'href="([^"]+rip\.png\?ask=[0-9a-f]{16})"', html).group(1)
+        response = self.client.get(card)
+        self.assertEqual((response.status_code, response["Content-Type"]), (200, "image/png"))
+        self.assertTrue(response.content.startswith(b"\x89PNG"))
+        self.assertEqual(response["X-Robots-Tag"], "noindex")
+
+    def test_no_card_once_the_answer_is_gone(self):
+        url = reverse("web:ask_rip_card", args=[self.box.slug])
+        self.assertEqual(self.client.get(f"{url}?ask=0123456789abcdef").status_code, 404)
+        self.assertEqual(self.client.get(f"{url}?ask=nonsense").status_code, 404)
 
 
 class RipTests(AskRipCase):

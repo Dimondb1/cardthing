@@ -282,3 +282,69 @@ def draw_post(product, summary, photo, store=None):
     out = BytesIO()
     card.save(out, "PNG", optimize=True)
     return out.getvalue()
+
+
+# Rip's answer as a card ----------------------------------------------------------------------------------------------
+# A square picture of Rip's verdict and the sentence behind it, for the phone's share sheet (ask.js), with the product,
+# the site and the code that opens the product page. A review, 13 Nov 2026: "a verdict card is something people send
+# to a partner or a mate who's about to buy. Every share would carry ripraptor.com". Drawn from the kept answer
+# (askrip.answer_for), so a card exists only while its answer does.
+
+RIP_SOURCE = "rip_share"           # the tag on the code's and the shared link's address
+# The badge's colours for each tone, as the Price check's chip (web/static/css/tokens.css).
+TONE_COLOURS = {"good": ("#e7f7ec", PRICE), "usual": (SHELF, INK_MUTED), "warn": ("#fbf1d3", "#7d6000")}
+
+
+def rip_url(product):
+    """The product page on the site itself, tagged as a visit from a shared Rip answer."""
+    from django.conf import settings
+
+    return f"{settings.RIPRAPTOR_SITE_URL}{product.get_absolute_url()}?utm_source={RIP_SOURCE}"
+
+
+def rip_card(product, kept, store=None):
+    """The card as PNG bytes: "Rip says", the verdict as a badge, the answer's first sentence large, the product's
+    name, the logo and site at the foot and the code at the foot right."""
+    from io import BytesIO
+
+    from django.contrib.staticfiles import finders
+    from PIL import Image, ImageDraw
+
+    size, margin = POST_SIZE, POST_MARGIN
+    card = Image.new("RGB", (size, size), PAPER)
+    draw = ImageDraw.Draw(card)
+    y = margin + 20
+    draw.text((margin, y), copy.get("product.ask.card_says", store=store), font=post_font(40, 700, 18), fill=BRAND)
+    y += 84
+    verdict = (kept.get("verdict") or "").upper()
+    if verdict:
+        bg, ink = TONE_COLOURS.get(kept.get("tone"), TONE_COLOURS["usual"])
+        font = post_font(46, 700, 20)
+        width = draw.textlength(verdict, font=font)
+        draw.rounded_rectangle((margin, y, margin + width + 64, y + 86), radius=43, fill=bg)
+        draw.text((margin + 32, y + 16), verdict, font=font, fill=ink)
+        y += 130
+    line_font = post_font(56, 600, 28)
+    for line in fit_lines(draw, kept.get("line") or kept.get("answer", ""), line_font, size - 2 * margin, lines=5):
+        draw.text((margin, y), line, font=line_font, fill=INK)
+        y += 72
+    small = post_font(32, 500, 14)
+    words = CODE_X - CODE_GAP - margin
+    name_y = CODE_Y - 8
+    for line in fit_lines(draw, product.name, small, words, lines=2):
+        draw.text((margin, name_y), line, font=small, fill=INK_MUTED)
+        name_y += 42
+    foot, height = 1000, 48
+    x = margin
+    logo_path = finders.find(LOGO)
+    if logo_path:
+        with Image.open(logo_path) as logo:
+            logo = logo.convert("RGBA")
+            logo = logo.resize((round(logo.width * height / logo.height), height))
+            card.paste(logo, (margin, foot), logo)
+            x += logo.width + 24
+    draw.text((x, foot + 8), "ripraptor.com", font=post_font(30, 600, 14), fill=INK_MUTED)
+    draw_code(draw, rip_url(product))
+    out = BytesIO()
+    card.save(out, "PNG", optimize=True)
+    return out.getvalue()

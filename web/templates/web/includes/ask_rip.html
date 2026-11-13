@@ -6,6 +6,7 @@
     {% include "web/includes/rip_bot.html" %}
     <div class="ask__bubble" tabindex="-1" data-ask-answer>
       {% if ask.shown %}
+      {% if ask.shown.verdict %}<p class="ask__verdict ask__verdict--{{ ask.shown.tone|default:'usual' }}"><span class="visually-hidden">{% copy "product.ask.verdict_label" %} </span>{{ ask.shown.verdict }}</p>{% endif %}
       <p><span class="visually-hidden">{% copy "product.ask.rip" %} </span>{{ ask.shown.answer }}</p>
       {% if ask.shown.checked %}<p class="ask__small">{% copy "product.ask.basis" clock=ask.shown.checked|stamp %}</p>{% endif %}
       {% elif ask.state == "limit" %}<p role="status">{% copy "product.ask.limit" count=ask.per_person hours=ask.hours %}</p>
@@ -13,6 +14,10 @@
       {% else %}<p>{% copy "product.ask.intro" %}</p>{% endif %}
     </div>
   </div>
+  {% if ask.shown %}<div class="ask__next">
+    {% if ask.shown.alert and track_on %}<a class="button button--quiet ask__track" href="{{ product.get_absolute_url }}?track={{ ask.shown.alert }}#track" data-ask-track="{{ ask.shown.alert }}">{% include "web/includes/icons/bell.svg" %}{% copy "product.ask.alert" price=ask.shown.alert_words %}</a>{% endif %}
+    <a class="button button--quiet ask__share" href="{% url 'web:ask_rip_card' product.slug %}?ask={{ ask.token }}" data-ask-share data-share-text="{% copy 'product.ask.share_text' line=ask.shown.line %}" data-share-url="{{ ask.share_url }}" data-share-name="{{ product.name }}" data-share-done="{% copy 'product.ask.shared' %}">{% copy "product.ask.share" %}</a>
+  </div>{% endif %}
   <p class="visually-hidden" role="status" data-ask-status></p>
   {% if ask.open and ask.left %}
   {% if ask.suggestions and ask.shown %}<form class="ask__chips" method="post" action="{% url 'web:ask_rip' product.slug %}" data-ask-form aria-label="{% copy 'product.ask.suggest.label' %}">

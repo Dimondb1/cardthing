@@ -1069,15 +1069,18 @@ we need to."
 - Each person gets 5 questions a day; the same question on the same
   product, while its prices are unchanged, is answered free from the cache
   and does not count. A question that fails on our side does not count.
-  A person is counted twice over, and the higher count holds: by their
-  internet address (kept only as a one-way hash in the cache for 24 hours)
-  and by their browser, in a signed cookie (`rip_asked`) holding only how
-  many they asked and when their day ends. A phone on mobile data gets a
-  new address often, so by address alone its 5 started again (the owner,
-  12 Nov 2026: "the 5 uses resets every time I change browser or reopen
-  the page"). A new browser on a new address still starts again; no limit
-  without accounts stops that, and the daily and monthly limits below cap
-  what it can cost. The Terms page says what the cookie holds.
+  A person is their browser: a signed cookie (`rip_asked`) holds only how
+  many they asked and when their day ends, so a phone getting a new
+  internet address keeps its count (the owner, 12 Nov 2026: "the 5 uses
+  resets every time I change browser or reopen the page"). Their internet
+  address (kept only as a one-way hash in the cache for 24 hours) is a
+  backstop of 15 a day for everyone on it (`PER_ADDRESS`): many people
+  share one, a phone network or an office, and counting by it took a
+  person's 5 (a review, 13 Nov 2026: "The page offered 5 questions, but
+  after the first one it said only 1 was left"). A new browser gets its
+  own 5 until its address has used 15; no limit without accounts stops
+  that, and the daily and monthly limits below cap what it can cost. The
+  Terms page says what the cookie holds.
 - Spending: it is the Claude page's **Ask Rip** job, with a monthly limit
   of its own of $30 until you save another (`judge.JOB_DEFAULT_LIMITS`),
   under £25 while a pound buys more than $1.20. That is its only limit: the
@@ -1160,6 +1163,31 @@ we need to."
   with delivery) and the offer with the fewest doubts: the cheapest
   without a warning sign from a UK shop we check, else one eBay vouches
   for.
+- Every answer opens with a verdict as a badge, the answer under it in at
+  most three short sentences and 50 words (a review, 13 Nov 2026: "Start
+  every answer with a one-word verdict. Show something like FAIR PRICE or
+  2 WARNING SIGNS as a coloured badge"). Rip writes a `VERDICT:` line
+  first (`askrip.split_verdict`); for the value and buy now or wait
+  questions the badge is the site's own value verdict (the Price check's,
+  or the quick value check's lean), and for red flags the site's own
+  count ("2 warning signs", "No warning signs"), whatever his line says
+  (`askrip.badge_for`), so the red flags answer can no longer open "No"
+  over two warning signs. Colours are the Price check's: green good, grey
+  about usual or a plain fact, dark yellow dearer or a warning. A verdict
+  naming a price the page does not show is not shown, like an answer.
+  Answers kept before the badge are not reused (`ANSWER_FORM`).
+- Under an answer whose price is not a good one yet, "Tell me if it drops
+  to £x" opens Track price with that price filled in (`ask.js`; without
+  script `?track=x#track`): where the Price check would call it good (5%
+  under our record's average), or 5% under today's price, in whole pounds
+  (`askrip.alert_price`). A review: "It turns a no into a sign-up instead
+  of someone leaving."
+- Share Rip's answer: a square card of the verdict, the answer's first
+  sentence, the product, the logo and a code to the product page
+  (`share.rip_card`, `/products/<slug>/rip.png?ask=`, noindex, while the
+  answer is kept), sent with "Rip says: ..." and a link tagged
+  `utm_source=rip_share` to the phone's share sheet; without one the words
+  and link are copied, and without script the link opens the card.
 - Hide conversation: once Rip has answered, a button floats at the foot
   of the box while it is on screen (sticky, above the phone's buy bar).
   `ask.js` folds the box to its heading and Show conversation; without
@@ -3890,6 +3918,13 @@ product page (`web.views.product_detail`) and on a card led by that shop
   the average, not 5%. "Lowest yet" still means at or below the lowest. A
   price that barely moves, always near its own lowest but never 2.5% under
   its average, stays fair.
+- The sheet's Lowest counts today too, as the price history does: today at
+  or under the record's lowest is the lowest, today, so the two name the
+  same day (`views.price_check`). The chart starts on the first day
+  recorded, not 90 days back, so its axis and the words under it agree (a
+  review, 13 Nov 2026: "two different dates for the £99.99 low ... The
+  chart also starts on 16 Aug, while the text says the record began on 20
+  Oct").
 - A wrong price does not stay in the record. A day's low under a quarter
   of the median of the product's lows in the window, lasting at most three
   recorded days before a normal price follows, was a wrong price (a pack

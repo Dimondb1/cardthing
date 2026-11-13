@@ -53,6 +53,62 @@
     }
   });
 
+  // Tell me if it drops to £x: Track price opened with that price filled in, where the page has it. Without this
+  // file, or where it has not, the link opens the page with the price filled in (?track=).
+  document.addEventListener("click", (event) => {
+    const offer = event.target.closest && event.target.closest("[data-ask-track]");
+    const panel = document.getElementById("track");
+    if (!offer || !panel) return;
+    event.preventDefault();
+    const price = panel.querySelector("input[name=price]");
+    if (price) price.value = offer.dataset.askTrack;
+    const opener = document.querySelector('[data-panel-open][aria-controls="track"]');
+    const open = !panel.classList.contains("is-closed")
+      && (panel.classList.contains("is-open") || location.hash === "#track");
+    if (opener && !open) opener.click();
+    else panel.classList.add("is-open");
+    const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    panel.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "center" });
+    const email = panel.querySelector("input[type=email]");
+    if (email) email.focus({ preventScroll: true });
+  });
+
+  // Share Rip's answer: the card and the words to the phone's share sheet, or the words alone, or onto the clipboard.
+  // Without any of them, or this file, the link opens the card.
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest && event.target.closest("[data-ask-share]");
+    if (!button) return;
+    const text = `${button.dataset.shareText} ${button.dataset.shareUrl}`;
+    const canShare = !!navigator.share;
+    const canCopy = !!(navigator.clipboard && window.isSecureContext);
+    if (!canShare && !canCopy) return;
+    event.preventDefault();
+    try {
+      if (canShare) {
+        let files = [];
+        try {
+          const blob = await (await fetch(button.href, { credentials: "same-origin" })).blob();
+          files = [new File([blob], "rip-says.png", { type: "image/png" })];
+        } catch (err) {
+          files = [];
+        }
+        if (files.length && navigator.canShare && navigator.canShare({ files })) {
+          await navigator.share({ files, title: button.dataset.shareName, text });
+        } else {
+          await navigator.share({ title: button.dataset.shareName, text: button.dataset.shareText, url: button.dataset.shareUrl });
+        }
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      const was = button.textContent;
+      button.textContent = button.dataset.shareDone;
+      setTimeout(() => { button.textContent = was; }, 4000);
+    } catch (err) {
+      // Closing the share sheet is not a failure; anything else opens the card instead.
+      if (!err || err.name !== "AbortError") window.location.href = button.href;
+    }
+  });
+
   if (!window.fetch || !window.FormData) return;
   document.addEventListener("submit", (event) => {
     const form = event.target.closest("form[data-ask-form]");
@@ -109,6 +165,8 @@
           box.remove();
           return;
         }
+        // The price alert offer needs Track price on the page.
+        if (!document.getElementById("track")) fresh.querySelectorAll("[data-ask-track]").forEach((offer) => offer.remove());
         box.replaceWith(fresh);
         watch(fresh);
         const answer = fresh.querySelector("[data-ask-answer]");

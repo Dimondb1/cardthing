@@ -13,7 +13,7 @@
       <div class="search-alert__fields">
         <div class="search-alert__field{% if track_state == 'price' or track_state == 'under' %} is-wrong{% endif %}">
           <label class="search-alert__label" for="track-price">{% copy "alerts.track.price_label" %}</label>
-          <span class="track-box__money"><span aria-hidden="true">£</span><input id="track-price" class="alert-box__input search-alert__input" type="text" name="price" data-panel-focus required inputmode="decimal" autocomplete="off" maxlength="9"{% if track_now %} aria-describedby="track-now"{% endif %}></span>
+          <span class="track-box__money"><span aria-hidden="true">£</span><input id="track-price" class="alert-box__input search-alert__input" type="text" name="price" data-panel-focus required inputmode="decimal" autocomplete="off" maxlength="9"{% if track_prefill %} value="{{ track_prefill|floatformat:'-2' }}"{% endif %}{% if track_now %} aria-describedby="track-now"{% endif %}></span>
           {% if track_now %}<span class="search-alert__hint" id="track-now">{% copy "alerts.track.now" price=track_now|gbp %}</span>{% endif %}
         </div>
         <div class="search-alert__field">

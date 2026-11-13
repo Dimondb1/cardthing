@@ -2259,10 +2259,12 @@ def ask_rip_about(request):
     """Ask Rip explained, for shoppers and for search engines and AI assistants: what he answers on every product page,
     where his answers come from, what he will not do, and the questions people ask about him, given again as
     schema.org FAQPage. The owner, 12 Nov 2026: "add something in the site that helps Google and other search engines
-    and AI pick up the fact that we have an intelligent Ask Rip feature". Wording only: no query."""
+    and AI pick up the fact that we have an intelligent Ask Rip feature". Wording, and the owner's question count
+    (askrip.chosen, from the cache)."""
     store = copy.for_request(request)
     page_url = request.build_absolute_uri(request.path)
-    values = {"count": askrip.PER_PERSON}
+    per_person = askrip.chosen().per_person
+    values = {"count": per_person}
     questions = [{"question": copy.get(f"product.ask.suggest.{key}", store=store),
                   "answer": copy.get(f"askrip.ask.{key}", store=store)} for key in ASK_RIP_QUESTIONS]
     faq = [(copy.get(f"askrip.faq.{key}.q", store=store), copy.get(f"askrip.faq.{key}.a", store=store, **values))
@@ -2276,7 +2278,7 @@ def ask_rip_about(request):
         "mainEntity": {"@id": page_url + "#faq"},
     }
     return render(request, "web/ask_rip_about.html", {
-        "questions": questions, "faq": faq, "per_person": askrip.PER_PERSON, "closed": askrip.closed_reason() != "",
+        "questions": questions, "faq": faq, "per_person": per_person, "closed": askrip.closed_reason() != "",
         "meta_title": title, "meta_description": description, "canonical_url": page_url,
         "structured_json": ld_json([page, crumbs, answers.faq_json(page_url, faq)]),
     })
@@ -3997,9 +3999,9 @@ CLAUDE_JOBS = {
 # Claude's jobs for shoppers rather than the list: on the Claude page with the rest, not in What Claude sorts.
 SHOPPER_JOBS = {
     "ask": ("", "Ask Rip",
-            "Answers shoppers' questions on product pages from the page's own prices and facts, 5 a person a day, on "
-            "Claude Haiku 5.5. Untick to hide the box at once. Only its own limit applies: Switch Claude off and the "
-            "shared limit leave it on."),
+            "Answers shoppers' questions on product pages from the page's own prices and facts. Questions a day and "
+            "the model are under Ask Rip above. Untick to hide the box at once. Only its own limit applies: Switch "
+            "Claude off and the shared limit leave it on."),
 }
 
 
@@ -4053,7 +4055,8 @@ def claude_jobs(counts, set_counts, doubtful_count, wrong, duplicates, found_cou
 def claude_page(request):
     """Claude's jobs and spending (the owner, 3 Nov 2026: "control and set what it does in a settings menu"): what
     each job asked and spent this month and today, a switch and a monthly limit of its own for each (judge.JOBS,
-    catalogue.ClaudeJob), and the Sort everything and on or off buttons the Claude box has. The model, effort,
+    catalogue.ClaudeJob), Ask Rip's settings (askrip.chosen: questions a person and the site may ask a day, and the
+    model), and the Sort everything and on or off buttons the Claude box has. The background jobs' model, effort,
     shared limit and key stay under Claude settings and key on Things to check. A few queries, however many asks."""
     from django.db.models import Count, Q, Sum
     from django.shortcuts import redirect
@@ -4065,12 +4068,15 @@ def claude_page(request):
         action = request.POST.get("action", "")
         if action == "claude_jobs":
             save_claude_jobs(request)
+        elif action == "askrip_settings":
+            save_askrip_settings(request)
         elif action in ("claude_sort_on", "claude_sort_off", "claude_on", "claude_off"):
             claude_tap(request, action)
         return redirect("claude")
     now = timezone.now()
     claude = judge.page_status(now)
     start_of_today = timezone.localtime(now).replace(hour=0, minute=0, second=0, microsecond=0)
+    owner = askrip.chosen(fresh=True)   # one query on every load, and what is saved, not what the cache held
 
     def by_kind(since):
         """{kind: (questions, micro-dollars with reservations held, input tokens read from the cache, all input
@@ -4100,7 +4106,7 @@ def claude_page(request):
             "name": name, "title": title, "does": does, "on": job.on, "cap": job.monthly_budget_usd,
             # Whether shoppers see Ask Rip now, and if not why (the owner, 11 Nov 2026: "Can't actually find where
             # this is meant to be on the site").
-            "status": askrip.CLOSED_WORDS.get(askrip.work_out_closed(now), "") if name == "ask" else "",
+            "status": askrip.closed_words(askrip.work_out_closed(now)) if name == "ask" else "",
             "asked_month": asked_month, "spent_month": judge.dollars(spent_month),
             "asked_today": asked_today, "spent_today": judge.dollars(spent_today),
             "cached": round(100 * read / all_input) if all_input else None,
@@ -4110,11 +4116,63 @@ def claude_page(request):
     all_input = sum(row[3] for row in month.values())
     context = {
         **admin.site.each_context(request), "title": "Claude", "claude": claude, "jobs": jobs,
+        "askrip": askrip_choices(owner, settings_["ask"].monthly_budget_usd),
         "asked_month": sum(job["asked_month"] for job in jobs), "asked_today": sum(job["asked_today"] for job in jobs),
         "spent_today": judge.dollars(sum(row[1] for row in today.values())),
         "cached": round(100 * read / all_input) if all_input else None,
     }
     return render(request, "admin/claude.html", context)
+
+
+def askrip_choices(owner, limit):
+    """Ask Rip's settings for the Claude page: the numbers saved (``owner``, askrip.chosen), and each model with what a
+    question costs at most and how many questions its monthly limit (``limit``, dollars or None) covers at that."""
+    from catalogue import judge
+
+    models = []
+    for model in askrip.MODELS:
+        usual = askrip.usual_micros(model)
+        dollars = usual / 1_000_000
+        models.append({
+            "id": model, "label": judge.MODELS[model][0].replace(" (recommended)", ""), "chosen": model == owner.model,
+            "cost": f"${dollars:.4f}" if dollars < 0.01 else f"${dollars:.3f}",
+            "covers": int(limit * 1_000_000 // usual) if limit else None,
+        })
+    return {"per_person": owner.per_person, "per_day": owner.per_day, "per_address": owner.per_address,
+            "per_person_most": askrip.PER_PERSON_MOST, "per_day_most": askrip.PER_DAY_MOST, "models": models,
+            "limit": limit}
+
+
+def save_askrip_settings(request):
+    """The Claude page's Save Ask Rip: the questions a person and the whole site may ask a day, and the model that
+    answers, saved together or not at all. The owner, 13 Nov 2026: "Add a way to configure ask rips limit amount
+    and chat model. In admin"."""
+    from django.contrib import messages
+
+    from catalogue import judge
+    from catalogue.models import AskRipSettings
+
+    def whole(name, most):
+        try:
+            value = int(request.POST.get(name, "").strip())
+        except ValueError:
+            return None
+        return value if 1 <= value <= most else None
+
+    per_person = whole("askrip_per_person", askrip.PER_PERSON_MOST)
+    per_day = whole("askrip_per_day", askrip.PER_DAY_MOST)
+    model = request.POST.get("askrip_model", "")
+    if per_person is None or per_day is None or model not in askrip.MODELS:
+        messages.warning(request, f"Ask Rip: give 1 to {askrip.PER_PERSON_MOST} questions a person, 1 to "
+                                  f"{askrip.PER_DAY_MOST:,} a day across the site, and choose a model. Nothing was "
+                                  "saved.")
+        return
+    AskRipSettings.objects.update_or_create(pk=1, defaults={"per_person": per_person, "per_day": per_day,
+                                                            "model": model})
+    askrip.reopen()   # every page uses the new numbers and model at once, not within the hour
+    label = judge.MODELS[model][0].replace(" (recommended)", "")
+    messages.success(request, f"Ask Rip is saved: {per_person} question{'s' if per_person != 1 else ''} a person "
+                              f"a day, {per_day:,} a day across the site, answered by {label}.")
 
 
 def save_claude_jobs(request):

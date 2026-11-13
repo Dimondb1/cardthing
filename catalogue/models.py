@@ -2248,6 +2248,29 @@ class ClaudeJob(models.Model):
         return self.name
 
 
+class AskRipSettings(models.Model):
+    """The one row of owner settings for Ask Rip (web/askrip.py), set on the Claude page: how many questions each
+    person may ask a day, how many the whole site takes in a day, and the model that answers. Its switch and monthly
+    limit are its ClaudeJob row. The owner, 13 Nov 2026: "Add a way to configure ask rips limit amount and chat
+    model. In admin. As I need to be able to change this"."""
+
+    per_person = models.PositiveSmallIntegerField("questions per person a day", default=5)
+    per_day = models.PositiveIntegerField("questions a day across the site", default=500)
+    model = models.CharField(max_length=40, default="claude-haiku-5-5")
+    changed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Ask Rip setting"
+
+    def __str__(self):
+        return "Ask Rip"
+
+    @classmethod
+    def current(cls):
+        """The row, or the defaults unsaved: a page that only reads it never writes."""
+        return cls.objects.filter(pk=1).first() or cls(pk=1)
+
+
 class ClaudeAsk(models.Model):
     """One question put to Claude about one Things to check row, and its answer, cost and use.
 

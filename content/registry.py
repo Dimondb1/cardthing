@@ -3826,9 +3826,9 @@ ENTRIES = [
         "If you ask Rip a question on a product page, we send it with that page's prices and product details to our "
         "AI provider to write the answer. We first take out anything that looks like an email address, phone number "
         "or link, and we keep the question and its answer, without anything that says who asked, to improve Rip. To "
-        "limit each person to 5 questions a day, we keep a code made from your internet address for 24 hours. It "
-        "cannot be turned back into the address. A small cookie of ours in your browser also keeps how many you "
-        "have asked and when the day ends, and nothing else.",
+        "limit how many questions each person can ask a day, we keep a code made from your internet address for 24 "
+        "hours. It cannot be turned back into the address. A small cookie of ours in your browser also keeps how "
+        "many you have asked and when the day ends, and nothing else.",
         "Data section of the terms page, after search alerts: what Ask Rip sends and keeps.",
         legal=True,
     ),

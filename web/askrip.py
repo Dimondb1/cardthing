@@ -12,7 +12,8 @@ to spend anymore than £25 at the start ... Make sure we can disable it when we 
   review, 13 Nov 2026: "The page offered 5 questions, but after the first one it said only 1 was left"). The same is
   said on the Terms page.
 * Each question goes to Claude Haiku 5.5, the cheapest model, with thinking off and a short answer: about a
-  fiftieth of a US cent each. It is the Claude page's Ask Rip job (catalogue/judge.py JOBS), so the owner switches it
+  fiftieth of a US cent each. The owner can choose Sonnet 5.5 or Opus 5.5 instead, and change the questions a person
+  and the site may ask a day, on the Claude page (AskRipSettings, read through chosen()). It is the Claude page's Ask Rip job (catalogue/judge.py JOBS), so the owner switches it
   off there, and it has a monthly limit of its own, $30 until the owner saves another (judge.JOB_DEFAULT_LIMITS). That
   is its only limit: the background jobs' shared one, Switch Claude off and a background job's fault leave it be, so a
   busy month of sorting never takes it off the site. Only a refused key or no credit hides it (ACCOUNT_PROBLEMS).
@@ -43,7 +44,9 @@ from django.utils import timezone
 from django.utils.formats import date_format
 
 from catalogue import insights, judge, pricing
-from catalogue.models import AMAZON, CardmarketMatch, ClaudeAsk, ClaudeJudge, DailyLowestPrice, Listing, Product
+from catalogue.models import (
+    AMAZON, AskRipSettings, CardmarketMatch, ClaudeAsk, ClaudeJudge, DailyLowestPrice, Listing, Product,
+)
 from content.registry import REGISTRY
 
 from . import share
@@ -52,19 +55,26 @@ from .templatetags.ripraptor import gbp
 
 Ask = ClaudeAsk
 KIND = Ask.Kind.ASK
+# The model until the owner chooses another on the Claude page, and the ones they can choose, cheapest first.
 MODEL = "claude-haiku-5-5"
+MODELS = ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5")
 EFFORT = "low"
 MAX_TOKENS = 400
 TIMEOUT_SECONDS = 20.0
 
+# Each person's questions a day and the whole site's, until the owner saves others on the Claude page, and the most
+# they can save. An internet address may ask ADDRESS_PEOPLE people's questions, and never fewer than PER_ADDRESS.
 PER_PERSON = 5
+PER_PERSON_MOST = 50
 PER_ADDRESS = 15
+ADDRESS_PEOPLE = 3
 WINDOW = timedelta(hours=24)
 # The browser's own count of its questions: {"n", "until"} signed, so it cannot be lowered by hand, only deleted, and
 # then the address still counts.
 COUNT_COOKIE = "rip_asked"
 COUNT_SALT = "web.askrip.count"
 PER_DAY = 500
+PER_DAY_MOST = 5000
 QUESTION_MIN, QUESTION_MAX = 3, 200
 ANSWER_MAX = 700
 # The facts sent: at most this many offers, shops without one and other products of the set.
@@ -84,6 +94,8 @@ OPEN_SECONDS = 60
 STOPPED_KEY = "askrip:stopped"
 STOPPED_SECONDS = 3600
 BUSY_KEY = "askrip:busy"
+SETTINGS_KEY = "askrip:settings"
+SETTINGS_SECONDS = 3600
 ANSWER_SECONDS = 24 * 3600
 
 # The states the page shows after a question (product.ask.<state> in content/registry.py).
@@ -115,17 +127,60 @@ How to answer:
 - Write in plain British English, as Rip, in the first person, friendly and direct. No lists, headings, bold, emoji, dashes or exclamation marks."""
 
 
+# The owner's settings --------------------------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Chosen:
+    per_person: int = PER_PERSON
+    per_day: int = PER_DAY
+    model: str = MODEL
+
+    @property
+    def per_address(self):
+        return max(PER_ADDRESS, self.per_person * ADDRESS_PEOPLE)
+
+
+def chosen(fresh=False):
+    """The owner's Ask Rip settings (AskRipSettings, saved on the Claude page), from the shared cache: one query an
+    hour at most, and at once after a save (reopen). ``fresh`` reads the row whatever the cache holds, and keeps it
+    for the next reader (the Claude page, which shows what is saved). A value out of range, or a model no longer
+    offered, is the default."""
+    kept = None if fresh else cache.get(SETTINGS_KEY)
+    if not isinstance(kept, dict):
+        row = AskRipSettings.current()
+        kept = {"per_person": row.per_person if 1 <= row.per_person <= PER_PERSON_MOST else PER_PERSON,
+                "per_day": row.per_day if 1 <= row.per_day <= PER_DAY_MOST else PER_DAY,
+                "model": row.model if row.model in MODELS else MODEL}
+        cache.set(SETTINGS_KEY, kept, SETTINGS_SECONDS)
+    return Chosen(**kept)
+
+
 # Whether Rip takes questions -------------------------------------------------------------------------------------
 
-def worst_micros(characters):
+def worst_micros(characters, model):
     """The most one question could cost, in micro-dollars: every character a token written to the cache (dearer than
-    reading it) and every output token. Haiku has no fallback model."""
-    _, write, _, out = judge.rates(MODEL)
-    return math.ceil(math.ceil(characters / 3) * write + MAX_TOKENS * out)
+    reading it) and every output token, and the same again at the dearest rates for a model that can hand a refusal
+    to a fallback (Haiku has none)."""
+    tokens = math.ceil(characters / 3)
+    _, write, _, out = judge.rates(model)
+    worst = tokens * write + MAX_TOKENS * out
+    if model in judge.FALLBACK_MODELS:
+        worst += tokens * judge.DEAREST[1] + MAX_TOKENS * judge.DEAREST[3]
+    return math.ceil(worst)
 
 
 # A question with a full page of facts: what the box checks there is room for before it is shown.
-TYPICAL_WORST = worst_micros(len(SYSTEM_PROMPT) + 6000)
+TYPICAL_CHARACTERS = len(SYSTEM_PROMPT) + 6000
+
+
+def typical_worst(model):
+    return worst_micros(TYPICAL_CHARACTERS, model)
+
+
+def usual_micros(model):
+    """What a question with a full page of facts costs at most when no fallback answers it, for the Claude page."""
+    _, write, _, out = judge.rates(model)
+    return math.ceil(math.ceil(TYPICAL_CHARACTERS / 3) * write + MAX_TOKENS * out)
 
 
 # The Claude box's problems that stop Ask Rip too: the key Anthropic refused, or no credit left on the account.
@@ -138,8 +193,13 @@ CLOSED_WORDS = {
     "stopped": "Hidden: Anthropic refused the key or reported no credit left. It shows again once they accept it.",
     "off": "Hidden: switched off here. Tick it and Save jobs to show it.",
     "job": "Hidden: it reached its own monthly limit. Raise it here, or it shows again next month.",
-    "day": "Hidden for today: 500 questions were asked. It shows again tomorrow.",
+    "day": "Hidden for today: its {per_day} questions a day were asked. It shows again tomorrow.",
 }
+
+
+def closed_words(reason):
+    """What the Claude page says of Ask Rip for ``reason`` (work_out_closed)."""
+    return CLOSED_WORDS.get(reason, "").format(per_day=chosen().per_day)
 
 
 def work_out_closed(now):
@@ -157,9 +217,10 @@ def work_out_closed(now):
         return "stopped"
     if not judge.job_on(KIND):
         return "off"
-    if judge.job_room(KIND, TYPICAL_WORST, now):
+    owner = chosen()
+    if judge.job_room(KIND, typical_worst(owner.model), now):
         return "job"   # at its own monthly limit
-    if (cache.get(day_key(now)) or 0) >= PER_DAY:
+    if (cache.get(day_key(now)) or 0) >= owner.per_day:
         return "day"
     return ""
 
@@ -175,8 +236,8 @@ def closed_reason(now=None):
 
 
 def reopen():
-    """Forget whether Rip takes questions, so a change on the Claude page shows at once."""
-    cache.delete(OPEN_KEY)
+    """Forget whether Rip takes questions, and the owner's settings, so a change on the Claude page shows at once."""
+    cache.delete_many([OPEN_KEY, SETTINGS_KEY])
 
 
 # Counting questions ------------------------------------------------------------------------------------------------
@@ -221,16 +282,20 @@ def person_count(request, now_ts=None):
 
 
 def left_for(request):
-    """Questions the visitor may still ask today: their own 5, unless their address's backstop has fewer left."""
+    """Questions the visitor may still ask today: their own (5 unless the owner chose another number), unless their
+    address's backstop has fewer left."""
     now_ts = time.time()
-    return max(0, min(PER_PERSON - browser_count(request, now_ts)[0], PER_ADDRESS - address_count(request, now_ts)[0]))
+    owner = chosen()
+    return max(0, min(owner.per_person - browser_count(request, now_ts)[0],
+                      owner.per_address - address_count(request, now_ts)[0]))
 
 
 def hours_left(request):
     """Whole hours until the visitor can ask again, at least 1: when the count that stops them ends."""
     now_ts = time.time()
+    owner = chosen()
     mine, address = browser_count(request, now_ts), address_count(request, now_ts)
-    until = mine[1] if mine[0] >= PER_PERSON else address[1] if address[0] >= PER_ADDRESS else None
+    until = mine[1] if mine[0] >= owner.per_person else address[1] if address[0] >= owner.per_address else None
     return max(1, math.ceil(((until or 0) - now_ts) / 3600))
 
 
@@ -721,9 +786,9 @@ def facts_text(found, question):
             f"<question>{safe}</question>")
 
 
-def request_params(found, question):
+def request_params(found, question, model=None):
     return {
-        "model": MODEL,
+        "model": model or chosen().model,
         "max_tokens": MAX_TOKENS,
         "system": [{"type": "text", "text": SYSTEM_PROMPT}],
         "messages": [{"role": "user", "content": facts_text(found, question)}],
@@ -737,10 +802,11 @@ def request_params(found, question):
 ANSWER_FORM = 2
 
 
-def fingerprint(found, question):
-    """Changes whenever the facts or the question do, so a kept answer is reused only while it still holds."""
-    return hashlib.sha256(json.dumps([ANSWER_FORM, found, question.casefold()], sort_keys=True, ensure_ascii=False)
-                          .encode()).hexdigest()
+def fingerprint(found, question, model=MODEL):
+    """Changes whenever the facts, the question or the model do, so a kept answer is reused only while it still holds,
+    and a model the owner chose answers afresh."""
+    return hashlib.sha256(json.dumps([ANSWER_FORM, found, question.casefold(), model], sort_keys=True,
+                                     ensure_ascii=False).encode()).hexdigest()
 
 
 # The answer ---------------------------------------------------------------------------------------------------------
@@ -817,7 +883,7 @@ def read(message, amounts):
     return Ask.Outcome.ANSWERED, text, "", verdict
 
 
-def record(ask, message, outcome, answer, why, verdict=""):
+def record(ask, message, outcome, answer, why, verdict="", model=MODEL):
     usage = message.usage
     Ask.objects.filter(pk=ask.pk).update(
         outcome=outcome, model_answered=(getattr(message, "model", "") or "")[:40],
@@ -825,7 +891,7 @@ def record(ask, message, outcome, answer, why, verdict=""):
         cache_write_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
         cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
         output_tokens=getattr(usage, "output_tokens", 0) or 0,
-        reserved_micros=0, cost_micros=judge.cost_micros(message, MODEL),
+        reserved_micros=0, cost_micros=judge.cost_micros(message, model),
         request_id=(getattr(message, "_request_id", None) or getattr(message, "id", "") or "")[:80],
         reason=why[:200], set_answer={"answer": answer, **({"verdict": verdict} if verdict else {})} if answer else {},
     )
@@ -850,7 +916,7 @@ def ask(request, product, question, now=None, client=None):
         return Asked("closed")
     token = token_for(product, question)
     found, amounts, checked = facts(product, now)
-    print_ = fingerprint(found, question)
+    print_ = fingerprint(found, question, chosen().model)
     kept = cache.get(answer_key(product, token))
     if isinstance(kept, dict) and kept.get("fp") == print_:
         return Asked("answered", token)   # free, and not counted
@@ -870,12 +936,13 @@ def ask(request, product, question, now=None, client=None):
 
 def send(product, question, found, amounts, checked, token, print_, now, client=None, request=None):
     params = request_params(found, question)
-    worst = worst_micros(len(SYSTEM_PROMPT) + len(params["messages"][0]["content"]))
+    model = params["model"]
+    worst = worst_micros(len(SYSTEM_PROMPT) + len(params["messages"][0]["content"]), model)
     if judge.job_room(KIND, worst, now):
         reopen()
         return "closed"
     ask = Ask.objects.create(
-        kind=KIND, row_key=f"ask:{product.pk}", fingerprint=print_, model_asked=MODEL, effort=EFFORT,
+        kind=KIND, row_key=f"ask:{product.pk}", fingerprint=print_, model_asked=model, effort=EFFORT,
         evidence={"product": product.name, "question": question}, reserved_micros=worst, asked_at=now, product=product,
     )
     try:
@@ -890,10 +957,10 @@ def send(product, question, found, amounts, checked, token, print_, now, client=
         return "failed"
     outcome, answer, why, said = read(message, amounts)
     if answer is None:
-        record(ask, message, outcome, answer, why)
+        record(ask, message, outcome, answer, why, model=model)
         return "declined"
     verdict, tone = badge_for(question, said, found)
-    record(ask, message, outcome, answer, why, verdict)
+    record(ask, message, outcome, answer, why, verdict, model=model)
     value = found[PRIVATE].get("value")
     alert = alert_price(product, now) if value is None or value[1] != "good" else None
     cache.set(answer_key(product, token), {
@@ -996,7 +1063,7 @@ def box(request, product, state="", token=""):
     return {
         "open": is_open, "state": state, "state_key": f"product.ask.{state}" if state else "", "shown": shown,
         "left": left, "mood": MOODS.get(state, "idle"),
-        "per_person": PER_PERSON, "hours": hours_left(request) if left == 0 else 0,
+        "per_person": chosen().per_person, "hours": hours_left(request) if left == 0 else 0,
         "max_length": QUESTION_MAX, "suggestions": suggestions(product, shown), "token": token if shown else "",
         "share_url": share.rip_url(product) if shown else "",
     }

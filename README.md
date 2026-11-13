@@ -1095,8 +1095,8 @@ $67 in three days: "control and set what it does in a settings menu".
 
 **Ask Rip** (`web/askrip.py`, `/products/<slug>/ask/`, `web:ask_rip`): a
 question box in the price box of every product page. A shopper types a
-question, or taps a suggested one, and Claude Haiku 5.5 answers in Rip's
-voice, in up to four short sentences, from that page's facts alone: each
+question, or taps a suggested one, and Claude Haiku 5.5 (or the model
+chosen under Ask Rip on the Claude page) answers in Rip's voice, in up to four short sentences, from that page's facts alone: each
 shop's price, delivery, total, price per pack and stock with when it was
 checked, free delivery thresholds, multi-buys and discount codes, what is
 inside, the RRP, our own price record, the cheapest about 30 days ago, the
@@ -1109,7 +1109,18 @@ needed. The owner,
 to spend anymore than £25 at the start ... Make sure we can disable it when
 we need to."
 
-- Each person gets 5 questions a day; the same question on the same
+- Settings: the **Ask Rip** section of the Claude page (`/admin/claude/`,
+  `catalogue.AskRipSettings`, read through `askrip.chosen()`, cached for an
+  hour and cleared on Save) sets the questions per person a day (1 to 50,
+  default 5), the questions a day across the site (1 to 5,000, default
+  500) and the model: Haiku 5.5 (the default, cheapest), Sonnet 5.5 or
+  Opus 5.5, each shown with what a question costs at most and how many its
+  monthly limit covers. A new model answers afresh (the model is part of
+  each kept answer's fingerprint). Sonnet and Opus are sent with the
+  server-side fallback, as the background jobs are; Haiku never is. The
+  owner, 13 Nov 2026: "Add a way to configure ask rips limit amount and
+  chat model. In admin."
+- Each person gets 5 questions a day (or the number saved); the same question on the same
   product, while its prices are unchanged, is answered free from the cache
   and does not count. A question that fails on our side does not count.
   A person is their browser: a signed cookie (`rip_asked`) holds only how
@@ -1117,7 +1128,8 @@ we need to."
   internet address keeps its count (the owner, 12 Nov 2026: "the 5 uses
   resets every time I change browser or reopen the page"). Their internet
   address (kept only as a one-way hash in the cache for 24 hours) is a
-  backstop of 15 a day for everyone on it (`PER_ADDRESS`): many people
+  backstop of 15 a day for everyone on it (`PER_ADDRESS`, or three people's
+  questions when more than 5 a person are saved): many people
   share one, a phone network or an office, and counting by it took a
   person's 5 (a review, 13 Nov 2026: "The page offered 5 questions, but
   after the first one it said only 1 was left"). A new browser gets its
@@ -1130,8 +1142,8 @@ we need to."
   background jobs' shared monthly limit does not hide it, so a busy month of
   sorting never takes it off the site. Each answer costs about a fiftieth of
   a US cent (thinking off, at most 400 output tokens), so $30 is over
-  100,000 answers. The site also stops at 500 questions a day, whoever asks
-  them.
+  100,000 answers on Haiku (about 1,100 at most on Opus). The site also
+  stops at 500 questions a day (or the number saved), whoever asks them.
 - Switching it off: untick **Ask Rip** on the Claude page and Save jobs; the
   box goes from every product page at once. **Switch Claude off** does not
   stop it (that switch is for the background jobs). It also hides itself

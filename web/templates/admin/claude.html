@@ -16,7 +16,14 @@
   .cl td input[type=checkbox] { width: 22px; height: 22px; }
   .cl .does { display: block; margin-top: 2px; color: var(--body-quiet-color); font-size: 0.92em; }
   .cl .at { color: var(--error-fg); }
-  @media (max-width: 640px) {
+  .cl .askrip { display: grid; gap: 14px; }
+  .cl .askrip .field { margin: 0; }
+  .cl .askrip label, .cl .askrip legend { display: block; margin-bottom: 4px; }
+  .cl .askrip input[type=number] { width: 8rem; min-height: 40px; box-sizing: border-box; }
+  .cl .askrip fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .cl .askrip .pick { display: block; padding: 8px 0; border-bottom: 1px solid var(--hairline-color); }
+  .cl .askrip .pick input { width: 20px; height: 20px; vertical-align: middle; margin: 0 6px 0 0; }
+  @media (max-width: 900px) {
     .cl table, .cl tbody, .cl tr, .cl td { display: block; }
     .cl thead { display: none; }
     .cl tr { padding: 10px 0; border-bottom: 1px solid var(--hairline-color); }
@@ -43,7 +50,27 @@
       <form method="post">{% csrf_token %}<input type="hidden" name="action" value="claude_on"><input type="submit" value="Switch Claude on"></form>
       {% endif %}
     </div>{% endif %}
-    <p class="note">The model, effort, the shared monthly limit and the key are under Claude settings and key on <a href="{% url 'checks' %}">Things to check</a>. <a href="{% url 'admin:catalogue_claudeask_changelist' %}">Every answer, with what each cost</a>.</p>
+    <p class="note">The background jobs' model, effort, the shared monthly limit and the key are under Claude settings and key on <a href="{% url 'checks' %}">Things to check</a>. <a href="{% url 'admin:catalogue_claudeask_changelist' %}">Every answer, with what each cost</a>.</p>
+  </section>
+
+  <section id="askrip">
+    <h2>Ask Rip</h2>
+    <p class="note">How many questions shoppers may ask, and which model answers. Its on switch and its monthly limit{% if askrip.limit is not None %} (now ${{ askrip.limit }}){% endif %} are on its row in Jobs below. Changes show on the site at once.</p>
+    <form method="post" class="askrip">{% csrf_token %}<input type="hidden" name="action" value="askrip_settings">
+      <p class="field"><label for="askrip_per_person"><b>Questions per person a day</b></label>
+        <input type="number" id="askrip_per_person" name="askrip_per_person" min="1" max="{{ askrip.per_person_most }}" step="1" inputmode="numeric" value="{{ askrip.per_person }}" required>
+        <span class="does">1 to {{ askrip.per_person_most }}. A person is their browser. Everyone on one internet address shares {{ askrip.per_address }} a day.</span></p>
+      <p class="field"><label for="askrip_per_day"><b>Questions a day across the site</b></label>
+        <input type="number" id="askrip_per_day" name="askrip_per_day" min="1" max="{{ askrip.per_day_most }}" step="1" inputmode="numeric" value="{{ askrip.per_day }}" required>
+        <span class="does">1 to {{ askrip.per_day_most|number }}. Past this, Ask Rip hides until tomorrow, whoever asks.</span></p>
+      <fieldset class="field"><legend><b>Model</b></legend>
+        {% for model in askrip.models %}<label class="pick"><input type="radio" name="askrip_model" value="{{ model.id }}"{% if model.chosen %} checked{% endif %} required> {{ model.label }}{% if forloop.first %} (cheapest){% endif %}
+          <span class="does">Up to about {{ model.cost }} a question{% if model.covers %}, so ${{ askrip.limit }} covers at least {{ model.covers|number }}{% endif %}.</span></label>
+        {% endfor %}
+        <span class="does">Haiku answers well from the page's facts. Sonnet and Opus write better answers to harder questions, at many times the price. A new model answers afresh, even a question answered earlier today.</span>
+      </fieldset>
+      <div class="row"><input type="submit" value="Save Ask Rip"></div>
+    </form>
   </section>
 
   <section>

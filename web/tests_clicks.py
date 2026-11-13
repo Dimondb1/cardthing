@@ -301,10 +301,13 @@ class MarketplaceSearchTests(ClickTestCase):
         amazon = self.search("amazon", referer=None)["Location"]
         self.assertTrue(amazon.startswith("https://www.amazon.co.uk/s?k="))
         self.assertNotIn("tag=", amazon)
-        # Counted as direct hits against the eBay shop (a robot and a HEAD are not saved); nothing for Amazon,
-        # which has no shop here to count it against.
+        # Counted as direct hits (a robot and a HEAD are not saved): two against the eBay shop, and Amazon's against a
+        # switched-off Amazon shop made for counting its clicks (the owner, 13 Nov 2026: "do we record how many
+        # amazon button clicks we make on our dashboard").
         self.assertEqual(OutboundClick.objects.people().count(), 0)
-        self.assertEqual(OutboundClick.objects.suspects().count(), 2)
+        self.assertEqual(OutboundClick.objects.suspects().count(), 3)
+        self.assertEqual(OutboundClick.objects.suspects().filter(retailer__source_type="amazon",
+                                                                 retailer__is_active=False).count(), 1)
 
     def test_unknown_market_or_no_tracking_id_is_not_found(self):
         self.assertEqual(self.search("etsy").status_code, 404)

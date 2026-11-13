@@ -425,6 +425,10 @@ class Command(BaseCommand):
 
         if amazon.configured():
             shops.append(AMAZON)
+        elif amazon.partner_tag():
+            # The tag alone: Amazon switched off, never read, so a click on an Amazon button has a shop to be
+            # counted against (the owner, 13 Nov 2026: "do we record how many amazon button clicks we make").
+            amazon.ensure_shop(active=False)
         if settings.RIPRAPTOR_EBAY_APP_ID and settings.RIPRAPTOR_EBAY_CAMPAIGN_ID:
             shops.append(EBAY)
         by_host = {}

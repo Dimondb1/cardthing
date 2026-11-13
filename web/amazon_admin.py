@@ -5,8 +5,8 @@ settings. Each save asks Amazon for a token and one search, and says plainly whe
 for editors. The owner, 13 Nov 2026: "We have been approved for the amazon creators api ... I have this and a secret
 password thing ... I now need you to build it in".
 
-A save also adds Amazon as a shop (setup_shops' AMAZON) if it is not one yet, so the next hourly read starts reading
-it, and shows how many Amazon prices the product pages show now.
+Working keys also add Amazon as a shop and switch it on (amazon.ensure_shop), so the next hourly read starts reading
+it; the page shows how many Amazon prices the product pages show now.
 """
 
 from datetime import timedelta
@@ -22,22 +22,6 @@ from django.views.decorators.http import require_http_methods
 from catalogue import amazon
 from catalogue.models import ImportRun, Listing, Retailer
 from guides.access import not_for_editors
-
-
-def add_amazon_shop():
-    """Amazon as a shop, as setup_shops adds it, when it is not one yet. Returns the shop."""
-    from decimal import Decimal
-
-    from catalogue.management.commands.setup_shops import AMAZON, CADENCE
-
-    slug, name, website, source_type, delivery, free_over, note = AMAZON
-    shop = Retailer.objects.filter(source_type=Retailer.Source.AMAZON).order_by("pk").first()
-    if shop is None:
-        shop = Retailer.objects.create(slug=slug, name=name, website=website, source_url=website,
-                                       source_type=source_type, delivery_cost=Decimal(delivery),
-                                       free_delivery_over=Decimal(free_over), delivery_note=note,
-                                       read_every_minutes=CADENCE[source_type])
-    return shop
 
 
 def status():
@@ -74,7 +58,7 @@ def amazon_page(request):
         amazon.save_keys(typed_id, typed_secret, typed_tag)
         ok, said = amazon.check()
         if ok:
-            add_amazon_shop()
+            amazon.ensure_shop(active=True)
             messages.success(request, f"Saved. Amazon accepted the keys and answered a test search with {said} "
                                       "items. Amazon is read at the next hourly read, then every 6 hours.")
         else:

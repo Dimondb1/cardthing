@@ -144,6 +144,15 @@ class ItemTests(TestCase):
         item["offersV2"] = {}
         self.assertIsNone(amazon.item_offer(item, Offer))
 
+    def test_only_amazons_uk_store_and_pounds(self):
+        """The owner, 13 Nov 2026: "The compare on amazon link is taking uses .com instead of co.uk"."""
+        item = api_item("B0TEST", "Box")
+        item["detailPageURL"] = "https://www.amazon.com/dp/B0TEST?tag=ripraptor-21"
+        self.assertIsNone(amazon.item_offer(item, Offer))
+        item = api_item("B0TEST", "Box")
+        del item["offersV2"]["listings"][0]["price"]["money"]["currency"]
+        self.assertIsNone(amazon.item_offer(item, Offer))
+
     def test_both_names_amazon_gives_the_lookup_answer(self):
         items = [api_item("B0TEST", "Box")]
         self.assertEqual(amazon.items_of({"itemsResult": {"items": items}}, "itemsResult"), items)
@@ -290,13 +299,71 @@ class ImportTests(TestCase):
     def test_setup_shops_adds_amazon_only_with_keys(self):
         self.retailer.delete()
         out = StringIO()
-        with override_settings(**NO_KEYS):
+        with override_settings(**{**NO_KEYS, "RIPRAPTOR_AMAZON_PARTNER_TAG": ""}):
             call_command("setup_shops", stdout=out)
         self.assertFalse(Retailer.objects.filter(slug="amazon").exists())
+        # The tag alone: switched off, never read, there to count the Amazon buttons' clicks against.
+        with override_settings(**NO_KEYS):
+            call_command("setup_shops", stdout=out)
+        self.assertFalse(Retailer.objects.get(slug="amazon").is_active)
+        self.assertNotIn(Retailer.objects.get(slug="amazon"), list(Retailer.due()))
+        Retailer.objects.filter(slug="amazon").delete()
         call_command("setup_shops", stdout=out)
         shop = Retailer.objects.get(slug="amazon")
         self.assertEqual(shop.source_type, Retailer.Source.AMAZON)
+        self.assertTrue(shop.is_active)
         self.assertEqual(shop.delivery_cost, Decimal("4.99"))
+
+
+class OtherStoreTests(TestCase):
+    def test_a_listing_linking_to_another_amazon_store_is_taken_off_and_searched_again(self):
+        from .testing import make_listing
+
+        shop = Retailer.objects.create(name="Amazon", slug="amazon", website="https://www.amazon.co.uk/",
+                                       source_type=Retailer.Source.AMAZON)
+        box = make_product(make_set(make_game()), name="Surging Sparks Booster Box", slug="surging-box")
+        Product.objects.filter(pk=box.pk).update(amazon_asin="B0COM")
+        wrong = make_listing(box, shop, price="120.00", url="https://www.amazon.com/dp/B0COM?tag=ripraptor-21")
+        other = make_product(box.product_set, name="Surging Sparks Tin", slug="surging-tin")
+        right = make_listing(other, shop, price="20.00", url="https://www.amazon.co.uk/dp/B0UK?tag=ripraptor-21")
+        self.assertEqual(amazon.forget_other_stores(shop), 1)
+        wrong.refresh_from_db()
+        right.refresh_from_db()
+        self.assertEqual((wrong.is_active, right.is_active), (False, True))
+        self.assertEqual(Product.objects.get(pk=box.pk).amazon_asin, "")
+
+    @override_settings(**KEYS)
+    def test_the_keys_check_says_when_amazon_answers_from_another_store(self):
+        item = api_item("B0TEST", "Box")
+        item["detailPageURL"] = "https://www.amazon.com/dp/B0TEST"
+        api = FakeAmazon({"searchItems": (200, {"searchResult": {"items": [item]}})})
+        ok, said = amazon.check(send=api)
+        self.assertFalse(ok)
+        self.assertIn("www.amazon.com, not amazon.co.uk", said)
+
+    def test_a_click_on_an_amazon_button_is_counted_with_no_amazon_shop_yet(self):
+        """The owner, 13 Nov 2026: "do we record how many amazon button clicks we make on our dashboard"."""
+        box = make_product(make_set(make_game()), name="Surging Sparks Booster Box", slug="surging-box")
+        url = box.get_absolute_url()
+        from catalogue import clicks
+
+        browser = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Safari/604.1"
+        with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
+            response = self.client.get(f"/go/search/{box.slug}/amazon/?b=amazon", HTTP_REFERER=f"http://testserver{url}",
+                                       HTTP_USER_AGENT=browser, HTTP_COOKIE=f"{clicks.PAGE_COOKIE}=1")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response["Location"].startswith("https://www.amazon.co.uk/s?"))
+        self.assertIn("tag=ripraptor-21", response["Location"])
+        shop = Retailer.objects.get(source_type=Retailer.Source.AMAZON)
+        self.assertFalse(shop.is_active)
+        click = OutboundClick.objects.get()
+        self.assertEqual((click.retailer, click.button), (shop, "amazon"))
+
+    def test_working_keys_switch_a_switched_off_amazon_on(self):
+        shop = amazon.ensure_shop(active=False)
+        self.assertFalse(shop.is_active)
+        self.assertEqual(amazon.ensure_shop(active=False).pk, shop.pk)
+        self.assertTrue(amazon.ensure_shop(active=True).is_active)
 
 
 @override_settings(**KEYS)

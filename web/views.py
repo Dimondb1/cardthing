@@ -2114,6 +2114,12 @@ def go_search(request, slug, market):
     reason = clicks.suspect_reason(request)
     source_type = Retailer.Source.AMAZON if market == "amazon" else Retailer.Source.EBAY
     retailer = Retailer.objects.filter(source_type=source_type).order_by("-is_active", "pk").first()
+    if retailer is None and market == "amazon":
+        # A switched-off Amazon shop, never read, so the click is counted under Amazon Associates on the dashboard.
+        # Until 13 Nov 2026 there was none, and Amazon's clicks were counted only by Analytics.
+        from catalogue import amazon
+
+        retailer = amazon.ensure_shop(active=False)
     if retailer is not None:
         save_click(request, reason, product, retailer)
     target = clicks.plain_url(tracked) if reason else tracked

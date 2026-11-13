@@ -617,7 +617,12 @@ How it reads (`catalogue/amazon.py`): a token from
 request) and `searchItems` at `https://creatorsapi.amazon/catalog/v1/`
 with `x-marketplace: www.amazon.co.uk`, about one call a second. A 429
 waits as Amazon asks, an ended token is renewed once, and Amazon's own
-error type and reason are shown in admin. Only Amazon's own offer is kept,
+error type and reason are shown in admin. Only items on Amazon's UK store
+(an `amazon.co.uk` link and a price in pounds) are kept; an Amazon listing
+linking to another store is taken off at the next read and its product
+searched again, and the keys' test on the Amazon page says so when Amazon
+answers from another store (the owner, 13 Nov 2026: "The compare on amazon
+link is taking uses .com instead of co.uk"). Only Amazon's own offer is kept,
 when Amazon itself sells it: the API gives the featured offer and its seller
 but no delivery, so Amazon's published rates (the shop's delivery rules)
 apply, where another seller's charge would be a guess.
@@ -636,6 +641,15 @@ every 6 hours (`importers.AMAZON_EVERY_HOURS`), each run taking a quarter of
 untick Active on Amazon's shop page. RipRaptor still has price tracking and
 alerts for the UK shops, so ask Amazon Associates to confirm in writing
 that this is allowed (the Amazon page says so too).
+
+Clicks on the Amazon buttons are counted on the dashboard under Amazon
+Associates, like any shop's (`go_search` saves them against the Amazon
+shop). With the tag but no working credential, Amazon is a switched-off
+shop, never read, made by `setup_shops` or the first click
+(`amazon.ensure_shop`), so the clicks still have a shop to be counted
+against; until 13 Nov 2026 there was none and only Analytics counted them
+(the owner: "do we record how many amazon button clicks we make on our
+dashboard"). Working keys saved on the Amazon page switch it on.
 
 Without a credential, set just the tag: every product page's price list then ends with
 an Amazon row, "Check price and stock on Amazon", whose button opens a tagged

@@ -18,7 +18,7 @@
   <section>
     <h2>Amazon prices</h2>
     {% if shop %}
-      <p>{% if shop.is_active %}Amazon is switched on.{% else %}Amazon is switched off in its shop page.{% endif %}
+      <p>{% if shop.is_active %}Amazon is switched on.{% else %}Amazon prices are off: they switch on when Amazon accepts the keys saved here. Clicks on the Amazon buttons are counted all the same.{% endif %}
         {% if last %}Last read {{ last.finished_at|date:"j M H:i" }}{% if last.error %}, which failed: {{ last.error }}{% else %}, {{ last.listings_updated }} prices updated{% endif %}.{% else %}Not read yet: it is read at the next hourly read.{% endif %}</p>
       <p>{{ shown }} product page{{ shown|pluralize }} show{{ shown|pluralize:"s," }} an Amazon price now, of {{ known }} Amazon listing{{ known|pluralize }} found.</p>
       <p class="note"><a href="{% url 'admin:catalogue_retailer_change' shop.pk %}">Amazon's shop page</a>: untick Active and save to stop showing Amazon prices.</p>

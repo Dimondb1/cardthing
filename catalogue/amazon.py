@@ -31,6 +31,7 @@ import time
 import urllib.error
 import urllib.request
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlsplit
 from pathlib import Path
 
 from django.conf import settings
@@ -38,7 +39,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from .matching import AUTO_LINK
-from .models import Listing, Product
+from .models import Listing, Product, Retailer
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,10 @@ RESOURCES = [
     "offersV2.listings.condition",
     "offersV2.listings.merchantInfo",
 ]
+# Only items on Amazon's UK store are kept: a link to another Amazon store (amazon.com) would send a UK shopper to
+# a store that cannot deliver at that price. The owner, 13 Nov 2026: "The compare on amazon link is taking uses .com
+# instead of co.uk".
+UK_HOSTS = {"www.amazon.co.uk", "amazon.co.uk"}
 # Amazon's availability types: in stock, or on pre-order; anything else (out of stock, unavailable, a lead time,
 # unknown) is out of stock here.
 IN_STOCK = {"IN_STOCK", "IN_STOCK_SCARCE"}
@@ -225,7 +230,8 @@ def sold_by_amazon(listing):
 
 
 def item_offer(item, Offer):
-    """An Offer for one item, or None: without a title, link or new-condition price in pounds sold by Amazon itself."""
+    """An Offer for one item, or None: without a title, a link to Amazon's UK store or a new-condition price in pounds
+    sold by Amazon itself."""
     asin = item.get("asin", "")
     title = ((item.get("itemInfo") or {}).get("title") or {}).get("displayValue", "")
     url = item.get("detailPageURL", "")
@@ -234,8 +240,10 @@ def item_offer(item, Offer):
                     and sold_by_amazon(row)), None)
     if not (asin and title and url and listing):
         return None
+    if (urlsplit(url).hostname or "").lower() not in UK_HOSTS:
+        return None
     money = (listing.get("price") or {}).get("money") or {}
-    if money.get("currency", "GBP") != "GBP":
+    if money.get("currency") != "GBP":
         return None
     try:
         amount = Decimal(str(money.get("amount", ""))).quantize(Decimal("0.01"))
@@ -272,7 +280,45 @@ def check(send=None):
                       retries=0)
     except AmazonError as exc:
         return False, str(exc)
-    return True, len(items_of(answer, "searchResult"))
+    items = items_of(answer, "searchResult")
+    stores = {(urlsplit(item.get("detailPageURL", "")).hostname or "").lower() for item in items} - UK_HOSTS - {""}
+    if stores:
+        return False, (f"Amazon answered from {', '.join(sorted(stores))}, not amazon.co.uk. Check the credential is "
+                       "for the UK store (Associates Central on amazon.co.uk) and version 3.2")
+    return True, len(items)
+
+
+def ensure_shop(active):
+    """Amazon as a shop, as setup_shops adds it, made if there is none. ``active`` True switches it on (working keys
+    were just saved); False makes it switched off when it is new, so a click on an Amazon button has a shop to be
+    counted against (web.views.go_search) before Amazon is read. A switched-off shop is never read."""
+    from .management.commands.setup_shops import AMAZON as SHOP, CADENCE
+
+    slug, name, website, source_type, delivery, free_over, note = SHOP
+    shop = Retailer.objects.filter(source_type=Retailer.Source.AMAZON).order_by("pk").first()
+    if shop is None:
+        return Retailer.objects.create(slug=slug, name=name, website=website, source_url=website,
+                                       source_type=source_type, delivery_cost=Decimal(delivery),
+                                       free_delivery_over=Decimal(free_over), delivery_note=note,
+                                       read_every_minutes=CADENCE[source_type], is_active=active)
+    if active and not shop.is_active:
+        shop.is_active = True
+        shop.save(update_fields=["is_active"])
+    return shop
+
+
+def forget_other_stores(retailer):
+    """Take off the Amazon listings that link to another Amazon store than the UK's, and let their products be
+    searched again. Returns how many."""
+    if retailer is None:
+        return 0
+    wrong = [listing for listing in Listing.objects.filter(retailer=retailer, is_active=True)
+             .only("pk", "product_id", "url") if (urlsplit(listing.url).hostname or "").lower() not in UK_HOSTS]
+    if wrong:
+        Listing.objects.filter(pk__in=[listing.pk for listing in wrong]).update(is_active=False)
+        Product.objects.filter(pk__in={listing.product_id for listing in wrong}).update(amazon_asin="")
+        logger.warning("Amazon: %d listings linked to another Amazon store and were taken off", len(wrong))
+    return len(wrong)
 
 
 # The import ----------------------------------------------------------------------------------------------------------
@@ -287,6 +333,7 @@ def amazon_offers(retailer, limit=None, call_api=None, pause=PAUSE):
     from .importers import AMAZON_EVERY_HOURS, Catalogue, Offer, ean_key
 
     credential_id, secret, tag = credentials()
+    forget_other_stores(retailer)
     if limit is None:
         limit = max(1, settings.RIPRAPTOR_AMAZON_DAILY_LIMIT * AMAZON_EVERY_HOURS // 24)
     api = call_api or (lambda operation, payload: call(operation, payload, credential_id, secret))

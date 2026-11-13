@@ -1709,6 +1709,11 @@ def price_check(product, listings, cheapest, today):
     # off, not softened, so nothing on the page calls the price better than it is; the Terms page says so.
     if fair is not None and fair.band == fair_price.HIGH_PRICE and cheapest.retailer.pays_commission:
         fair = None
+    # Its lowest counts today too, as the price history does, so the two name the same day: today at or under the
+    # record's lowest is the lowest, today. A review, 13 Nov 2026: "The page gives two different dates for the
+    # £99.99 low: 12 Nov in the price check and 13 Nov in the price history".
+    if fair is not None and fair.low is not None and fair.price <= fair.low:
+        fair.low, fair.low_date = fair.price, today
     return fair
 
 

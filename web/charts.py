@@ -15,12 +15,15 @@ def price_chart(points, days, today):
     if len(points) < 2:
         return None
 
-    start = today - timedelta(days=days - 1)
+    # From the first day recorded, not the window's first: the axis then names the day the record began, as the
+    # words under the chart do (a review, 13 Nov 2026: "The chart also starts on 16 Aug, while the text says the
+    # record began on 20 Oct").
+    start = max(today - timedelta(days=days - 1), points[0][0])
     values = [float(price) for _, price in points]
     low, high = min(values), max(values)
     padding = (high - low) * 0.15 or high * 0.05 or 1.0
     floor, ceiling = low - padding, high + padding
-    span_days = max(days - 1, 1)
+    span_days = max((today - start).days, 1)
 
     def x(day):
         return (day - start).days / span_days * WIDTH

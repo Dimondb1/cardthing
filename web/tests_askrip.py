@@ -893,6 +893,25 @@ class ShareCardTests(AskRipCase):
         self.assertTrue(response.content.startswith(b"\x89PNG"))
         self.assertEqual(response["X-Robots-Tag"], "noindex")
 
+    def test_rip_is_on_the_card_with_the_face_of_the_verdict(self):
+        """The owner, 13 Nov 2026: "On the share card can it have rip on the design please"."""
+        from django.contrib.staticfiles import finders
+        from PIL import Image
+        from io import BytesIO
+
+        self.assertEqual(set(askrip.share.RIP_FACES), {"good", "warn"})
+        for face in [*askrip.share.RIP_FACES.values(), askrip.share.RIP_FACE]:
+            with self.subTest(face=face):
+                self.assertIsNotNone(finders.find(face))
+        for tone in ("good", "usual", "warn"):
+            kept = {"verdict": "No warning signs found today", "tone": tone, "line": "Harbour Games has it.",
+                    "answer": ""}
+            with Image.open(BytesIO(askrip.share.rip_card(self.box, kept))) as card:
+                # Rip's orange fills much of the top right.
+                corner = card.convert("RGB").crop((680, 60, 1020, 320))
+                orange = sum(1 for pixel in corner.getdata() if pixel == (255, 90, 31))
+                self.assertGreater(orange / (corner.width * corner.height), 0.2)
+
     def test_no_card_once_the_answer_is_gone(self):
         url = reverse("web:ask_rip_card", args=[self.box.slug])
         self.assertEqual(self.client.get(f"{url}?ask=0123456789abcdef").status_code, 404)

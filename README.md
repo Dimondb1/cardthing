@@ -1182,8 +1182,11 @@ we need to."
   under our record's average), or 5% under today's price, in whole pounds
   (`askrip.alert_price`). A review: "It turns a no into a sign-up instead
   of someone leaving."
-- Share Rip's answer: a square card of the verdict, the answer's first
-  sentence, the product, the logo and a code to the product page
+- Share Rip's answer: a square card of Rip himself at the top right (glad
+  at a good verdict, puzzled at a warning, his usual face otherwise, from
+  the owner's pack rendered to `img/rip/avatars/card_*.png`), the verdict,
+  the answer's first sentence, the product, the logo and a code to the
+  product page
   (`share.rip_card`, `/products/<slug>/rip.png?ask=`, noindex, while the
   answer is kept), sent with "Rip says: ..." and a link tagged
   `utm_source=rip_share` to the phone's share sheet; without one the words

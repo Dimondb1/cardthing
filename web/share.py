@@ -293,6 +293,13 @@ def draw_post(product, summary, photo, store=None):
 RIP_SOURCE = "rip_share"           # the tag on the code's and the shared link's address
 # The badge's colours for each tone, as the Price check's chip (web/static/css/tokens.css).
 TONE_COLOURS = {"good": ("#e7f7ec", PRICE), "usual": (SHELF, INK_MUTED), "warn": ("#fbf1d3", "#7d6000")}
+# Rip himself at the top right, his face following the verdict as it does in the chat: glad at a good one, puzzled at
+# a warning. Pictures drawn from the owner's rip_bot pack (web/static/img/rip/avatars/avatar_*.svg). The owner, 13 Nov
+# 2026: "On the share card can it have rip on the design please".
+RIP_FACES = {"good": "img/rip/avatars/card_happy.png", "warn": "img/rip/avatars/card_puzzled.png"}
+RIP_FACE = "img/rip/avatars/card_normal.png"
+RIP_WIDTH = 340
+RIP_GAP = 32      # between the words on the left and Rip
 
 
 def rip_url(product):
@@ -313,17 +320,32 @@ def rip_card(product, kept, store=None):
     size, margin = POST_SIZE, POST_MARGIN
     card = Image.new("RGB", (size, size), PAPER)
     draw = ImageDraw.Draw(card)
+    rip_bottom = margin
+    face = finders.find(RIP_FACES.get(kept.get("tone"), RIP_FACE))
+    if face:
+        with Image.open(face) as rip:
+            rip = rip.convert("RGBA")
+            rip = rip.crop(rip.getbbox())
+            rip = rip.resize((RIP_WIDTH, round(rip.height * RIP_WIDTH / rip.width)), Image.LANCZOS)
+            card.paste(rip, (size - margin - RIP_WIDTH, margin), rip)
+            rip_bottom = margin + rip.height
+    beside = size - 2 * margin - RIP_WIDTH - RIP_GAP   # the width the words beside Rip may take
     y = margin + 20
     draw.text((margin, y), copy.get("product.ask.card_says", store=store), font=post_font(40, 700, 18), fill=BRAND)
     y += 84
     verdict = (kept.get("verdict") or "").upper()
     if verdict:
         bg, ink = TONE_COLOURS.get(kept.get("tone"), TONE_COLOURS["usual"])
-        font = post_font(46, 700, 20)
+        points = 46
+        font = post_font(points, 700, 20)
+        while points > 30 and draw.textlength(verdict, font=font) + 64 > beside:
+            points -= 2
+            font = post_font(points, 700, 20)
         width = draw.textlength(verdict, font=font)
         draw.rounded_rectangle((margin, y, margin + width + 64, y + 86), radius=43, fill=bg)
-        draw.text((margin + 32, y + 16), verdict, font=font, fill=ink)
+        draw.text((margin + 32, y + (86 - points) // 2 - 4), verdict, font=font, fill=ink)
         y += 130
+    y = max(y, rip_bottom + 40)
     line_font = post_font(56, 600, 28)
     for line in fit_lines(draw, kept.get("line") or kept.get("answer", ""), line_font, size - 2 * margin, lines=5):
         draw.text((margin, y), line, font=line_font, fill=INK)

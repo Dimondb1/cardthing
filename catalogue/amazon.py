@@ -1,28 +1,37 @@
 """
-Prices from Amazon.co.uk through the Product Advertising API.
+Prices from Amazon.co.uk through Amazon's Creators API (it replaced the Product Advertising API).
 
-Amazon publishes no feed. Its API answers signed requests (AWS signature
-version 4) at about one a second, so a run reads every product we have
-already found on Amazon in batches of ten, then looks up new products:
-by barcode where we have one, otherwise by name, keeping a result only
-when it matches the product we asked about.
+Amazon publishes no feed. Its Creators API lends an application a token for its credential (an hour, kept and used
+again) and then answers item lookups and searches at about one a second. A run reads every product we have already
+found on Amazon, ten a request (getItems), then looks up new products by barcode where we have one and otherwise by
+name (searchItems), keeping a result only when it matches the product we asked about.
 
-    RIPRAPTOR_AMAZON_ACCESS_KEY, RIPRAPTOR_AMAZON_SECRET_KEY
-    RIPRAPTOR_AMAZON_PARTNER_TAG   the Associates tag, for example ripraptor-21
+    RIPRAPTOR_AMAZON_CREDENTIAL_ID, RIPRAPTOR_AMAZON_CREDENTIAL_SECRET   from Associates Central, Tools, Creators API
+    RIPRAPTOR_AMAZON_PARTNER_TAG                                         the Associates tag, for example ripraptor-21
 
-Links keep Amazon's own tracking address, so no affiliate link format is
-needed on the retailer.
+or saved from Admin, Amazon (web/amazon_admin.py) into a file only the site can read (RIPRAPTOR_AMAZON_KEY_FILE);
+what is set in the server's settings wins. The owner, 13 Nov 2026, approved for the Creators API: "We can start
+listing products ... I now need you to build it in".
+
+Only Amazon's own offer is kept, when Amazon itself sells it (OffersV2 gives the featured offer and who sells it, but
+no delivery): Amazon's published delivery rates then apply (the shop's rules, setup_shops), where another seller's
+charge would be a guess. An Amazon price never joins the comparison, the price history or any alert (models.fresh):
+Amazon's rules forbid price tracking and alerting on an Associates site unless Amazon agrees, so it is shown only
+as its own row on the product page, with when it was checked and Amazon's disclaimer beside it, for
+RIPRAPTOR_AMAZON_SHOW_HOURS (web.views.amazon_offer).
+
+Links keep Amazon's own tracked address (detailPageURL), so no affiliate link format is needed on the retailer.
 """
 
-import datetime
-import hashlib
-import hmac
 import json
 import logging
+import os
+import tempfile
 import time
 import urllib.error
 import urllib.request
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from django.conf import settings
 from django.db.models import F
@@ -33,165 +42,254 @@ from .models import Listing, Product
 
 logger = logging.getLogger(__name__)
 
-HOST = "webservices.amazon.co.uk"
-REGION = "eu-west-1"
-SERVICE = "ProductAdvertisingAPI"
+# Credential version 3.2 is Europe's: its tokens come from Amazon's UK address. The catalogue is one address for
+# every marketplace, which each request names.
+TOKEN_URL = "https://api.amazon.co.uk/auth/o2/token"
+API_URL = "https://creatorsapi.amazon/catalog/v1/"
+SCOPE = "creatorsapi::default"
 MARKETPLACE = "www.amazon.co.uk"
-BATCH = 10
-PAUSE = 1.1  # seconds between calls: new accounts get one a second
+BATCH = 10         # items a getItems request, and results a search
+PAUSE = 1.1        # seconds between calls: new credentials get one a second
+TOKEN_MARGIN = 300 # a token is asked for again this many seconds before Amazon says it ends
 RESOURCES = [
-    "ItemInfo.Title",
-    "ItemInfo.ExternalIds",
-    "Offers.Listings.Price",
-    "Offers.Listings.Availability.Type",
-    "Offers.Listings.Condition",
-    "Offers.Listings.DeliveryInfo.IsFreeShippingEligible",
+    "itemInfo.title",
+    "itemInfo.externalIds",
+    "offersV2.listings.price",
+    "offersV2.listings.availability",
+    "offersV2.listings.condition",
+    "offersV2.listings.merchantInfo",
 ]
+# Amazon's availability types: in stock, or on pre-order; anything else (out of stock, unavailable, a lead time,
+# unknown) is out of stock here.
+IN_STOCK = {"IN_STOCK", "IN_STOCK_SCARCE"}
+PREORDER = {"PREORDER", "AVAILABLE_DATE"}
+_token = {"value": "", "until": 0.0, "for": ""}
 
 
 class AmazonError(Exception):
     pass
 
 
-def credentials():
-    key = getattr(settings, "RIPRAPTOR_AMAZON_ACCESS_KEY", "")
-    secret = getattr(settings, "RIPRAPTOR_AMAZON_SECRET_KEY", "")
-    tag = getattr(settings, "RIPRAPTOR_AMAZON_PARTNER_TAG", "")
-    if not (key and secret and tag):
-        raise AmazonError(
-            "Set RIPRAPTOR_AMAZON_ACCESS_KEY, RIPRAPTOR_AMAZON_SECRET_KEY and "
-            "RIPRAPTOR_AMAZON_PARTNER_TAG first."
-        )
-    return key, secret, tag
+# Credentials -------------------------------------------------------------------------------------------------------
+
+def key_path():
+    return Path(settings.RIPRAPTOR_AMAZON_KEY_FILE)
 
 
-# Signing ---------------------------------------------------------------------
-
-def _sign(key, message):
-    return hmac.new(key, message.encode(), hashlib.sha256).digest()
-
-
-def signed_headers(operation, body, key, secret, now=None):
-    """Headers for one API call, signed with AWS signature version 4."""
-    now = now or datetime.datetime.now(datetime.timezone.utc)
-    stamp = now.strftime("%Y%m%dT%H%M%SZ")
-    day = now.strftime("%Y%m%d")
-    path = f"/paapi5/{operation.lower()}"
-    target = f"com.amazon.paapi5.v1.ProductAdvertisingAPIv1.{operation}"
-    headers = {
-        "content-encoding": "amz-1.0",
-        "content-type": "application/json; charset=utf-8",
-        "host": HOST,
-        "x-amz-date": stamp,
-        "x-amz-target": target,
-    }
-    signed = ";".join(headers)
-    canonical = "\n".join(
-        ["POST", path, "", *[f"{k}:{v}" for k, v in headers.items()], "", signed, hashlib.sha256(body).hexdigest()]
-    )
-    scope = f"{day}/{REGION}/{SERVICE}/aws4_request"
-    to_sign = "\n".join(["AWS4-HMAC-SHA256", stamp, scope, hashlib.sha256(canonical.encode()).hexdigest()])
-    signing_key = _sign(_sign(_sign(_sign(("AWS4" + secret).encode(), day), REGION), SERVICE), "aws4_request")
-    signature = hmac.new(signing_key, to_sign.encode(), hashlib.sha256).hexdigest()
-    headers["authorization"] = (
-        f"AWS4-HMAC-SHA256 Credential={key}/{scope}, SignedHeaders={signed}, Signature={signature}"
-    )
-    return path, headers
+def saved_keys():
+    """{"credential_id", "secret", "tag"} saved from Admin, Amazon, or {}."""
+    try:
+        found = json.loads(key_path().read_text())
+    except (OSError, ValueError):
+        return {}
+    return found if isinstance(found, dict) else {}
 
 
-def call(operation, payload, key, secret, retries=2):
-    """One API call, returning the decoded JSON. Retries when throttled."""
-    body = json.dumps(payload).encode()
-    path, headers = signed_headers(operation, body, key, secret)
-    request = urllib.request.Request(f"https://{HOST}{path}", data=body, headers=headers, method="POST")
-    for attempt in range(retries + 1):
+def save_keys(credential_id, secret, tag):
+    """Write the keys where only the site's user can read them, whole or not at all. A blank secret keeps the one
+    saved before, so the page never has to show it."""
+    kept = saved_keys()
+    keys = {"credential_id": credential_id.strip(), "secret": secret.strip() or kept.get("secret", ""),
+            "tag": tag.strip()}
+    path = key_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temp = tempfile.mkstemp(dir=path.parent, prefix=".amazon-keys-")
+    try:
+        os.chmod(temp, 0o600)
+        os.write(handle, json.dumps(keys).encode())
+        os.fsync(handle)
+        os.close(handle)
+        os.replace(temp, path)
+    except BaseException:
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return json.loads(response.read())
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "ignore")[:300]
-            if exc.code == 429 and attempt < retries:
-                time.sleep(5 * (attempt + 1))
-                continue
-            if exc.code == 404 and "NoResults" in detail:
-                return {}
-            raise AmazonError(f"Amazon API {exc.code}: {detail}") from exc
-        except OSError as exc:
-            raise AmazonError(f"Amazon API unreachable: {exc}") from exc
+            os.close(handle)
+        except OSError:
+            pass
+        if os.path.exists(temp):
+            os.unlink(temp)
+        raise
+    forget_token()
+
+
+def keys():
+    """(credential id, secret, tag): the server's settings where set, else the ones saved from Admin."""
+    saved = saved_keys()
+    return (settings.RIPRAPTOR_AMAZON_CREDENTIAL_ID or saved.get("credential_id", ""),
+            settings.RIPRAPTOR_AMAZON_CREDENTIAL_SECRET or saved.get("secret", ""),
+            settings.RIPRAPTOR_AMAZON_PARTNER_TAG or saved.get("tag", ""))
+
+
+def partner_tag():
+    return keys()[2]
+
+
+def configured():
+    return all(keys())
+
+
+def credentials():
+    credential_id, secret, tag = keys()
+    if not (credential_id and secret and tag):
+        raise AmazonError("Save the Creators API credential and the Associates tag in Admin, Amazon first.")
+    return credential_id, secret, tag
+
+
+# Calls ---------------------------------------------------------------------------------------------------------------
+
+def forget_token():
+    _token.update(value="", until=0.0, **{"for": ""})
+
+
+def post(url, body, headers, timeout=30):
+    """POST JSON, returning (status, decoded JSON or {}, Retry-After seconds or None)."""
+    request = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
+                                     headers={"Content-Type": "application/json", **headers})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status, json.loads(response.read() or b"{}"), None
+    except urllib.error.HTTPError as exc:
+        text = exc.read().decode("utf-8", "ignore")
+        try:
+            answer = json.loads(text) if text else {}
+        except ValueError:
+            answer = {"message": text[:300]}
+        retry = exc.headers.get("Retry-After") if exc.headers else None
+        return exc.code, answer if isinstance(answer, dict) else {"message": str(answer)[:300]}, retry
+    except OSError as exc:
+        raise AmazonError(f"Amazon API unreachable: {exc}") from exc
+
+
+def token(credential_id, secret, send=None, clock=None):
+    """An access token for the credential, kept until TOKEN_MARGIN before it ends."""
+    send = send or post
+    clock = clock or time.monotonic
+    if _token["value"] and _token["for"] == credential_id and clock() < _token["until"]:
+        return _token["value"]
+    status, answer, _retry = send(TOKEN_URL, {"grant_type": "client_credentials", "client_id": credential_id,
+                                              "client_secret": secret, "scope": SCOPE}, {})
+    if status != 200 or not answer.get("access_token"):
+        why = answer.get("error_description") or answer.get("error") or answer.get("message") or f"status {status}"
+        raise AmazonError(f"Amazon did not lend a token for the credential: {why}")
+    _token.update(value=answer["access_token"], until=clock() + int(answer.get("expires_in") or 3600) - TOKEN_MARGIN,
+                  **{"for": credential_id})
+    return _token["value"]
+
+
+def call(operation, payload, credential_id, secret, send=None, retries=2, sleep=None):
+    """One catalogue call (getItems, searchItems), returning the decoded JSON. Waits and asks again when throttled,
+    and asks for a new token once when Amazon says the one used has ended. Amazon finding none of the items is {}."""
+    send = send or post
+    sleep = sleep or time.sleep
+    renewed = False
+    for attempt in range(retries + 2):
+        headers = {"Authorization": f"Bearer {token(credential_id, secret, send)}", "x-marketplace": MARKETPLACE}
+        status, answer, retry = send(API_URL + operation, payload, headers)
+        if status == 200:
+            return answer
+        kind = answer.get("type", "") or answer.get("error", "")
+        reason = answer.get("reason", "")
+        if status == 401 and not renewed:
+            forget_token()
+            renewed = True
+            continue
+        if status == 429 and attempt < retries:
+            wait = answer.get("retryAfterSeconds") or retry or 5 * (attempt + 1)
+            try:
+                sleep(min(float(wait), 60))
+            except (TypeError, ValueError):
+                sleep(5)
+            continue
+        if status == 404 and "ResourceNotFound" in kind:
+            return {}
+        message = answer.get("message") or answer.get("error_description") or ""
+        raise AmazonError(f"Amazon API {status} {kind} {reason}: {message}".replace("  ", " ").strip()[:400])
     raise AmazonError("Amazon API kept throttling us.")
 
 
-# Reading answers -------------------------------------------------------------
+# Reading answers -----------------------------------------------------------------------------------------------------
+
+def items_of(answer, result):
+    """The items of a getItems (itemsResult; Amazon's own reference also says itemResults) or searchItems
+    (searchResult) answer."""
+    holders = [result] if result != "itemsResult" else ["itemsResult", "itemResults"]
+    for holder in holders:
+        found = (answer.get(holder) or {}).get("items")
+        if found:
+            return found
+    return []
+
+
+def sold_by_amazon(listing):
+    name = ((listing.get("merchantInfo") or {}).get("name") or "").strip().lower()
+    return name.startswith("amazon")
+
 
 def item_offer(item, Offer):
-    """An Offer for one API item, or None when it has no new-condition price."""
-    asin = item.get("ASIN", "")
-    title = (item.get("ItemInfo", {}).get("Title", {}) or {}).get("DisplayValue", "")
-    url = item.get("DetailPageURL", "")
-    listings = (item.get("Offers", {}) or {}).get("Listings", []) or []
-    listing = next((row for row in listings if (row.get("Condition", {}) or {}).get("Value", "New") == "New"), None)
+    """An Offer for one item, or None: without a title, link or new-condition price in pounds sold by Amazon itself."""
+    asin = item.get("asin", "")
+    title = ((item.get("itemInfo") or {}).get("title") or {}).get("displayValue", "")
+    url = item.get("detailPageURL", "")
+    listings = (item.get("offersV2") or {}).get("listings") or []
+    listing = next((row for row in listings if ((row.get("condition") or {}).get("value") or "New") == "New"
+                    and sold_by_amazon(row)), None)
     if not (asin and title and url and listing):
         return None
-    price = listing.get("Price", {}) or {}
-    if price.get("Currency", "GBP") != "GBP":
+    money = (listing.get("price") or {}).get("money") or {}
+    if money.get("currency", "GBP") != "GBP":
         return None
     try:
-        amount = Decimal(str(price.get("Amount", "")))
+        amount = Decimal(str(money.get("amount", ""))).quantize(Decimal("0.01"))
     except InvalidOperation:
         return None
-    in_stock = (listing.get("Availability", {}) or {}).get("Type", "Now") == "Now"
-    free = (listing.get("DeliveryInfo", {}) or {}).get("IsFreeShippingEligible", False)
-    eans = ((item.get("ItemInfo", {}).get("ExternalIds", {}) or {}).get("EANs", {}) or {}).get("DisplayValues", [])
+    kind = ((listing.get("availability") or {}).get("type") or "").upper()
+    availability = (Listing.Availability.IN_STOCK if kind in IN_STOCK
+                    else Listing.Availability.PREORDER if kind in PREORDER else Listing.Availability.OUT_OF_STOCK)
+    eans = (((item.get("itemInfo") or {}).get("externalIds") or {}).get("eans") or {}).get("displayValues") or []
     # No picture: Amazon's policies forbid storing its images, and the site keeps a product's picture for good.
-    return Offer(
-        title=title,
-        url=url,
-        price=amount,
-        ean=eans[0] if eans else "",
-        availability=Listing.Availability.IN_STOCK if in_stock else Listing.Availability.OUT_OF_STOCK,
-        delivery=Decimal("0.00") if free else None,
-        image="",
-        tags=(asin,),
-    )
+    # Delivery is left to the shop's rules: Amazon's published rates for what it sells itself.
+    return Offer(title=title, url=url, price=amount, ean=eans[0] if eans else "", availability=availability,
+                 delivery=None, image="", tags=(asin,))
 
 
 def search_payload(keywords, tag):
-    return {
-        "Keywords": keywords,
-        "SearchIndex": "All",
-        "Condition": "New",
-        "ItemCount": 10,
-        "PartnerTag": tag,
-        "PartnerType": "Associates",
-        "Marketplace": MARKETPLACE,
-        "Resources": RESOURCES,
-    }
+    return {"keywords": keywords[:200], "searchIndex": "All", "itemCount": BATCH, "condition": "New",
+            "availability": "IncludeOutOfStock", "partnerTag": tag, "marketplace": MARKETPLACE,
+            "resources": RESOURCES}
 
 
 def items_payload(asins, tag):
-    return {
-        "ItemIds": list(asins),
-        "Condition": "New",
-        "PartnerTag": tag,
-        "PartnerType": "Associates",
-        "Marketplace": MARKETPLACE,
-        "Resources": RESOURCES,
-    }
+    return {"itemIds": list(asins), "itemIdType": "ASIN", "condition": "New", "partnerTag": tag,
+            "marketplace": MARKETPLACE, "resources": RESOURCES}
 
 
-# The import ------------------------------------------------------------------
+def check(send=None):
+    """Ask Amazon for a token and one search, to show the owner on Admin, Amazon whether the keys work: (True, how
+    many items the search found) or (False, what Amazon said)."""
+    try:
+        credential_id, secret, tag = credentials()
+        forget_token()
+        answer = call("searchItems", search_payload("Pokemon booster box", tag), credential_id, secret, send=send,
+                      retries=0)
+    except AmazonError as exc:
+        return False, str(exc)
+    return True, len(items_of(answer, "searchResult"))
+
+
+# The import ----------------------------------------------------------------------------------------------------------
 
 def amazon_offers(retailer, limit=None, call_api=None, pause=PAUSE):
-    """Offers for every product known on Amazon plus up to ``limit`` new lookups.
+    """Offers for every product known on Amazon plus up to ``limit`` new lookups (RIPRAPTOR_AMAZON_DAILY_LIMIT
+    shared over the day's runs, importers.AMAZON_EVERY_HOURS apart).
 
-    ``call_api(operation, payload)`` can replace the signed call in tests.
+    ``call_api(operation, payload)`` can replace the real call in tests.
     """
     from .finder import interest_first
-    from .importers import Catalogue, Offer, ean_key
+    from .importers import AMAZON_EVERY_HOURS, Catalogue, Offer, ean_key
 
-    key, secret, tag = credentials()
-    limit = limit if limit is not None else getattr(settings, "RIPRAPTOR_AMAZON_DAILY_LIMIT", 2000)
-    api = call_api or (lambda operation, payload: call(operation, payload, key, secret))
+    credential_id, secret, tag = credentials()
+    if limit is None:
+        limit = max(1, settings.RIPRAPTOR_AMAZON_DAILY_LIMIT * AMAZON_EVERY_HOURS // 24)
+    api = call_api or (lambda operation, payload: call(operation, payload, credential_id, secret))
     catalogue = Catalogue(Product.objects.filter(is_active=True).values_list("pk", "name", "game__slug"))
     products = Product.objects.filter(is_active=True).select_related("game")
     offers = []
@@ -200,14 +298,15 @@ def amazon_offers(retailer, limit=None, call_api=None, pause=PAUSE):
     known = list(products.exclude(amazon_asin=""))
     for start in range(0, len(known), BATCH):
         batch = known[start:start + BATCH]
-        answer = api("GetItems", items_payload([p.amazon_asin for p in batch], tag))
+        answer = api("getItems", items_payload([p.amazon_asin for p in batch], tag))
         calls += 1
         by_asin = {p.amazon_asin: p for p in batch}
-        for item in (answer.get("ItemsResult", {}) or {}).get("Items", []) or []:
-            product = by_asin.get(item.get("ASIN"))
+        for item in items_of(answer, "itemsResult"):
+            product = by_asin.get(item.get("asin"))
             offer = item_offer(item, Offer)
             if product and offer:
                 offer.ean = product.ean or ""
+                offer.product_pk = product.pk
                 offers.append(offer)
         time.sleep(pause)
 
@@ -219,9 +318,9 @@ def amazon_offers(retailer, limit=None, call_api=None, pause=PAUSE):
     found = {}
     for product in interest_first(fresh, budget, "amazon_checked_at"):
         keywords = product.ean or product.name
-        answer = api("SearchItems", search_payload(keywords, tag))
+        answer = api("searchItems", search_payload(keywords, tag))
         checked.append(product.pk)
-        for item in (answer.get("SearchResult", {}) or {}).get("Items", []) or []:
+        for item in items_of(answer, "searchResult"):
             offer = item_offer(item, Offer)
             if offer is None:
                 continue
@@ -233,6 +332,7 @@ def amazon_offers(retailer, limit=None, call_api=None, pause=PAUSE):
             if matched:
                 found[product.pk] = offer.tags[0]
                 offer.ean = product.ean or ""
+                offer.product_pk = product.pk
                 offers.append(offer)
                 break
         time.sleep(pause)

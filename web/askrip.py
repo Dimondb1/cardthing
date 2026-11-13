@@ -43,7 +43,7 @@ from django.utils import timezone
 from django.utils.formats import date_format
 
 from catalogue import insights, judge, pricing
-from catalogue.models import CardmarketMatch, ClaudeAsk, ClaudeJudge, DailyLowestPrice, Listing, Product
+from catalogue.models import AMAZON, CardmarketMatch, ClaudeAsk, ClaudeJudge, DailyLowestPrice, Listing, Product
 from content.registry import REGISTRY
 
 from . import share
@@ -471,8 +471,9 @@ def facts(product, now=None):
         amounts.add(Decimal(value).quantize(Decimal("0.01")))
         return gbp(value)
 
-    listings = list(Listing.objects.filter(product=product).live().select_related("retailer")
-                    .order_by("-delivery_known", "delivered_price", "retailer__name"))
+    # Amazon's price is shown on its own row with Amazon's disclaimer, never compared (models.fresh): Rip leaves it out.
+    listings = list(Listing.objects.filter(product=product).live().exclude(retailer__source_type=AMAZON)
+                    .select_related("retailer").order_by("-delivery_known", "delivered_price", "retailer__name"))
     current = buy_order(listings)
     rrp = product.rrp_now
     release = product.effective_release_date

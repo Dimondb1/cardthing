@@ -1,4 +1,19 @@
-{% load sitecopy %}{# The last row of the price list: a tagged Amazon search, shown while we have no Amazon price. Takes amazon_search. #}
+{% load sitecopy ripraptor %}{# The last row of the price list. With an Amazon price (views.amazon_offer): Amazon's price on its own row, never part of the comparison, with when it was checked and Amazon's disclaimer beside it, as Amazon's rules ask. Without one: a tagged Amazon search. Takes amazon_offer or amazon_search. #}
+{% if amazon_offer %}
+<li class="offer offer--amazon offer--amazon-priced" data-listing="{{ amazon_offer.pk }}">
+  <div class="offer__retailer"><span class="offer__name">Amazon</span></div>
+  <div class="offer__stock"><span class="stock-inline stock-inline--{{ amazon_offer.availability }}">{{ amazon_offer.get_availability_display }}</span></div>
+  <div class="offer__price num"><span class="visually-hidden">{% copy "product.compare.col.price" %}: </span>{{ amazon_offer.price|gbp }}</div>
+  <div class="offer__delivery num"><span class="visually-hidden">{% copy "product.compare.col.delivery" %}: </span>{% if not amazon_offer.delivery_known %}{% copy "product.compare.delivery_unknown" %}{% elif amazon_offer.delivery_cost %}{{ amazon_offer.delivery_cost|gbp }}{% else %}{% copy "product.compare.free_delivery" %}{% endif %}</div>
+  <div class="offer__total num"><span class="visually-hidden">{% copy "product.compare.col.total" %}: </span><span class="money">{% if amazon_offer.delivery_known %}{{ amazon_offer.delivered_price|gbp }}{% else %}{% copy "product.compare.plus_delivery" price=amazon_offer.price|gbp %}{% endif %}</span></div>
+  <div class="offer__checked"><span class="visually-hidden">{% copy "product.compare.col.checked" %}: </span>{{ amazon_offer.last_checked|ago }}</div>
+  <p class="offer__meta">{% copy "product.compare.checked_ago" time=amazon_offer.last_checked|ago %}</p>
+  <p class="offer__disclaimer">{% copy "product.amazon.price_at" when=amazon_offer.last_checked|stamp %} {% copy "product.amazon.disclaimer" %} {% copy "terms.amazon" %}</p>
+  <div class="offer__action">
+    <a class="button button--small button--amazon" {% go_link amazon_offer "price_list" product %} target="_blank" rel="sponsored nofollow noopener">{% if amazon_offer.availability == "preorder" %}{% copy "product.compare.amazon_preorder" %}{% else %}{% copy "product.compare.amazon_buy" %}{% endif %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+  </div>
+</li>
+{% else %}
 <li class="offer offer--amazon">
   <div class="offer__retailer"><span class="offer__name">Amazon</span></div>
   <div class="offer__stock"><span class="offer__check">{% copy "product.compare.amazon" %}</span></div>
@@ -10,3 +25,4 @@
     <a class="button button--small button--amazon" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.compare.amazon_button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
   </div>
 </li>
+{% endif %}

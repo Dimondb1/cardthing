@@ -626,12 +626,14 @@ class AmazonLinkTests(PageTestCase):
         from catalogue.models import Retailer
 
         amazon = make_retailer("Amazon", slug="amazon", source_type=Retailer.Source.AMAZON)
-        make_listing(self.etb, amazon, price="80.00")
+        listing = make_listing(self.etb, amazon, price="80.00")
         with override_settings(RIPRAPTOR_AMAZON_PARTNER_TAG="ripraptor-21"):
             response = self.client.get(self.etb.get_absolute_url())
-        self.assertNotContains(response, "Compare on Amazon")
-        self.assertNotContains(response, self.ROW)   # Amazon's real price is in the list instead
-        self.assertContains(response, '<span class="offer__name">Amazon</span>')
+        self.assertNotContains(response, f"/go/search/{self.etb.slug}/amazon/")
+        self.assertNotContains(response, self.ROW)   # Amazon's real price is in the list instead, on its own row
+        self.assertContains(response, '<li class="offer offer--amazon offer--amazon-priced"')
+        # The price box's Amazon button opens the item itself.
+        self.assertContains(response, f'href="/go/{listing.pk}/?b=amazon" data-click="amazon"')
 
 
 class LanguageAndSortTests(PageTestCase):

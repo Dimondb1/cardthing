@@ -2110,6 +2110,26 @@ ENTRIES = [
         "have no Amazon price for the product. The row opens a tagged Amazon search in a new tab.",
     ),
     Entry(
+        "product.compare.amazon_buy", B, "Amazon priced row button", "Buy on Amazon",
+        "Button on the Amazon row of the price list when we hold Amazon's price.",
+    ),
+    Entry(
+        "product.compare.amazon_preorder", B, "Amazon priced row button, pre-order", "Pre-order on Amazon",
+        "Button on the Amazon row of the price list when Amazon takes pre-orders.",
+    ),
+    Entry(
+        "product.amazon.price_at", T, "Amazon price time", "Amazon's price and stock at {when}.",
+        "Under Amazon's price on its row, before Amazon's disclaimer. Amazon requires the time.", placeholders=("when",),
+        legal=True,
+    ),
+    Entry(
+        "product.amazon.disclaimer", T, "Amazon price disclaimer",
+        "Product prices and availability are accurate as of the date/time indicated and are subject to change. Any "
+        "price and availability information displayed on Amazon.co.uk at the time of purchase will apply to the "
+        "purchase of this product.",
+        "Beside every Amazon price. Amazon requires this wording.", legal=True,
+    ),
+    Entry(
         "product.compare.amazon_button", B, "Amazon row button",
         "Check on Amazon",
         "Button on the Amazon row at the foot of the price list.",

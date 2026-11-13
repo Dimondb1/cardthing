@@ -1626,10 +1626,14 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .offer--amazon { background: var(--color-shelf); }
 .offer--amazon .offer__action .button { white-space: nowrap; }
 .offer__check { font-size: var(--text-sm); color: var(--color-ink-muted); }
+/* Amazon's price on its own row: when it was checked and Amazon's disclaimer under it, the width of the row, and its
+   total in ink, since it is never the comparison's cheapest. */
+.offer__disclaimer { grid-column: 1 / -1; font-size: var(--text-xs); color: var(--color-ink-muted); }
+.offer--amazon-priced .offer__total { color: var(--color-ink); }
 @media (min-width: 60rem) {
-  /* The Amazon row has no price columns: the sentence takes their room and the button keeps to one line. */
-  .offer--amazon .offer__stock { grid-column: stock / checked; }
-  .offer--amazon .offer__price, .offer--amazon .offer__delivery, .offer--amazon .offer__total, .offer--amazon .offer__checked { display: none; }
+  /* The Amazon search row has no price columns: the sentence takes their room and the button keeps to one line. */
+  .offer--amazon:not(.offer--amazon-priced) .offer__stock { grid-column: stock / checked; }
+  .offer--amazon:not(.offer--amazon-priced) .offer__price, .offer--amazon:not(.offer--amazon-priced) .offer__delivery, .offer--amazon:not(.offer--amazon-priced) .offer__total, .offer--amazon:not(.offer--amazon-priced) .offer__checked { display: none; }
 }
 @media (min-width: 60rem) {
   .offers__head, .offer { grid-template-columns: minmax(8rem, 1.6fr) minmax(7rem, 1fr) 5.5rem 5.5rem 6.5rem minmax(6.5rem, 1fr) 7.5rem; grid-template-areas: "retailer stock price delivery total checked action"; column-gap: var(--space-4); }

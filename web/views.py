@@ -1663,6 +1663,15 @@ def ebay_search_url(product, listings):
 MARKET_SEARCHES = {"amazon": amazon_search_url, "ebay": ebay_search_url}
 
 
+def amazon_offer(rows):
+    """The product's Amazon price to show on its own row, or None: in stock or on pre-order, and checked within
+    RIPRAPTOR_AMAZON_SHOW_HOURS, as Amazon's rules ask. It never joins the comparison (models.fresh)."""
+    since = timezone.now() - timedelta(hours=settings.RIPRAPTOR_AMAZON_SHOW_HOURS)
+    shown = [row for row in rows if row.availability in Listing.BUYABLE and row.last_checked >= since
+             and row.sanity != Listing.Sanity.EXCLUDED]
+    return min(shown, key=lambda row: row.delivered_price, default=None)
+
+
 def search_link(product, market, tracked):
     """Our address for a marketplace search button, or None when the button is not shown."""
     return f'{reverse("web:go_search", args=[product.slug, market])}?b={market}' if tracked else None
@@ -1742,6 +1751,9 @@ def product_detail(request, slug):
         .select_related("retailer")
         .order_by("-delivery_known", "delivered_price", "retailer__name")
     )
+    # Amazon's price never counts (models.fresh): it has its own row, with Amazon's disclaimer (amazon_offer).
+    amazon_listing = amazon_offer([row for row in listings if row.retailer.source_type == Retailer.Source.AMAZON])
+    listings = [row for row in listings if row.retailer.source_type != Retailer.Source.AMAZON]
     current = buy_order(listings)
     unavailable = [listing for listing in listings if not listing.is_buyable]
     # Open draws at shops we read: listed with the prices under their own label, never as stock.
@@ -1966,7 +1978,9 @@ def product_detail(request, slug):
             "track_state": request.GET.get("track") if request.GET.get("track") in TRACK_STATES else "",
             "share": share_links(request, product, page_url, cheapest),
             # Through /go/search/ so only a person's click carries our tag or campaign (go_search).
-            "amazon_search": search_link(product, "amazon", amazon_search_url(product, listings)),
+            "amazon_offer": amazon_listing,
+            "amazon_search": None if amazon_listing else search_link(product, "amazon",
+                                                                     amazon_search_url(product, listings)),
             "ebay_search": search_link(product, "ebay", ebay_search_url(product, listings)),
             "related": related,
             "instead": instead,

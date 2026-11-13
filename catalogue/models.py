@@ -27,6 +27,10 @@ def stale_cutoff(now=None):
 # until it is checked again. The owner, 12 Nov 2026: "As ebay hasn't updated in 8 hours ... most things become out of
 # stock and th site doesn't know ... This sort of time to update is not good enough".
 EBAY = "ebay"   # Retailer.Source.EBAY, which is defined below
+# An Amazon price never counts at all: not in the comparison, the cheapest price, the price history or any alert.
+# Amazon's rules forbid price tracking and alerting on an Associates site unless Amazon agrees, so its price is shown
+# only as its own row on the product page, with Amazon's disclaimer (catalogue/amazon.py, web.views.amazon_offer).
+AMAZON = "amazon"   # Retailer.Source.AMAZON
 
 
 def ebay_stale_cutoff(now=None):
@@ -49,11 +53,11 @@ def fresh(prefix="", now=None):
     within eBay's. ``prefix`` is the way to the listing ("listings__" from a product). Only positive conditions, so
     from a product every part of it is about the same listing."""
     cutoff, ebay_cutoff = stale_cutoff(now), ebay_stale_cutoff(now)
+    shops = [value for value in Retailer.Source.values if value not in (EBAY, AMAZON)]
     if ebay_cutoff <= cutoff:
-        return Q(**{f"{prefix}last_checked__gte": cutoff})
-    others = [value for value in Retailer.Source.values if value != EBAY]
-    return (Q(**{f"{prefix}last_checked__gte": ebay_cutoff})
-            | Q(**{f"{prefix}last_checked__gte": cutoff, f"{prefix}retailer__source_type__in": others}))
+        return Q(**{f"{prefix}last_checked__gte": cutoff, f"{prefix}retailer__source_type__in": shops + [EBAY]})
+    return (Q(**{f"{prefix}last_checked__gte": ebay_cutoff, f"{prefix}retailer__source_type": EBAY})
+            | Q(**{f"{prefix}last_checked__gte": cutoff, f"{prefix}retailer__source_type__in": shops}))
 
 
 def shown_change(at):
@@ -1016,6 +1020,8 @@ class Listing(models.Model):
 
     @property
     def is_stale(self):
+        if self.retailer.source_type == AMAZON:
+            return True   # never counts (fresh); shown on its own row
         return self.last_checked < listing_stale_cutoff(self)
 
     @property

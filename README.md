@@ -596,20 +596,48 @@ affiliate programme. Shopify shops can turn on Shopify Collabs for free.
 
 ## Amazon
 
-Amazon publishes no feed, so prices come from its Product Advertising API,
-which needs an Amazon Associates account. In Associates Central open Tools,
-Product Advertising API, and add credentials. Put the three values in the
-server's `.env`:
+Amazon publishes no feed, so prices come from its Creators API (which
+replaced the Product Advertising API), granted to Associates accounts with
+recent sales. In Associates Central open Tools, Creators API, create an
+application and a credential (version 3.2 for the UK), then open Admin,
+**Amazon** (`/admin/amazon/`) and type the Credential ID, the Credential
+Secret and the tracking tag (`ripraptor-21`). They are saved into a file only
+the site can read (`RIPRAPTOR_AMAZON_KEY_FILE`, beside the database), never
+typed into a message or the server's settings; the secret is never shown
+back, and an empty box keeps the saved one. Each save asks Amazon for a token
+and one test search and says whether the keys work (Amazon says access can
+take up to 48 hours after a credential is made), and adds Amazon as a shop.
+`RIPRAPTOR_AMAZON_CREDENTIAL_ID` and `RIPRAPTOR_AMAZON_CREDENTIAL_SECRET` in
+`.env` win over the saved ones; `setup_shops` adds Amazon whenever a
+credential and tag are set either way.
 
-```sh
-RIPRAPTOR_AMAZON_ACCESS_KEY=...
-RIPRAPTOR_AMAZON_SECRET_KEY=...
-RIPRAPTOR_AMAZON_PARTNER_TAG=ripraptor-21
-```
+How it reads (`catalogue/amazon.py`): a token from
+`https://api.amazon.co.uk/auth/o2/token` (client credentials, scope
+`creatorsapi::default`, kept for its hour), then `getItems` (ten ASINs a
+request) and `searchItems` at `https://creatorsapi.amazon/catalog/v1/`
+with `x-marketplace: www.amazon.co.uk`, about one call a second. A 429
+waits as Amazon asks, an ended token is renewed once, and Amazon's own
+error type and reason are shown in admin. Only Amazon's own offer is kept,
+when Amazon itself sells it: the API gives the featured offer and its seller
+but no delivery, so Amazon's published rates (the shop's delivery rules)
+apply, where another seller's charge would be a guess.
 
-then run `setup_shops`, which adds Amazon as a shop only when the keys are
-set. Amazon grants the API only to approved accounts with recent sales, so
-until then set just the tag: every product page's price list then ends with
+**Amazon's price is never compared.** Amazon's rules forbid price tracking
+and alerting on an Associates site unless Amazon agrees, so an Amazon price
+never counts anywhere (`models.fresh`): not in the cheapest price, Buy now,
+lists, the price history, the Price check, badges, deals, alerts or Ask
+Rip. It is shown only on its own row at the foot of the product page's
+price list (`offer_amazon.html`, `views.amazon_offer`), with the time it was
+checked, Amazon's disclaimer and the Associates statement beside it, and
+Buy on Amazon through `/go/`, for `RIPRAPTOR_AMAZON_SHOW_HOURS` (24) after
+each check; the price box's Amazon button then opens it too. Amazon is read
+every 6 hours (`importers.AMAZON_EVERY_HOURS`), each run taking a quarter of
+`RIPRAPTOR_AMAZON_DAILY_LIMIT` new lookups. To stop showing Amazon prices,
+untick Active on Amazon's shop page. RipRaptor still has price tracking and
+alerts for the UK shops, so ask Amazon Associates to confirm in writing
+that this is allowed (the Amazon page says so too).
+
+Without a credential, set just the tag: every product page's price list then ends with
 an Amazon row, "Check price and stock on Amazon", whose button opens a tagged
 Amazon search, and the price box keeps its "Compare on Amazon" button. A
 product with no prices at all still gets the list with that one row. Both go
@@ -620,8 +648,8 @@ like any other shop. The Amazon buttons are the site's one dark button
 rim), so the button that pays on anything bought at Amazon stands apart from
 Buy now and the quiet buttons. The owner asked for it on 6 Nov 2026 ("an
 outline of a rectangle inside the button, like a rainbow"), an exception
-to the rule that nothing but prices and the brand is coloured. The hourly import reads Amazon once a day: every product already
-found there is refreshed in batches of ten, then up to
+to the rule that nothing but prices and the brand is coloured. The hourly import reads Amazon every 6 hours: every product already
+found there is refreshed ten at a time, then up to a quarter of
 `RIPRAPTOR_AMAZON_DAILY_LIMIT` products are looked up, by barcode where we
 have one and otherwise by name. The products visitors want most go first
 (clicks, views, watchlists, alerts and the owner's "Search other shops
@@ -644,16 +672,17 @@ the Terms page, which says shops and their affiliate networks set their own
 cookies. No Amazon picture is asked for or stored: Amazon forbids keeping
 its images.
 
-Before turning on Amazon prices (the API keys), three more rules apply.
-Amazon's UK policies say a site with Amazon links "must not have price
-tracking and/or price alerting functionality" unless Amazon agrees, and
-RipRaptor has price history, lowest-in-90-days badges and stock alerts, so
-get Amazon's agreement in writing first. Amazon prices may be shown only
-when refreshed within 24 hours, with the time they were checked and
-Amazon's disclaimer ("Product prices and availability are accurate as of
-the date/time indicated and are subject to change...") beside them or a
-Details link to it. The daily read and the 72 hour stale window do not
-meet that yet.
+Amazon prices (the Creators API) bring three more rules. Amazon's UK
+policies say a site with Amazon links "must not have price tracking and/or
+price alerting functionality" unless Amazon agrees: RipRaptor has price
+history, lowest-in-90-days badges and stock alerts for the UK shops, so get
+Amazon's agreement in writing; meanwhile no Amazon price is ever tracked,
+compared or alerted on (above). Amazon prices may be shown only when
+refreshed recently, with the time they were checked and Amazon's disclaimer
+("Product prices and availability are accurate as of the date/time
+indicated and are subject to change...") beside them: Amazon is read every
+6 hours, its price shown for 24 hours after a check, always with the time,
+the disclaimer and the statement on its row.
 
 ## eBay
 
@@ -3192,10 +3221,12 @@ index.
 | `RIPRAPTOR_LIST_MAX_STALE_SECONDS` | 600 | A cached page list is never served once its build started longer ago than this: the visitor who finds it builds it first. |
 | `RIPRAPTOR_CACHE_DIR`          | `/var/lib/ripraptor/cache` (`.cache` with `DJANGO_DEBUG` on) | The cache folder the site and every command share. Must be writable by the user the site runs as. |
 | `RIPRAPTOR_WORKER_THREADS`     | 3       | Jobs the background reader runs at once. 2 suits a server with under 1.5 GB of memory, and `deploy/install.sh` writes 2 on such a server when the setting is missing, and removes that 2 once the server has 1.5 GB or more. Restart `ripraptor-worker` after changing it. |
-| `RIPRAPTOR_AMAZON_ACCESS_KEY`  |         | Product Advertising API key from Amazon Associates. |
-| `RIPRAPTOR_AMAZON_SECRET_KEY`  |         | Its secret. |
-| `RIPRAPTOR_AMAZON_PARTNER_TAG` |         | The Associates tracking tag, for example `ripraptor-21`. All three set means Amazon is read once a day. |
-| `RIPRAPTOR_AMAZON_DAILY_LIMIT` | 2000    | New products looked up on Amazon per day. |
+| `RIPRAPTOR_AMAZON_CREDENTIAL_ID` |       | Creators API Credential ID from Amazon Associates. Usually typed in Admin, Amazon instead; set here, it wins. |
+| `RIPRAPTOR_AMAZON_CREDENTIAL_SECRET` |   | Its Credential Secret. |
+| `RIPRAPTOR_AMAZON_PARTNER_TAG` |         | The Associates tracking tag, for example `ripraptor-21`. Alone, it tags the Amazon search links; with a credential, Amazon is read every 6 hours. |
+| `RIPRAPTOR_AMAZON_KEY_FILE`    | `amazon-keys` beside the database | Where the keys typed in Admin, Amazon are kept, readable by the site's user only. |
+| `RIPRAPTOR_AMAZON_DAILY_LIMIT` | 2000    | New products looked up on Amazon a day, shared over its runs. |
+| `RIPRAPTOR_AMAZON_SHOW_HOURS`  | 24      | How long an Amazon price is shown on its product page after it was checked. |
 | `RIPRAPTOR_EBAY_APP_ID`        |         | Production App ID (Client ID) from developer.ebay.com. |
 | `RIPRAPTOR_EBAY_CERT_ID`       |         | Its Cert ID (Client Secret). |
 | `RIPRAPTOR_EBAY_CAMPAIGN_ID`   |         | eBay Partner Network campaign id. All three set means eBay is read once a day. |

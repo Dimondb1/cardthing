@@ -1,0 +1,51 @@
+{% extends "admin/base_site.html" %}
+{# Amazon (web/amazon_admin.py): the Creators API credential and the Associates tag, saved into a file only the site can read, tested on each save. #}
+{% block title %}Amazon | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .amazon-keys { display: grid; gap: 20px; max-width: 44rem; }
+  .amazon-keys h2 { margin: 0 0 4px; }
+  .amazon-keys p { margin: 0 0 8px; }
+  .amazon-keys .note { color: var(--body-quiet-color); }
+  .amazon-keys label { display: block; margin: 12px 0 4px; font-weight: 600; }
+  .amazon-keys input[type="text"], .amazon-keys input[type="password"] { width: 100%; max-width: 36rem; box-sizing: border-box; padding: 8px; font-size: 1rem; }
+  .amazon-keys .save { margin-top: 16px; }
+  .amazon-keys .warn { padding: 12px; border-left: 4px solid var(--message-warning-bg, #ffc); background: var(--darkened-bg); }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Amazon</div>{% endblock %}
+{% block content %}
+<div class="amazon-keys">
+  <section>
+    <h2>Amazon prices</h2>
+    {% if shop %}
+      <p>{% if shop.is_active %}Amazon is switched on.{% else %}Amazon is switched off in its shop page.{% endif %}
+        {% if last %}Last read {{ last.finished_at|date:"j M H:i" }}{% if last.error %}, which failed: {{ last.error }}{% else %}, {{ last.listings_updated }} prices updated{% endif %}.{% else %}Not read yet: it is read at the next hourly read.{% endif %}</p>
+      <p>{{ shown }} product page{{ shown|pluralize }} show{{ shown|pluralize:"s," }} an Amazon price now, of {{ known }} Amazon listing{{ known|pluralize }} found.</p>
+      <p class="note"><a href="{% url 'admin:catalogue_retailer_change' shop.pk %}">Amazon's shop page</a>: untick Active and save to stop showing Amazon prices.</p>
+    {% else %}
+      <p>Amazon is not a shop yet. Save working keys below and it is added.</p>
+    {% endif %}
+    <p class="note">Each product page shows Amazon's price on its own row, with when it was checked and Amazon's disclaimer, for {{ show_hours }} hours after each check. It is never part of the comparison, the cheapest price, the price history or any alert.</p>
+  </section>
+  <section class="warn">
+    <p><strong>Amazon's rules.</strong> Unless Amazon agrees otherwise, an Associates site must not have price tracking or price alerts. RipRaptor has both for the UK shops (price history, Track price, stock alerts), even though Amazon's prices are kept out of them. Ask Amazon Associates to confirm in writing that this is allowed.</p>
+  </section>
+  <section>
+    <h2>Creators API keys</h2>
+    {% if from_settings %}
+      <p>The credential is set in the server's settings, which win over anything saved here.</p>
+    {% else %}
+    <p class="note">From Associates Central, Tools, Creators API. Type them here, never into a message.</p>
+    <form method="post">{% csrf_token %}
+      <label for="amazon-id">Credential ID</label>
+      <input id="amazon-id" type="text" name="credential_id" value="{{ credential_id }}" autocomplete="off" spellcheck="false" required>
+      <label for="amazon-secret">Credential Secret</label>
+      <input id="amazon-secret" type="password" name="secret" autocomplete="new-password" spellcheck="false"{% if not has_secret %} required{% endif %} placeholder="{% if has_secret %}Saved. Leave empty to keep it{% endif %}">
+      <label for="amazon-tag">Tracking tag</label>
+      <input id="amazon-tag" type="text" name="tag" value="{{ tag }}" autocomplete="off" spellcheck="false" required>
+      <div class="save"><input type="submit" class="default" value="Save and test"></div>
+    </form>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

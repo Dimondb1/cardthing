@@ -292,13 +292,16 @@ RIPRAPTOR_INDEXNOW = env_bool("RIPRAPTOR_INDEXNOW", default=not DEBUG) and not T
 # so their reports stayed empty.
 RIPRAPTOR_GA_ID = os.environ.get("RIPRAPTOR_GA_ID", "" if DEBUG else "G-TZW5ZVM9H8").strip()
 
-# Amazon Associates: Product Advertising API keys and the tracking tag
-# (ripraptor-21). All three empty means Amazon is not read.
-RIPRAPTOR_AMAZON_ACCESS_KEY = os.environ.get("RIPRAPTOR_AMAZON_ACCESS_KEY", "").strip()
-RIPRAPTOR_AMAZON_SECRET_KEY = os.environ.get("RIPRAPTOR_AMAZON_SECRET_KEY", "").strip()
+# Amazon Associates: the Creators API credential (its ID and secret, from Associates Central, Tools, Creators API) and
+# the tracking tag (ripraptor-21). Set here, or saved from Admin, Amazon into RIPRAPTOR_AMAZON_KEY_FILE (set below);
+# these win. Without a credential Amazon is not read, and the tag alone tags the Amazon search links.
+RIPRAPTOR_AMAZON_CREDENTIAL_ID = os.environ.get("RIPRAPTOR_AMAZON_CREDENTIAL_ID", "").strip()
+RIPRAPTOR_AMAZON_CREDENTIAL_SECRET = os.environ.get("RIPRAPTOR_AMAZON_CREDENTIAL_SECRET", "").strip()
 RIPRAPTOR_AMAZON_PARTNER_TAG = os.environ.get("RIPRAPTOR_AMAZON_PARTNER_TAG", "").strip()
-# New products looked up on Amazon per daily run. Amazon allows 8,640 calls a day at first.
+# New products looked up on Amazon a day, shared over the day's runs. Amazon allows 8,640 calls a day at first.
 RIPRAPTOR_AMAZON_DAILY_LIMIT = int(os.environ.get("RIPRAPTOR_AMAZON_DAILY_LIMIT", "2000"))
+# How long an Amazon price is shown on its product page after it was checked (web.views.amazon_offer).
+RIPRAPTOR_AMAZON_SHOW_HOURS = int(os.environ.get("RIPRAPTOR_AMAZON_SHOW_HOURS", "24"))
 
 # eBay Partner Network: a developer keyset (App ID and Cert ID from
 # developer.ebay.com, production) and the EPN campaign id. All three set
@@ -380,6 +383,10 @@ RIPRAPTOR_OUTREACH_PASSWORD_FILE = os.environ.get("RIPRAPTOR_OUTREACH_PASSWORD_F
 # the database. Without one, shop emails use RIPRAPTOR_ZEPTOMAIL_TOKEN, as the alert emails do.
 RIPRAPTOR_OUTREACH_TOKEN_FILE = os.environ.get("RIPRAPTOR_OUTREACH_TOKEN_FILE", "").strip() or str(
     Path(DATABASES["default"]["NAME"]).with_name("outreach-zeptomail-token")
+)
+# The Amazon Creators API credential and tag saved from Admin, Amazon (catalogue/amazon.py), beside the database.
+RIPRAPTOR_AMAZON_KEY_FILE = os.environ.get("RIPRAPTOR_AMAZON_KEY_FILE", "").strip() or str(
+    Path(DATABASES["default"]["NAME"]).with_name("amazon-keys")
 )
 RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD = int(os.environ.get("RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD", "100") or 100)
 # Before Claude is asked about a row, the shop pages involved are read for evidence (catalogue/shop_pages.py),

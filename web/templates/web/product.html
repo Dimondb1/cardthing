@@ -58,12 +58,12 @@
     {% else %}
       <p class="buybox__none">{% copy "product.no_listings" %}</p>
     {% endif %}
-    {% if not cheapest and amazon_search or not cheapest and ebay_search %}
+    {% if not cheapest and amazon_search or not cheapest and ebay_search or not cheapest and amazon_offer %}
       {# Sold out everywhere we check: Amazon and eBay are the obvious next step, so they lead. #}
       <div class="buybox__amazon buybox__amazon--lead">
-        {% if amazon_search %}<a class="button button--big button--amazon buybox__amazon-button" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
-        {% if ebay_search %}<a class="button {% if amazon_search %}button--quiet{% else %}button--big{% endif %} buybox__amazon-button" href="{{ ebay_search }}" data-click="ebay" data-click-shop="eBay" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.ebay.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
-        <p class="buybox__summary">{% copy "product.marketplaces.note_sold_out" %}{% if amazon_search %} {% copy "terms.amazon" %}{% endif %}</p>
+        {% if amazon_offer %}<a class="button button--big button--amazon buybox__amazon-button" {% go_link amazon_offer "amazon" product %} target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% elif amazon_search %}<a class="button button--big button--amazon buybox__amazon-button" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
+        {% if ebay_search %}<a class="button {% if amazon_search or amazon_offer %}button--quiet{% else %}button--big{% endif %} buybox__amazon-button" href="{{ ebay_search }}" data-click="ebay" data-click-shop="eBay" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.ebay.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
+        <p class="buybox__summary">{% copy "product.marketplaces.note_sold_out" %}{% if amazon_search or amazon_offer %} {% copy "terms.amazon" %}{% endif %}</p>
       </div>
     {% endif %}
     {% if has_listings %}
@@ -92,9 +92,9 @@
     {% include "web/includes/share_box.html" %}
     {% if ask %}{% include "web/includes/ask_rip.html" %}{% endif %}
     {% if guide_door %}<p class="buybox__guide"><a href="{{ guide_door.url }}">{{ guide_door.line }}</a></p>{% endif %}
-    {% if amazon_search and cheapest %}
+    {% if amazon_search and cheapest or amazon_offer and cheapest %}
       <div class="buybox__amazon">
-        <a class="button button--small button--amazon buybox__amazon-button" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>
+        {% if amazon_offer %}<a class="button button--small button--amazon buybox__amazon-button" {% go_link amazon_offer "amazon" product %} target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% else %}<a class="button button--small button--amazon buybox__amazon-button" href="{{ amazon_search }}" data-click="amazon" data-click-shop="Amazon" data-click-product="{{ product.name }}" data-click-game="{{ product.game.display_short }}" target="_blank" rel="sponsored nofollow noopener">{% copy "product.amazon.button" %}<span class="visually-hidden"> (opens in a new tab)</span></a>{% endif %}
         <p class="buybox__summary">{% copy "product.amazon.note" %} {% copy "terms.amazon" %}</p>
       </div>
     {% endif %}
@@ -113,7 +113,7 @@
 </section>
 {% endif %}
 
-{% if has_listings or amazon_search %}
+{% if has_listings or amazon_search or amazon_offer %}
 <section class="block offers-section" aria-labelledby="offers-title">
   <div class="section-head section-head--tight">
     <h2 id="offers-title" class="section-title" tabindex="-1">{% copy "product.compare.title" %}</h2>
@@ -130,7 +130,7 @@
       {% include "web/includes/offer_row.html" with cheapest_row=forloop.first muted=False %}
     {% endfor %}
     {% for listing in lotteries %}{% include "web/includes/offer_row.html" with cheapest_row=False muted=False lottery=True %}{% endfor %}
-    {% if amazon_search %}{% include "web/includes/offer_amazon.html" %}{% endif %}
+    {% if amazon_offer or amazon_search %}{% include "web/includes/offer_amazon.html" %}{% endif %}
   </ul>
     {% if unavailable %}
     <details class="offers-more">
@@ -149,7 +149,7 @@
     {% for listing in unavailable %}
       {% include "web/includes/offer_row.html" with cheapest_row=False muted=True %}
     {% endfor %}
-    {% if amazon_search %}{% include "web/includes/offer_amazon.html" %}{% endif %}
+    {% if amazon_offer or amazon_search %}{% include "web/includes/offer_amazon.html" %}{% endif %}
   </ul>
   {% endif %}
   {% if report_listing or report_state %}{% include "web/includes/report_form.html" %}{% endif %}

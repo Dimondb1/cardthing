@@ -421,7 +421,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         shops = list(SHOPS)
-        if settings.RIPRAPTOR_AMAZON_ACCESS_KEY and settings.RIPRAPTOR_AMAZON_PARTNER_TAG:
+        from catalogue import amazon
+
+        if amazon.configured():
             shops.append(AMAZON)
         if settings.RIPRAPTOR_EBAY_APP_ID and settings.RIPRAPTOR_EBAY_CAMPAIGN_ID:
             shops.append(EBAY)

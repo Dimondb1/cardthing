@@ -1,27 +1,75 @@
-{% load sitecopy %}{# Ask Rip, opened by the header's Ask button (ask-input.js; the owner, 14 Nov 2026: "Find button on header should be changed to ask ... it should act as a toggle ... blurs the current page and then presents the user with the search box ... with icons for build a shopping list and one for existing lists"). One box, typed or spoken: Rip reads it as he reads a voice search (web.views.voice_search, via=typed when typed) and opens the right results, or the list builder for several products. Then the ways in: build a list, the list itself, and Shop with Rip, the step by step helper (Find with Rip's guided steps; the owner renamed it from Step by step, 14 Nov 2026). Hidden until the script opens it; without script the Ask button opens the Find page instead. A plain GET form, so the cached pages around it need no token. #}
+{% load sitecopy ripraptor %}{% comment %}Ask Rip, opened by the header's Ask button (ask-input.js). The owner, 14 Nov 2026: "Find button on header should be changed to ask ... it should act as a toggle ... blurs the current page and then presents the user with the search box ... with icons for build a shopping list and one for existing lists", and the same day, from a mockup: a sheet from the foot of a phone with Rip peeking over its top, suggestions under the box, today's top deal, a big listening view, and on a product page that product's questions. A phone gets the sheet; a wider screen the same panel, centred under the header, which stays sharp above the blur so Ask still toggles it.
+One box, typed or spoken: Rip reads it as he reads a voice search (web.views.voice_search, via=typed when typed) and opens the right results, or the list builder for several products. The arrow that sends it shows once there are words. The suggestions are plain links to their results, so a tap costs Rip nothing. Today's top deal is the first of the home page's Today's best deals (web.feed.today, one cache read). Then the ways in: build a list, the list itself (its count from the cookie that holds only the number, as the header's), and Shop with Rip, the step by step helper.
+On a product page, while Rip takes its questions, it opens on that product: its cheapest delivered price and its one-tap questions, which go to the Ask Rip box in its price box (ask.js), as the questions at the top of the page do; Ask about something else shows the search instead.
+Hidden until the script opens it; without script the Ask button opens the Find page instead. The search is a plain GET form, so the cached pages around it need no token.{% endcomment %}{% url 'web:voice_search' as voice_url %}
 <div class="ask-sheet" id="ask-sheet" hidden data-ask-sheet>
   <div class="ask-sheet__backdrop" data-ask-close></div>
-  <section class="ask-sheet__panel" role="dialog" aria-labelledby="ask-sheet-title" tabindex="-1">
-    <div class="ask-sheet__head">
-      <span class="mark ask-sheet__rip" aria-hidden="true"></span>
-      <h2 class="ask-sheet__title" id="ask-sheet-title">{% copy "askrip.sheet.title" %}</h2>
-      <button class="button button--quiet button--small ask-sheet__close" type="button" data-ask-close>{% copy "askrip.sheet.close" %}</button>
-    </div>
-    <form class="ask-sheet__form" action="{% url 'web:voice_search' %}" method="get" role="search" data-ask-sheet-form>
-      <input type="hidden" name="via" value="typed">
-      <label class="visually-hidden" for="ask-sheet-q">{% copy "askrip.sheet.label" %}</label>
-      <div class="ask-sheet__box">
-        <span class="ask-sheet__icon icon icon--search" aria-hidden="true"></span>
-        <textarea id="ask-sheet-q" class="ask-sheet__input" name="q" rows="2" maxlength="300" required placeholder="{% copy 'askrip.sheet.placeholder' %}" enterkeyhint="search" data-grow></textarea>
-        <span class="ask-sheet__tools"><button class="search__tool" type="button" hidden data-voice="ask-sheet-q" data-voice-submit data-voice-ai="{% url 'web:voice_search' %}" data-voice-stop="{% copy 'askrip.voice.stop' %}" data-voice-listening="{% copy 'askrip.voice.listening' %}" data-voice-searching="{% copy 'askrip.voice.searching' words='{words}' %}" data-voice-denied="{% copy 'askrip.voice.denied' %}" data-voice-unheard="{% copy 'askrip.voice.unheard' %}" aria-label="{% copy 'feed.search.voice' %}">{% include "web/includes/icons/mic.svg" %}</button><a class="search__tool" href="{% url 'web:search_photo' %}" rel="nofollow" aria-label="{% copy 'site.search.photo' %}">{% include "web/includes/icons/camera.svg" %}</a></span>
+  <section class="ask-sheet__panel" role="dialog" aria-labelledby="ask-sheet-title" tabindex="-1" data-ask-panel>
+    <span class="ask-sheet__grip" aria-hidden="true" data-ask-grip></span>
+    <span class="mark ask-sheet__rip" aria-hidden="true"></span>
+    <div class="ask-sheet__head" data-ask-grip>
+      <div class="ask-sheet__heading">
+        <h2 class="ask-sheet__title" id="ask-sheet-title" data-ask-title data-title-all="{% copy 'askrip.sheet.title' %}" data-title-listening="{% copy 'askrip.sheet.listen_title' %}" data-title-searching="{% copy 'askrip.sheet.searching_title' %}">{% if request.resolver_match.url_name == "product" and product and ask.open and ask.left and ask.suggestions %}{% copy "askrip.sheet.product_title" %}{% else %}{% copy "askrip.sheet.title" %}{% endif %}</h2>
+        <p class="ask-sheet__sub" data-ask-sub hidden>{% copy "askrip.sheet.listen_hint" %}</p>
       </div>
-      <span class="visually-hidden" role="status" data-voice-status hidden></span>
-      <p class="ask-sheet__send"><button class="button" type="submit" data-working="{% copy 'askrip.sheet.working' %}">{% copy "askrip.sheet.button" %}</button></p>
-    </form>
-    <nav class="ask-sheet__ways" aria-label="{% copy 'askrip.sheet.ways' %}">
-      <a class="ask-sheet__way" href="{% url 'web:find_list' %}">{% include "web/includes/icons/list-add.svg" %}<span>{% copy "askrip.sheet.build" %}</span></a>
-      <a class="ask-sheet__way" href="{% url 'web:shopping_list' %}" rel="nofollow">{% include "web/includes/icons/list.svg" %}<span>{% copy "askrip.sheet.list" %}</span></a>
-      <a class="ask-sheet__way" href="{% url 'web:find' %}?go=find">{% include "web/includes/icons/steps.svg" %}<span>{% copy "askrip.sheet.steps" %}</span></a>
-    </nav>
+      <button class="ask-sheet__close" type="button" data-ask-close aria-label="{% copy 'askrip.sheet.close' %}">{% include "web/includes/icons/close.svg" %}</button>
+    </div>
+    {% if request.resolver_match.url_name == "product" and product and ask.open and ask.left and ask.suggestions %}
+    <div class="ask-sheet__view" data-ask-view="product">
+      <div class="ask-sheet__product">
+        <span class="ask-pick__image">{% product_image product "thumb" %}</span>
+        <span class="ask-pick__body">
+          <span class="ask-pick__name">{{ product.name }}</span>
+          {% if cheapest %}<span class="ask-pick__meta">{% if cheapest.delivery_known %}{% copy "browse.price.label" %}{% else %}{% copy "browse.price.plus" %}{% endif %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ cheapest.retailer.name }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy "product.compare.checked_ago" time=cheapest.last_checked|ago %}</span>{% endif %}
+        </span>
+        {% if cheapest %}<span class="ask-pick__price">{{ cheapest.shown_price|gbp }}</span>{% endif %}
+      </div>
+      <form class="ask-sheet__questions" method="post" action="{% url 'web:ask_rip' product.slug %}" data-ask-form data-ask-strip aria-label="{% copy 'product.ask.suggest.label' %}">
+        {% csrf_token %}
+        {% for line in ask.suggestions %}<button class="chip ask-sheet__chip" type="submit" name="suggested" value="{{ line }}">{{ line }}</button>{% endfor %}
+      </form>
+      <form class="ask-sheet__form" method="post" action="{% url 'web:ask_rip' product.slug %}" data-ask-sheet-question>
+        {% csrf_token %}
+        <label class="visually-hidden" for="ask-sheet-question">{% copy "product.ask.label" %}</label>
+        <div class="ask-sheet__box">
+          <input id="ask-sheet-question" class="ask-sheet__input" type="text" name="question" required minlength="3" maxlength="{{ ask.max_length }}" autocomplete="off" enterkeyhint="send" placeholder="{% copy 'product.ask.placeholder' %}" data-has-words>
+          <span class="ask-sheet__tools"><button class="search__tool" type="button" hidden data-voice="ask-sheet-question" data-voice-stop="{% copy 'askrip.voice.stop' %}" data-voice-listening="{% copy 'askrip.voice.listening_question' %}" data-voice-denied="{% copy 'askrip.voice.denied' %}" data-voice-unheard="{% copy 'askrip.voice.unheard' %}" aria-label="{% copy 'askrip.voice.question' %}">{% include "web/includes/icons/mic.svg" %}</button><button class="ask-sheet__send" type="submit" aria-label="{% copy 'askrip.sheet.button' %}">{% include "web/includes/icons/send.svg" %}</button></span>
+        </div>
+        <span class="visually-hidden" role="status" data-voice-status hidden></span>
+      </form>
+      <p class="ask-sheet__switch"><button class="ask-sheet__other" type="button" data-ask-other>{% copy "askrip.sheet.product_other" %}</button></p>
+    </div>
+    {% endif %}
+    <div class="ask-sheet__view" data-ask-view="all"{% if request.resolver_match.url_name == "product" and product and ask.open and ask.left and ask.suggestions %} hidden{% endif %}>
+      <form class="ask-sheet__form" action="{{ voice_url }}" method="get" role="search" data-ask-sheet-form>
+        <input type="hidden" name="via" value="typed">
+        <label class="visually-hidden" for="ask-sheet-q">{% copy "askrip.sheet.label" %}</label>
+        <div class="ask-sheet__box">
+          <span class="ask-sheet__icon icon icon--search" aria-hidden="true"></span>
+          <textarea id="ask-sheet-q" class="ask-sheet__input" name="q" rows="1" maxlength="300" required placeholder="{% copy 'askrip.sheet.placeholder' %}" enterkeyhint="search" data-grow data-has-words></textarea>
+          <span class="ask-sheet__tools"><button class="search__tool" type="button" hidden data-voice="ask-sheet-q" data-voice-submit data-voice-ai="{{ voice_url }}" data-voice-stop="{% copy 'askrip.voice.stop' %}" data-voice-listening="{% copy 'askrip.sheet.listen_box' %}" data-voice-searching="{% copy 'askrip.voice.searching' words='{words}' %}" data-voice-denied="{% copy 'askrip.voice.denied' %}" data-voice-unheard="{% copy 'askrip.voice.unheard' %}" aria-label="{% copy 'feed.search.voice' %}">{% include "web/includes/icons/mic.svg" %}</button><a class="search__tool ask-sheet__camera" href="{% url 'web:search_photo' %}" rel="nofollow" aria-label="{% copy 'site.search.photo' %}">{% include "web/includes/icons/camera.svg" %}</a><button class="ask-sheet__send" type="submit" aria-label="{% copy 'askrip.sheet.button' %}" data-working="{% copy 'askrip.sheet.working' %}">{% include "web/includes/icons/send.svg" %}</button></span>
+        </div>
+        <span class="visually-hidden" role="status" data-voice-status hidden></span>
+      </form>
+      <div class="ask-sheet__listen" data-ask-listen hidden>
+        <span class="ask-sheet__stop-wrap"><button class="ask-sheet__stop" type="button" data-ask-stop aria-label="{% copy 'askrip.voice.stop' %}"><span class="ask-sheet__stop-mark" aria-hidden="true"></span></button></span>
+        <p class="ask-sheet__stop-label" aria-hidden="true">{% copy "askrip.sheet.listen_stop" %}</p>
+        <p class="ask-sheet__private">{% copy "askrip.sheet.listen_private" %}</p>
+      </div>
+      <div class="ask-sheet__more" data-ask-more>
+        <ul class="ask-sheet__chips" aria-label="{% copy 'askrip.sheet.chips' %}">
+          {% copy "askrip.sheet.chip_1" as chip_1 %}{% if chip_1 %}<li><a class="chip ask-sheet__chip" href="{% url 'web:search' %}?q={{ chip_1|urlencode }}">{{ chip_1 }}</a></li>{% endif %}
+          {% copy "askrip.sheet.chip_2" as chip_2 %}{% if chip_2 %}<li><a class="chip ask-sheet__chip" href="{% url 'web:search' %}?q={{ chip_2|urlencode }}">{{ chip_2 }}</a></li>{% endif %}
+          <li><a class="chip ask-sheet__chip" href="{% url 'web:drops' %}?show=out">{% copy "askrip.sheet.chip_new" %}</a></li>
+          <li><a class="chip ask-sheet__chip" href="{% url 'web:search_photo' %}" rel="nofollow">{% copy "askrip.sheet.chip_photo" %}</a></li>
+        </ul>
+        {% with today=ask_today %}{% if today %}{% copy "askrip.sheet.today" as today_label %}{% include "web/includes/ask_pick.html" with product=today.product listing=today.summary.best summary=today.summary label=today_label %}{% endif %}{% endwith %}
+        <nav class="ask-sheet__ways" aria-label="{% copy 'askrip.sheet.ways' %}">
+          <a class="ask-sheet__way" href="{% url 'web:find_list' %}">{% include "web/includes/icons/list-add.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.build" %}</span><span class="ask-sheet__way-sub">{% copy "askrip.sheet.build_sub" %}</span></a>
+          <a class="ask-sheet__way" href="{% url 'web:shopping_list' %}" rel="nofollow">{% include "web/includes/icons/list.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.list" %}</span><span class="ask-sheet__way-sub" data-list-items data-one="{% copy 'askrip.sheet.list_one' %}" data-many="{% copy 'askrip.sheet.list_many' count='{count}' %}">{% copy "askrip.sheet.list_sub" %}</span></a>
+          <a class="ask-sheet__way" href="{% url 'web:find' %}?go=find">{% include "web/includes/icons/steps.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.steps" %}</span><span class="ask-sheet__way-sub">{% copy "askrip.sheet.steps_sub" %}</span></a>
+        </nav>
+      </div>
+    </div>
   </section>
 </div>

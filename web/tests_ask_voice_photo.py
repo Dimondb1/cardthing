@@ -10,13 +10,14 @@ import json
 from unittest import mock
 
 from django.contrib.staticfiles import finders
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from PIL import Image
 
 from catalogue import judge
-from catalogue.models import AskRipSettings, ClaudeAsk, ClaudeJob, SiteLook
-from web import askrip, look, rip_list
+from catalogue.models import AskRipSettings, ClaudeAsk, ClaudeJob, OutboundClick, SiteLook
+from web import askrip, look, rip_list, views
 
 from .tests_rip_list import URL, ListCase, items
 
@@ -520,7 +521,10 @@ class AskSheetTests(ListCase):
     """The header's Ask button opens Ask Rip over the page instead of going to one (the owner, 14 Nov 2026: "Find
     button on header should be changed to ask ... it should act as a toggle ... blurs the current page and then
     presents the user with the search box ... with icons for build a shopping list and one for existing lists"), and
-    keeps the step by step helper as a third icon. What is typed there Rip reads like a voice search."""
+    keeps the step by step helper, Shop with Rip, as a third icon. What is typed there Rip reads like a voice search.
+    The same day, from a mockup the owner liked: a sheet from the foot of a phone with Rip peeking over it, suggestions
+    under the box, the arrow that sends it once there are words, today's top deal (AskTodayTests in tests_feed), a
+    big listening view, and on a product page that product's questions."""
 
     def new_home(self):
         row = SiteLook.load()
@@ -529,28 +533,93 @@ class AskSheetTests(ListCase):
         look.remember()
         self.addCleanup(look.remember)
 
-    def test_ask_opens_one_box_and_three_ways_in_on_every_page(self):
+    def sheet(self, url, **params):
+        html = self.client.get(url, params).content.decode()
+        return html[html.index('<div class="ask-sheet" id="ask-sheet" hidden data-ask-sheet>'):html.index("</section>\n</div>")]
+
+    def test_ask_opens_one_box_suggestions_and_three_ways_in(self):
         self.assertNotIn("ask-sheet", self.client.get(reverse("web:home")).content.decode())   # only with Ask shown
         self.new_home()
-        for url in (reverse("web:home"), self.box.get_absolute_url()):
+        for url in (reverse("web:home"), reverse("web:find_list")):
             html = self.client.get(url).content.decode()
+            sheet = self.sheet(url)
             with self.subTest(url=url):
                 self.assertIn('data-ask-open aria-controls="ask-sheet" aria-expanded="false">', html)
-                sheet = html[html.index('<div class="ask-sheet" id="ask-sheet" hidden data-ask-sheet>'):]
+                self.assertIn('<h2 class="ask-sheet__title" id="ask-sheet-title" data-ask-title '
+                              'data-title-all="What are you after?" data-title-listening="Listening" '
+                              'data-title-searching="Searching">What are you after?</h2>', sheet)
+                self.assertIn('<span class="mark ask-sheet__rip" aria-hidden="true"></span>', sheet)   # Rip peeking
+                self.assertIn('<button class="ask-sheet__close" type="button" data-ask-close aria-label="Close">', sheet)
                 self.assertIn(f'<form class="ask-sheet__form" action="{VOICE_URL}" method="get" role="search"', sheet)
                 self.assertIn('<input type="hidden" name="via" value="typed">', sheet)
-                self.assertIn('<textarea id="ask-sheet-q" class="ask-sheet__input" name="q" rows="2" maxlength="300" '
-                              'required placeholder="Type or say it, like cheap Delta Reign packs"', sheet)
+                self.assertIn('<textarea id="ask-sheet-q" class="ask-sheet__input" name="q" rows="1" maxlength="300" '
+                              'required placeholder="Type or say what you want" enterkeyhint="search" data-grow '
+                              'data-has-words></textarea>', sheet)
                 self.assertIn(f'data-voice="ask-sheet-q" data-voice-submit data-voice-ai="{VOICE_URL}"', sheet)
-                self.assertIn(f'href="{reverse("web:search_photo")}" rel="nofollow"', sheet)
+                self.assertIn('data-voice-listening="Your words show here"', sheet)
+                self.assertIn(f'<a class="search__tool ask-sheet__camera" href="{reverse("web:search_photo")}" rel="nofollow"',
+                              sheet)
+                # No Ask Rip button under the box: an arrow in it, shown once there are words (site.css).
+                self.assertIn('<button class="ask-sheet__send" type="submit" aria-label="Ask Rip" '
+                              'data-working="Rip is looking">', sheet)
+                self.assertNotIn('class="button"', sheet)
+                # The suggestions open their results at once, read as a search box reads them: no question to Rip.
+                chips = sheet[sheet.index('<ul class="ask-sheet__chips"'):sheet.index("</ul>")]
+                search = reverse("web:search")
+                for href, words in ((f"{search}?q=Cheapest%20Delta%20Reign%20packs", "Cheapest Delta Reign packs"),
+                                    (f"{search}?q=ETBs%20under%20%C2%A350", "ETBs under £50"),
+                                    (reverse("web:drops") + "?show=out", "New releases")):
+                    self.assertIn(f'<a class="chip ask-sheet__chip" href="{href}">{words}</a>', chips)
+                self.assertIn(f'<a class="chip ask-sheet__chip" href="{reverse("web:search_photo")}" rel="nofollow">'
+                              'Price check a photo</a>', chips)
                 ways = sheet[sheet.index('<nav class="ask-sheet__ways"'):sheet.index("</nav>")]
-                for href, words in ((reverse("web:find_list"), "Build a shopping list"),
-                                    (reverse("web:shopping_list"), "Your list"),
-                                    (reverse("web:find") + "?go=find", "Shop with Rip")):
+                for href, words, under in ((reverse("web:find_list"), "Build a shopping list", "Type, say or photo"),
+                                           (reverse("web:shopping_list"), "Your list", "See or change it"),
+                                           (reverse("web:find") + "?go=find", "Shop with Rip", "Pick a game, then a kind")):
                     self.assertIn(f'href="{href}"', ways)
-                    self.assertIn(f"<span>{words}</span>", ways)
+                    self.assertIn(f'<span class="ask-sheet__way-name">{words}</span>', ways)
+                    self.assertIn(f">{under}</span>", ways)
+                # Your list's count comes from the cookie that holds only the number, so a cached page shows no one's.
+                self.assertIn('data-list-items data-one="1 item on it" data-many="{count} items on it">See or change it',
+                              ways)
+                listen = sheet[sheet.index('<div class="ask-sheet__listen" data-ask-listen hidden>'):]
+                self.assertIn('<button class="ask-sheet__stop" type="button" data-ask-stop aria-label="Stop listening">',
+                              listen)
+                self.assertIn("Tap to stop", listen)
+                self.assertIn("RipRaptor only gets the words, never the recording.", listen)
         # Shop with Rip is the guided helper's first question, not the page Ask opens without script.
         self.assertContains(self.client.get(reverse("web:find"), {"go": "find"}), "find__steps")
+
+    def test_on_a_product_page_it_opens_on_that_product_and_its_questions(self):
+        self.new_home()
+        sheet = self.sheet(self.box.get_absolute_url())
+        self.assertIn('data-title-searching="Searching">Ask about this</h2>', sheet)
+        product = sheet[sheet.index('<div class="ask-sheet__view" data-ask-view="product">'):
+                        sheet.index('<div class="ask-sheet__view" data-ask-view="all" hidden>')]
+        self.assertIn('<span class="ask-pick__name">Surging Sparks Booster Box</span>', product)
+        self.assertIn('<span class="ask-pick__price">£', product)
+        self.assertIn("Harbour Games", product)
+        self.assertIn("Checked ", product)
+        # The questions go where the ones at the top of the page go: Rip's box in the price box (ask.js).
+        ask = reverse("web:ask_rip", args=[self.box.slug])
+        self.assertIn(f'<form class="ask-sheet__questions" method="post" action="{ask}" data-ask-form data-ask-strip', product)
+        for line in ("What&#x27;s inside?", "Is it good value?", "Buy now or wait?", "Any red flags?"):
+            self.assertIn(f'name="suggested" value="{line}">{line}</button>', product)
+        self.assertIn(f'<form class="ask-sheet__form" method="post" action="{ask}" data-ask-sheet-question>', product)
+        self.assertIn('name="question" required minlength="3"', product)
+        self.assertIn('<button class="ask-sheet__other" type="button" data-ask-other>Ask about something else</button>',
+                      product)
+        # The search is still there, a tap away.
+        self.assertIn('<textarea id="ask-sheet-q"', sheet)
+
+    def test_with_rip_taking_no_questions_a_product_page_opens_on_the_search(self):
+        self.new_home()
+        ClaudeJob.objects.create(name="ask", on=False)
+        askrip.reopen()
+        sheet = self.sheet(self.box.get_absolute_url())
+        self.assertNotIn('data-ask-view="product"', sheet)
+        self.assertIn('<div class="ask-sheet__view" data-ask-view="all">', sheet)
+        self.assertIn(">What are you after?</h2>", sheet)
 
     def test_what_is_typed_is_read_by_rip_and_shown_as_asked(self):
         self.fake.answer = general(items=[("Surging Sparks Booster Box", "pokemon", 1)])
@@ -569,34 +638,109 @@ class AskSheetTests(ListCase):
                                    REMOTE_ADDR="203.0.113.7")["Location"]
         self.assertEqual(parse_qs(urlsplit(location).query)["asked"], ["cheap booster packs"])
 
-    def test_the_script_toggles_it_and_enter_sends(self):
+    def script(self):
         with open(finders.find("js/ask-input.js"), encoding="utf-8") as handle:
             script = handle.read()
-        sheet = script[script.index('var sheet = document.querySelector("[data-ask-sheet]");'):]
+        return script[script.index('var sheet = document.querySelector("[data-ask-sheet]");'):]
+
+    def test_the_script_toggles_it_and_enter_sends(self):
+        sheet = self.script()
         self.assertIn("event.preventDefault();\n      if (sheet.hidden) open();\n      else close();", sheet)
         self.assertIn('document.documentElement.classList.add("has-ask-sheet");', sheet)
         self.assertIn('opener.setAttribute("aria-expanded", "true");', sheet)
         self.assertIn('if (event.key === "Escape") close();', sheet)
         self.assertIn('if (event.key !== "Enter" || event.shiftKey) return;', sheet)
-        self.assertIn('send.textContent = send.getAttribute("data-working");', sheet)
+        self.assertIn('send.setAttribute("aria-label", send.getAttribute("data-working"));', sheet)
+        self.assertIn('field.form.classList.toggle("has-words", !!field.value.trim());', sheet)
+        # Your list's count, from the cookie, each time it opens.
+        self.assertIn("var found = document.cookie.match(/(?:^|; )rr_list_n=(\\d+)/);", sheet)
+        # A phone's sheet closes with a swipe down on its top; only its position changes while the finger moves.
+        self.assertIn('panel.style.transform = "translateY(" + drag.moved + "px)";', sheet)
+        self.assertIn("if (moved > DRAG_CLOSE) close();", sheet)
         css = open(finders.find("css/site.css"), encoding="utf-8").read()
         self.assertIn(".has-ask-sheet .masthead { z-index: 31; }", css)   # the header stays sharp, Ask stays tappable
         self.assertIn("backdrop-filter: blur(var(--ask-sheet-blur));", css)
-        motion = css[css.index("@keyframes ask-sheet-drop"):]
-        self.assertIn("@media (prefers-reduced-motion: no-preference)", motion[:300])
+        self.assertIn(".ask-sheet__form.has-words .ask-sheet__send { display: flex; }", css)
+        self.assertIn(".ask-sheet__rip { --mark-size: var(--ask-sheet-rip); position: absolute; "
+                      "top: calc(-1 * var(--ask-sheet-peek));", css)
+        motion = css[css.index("@keyframes ask-sheet-rise"):]
+        self.assertIn("@media (prefers-reduced-motion: no-preference)", motion[:400])
+
+    def test_the_microphone_turns_it_into_the_listening_view(self):
+        with open(finders.find("js/ask-input.js"), encoding="utf-8") as handle:
+            script = handle.read()
+        # The microphone says what it is doing; the popup listens for it.
+        self.assertIn('new CustomEvent("ripvoice", { bubbles: true, detail: { state: state, line: line || "" } })', script)
+        self.assertLess(script.index('tell("listening");'), script.index("recognition.start();"))
+        sheet = self.script()
+        self.assertIn('title.textContent = title.getAttribute("data-title-listening");', sheet)
+        self.assertIn('title.textContent = title.getAttribute("data-title-searching");', sheet)
+        self.assertIn("if (mic) mic.click();   // a listening microphone stops when tapped again", sheet)
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn(".ask-sheet__panel.is-listening .ask-sheet__more, .ask-sheet__panel.is-voice-searching "
+                      ".ask-sheet__more { display: none; }", css)
+        self.assertIn(".ask-sheet__panel.is-voice-searching .ask-sheet__stop::after { inset: 0; border-width: "
+                      "var(--ask-stop-spin); border-right-color: transparent;", css)
+        reduced = css[css.index("@media (prefers-reduced-motion: reduce) { .ask-sheet__form.is-searching"):]
+        self.assertIn(".ask-sheet__stop::after { animation: none; }", reduced[:200])
+
+    def test_a_product_question_goes_to_the_box_in_the_price_box(self):
+        sheet = self.script()
+        self.assertIn('if (questions) questions.addEventListener("submit", close);', sheet)
+        self.assertIn('var target = document.getElementById("ask-question");', sheet)
+        self.assertIn('if (!target || !target.form) return;   // no box on the page: the form posts the plain way', sheet)
 
     def test_the_box_grows_with_the_words_then_scrolls(self):
         with open(finders.find("js/ask-input.js"), encoding="utf-8") as handle:
             script = handle.read()
         self.assertIn('document.querySelectorAll("textarea[data-grow]")', script)
-        # Measured while hidden a box is 0 high: it keeps its two rows, so the example in it is not cut off.
+        # Measured while hidden a box is 0 high: it keeps its rows, so the example in it is not cut off.
         self.assertIn('if (field.scrollHeight) field.style.height = field.scrollHeight + "px";', script)
         self.assertIn('panel.className = "voice-words";', script)
         css = open(finders.find("css/site.css"), encoding="utf-8").read()
         self.assertIn("max-height: var(--voice-words-max);", css)
         self.assertIn(".contact-form__text[data-grow] { max-height: var(--ask-box-max); overflow-y: auto; }", css)
-        self.assertIn("max-height: var(--ask-box-max); padding: var(--space-2) 0;", css)
+        self.assertIn("max-height: var(--ask-box-max); padding: var(--space-3) 0;", css)
         tokens = open(finders.find("css/tokens.css"), encoding="utf-8").read()
-        for token in ("--voice-words-max:", "--ask-box-max:", "--ask-sheet-blur:"):
+        for token in ("--voice-words-max:", "--ask-box-max:", "--ask-sheet-blur:", "--ask-sheet-rip:", "--ask-sheet-peek:",
+                      "--ask-stop:", "--ask-stop-spin:"):
             self.assertIn(token, tokens)
         self.assertContains(self.client.get(URL), "data-grow")
+
+
+class NoDeadEndTests(ListCase):
+    """A search that finds nothing is never a dead end (the owner, 14 Nov 2026: "people will give up after that", and
+    the mockup's "Did I hear that right?"): what the phone heard, or what was searched for, in a box to change it, Say
+    it again and Type it, and three products people are opening this week with their delivered prices."""
+
+    def test_after_speaking_it_says_what_it_heard_and_offers_to_try_again(self):
+        html = self.client.get(reverse("web:search"), {"q": "papa chicken", "said": "papa chicken"}).content.decode()
+        card = html[html.index('<div class="no-luck">'):]
+        self.assertIn('<h1 class="no-luck__title">Did I hear that right?</h1>', card)
+        self.assertIn('<label class="no-luck__label" for="no-luck-q">I heard</label>', card)
+        self.assertIn('<input id="no-luck-q" class="no-luck__input" type="search" name="q" value="papa chicken"', card)
+        self.assertIn(f'<form class="no-luck__fix" method="get" action="{reverse("web:search")}" role="search">', card)
+        # Say it again: shown only where the browser can listen (ask-input.js); it searches through Rip.
+        self.assertIn(f'<button class="button no-luck__again" type="button" hidden data-voice="no-luck-q" data-voice-submit '
+                      f'data-voice-ai="{VOICE_URL}"', card)
+        self.assertIn("<span data-voice-label>Say it again</span>", card)
+        # Type it works without script: it is the box's own label.
+        self.assertIn('<label class="button button--quiet no-luck__type" for="no-luck-q">Type it</label>', card)
+        self.assertIn("No products match ‘papa chicken’", card)
+
+    def test_a_typed_search_says_what_was_searched_for(self):
+        html = self.client.get(reverse("web:search"), {"q": "papa chicken"}).content.decode()
+        self.assertIn('<h1 class="no-luck__title">No luck. Yet.</h1>', html)
+        self.assertIn('<label class="no-luck__label" for="no-luck-q">You searched for</label>', html)
+
+    def test_popular_products_come_with_their_delivered_prices(self):
+        OutboundClick.objects.create(product=self.box, retailer=self.box.listings.first().retailer)
+        cache.clear()
+        html = self.client.get(reverse("web:search"), {"q": "papa chicken"}).content.decode()
+        popular = html[html.index('<section class="no-luck__popular"'):html.index("</section>", html.index("no-luck__popular"))]
+        self.assertIn('<h2 class="no-luck__popular-title" id="no-luck-popular">Popular right now</h2>', popular)
+        self.assertIn(f'<a class="ask-pick__link" href="{self.box.get_absolute_url()}">', popular)
+        self.assertIn('<span class="ask-pick__name">Surging Sparks Booster Box</span>', popular)
+        self.assertIn('<span class="ask-pick__price">£', popular)
+        self.assertIn("Checked ", popular)
+        self.assertLessEqual(popular.count("<li"), views.NO_LUCK_POPULAR)

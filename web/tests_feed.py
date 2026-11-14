@@ -857,6 +857,40 @@ class CacheTests(FeedCase):
         self.assertIn("£13.00 less than Northgate Cards", self.page())
 
 
+class AskTodayTests(FeedCase):
+    """The Ask Rip popup's Today's top deal (web.feed.today, ask_sheet.html): the first of the home page's Today's best
+    deals, kept apart with each build of the rails so every page shows it from one small cache read. The owner, 14 Nov
+    2026, picking it over a biggest price drop, which would show a wrong listing as a bargain."""
+
+    def sheet(self, html):
+        return html[html.index('<div class="ask-sheet"'):]
+
+    def test_the_popup_shows_the_first_of_the_home_pages_deals(self):
+        switch(True)
+        self.page()   # the home page builds the rails
+        self.assertEqual(feed.today().product.pk, self.box.pk)
+        with self.assertNumQueries(0):
+            feed.today()
+        sheet = self.sheet(self.page(reverse("web:find_list")))
+        self.assertIn('<span class="ask-pick__label">Today&#x27;s top deal</span>', sheet)
+        self.assertIn(f'href="{self.box.get_absolute_url()}"', sheet)
+        self.assertIn('<span class="ask-pick__why">£8.00 less than Northgate Cards</span>', sheet)
+        meta = sheet[sheet.index('class="ask-pick__meta"'):sheet.index('class="ask-pick__why"')]
+        self.assertIn("Harbour Games", meta)
+        self.assertIn("Checked 1 hour ago", meta)   # every price says when it was checked
+
+    def test_kept_no_longer_than_the_rails_may_be_served(self):
+        with mock.patch.object(feed.cache, "set", wraps=feed.cache.set) as kept:
+            feed.rails(fresh=True)
+        call = next(call for call in kept.call_args_list if call.args[0] == feed.TODAY_KEY)
+        self.assertEqual(call.args[2], listcache.max_stale())
+
+    def test_with_no_deal_built_there_is_no_card(self):
+        switch(True)
+        self.assertIsNone(feed.today())
+        self.assertNotIn('class="ask-pick"', self.sheet(self.page(reverse("web:find_list"))))
+
+
 class BarTests(TestCase):
     def test_each_game_gets_its_own_icon_matched_on_its_slug(self):
         cases = {"pokemon": "pokemon", "magic-the-gathering": "magic", "one-piece": "one-piece", "lorcana": "lorcana",

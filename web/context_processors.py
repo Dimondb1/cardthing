@@ -5,7 +5,7 @@ from django.conf import settings
 from catalogue import referrals
 from guides import state as guides
 
-from . import look, navigation, refresh, seasons
+from . import feed, look, navigation, refresh, seasons
 
 # Addresses that are private links: a message thread, the links in stock alert and refer a friend emails (and the
 # Your alerts page they and the watchlist page link to), and the owner's dashboard. analytics.js holds the same pattern.
@@ -47,6 +47,8 @@ def site(request):
         # Find with Rip in the header (web/find.py) while the new home page or the compact layout is on (web/look.py,
         # from the cache alone).
         "find_link": look.mode(request) in (look.FEED, look.COMPACT),
+        # The Ask Rip popup's Today's top deal (web/feed.py today): called only where the popup is drawn, one cache read.
+        "ask_today": feed.today,
         # The refresh dots under the logo (web/refresh.py): the lists' next rebuild, from the clock alone; a product
         # page puts its own shops' next read in their place.
         "refresh": refresh.for_lists(),

@@ -1,0 +1,12 @@
+{% load sitecopy ripraptor %}{# One product as a row that opens its page, with the price of one offer: its picture, name, the delivered price in green, the shop and when it was checked. The Ask Rip popup's Today's top deal (ask_sheet.html) and the products under a search that found nothing (browse.html). Takes product, listing (the offer to show), label (a line over the name, optional), summary (an offers.Summary: its reason for being a deal goes under the name, as on a feed card), tag ("li" inside a list) and compare (the data-compare name, for the click count). #}<{{ tag|default:"div" }} class="ask-pick">
+  <a class="ask-pick__link" href="{{ product.get_absolute_url }}"{% if compare %} data-compare="{{ compare }}"{% endif %}>
+    <span class="ask-pick__image">{% product_image product "thumb" %}</span>
+    <span class="ask-pick__body">
+      {% if label %}<span class="ask-pick__label">{{ label }}</span>{% endif %}
+      <span class="ask-pick__name">{{ product.name }}</span>
+      <span class="ask-pick__meta">{% if listing.delivery_known %}{% copy "browse.price.label" %}{% else %}{% copy "browse.price.plus" %}{% endif %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ listing.retailer.name }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy "product.compare.checked_ago" time=listing.last_checked|ago %}</span>
+      {% if summary.low_deal %}<span class="ask-pick__why">{% if summary.under %}{% copy "feed.card.why_low_under" percent=summary.under %}{% else %}{% copy "feed.card.why_low" %}{% endif %}</span>{% elif summary.saving and summary.second %}<span class="ask-pick__why">{% copy "feed.card.why_save" amount=summary.saving|gbp retailer=summary.second.retailer.name %}</span>{% endif %}
+    </span>
+    <span class="ask-pick__price">{{ listing.shown_price|gbp }}</span>
+  </a>
+</{{ tag|default:"div" }}>

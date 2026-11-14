@@ -13,14 +13,32 @@
 {% if query %}<span data-search-query="{{ query }}" hidden></span>{% endif %}
 {% if game %}<span data-visited-game="{{ game.slug }}" hidden></span>{% endif %}
 {% if no_matches %}
-{# A plain search found nothing: lead with that and offer a way forward. #}
+{# A search found nothing: never a dead end (the owner, 14 Nov 2026: "people will give up after that"). What the phone heard, or what was searched for, in a box to change it, with Say it again where the browser can listen and Type it; then three products people are opening this week, with their delivered prices. #}
 <div class="browse-head browse-head--empty">
   <div class="no-luck">
     <div class="raptor-says"><div class="empty-mark" aria-hidden="true"><span class="mark mark--md"></span><span class="empty-mark__ask">?</span></div>{% copy "browse.no_results.raptor" as says %}{% if says %}<p class="raptor-says__line">{{ says }}</p>{% endif %}</div>
-    <h1 class="no-luck__title">{% copy "browse.no_results.headline" %}</h1>
-    <p class="no-luck__query">{% copy "browse.no_results.title" query=query %}</p>
+    <h1 class="no-luck__title">{% if said %}{% copy "browse.no_results.heard_title" %}{% else %}{% copy "browse.no_results.headline" %}{% endif %}</h1>
+    <form class="no-luck__fix" method="get" action="{% url 'web:search' %}" role="search">
+      <label class="no-luck__label" for="no-luck-q">{% if said %}{% copy "browse.no_results.heard" %}{% else %}{% copy "browse.no_results.searched" %}{% endif %}</label>
+      <div class="no-luck__box">
+        <input id="no-luck-q" class="no-luck__input" type="search" name="q" value="{{ query }}" maxlength="200" required autocomplete="off" enterkeyhint="search">
+        <button class="button button--small" type="submit">{% copy "browse.no_results.search" %}</button>
+      </div>
+      <p class="no-luck__query">{% copy "browse.no_results.title" query=query %}</p>
+      <div class="no-luck__actions">
+        <button class="button no-luck__again" type="button" hidden data-voice="no-luck-q" data-voice-submit data-voice-ai="{% url 'web:voice_search' %}" data-voice-stop="{% copy 'askrip.voice.stop' %}" data-voice-listening="{% copy 'askrip.voice.listening' %}" data-voice-searching="{% copy 'askrip.voice.searching' words='{words}' %}" data-voice-denied="{% copy 'askrip.voice.denied' %}" data-voice-unheard="{% copy 'askrip.voice.unheard' %}">{% include "web/includes/icons/mic.svg" %}<span data-voice-label>{% copy "browse.no_results.again" %}</span></button>
+        <label class="button button--quiet no-luck__type" for="no-luck-q">{% copy "browse.no_results.type" %}</label>
+      </div>
+      <span class="visually-hidden" role="status" data-voice-status hidden></span>
+    </form>
     <div class="prose">{% copy "browse.no_results.body" %}</div>
-    <p><a class="button" href="{% url 'web:games' %}">{% copy "browse.no_results.button" %} <span aria-hidden="true">→</span></a></p>
+    {% if popular %}
+    <section class="no-luck__popular" aria-labelledby="no-luck-popular">
+      <h2 class="no-luck__popular-title" id="no-luck-popular">{% copy "browse.no_results.popular" %}</h2>
+      <ul class="no-luck__picks">{% for product in popular %}{% include "web/includes/ask_pick.html" with product=product listing=product.best_offer tag="li" summary=None label="" %}{% endfor %}</ul>
+    </section>
+    {% endif %}
+    <p><a class="button button--quiet" href="{% url 'web:games' %}">{% copy "browse.no_results.button" %} <span aria-hidden="true">→</span></a></p>
     {% if games %}
     <p class="game-links">
       {% for item in games %}<a href="{{ item.get_absolute_url }}">{{ item.display_short }}</a>{% endfor %}

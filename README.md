@@ -6523,23 +6523,64 @@ visible happens, they assume it's broken and try again"). All of this is in
 changed to ask ... it should act as a toggle ... blurs the current page and
 then presents the user with the search box", with icons for building a
 shopping list and for the list itself, and the step by step helper kept as
-a third icon.
+a third icon. The same day he liked a mockup from another chat and picked
+what to take from it: the sheet shape, the suggestions and send arrow, the
+listening view, no dead end when misheard, the product page version, the
+list count and today's top deal.
 
 - The header's button says Ask Rip (Ask on a phone, `feed.find.*`). With
-  script it opens and closes the popup over the page; Close, a tap on the
-  blurred page and Escape close it too. The header stays sharp above the
-  blur (`html.has-ask-sheet`), so Ask can be tapped again. Without script
-  it is still a link to `/find/`.
-- One box, typed or spoken, with the microphone and the camera. Enter
-  sends it (Shift and Enter is a new line). It goes to `/search/voice/`
-  with `via=typed`, so Rip reads it as he reads a voice search, sharing the
+  script it opens and closes the popup over the blurred page; Close (the
+  cross), a tap on the blurred page and Escape close it too. The header
+  stays sharp above the blur (`html.has-ask-sheet`), so Ask can be tapped
+  again. Without script it is still a link to `/find/`.
+- **A phone** gets a sheet from the foot of the screen with Rip's head
+  peeking over its top edge (`--ask-sheet-rip`, `--ask-sheet-peek`). Its
+  contents scroll inside it on a short screen; a swipe down on its top
+  closes it (only its position changes while the finger moves). **Wider
+  screens** get the same panel centred under the header.
+- **One box**, typed or spoken, with the microphone and the camera. The
+  arrow that sends it shows once there are words; Enter sends it too
+  (Shift and Enter is a new line). It goes to `/search/voice/` with
+  `via=typed`, so Rip reads it as he reads a voice search, sharing the
   voice allowance (30 a day, the owner exempt). The results say "Rip found
   these for ‘...’" rather than "You said".
-- Under it, three ways in: Build a shopping list (`/find/list/`), Your list
-  (`/shopping-list/`), Shop with Rip (`/find/?go=find`, the guided
-  questions; called Step by step until the owner renamed it).
-- Words are `askrip.sheet.*`; the blur is `--ask-sheet-blur`. It only shows
-  where the header shows Ask (new home page or compact layout on).
+- **Suggestions** under the box: two searches the owner edits in Admin
+  (`askrip.sheet.chip_1`, `chip_2`; empty hides one), New releases (Out
+  now on the drops page) and Price check a photo. They are plain links to
+  their results, read as a search box reads them, so a tap costs Rip
+  nothing. Change the searches as sets come and go.
+- **Today's top deal**: the first of the home page's Today's best deals,
+  with its delivered price, shop, why it is a deal and when it was checked.
+  `web.feed.build_rails` keeps it in a small cache entry of its own
+  (`feed.TODAY_KEY`, no longer than the rails may be served), so a page
+  reads one card, never the rails, and gains no query. Not "biggest price
+  drop": that would show a wrong listing as a bargain.
+- **Three ways in**: Build a shopping list (`/find/list/`), Your list
+  (`/shopping-list/`, with how many products are on it, from the
+  `rr_list_n` cookie as the header's count) and Shop with Rip
+  (`/find/?go=find`, the guided questions).
+- **Listening view.** The popup's microphone turns it into Listening, "Say
+  a product or set. I stop when you do.", the words as they come in the
+  box, a big stop button with a pulsing ring and "RipRaptor only gets the
+  words, never the recording." Once the words are heard it says Searching
+  and the stop button becomes the spinner, so nothing jumps. The
+  microphone tells its box what it is doing with a `ripvoice` event.
+- **On a product page**, while Rip takes questions there, it opens on that
+  product: its cheapest delivered price and its five one-tap questions,
+  which go to the Ask Rip box in the price box (`ask.js`) as the questions
+  at the top of the page do, so the popup closes and the answer shows
+  there. A typed question is put in that box and sent from it. Ask about
+  something else shows the search.
+- Words are `askrip.sheet.*`. It only shows where the header shows Ask (new
+  home page or compact layout on).
+
+**A search that finds nothing** is never a dead end (`browse.html`): after
+speaking it asks "Did I hear that right?" and shows what the phone heard in
+a box to change it, with Say it again (where the browser can listen) and
+Type it; a typed search shows You searched for. Under it, Popular right
+now: three products people are opening this week (the Deals page's
+Trending, `views.NO_LUCK_POPULAR`) with their delivered prices and when
+they were checked. Words are `browse.no_results.*`.
 
 Rip's side of a voice search:
 

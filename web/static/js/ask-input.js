@@ -61,6 +61,11 @@
         else button.setAttribute("aria-label", words);
       };
       var listening = null;
+      // What the microphone is doing, for whatever holds it (the Ask popup's listening view): listening, searching or
+      // rest, with the line the box shows.
+      var tell = function (state, line) {
+        button.dispatchEvent(new CustomEvent("ripvoice", { bubbles: true, detail: { state: state, line: line || "" } }));
+      };
       var say = function (text) {
         if (!status) return;
         status.textContent = text || "";
@@ -72,6 +77,7 @@
         name(idle);
         field.setAttribute("placeholder", hint);
         if (!form || !form.classList.contains("is-searching")) shown(field, "");
+        tell("rest");
       };
       var searching = function (words) {
         // Locked until the next page: no second search half way through this one.
@@ -90,6 +96,7 @@
         }
         field.readOnly = true;
         say(line);
+        tell("searching", line);
       };
       // Coming back to the page (the back button keeps it as it was): ready again.
       window.addEventListener("pageshow", function () {
@@ -176,6 +183,7 @@
         name(button.getAttribute("data-voice-stop"));
         if (submits) field.value = "";
         if (button.getAttribute("data-voice-listening")) field.setAttribute("placeholder", button.getAttribute("data-voice-listening"));
+        tell("listening");
         var nothing = setTimeout(function () { if (!heard) stop(); }, NOTHING_MS);
         try { recognition.start(); } catch (error) {
           clearTimeout(nothing);
@@ -192,17 +200,41 @@
 
   // Ask Rip, over the page (the owner, 14 Nov 2026: the header's Ask "should no longer navigate to a page it should
   // act as a toggle ... blurs the current page and then presents the user with the search box"). The Ask button
-  // opens and closes it; so do Close, a tap on the blurred page and Escape. The header stays sharp above the blur,
-  // so Ask can be tapped again. Without script Ask is a link to the Find page. The page under it keeps still.
+  // opens and closes it; so do Close, a tap on the blurred page, Escape, and on a phone a swipe down on its top. The
+  // header stays sharp above the blur, so Ask can be tapped again. Without script Ask is a link to the Find page.
   var sheet = document.querySelector("[data-ask-sheet]");
   var opener = document.querySelector("[data-ask-open]");
   if (sheet && opener) {
-    var panel = sheet.querySelector(".ask-sheet__panel");
+    var panel = sheet.querySelector("[data-ask-panel]");
     var head = document.querySelector(".masthead");
-    var box = sheet.querySelector("textarea");
+    var title = sheet.querySelector("[data-ask-title]");
+    var sub = sheet.querySelector("[data-ask-sub]");
+    var listen = sheet.querySelector("[data-ask-listen]");
+    var views = sheet.querySelectorAll("[data-ask-view]");
+    var productView = sheet.querySelector('[data-ask-view="product"]');
+    var allView = sheet.querySelector('[data-ask-view="all"]');
+    var sheetForm = sheet.querySelector("[data-ask-sheet-form]");
+    var box = sheetForm.querySelector("textarea");
+    var firstTitle = title.textContent;
+    var show = function (view) {
+      Array.prototype.forEach.call(views, function (each) { each.hidden = each !== view; });
+      title.textContent = view === allView ? title.getAttribute("data-title-all") : firstTitle;
+    };
+    // Your list's count, from the cookie that holds only the number (as the header's, site.js).
+    var items = sheet.querySelector("[data-list-items]");
+    var itemsNone = items ? items.textContent : "";
+    var counted = function () {
+      if (!items) return;
+      var found = document.cookie.match(/(?:^|; )rr_list_n=(\d+)/);
+      var count = found ? parseInt(found[1], 10) : 0;
+      items.textContent = count === 1 ? items.getAttribute("data-one")
+        : count > 1 ? items.getAttribute("data-many").replace("{count}", count) : itemsNone;
+    };
     var open = function () {
       var top = head ? Math.max(0, Math.round(head.getBoundingClientRect().bottom)) : 0;
       sheet.style.setProperty("--ask-sheet-top", top + "px");
+      show(productView || allView);
+      counted();
       sheet.hidden = false;
       grow(box);
       document.documentElement.classList.add("has-ask-sheet");
@@ -212,6 +244,7 @@
     var close = function () {
       if (sheet.hidden) return;
       sheet.hidden = true;
+      panel.style.transform = "";
       document.documentElement.classList.remove("has-ask-sheet");
       opener.setAttribute("aria-expanded", "false");
       opener.focus({ preventScroll: true });
@@ -228,8 +261,14 @@
       if (event.key === "Escape") close();
     });
     window.addEventListener("pageshow", function () { close(); });
+
+    // The arrow that sends shows once there are words.
+    Array.prototype.forEach.call(sheet.querySelectorAll("[data-has-words]"), function (field) {
+      var mark = function () { field.form.classList.toggle("has-words", !!field.value.trim()); };
+      field.addEventListener("input", mark);
+      window.addEventListener("pageshow", mark);
+    });
     // Enter sends, as in a search box; Shift and Enter starts a new line.
-    var sheetForm = sheet.querySelector("[data-ask-sheet-form]");
     box.addEventListener("keydown", function (event) {
       if (event.key !== "Enter" || event.shiftKey) return;
       event.preventDefault();
@@ -237,20 +276,110 @@
       if (sheetForm.requestSubmit) sheetForm.requestSubmit();
       else sheetForm.submit();
     });
-    // Rip takes a second or two: the box says so and cannot be sent twice.
+    // Rip takes a second or two: the box says so, with the spinner in place of the glass, and cannot be sent twice.
     var send = sheetForm.querySelector("[data-working]");
-    var sendWords = send.textContent;
+    var sendWords = send.getAttribute("aria-label");
+    var status = sheetForm.querySelector("[data-voice-status]");
     sheetForm.addEventListener("submit", function () {
       sheetForm.classList.add("is-searching");
       box.readOnly = true;
-      send.textContent = send.getAttribute("data-working");
+      send.setAttribute("aria-label", send.getAttribute("data-working"));
       send.disabled = true;
+      if (status) { status.textContent = send.getAttribute("data-working"); status.hidden = false; }
     });
     window.addEventListener("pageshow", function () {
       sheetForm.classList.remove("is-searching");
       box.readOnly = false;
-      send.textContent = sendWords;
+      send.setAttribute("aria-label", sendWords);
       send.disabled = false;
+    });
+
+    // The microphone turns the popup into its listening view: Listening, what to say, the words as they come, a big
+    // stop button and what is sent; then Searching for what was heard until the results come.
+    var mic = sheetForm.querySelector("[data-voice]");
+    var stopper = sheet.querySelector("[data-ask-stop]");
+    var resting = function () {
+      panel.classList.remove("is-listening", "is-voice-searching");
+      stopper.disabled = false;
+      listen.hidden = true;
+      sub.hidden = true;
+      title.textContent = title.getAttribute("data-title-all");
+    };
+    sheetForm.addEventListener("ripvoice", function (event) {
+      var state = event.detail.state;
+      if (state === "listening") {
+        panel.classList.add("is-listening");
+        listen.hidden = false;
+        sub.hidden = false;
+        title.textContent = title.getAttribute("data-title-listening");
+      } else if (state === "searching") {
+        // The words stay in the box; the stop button becomes the spinner in its place, so nothing jumps.
+        panel.classList.remove("is-listening");
+        panel.classList.add("is-voice-searching");
+        stopper.disabled = true;
+        listen.hidden = false;   // the microphone rests a moment before it searches, which put the view away
+        sub.hidden = true;
+        title.textContent = title.getAttribute("data-title-searching");
+      } else if (!panel.classList.contains("is-voice-searching")) {
+        resting();
+      }
+    });
+    stopper.addEventListener("click", function () {
+      if (mic) mic.click();   // a listening microphone stops when tapped again
+    });
+    window.addEventListener("pageshow", resting);
+
+    // On a product page: Ask about something else shows the search; a question goes to the Ask Rip box in the price
+    // box (ask.js), which answers there, so the popup closes first. A typed one is put in that box and sent from it.
+    var other = sheet.querySelector("[data-ask-other]");
+    if (other) {
+      other.addEventListener("click", function () {
+        show(allView);
+        box.focus();
+      });
+    }
+    var questions = sheet.querySelector("form[data-ask-strip]");
+    if (questions) questions.addEventListener("submit", close);
+    var typed = sheet.querySelector("[data-ask-sheet-question]");
+    if (typed) {
+      typed.addEventListener("submit", function (event) {
+        var target = document.getElementById("ask-question");
+        if (!target || !target.form) return;   // no box on the page: the form posts the plain way
+        event.preventDefault();
+        target.value = typed.querySelector("[name=question]").value;
+        close();
+        if (target.form.requestSubmit) target.form.requestSubmit();
+        else target.form.submit();
+      });
+    }
+
+    // On a phone the popup is a sheet from the foot of the screen: a swipe down on its top closes it. Only its
+    // position changes while the finger moves.
+    var drag = null;
+    var DRAG_CLOSE = 80;
+    var sheetLayout = window.matchMedia("(max-width: 47.99rem)");
+    Array.prototype.forEach.call(sheet.querySelectorAll("[data-ask-grip]"), function (grip) {
+      grip.addEventListener("pointerdown", function (event) {
+        if (!sheetLayout.matches || event.button !== 0 || event.target.closest("button, a, input, textarea")) return;
+        drag = { y: event.clientY, moved: 0, id: event.pointerId };
+        panel.classList.add("is-dragging");
+        grip.setPointerCapture(event.pointerId);
+      });
+      grip.addEventListener("pointermove", function (event) {
+        if (!drag || event.pointerId !== drag.id) return;
+        drag.moved = Math.max(0, event.clientY - drag.y);
+        panel.style.transform = "translateY(" + drag.moved + "px)";
+      });
+      var end = function (event) {
+        if (!drag || event.pointerId !== drag.id) return;
+        var moved = drag.moved;
+        drag = null;
+        panel.classList.remove("is-dragging");
+        panel.style.transform = "";
+        if (moved > DRAG_CLOSE) close();
+      };
+      grip.addEventListener("pointerup", end);
+      grip.addEventListener("pointercancel", end);
     });
   }
 

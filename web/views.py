@@ -182,6 +182,8 @@ STOCK_TABS = [("in-stock", "In stock"), ("pre-orders", "Pre-orders"), ("out-of-s
 # Below this many products in the list in view, a game or set page shows no sort or filter choices: a short
 # list is read at a glance. From it up, they fold under one Sort and filter button.
 FILTERS_FROM = 12
+# Products people are opening this week, under a search that found nothing (browse.html).
+NO_LUCK_POPULAR = 3
 # Sets in the row on a game page, the ones people want most this week first (popularity.set_demand), newest first
 # when equal, then the most in stock; All sets opens the game's whole list on the Games page.
 GAME_PAGE_SETS = 8
@@ -436,6 +438,10 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "feed_chosen": [label for label in (dict(form.fields["price"].choices).get(band) if band else "",
                                             form.fields["compared"].label if form.value("compared") else "") if label],
     }
+    if context["no_matches"]:
+        # A search that found nothing still leads somewhere: the products people are opening this week, with their
+        # delivered prices (the Deals page's Trending, from the cache the home page's lists share).
+        context["popular"] = [product for product in home_lists()[1] if product.best_offer][:NO_LUCK_POPULAR]
     # The compact layout (web/compact.py): the products as rows, with the search box and the games at the foot.
     context["compact"] = look.compact_for_request(request)
     if context["compact"]:

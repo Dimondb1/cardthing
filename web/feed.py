@@ -34,6 +34,9 @@ from content import service as copy
 from . import listcache
 
 RAILS_KEY = "web:feed-rails:v2"
+# The first of the home page's rail on its own, for the Ask Rip popup on every page (today()): a small entry set
+# with each build of the rails, so a page reads one card, never the rails.
+TODAY_KEY = "web:ask-today:v1"
 TILES_KEY = "web:feed-tiles:v1"
 TILES_SECONDS = 60 * 60
 RAIL_SIZE = 12         # cards shown on a rail
@@ -162,6 +165,13 @@ def rails(fresh=False, candidates=None):
                                   since=views.read_since(candidates))
 
 
+def today():
+    """The Ask Rip popup's Today's top deal (ask_sheet.html): the first card of the home page's Today's best deals as
+    the rails were last built, from one small cache entry, so no page gains a query or reads the rails. None before the
+    rails are first built, after the stale rule (web.listcache) has passed them by, or with no deal at all."""
+    return cache.get(TODAY_KEY) or None
+
+
 def click_counts(days=None):
     """{product pk: clicks through to a shop by people in the last ``days``} (RIPRAPTOR_TRENDING_DAYS, as the
     Trending list counts, catalogue.pricing.popular), in one query: what the site itself knows of what is popular."""
@@ -203,7 +213,11 @@ def build_rails(candidates=None):
                          if scope is None or product.game_id == scope][:size]
     # The products as a list shows them (game, set, prices), in one query for every rail.
     groups = views.with_list_fields(*chosen.values())
-    return {scope: [Card(product, summary) for product, summary in group] for scope, group in zip(chosen, groups)}
+    built = {scope: [Card(product, summary) for product, summary in group] for scope, group in zip(chosen, groups)}
+    home = built.get(None) or []
+    # Kept no longer than the rails may be served (web.listcache), so the popup's card is never older than they are.
+    cache.set(TODAY_KEY, home[0] if home else "", listcache.max_stale())
+    return built
 
 
 def rail(game=None):

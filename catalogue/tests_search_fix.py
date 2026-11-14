@@ -67,7 +67,10 @@ class PageTests(FixCase):
     def test_the_link_searches_exactly_what_was_typed(self):
         response = self.client.get(SEARCH, {"q": "delta rain", "exact": "1"})
         self.assertNotContains(response, "browse-head__fix")
-        self.assertNotContains(response, "Mega Evolution Delta Reign Booster Box")
+        self.assertContains(response, "No products match ‘delta rain’")
+        # Found nothing, so it says so; the box may still be under Popular right now (web.views NO_LUCK_POPULAR).
+        html = response.content.decode()
+        self.assertNotIn("Mega Evolution Delta Reign Booster Box", html[:html.index('class="no-luck__fix"')])
 
     def test_a_search_that_finds_something_is_left_alone(self):
         response = self.client.get(SEARCH, {"q": "delta reign"})

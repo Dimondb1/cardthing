@@ -340,7 +340,9 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     if tabs:
         paginator.count = tab_counts[tab]   # counted with the tabs already
     page = paginator.get_page(request.GET.get("page"))
-    if query and not request.GET.get("page") and not clicks.prefetching(request):
+    # Not a page of more results, one the browser fetched ahead, or the Ask Rip popup's own suggestions (from=ask,
+    # ask_sheet.html), which are our words and are rendered ahead as it opens: only what people searched for.
+    if query and not request.GET.get("page") and not clicks.prefetching(request) and request.GET.get("from") != "ask":
         insights.record_search(request, query, paginator.count)
     # A list about stock now (Out now, the In stock tab or filter) leads each card with an in-stock shop.
     if stock_now or tab == "in-stock" or (form.value("in_stock") and not tabs):

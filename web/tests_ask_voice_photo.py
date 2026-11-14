@@ -547,7 +547,8 @@ class AskSheetTests(ListCase):
                 self.assertIn('data-ask-open aria-controls="ask-sheet" aria-expanded="false">', html)
                 self.assertIn('<h2 class="ask-sheet__title" id="ask-sheet-title" data-ask-title '
                               'data-title-all="What are you after?" data-title-listening="Listening" '
-                              'data-title-searching="Searching">What are you after?</h2>', sheet)
+                              'data-title-searching="Searching" data-title-search="Searching for ‘{words}’" '
+                              'data-title-opening="Opening {what}">What are you after?</h2>', sheet)
                 # Rip peeking over the top, the pack's own drawing with the white of his eye (the owner, 14 Nov 2026:
                 # "Rip needs the white of his eyes"), not the one-colour mark whose eye is a hole.
                 self.assertIn('<img class="ask-sheet__rip" src="', sheet)
@@ -569,10 +570,14 @@ class AskSheetTests(ListCase):
                 # The suggestions open their results at once, read as a search box reads them: no question to Rip.
                 chips = sheet[sheet.index('<ul class="ask-sheet__chips"'):sheet.index("</ul>")]
                 search = reverse("web:search")
-                for href, words in ((f"{search}?q=Cheap%20Delta%20Reign%20packs", "Cheap Delta Reign packs"),
-                                    (f"{search}?q=ETBs%20under%20%C2%A350", "ETBs under £50"),
-                                    (reverse("web:drops") + "?show=out", "New releases")):
-                    self.assertIn(f'<a class="chip ask-sheet__chip" href="{href}">{words}</a>', chips)
+                # The searches are marked from=ask (never counted as people's searches) and start as it opens.
+                for href, words in ((f"{search}?q=Cheap%20Delta%20Reign%20packs&amp;from=ask", "Cheap Delta Reign packs"),
+                                    (f"{search}?q=ETBs%20under%20%C2%A350&amp;from=ask", "ETBs under £50")):
+                    self.assertIn(f'<a class="chip ask-sheet__chip" href="{href}" data-ask-search data-ask-ahead>{words}</a>',
+                                  chips)
+                self.assertIn(f'<a class="chip ask-sheet__chip" href="{reverse("web:drops")}?show=out">New releases</a>', chips)
+                self.assertIn('data-title-search="Searching for ‘{words}’" data-title-opening="Opening {what}"', sheet)
+                self.assertIn('<span class="visually-hidden" role="status" data-ask-going></span>', sheet)
                 self.assertNotIn(reverse("web:search_photo"), chips)   # a photo is the camera in the box
                 ways = sheet[sheet.index('<nav class="ask-sheet__ways"'):sheet.index("</nav>")]
                 for href, words in ((reverse("web:find_list"), "Build a shopping list"),
@@ -595,7 +600,7 @@ class AskSheetTests(ListCase):
     def test_on_a_product_page_it_opens_on_that_product_and_its_questions(self):
         self.new_home()
         sheet = self.sheet(self.box.get_absolute_url())
-        self.assertIn('data-title-searching="Searching">Ask about this</h2>', sheet)
+        self.assertIn('data-title-opening="Opening {what}">Ask about this</h2>', sheet)
         product = sheet[sheet.index('<div class="ask-sheet__view" data-ask-view="product">'):
                         sheet.index('<div class="ask-sheet__view" data-ask-view="all" hidden>')]
         self.assertIn('<span class="ask-pick__name">Surging Sparks Booster Box</span>', product)
@@ -685,7 +690,42 @@ class AskSheetTests(ListCase):
         self.assertIn(".ask-sheet__panel.is-voice-searching .ask-sheet__stop::after { inset: 0; border-width: "
                       "var(--ask-stop-spin); border-right-color: transparent;", css)
         reduced = css[css.index("@media (prefers-reduced-motion: reduce) { .ask-sheet__form.is-searching"):]
-        self.assertIn(".ask-sheet__stop::after { animation: none; }", reduced[:200])
+        self.assertIn(".ask-sheet__stop::after, ", reduced[:200])
+        self.assertIn("{ animation: none; }", reduced[:200])
+
+    def test_a_tap_says_at_once_what_it_is_opening(self):
+        # The owner, 14 Nov 2026, after tapping ETBs under £50: "a delay happened and I felt unsure what was
+        # happening I needed feedback".
+        sheet = self.script()
+        self.assertIn('var link = event.target.closest && event.target.closest("a[href]");', sheet)
+        self.assertIn('? title.getAttribute("data-title-search").replace("{words}", what)', sheet)
+        self.assertIn(': title.getAttribute("data-title-opening").replace("{what}", what);', sheet)
+        self.assertIn('link.classList.add("is-opening");', sheet)
+        self.assertIn('link.setAttribute("aria-busy", "true");', sheet)
+        self.assertIn("goingLine.textContent = line;", sheet)   # read out too
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn(".ask-sheet .is-opening::after { content: \"\"; flex: none; width: var(--icon-button);", css)
+        self.assertIn(".ask-sheet__panel.is-going .ask-sheet__more a:not(.is-opening) { opacity: var(--opacity-waiting); }", css)
+        reduced = css[css.index("@media (prefers-reduced-motion: reduce) { .ask-sheet__form.is-searching"):]
+        self.assertIn(".ask-sheet .is-opening::after { animation: none; }", reduced[:250])   # still: a ring, not a spin
+
+    def test_the_suggested_searches_start_as_it_opens(self):
+        sheet = self.script()
+        self.assertIn("      startEarly();\n", sheet)
+        self.assertIn('if (navigator.connection && navigator.connection.saveData) return;', sheet)
+        self.assertIn('rules.textContent = JSON.stringify({ prerender: [{ source: "list", urls: urls, eagerness: "immediate" }] });',
+                      sheet)
+        self.assertIn("if (own) rules.nonce = own.nonce;", sheet)   # the content security policy allows it
+        self.assertIn('hint.rel = "prefetch";', sheet)   # browsers without speculation rules
+
+    def test_suggested_searches_are_not_counted_as_peoples_searches(self):
+        from catalogue.models import DailySearch
+
+        browser = {"HTTP_USER_AGENT": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131.0 Mobile Safari/537.36"}
+        self.client.get(reverse("web:search"), {"q": "etbs under £50", "from": "ask"}, **browser)
+        self.assertFalse(DailySearch.objects.exists())
+        self.client.get(reverse("web:search"), {"q": "etbs under £50"}, **browser)
+        self.assertEqual(DailySearch.objects.get().query, "etbs under £50")
 
     def test_a_product_question_goes_to_the_box_in_the_price_box(self):
         sheet = self.script()

@@ -565,6 +565,9 @@ ENTRIES = [
     Entry("askrip.sheet.list", B, "Ask Rip popup: your list", "Your list", "Opens the shopping list, to see or change it."),
     Entry("askrip.sheet.steps", B, "Ask Rip popup: Shop with Rip", "Shop with Rip",
           "Opens Find with Rip's guided steps: pick a game, then a kind of product."),
+    Entry("askrip.sheet.opening", H, "Ask Rip popup: opening a link", "Opening {what}",
+          "The popup's heading the moment a link in it is tapped, until the page comes. {what} is what was tapped, "
+          "such as Build a shopping list. A suggested search says Searching for instead.", placeholders=("what",)),
     Entry("askrip.sheet.listen_title", H, "Ask Rip popup: listening", "Listening",
           "The popup's heading while the microphone listens."),
     Entry("askrip.sheet.listen_hint", T, "Ask Rip popup: listening, what to say", "Say a product or set. I stop when you do.",

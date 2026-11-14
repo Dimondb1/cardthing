@@ -6552,6 +6552,19 @@ list count and today's top deal.
   now on the drops page). A photo is the camera in the box. They are plain
   links to their results, read as a search box reads them, so a tap costs
   Rip nothing. Change the searches as sets come and go.
+- **A tap shows at once** (the owner, 14 Nov 2026, after tapping ETBs
+  under £50: "a delay happened and I felt unsure what was happening I
+  needed feedback"). Anything tapped in the popup turns a spinner, the
+  rest step back, and the heading says "Searching for ‘ETBs under £50’" or
+  "Opening Build a shopping list" (`askrip.sheet.opening`) until the page
+  comes. A screen reader hears the same.
+- **The suggested searches start as the popup opens** (`data-ask-ahead`):
+  Chrome renders them in the background (speculation rules, given the
+  page's own nonce for the content security policy), another browser
+  fetches them, and nothing happens with Save-Data on. They carry
+  `from=ask`, so `views.search` never counts them as searches people
+  typed, and a page fetched ahead counts as a view only once it is shown
+  (`site.js`), so Insights stay true.
 - **Today's top deal**: the first of the home page's Today's best deals,
   with its delivered price, shop, why it is a deal and when it was checked,
   in a short row (`ask_pick.html`: the name in two lines at most, the rest

@@ -3006,14 +3006,21 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .ask-sheet__panel.is-voice-searching .ask-sheet__stop-mark { display: none; }
 .ask-sheet__panel.is-voice-searching .ask-sheet__stop::after { inset: 0; border-width: var(--ask-stop-spin); border-right-color: transparent; opacity: 1; animation: voice-spin var(--motion-slow) linear infinite; }
 .ask-sheet__panel.is-voice-searching .ask-sheet__stop-label { visibility: hidden; }
+/* A link tapped: it turns a spinner and the rest step back until the page comes (ask-input.js). */
+.ask-sheet__panel.is-going .ask-sheet__more a:not(.is-opening) { opacity: var(--opacity-waiting); }
+.ask-sheet .is-opening { position: relative; border-color: var(--color-brand); }
+.ask-sheet .is-opening::after { content: ""; flex: none; width: var(--icon-button); height: var(--icon-button); border: var(--voice-ring) solid var(--color-brand); border-right-color: transparent; border-radius: 50%; animation: voice-spin var(--motion-slow) linear infinite; }
+.ask-sheet__chip.is-opening::after { margin-left: var(--space-2); }
+.ask-sheet__way.is-opening::after { position: absolute; top: var(--space-2); right: var(--space-2); }
 @keyframes ask-sheet-rise { from { transform: translateY(var(--space-6)); opacity: 0; } }
 @keyframes ask-sheet-drop { from { opacity: 0; transform: translateY(calc(-1 * var(--space-3))); } }
 @keyframes ask-sheet-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: no-preference) {
   .ask-sheet__panel { animation: ask-sheet-rise var(--motion-normal) var(--ease-out); transition: transform var(--motion-fast) var(--ease-out); }
+  .ask-sheet__more a { transition: opacity var(--motion-fast) var(--ease-standard); }
   .ask-sheet__backdrop { animation: ask-sheet-fade var(--motion-normal) var(--ease-out); }
 }
-@media (prefers-reduced-motion: reduce) { .ask-sheet__form.is-searching .ask-sheet__icon, .ask-sheet__stop::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .ask-sheet__form.is-searching .ask-sheet__icon, .ask-sheet__stop::after, .ask-sheet .is-opening::after { animation: none; } }
 @media (min-width: 48rem) {
   .ask-sheet { padding: var(--ask-sheet-top) var(--gutter) 0; overflow-y: auto; overscroll-behavior: contain; }
   .ask-sheet__panel { position: relative; inset: auto; max-width: var(--find-width); max-height: none; margin: var(--space-2) auto var(--space-5); padding: var(--space-4) var(--space-5) var(--space-5); border: var(--border-width) solid var(--color-brand-line); border-radius: var(--radius-card); box-shadow: var(--shadow-lift); }

@@ -220,7 +220,36 @@
       Array.prototype.forEach.call(views, function (each) { each.hidden = each !== view; });
       title.textContent = view === allView ? title.getAttribute("data-title-all") : firstTitle;
     };
+    // The suggested searches start as the popup opens (the owner, 14 Nov 2026: "a delay happened and I felt unsure
+    // what was happening"): Chrome renders them in the background (speculation rules, as base.html does for other
+    // links), another browser fetches them, so a tap shows them at once. Once a page, never on Save-Data. They are
+    // marked from=ask, and a page fetched ahead counts as a view only once it is shown (site.js), so nothing is
+    // counted that nobody opened.
+    var ahead = false;
+    var startEarly = function () {
+      if (ahead) return;
+      ahead = true;
+      if (navigator.connection && navigator.connection.saveData) return;
+      var urls = Array.prototype.map.call(sheet.querySelectorAll("[data-ask-ahead]"), function (link) { return link.href; });
+      if (!urls.length) return;
+      if (window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports("speculationrules")) {
+        var rules = document.createElement("script");
+        rules.type = "speculationrules";
+        var own = document.querySelector("script[nonce]");
+        if (own) rules.nonce = own.nonce;   // the page's own, which its content security policy asks for
+        rules.textContent = JSON.stringify({ prerender: [{ source: "list", urls: urls, eagerness: "immediate" }] });
+        document.head.appendChild(rules);
+      } else {
+        urls.forEach(function (url) {
+          var hint = document.createElement("link");
+          hint.rel = "prefetch";
+          hint.href = url;
+          document.head.appendChild(hint);
+        });
+      }
+    };
     var open = function () {
+      startEarly();
       var top = head ? Math.max(0, Math.round(head.getBoundingClientRect().bottom)) : 0;
       sheet.style.setProperty("--ask-sheet-top", top + "px");
       show(productView || allView);
@@ -250,6 +279,38 @@
       if (event.key === "Escape") close();
     });
     window.addEventListener("pageshow", function () { close(); });
+
+    // Feedback the moment anything here is tapped, until the page comes: the heading says what it is opening
+    // (Searching for the words of a suggested search), the tapped thing turns a spinner and a screen reader hears it.
+    var goingLine = sheet.querySelector("[data-ask-going]");
+    var going = function (link) {
+      var named = link.querySelector(".ask-sheet__way-name, .ask-pick__name");
+      var what = ((named || link).textContent || link.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim()
+        || link.getAttribute("aria-label") || "";
+      var line = link.hasAttribute("data-ask-search")
+        ? title.getAttribute("data-title-search").replace("{words}", what)
+        : title.getAttribute("data-title-opening").replace("{what}", what);
+      panel.classList.add("is-going");
+      link.classList.add("is-opening");
+      link.setAttribute("aria-busy", "true");
+      if (link.hasAttribute("data-ask-search")) sheetForm.classList.add("is-searching");
+      title.textContent = line;
+      goingLine.textContent = line;
+    };
+    sheet.addEventListener("click", function (event) {
+      var link = event.target.closest && event.target.closest("a[href]");
+      if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey
+          || event.altKey || link.target === "_blank") return;
+      going(link);
+    });
+    window.addEventListener("pageshow", function () {
+      panel.classList.remove("is-going");
+      Array.prototype.forEach.call(sheet.querySelectorAll(".is-opening"), function (link) {
+        link.classList.remove("is-opening");
+        link.removeAttribute("aria-busy");
+      });
+      goingLine.textContent = "";
+    });
 
     // The arrow that sends shows once there are words.
     Array.prototype.forEach.call(sheet.querySelectorAll("[data-has-words]"), function (field) {

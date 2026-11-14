@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{# A shop's request to be listed (inbox/admin.py ShopEnquiryAdmin): Approve lists the shop and sends the welcome email once; Check the website hands it to the shop checker again. The buttons are part of the form, so it all works without JavaScript. #}
+{% block submit_buttons_bottom %}
+{% if original %}<div class="submit-row" style="flex-wrap: wrap; gap: 8px;">
+  {% if not original.approved_at %}
+  <input type="submit" class="default" name="_approve" value="Approve, list the shop and send the welcome email">
+  <input type="submit" name="_recheck" value="Check the website">
+  {% elif not original.welcome_sent_at %}
+  <input type="submit" class="default" name="_send_welcome" value="Send the welcome email">
+  {% endif %}
+</div>{% endif %}
+{{ block.super }}
+{% endblock %}

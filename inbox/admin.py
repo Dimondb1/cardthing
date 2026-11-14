@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
+from django.utils import timezone
 
 from catalogue import mail
 
@@ -105,25 +106,108 @@ class HandledFilter(admin.SimpleListFilter):
 
 @admin.register(ShopEnquiry)
 class ShopEnquiryAdmin(admin.ModelAdmin):
-    """Shops asking to be listed. Answer from your own email; nothing is sent from here. The website is shown
-    as text: it is what they typed, and the site never reads it until you add the shop."""
+    """Shops asking to be listed (inbox/shops.py). The shop checker looks at each website as it arrives; Approve adds
+    the shop, saves its discount code and sends the welcome email once. Nothing else is ever sent from here. The
+    website is shown as text: it is what they typed."""
 
-    list_display = ("name", "domain", "email", "created_at", "handled")
+    list_display = ("name", "domain", "email", "created_at", "check_state", "approved", "handled")
     list_filter = (HandledFilter,)
-    search_fields = ("name", "domain", "shop_url", "email", "message", "note")
+    search_fields = ("name", "domain", "shop_url", "email", "message", "note", "discount_code")
     date_hierarchy = "created_at"
-    readonly_fields = ("name", "shop_url", "domain", "email", "message", "created_at")
-    fields = ("name", "shop_url", "domain", "email", "message", "created_at", "handled_at", "note")
+    list_select_related = ("shop_check",)
+    readonly_fields = ("name", "shop_url", "domain", "email", "email_check", "discount_code", "discount_terms",
+                       "message", "created_at", "check_result", "shop_link", "approved_at", "welcome_sent_at",
+                       "welcome_preview")
+    fields = ("check_result", "name", "shop_url", "domain", "email", "email_check", "discount_code", "discount_terms",
+              "message", "created_at", "shop_link", "approved_at", "welcome_sent_at", "welcome_preview",
+              "handled_at", "note")
     actions = ("mark_handled",)
+    change_form_template = "admin/inbox/shopenquiry/change_form.html"
 
     @admin.display(boolean=True, description="Handled", ordering="handled_at")
     def handled(self, obj):
         return obj.handled_at is not None
 
+    @admin.display(boolean=True, description="Approved", ordering="approved_at")
+    def approved(self, obj):
+        return obj.approved_at is not None
+
+    @admin.display(description="Check")
+    def check_state(self, obj):
+        return obj.shop_check.get_status_display() if obj.shop_check_id else "Not checked"
+
+    @admin.display(description="What the check found")
+    def check_result(self, obj):
+        from django.utils.html import format_html
+
+        row = obj.shop_check
+        if row is None:
+            return "Not checked: too many shops asked today. Press Check the website."
+        when = f" Checked {timezone.localtime(row.checked_at):%d %b %H:%M}." if row.checked_at else ""
+        return format_html("<strong>{}</strong> {}{}", row.get_status_display(), row.note, when)
+
+    @admin.display(description="Is the email the shop's")
+    def email_check(self, obj):
+        from . import shops
+
+        if shops.email_matches(obj):
+            return f"On the shop's own domain ({obj.domain})."
+        return (f"Not on the shop's own domain ({obj.domain}). Make sure it is really the shop's before approving: "
+                "the welcome email goes to it.")
+
+    @admin.display(description="Shop on RipRaptor")
+    def shop_link(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+
+        if obj.retailer_id is None:
+            return "Added when you approve it."
+        return format_html('<a href="{}">{}</a>', reverse("admin:catalogue_retailer_change", args=[obj.retailer_id]),
+                           obj.retailer.name)
+
+    @admin.display(description="Welcome email")
+    def welcome_preview(self, obj):
+        from django.utils.html import format_html
+
+        from . import shops
+
+        subject, body = shops.welcome(obj)
+        return format_html('<div style="max-width: 40rem; min-width: 0;"><p><strong>{}</strong></p>'
+                           '<div style="white-space: pre-wrap; overflow-wrap: anywhere;">{}</div></div>', subject, body)
+
+    def response_change(self, request, obj):
+        from django.contrib import messages
+        from django.http import HttpResponseRedirect
+
+        from . import shops
+
+        if "_approve" in request.POST:
+            try:
+                shop, why = shops.approve(obj)
+            except shops.NotReady as exc:
+                messages.error(request, f"Not approved: {exc}")
+            else:
+                listed = f"{shop.name} is listed and switched on"
+                if why:
+                    messages.warning(request, f"{listed}, but the welcome email was not sent: {why}")
+                else:
+                    messages.success(request, f"{listed}. The welcome email went to {obj.email}.")
+            return HttpResponseRedirect(request.path)
+        if "_send_welcome" in request.POST:
+            why = shops.send_welcome(obj)
+            if why:
+                messages.error(request, f"Not sent: {why}")
+            else:
+                messages.success(request, f"The welcome email went to {obj.email}.")
+            return HttpResponseRedirect(request.path)
+        if "_recheck" in request.POST:
+            shops.check_again(obj)
+            messages.success(request, "The website will be checked within a few minutes. Reload this page to see it.")
+            return HttpResponseRedirect(request.path)
+        return super().response_change(request, obj)
+
     @admin.action(description="Mark handled")
     def mark_handled(self, request, queryset):
-        from django.utils import timezone
-
         done = queryset.filter(handled_at__isnull=True).update(handled_at=timezone.now())
         self.message_user(request, f"{done} shop enquir{'y' if done == 1 else 'ies'} marked handled. "
                                    "Each is deleted a year from now.")

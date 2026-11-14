@@ -1528,10 +1528,14 @@ class RetailerCollection(models.Model):
 class ShopToAdd(models.Model):
     """A shop address pasted on the Add shops page (web/add_shops.py), checked by the background reader and added as
     a Retailer when it passes (catalogue/shop_adding.py). Each address is checked once, so one the owner later
-    deletes is not added back by it."""
+    deletes is not added back by it.
+
+    A shop that asked on the List your shop page (inbox/shops.py) is checked the same way but held: one that passes
+    waits for the owner to approve it (PASSED) and is added then, with the name and kind of shop the check found."""
 
     class Status(models.TextChoices):
         WAITING = "waiting", "Waiting to be checked"
+        PASSED = "passed", "Passed: waiting for your approval"
         ADDED = "added", "Added"
         ALREADY = "already", "Already on RipRaptor"
         NOT_ADDED = "not_added", "Not added"
@@ -1541,6 +1545,14 @@ class ShopToAdd(models.Model):
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.WAITING, db_index=True)
     note = models.CharField(max_length=300, blank=True, help_text="What the check found, or why it was not added.")
     retailer = models.ForeignKey(Retailer, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    hold = models.BooleanField(
+        "wait for approval", default=False, editable=False,
+        help_text="From a shop's own request on the List your shop page: checked with the reader that refuses private "
+                  "addresses, and added only when you approve it.")
+    found_name = models.CharField(max_length=120, blank=True, editable=False,
+                                  help_text="The shop's name as the check found it, used when it is added.")
+    found_source = models.CharField(max_length=20, blank=True, editable=False,
+                                    help_text="How the shop is read, as the check found it (Shopify or Website).")
     created_at = models.DateTimeField(default=timezone.now)
     checked_at = models.DateTimeField(null=True, blank=True)
 

@@ -53,11 +53,12 @@ class Message(models.Model):
 
 
 class ShopEnquiry(models.Model):
-    """A shop asking to be listed, from the List your shop page.
+    """A shop asking to be listed, from the List your shop page (inbox/shops.py).
 
-    Kept to answer it and for nothing else: nothing is ever emailed to the address given, and the shop's
-    website is never fetched until the owner adds the shop themselves. Deleted a year after it is marked
-    handled, or after two years if it never is (inbox/shops.py purge, run by tidy_all).
+    Its website is checked at once by the shop checker (catalogue/shop_adding.py, ``check``), which never adds it:
+    the owner approves it in admin, and only then is the shop added, its discount code saved and one welcome email
+    sent to the address given. Nothing else is ever emailed to it. Deleted a year after it is marked handled, or
+    after two years if it never is (purge, run by tidy_all).
     """
 
     name = models.CharField(max_length=80)
@@ -66,6 +67,18 @@ class ShopEnquiry(models.Model):
                               help_text="The website's domain without www, so one shop asks once a month.")
     email = models.EmailField(max_length=254)
     message = models.TextField(max_length=1000, blank=True)
+    discount_code = models.CharField(max_length=40, blank=True,
+                                     help_text="A code the shop offers RipRaptor shoppers, saved on the shop when you "
+                                               "approve it.")
+    discount_terms = models.CharField(max_length=120, blank=True, help_text="What the code gives, as the shop put it.")
+    shop_check = models.ForeignKey("catalogue.ShopToAdd", null=True, blank=True, on_delete=models.SET_NULL,
+                              related_name="enquiries", editable=False,
+                              help_text="The shop checker's look at the website.")
+    retailer = models.ForeignKey("catalogue.Retailer", null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="+", editable=False, verbose_name="shop",
+                                 help_text="The shop on RipRaptor, once approved.")
+    approved_at = models.DateTimeField(null=True, blank=True, editable=False)
+    welcome_sent_at = models.DateTimeField("welcome email sent", null=True, blank=True, editable=False)
     created_at = models.DateTimeField(default=timezone.now, editable=False, db_index=True)
     handled_at = models.DateTimeField(null=True, blank=True, help_text="When you dealt with it. Blank while it waits.")
     note = models.TextField(blank=True, help_text="Your own note. Never shown to the shop.")

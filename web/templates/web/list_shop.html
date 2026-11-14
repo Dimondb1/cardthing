@@ -17,6 +17,12 @@
   <label class="contact-form__label" for="list-shop-email">{% copy "listshop.form.email" %}</label>
   <input id="list-shop-email" class="contact-form__input" type="email" name="email" maxlength="254" autocomplete="email" inputmode="email" value="{{ values.email }}" aria-describedby="list-shop-email-note" required>
   <p class="contact-form__note" id="list-shop-email-note">{% copy "listshop.form.email_note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
+  <label class="contact-form__label" for="list-shop-code">{% copy "listshop.form.discount_code" %}</label>
+  <input id="list-shop-code" class="contact-form__input" type="text" name="discount_code" maxlength="{{ limits.code }}" autocomplete="off" autocapitalize="characters" spellcheck="false" pattern="[A-Za-z0-9][A-Za-z0-9_\-]*" value="{{ values.discount_code }}" aria-describedby="list-shop-code-note">
+  <p class="contact-form__note" id="list-shop-code-note">{% copy "listshop.form.discount_code_note" %}</p>
+  <label class="contact-form__label" for="list-shop-terms">{% copy "listshop.form.discount_terms" %}</label>
+  <input id="list-shop-terms" class="contact-form__input" type="text" name="discount_terms" maxlength="{{ limits.terms }}" autocomplete="off" value="{{ values.discount_terms }}" aria-describedby="list-shop-terms-note">
+  <p class="contact-form__note" id="list-shop-terms-note">{% copy "listshop.form.discount_terms_note" %}</p>
   <label class="contact-form__label" for="list-shop-message">{% copy "listshop.form.message" %}</label>
   <textarea id="list-shop-message" class="contact-form__input contact-form__text" name="message" rows="5" maxlength="{{ limits.message }}">{{ values.message }}</textarea>
   <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>

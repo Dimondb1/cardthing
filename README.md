@@ -4918,21 +4918,55 @@ Thread pages are noindex and kept out of robots.txt.
 ## List your shop
 
 `/list-your-shop/` (footer, How it works page and the sitemap) lets a UK
-shop ask to be listed: their name, the shop's website, an email address
-and an optional message of up to 1,000 characters. It works without
+shop ask to be listed: their name, the shop's website, an email address,
+an optional discount code for RipRaptor shoppers (letters, numbers, dashes
+and underscores, up to 40) with what it gives (up to 120 characters), and
+an optional message of up to 1,000 characters. It works without
 JavaScript; a sent form redirects to `/list-your-shop/thanks/` (noindex),
 so a reload sends nothing twice. The website is tidied (https assumed when
 no scheme is typed, only http and https, a real domain name, no password
-or odd port, lower-cased host) and stored as text. It is never fetched:
-a shop is read only once you add it.
+or odd port, lower-cased host) and stored as text.
 
-Enquiries are in admin under Messages -> Shop enquiries, with a
-Waiting/Handled filter, search and a "Mark handled" action; the admin home
-shows how many wait. Each new one is emailed to you as plain text (to
-`RIPRAPTOR_CONTACT_EMAIL` when set, else `RIPRAPTOR_INBOX_NOTIFY_EMAIL`)
-with a link to admin, and the ntfy push says only that a shop asked.
-Nothing is ever emailed to the address typed into the form, so the form
-cannot be used to mail a stranger; answer from your own email.
+Then it runs itself up to your approval (the owner, 14 Nov 2026: "they
+need to provide the info it then goes to the shop checker function we
+already have and is checked, need to make sure this a cannot be abused, I
+will then approve it and then it sends this message via email"):
+
+1. The website goes to the shop checker (the one behind Add shops,
+   `catalogue/shop_adding.py`) as a held row: checked by the background
+   reader within a few minutes, never while the form is sent, and never
+   added on its own. One that passes waits as "Passed: waiting for your
+   approval", with the name and kind of shop the check found. A shop the
+   checker has looked at before keeps that look.
+2. Admin, Messages, Shop enquiries shows each request with what the check
+   found, whether the email address is on the shop's own domain (a warning
+   when it is not: the welcome email goes to it), the discount code and a
+   preview of the welcome email.
+3. **Approve, list the shop and send the welcome email** adds the shop
+   switched on (or finds it, if already listed), saves the discount code on
+   it, keeps the address for Shop outreach, marks the request handled and
+   sends the welcome email once, as plain text from the Sending shop emails
+   settings (your name and address, replies to you, a copy to you; it
+   counts in the day's shop emails and shows in the shop's history). The
+   wording is yours, in Site wording under List your shop
+   (`listshop.welcome.*`): the discount line is there only when a code was
+   given. If the email cannot go (sending switched off, the day's limit, a
+   refusal), the shop is still listed and the page says why, with **Send
+   the welcome email** to try again. A shop marked Do not email is never
+   sent it. **Check the website** looks again at a shop that did not pass.
+
+Abuse: anyone can type any website, so a request's website is read only
+on the public internet (`shop_adding.public_get`: every address the name
+resolves to must be public, never this server, its network or a private
+or reserved address, checked again on every redirect; standard ports
+only), at most 40 new shops from the form are checked a day
+(`shops.PUBLIC_CHECKS_DAY`; past that the request waits for **Check the
+website**), and nothing is emailed to the address typed until you approve
+the shop, then once. Each new request is still emailed to you as plain text
+(to `RIPRAPTOR_CONTACT_EMAIL` when set, else
+`RIPRAPTOR_INBOX_NOTIFY_EMAIL`) with the code and the email check, and the
+ntfy push says only that a shop asked. The Add shops page counts the
+shops waiting for approval and links to them.
 
 Limits (`inbox/shops.py`): 5 enquiries an hour and 20 a day from one
 connection (counted in the shared cache under a one-way hash, never the

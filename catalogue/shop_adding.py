@@ -12,12 +12,22 @@ checks them one at a time in a thread of its own (catalogue/worker.py), politely
 
 A shop that passes is added switched on, read within the hour like any new shop, its delivery left unknown (shown as
 "plus delivery") until the daily check_delivery --unknown reads it from the shop's own delivery page or a basket.
+
+A shop that asked on the List your shop page (inbox/shops.py) is a held row: anyone can type its address, so it is
+read with public_get, which reaches only addresses on the public internet (never this server, its network or a
+private address, checked again on every redirect), and one that passes waits for the owner's approval (PASSED) and is
+added by add_passed. The owner, 14 Nov 2026: "they need to provide the info it then goes to the shop checker function
+we already have and is checked, need to make sure this a cannot be abused, I will then approve it".
 """
 
+import ipaddress
 import json
 import logging
 import re
+import socket
 import time
+import urllib.error
+import urllib.request
 import urllib.robotparser
 from urllib.parse import urlsplit
 
@@ -78,6 +88,60 @@ def take(text):
         saved += created
         known += not created
     return saved, known
+
+
+class NotPublic(importers.ImportError_):
+    """An address that is not on the public internet, refused before anything is sent to it."""
+
+
+def public_host(host):
+    """Raise NotPublic unless every address ``host`` resolves to is a public one: not loopback, private, link local,
+    reserved, multicast or this server's own."""
+    try:
+        found = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+    except (socket.gaierror, UnicodeError) as exc:
+        raise NotPublic(f"Could not find {host}") from exc
+    if not found:
+        raise NotPublic(f"Could not find {host}")
+    for *_rest, sockaddr in found:
+        address = ipaddress.ip_address(sockaddr[0].split("%")[0])
+        if not address.is_global or address.is_multicast:
+            raise NotPublic(f"{host} is not on the public internet")
+
+
+class PublicRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect only to http or https on the public internet."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parts = urlsplit(newurl)
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            raise NotPublic(f"Redirected to {newurl[:80]}")
+        public_host(parts.hostname)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def public_get(deadline):
+    """A reader for an address anyone could have typed: like importers.fetch, once, but only to the public internet."""
+    opener = urllib.request.build_opener(PublicRedirects)
+
+    def get(url):
+        url = importers.safe_url(url)
+        parts = urlsplit(url)
+        if parts.scheme not in ("http", "https") or not parts.hostname or parts.port not in (None, 80, 443):
+            raise NotPublic(f"Not a web address: {url[:80]}")
+        public_host(parts.hostname)
+        request = urllib.request.Request(url, headers={"User-Agent": importers.USER_AGENT})
+        try:
+            with opener.open(request, timeout=importers.socket_timeout(deadline)) as response:
+                return importers.read_body(response, deadline)
+        except NotPublic:
+            raise
+        except urllib.error.HTTPError as exc:
+            raise importers.ImportError_(f"Could not fetch {url}: {exc}") from exc
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            raise importers.ImportError_(f"Could not fetch {url}: {exc}") from exc
+
+    return get
 
 
 def retailer_for(host):
@@ -183,10 +247,12 @@ def shop_name(found, host):
 
 
 def check(row, get=None, now=None):
-    """Check one shop to add and add it when it passes. Never raises for the shop's own faults: the row says why."""
+    """Check one shop to add and add it when it passes, or for a held row (a shop's own request) mark it PASSED for
+    the owner to approve. Never raises for the shop's own faults: the row says why."""
     now = now or timezone.now()
     deadline = time.monotonic() + CHECK_SECONDS
-    get = get or (lambda url: importers.fetch(url, retries=0, deadline=deadline))
+    if get is None:
+        get = public_get(deadline) if row.hold else (lambda url: importers.fetch(url, retries=0, deadline=deadline))
     row.checked_at = now
     existing = retailer_for(row.host)
     if existing is not None:
@@ -194,6 +260,13 @@ def check(row, get=None, now=None):
         row.save()
         return row
     base = base_of(row.address)
+    if row.hold:
+        try:
+            public_host(urlsplit(base).hostname)
+        except NotPublic:
+            row.status, row.note = ShopToAdd.Status.NOT_ADDED, "Its address is not a website on the public internet."
+            row.save()
+            return row
     if RemovedShop.covers("", base):
         row.status, row.note = ShopToAdd.Status.NOT_ADDED, "You deleted this shop before, so it is not added back."
         row.save()
@@ -212,6 +285,28 @@ def check(row, get=None, now=None):
         row.status, row.note = ShopToAdd.Status.NOT_ADDED, why
         row.save()
         return row
+    if row.hold:
+        row.status, row.note = ShopToAdd.Status.PASSED, why
+        row.found_name, row.found_source = shop_name(name, row.host)[:120], source
+        row.save()
+        return row
+    return create(row, name, source, why)
+
+
+def add_passed(row):
+    """Add a held shop that passed its check, now the owner approves it. Returns the row, ADDED with its shop, or
+    ALREADY when the shop was added another way meanwhile."""
+    existing = retailer_for(row.host)
+    if existing is not None:
+        row.status, row.retailer, row.note = ShopToAdd.Status.ALREADY, existing, f"Already on RipRaptor as {existing.name}."
+        row.save()
+        return row
+    return create(row, row.found_name, row.found_source or Retailer.Source.WEBSITE, row.note)
+
+
+def create(row, name, source, why):
+    """Add the shop the row checked, switched on, as ``name`` read the ``source`` way."""
+    base = base_of(row.address)
     name = unique_name(shop_name(name, row.host))
     try:
         with transaction.atomic():

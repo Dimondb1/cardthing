@@ -2906,7 +2906,7 @@ ENTRIES = [
     Entry(
         "listshop.intro", T, "Introduction",
         "RipRaptor compares UK prices for sealed trading card game products. If your UK shop sells them, ask "
-        "to be listed here and we will reply by email.",
+        "to be listed here. We check your shop and email you once it is listed.",
         "Under the heading on the List your shop page.",
     ),
     Entry("listshop.form.name", T, "Name label", "Your name", "Label above the name box."),
@@ -2918,6 +2918,14 @@ ENTRIES = [
         "Used only to reply about your shop. We delete it a year after we deal with it, or after two years at most.",
         "Under the email box, followed by a link to the data part of the terms page.",
     ),
+    Entry("listshop.form.discount_code", T, "Discount code label", "Discount code for RipRaptor shoppers (optional)",
+          "Label above the discount code box."),
+    Entry("listshop.form.discount_code_note", T, "Discount code note",
+          "We show it beside your prices. Letters, numbers, dashes and underscores.", "Under the discount code box."),
+    Entry("listshop.form.discount_terms", T, "Code terms label", "What the code gives (optional)",
+          "Label above the box for what the discount code gives."),
+    Entry("listshop.form.discount_terms_note", T, "Code terms note", "For example 5% off your first order",
+          "Under the box for what the discount code gives."),
     Entry("listshop.form.message", T, "Message label", "Anything we should know (optional)", "Label above the message box."),
     Entry("listshop.form.button", B, "Send button", "Ask to be listed", "Button that sends the form."),
     Entry("listshop.form.name_invalid", T, "Missing name", "Add your name.", "Shown when the name box is empty."),
@@ -2928,6 +2936,11 @@ ENTRIES = [
     ),
     Entry("listshop.form.email_invalid", T, "Bad email", "That email address does not look right.", "Shown when the email address is not valid."),
     Entry("listshop.form.message_invalid", T, "Long message", "Keep the message under 1,000 characters.", "Shown when the message is too long."),
+    Entry("listshop.form.discount_code_invalid", T, "Bad discount code",
+          "Use only letters, numbers, dashes and underscores in the code, up to 40 of them.",
+          "Shown when the discount code has spaces or other characters, or is too long."),
+    Entry("listshop.form.discount_terms_invalid", T, "Long code terms",
+          "Keep what the code gives under 120 characters.", "Shown when what the code gives is too long."),
     Entry(
         "listshop.form.busy", T, "Too many requests",
         "We have had a lot of requests just now. Try again in an hour.",
@@ -2960,10 +2973,37 @@ ENTRIES = [
     Entry("listshop.thanks.title", H, "Thanks heading", "Thanks for asking", "Top of the page after the form is sent."),
     Entry(
         "listshop.thanks.body", T, "Thanks text",
-        "We read every request and will reply to the email address you gave.",
+        "We check every request, and email you as soon as your shop is listed.",
         "Under the heading after the form is sent. The same words show however many times a shop asks.",
     ),
     Entry("listshop.thanks.back", B, "Back button", "Go to the home page", "Button on the page after the form is sent."),
+    # The one email a shop that asked gets, when the owner approves it in admin (inbox/shops.py welcome). The owner's
+    # own words, 14 Nov 2026.
+    Entry("listshop.welcome.subject", T, "Welcome email: subject", "{shop} is now on RipRaptor",
+          "Subject of the email a shop gets when you approve its request to be listed.", placeholders=("shop",)),
+    Entry("listshop.welcome.discount", T, "Welcome email: discount line", "We have also listed your discount code.",
+          "Added to the welcome email's first paragraph when the shop gave a discount code."),
+    Entry("listshop.welcome.body", P, "Welcome email",
+          "Hello,\n\n"
+          "Thank you for asking for {shop} to be listed on RipRaptor. Your shop is now connected, and your products "
+          "should start appearing in our price comparisons very soon. {discount_line}\n\n"
+          "A few things that would help from here:\n\n"
+          "Our badge. If you are happy to, adding a RipRaptor badge to your site lets your customers know they can "
+          "compare your prices with us. The light and dark versions, with the code to paste, are here:\n"
+          "{badge_url}\n"
+          "It is entirely your call, and nothing changes on our side either way.\n\n"
+          "Instagram. We are @ripraptor_uk (https://www.instagram.com/ripraptor_uk/). A follow would be great, and "
+          "please tag us when you post restocks, new releases or offers so we see them.\n\n"
+          "New discount codes. If you start a new code, just reply to this email and we will add it.\n\n"
+          "Anything wrong. If a price, stock level or product on your listing looks wrong, reply here and we will "
+          "put it right.\n\n"
+          "We are also on Facebook, TikTok and Discord, all linked at the bottom of ripraptor.com.\n\n"
+          "Thanks,\n"
+          "Ben Dimond",
+          "The email a shop gets when you approve its request to be listed. {shop} is its name, {badge_url} the badge "
+          "part of the List your shop page and {discount_line} the discount line, left out when it gave no code. "
+          "Sent once, from the Sending shop emails settings, as plain text.",
+          placeholders=("shop", "badge_url", "discount_line")),
     Entry(
         "about.listshop", T, "List your shop line",
         "Run a UK shop that sells sealed products? Ask to be listed.",
@@ -3841,9 +3881,11 @@ ENTRIES = [
     ),
     Entry(
         "terms.data.listshop", P, "Shop enquiries",
-        "If you ask us to list your shop, we keep your name, your shop's website, your email address and "
-        "your message to reply to you and for nothing else. We do not add you to a mailing list. Your "
-        "enquiry is deleted a year after we have dealt with it, or two years after you sent it if we never do.",
+        "If you ask us to list your shop, we keep your name, your shop's website, your email address, any "
+        "discount code you give and your message. We look at your shop's website to check it can be listed, and "
+        "once it is, we email you once to say so. We use your email address only for that and to reply to you, "
+        "and we do not add you to a mailing list. Your enquiry is deleted a year after we have dealt with it, or "
+        "two years after you sent it if we never do.",
         "Data section of the terms page, after the main explanation: what the List your shop form keeps.",
         legal=True,
     ),

@@ -1,13 +1,19 @@
 """
-List your shop: a shop asks to be listed, the owner reads it in admin and answers from their own email.
+List your shop: a shop asks to be listed, the shop checker looks at its website, and the owner approves it in admin,
+which adds the shop, saves its discount code and sends it one welcome email. The owner, 14 Nov 2026: "they need to
+provide the info it then goes to the shop checker function we already have and is checked, need to make sure this a
+cannot be abused, I will then approve it and then it sends this message via email".
 
 What the form takes is checked here, in the order that costs least: the shape of each field, then the
 sender's internet address (a one-way hashed count in the shared cache, as the drop reminders keep), then
 a cap on new enquiries an hour for the whole site, then whether the same shop already has an open
 enquiry. Only then is anything written.
 
-Nothing is ever emailed to the address given, so the form cannot be used to send mail to a stranger. The
-shop's website is stored as text and never fetched: a shop is only read once the owner adds it.
+Abuse: the website is checked by the background reader, never while the form is sent, and only on the public
+internet (catalogue/shop_adding.py public_get), at most PUBLIC_CHECKS_DAY new shops a day and once per shop. Nothing
+is ever emailed to the address given until the owner approves the shop, and then once (welcome_sent_at), so the form
+cannot be used to send mail to a stranger. The owner sees whether the address is on the shop's own domain before
+approving (email_matches).
 
 A shop that asks again within DUPLICATE_DAYS while its first enquiry is still open is answered with the
 same thanks and nothing more is stored or sent, so the page never says what it already knows.
@@ -34,6 +40,10 @@ from .models import ShopEnquiry
 MAX_NAME = 80
 MAX_URL = 300
 MAX_MESSAGE = 1000
+MAX_CODE = 40
+MAX_TERMS = 120
+CODE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+PUBLIC_CHECKS_DAY = 40       # new shops from the form the shop checker looks at in a day; past it, the owner checks
 MAX_BODY = 8 * 1024          # bytes a POST may carry; the form's fields at their longest fit in well under this
 PER_ADDRESS_HOUR = 5         # enquiries one internet address may send in an hour
 PER_ADDRESS_DAY = 20         # and in a day
@@ -110,7 +120,7 @@ def normalise_url(raw):
     return url, domain
 
 
-def clean(name, shop_url, email, message):
+def clean(name, shop_url, email, message, discount_code="", discount_terms=""):
     """The form's values tidied, or Invalid naming the first field that is wrong."""
     name = " ".join(strip_hidden(name or "", keep="\t\n").split())
     if not name or len(name) > MAX_NAME:
@@ -124,7 +134,14 @@ def clean(name, shop_url, email, message):
     message = strip_hidden((message or "").replace("\r\n", "\n").replace("\r", "\n"), keep="\t\n").strip()
     if len(message) > MAX_MESSAGE:
         raise Invalid("message")
-    return {"name": name, "shop_url": url, "domain": domain, "email": email, "message": message}
+    code = (discount_code or "").strip()
+    if code and (len(code) > MAX_CODE or not CODE.fullmatch(code)):
+        raise Invalid("discount_code")
+    terms = " ".join(strip_hidden(discount_terms or "", keep="\t\n").split()) if code else ""
+    if len(terms) > MAX_TERMS:
+        raise Invalid("discount_terms")
+    return {"name": name, "shop_url": url, "domain": domain, "email": email, "message": message,
+            "discount_code": code, "discount_terms": terms}
 
 
 def address_allowed(ip):
@@ -150,8 +167,151 @@ def ask(values, ip, now=None):
                                   created_at__gte=now - timedelta(days=DUPLICATE_DAYS)).exists():
         return None
     enquiry = ShopEnquiry.objects.create(created_at=now, **values)
+    queue_check(enquiry, now)
     tell_owner(enquiry)
     return enquiry
+
+
+def queue_check(enquiry, now=None):
+    """Hand the shop's website to the shop checker, held for the owner's approval. A shop it has looked at before keeps
+    that look. Past PUBLIC_CHECKS_DAY new shops in a day nothing is queued: the owner presses Check in admin."""
+    from catalogue import shop_adding
+    from catalogue.models import ShopToAdd
+
+    now = now or timezone.now()
+    row = ShopToAdd.objects.filter(host=enquiry.domain).first()
+    if row is None:
+        if ShopToAdd.objects.filter(hold=True, created_at__gte=now - timedelta(days=1)).count() >= PUBLIC_CHECKS_DAY:
+            return None
+        row = ShopToAdd.objects.create(host=enquiry.domain, address=shop_adding.base_of(enquiry.shop_url), hold=True,
+                                       created_at=now)
+    ShopEnquiry.objects.filter(pk=enquiry.pk).update(shop_check=row)
+    enquiry.shop_check = row
+    return row
+
+
+def check_again(enquiry):
+    """Look at the shop's website again (a shop that has not passed, or was never queued). Returns the row."""
+    from catalogue.models import ShopToAdd
+
+    row = enquiry.shop_check or queue_check(enquiry)
+    if row is None:
+        from catalogue import shop_adding
+
+        row, _ = ShopToAdd.objects.get_or_create(host=enquiry.domain, defaults={
+            "address": shop_adding.base_of(enquiry.shop_url), "hold": True})
+        ShopEnquiry.objects.filter(pk=enquiry.pk).update(shop_check=row)
+        enquiry.shop_check = row
+    if row.status in (ShopToAdd.Status.NOT_ADDED, ShopToAdd.Status.WAITING):
+        ShopToAdd.objects.filter(pk=row.pk).update(status=ShopToAdd.Status.WAITING, note="", checked_at=None)
+    return row
+
+
+def email_matches(enquiry):
+    """Whether the address is on the shop's own domain (info@shop.co.uk for shop.co.uk): a sign it is theirs."""
+    domain = enquiry.email.rpartition("@")[2].lower()
+    return domain == enquiry.domain or domain.endswith("." + enquiry.domain)
+
+
+# Approving -------------------------------------------------------------------------------------------------------
+
+class NotReady(Exception):
+    """Why a shop cannot be approved yet, worded for the owner."""
+
+
+def shop_name(enquiry):
+    """The shop's name as the welcome email gives it: the shop's own, else what the check found, else its domain."""
+    if enquiry.retailer_id:
+        return enquiry.retailer.name
+    row = enquiry.shop_check
+    return (row.found_name if row else "") or enquiry.domain
+
+
+def welcome(enquiry, store=None):
+    """(subject, body) of the welcome email (content/registry.py listshop.welcome.*)."""
+    from content import service as copy
+
+    shop = shop_name(enquiry)
+    badge_url = settings.RIPRAPTOR_SITE_URL + reverse("web:list_shop") + "#badge"
+    discount = copy.get("listshop.welcome.discount", store=store) if enquiry.discount_code else ""
+    subject = copy.get("listshop.welcome.subject", store=store, shop=shop)
+    body = copy.get("listshop.welcome.body", store=store, shop=shop, badge_url=badge_url, discount_line=discount)
+    return subject, re.sub(r"[ \t]+\n", "\n", body)
+
+
+def approve(enquiry, now=None):
+    """Approve a shop that asked and passed its check: add it (or find it, if it is already on RipRaptor), save its
+    discount code, keep its address for Shop outreach, mark the enquiry handled, then send the welcome email once.
+    Returns (shop, why the email was not sent or ""). Raises NotReady, changing nothing, when it cannot be approved."""
+    from django.db import transaction
+
+    from catalogue import shop_adding
+    from catalogue.models import ShopToAdd
+
+    from .models import ShopContact
+
+    now = now or timezone.now()
+    shop = enquiry.retailer
+    if shop is None:
+        row = enquiry.shop_check
+        if row is None:
+            raise NotReady("Its website has not been checked yet. Press Check the website.")
+        row.refresh_from_db()
+        if row.status == ShopToAdd.Status.WAITING:
+            raise NotReady("The check has not finished yet. Try again in a minute or two.")
+        if row.status == ShopToAdd.Status.NOT_ADDED:
+            raise NotReady(f"It did not pass the check: {row.note.rstrip('.')}. Add it by hand under Retailers if you "
+                           "still want it, or press Check the website to try again.")
+        if row.status == ShopToAdd.Status.PASSED:
+            row = shop_adding.add_passed(row)
+            if row.status == ShopToAdd.Status.NOT_ADDED:
+                raise NotReady(row.note)
+        shop = row.retailer or shop_adding.retailer_for(row.host)
+        if shop is None:
+            raise NotReady("The shop could not be found on RipRaptor. Add it by hand under Retailers.")
+    with transaction.atomic():
+        if enquiry.discount_code:
+            shop.discount_code, shop.discount_terms, shop.discount_ends = (
+                enquiry.discount_code, enquiry.discount_terms, None)
+            shop.save(update_fields=["discount_code", "discount_terms", "discount_ends"])
+        contact, _ = ShopContact.objects.get_or_create(retailer=shop)
+        if not contact.email:
+            contact.email = enquiry.email
+            contact.save(update_fields=["email"])
+        enquiry.retailer = shop
+        enquiry.approved_at = enquiry.approved_at or now
+        enquiry.handled_at = enquiry.handled_at or now
+        enquiry.save(update_fields=["retailer", "approved_at", "handled_at"])
+    return shop, send_welcome(enquiry, now)
+
+
+def send_welcome(enquiry, now=None):
+    """Send the welcome email from the owner, as the Sending page says (inbox/sending.py), once. Returns "" when sent,
+    else why not, worded for the owner. It counts against the day's shop emails and shows in the shop's history."""
+    from . import sending
+    from .models import OutreachEmail, ShopContact
+
+    now = now or timezone.now()
+    if enquiry.welcome_sent_at:
+        return "The welcome email was already sent."
+    if enquiry.retailer_id is None:
+        return "Approve the shop first."
+    contact = ShopContact.objects.filter(retailer_id=enquiry.retailer_id).first()
+    if contact is not None and contact.status == ShopContact.Status.DO_NOT_EMAIL:
+        return "The shop asked not to be emailed, so no welcome email was sent."
+    if sending.room_today(now=now) <= 0:
+        return "Today's limit of shop emails is reached. Press Send the welcome email tomorrow."
+    subject, body = welcome(enquiry)
+    try:
+        sending.send(enquiry.email, subject, body)
+    except sending.SendError as exc:
+        return str(exc)
+    ShopEnquiry.objects.filter(pk=enquiry.pk).update(welcome_sent_at=now)
+    enquiry.welcome_sent_at = now
+    if contact is None:
+        contact, _ = ShopContact.objects.get_or_create(retailer_id=enquiry.retailer_id)
+    OutreachEmail.objects.create(contact=contact, kind="welcome", subject=subject[:200], sent_at=now)
+    return ""
 
 
 def owner_address():
@@ -162,13 +322,16 @@ def owner_address():
 def tell_owner(enquiry, opener=None):
     """Best effort, through the same mailer as Message us. The email is plain text (escaped in its HTML
     part, the website never made a link); the push names nothing, since ntfy.sh topics are public."""
+    code = f"{enquiry.discount_code} ({enquiry.discount_terms})" if enquiry.discount_terms else enquiry.discount_code
     detail = (
         f"Name: {enquiry.name}\n"
-        f"Shop website (typed by them, not checked): {enquiry.shop_url}\n"
-        f"Email: {enquiry.email}\n"
+        f"Shop website (typed by them): {enquiry.shop_url}\n"
+        f"Email: {enquiry.email}{'' if email_matches(enquiry) else ' (not on the shop website domain)'}\n"
+        f"Discount code: {code or '(none)'}\n"
         f"Message: {enquiry.message or '(none)'}\n\n"
-        "Nothing has been sent to them. To answer, write to them from your own email. The shop is not read "
-        "until you add it."
+        "Nothing has been sent to them. The shop checker looks at the website within a few minutes. Open it in "
+        "admin to see what it found, then Approve it: that adds the shop, saves the code and sends them the "
+        "welcome email."
     )
     notify.owner(
         f"Shop asking to be listed: {enquiry.domain}", "A shop asks to be listed",

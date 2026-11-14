@@ -3593,14 +3593,14 @@ def contact_thread(request, token):
     return remember_thread(response, request, conversation)
 
 
-LIST_SHOP_FIELDS = ("name", "shop_url", "email", "message")
+LIST_SHOP_FIELDS = ("name", "shop_url", "email", "discount_code", "discount_terms", "message")
 
 
 @sensitive_post_parameters("email")
 def list_shop(request):
-    """A shop asks to be listed (inbox/shops.py). Works without JavaScript; a sent form goes on to the thanks
-    page by redirect, so reloading it sends nothing twice. A robot's form, a shop that already asked and a
-    new enquiry all reach the same thanks."""
+    """A shop asks to be listed (inbox/shops.py): its website goes to the shop checker, and the owner approves it in
+    admin. Works without JavaScript; a sent form goes on to the thanks page by redirect, so reloading it sends nothing
+    twice. A robot's form, a shop that already asked and a new enquiry all reach the same thanks."""
     from inbox import shops
 
     values = dict.fromkeys(LIST_SHOP_FIELDS, "")
@@ -3633,7 +3633,8 @@ def list_shop(request):
 
     return render(request, "web/list_shop.html", {
         "values": values, "error": error, "limits": {"name": shops.MAX_NAME, "url": shops.MAX_URL,
-                                                     "message": shops.MAX_MESSAGE},
+                                                     "message": shops.MAX_MESSAGE, "code": shops.MAX_CODE,
+                                                     "terms": shops.MAX_TERMS},
         "badges": badge.badges(text(request, "listshop.badge.alt")),
         "meta_title": text(request, "listshop.title"),
         "meta_description": text(request, "meta.listshop.description"),

@@ -16,6 +16,12 @@ The owner, 11 Nov 2026, on a shopping list: "But shopping list does sound good a
 * It is compared with buying each product on its own at the cheapest delivered price its page shows.
 * Every possible plan is tried when there are few enough (EXACT_LIMIT); a longer list is searched from the cheapest
   start by moving products between sellers and emptying sellers, until nothing gets cheaper.
+* Each product has a quantity, 1 to MAX_QUANTITY, kept in the cookie as slug~2. A shop's delivery is worked out on the
+  whole order's value; an eBay or Amazon offer's delivery is counted once for each one bought, never less than the
+  seller can ask. Shops do not say how many they have, so the page says to check the basket.
+* Next to the cheapest plan, the one with the fewest sellers (fewest), all from one shop when one has everything:
+  the owner, 14 Nov 2026: "provide the most convenient purchase based on availability, delivery as it could be
+  cheaper overall to get it through one seller".
 """
 
 import itertools
@@ -27,8 +33,11 @@ from catalogue import pricing
 from catalogue.models import Listing, Product
 
 COOKIE = "rr_list"
+# The number of products on the list alone, which the header's script reads (the list's cookie is the server's only).
+COUNT_COOKIE = "rr_list_n"
 COOKIE_DAYS = 90
 MAX_ITEMS = 20
+MAX_QUANTITY = 10
 SLUG = re.compile(r"^[-a-z0-9_]{1,200}$")
 # Candidates kept per product, cheapest first, and the most plans tried one by one.
 CANDIDATES = 8
@@ -39,22 +48,49 @@ UNKNOWN = Decimal("100000")
 
 # The cookie ----------------------------------------------------------------------------------------------------------
 
+def quantity(raw):
+    """A quantity as the cookie or a form gives it, kept to 1 to MAX_QUANTITY; 1 when it is not a number."""
+    try:
+        return min(max(int(str(raw).strip()), 1), MAX_QUANTITY)
+    except (TypeError, ValueError):
+        return 1
+
+
+def read_items(request):
+    """The list as (slug, quantity) in the order added, at most MAX_ITEMS. A cookie from before quantities holds
+    slugs alone, each one of."""
+    seen, items = set(), []
+    for entry in (request.COOKIES.get(COOKIE) or "").split("."):
+        slug, _tilde, count = entry.partition("~")
+        if SLUG.match(slug) and slug not in seen:
+            seen.add(slug)
+            items.append((slug, quantity(count) if count else 1))
+    return items[:MAX_ITEMS]
+
+
 def read(request):
     """The products on the visitor's list, as slugs in the order added, at most MAX_ITEMS."""
-    seen = []
-    for slug in (request.COOKIES.get(COOKIE) or "").split("."):
-        if SLUG.match(slug) and slug not in seen:
-            seen.append(slug)
-    return seen[:MAX_ITEMS]
+    return [slug for slug, _count in read_items(request)]
 
 
-def write(response, slugs, secure=False):
-    """Keep ``slugs`` as the list, or forget it when empty."""
+def quantities(request):
+    return dict(read_items(request))
+
+
+def write(response, slugs, secure=False, counts=None):
+    """Keep ``slugs`` as the list, each with its quantity in ``counts`` (1 when not given), or forget it when empty.
+    A second cookie holds only how many products, for the header's count."""
+    counts = counts or {}
+    slugs = slugs[:MAX_ITEMS]
     if slugs:
-        response.set_cookie(COOKIE, ".".join(slugs[:MAX_ITEMS]), max_age=COOKIE_DAYS * 86400, samesite="Lax",
-                            httponly=True, secure=secure)
+        value = ".".join(slug if quantity(counts.get(slug, 1)) == 1 else f"{slug}~{quantity(counts[slug])}"
+                         for slug in slugs)
+        response.set_cookie(COOKIE, value, max_age=COOKIE_DAYS * 86400, samesite="Lax", httponly=True, secure=secure)
+        response.set_cookie(COUNT_COOKIE, str(len(slugs)), max_age=COOKIE_DAYS * 86400, samesite="Lax",
+                            secure=secure)
     else:
         response.delete_cookie(COOKIE, samesite="Lax")
+        response.delete_cookie(COUNT_COOKIE, samesite="Lax")
     return response
 
 
@@ -80,17 +116,28 @@ def seller_key(listing):
     return ("offer", listing.pk) if is_marketplace(listing) else ("shop", listing.retailer_id)
 
 
+def count_of(listing):
+    """How many of the listing's product the list wants (plan sets it on each offer it weighs)."""
+    return getattr(listing, "qty", 1)
+
+
+def line(listing):
+    """The listing's price for the quantity wanted."""
+    return listing.price * count_of(listing)
+
+
 def order_delivery(listings):
-    """The delivery charge on one order of ``listings`` from one seller, or None when we do not know it."""
+    """The delivery charge on one order of ``listings`` from one seller, or None when we do not know it. An eBay or
+    Amazon offer's charge is counted once for each one bought: never less than the seller can ask."""
     first = listings[0]
     if is_marketplace(first):
-        return first.delivery_cost if first.delivery_known else None
-    subtotal = sum((listing.price for listing in listings), Decimal("0"))
+        return first.delivery_cost * count_of(first) if first.delivery_known else None
+    subtotal = sum((line(listing) for listing in listings), Decimal("0"))
     charge = first.retailer.delivery_for(subtotal)
     if charge is not None:
         return charge
     if all(listing.delivery_known for listing in listings):
-        return sum((listing.delivery_cost for listing in listings), Decimal("0"))
+        return sum((listing.delivery_cost * count_of(listing) for listing in listings), Decimal("0"))
     return None
 
 
@@ -103,22 +150,37 @@ def plan_cost(choice):
     total = Decimal("0")
     for listings in groups.values():
         delivery = order_delivery(listings)
-        total += sum((listing.price for listing in listings), Decimal("0")) + (
+        total += sum((line(listing) for listing in listings), Decimal("0")) + (
             UNKNOWN * len(listings) if delivery is None else delivery)
     return total
 
 
+def alone(listing):
+    """The product bought on its own from this offer, the quantity wanted, delivered; None when delivery is unknown.
+    One of it is its delivered price, as its page gives it."""
+    if count_of(listing) == 1:
+        return listing.delivered_price if listing.delivery_known else None
+    delivery = order_delivery([listing])
+    return None if delivery is None else line(listing) + delivery
+
+
 def single_cost(listing):
-    """One product bought on its own, as its page gives it: the delivered price, or the item price and UNKNOWN."""
-    return listing.delivered_price if listing.delivery_known else listing.price + UNKNOWN
+    """One product bought on its own: what ``alone`` gives, or the price and UNKNOWN."""
+    cost = alone(listing)
+    return line(listing) + UNKNOWN if cost is None else cost
 
 
-def candidates(listings):
-    """The offers a plan may use for one product, cheapest on its own first: in stock, or pre-orders when none is."""
+def usable_offers(listings):
+    """Every offer a plan may use for one product, cheapest on its own first: in stock, or pre-orders when none is."""
     usable = [listing for listing in listings if listing.is_buyable and listing.sanity == Listing.Sanity.OK]
     in_stock = [listing for listing in usable if listing.availability == Listing.Availability.IN_STOCK]
     chosen = in_stock or [listing for listing in usable if listing.availability == Listing.Availability.PREORDER]
-    return sorted(chosen, key=lambda listing: (single_cost(listing), listing.retailer.name))[:CANDIDATES]
+    return sorted(chosen, key=lambda listing: (single_cost(listing), listing.retailer.name))
+
+
+def candidates(listings):
+    """The cheapest CANDIDATES of usable_offers, which the cheapest plan chooses among."""
+    return usable_offers(listings)[:CANDIDATES]
 
 
 def search(options):
@@ -167,6 +229,31 @@ def improve(choice, options):
     return choice
 
 
+def fewest(options):
+    """The choice that buys every product from the fewest sellers, the cheapest such; ``options`` are every usable
+    offer for each product. A seller with everything wins outright; otherwise sellers are taken, most products first,
+    until every product is covered, and the cheapest plan among them is found."""
+    sellers = {}
+    for i, listed in enumerate(options):
+        for listing in listed:
+            sellers.setdefault(seller_key(listing), {}).setdefault(i, []).append(listing)
+    everything = [key for key, has in sellers.items() if len(has) == len(options)]
+    if everything:
+        return min(([min(sellers[key][i], key=line) for i in range(len(options))] for key in everything),
+                   key=plan_cost)
+    left, chosen = set(range(len(options))), set()
+    while left:
+        def weight(key):
+            covers = left & sellers[key].keys()
+            return (len(covers), -sum((min(single_cost(listing) for listing in sellers[key][i]) for i in covers),
+                                      Decimal("0")))
+        key = max(sellers, key=weight)
+        chosen.add(key)
+        left -= sellers[key].keys()
+    return search([[listing for listing in listed if seller_key(listing) in chosen][:CANDIDATES]
+                   for listed in options])
+
+
 @dataclass
 class Order:
     """What the plan buys from one seller."""
@@ -180,8 +267,30 @@ class Order:
     def __post_init__(self):
         self.retailer = self.listings[0].retailer
         self.marketplace = is_marketplace(self.listings[0])
-        self.subtotal = sum((listing.price for listing in self.listings), Decimal("0"))
+        self.subtotal = sum((line(listing) for listing in self.listings), Decimal("0"))
         self.total = None if self.delivery is None else self.subtotal + self.delivery
+
+
+def orders_for(choice):
+    """The orders a choice makes, the seller with most first."""
+    groups = {}
+    for listing in choice:
+        groups.setdefault(seller_key(listing), []).append(listing)
+    orders = [Order(listings, order_delivery(listings)) for listings in groups.values()]
+    return sorted(orders, key=lambda order: (-len(order.listings), order.retailer.name))
+
+
+@dataclass
+class Way:
+    """Another way to buy the list: its orders, its total and how many orders have delivery we do not know."""
+    orders: list
+    total: Decimal
+    unknown: int
+    extra: Decimal | None = None   # what it costs over the cheapest plan, when both totals are whole
+
+    @property
+    def shops(self):
+        return len(self.orders)
 
 
 @dataclass
@@ -195,49 +304,61 @@ class Plan:
     unknown: int = 0                       # orders whose delivery we do not know, and so is extra
     oldest: object = None                  # when the plan's prices were checked: the oldest and newest
     newest: object = None
+    fewest: Way | None = None              # the fewest sellers, when that is fewer than the cheapest plan's
+    counts: dict = field(default_factory=dict)   # product pk: quantity
+    many: bool = False                     # more than one of something is wanted
 
     @property
     def shops(self):
         return len(self.orders)
 
 
-def plan(slugs):
-    """The Plan for the products ``slugs`` name. Two queries: the products, and every offer for them."""
+def plan(slugs, counts=None):
+    """The Plan for the products ``slugs`` name, ``counts`` of each (slug: quantity, 1 when not given). Two queries:
+    the products, and every offer for them."""
+    counts = counts or {}
     found = {product.slug: product for product in Product.objects.for_lists().filter(slug__in=slugs)}
     products = [found[slug] for slug in slugs if slug in found]
-    result = Plan(products=products)
+    result = Plan(products=products, counts={product.pk: quantity(counts.get(product.slug, 1)) for product in products})
+    result.many = any(count > 1 for count in result.counts.values())
     if not products:
         return result
     by_product = {}
     for listing in (Listing.objects.filter(product__in=products).live().select_related("retailer")
                     .order_by("delivered_price", "retailer__name")):
         by_product.setdefault(listing.product_id, []).append(listing)
-    options, buyable = [], []
+    options, every, buyable = [], [], []
     for product in products:
-        listed = candidates(by_product.get(product.pk, []))
+        for listing in by_product.get(product.pk, []):
+            listing.product = product   # the row needs no query of its own
+            listing.qty = result.counts[product.pk]
+        listed = usable_offers(by_product.get(product.pk, []))
         if listed:
-            for listing in listed:
-                listing.product = product   # the row needs no query of its own
-            options.append(listed)
+            options.append(listed[:CANDIDATES])
+            every.append(listed)
             buyable.append(product)
         else:
             result.missing.append(product)
     if not options:
         return result
     choice = search(options)
-    groups = {}
-    for listing in choice:
-        groups.setdefault(seller_key(listing), []).append(listing)
-    orders = [Order(listings, order_delivery(listings)) for listings in groups.values()]
-    result.orders = sorted(orders, key=lambda order: (-len(order.listings), order.retailer.name))
-    result.unknown = sum(1 for order in orders if order.delivery is None)
-    result.total = sum((order.subtotal + (order.delivery or 0) for order in orders), Decimal("0"))
+    result.orders = orders_for(choice)
+    result.unknown = sum(1 for order in result.orders if order.delivery is None)
+    result.total = sum((order.subtotal + (order.delivery or 0) for order in result.orders), Decimal("0"))
     if not result.unknown:
-        # The same products, each on its own at the cheapest delivered price its page shows.
-        result.separately = sum((min(listing.delivered_price for listing in listed if listing.delivery_known)
-                                 for listed in options), Decimal("0"))
-        if result.separately > result.total:
-            result.saving = result.separately - result.total
+        # The same products, each on its own at the cheapest delivered price its page shows, for the quantity wanted.
+        cheapest = [min((cost for cost in map(alone, listed) if cost is not None), default=None) for listed in options]
+        if None not in cheapest:
+            result.separately = sum(cheapest, Decimal("0"))
+            if result.separately > result.total:
+                result.saving = result.separately - result.total
     checked = [listing.last_checked for listing in choice]
     result.oldest, result.newest = min(checked), max(checked)
+    if result.shops > 1:
+        other = orders_for(fewest(every))
+        if len(other) < result.shops:
+            unknown = sum(1 for order in other if order.delivery is None)
+            total = sum((order.subtotal + (order.delivery or 0) for order in other), Decimal("0"))
+            result.fewest = Way(other, total, unknown,
+                                extra=total - result.total if not unknown and not result.unknown else None)
     return result

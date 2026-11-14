@@ -14,8 +14,21 @@
   {% elif plan.separately is not None %}<p class="plan__note">{% copy "list.plan.same" %}</p>{% endif %}
   {% if plan.unknown %}<p class="plan__note">{% copy_count "list.plan.unknown" plan.unknown %}</p>{% endif %}
   <p class="plan__note">{% copy "list.plan.checked" start=plan.oldest|stamp end=plan.newest|stamp %}</p>
+  {% if plan.many %}<p class="plan__note">{% copy "list.plan.how_many" %}</p>{% endif %}
 </section>
-{% for order in plan.orders %}
+{% if plan.fewest %}
+<nav class="plan-ways" aria-label="{% copy 'list.ways.label' %}">
+  <a class="plan-ways__way" href="{% url 'web:shopping_list' %}"{% if way == "cheapest" %} aria-current="true"{% endif %}>
+    <span class="plan-ways__name">{% copy "list.ways.cheapest" %}</span>
+    <span class="plan-ways__sum">{{ plan.total|gbp }}, {% copy_count "list.plan.shops" plan.shops %}</span>
+  </a>
+  <a class="plan-ways__way" href="{% url 'web:shopping_list' %}?way=fewest"{% if way == "fewest" %} aria-current="true"{% endif %}>
+    <span class="plan-ways__name">{% if plan.fewest.shops == 1 %}{% copy "list.ways.one_shop" %}{% else %}{% copy "list.ways.fewest" %}{% endif %}</span>
+    <span class="plan-ways__sum">{{ plan.fewest.total|gbp }}, {% copy_count "list.plan.shops" plan.fewest.shops %}{% if plan.fewest.extra %} <span class="plan-ways__extra">{% copy "list.ways.extra" extra=plan.fewest.extra|gbp %}</span>{% endif %}</span>
+  </a>
+</nav>
+{% endif %}
+{% for order in orders %}
 <section class="plan-order" aria-labelledby="order-{{ forloop.counter }}">
   <div class="plan-order__head">
     <h2 class="plan-order__shop" id="order-{{ forloop.counter }}">{{ order.retailer.name }}{% if order.marketplace %} <span class="plan-order__seller">{% copy "list.order.seller" %}</span>{% endif %}</h2>
@@ -33,12 +46,13 @@
         </span>
       </a>
       <div class="watch__prices">
-        <p class="watch__now">{% price listing.price size="md" %}</p>
+        <p class="watch__now">{% price listing.price size="md" %}{% if listing.qty > 1 %} <span class="watch__times">{% copy "list.times" count=listing.qty %}</span>{% endif %}</p>
         <p class="watch__checked">{% copy "product.last_checked" time=listing.last_checked|ago %}</p>
       </div>
       <div class="watch__actions">
         <a class="button button--buy button--card" {% go_link listing "list" product %} target="_blank" rel="sponsored nofollow noopener">{% include "web/includes/buy_mark.svg" %}{% if listing.availability == "preorder" %}{% copy "product.preorder.button" %}{% else %}{% copy "product.buy.button" %}{% endif %}<span class="visually-hidden"> {{ product.name }} at {{ listing.retailer.name }} (opens in a new tab)</span></a>
-        <form method="post" action="{% url 'web:list_remove' product.slug %}">{% csrf_token %}<button class="button button--quiet button--small" type="submit">{% copy "list.remove" %}<span class="visually-hidden"> {{ product.name }}</span></button></form>
+        <form class="list-qty" method="post" action="{% url 'web:list_quantity' product.slug %}">{% csrf_token %}<input type="hidden" name="way" value="{{ way }}"><label class="visually-hidden" for="qty-{{ product.pk }}">{% copy "list.quantity" %} {{ product.name }}</label><input class="list-qty__input" id="qty-{{ product.pk }}" type="number" name="quantity" min="1" max="{{ max_quantity }}" value="{{ listing.qty }}" inputmode="numeric"><button class="button button--quiet button--small" type="submit">{% copy "list.quantity.update" %}</button></form>
+        <form method="post" action="{% url 'web:list_remove' product.slug %}">{% csrf_token %}<input type="hidden" name="way" value="{{ way }}"><button class="button button--quiet button--small" type="submit">{% copy "list.remove" %}<span class="visually-hidden"> {{ product.name }}</span></button></form>
       </div>
     </li>{% endwith %}
     {% endfor %}

@@ -1,0 +1,60 @@
+{% extends "web/base.html" %}
+{% load sitecopy ripraptor %}
+{% block page_class %}page--find{% endblock %}
+
+{% block content %}
+{# Build a shopping list with Rip (web/rip_list.py): a box for what the visitor wants, then the site's own products for each thing, one ticked, to add to the shopping list with how many. Plain forms, so it works without script. #}
+<div class="find">
+  <h1 class="visually-hidden">{% copy "find.list.title" %}</h1>
+  <div class="find__ask">
+    <span class="mark find__rip" aria-hidden="true"></span>
+    <div class="find__bubble">
+      {% if wanted %}
+      <h2 class="find__question">{% copy "find.list.made.question" %}</h2>
+      <p class="find__sub">{% copy "find.list.made.sub" %}</p>
+      {% else %}
+      <h2 class="find__question">{% copy "find.list.question" %}</h2>
+      <p class="find__sub">{% copy "find.list.sub" %}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if wanted %}
+  <p class="rip-list__wants">{% copy "find.list.made.you_said" %} <q>{{ wants }}</q></p>
+  <form class="rip-list" method="post" action="{% url 'web:list_add_many' %}">{% csrf_token %}
+    {% for row in wanted %}
+    <fieldset class="rip-list__item">
+      <legend class="rip-list__ask">{{ row.search }}</legend>
+      {% if row.choices %}
+      <ul class="rip-list__choices">
+        {% for choice in row.choices %}
+        <li><label class="rip-list__choice"><input class="rip-list__radio" type="radio" name="pick_{{ row.number }}" value="{{ choice.product.slug }}"{% if choice.product.slug == row.default %} checked{% endif %}>{% product_image choice.product "row" %}<span class="rip-list__body"><span class="rip-list__name">{{ choice.product.name }}</span><span class="rip-list__price">{% if choice.price is not None %}{% price choice.price size="md" %} <span class="rip-list__at">{% copy "find.list.item.at" shop=choice.listing.retailer.name time=choice.listing.last_checked|ago %}</span>{% else %}<span class="rip-list__at">{% copy "find.list.item.out" %}</span>{% endif %}</span></span></label></li>
+        {% endfor %}
+        <li><label class="rip-list__choice rip-list__choice--none"><input class="rip-list__radio" type="radio" name="pick_{{ row.number }}" value="">{% copy "find.list.item.none" %}</label></li>
+      </ul>
+      <p class="rip-list__qty"><label for="qty-{{ row.number }}">{% copy "find.list.item.quantity" %}</label> <input class="list-qty__input" id="qty-{{ row.number }}" type="number" name="qty_{{ row.number }}" min="1" max="{{ max_quantity }}" value="{{ row.quantity }}" inputmode="numeric"></p>
+      {% else %}
+      <p class="rip-list__missing">{% copy "find.list.item.missing" %} <a href="{% url 'web:search' %}?q={{ row.search|urlencode }}">{% copy "find.list.item.search" %}</a></p>
+      {% endif %}
+    </fieldset>
+    {% endfor %}
+    <p><button class="button" type="submit">{% include "web/includes/icons/list.svg" %}{% copy "find.list.add" %}</button></p>
+  </form>
+  <p class="find__again"><a href="{% url 'web:find_list' %}">{% copy "find.list.again" %}</a></p>
+  {% else %}
+  {% if wanted is not None %}<p class="rip-list__state" role="status">{% copy "find.list.nothing" %}</p>{% endif %}
+  {% if box.state_key %}<p class="rip-list__state" role="status">{% copy box.state_key count=box.per_person hours=box.hours %}</p>{% endif %}
+  {% if box.open and box.left %}
+  <form class="rip-list__form" method="post" action="{% url 'web:find_list' %}">{% csrf_token %}
+    <label class="contact-form__label" for="rip-list-wants">{% copy "find.list.label" %}</label>
+    <textarea id="rip-list-wants" class="contact-form__input contact-form__text" name="wants" rows="3" maxlength="{{ box.max_length }}" required></textarea>
+    <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <p class="rip-list__left">{% if box.left == 1 %}{% copy "product.ask.left.one" %}{% else %}{% copy "product.ask.left.other" count=box.left %}{% endif %}</p>
+    <p><button class="button" type="submit">{% copy "find.list.button" %}</button></p>
+  </form>
+  {% endif %}
+  <p class="find__again"><a href="{% url 'web:find' %}">{% copy "find.list.back" %}</a></p>
+  {% endif %}
+  <p class="small-print">{% copy "find.list.note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
+</div>
+{% endblock %}

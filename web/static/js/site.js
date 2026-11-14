@@ -426,3 +426,11 @@ document.addEventListener("ripraptor:content", (event) => {
     }).catch(() => {});
   });
 })();
+
+// The shopping list's count in the header (web/shopping.py): a cookie that holds only the number, so the header,
+// cached for everyone, shows each visitor their own.
+(() => {
+  const found = document.cookie.match(/(?:^|; )rr_list_n=(\d+)/);
+  const count = found ? parseInt(found[1], 10) : 0;
+  document.querySelectorAll("[data-list-count]").forEach((el) => { el.textContent = count > 0 ? `(${count})` : ""; });
+})();

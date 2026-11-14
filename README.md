@@ -5145,10 +5145,17 @@ Only a business address is stored, typed by you or found on the shop's own site 
 ## Shopping list
 
 A product page's price box has **Add to list** (`web/shopping.py`,
-`/shopping-list/`, `web:shopping_list`). The list is a cookie of ours
-(`rr_list`, the products' addresses only, HttpOnly, 90 days, up to 20
-products), so it works with JavaScript off: Add to list is a form, and the
-button then reads "Your list (3)". `list.js` sends it without a reload.
+`/shopping-list/`, `web:shopping_list`), and Rip can build a list on Find
+(below and in "Find with Rip"). The list is a cookie of ours (`rr_list`,
+the products' addresses and how many of each as `slug~2`, HttpOnly, 90
+days, up to 20 products, 1 to 10 of each; an older cookie of addresses alone
+still reads), so it works with JavaScript off: Add to list is a form, and
+the button then reads "Your list (3)". `list.js` sends it without a reload.
+A second cookie, `rr_list_n`, holds only how many products, so the header's
+List link (beside the Watchlist, an icon with "List" on a phone) can show
+the count from script on pages cached for everyone. Each row has a number
+box with Update (`/shopping-list/quantity/<slug>/`); with more than one of
+something the page says shops do not say how many they have.
 The page shows the cheapest way to buy the lot, delivery included, against
 buying each product on its own at its page's cheapest delivered price, and
 the saving in green when there is one.
@@ -5166,6 +5173,16 @@ the saving in green when there is one.
   saving is claimed.
 - Every plan is tried for a short list (up to 6,000 combinations); a longer
   one is searched by moving products between shops until nothing is cheaper.
+- Quantities: a shop's delivery is worked out on the whole order's value,
+  so two of something can reach free delivery; an eBay or Amazon offer's
+  delivery is counted once for each one bought, never less than it can
+  ask. Bought separately is each product alone in the quantity wanted.
+- Fewest shops (`shopping.fewest`): next to the cheapest way, when it takes
+  more than one shop, the way with the fewest shops: all from one shop when
+  one has everything (the cheapest such), otherwise shops are taken most
+  products first and the cheapest plan among them is found. Both show as two
+  cards with their totals and how much more the fewer shops cost;
+  `?way=fewest` lists that way's orders (plain links, no script).
 - Buy links go through `/go/` with the button "list", so the Shop
   performance report and Insights count them. The page is private, `no-store`,
   `noindex` and disallowed in robots.txt. Three queries, however long the
@@ -6307,6 +6324,31 @@ the visitor to the game's or set's page, filtered and sorted, which opens on
 what is in stock, best first. Rip asks each question from a speech bubble,
 the option cards arrive one after another, and in Chrome one question
 cross-fades into the next. The wording is `find.*` in the registry.
+
+Find opens with a choice (`find.start`, no answers in the address): **Find
+something to buy** (`?go=find`, the four questions above), **Build a
+shopping list with Rip**, and **Your shopping list** with its count when
+there is one. The owner, 14 Nov 2026: "when you get on to find, here will
+say what you're looking for, or you're looking to build a shopping list".
+
+**Build a shopping list with Rip** (`web/rip_list.py`, `/find/list/`,
+`web:find_list`): the visitor types what they want ("2 Surging Sparks ETBs
+and a booster bundle", up to 300 characters, tidied like an Ask Rip
+question: no email addresses, links or long numbers). Claude (the Ask Rip
+model, thinking off, the answer as JSON in a fixed shape) says only what to
+search for and how many of each, at most 10 things and 10 of each; it never
+names a product, a price or a shop. The site's own search
+(`catalogue/search.py`) finds up to three products for each, those someone
+sells first, with the cheapest delivered price, the shop and when it was
+checked; a search that finds nothing is tried a word shorter. The visitor
+ticks one for each (or None of these), sets how many and presses Add to my
+list (`/shopping-list/add-many/`); a thing nothing matched offers Search for
+it. It is the Claude page's Ask Rip job: its switch, its monthly limit, its
+model and its questions a day, one list counting as one question; the same
+words again are answered from the cache for a day, free. Each request is a
+`ClaudeAsk` (kind ask, row key `list`) with its cost. Plain forms, so it
+works without script; the page is private and noindex. The wording is
+`find.list.*`.
 
 **Share as post** (`web/share.py`, `share.js`): the Post icon in a product's
 Share panel, and in the cards' Share sheet, makes an Instagram post. The

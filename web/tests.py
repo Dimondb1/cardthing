@@ -163,7 +163,8 @@ class PageTests(PageTestCase):
                                       'aria-current="page"')
         css = (Path(settings.BASE_DIR) / "web" / "static" / "css" / "site.css").read_text()
         # On a phone both icons are always orange, so the current one gets the soft orange well too.
-        self.assertIn('.masthead__watch[aria-current="page"] { background: var(--color-brand-soft);', css)
+        self.assertIn('.masthead__watch[aria-current="page"], .masthead__list[aria-current="page"] { background: '
+                      'var(--color-brand-soft);', css)
 
     def test_deals_page_carries_what_left_the_home_page(self):
         response = self.client.get(reverse("web:deals"))
@@ -3126,7 +3127,8 @@ class GoldenLayoutTests(PageTestCase):
         # At very large text the menu keeps its icons, the words go to screen readers, and the empty column goes.
         narrow = css[css.index("@media (max-width: 14.99rem) {"):]
         self.assertIn('grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand nav" "search search";', narrow)
-        self.assertIn(".masthead__swipe > span, .masthead__watch > span { position: absolute; width: 1px;", narrow)
+        self.assertIn(".masthead__swipe > span, .masthead__watch > span, .masthead__list > span { position: absolute; "
+                      "width: 1px;", narrow)
         self.assertIn('.body--deck .masthead__inner { grid-template-areas: "brand nav"; }', css)
         # Cards, the price box and the product head are one column no wider than themselves.
         self.assertIn("position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding: var(--card-pad);", css)

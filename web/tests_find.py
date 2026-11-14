@@ -50,8 +50,20 @@ class FindCase(TestCase):
 
 
 class StepTests(FindCase):
+    def test_find_opens_with_a_choice(self):
+        html = self.page().content.decode()
+        self.assertIn('<h2 class="find__question">What can I help you with?</h2>', html)
+        self.assertEqual(self.options(html), [(f"{FIND}?go=find", "Find something to buy"),
+                                              ("/find/list/", "Build a shopping list with Rip")])
+        self.assertNotIn("find__steps", html)
+        # With something on the shopping list, it is offered too.
+        self.client.cookies["rr_list"] = f"{self.box.slug}.{self.etb.slug}~2"
+        html = self.page().content.decode()
+        self.assertIn(("/shopping-list/", "Your shopping list"), self.options(html))
+        self.assertIn("2 on it", html)
+
     def test_the_first_question_is_the_game(self):
-        response = self.page()
+        response = self.page(go="find")
         html = response.content.decode()
         self.assertEqual(response.status_code, 200)
         self.assertIn("<title>Find with Rip | RipRaptor</title>", html)
@@ -76,7 +88,7 @@ class StepTests(FindCase):
         self.assertIn('<span class="find__note">2 in stock</span>', html)   # two booster boxes
         self.assertNotIn("Bundles", html)   # the bundle is sold out
         self.assertIn("https://cdn.example/26.png", html)   # Surging Sparks Booster Box pictures its type
-        self.assertIn(f'<a class="chip" href="{FIND}">Pokémon<span class="chip__off"', html)
+        self.assertIn(f'<a class="chip" href="{FIND}?go=find">Pokémon<span class="chip__off"', html)
         self.assertEqual(html.count("find__step--done"), 1)
         self.assertIn(f'<a href="{FIND}">Start again</a>', html)
 

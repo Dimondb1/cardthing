@@ -20,6 +20,7 @@
         const fresh = wrap.querySelector("[data-list-button]");
         if (!fresh) throw new Error("no button");
         holder.replaceWith(fresh);
+        document.querySelectorAll("[data-list-count]").forEach((el) => { el.textContent = data.count ? `(${data.count})` : ""; });
         const link = fresh.querySelector("a");
         if (link) {
           link.classList.add("is-added");

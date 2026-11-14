@@ -291,7 +291,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .masthead__nav a:hover, .masthead__nav a[aria-current="page"] { color: var(--color-brand-text); text-decoration: underline; }
 .wordmark__img { transition: transform var(--motion-normal) var(--ease-out); }
 @media (hover: hover) { .wordmark:hover .wordmark__img { transform: scale(1.03) rotate(-1deg); } }
-.masthead__swipe-icon, .masthead__watch-icon { display: none; width: var(--icon-nav); height: var(--icon-nav); }
+.masthead__swipe-icon, .masthead__watch-icon, .masthead__list-icon { display: none; width: var(--icon-nav); height: var(--icon-nav); }
 /* Find with Rip (web/find.py) while the new home page is on: Rip's head on the brand's soft pill, so it reads as the
    one button in the menu. A tablet up says Find with Rip beside the head; a phone puts Find under it, with the icons. */
 .masthead__find { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--color-brand-soft); color: var(--color-brand-text); }
@@ -300,18 +300,18 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .masthead__nav .masthead__find:hover, .masthead__nav .masthead__find[aria-current="page"] { background: var(--color-brand-pill); text-decoration: none; }
 @media (max-width: 47.99rem) {
   .masthead__nav { gap: var(--space-1); }
-  .masthead__nav a:not(.masthead__swipe):not(.masthead__watch):not(.masthead__find) { display: none; }
+  .masthead__nav a:not(.masthead__swipe):not(.masthead__watch):not(.masthead__list):not(.masthead__find) { display: none; }
   .masthead__find { flex-direction: column; gap: 1px; min-width: var(--tap); padding: var(--space-1); border-radius: var(--radius-sm); font-size: var(--text-2xs); font-weight: var(--weight-medium); letter-spacing: 0.01em; }
   .masthead__find-full { display: none; }
   .masthead__find-brief { display: inline; line-height: 1; }
   .masthead__find:active { transform: scale(0.94); }
-  .masthead__swipe, .masthead__watch { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-width: var(--tap); padding: var(--space-1); color: var(--color-brand-text); border-radius: var(--radius-sm); font-size: var(--text-2xs); font-weight: var(--weight-medium); letter-spacing: 0.01em; }
-  .masthead__watch { margin-right: calc(-1 * var(--space-1)); }
-  .masthead__swipe span, .masthead__watch span { line-height: 1; }
-  .masthead__watch [data-watch-count] { display: none; }
-  .masthead__swipe-icon, .masthead__watch-icon { display: block; }
-  .masthead__swipe:active, .masthead__watch:active { transform: scale(0.94); }
-  .masthead__swipe[aria-current="page"], .masthead__watch[aria-current="page"] { background: var(--color-brand-soft); text-decoration: none; }
+  .masthead__swipe, .masthead__watch, .masthead__list { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-width: var(--tap); padding: var(--space-1); color: var(--color-brand-text); border-radius: var(--radius-sm); font-size: var(--text-2xs); font-weight: var(--weight-medium); letter-spacing: 0.01em; }
+  .masthead__list { margin-right: calc(-1 * var(--space-1)); }
+  .masthead__swipe span, .masthead__watch span, .masthead__list span { line-height: 1; }
+  .masthead__watch [data-watch-count], .masthead__list [data-list-count] { display: none; }
+  .masthead__swipe-icon, .masthead__watch-icon, .masthead__list-icon { display: block; }
+  .masthead__swipe:active, .masthead__watch:active, .masthead__list:active { transform: scale(0.94); }
+  .masthead__swipe[aria-current="page"], .masthead__watch[aria-current="page"], .masthead__list[aria-current="page"] { background: var(--color-brand-soft); text-decoration: none; }
   /* Compact on phones: the page under it, not the header, should fill the first screen. */
   .wordmark__img { height: var(--masthead-logo); }
   .masthead .search--header input { height: var(--masthead-search); }
@@ -321,7 +321,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 @media (max-width: 14.99rem) {
   .masthead__inner { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand nav" "search search"; column-gap: var(--space-2); }
   .masthead--home .masthead__inner { grid-template-areas: "brand nav"; }
-  .masthead__swipe > span, .masthead__watch > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .masthead__swipe > span, .masthead__watch > span, .masthead__list > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .masthead__find-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 @media (min-width: 48rem) {
@@ -1704,6 +1704,36 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 /* A product's price in the plan is what that shop asks, not always its cheapest alone, so it is not green. */
 .plan-order .price { color: var(--color-ink); }
 .plan-clear { margin-top: var(--space-4); }
+/* The two ways to buy the list: the cheapest, and the fewest shops (all from one shop when one has everything). Plain
+   links, so it works without script; the chosen one has the brand border. */
+.plan-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-2); margin-top: var(--space-3); }
+.plan-ways__way { display: grid; gap: var(--space-1); padding: var(--space-3) var(--space-4); border: 1px solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); color: var(--color-ink); text-decoration: none; }
+.plan-ways__way[aria-current="true"] { border-color: var(--color-brand); box-shadow: inset 0 0 0 1px var(--color-brand); }
+.plan-ways__name { font-weight: var(--weight-strong); }
+.plan-ways__sum, .plan-ways__extra { font-size: var(--text-sm); color: var(--color-ink-muted); }
+/* Build a shopping list with Rip (find_list.html): what was asked for, then for each thing the site's products as
+   rounded cards to choose one of, with how many. */
+.rip-list { display: grid; gap: var(--space-4); margin-top: var(--space-4); }
+.rip-list__wants, .rip-list__state, .rip-list__left { margin-top: var(--space-3); color: var(--color-ink-muted); }
+.rip-list__state { color: var(--color-ink); font-weight: var(--weight-strong); }
+.rip-list__form { display: grid; gap: var(--space-2); margin-top: var(--space-4); }
+.rip-list__item { display: grid; gap: var(--space-2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.rip-list__ask { padding: 0; font-size: var(--text-lg); font-weight: var(--weight-strong); }
+.rip-list__choices { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.rip-list__choice { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-paper); cursor: pointer; }
+.rip-list__choice:has(.rip-list__radio:checked) { border-color: var(--color-brand); box-shadow: inset 0 0 0 1px var(--color-brand); }
+.rip-list__choice--none { color: var(--color-ink-muted); border-color: var(--color-line); }
+.rip-list__radio { flex: none; width: var(--rip-list-radio); height: var(--rip-list-radio); accent-color: var(--color-brand-action); }
+.rip-list__choice .product-image--row { flex: none; width: var(--rip-list-thumb); }
+.rip-list__body { display: grid; gap: var(--space-1); min-width: 0; }
+.rip-list__name { font-weight: var(--weight-strong); overflow-wrap: anywhere; }
+.rip-list__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
+.rip-list__at { font-size: var(--text-sm); color: var(--color-ink-muted); }
+.rip-list__qty { display: flex; align-items: center; gap: var(--space-2); }
+/* How many of a product: a number box and its own Update button. */
+.list-qty { display: flex; align-items: center; gap: var(--space-1); }
+.list-qty__input { width: var(--list-qty-width); min-height: var(--tap); padding: var(--space-1) var(--space-2); border: 1px solid var(--color-line-strong); border-radius: var(--radius); font: inherit; }
+.watch__times { font-size: var(--text-sm); font-weight: var(--weight-body); color: var(--color-ink-muted); }
 
 /* Rip (rip_bot.html): the owner's raptor (web/static/img/rip/), posed by the box's data-mood with the pack's own angles:
    which eye shows, how far the head tilts and the jaw opens, and the marks above. The rock, the blink and the jaw's

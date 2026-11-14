@@ -3,8 +3,13 @@ Find with Rip: the guided search, one question a screen, for a visitor who does 
 5 Nov 2026: "a little bit of a hand-holding ... what are you looking for? Pokemon. What kind? Booster packs. Which
 series? What matters most? ... and then it just takes them to that list".
 
-Four steps, each a page of plain links (so it works without script, and Back works): the game, the product type in
-stock for it, the newest sets with that type in stock (or any set), and what matters most, which is the list's sort.
+It opens with a choice (start): find something to buy, build a shopping list with Rip (web/rip_list.py), or the
+visitor's shopping list when there is one. The owner, 14 Nov 2026: "when you get on to find, here will say what you're
+looking for, or you're looking to build a shopping list, and or any other options".
+
+Finding something is four steps, each a page of plain links (so it works without script, and Back works): the game,
+the product type in stock for it, the newest sets with that type in stock (or any set), and what matters most, which
+is the list's sort. ?go=find starts them.
 The answers ride in the address (?game=&type=&set=&want=); with all four the view sends the visitor to the game's
 or set's page, filtered and sorted, which opens on what is in stock, best first.
 """
@@ -17,7 +22,7 @@ from django.urls import reverse
 from catalogue.models import Product, ProductSet
 from catalogue.types import type_label
 
-from . import feed
+from . import feed, shopping
 
 SETS_SHOWN = 8
 # What matters most, and the sort the list opens with (catalogue/ordering.py SORTS).
@@ -88,15 +93,31 @@ def in_stock(game, kind=""):
     return products.filter(product_type=kind) if kind and kind != "any" else products
 
 
+def start(request, text):
+    """The opening choice: find something, build a list with Rip, or the list there is."""
+    found = Step("start", text("find.start.question"), text("find.start.sub"), number=0)
+    found.options = [
+        Option(text("find.start.find"), link(go="find"), icon="search", note=text("find.start.find_note")),
+        Option(text("find.start.list"), reverse("web:find_list"), icon="list", note=text("find.start.list_note")),
+    ]
+    count = len(shopping.read(request))
+    if count:
+        found.options.append(Option(text("find.start.your_list"), reverse("web:shopping_list"), icon="shop",
+                                    note=text("find.start.your_list_note", count=count)))
+    return found
+
+
 def step(request, text):
     """The step to show, or the address to send the visitor to once every question is answered. ``text`` is
     views.text, for the wording."""
+    if not any(request.GET.get(key) for key in ("go", "game", "type", "set", "want")):
+        return start(request, text)
     games, game, kind, product_set, set_asked, want = answers(request)
     if game is not None and kind and set_asked and want:
         return destination(game, "" if kind == "any" else kind, product_set, want)
     chosen = []
     if game is not None:
-        chosen.append((game.display_short, link()))
+        chosen.append((game.display_short, link(go="find")))
     if game is not None and kind:
         chosen.append((text("find.type.any") if kind == "any" else type_label(game.slug, kind), link(game=game.slug)))
     if game is not None and kind and set_asked:

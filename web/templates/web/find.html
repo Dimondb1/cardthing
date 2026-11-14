@@ -10,9 +10,9 @@
 {% include "web/includes/feed_sprite.svg" %}
 <div class="find">
   <h1 class="visually-hidden">{% copy "find.title" %}</h1>
-  <ol class="find__steps" aria-label="{% copy 'find.title' %}">
+  {% if step.number %}<ol class="find__steps" aria-label="{% copy 'find.title' %}">
     {% for key in steps %}<li class="find__step{% if forloop.counter < step.number %} find__step--done{% elif forloop.counter == step.number %} find__step--now{% endif %}"><span class="visually-hidden">{{ forloop.counter }}</span></li>{% endfor %}
-  </ol>
+  </ol>{% endif %}
   <div class="find__ask">
     <span class="mark find__rip" aria-hidden="true"></span>
     <div class="find__bubble">

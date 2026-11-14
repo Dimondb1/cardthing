@@ -44,7 +44,7 @@ from guides import state as guide_doors
 from guides.access import not_for_editors
 from ripraptor import csp
 
-from . import answers, askrip, compact, feed, hubs, listcache, look, pagecache, partners, refresh, share, shopping
+from . import answers, askrip, compact, feed, hubs, listcache, look, pagecache, partners, refresh, rip_list, share, shopping
 from . import find as find_steps
 from .pagecache import cached_page
 from .charts import price_chart
@@ -2999,6 +2999,35 @@ def find(request):
     })
 
 
+@require_http_methods(["GET", "POST"])
+def find_list(request):
+    """Build a shopping list with Rip (web/rip_list.py), on Find. The form posts and the page comes back with the
+    products Rip found to choose from (?made=), kept for a day, or what happened instead (?state=). It works without
+    script; nothing here is cached or indexed."""
+    if request.method == "POST":
+        if request.POST.get("website"):
+            return HttpResponseRedirect(reverse("web:find_list"))   # the hidden field is only ever filled by robots
+        made = rip_list.make(request, request.POST.get("wants", ""))
+        query = urlencode({"made": made.token} if made.token else {"state": made.state})
+        response = HttpResponseRedirect(f"{reverse('web:find_list')}?{query}")
+        response.status_code = 303
+        askrip.keep_count(request, response)
+        response["Cache-Control"] = "no-store"
+        response["X-Robots-Tag"] = "noindex, nofollow"
+        return response
+    token = request.GET.get("made", "")[:40]
+    found = rip_list.kept(token) if token else None
+    state = request.GET.get("state", "")
+    state = "gone" if token and found is None else state if state in rip_list.STATES else ""
+    wants, wanted = found if found else ("", None)
+    response = render(request, "web/find_list.html", {
+        "box": rip_list.box(request, state), "wants": wants, "wanted": wanted, "max_quantity": shopping.MAX_QUANTITY,
+        "meta_title": text(request, "find.list.title"), "noindex": True,
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
 def post_product(slug):
     """The product a Share as post is about, with its buyable offers and the week's lows (offers.summarise), or 404."""
     product = get_object_or_404(
@@ -3084,11 +3113,14 @@ def track_price(raw):
 def shopping_list(request):
     """The shopping list (web/shopping.py): the products on it and the cheapest way to buy the lot, delivery included,
     against buying each on its own. The list is the visitor's cookie, so the page is theirs alone and never cached or
-    indexed. Three queries."""
-    found = shopping.plan(shopping.read(request))
+    indexed. Three queries. ?way=fewest shows the fewest-sellers plan's orders instead of the cheapest's."""
+    items = shopping.read_items(request)
+    found = shopping.plan([slug for slug, _count in items], dict(items))
+    fewest = request.GET.get("way") == "fewest" and found.fewest is not None
     response = render(request, "web/shopping_list.html", {
         "plan": found, "meta_title": text(request, "meta.shopping_list.title"), "noindex": True,
-        "max_items": shopping.MAX_ITEMS,
+        "max_items": shopping.MAX_ITEMS, "max_quantity": shopping.MAX_QUANTITY,
+        "way": "fewest" if fewest else "cheapest", "orders": found.fewest.orders if fewest else found.orders,
     })
     response["Cache-Control"] = "private, no-store"
     return response
@@ -3115,15 +3147,52 @@ def list_add(request, slug):
         response = HttpResponseRedirect(product.get_absolute_url())
         response.status_code = 303
     response["Cache-Control"] = "no-store"
-    return shopping.write(response, slugs, secure=request.is_secure())
+    return shopping.write(response, slugs, secure=request.is_secure(), counts=shopping.quantities(request))
+
+
+def back_to_list(request):
+    """To the list, keeping the way it was shown (?way=fewest)."""
+    url = reverse("web:shopping_list") + ("?way=fewest" if request.POST.get("way") == "fewest" else "")
+    response = HttpResponseRedirect(url)
+    response.status_code = 303
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @require_POST
 def list_remove(request, slug):
     """Remove on the shopping list: back to the list without it."""
-    response = HttpResponseRedirect(reverse("web:shopping_list"))
-    response.status_code = 303
-    return shopping.write(response, shopping.removed(shopping.read(request), slug), secure=request.is_secure())
+    return shopping.write(back_to_list(request), shopping.removed(shopping.read(request), slug),
+                          secure=request.is_secure(), counts=shopping.quantities(request))
+
+
+@require_POST
+def list_quantity(request, slug):
+    """How many of a product, on the shopping list: a form with its own Update button, so it works without script."""
+    counts = shopping.quantities(request)
+    if slug in counts:
+        counts[slug] = shopping.quantity(request.POST.get("quantity"))
+    return shopping.write(back_to_list(request), list(counts), secure=request.is_secure(), counts=counts)
+
+
+@require_POST
+def list_add_many(request):
+    """Add the products Rip found (web/rip_list.py) to the list, each with its quantity: pick_<n> names a product and
+    qty_<n> how many. A product already on it takes the new quantity. Products that are not on the site are left out."""
+    picks = []
+    for n in range(rip_list.MAX_ITEMS):
+        slug = request.POST.get(f"pick_{n}", "")
+        if shopping.SLUG.match(slug):
+            picks.append((slug, shopping.quantity(request.POST.get(f"qty_{n}"))))
+    real = set(Product.objects.active().filter(slug__in=[slug for slug, _count in picks]).values_list("slug", flat=True))
+    counts = shopping.quantities(request)
+    slugs = list(counts)
+    for slug, count in picks:
+        if slug in real:
+            slugs = shopping.added(slugs, slug)
+            if slug in slugs:
+                counts[slug] = count
+    return shopping.write(back_to_list(request), slugs, secure=request.is_secure(), counts=counts)
 
 
 @require_POST

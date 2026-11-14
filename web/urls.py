@@ -20,6 +20,7 @@ urlpatterns = [
     path("swipe/", views.deck, name="deck"),
     path("deals/", views.deals, name="deals"),
     path("find/", views.find, name="find"),
+    path("find/list/", views.find_list, name="find_list"),
     path("new/", views.latest_drops, name="new"),
     path("drops/", views.drops, name="drops"),
     path("drops/remind/<int:set_id>/", views.drop_ask, name="drop_ask"),
@@ -32,6 +33,8 @@ urlpatterns = [
     path("shopping-list/add/<slug:slug>/", views.list_add, name="list_add"),
     path("shopping-list/remove/<slug:slug>/", views.list_remove, name="list_remove"),
     path("shopping-list/clear/", views.list_clear, name="list_clear"),
+    path("shopping-list/quantity/<slug:slug>/", views.list_quantity, name="list_quantity"),
+    path("shopping-list/add-many/", views.list_add_many, name="list_add_many"),
     # Under /alerts/confirm/, /alerts/stop/ and /alerts/manage/, so they are private links like the stock
     # alerts' (no third-party script, kept out of search engines by robots.txt).
     path("alerts/manage/<str:token>/", views.alerts_manage, name="alerts_manage"),

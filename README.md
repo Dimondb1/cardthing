@@ -6408,6 +6408,29 @@ words again are answered from the cache for a day, free. Each request is a
 works without script; the page is private and noindex. The wording is
 `find.list.*`.
 
+**General requests** (the owner, 14 Nov 2026: "find booster packs at a low
+price" came back with nothing; "It can't handle much can it?"). Rip's reply
+has a `browse` part as well as the named products (`rip_list.BROWSE`):
+
+- What it holds: the kind of product, the game, a set by its listed name, a
+  sort (cheapest, cheapest per card, best value, biggest saving, lowest in
+  90 days, newest), a price band and in stock.
+- `read_browse` keeps only what matches the site's own filters, and
+  `browse_url` turns it into the site's own list: a set's page when one was
+  named, else the search page, with "Rip found these for ‘…’" under the
+  heading (`asked=`, `browse.rip.asked`).
+- A general request alone opens that list straight away (`list_target`). A
+  voice search or photo does the same (`found_target`). With named products
+  as well, the choices page shows them and a link to the rest
+  (`find.list.browse`).
+- A request Rip finds nothing in gives the question back, as a failure
+  does.
+
+**The owner is never held to the day's questions.** While logged in to
+Admin (staff), Ask Rip, the list builder, photo search and voice search are
+not counted (`askrip.is_owner`), so testing never runs out. It still sits
+under Ask Rip's switch and monthly limit.
+
 Two more ways to ask (the owner, 14 Nov 2026: "add a microphone option as it
 could take a while, and upload a shopping list photo"):
 

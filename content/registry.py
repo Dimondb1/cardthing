@@ -665,6 +665,9 @@ ENTRIES = [
           "After I couldn't find this: opens the search with those words."),
     Entry("find.list.add", B, "List builder: add button", "Add to my list",
           "The button that puts the chosen products on the shopping list."),
+    Entry("find.list.browse", B, "List builder: the rest of the request", "See the other products you asked about",
+          "Under the products found, when the request also asked for a kind of product in general (cheap booster "
+          "packs): opens the site's own list for it."),
     Entry("find.list.again", B, "List builder: start again", "Start again", "Under the products found."),
     Entry("find.list.nothing", T, "List builder: nothing to buy",
           "I couldn't see anything to buy in that. Try naming the set and the kind of product.",
@@ -898,6 +901,9 @@ ENTRIES = [
     ),
 
     # Search results and browsing -----------------------------------------
+    Entry("browse.rip.asked", T, "Search: what was asked of Rip", "Rip found these for ‘{asked}’.",
+          "Under the heading when Rip's list builder opened the list for a general request (booster packs at a low "
+          "price), so the shopper sees it is their request.", placeholders=("asked",)),
     Entry("browse.voice.said", T, "Search: what was said", "You said ‘{said}’.",
           "Under the results heading after a voice search Rip read, so the shopper sees what the phone heard.",
           placeholders=("said",)),

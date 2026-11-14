@@ -281,9 +281,18 @@ def person_count(request, now_ts=None):
     return browser_count(request, now_ts or time.time())
 
 
+def is_owner(request):
+    """The site's own people, logged in to Admin: never held to a day's questions or voice searches (the owner,
+    14 Nov 2026, testing: "No limit when I'm logged in"), still under Ask Rip's switch and monthly limit."""
+    user = getattr(request, "user", None)
+    return bool(user is not None and user.is_authenticated and user.is_staff)
+
+
 def left_for(request):
     """Questions the visitor may still ask today: their own (5 unless the owner chose another number), unless their
-    address's backstop has fewer left."""
+    address's backstop has fewer left. The owner always has the full number (is_owner)."""
+    if is_owner(request):
+        return chosen().per_person
     now_ts = time.time()
     owner = chosen()
     return max(0, min(owner.per_person - browser_count(request, now_ts)[0],
@@ -302,7 +311,9 @@ def hours_left(request):
 def count_question(request, now, give_back=False):
     """Add one to the visitor's questions and their address's (or take one off, for a question that failed on our
     side), and to the day's. Each window is a day from its first question, kept to its end however often it is
-    written."""
+    written. The owner's are not counted (is_owner)."""
+    if is_owner(request):
+        return
     now_ts = time.time()
     step = -1 if give_back else 1
     for count, key in ((address_count(request, now_ts), person_key(request)), (browser_count(request, now_ts), None)):

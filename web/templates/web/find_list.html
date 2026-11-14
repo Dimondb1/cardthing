@@ -41,6 +41,7 @@
     {% endfor %}
     <p class="rip-list__send"><button class="button" type="submit">{% include "web/includes/icons/list.svg" %}{% copy "find.list.add" %}</button></p>
   </form>
+  {% if browse_url %}<p class="find__again"><a href="{{ browse_url }}">{% copy "find.list.browse" %}</a></p>{% endif %}
   <p class="find__again"><a href="{% url 'web:find_list' %}">{% copy "find.list.again" %}</a></p>
   {% else %}
   {% if wanted is not None %}<p class="rip-list__state" role="status">{% copy "find.list.nothing" %}</p>{% endif %}

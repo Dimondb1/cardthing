@@ -67,7 +67,7 @@ class PhotoTests(ListCase):
         ask = ClaudeAsk.objects.get()
         self.assertEqual(ask.evidence, {"list": "", "photo": True})
         self.assertEqual(ask.set_answer, {"items": [{"search": "Surging Sparks Booster Box", "game": "pokemon",
-                                                     "quantity": 2}]})
+                                                     "quantity": 2}], "browse": None})
         sent = self.fake.sent[0]["messages"][0]["content"][0]["source"]["data"]
         stored = json.dumps([getattr(ask, f.attname) for f in ClaudeAsk._meta.concrete_fields], default=str)
         self.assertNotIn(sent[:200], stored)
@@ -365,3 +365,90 @@ class VoiceSearchTests(ListCase):
             script = handle.read()
         self.assertIn('var ai = button.getAttribute("data-voice-ai");', script)
         self.assertIn('window.location.href = ai + "?" + query.toString();', script)
+
+
+
+def general(items=(), **browse):
+    """Rip's reply with a general request in it, as the schema has it."""
+    found = {"wanted": True, "type": "", "game": "", "set": "", "sort": "", "price": "", "in_stock": True, **browse}
+    return json.dumps({"items": [{"search": search, "game": game, "quantity": quantity} for search, game, quantity in items],
+                       "browse": found})
+
+
+class GeneralRequestTests(ListCase):
+    """The owner, 14 Nov 2026: "find booster packs at a low price" came back as "I couldn't see anything to buy in
+    that"; "It can't handle much can it?". Rip now turns a general request into the site's own filtered list."""
+
+    def test_booster_packs_at_a_low_price_opens_them_cheapest_first(self):
+        self.fake.answer = general(type="booster_pack", sort="price")
+        response = self.build("find booster packs at a low price")
+        self.assertEqual(response["Location"], reverse("web:search") + "?type=booster_pack&sort=price&in_stock=1"
+                                               "&asked=find+booster+packs+at+a+low+price")
+        page = self.client.get(response["Location"])
+        self.assertContains(page, "Rip found these for ‘find booster packs at a low price’.")
+        # Rip was told how, with the site's own kinds of product and sorts.
+        sent = self.fake.sent[0]
+        self.assertIn('"booster packs at a low price"', sent["system"][0]["text"])
+        self.assertIn("booster_pack (booster pack)", sent["system"][0]["text"])
+        self.assertEqual(sent["output_config"]["format"]["schema"]["properties"]["browse"], rip_list.BROWSE)
+        # It helped, so it counts.
+        self.assertContains(self.client.get(URL, REMOTE_ADDR="203.0.113.7"), "You can ask 4 more questions today.")
+
+    def test_a_game_a_price_band_and_a_set_by_its_listed_name(self):
+        self.fake.answer = general(type="elite_trainer_box", game="pokemon", price="25-50", sort="fair")
+        self.assertEqual(self.build("pokemon etbs under 50 quid, best value")["Location"],
+                         reverse("web:search") + "?type=elite_trainer_box&sort=fair&price=25-50&in_stock=1"
+                                                 "&game=pokemon&asked=pokemon+etbs+under+50+quid%2C+best+value")
+        self.fake.answer = general(set=self.box.product_set.name, sort="price")
+        location = self.build("cheapest from that set")["Location"]
+        self.assertEqual(location, self.box.product_set.get_absolute_url() + "?sort=price&in_stock=1")
+
+    def test_what_rip_cannot_match_to_the_sites_filters_is_dropped(self):
+        self.fake.answer = general(game="not-a-game", set="Not A Set")
+        token, _ = self.made(self.build("something odd"))
+        self.assertIsNone(rip_list.kept_browse(token))
+
+    def test_named_products_and_a_general_request_together(self):
+        self.fake.answer = general(items=[("Surging Sparks Booster Box", "pokemon", 1)], type="booster_pack",
+                                   sort="price")
+        token, _ = self.made(self.build("a surging sparks box and some cheap packs"))
+        page = self.client.get(URL, {"made": token})
+        self.assertContains(page, "Surging Sparks Booster Box")
+        self.assertContains(page, f'<a href="{reverse("web:search")}?type=booster_pack&amp;sort=price&amp;in_stock=1">'
+                                  "See the other products you asked about</a>")
+
+    def test_nothing_found_does_not_use_up_a_question_and_says_so_once(self):
+        self.fake.answer = items()
+        token, _ = self.made(self.build("hello there rip"))
+        page = self.client.get(URL, {"made": token}, REMOTE_ADDR="203.0.113.7")
+        self.assertContains(page, "I couldn&#x27;t see anything to buy in that.", count=1)
+        self.assertContains(page, "You can ask 5 more questions today.")
+
+    def test_a_spoken_general_request_opens_the_list_too(self):
+        self.fake.answer = general(type="booster_pack", sort="price")
+        self.assertEqual(self.client.get(reverse("web:voice_search"), {"q": "cheap booster packs"},
+                                         REMOTE_ADDR="203.0.113.7")["Location"],
+                         reverse("web:search") + "?type=booster_pack&sort=price&in_stock=1&said=cheap+booster+packs")
+
+
+class OwnerTests(ListCase):
+    """The owner, testing, used all ten of the day's questions: "No limit when I'm logged in"."""
+
+    def test_the_owner_logged_in_is_never_held_to_the_days_questions_or_voice_searches(self):
+        from django.contrib.auth import get_user_model
+
+        AskRipSettings.objects.create(pk=1, per_person=1)
+        askrip.reopen()
+        owner = get_user_model().objects.create_user("owner", "o@example.com", "pw", is_staff=True)
+        self.client.force_login(owner)
+        for n in range(3):
+            self.fake.answer = items((f"Surging Sparks Booster Box {n}", "pokemon", 1))
+            self.assertTrue(self.made(self.build(f"surging sparks box number {n}"))[0])
+        self.assertContains(self.client.get(URL), "You can ask 1 more question today.")
+        with mock.patch.object(rip_list, "VOICE_PER_DAY", 0):
+            self.fake.answer = items(("Surging Sparks Booster Box", "pokemon", 1))
+            self.assertIn("said=", self.client.get(reverse("web:voice_search"), {"q": "surging sparks"})["Location"])
+        # A shopper on the same settings is held to one.
+        self.client.logout()
+        self.build("prismatic evolutions bundle")
+        self.assertEqual(self.made(self.build("another one please"))[1], "limit")

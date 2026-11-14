@@ -1202,7 +1202,8 @@ def search_path(query):
 def search(request):
     query = request.GET.get("q", "").strip()
     kind = request.GET.get("type", "")
-    said = request.GET.get("said", "").strip()[:100] if query else ""   # what the phone heard, when Rip read it
+    said = request.GET.get("said", "").strip()[:100]   # what the phone heard, when Rip read it
+    asked = request.GET.get("asked", "").strip()[:300]   # what was typed to Rip's list builder
     if query:
         heading = text(request, "browse.results.title", query=query)
     elif kind in Product.Type.values and kind != Product.Type.OTHER:
@@ -1213,7 +1214,7 @@ def search(request):
     return _browse(
         request,
         {
-            "heading": heading, "meta_title": heading, "noindex": True, "is_search": True, "said": said,
+            "heading": heading, "meta_title": heading, "noindex": True, "is_search": True, "said": said, "asked": asked,
             # Where the products searched for live, game / set / type, as links (search_path).
             "search_path": search_path(query) if query else [],
             # The sort and filters fold under one button, as on a game's page, so the list is in reach on a phone.
@@ -3042,8 +3043,7 @@ def find_list(request):
         if request.POST.get("website"):
             return HttpResponseRedirect(reverse("web:find_list"))   # the hidden field is only ever filled by robots
         made = rip_list.make(request, request.POST.get("wants", ""), photo=request.FILES.get("photo"))
-        query = urlencode({"made": made.token} if made.token else {"state": made.state})
-        response = HttpResponseRedirect(f"{reverse('web:find_list')}?{query}")
+        response = HttpResponseRedirect(rip_list.list_target(made))
         response.status_code = 303
         askrip.keep_count(request, response)
         response["Cache-Control"] = "no-store"
@@ -3051,11 +3051,15 @@ def find_list(request):
         return response
     token = request.GET.get("made", "")[:40]
     found = rip_list.kept(token) if token else None
+    browse = rip_list.kept_browse(token) if found else None
+    if found and not found[2] and browse:   # a general request alone: its list
+        return HttpResponseRedirect(rip_list.browse_url(browse, asked=found[0]))
     state = request.GET.get("state", "")
     state = "gone" if token and found is None else state if state in rip_list.STATES else ""
     wants, photo, wanted = found if found else ("", False, None)
     response = render(request, "web/find_list.html", {
         "box": rip_list.box(request, state), "wants": wants, "photo": photo, "wanted": wanted,
+        "browse_url": rip_list.browse_url(browse) if browse else "",
         "max_quantity": shopping.MAX_QUANTITY,
         "meta_title": text(request, "find.list.title"), "noindex": True,
     })

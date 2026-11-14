@@ -588,15 +588,26 @@ ENTRIES = [
           "The list builder's page title, for the browser tab and screen readers."),
     Entry("find.list.question", H, "List builder: question", "What do you want to buy?", "Rip's question above the box."),
     Entry("find.list.sub", T, "List builder: under the question",
-          "Say it however you like, for example two Surging Sparks Elite Trainer Boxes and a Prismatic Evolutions "
-          "booster bundle. I'll find them on RipRaptor and you choose the right ones.",
+          "Type it, say it or add a photo of your list, for example two Surging Sparks Elite Trainer Boxes and a "
+          "Prismatic Evolutions booster bundle. I'll find them on RipRaptor and you choose the right ones.",
           "Under Rip's question above the box."),
     Entry("find.list.label", T, "List builder: box label", "What you want", "Label above the box."),
     Entry("find.list.button", B, "List builder: button", "Find them", "The button that sends what was typed to Rip."),
+    Entry("find.list.working", B, "List builder: button while Rip reads", "Reading your list",
+          "The button's words once it is pressed, while Rip reads the words or photo. Only with script on."),
+    Entry("find.list.photo_add", B, "List builder: add a photo", "Add a photo of your list",
+          "Under the box: opens the camera or the phone's photos. Rip reads the list in the photo."),
+    Entry("find.list.photo_added", T, "List builder: photo chosen", "Photo added",
+          "Beside a small copy of the chosen photo, before Find them is pressed. Only with script on."),
+    Entry("find.list.photo_remove", B, "List builder: remove the photo", "Remove photo",
+          "Beside Photo added: takes the photo off before it is sent."),
+    Entry("find.list.photo", T, "List builder: photo could not be read",
+          "I couldn't open that photo. Try another one, or type your list.",
+          "When the file sent is not a photo, is too big or cannot be opened."),
     Entry("find.list.back", B, "List builder: back to Find", "Back to Find", "The link under the box."),
     Entry("find.list.note", T, "List builder: small print",
-          "Rip uses AI to read what you type and can get it wrong, so check each product before you add it. Prices "
-          "come from RipRaptor's own checks. Please do not type personal details.",
+          "Rip uses AI to read your words or photo and can get it wrong, so check each product before you add it. "
+          "Prices come from RipRaptor's own checks. Please leave personal details out of your words and photos.",
           "Under the list builder, before the link to the data part of the terms page."),
     Entry("find.list.made.question", H, "List builder: results heading", "Here's what I found",
           "Rip's words above the products found."),
@@ -606,6 +617,8 @@ ENTRIES = [
           "Under Here's what I found."),
     Entry("find.list.made.you_said", T, "List builder: what was typed", "You asked for",
           "Before the words the visitor typed, above the products found."),
+    Entry("find.list.made.from_photo", T, "List builder: read from a photo", "From the photo of your list",
+          "Above the products found when the visitor sent a photo. The photo itself is not kept."),
     Entry("find.list.item.at", T, "List builder: where the price is", "at {shop}, checked {time}",
           "After a product's cheapest delivered price.", placeholders=("shop", "time")),
     Entry("find.list.item.out", T, "List builder: not for sale", "No shop we compare has it now",
@@ -3773,8 +3786,20 @@ ENTRIES = [
           "repack or resealed, an eBay seller with few ratings, or a product no UK shop we check sells.",
           "Beside the Any red flags? question."),
     Entry("askrip.ask.own", T, "Ask Rip page: your own question",
-          "Or type your own question about the product, such as whether a shop has free delivery.",
+          "Or ask your own question about the product, typed or spoken, such as whether a shop has free delivery.",
           "Under the one-tap questions."),
+    Entry("askrip.voice.list", B, "Microphone: list builder button", "Speak your list",
+          "Beside the list builder's box: the phone or browser listens and writes the words in the box. Shown only "
+          "where the browser can do it."),
+    Entry("askrip.voice.question", B, "Microphone: product question button", "Speak your question",
+          "Read aloud by screen readers for the microphone button beside the Ask Rip box on a product page."),
+    Entry("askrip.voice.stop", B, "Microphone: stop", "Stop listening",
+          "The microphone button's words while it is listening."),
+    Entry("askrip.voice.denied", T, "Microphone: not allowed",
+          "To speak, allow the microphone for RipRaptor in your browser's settings, or type instead.",
+          "When the visitor or their browser has said no to the microphone."),
+    Entry("askrip.voice.unheard", T, "Microphone: nothing heard", "I didn't catch that. Try again, or type it.",
+          "When the microphone heard no words, or the browser could not turn them into words."),
     Entry("askrip.source.title", H, "Ask Rip page: where answers come from", "Where his answers come from",
           "Heading of the part on what Rip answers from."),
     Entry("askrip.source.body", P, "Ask Rip page: where answers come from, text",
@@ -3967,7 +3992,10 @@ ENTRIES = [
         "terms.data.ask", P, "Ask Rip data",
         "If you ask Rip a question on a product page, we send it with that page's prices and product details to our "
         "AI provider to write the answer. If you ask Rip to build a shopping list, we send what you type, and he "
-        "says what to search for; the products and prices come from RipRaptor. We first take out anything that looks like an email address, phone number "
+        "says what to search for; the products and prices come from RipRaptor. If you add a photo of your list, we "
+        "make it smaller, send it to our AI provider to read and do not keep it; we keep only the products Rip read "
+        "from it. If you use the microphone, your phone or browser turns what you say into words, and we only "
+        "receive the words. We first take out anything that looks like an email address, phone number "
         "or link, and we keep the question and its answer, without anything that says who asked, to improve Rip. To "
         "limit how many questions each person can ask a day, we keep a code made from your internet address for 24 "
         "hours. It cannot be turned back into the address. A small cookie of ours in your browser also keeps how "

@@ -6366,6 +6366,30 @@ words again are answered from the cache for a day, free. Each request is a
 works without script; the page is private and noindex. The wording is
 `find.list.*`.
 
+Two more ways to ask (the owner, 14 Nov 2026: "add a microphone option as it
+could take a while, and upload a shopping list photo"):
+
+- **A photo of the list.** The form is multipart with a plain file field,
+  so it works without script. `rip_list.photo_jpeg` refuses files over 15 MB
+  (`PHOTO_MAX_BYTES`), over 60 megapixels or not JPEG, PNG, WebP or GIF, then
+  turns the photo upright from its EXIF note and shrinks it to 1568 pixels on
+  its longest side. Claude gets the picture plus any words. The photo is
+  never saved, only the products read from it (the `ClaudeAsk` row's
+  evidence says `"photo": true`). It counts as one question, the same photo
+  again is free from the cache, and a visitor with no questions left is
+  turned away before the photo is opened. The spending check allows for the
+  picture's tokens (`PHOTO_CHARACTERS`). With script, `ask-input.js` makes
+  the field a button, shows a small copy of the photo with Remove photo,
+  and shrinks the photo in the browser before upload, so it sends in a
+  moment on phone data.
+- **Speak instead of typing.** A microphone button beside the list
+  builder's box, and inside the right end of a product page's Ask Rip box.
+  It uses the browser's own speech to text (`SpeechRecognition`). It is
+  hidden until `ask-input.js` finds the browser can do it, so it never shows
+  where it would not work (Firefox, for one). The words go into the box to
+  check and send, and the site only ever receives the words. Wording is
+  `askrip.voice.*`.
+
 **Share as post** (`web/share.py`, `share.js`): the Post icon in a product's
 Share panel, and in the cards' Share sheet, makes an Instagram post. The
 server draws a square picture (1080 by 1080, Pillow, DM Sans from

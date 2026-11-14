@@ -28,10 +28,12 @@
     {% csrf_token %}
     <div class="ask__row">
       <label class="visually-hidden" for="ask-question">{% copy "product.ask.label" product=product.name %}</label>
-      <input id="ask-question" class="ask__input" type="text" name="question" required minlength="3" maxlength="{{ ask.max_length }}" autocomplete="off" enterkeyhint="send" placeholder="{% copy 'product.ask.placeholder' %}">
+      <span class="ask__field"><input id="ask-question" class="ask__input" type="text" name="question" required minlength="3" maxlength="{{ ask.max_length }}" autocomplete="off" enterkeyhint="send" placeholder="{% copy 'product.ask.placeholder' %}">
+      {% include "web/includes/voice_button.html" with field="ask-question" words="askrip.voice.question" icon_only=True %}</span>
       <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
       <button class="button" type="submit">{% copy "product.ask.button" %}</button>
     </div>
+    <p class="voice-note" role="status" data-voice-status hidden></p>
   </form>
   <p class="ask__small">{% copy_count "product.ask.left" ask.left %} {% copy "product.ask.note" %} <a href="{% url 'web:ask_rip_about' %}">{% copy "product.ask.howto" %}</a> · <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.terms" %}</a></p>
   {% endif %}

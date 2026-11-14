@@ -2,8 +2,10 @@
 {% load sitecopy ripraptor %}
 {% block page_class %}page--find{% endblock %}
 
+{% block scripts %}{% load static %}<script nonce="{{ csp_nonce }}" src="{% static 'js/ask-input.js' %}" defer></script>{% endblock %}
+
 {% block content %}
-{# Build a shopping list with Rip (web/rip_list.py): a box for what the visitor wants, then the site's own products for each thing, one ticked, to add to the shopping list with how many. Plain forms, so it works without script. #}
+{# Build a shopping list with Rip (web/rip_list.py): a box for what the visitor wants, or a photo of their list, then the site's own products for each thing, one ticked, to add to the shopping list with how many. Plain forms, so it works without script: the photo is a plain file field. ask-input.js adds the microphone where the browser can turn speech into words, makes the photo field a button with a small copy of the photo, and shrinks the photo before it is sent. #}
 <div class="find">
   <h1 class="visually-hidden">{% copy "find.list.title" %}</h1>
   <div class="find__ask">
@@ -20,7 +22,8 @@
   </div>
 
   {% if wanted %}
-  <p class="rip-list__wants">{% copy "find.list.made.you_said" %} <q>{{ wants }}</q></p>
+  {% if photo %}<p class="rip-list__wants">{% copy "find.list.made.from_photo" %}</p>{% endif %}
+  {% if wants %}<p class="rip-list__wants">{% copy "find.list.made.you_said" %} <q>{{ wants }}</q></p>{% endif %}
   <form class="rip-list" method="post" action="{% url 'web:list_add_many' %}">{% csrf_token %}
     {% for row in wanted %}
     <fieldset class="rip-list__item">
@@ -45,12 +48,21 @@
   {% if wanted is not None %}<p class="rip-list__state" role="status">{% copy "find.list.nothing" %}</p>{% endif %}
   {% if box.state_key %}<p class="rip-list__state" role="status">{% copy box.state_key count=box.per_person hours=box.hours %}</p>{% endif %}
   {% if box.open and box.left %}
-  <form class="rip-list__form" method="post" action="{% url 'web:find_list' %}">{% csrf_token %}
+  <form class="rip-list__form" method="post" action="{% url 'web:find_list' %}" enctype="multipart/form-data" data-rip-list>{% csrf_token %}
     <label class="contact-form__label" for="rip-list-wants">{% copy "find.list.label" %}</label>
-    <textarea id="rip-list-wants" class="contact-form__input contact-form__text" name="wants" rows="3" maxlength="{{ box.max_length }}" required></textarea>
+    <textarea id="rip-list-wants" class="contact-form__input contact-form__text" name="wants" rows="3" maxlength="{{ box.max_length }}"></textarea>
+    <div class="rip-list__tools">
+      {% include "web/includes/voice_button.html" with field="rip-list-wants" words="askrip.voice.list" %}
+      <div class="rip-list__photo" data-photo>
+        <label class="rip-list__photo-label" for="rip-list-photo">{% include "web/includes/icons/camera.svg" %}<span>{% copy "find.list.photo_add" %}</span></label>
+        <input id="rip-list-photo" class="rip-list__file" type="file" name="photo" accept="image/*">
+        <div class="rip-list__chosen" data-photo-chosen hidden><img class="rip-list__thumb" alt="" data-photo-thumb hidden><span>{% copy "find.list.photo_added" %}</span><button class="button button--quiet button--small" type="button" data-photo-remove>{% copy "find.list.photo_remove" %}</button></div>
+      </div>
+    </div>
+    <p class="voice-note" role="status" data-voice-status hidden></p>
     <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
     <p class="rip-list__left">{% if box.left == 1 %}{% copy "product.ask.left.one" %}{% else %}{% copy "product.ask.left.other" count=box.left %}{% endif %}</p>
-    <p><button class="button" type="submit">{% copy "find.list.button" %}</button></p>
+    <p><button class="button" type="submit" data-working="{% copy 'find.list.working' %}">{% copy "find.list.button" %}</button></p>
   </form>
   {% endif %}
   <p class="find__again"><a href="{% url 'web:find' %}">{% copy "find.list.back" %}</a></p>

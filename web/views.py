@@ -3007,7 +3007,7 @@ def find_list(request):
     if request.method == "POST":
         if request.POST.get("website"):
             return HttpResponseRedirect(reverse("web:find_list"))   # the hidden field is only ever filled by robots
-        made = rip_list.make(request, request.POST.get("wants", ""))
+        made = rip_list.make(request, request.POST.get("wants", ""), photo=request.FILES.get("photo"))
         query = urlencode({"made": made.token} if made.token else {"state": made.state})
         response = HttpResponseRedirect(f"{reverse('web:find_list')}?{query}")
         response.status_code = 303
@@ -3019,9 +3019,10 @@ def find_list(request):
     found = rip_list.kept(token) if token else None
     state = request.GET.get("state", "")
     state = "gone" if token and found is None else state if state in rip_list.STATES else ""
-    wants, wanted = found if found else ("", None)
+    wants, photo, wanted = found if found else ("", False, None)
     response = render(request, "web/find_list.html", {
-        "box": rip_list.box(request, state), "wants": wants, "wanted": wanted, "max_quantity": shopping.MAX_QUANTITY,
+        "box": rip_list.box(request, state), "wants": wants, "photo": photo, "wanted": wanted,
+        "max_quantity": shopping.MAX_QUANTITY,
         "meta_title": text(request, "find.list.title"), "noindex": True,
     })
     response["Cache-Control"] = "private, no-store"

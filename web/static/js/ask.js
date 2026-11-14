@@ -169,6 +169,7 @@
         if (!document.getElementById("track")) fresh.querySelectorAll("[data-ask-track]").forEach((offer) => offer.remove());
         box.replaceWith(fresh);
         watch(fresh);
+        if (window.ripVoice) window.ripVoice(fresh);   // its microphone (ask-input.js)
         const answer = fresh.querySelector("[data-ask-answer]");
         if (answer) answer.focus({ preventScroll: true });
       })

@@ -1732,6 +1732,25 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .rip-list__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
 .rip-list__at { font-size: var(--text-sm); color: var(--color-ink-muted); }
 .rip-list__qty { display: flex; align-items: center; gap: var(--space-2); }
+/* Other ways to ask (ask-input.js). Without script the photo is a plain file field under its label; with it the label
+   is a quiet button and a small copy of the chosen photo shows with Remove photo. The microphone shows only where the
+   browser can turn speech into words, and wears the saved look while it listens, so it is plain that it is on. */
+.rip-list__tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.rip-list__photo { display: grid; gap: var(--space-2); min-width: 0; }
+.rip-list__photo-label { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-strong); }
+.rip-list__photo:has(.rip-list__file:focus-visible) .rip-list__photo-label { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.rip-list__file { max-width: 100%; font-size: var(--text-sm); }
+.rip-list__chosen { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-weight: var(--weight-strong); }
+.rip-list__thumb { width: var(--rip-list-thumb); height: var(--rip-list-thumb); object-fit: cover; border: 1px solid var(--color-line); border-radius: var(--radius-sm); }
+.voice { gap: var(--space-2); }
+.voice.is-listening { color: var(--color-brand-text); border-color: var(--color-brand-line); background: var(--color-brand-soft); }
+/* On a product page the microphone sits inside the right end of the question box, so the row keeps its one line. */
+.ask__field { position: relative; display: flex; flex: 1 1 var(--field-short); min-width: 0; }
+.ask__field .ask__input { flex: 1 1 auto; }
+.ask__field:has(.voice:not([hidden])) .ask__input { padding-right: var(--tap); }
+.voice--icon { position: absolute; top: 0; right: 0; width: var(--tap); min-height: var(--tap); border-color: transparent; background: transparent; }
+.voice--icon.is-listening { border-color: var(--color-brand-line); }
+.voice-note { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink); }
 /* How many of a product: a number box and its own Update button. */
 .list-qty { display: flex; align-items: center; gap: var(--space-1); }
 .list-qty__input { width: var(--list-qty-width); min-height: var(--tap); padding: var(--space-1) var(--space-2); border: 1px solid var(--color-line-strong); border-radius: var(--radius); font: inherit; }

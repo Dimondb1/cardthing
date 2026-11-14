@@ -3,6 +3,7 @@ found products due out in November under Out now, some with Dropping soon on the
 stock before its release date is not the release, and a list about stock now leads with a shop that has it."""
 
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from unittest import mock
 from zoneinfo import ZoneInfo
 
@@ -90,7 +91,10 @@ class OutNowTests(TestCase):
         box = self.product("Mixed Set", self.today - timedelta(days=2))
         make_listing(box, self.harbour, price="80.00", availability=PRE)
         make_listing(box, self.north, price="95.00")
-        Product.objects.filter(pk=box.pk).update(price_band=5)   # a Price check worked out on the £80 pre-order
+        # The Price check is worked out on the price the card shows, the cheapest in stock (catalogue/models.py
+        # with_prices), so it is shown with it.
+        Product.objects.filter(pk=box.pk).update(price_band=5)
+        self.assertEqual(Product.objects.with_prices().get(pk=box.pk).lowest_known, Decimal("95.00"))
         for url in ("/drops/?show=out", self.game.get_absolute_url(), "/search/?q=Mixed&in_stock=on"):
             html = self.client.get(url).content.decode()
             card = html[html.index('<li class="card'):]
@@ -98,11 +102,15 @@ class OutNowTests(TestCase):
             self.assertIn("£95.00", card, url)
             self.assertIn("Northgate Cards", card, url)
             self.assertNotIn("Dropping soon", card, url)
-            self.assertNotIn('class="fair ', card, url)   # that Price check was for another price
-        # The Pre-orders view of the same product still leads with its cheapest offer, the pre-order.
+            self.assertIn('class="fair ', card, url)
+            self.assertNotIn("£80.00", card, url)   # a list about stock leaves pre-orders out altogether
+        # Every other list leads with the cheapest in stock too, and says the pre-order is cheaper (the owner, 14 Nov
+        # 2026: "It's showing a reserve price as the lowest not the cheapest available price today").
         html = self.client.get("/search/?q=Mixed").content.decode()
         card = html[html.index('<li class="card'):]
-        self.assertIn("£80.00", card[:card.index("</li>")])
+        card = card[:card.index("</li>")]
+        self.assertIn('<span class="price price--card">£95.00</span>', card)
+        self.assertIn("Pre-order from £80.00", card)
 
 
 class ProductPageTests(TestCase):

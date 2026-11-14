@@ -1,4 +1,4 @@
-{% load sitecopy ripraptor %}{# One product as a row in the compact layout (web/compact.py): the whole row is the link to its page. Picture, name, the cheapest shop (or that it is a pre-order, or that no shop has it), then the delivered price, how many shops, and for a box how many packs it holds and the price of each (the owner, 9 Nov 2026: "when I looking up booster boxes, I would like to see the pack count"). With Best for ripping on (rip_on), the price a card and the Price check's chip too. Takes product (with for_lists' prices and its offers), summary (offers.Summary) and, in a set's list, product.compact_name. #}
+{% load sitecopy ripraptor %}{# One product as a row in the compact layout (web/compact.py): the whole row is the link to its page. Picture, name, the cheapest shop in stock (or that it is a pre-order when nobody has it, or that no shop has it), a cheaper pre-order's price when there is one, then the delivered price, how many shops, and for a box how many packs it holds and the price of each (the owner, 9 Nov 2026: "when I looking up booster boxes, I would like to see the pack count"). With Best for ripping on (rip_on), the price a card and the Price check's chip too. Takes product (with for_lists' prices and its offers), summary (offers.Summary) and, in a set's list, product.compact_name. #}
 <li class="crow{% if not summary.best %} crow--none{% endif %}">
   <a class="crow__link" href="{{ product.get_absolute_url }}">
     <span class="crow__pic">{% product_image product "compact" %}</span>
@@ -10,6 +10,7 @@
     {% if summary.best %}<span class="crow__offer">
       <span class="crow__price">{{ summary.best.shown_price|gbp }}{% if not summary.best.delivery_known %} <small>{% copy "browse.price.plus" %}</small>{% endif %}</span>
       <span class="crow__meta">{% copy_count "compact.row.shops" product.offers|length %}</span>
+      {% if summary.cheaper_preorder %}<span class="crow__meta">{% copy "browse.preorder_from" price=summary.cheaper_preorder.shown_price|gbp %}</span>{% endif %}
       {% with each=summary.best.shown_price|per_pack:product.packs_inside %}{% if each %}<span class="crow__meta">{% copy "compact.row.packs" packs=product.packs_inside each=each|gbp %}</span>{% endif %}{% endwith %}
       {% if rip_on %}{% with card=summary.best.shown_price|per_card:product %}{% if card %}<span class="crow__meta crow__meta--card">{% copy "browse.card.per_card" each=card %}</span>{% endif %}{% endwith %}{% endif %}
     </span>{% else %}<span class="crow__offer crow__offer--none">{% copy "compact.row.none" %}</span>{% endif %}

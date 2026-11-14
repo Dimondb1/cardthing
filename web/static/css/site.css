@@ -1072,6 +1072,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .card__offer > p { margin: 0; }   /* the grid gap spaces these lines, not the usual paragraph margin */
 .card__offer--none { grid-template-columns: minmax(0, 1fr); grid-template-areas: "price" "at"; }
 .card__price { grid-area: price; }
+/* A cheaper pre-order than the in-stock price above it: its own line under the shop, across the card. */
+.card__preorder { grid-column: 1 / -1; font-size: var(--text-sm); color: var(--color-ink-muted); }
 .card__at { grid-area: at; font-size: var(--text-sm); color: var(--color-ink-muted); }
 .card__each { white-space: nowrap; color: var(--color-ink); font-weight: var(--weight-medium); }
 /* On the Cheapest per card page the price per card is what the list is ranked by: green, as every cheapest price is. */

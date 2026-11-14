@@ -4301,6 +4301,19 @@ marked Cheapest, and the search description names both prices
 title quote the in-stock price. Only when no shop has it in stock does
 the cheapest pre-order lead, with the Pre-order button and Dropping soon.
 
+Every list follows the same rule (the owner, 14 Nov 2026, on Delta Reign's
+booster pack showing a £5.49 pre-order while shops had it in stock: "It's
+showing a reserve price as the lowest not the cheapest available price
+today"). `offers.buyable_prefetch` puts offers in stock first, so a card,
+a compact row and a feed card lead with the cheapest in stock, and
+`Product.objects.with_prices()` gives `lowest_known` and `lowest_price`
+from the offers in stock, or from the pre-orders only when no shop has it
+in stock. Sorting by price, the daily price record (`snapshot_all`), the
+Price check, Discord posts and the dashboards all use that price. A
+cheaper pre-order is said under the price on cards and compact rows
+("Pre-order from £5.49", `browse.preorder_from`, `Summary.cheaper_preorder`);
+lists about stock (In stock, Out now) leave pre-orders out as before.
+
 When no shop has a product in stock, the price box leads with "Compare on
 Amazon" and "Search eBay": a tagged Amazon search and an eBay UK search
 for new, buy it now listings carrying the eBay Partner Network campaign,

@@ -25,7 +25,7 @@ from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
-from django.db.models import Prefetch
+from django.db.models import Case, Prefetch, Value, When
 from django.utils import timezone
 
 from .models import DailyLowestPrice, Listing, fresh
@@ -42,7 +42,9 @@ DEAL_PERCENT = 5                  # a credible saving this big or bigger is a de
 
 
 def buyable_prefetch():
-    """Attach ``product.offers``: buyable listings, cheapest first."""
+    """Attach ``product.offers``: buyable listings, in stock before pre-orders, then cheapest first. A list leads with
+    the cheapest price in stock today, as the product page does; a pre-order leads only when nobody has it in stock.
+    The owner, 14 Nov 2026: "It's showing a reserve price as the lowest not the cheapest available price today"."""
     return Prefetch(
         "listings",
         queryset=Listing.objects.filter(
@@ -53,8 +55,9 @@ def buyable_prefetch():
         )
         .exclude(sanity=Listing.Sanity.EXCLUDED)
         .select_related("retailer")
-        # Confirmed delivered prices first, cheapest first; shops whose delivery is unknown after them.
-        .order_by("-delivery_known", "delivered_price", "retailer__name"),
+        # In stock first; then confirmed delivered prices, cheapest first; shops whose delivery is unknown after them.
+        .order_by(Case(When(availability=Listing.Availability.IN_STOCK, then=Value(0)), default=Value(1)),
+                  "-delivery_known", "delivered_price", "retailer__name"),
         to_attr="offers",
     )
 
@@ -64,6 +67,15 @@ def offer_order(listing):
     return (not listing.delivery_known, listing.delivered_price)
 
 
+def cheaper_preorder(offers, best):
+    """The cheapest pre-order in ``offers`` (buyable_prefetch's order) under ``best``'s price, when ``best`` is in
+    stock; else None."""
+    if best is None or best.availability != Listing.Availability.IN_STOCK:
+        return None
+    found = next((offer for offer in offers if offer.availability == Listing.Availability.PREORDER), None)
+    return found if found is not None and found.shown_price < best.shown_price else None
+
+
 # A saving above this share of the runner-up's price is a wrong product link (a pack against a box,
 # a part against the whole), not a bargain. It is never shown, and suspect_savings lists it for checking.
 # The price verdicts (catalogue/sanity.py) catch these first; this cap stays as a second guard.
@@ -71,13 +83,16 @@ MAX_REAL_PERCENT = 70
 
 
 class Summary:
-    __slots__ = ("best", "second", "saving", "percent", "badge", "suspect", "deal", "under")
+    __slots__ = ("best", "second", "saving", "percent", "badge", "suspect", "deal", "under", "cheaper_preorder")
 
-    def __init__(self, best, second, saving, percent, badge, suspect=False, deal=None, under=None):
+    def __init__(self, best, second, saving, percent, badge, suspect=False, deal=None, under=None,
+                 cheaper_preorder=None):
         self.best, self.second, self.saving, self.percent, self.badge = best, second, saving, percent, badge
         self.suspect = suspect
         self.deal = deal
         self.under = under      # with LOW_30: how far today's price is under the 30-day average, in percent
+        # A pre-order cheaper than the best, which is in stock: lists say "Pre-order from £x" under the price.
+        self.cheaper_preorder = cheaper_preorder
 
     @property
     def low_deal(self):
@@ -170,7 +185,8 @@ def summarise(product, week_lows=None):
         elif lows.week is not None and price <= lows.week and price < lows.week_high:
             badge = BEST_WEEK
         under = under if badge == LOW_30 else None
-    return Summary(best, second, saving, percent, badge, suspect, best_deal(offers, best), under)
+    return Summary(best, second, saving, percent, badge, suspect, best_deal(offers, best), under,
+                   cheaper_preorder(offers, best))
 
 
 def week_low_map(product_ids, days=None, today=None):

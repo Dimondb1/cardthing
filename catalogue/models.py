@@ -174,18 +174,18 @@ class ProductQuerySet(models.QuerySet):
             listings__sanity__in=Listing.COUNTED,
         )
         known = Q(listings__delivery_known=True)
+        unknown = Q(listings__delivery_known=False)
+        stocked = buyable & Q(listings__availability=Listing.Availability.IN_STOCK)
+        ahead = buyable & Q(listings__availability=Listing.Availability.PREORDER)
         delivered = listing_delivered_price("listings__")
         return self.annotate(
-            # The cheapest confirmed delivered price; without one, the cheapest item price of a shop whose
-            # delivery is unknown, which is shown as "plus delivery". Lists sort on what they show.
-            lowest_known=Min(delivered, filter=buyable & known),
-            lowest_price=Coalesce(
-                Min(delivered, filter=buyable & known),
-                Min("listings__price", filter=buyable & Q(listings__delivery_known=False)),
-            ),
+            in_stock_known=Min(delivered, filter=stocked & known),
+            in_stock_unknown=Min("listings__price", filter=stocked & unknown),
+            preorder_known=Min(delivered, filter=ahead & known),
+            preorder_unknown=Min("listings__price", filter=ahead & unknown),
             in_stock_count=Count(
                 "listings",
-                filter=buyable & Q(listings__availability=Listing.Availability.IN_STOCK),
+                filter=stocked,
                 distinct=True,
             ),
             preorder_count=Count(
@@ -197,6 +197,19 @@ class ProductQuerySet(models.QuerySet):
             # Cheapest delivered price any shop has listed, whether or not it is in stock now, leaving out a
             # price kept out of the comparison.
             last_price=Min(delivered, filter=live & Q(listings__sanity__in=Listing.COUNTED)),
+        ).annotate(
+            # The cheapest price in stock today; a pre-order's only when no shop has it in stock, as the product
+            # page leads (the owner, 14 Nov 2026: "It's showing a reserve price as the lowest not the cheapest
+            # available price today. It should"). lowest_known is the cheapest confirmed delivered price of those;
+            # lowest_price falls back to the cheapest item price of a shop whose delivery is unknown, shown as "plus
+            # delivery". Lists sort on what they show, and the daily record and the Price check use the same price.
+            lowest_known=Case(When(in_stock_count__gt=0, then=F("in_stock_known")), default=F("preorder_known"),
+                              output_field=models.DecimalField(max_digits=9, decimal_places=2)),
+            lowest_price=Case(
+                When(in_stock_count__gt=0, then=Coalesce(F("in_stock_known"), F("in_stock_unknown"))),
+                default=Coalesce(F("preorder_known"), F("preorder_unknown")),
+                output_field=models.DecimalField(max_digits=9, decimal_places=2),
+            ),
         )
 
     def with_release(self):

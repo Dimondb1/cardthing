@@ -722,6 +722,9 @@ ENTRIES = [
           "Under a product row's price: how many shops have it."),
     Entry("compact.row.shops.other", T, "Compact layout: shops on a row (more than one)", "{count} shops",
           "Under a product row's price: how many shops have it.", placeholders=("count",)),
+    Entry("browse.preorder_from", T, "Lists: a cheaper pre-order", "Pre-order from {price}",
+          "Under a product's price in lists and cards, when a shop's pre-order is cheaper than the cheapest in stock, "
+          "which the price shows.", placeholders=("price",)),
     Entry("compact.row.preorder", T, "Compact layout: a row on pre-order", "Pre-order",
           "Before the shop's name on a product row when its cheapest price is a pre-order."),
     Entry("compact.row.none", T, "Compact layout: a row none has", "None in stock",

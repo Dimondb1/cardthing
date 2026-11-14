@@ -176,11 +176,13 @@ class PostTests(TestCase):
         cache.clear()
         self.addCleanup(cache.clear)
         Listing.objects.filter(retailer=self.northgate).update(price="80.00", availability=Listing.Availability.PREORDER)
-        Product.objects.filter(pk=self.product.pk).update(price_band=fair_price.GOOD_PRICE)   # worked out on the £80
+        # The Price check is worked out on the cheapest price in stock (catalogue/models.py with_prices), the one
+        # the post leads with, so its verdict goes with it.
+        Product.objects.filter(pk=self.product.pk).update(price_band=fair_price.GOOD_PRICE)
         caption = self.caption()["caption"]
-        self.assertIn("£87.00 delivered today at the one UK shop we found it at. Checked", caption)
+        self.assertIn("£87.00 delivered today at the one UK shop we found it at. A good price by our Price check.",
+                      caption)
         self.assertNotIn("pre-order", caption)
-        self.assertNotIn("Price check", caption)   # that verdict was for the other price
         with mock.patch("catalogue.importers.fetch", side_effect=OSError("down")):
             response = self.client.get(f"/products/{self.product.slug}/post.png")
         with Image.open(BytesIO(response.content)) as picture:
@@ -194,7 +196,9 @@ class PostTests(TestCase):
             lead = share.post_lead(product, summary)
             self.assertEqual((lead.retailer, lead.availability, str(lead.shown_price)),
                              (self.harbour, Listing.Availability.IN_STOCK, "87.00"))
-            self.assertEqual(str(summary.best.shown_price), "80.00")   # the cheapest of all is the pre-order
+            # Lists lead with the cheapest in stock too, and keep the cheaper pre-order to mention.
+            self.assertEqual(str(summary.best.shown_price), "87.00")
+            self.assertEqual(str(summary.cheaper_preorder.shown_price), "80.00")
         # With no shop having it, the pre-order leads, as before.
         Listing.objects.filter(retailer=self.harbour).update(availability=Listing.Availability.OUT_OF_STOCK)
         self.assertIn("On pre-order at £80.00 delivered, the cheapest of the UK shops taking orders.", self.caption()["caption"])

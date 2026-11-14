@@ -22,6 +22,7 @@ urlpatterns = [
     path("find/", views.find, name="find"),
     path("find/list/", views.find_list, name="find_list"),
     path("find/photo/", views.search_photo, name="search_photo"),
+    path("search/voice/", views.voice_search, name="voice_search"),
     path("new/", views.latest_drops, name="new"),
     path("drops/", views.drops, name="drops"),
     path("drops/remind/<int:set_id>/", views.drop_ask, name="drop_ask"),

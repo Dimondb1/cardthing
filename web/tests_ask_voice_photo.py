@@ -199,7 +199,8 @@ class SearchBoxTests(ListCase):
     def test_every_search_box_has_the_microphone_and_the_camera(self):
         html = self.client.get(reverse("web:search"), {"q": "box"}).content.decode()
         self.assertIn('<button class="search__tool" type="button" hidden data-voice="header-q" data-voice-submit '
-                      'data-voice-stop="Stop listening" aria-label="Search by voice">', html)
+                      f'data-voice-ai="{reverse("web:voice_search")}" data-voice-stop="Stop listening" '
+                      'aria-label="Search by voice">', html)
         self.assertIn(f'<a class="search__tool" href="{PHOTO_URL}" rel="nofollow" aria-label="Search by photo">', html)
         # The large search on the page for a missing address, the same parts.
         missing = self.client.get("/no-such-page/").content.decode()
@@ -298,3 +299,69 @@ class OneScreenTests(ListCase):
                       html)
         token, _ = self.made(self.build())
         self.assertContains(self.client.get(URL, {"made": token}), '<p class="rip-list__send"><button class="button"')
+
+
+VOICE_URL = reverse("web:voice_search")
+
+
+class VoiceSearchTests(ListCase):
+    """Rip reads every spoken search, with the site's sets (the owner, 14 Nov 2026: "surely the ai can know the list
+    of products and has intelligence built in to the model that knows what words sound like other words")."""
+
+    def setUp(self):
+        super().setUp()
+        self.fake.answer = items(("Surging Sparks Booster Box", "pokemon", 1))
+
+    def say(self, words="surging sparks booster box", **extra):
+        return self.client.get(VOICE_URL, {"q": words, **extra}, REMOTE_ADDR="203.0.113.7")
+
+    def test_what_was_heard_goes_to_rip_with_the_sites_sets(self):
+        response = self.say("surging sparkles booster box")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("web:search") + "?q=Surging+Sparks+Booster+Box&game=pokemon"
+                                               "&said=surging+sparkles+booster+box")
+        sent = self.fake.sent[0]
+        system = sent["system"][0]
+        self.assertEqual(system["cache_control"], {"type": "ephemeral"})   # the set list is cached between requests
+        self.assertIn("may come from a phone's speech to text and be misheard", system["text"])
+        self.assertIn(f"pokemon: {self.box.product_set.name}", system["text"])
+        self.assertEqual(sent["messages"][0]["content"], "<wants>surging sparkles booster box</wants>")
+        self.assertEqual(ClaudeAsk.objects.get().row_key, "voice")
+        # The page says what the phone heard, and a voice search is not one of the five Ask Rip questions.
+        page = self.client.get(response["Location"], REMOTE_ADDR="203.0.113.7")
+        self.assertContains(page, "You said ‘surging sparkles booster box’.")
+        self.assertContains(self.client.get(URL, REMOTE_ADDR="203.0.113.7"), "You can ask 5 more questions today.")
+
+    def test_several_products_said_open_the_list_builders_choices(self):
+        self.fake.answer = items(("Surging Sparks Booster Box", "pokemon", 2), ("Prismatic Evolutions Booster Bundle",
+                                                                                 "pokemon", 1))
+        self.assertTrue(self.say("two surging sparks boxes and a prismatic bundle")["Location"]
+                        .startswith(reverse("web:find_list") + "?made="))
+
+    def test_the_same_words_again_are_free(self):
+        self.say()
+        self.say()
+        self.assertEqual(len(self.fake.sent), 1)
+
+    def test_whenever_rip_cannot_answer_the_plain_search_runs_on_the_words_heard(self):
+        plain = reverse("web:search") + "?q=delta+rain"
+        with mock.patch.object(rip_list, "VOICE_PER_DAY", 0):
+            self.assertEqual(self.say("delta rain")["Location"], plain)   # past the day's voice searches
+        self.fake.answer = items()
+        self.assertEqual(self.say("delta rain")["Location"], plain)   # Rip found nothing
+        self.assertEqual(self.say("delta rain", game="pokemon")["Location"], plain + "&game=pokemon")
+        ClaudeJob.objects.create(name="ask", on=False)
+        askrip.reopen()
+        sent = len(self.fake.sent)
+        self.assertEqual(self.say("obsidian flames")["Location"], reverse("web:search") + "?q=obsidian+flames")
+        self.assertEqual(len(self.fake.sent), sent)   # switched off: nothing sent
+
+    def test_the_list_builder_knows_the_sets_too(self):
+        self.build()
+        self.assertIn(f"pokemon: {self.box.product_set.name}", self.fake.sent[0]["system"][0]["text"])
+
+    def test_the_microphone_sends_what_it_heard_to_rip(self):
+        with open(finders.find("js/ask-input.js"), encoding="utf-8") as handle:
+            script = handle.read()
+        self.assertIn('var ai = button.getAttribute("data-voice-ai");', script)
+        self.assertIn('window.location.href = ai + "?" + query.toString();', script)

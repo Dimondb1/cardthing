@@ -252,7 +252,8 @@ class HomeFeedTests(FeedCase):
         self.assertIn('window.addEventListener("scroll", showCues, { passive: true });', script)
         # Voice search by the one script every box uses (ask-input.js); photo search a link (the owner, 14 Nov 2026).
         self.assertIn('<button class="feed-search__mic" type="button" hidden data-voice="feed-q" data-voice-submit '
-                      'data-voice-stop="Stop listening" aria-label="Search by voice">', dock)
+                      f'data-voice-ai="{reverse("web:voice_search")}" data-voice-stop="Stop listening" '
+                      'aria-label="Search by voice">', dock)
         self.assertIn(f'<a class="feed-search__mic" href="{reverse("web:search_photo")}" rel="nofollow" '
                       'aria-label="Search by photo">', dock)
         # Results as you type: the same script and wording as the header's search, the panel above the box.

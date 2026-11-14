@@ -64,7 +64,16 @@
           if (!heard) return;
           field.dispatchEvent(new Event("input", { bubbles: true }));
           if (submits && form) {
-            if (form.requestSubmit) form.requestSubmit();
+            // A search box sends what was heard to Rip (data-voice-ai), who knows the site's sets and so what a
+            // misheard word meant; his page falls back to the plain search on its own.
+            var ai = button.getAttribute("data-voice-ai");
+            if (ai) {
+              var query = new URLSearchParams();
+              query.set("q", field.value);
+              var game = form.querySelector("input[name=game]");
+              if (game && game.value) query.set("game", game.value);
+              window.location.href = ai + "?" + query.toString();
+            } else if (form.requestSubmit) form.requestSubmit();
             else form.submit();
           }
         };

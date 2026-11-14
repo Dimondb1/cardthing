@@ -97,6 +97,7 @@
   {% endif %}
   {% if game and not product_set %}<div class="browse-head__title-row">{% if feed %}<h2 class="browse-head__title">{{ heading }}</h2>{% else %}<h1 class="browse-head__title">{{ heading }}</h1>{% endif %}{% info "game" game.slug game.display_short %}</div>{% else %}<h1 class="browse-head__title">{{ heading }}</h1>{% endif %}
   {# The words searched for in place of what was typed, which found nothing (catalogue.search.corrected), and a way back to exactly what was typed. #}
+  {% if said %}<p class="browse-head__fix">{% copy "browse.voice.said" said=said %}</p>{% endif %}
   {% if searched_for %}<p class="browse-head__fix" role="status">{% copy "browse.fix.showing" query=searched_for %} <a href="{{ exact_url }}">{% copy "browse.fix.exact" query=query %}</a></p>{% endif %}
   {% if intro %}<p class="browse-head__intro">{{ intro }}</p>{% endif %}
   {% if product_set %}<p class="browse-head__meta">{% for fact in set_facts %}{{ fact }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% endfor %}<a href="{{ game.get_absolute_url }}">{% copy "browse.set.game_link" game=game.display_short %}</a></p>{% endif %}

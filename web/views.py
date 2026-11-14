@@ -1202,6 +1202,7 @@ def search_path(query):
 def search(request):
     query = request.GET.get("q", "").strip()
     kind = request.GET.get("type", "")
+    said = request.GET.get("said", "").strip()[:100] if query else ""   # what the phone heard, when Rip read it
     if query:
         heading = text(request, "browse.results.title", query=query)
     elif kind in Product.Type.values and kind != Product.Type.OTHER:
@@ -1212,7 +1213,7 @@ def search(request):
     return _browse(
         request,
         {
-            "heading": heading, "meta_title": heading, "noindex": True, "is_search": True,
+            "heading": heading, "meta_title": heading, "noindex": True, "is_search": True, "said": said,
             # Where the products searched for live, game / set / type, as links (search_path).
             "search_path": search_path(query) if query else [],
             # The sort and filters fold under one button, as on a game's page, so the list is in reach on a phone.
@@ -2981,6 +2982,22 @@ def find(request):
     return render(request, "web/find.html", {
         "step": found, "steps": find_steps.STEPS, "meta_title": words("find.title"), "noindex": True,
     })
+
+
+@require_GET
+def voice_search(request):
+    """A spoken search (web/rip_list.py hear), from the microphone in every search box: Rip reads what the phone heard
+    against the site's sets, so "delta rain" opens Delta Reign. One product opens its search, several the list
+    builder's choices; otherwise the plain search runs on the words heard, with its sound-alike fix. Only the
+    microphone's script links here; it is never cached or indexed."""
+    said = request.GET.get("q", "").strip()[:100]
+    made = rip_list.hear(request, said)
+    plain = {"q": said, **({"game": request.GET["game"]} if request.GET.get("game") else {})}
+    response = HttpResponseRedirect(rip_list.found_target(made, f"{reverse('web:search')}?{urlencode(plain)}", said=said)
+                                    if said else reverse("web:search"))
+    response["Cache-Control"] = "no-store"
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
 
 
 # Search by photo: what Rip says of each state is its own where the list builder's would not fit.

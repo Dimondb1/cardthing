@@ -6442,8 +6442,28 @@ tokens (`--search-tool`, `--search-header-button` and the like).
 
 - The **microphone** uses the same `ask-input.js` code as Ask Rip's boxes,
   now loaded on every page (`feed.js` lost its own copy). In a search box
-  (`data-voice-submit`) it searches as soon as it hears words, since a
-  search costs nothing.
+  (`data-voice-submit`) it acts as soon as it hears words. It sends them to
+  **Rip** (`data-voice-ai`, `/search/voice/`, `web.views.voice_search`,
+  `rip_list.hear`). The owner, 14 Nov 2026: "surely the ai can know the
+  list of products and has intelligence built in to the model that knows
+  what words sound like other words".
+  - Rip reads the words as the list builder does, told they may be
+    misheard and given every set we have products for (`rip_list.set_lines`,
+    a line a game, newest first, kept ten minutes). So "delta rain" is
+    Delta Reign even though the set is newer than his own knowledge.
+  - One product opens its search, with "You said ‘…’" under the heading
+    (`browse.voice.said`). Several open the list builder's choices.
+  - It has its own allowance, 30 a person a day (`rip_list.VOICE_PER_DAY`,
+    counted under a one-way hash of the internet address), not the five
+    Ask Rip questions. It sits under Ask Rip's switch and monthly limit on
+    the Claude page (row key `voice`), and the same words again come free
+    from the cache.
+  - Whenever Rip cannot answer (off, at a limit, busy, failed, nothing
+    found) the plain search runs on the words heard, with its sound-alike
+    fix, so a voice search never ends at a dead end.
+  - The prompt, set list included, is marked for the API's prompt cache,
+    so a request pays in full only for the few words asked. The list
+    builder and Search by photo get the same set list.
 - The **camera** is a plain link to **Search by photo** (`/find/photo/`,
   `web.views.search_photo`). It is a link rather than a file button
   because search boxes sit on cached pages that cannot carry a form token,

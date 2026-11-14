@@ -898,6 +898,9 @@ ENTRIES = [
     ),
 
     # Search results and browsing -----------------------------------------
+    Entry("browse.voice.said", T, "Search: what was said", "You said ‘{said}’.",
+          "Under the results heading after a voice search Rip read, so the shopper sees what the phone heard.",
+          placeholders=("said",)),
     Entry("browse.fix.showing", T, "Search: showing results for a near word", "Showing results for ‘{query}’.",
           "Under the results heading when the words searched for found nothing and a word that sounds or is spelt "
           "alike did (a phone hearing delta rain for Delta Reign).", placeholders=("query",)),
@@ -4016,7 +4019,8 @@ ENTRIES = [
         "says what to search for; the products and prices come from RipRaptor. If you add a photo of your list, we "
         "make it smaller, send it to our AI provider to read and do not keep it; we keep only the products Rip read "
         "from it. If you use the microphone, your phone or browser turns what you say into words, and we only "
-        "receive the words. We first take out anything that looks like an email address, phone number "
+        "receive the words; a spoken search goes to our AI provider to work out which product you meant. We first "
+        "take out anything that looks like an email address, phone number "
         "or link, and we keep the question and its answer, without anything that says who asked, to improve Rip. To "
         "limit how many questions each person can ask a day, we keep a code made from your internet address for 24 "
         "hours. It cannot be turned back into the address. A small cookie of ours in your browser also keeps how "

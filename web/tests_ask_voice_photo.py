@@ -546,10 +546,10 @@ class AskSheetTests(ListCase):
                 ways = sheet[sheet.index('<nav class="ask-sheet__ways"'):sheet.index("</nav>")]
                 for href, words in ((reverse("web:find_list"), "Build a shopping list"),
                                     (reverse("web:shopping_list"), "Your list"),
-                                    (reverse("web:find") + "?go=find", "Step by step")):
+                                    (reverse("web:find") + "?go=find", "Shop with Rip")):
                     self.assertIn(f'href="{href}"', ways)
                     self.assertIn(f"<span>{words}</span>", ways)
-        # Step by step is the guided helper's first question, not the page Ask opens without script.
+        # Shop with Rip is the guided helper's first question, not the page Ask opens without script.
         self.assertContains(self.client.get(reverse("web:find"), {"go": "find"}), "find__steps")
 
     def test_what_is_typed_is_read_by_rip_and_shown_as_asked(self):

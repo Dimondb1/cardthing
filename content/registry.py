@@ -549,7 +549,7 @@ ENTRIES = [
     Entry("askrip.sheet.build", B, "Ask Rip popup: build a list", "Build a shopping list",
           "Opens the list builder, where Rip turns words or a photo into a list."),
     Entry("askrip.sheet.list", B, "Ask Rip popup: your list", "Your list", "Opens the shopping list, to see or change it."),
-    Entry("askrip.sheet.steps", B, "Ask Rip popup: step by step", "Step by step",
+    Entry("askrip.sheet.steps", B, "Ask Rip popup: Shop with Rip", "Shop with Rip",
           "Opens Find with Rip's guided steps: pick a game, then a kind of product."),
     Entry("find.title", H, "Find with Rip: page title", "Find with Rip", "The guided search's page title and heading for search engines."),
     Entry("find.game.question", T, "Find with Rip: the first question", "What are you looking for?",

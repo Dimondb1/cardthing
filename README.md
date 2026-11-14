@@ -6536,7 +6536,8 @@ a third icon.
   voice allowance (30 a day, the owner exempt). The results say "Rip found
   these for ‘...’" rather than "You said".
 - Under it, three ways in: Build a shopping list (`/find/list/`), Your list
-  (`/shopping-list/`), Step by step (`/find/?go=find`, the guided questions).
+  (`/shopping-list/`), Shop with Rip (`/find/?go=find`, the guided
+  questions; called Step by step until the owner renamed it).
 - Words are `askrip.sheet.*`; the blur is `--ask-sheet-blur`. It only shows
   where the header shows Ask (new home page or compact layout on).
 

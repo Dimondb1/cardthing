@@ -295,7 +295,6 @@
   --ask-grip-width: 2.5rem;         /* the bar at the top of the sheet that says it can be swiped down */
   --ask-grip-height: 0.3125rem;
   --ask-close-icon: 1.375rem;       /* the popup's cross */
-  --ask-way-height: 6.5rem;         /* the three ways in under the popup's box, on a phone */
   --ask-way-icon: 1.625rem;
   --ask-stop: 5rem;                 /* the big stop button while the popup listens */
   --ask-stop-mark: 1.5rem;          /* the square on it */

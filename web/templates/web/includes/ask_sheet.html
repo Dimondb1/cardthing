@@ -1,12 +1,12 @@
-{% load sitecopy ripraptor %}{% comment %}Ask Rip, opened by the header's Ask button (ask-input.js). The owner, 14 Nov 2026: "Find button on header should be changed to ask ... it should act as a toggle ... blurs the current page and then presents the user with the search box ... with icons for build a shopping list and one for existing lists", and the same day, from a mockup: a sheet from the foot of a phone with Rip peeking over its top, suggestions under the box, today's top deal, a big listening view, and on a product page that product's questions. A phone gets the sheet; a wider screen the same panel, centred under the header, which stays sharp above the blur so Ask still toggles it.
-One box, typed or spoken: Rip reads it as he reads a voice search (web.views.voice_search, via=typed when typed) and opens the right results, or the list builder for several products. The arrow that sends it shows once there are words. The suggestions are plain links to their results, so a tap costs Rip nothing. Today's top deal is the first of the home page's Today's best deals (web.feed.today, one cache read). Then the ways in: build a list, the list itself (its count from the cookie that holds only the number, as the header's), and Shop with Rip, the step by step helper.
+{% load static sitecopy ripraptor %}{% comment %}Ask Rip, opened by the header's Ask button (ask-input.js). The owner, 14 Nov 2026: "Find button on header should be changed to ask ... it should act as a toggle ... blurs the current page and then presents the user with the search box ... with icons for build a shopping list and one for existing lists", and the same day, from a mockup: a sheet from the foot of a phone with Rip peeking over its top, suggestions under the box, today's top deal, a big listening view, and on a product page that product's questions. The owner, the same evening: "Rip needs the white of his eyes ... no excuse for this to not all fit on the screen": Rip is the pack's own drawing with its white eye, and it all fits a phone's screen without scrolling. A phone gets the sheet; a wider screen the same panel, centred under the header, which stays sharp above the blur so Ask still toggles it.
+One box, typed or spoken: Rip reads it as he reads a voice search (web.views.voice_search, via=typed when typed) and opens the right results, or the list builder for several products. The arrow that sends it shows once there are words. The suggestions are plain links to their results, so a tap costs Rip nothing; a photo is the camera in the box. Today's top deal is the first of the home page's Today's best deals (web.feed.today, one cache read). Then the ways in: build a list, the list itself (its count filled in by site.js from the cookie that holds only the number, as the header's), and Shop with Rip, the step by step helper.
 On a product page, while Rip takes its questions, it opens on that product: its cheapest delivered price and its one-tap questions, which go to the Ask Rip box in its price box (ask.js), as the questions at the top of the page do; Ask about something else shows the search instead.
 Hidden until the script opens it; without script the Ask button opens the Find page instead. The search is a plain GET form, so the cached pages around it need no token.{% endcomment %}{% url 'web:voice_search' as voice_url %}
 <div class="ask-sheet" id="ask-sheet" hidden data-ask-sheet>
   <div class="ask-sheet__backdrop" data-ask-close></div>
   <section class="ask-sheet__panel" role="dialog" aria-labelledby="ask-sheet-title" tabindex="-1" data-ask-panel>
     <span class="ask-sheet__grip" aria-hidden="true" data-ask-grip></span>
-    <span class="mark ask-sheet__rip" aria-hidden="true"></span>
+    <img class="ask-sheet__rip" src="{% static 'img/rip/expressions/rip_normal.svg' %}" alt="" width="1024" height="1024" decoding="async">
     <div class="ask-sheet__head" data-ask-grip>
       <div class="ask-sheet__heading">
         <h2 class="ask-sheet__title" id="ask-sheet-title" data-ask-title data-title-all="{% copy 'askrip.sheet.title' %}" data-title-listening="{% copy 'askrip.sheet.listen_title' %}" data-title-searching="{% copy 'askrip.sheet.searching_title' %}">{% if request.resolver_match.url_name == "product" and product and ask.open and ask.left and ask.suggestions %}{% copy "askrip.sheet.product_title" %}{% else %}{% copy "askrip.sheet.title" %}{% endif %}</h2>
@@ -19,10 +19,9 @@ Hidden until the script opens it; without script the Ask button opens the Find p
       <div class="ask-sheet__product">
         <span class="ask-pick__image">{% product_image product "thumb" %}</span>
         <span class="ask-pick__body">
-          <span class="ask-pick__name">{{ product.name }}</span>
-          {% if cheapest %}<span class="ask-pick__meta">{% if cheapest.delivery_known %}{% copy "browse.price.label" %}{% else %}{% copy "browse.price.plus" %}{% endif %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{{ cheapest.retailer.name }}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy "product.compare.checked_ago" time=cheapest.last_checked|ago %}</span>{% endif %}
+          <span class="ask-pick__top"><span class="ask-pick__name">{{ product.name }}</span>{% if cheapest %}<span class="ask-pick__price">{{ cheapest.shown_price|gbp }}</span>{% endif %}</span>
+          {% if cheapest %}<span class="ask-pick__meta"><span class="ask-pick__basis">{% if cheapest.delivery_known %}{% copy "browse.price.label" %}{% else %}{% copy "browse.price.plus" %}{% endif %}<span aria-hidden="true"> · </span><span class="visually-hidden">, </span></span><span class="ask-pick__shop">{{ cheapest.retailer.name }}</span><span class="ask-pick__checked"><span aria-hidden="true"> · </span><span class="visually-hidden">, </span>{% copy "product.compare.checked_ago" time=cheapest.last_checked|ago %}</span></span>{% endif %}
         </span>
-        {% if cheapest %}<span class="ask-pick__price">{{ cheapest.shown_price|gbp }}</span>{% endif %}
       </div>
       <form class="ask-sheet__questions" method="post" action="{% url 'web:ask_rip' product.slug %}" data-ask-form data-ask-strip aria-label="{% copy 'product.ask.suggest.label' %}">
         {% csrf_token %}
@@ -61,13 +60,12 @@ Hidden until the script opens it; without script the Ask button opens the Find p
           {% copy "askrip.sheet.chip_1" as chip_1 %}{% if chip_1 %}<li><a class="chip ask-sheet__chip" href="{% url 'web:search' %}?q={{ chip_1|urlencode }}">{{ chip_1 }}</a></li>{% endif %}
           {% copy "askrip.sheet.chip_2" as chip_2 %}{% if chip_2 %}<li><a class="chip ask-sheet__chip" href="{% url 'web:search' %}?q={{ chip_2|urlencode }}">{{ chip_2 }}</a></li>{% endif %}
           <li><a class="chip ask-sheet__chip" href="{% url 'web:drops' %}?show=out">{% copy "askrip.sheet.chip_new" %}</a></li>
-          <li><a class="chip ask-sheet__chip" href="{% url 'web:search_photo' %}" rel="nofollow">{% copy "askrip.sheet.chip_photo" %}</a></li>
         </ul>
         {% with today=ask_today %}{% if today %}{% copy "askrip.sheet.today" as today_label %}{% include "web/includes/ask_pick.html" with product=today.product listing=today.summary.best summary=today.summary label=today_label %}{% endif %}{% endwith %}
         <nav class="ask-sheet__ways" aria-label="{% copy 'askrip.sheet.ways' %}">
-          <a class="ask-sheet__way" href="{% url 'web:find_list' %}">{% include "web/includes/icons/list-add.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.build" %}</span><span class="ask-sheet__way-sub">{% copy "askrip.sheet.build_sub" %}</span></a>
-          <a class="ask-sheet__way" href="{% url 'web:shopping_list' %}" rel="nofollow">{% include "web/includes/icons/list.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.list" %}</span><span class="ask-sheet__way-sub" data-list-items data-one="{% copy 'askrip.sheet.list_one' %}" data-many="{% copy 'askrip.sheet.list_many' count='{count}' %}">{% copy "askrip.sheet.list_sub" %}</span></a>
-          <a class="ask-sheet__way" href="{% url 'web:find' %}?go=find">{% include "web/includes/icons/steps.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.steps" %}</span><span class="ask-sheet__way-sub">{% copy "askrip.sheet.steps_sub" %}</span></a>
+          <a class="ask-sheet__way" href="{% url 'web:find_list' %}">{% include "web/includes/icons/list-add.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.build" %}</span></a>
+          <a class="ask-sheet__way" href="{% url 'web:shopping_list' %}" rel="nofollow">{% include "web/includes/icons/list.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.list" %} <span data-list-count></span></span></a>
+          <a class="ask-sheet__way" href="{% url 'web:find' %}?go=find">{% include "web/includes/icons/steps.svg" %}<span class="ask-sheet__way-name">{% copy "askrip.sheet.steps" %}</span></a>
         </nav>
       </div>
     </div>

@@ -875,9 +875,10 @@ class AskTodayTests(FeedCase):
         self.assertIn('<span class="ask-pick__label">Today&#x27;s top deal</span>', sheet)
         self.assertIn(f'href="{self.box.get_absolute_url()}"', sheet)
         self.assertIn('<span class="ask-pick__why">£8.00 less than Northgate Cards</span>', sheet)
-        meta = sheet[sheet.index('class="ask-pick__meta"'):sheet.index('class="ask-pick__why"')]
+        meta = sheet[sheet.index('class="ask-pick__meta"'):sheet.index("</a>", sheet.index('class="ask-pick__meta"'))]
         self.assertIn("Harbour Games", meta)
-        self.assertIn("Checked 1 hour ago", meta)   # every price says when it was checked
+        self.assertIn('<span class="ask-pick__checked"><span aria-hidden="true"> · </span><span class="visually-hidden">, '
+                      '</span>Checked 1 hour ago</span>', meta)   # every price says when it was checked
 
     def test_kept_no_longer_than_the_rails_may_be_served(self):
         with mock.patch.object(feed.cache, "set", wraps=feed.cache.set) as kept:

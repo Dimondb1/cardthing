@@ -548,7 +548,10 @@ class AskSheetTests(ListCase):
                 self.assertIn('<h2 class="ask-sheet__title" id="ask-sheet-title" data-ask-title '
                               'data-title-all="What are you after?" data-title-listening="Listening" '
                               'data-title-searching="Searching">What are you after?</h2>', sheet)
-                self.assertIn('<span class="mark ask-sheet__rip" aria-hidden="true"></span>', sheet)   # Rip peeking
+                # Rip peeking over the top, the pack's own drawing with the white of his eye (the owner, 14 Nov 2026:
+                # "Rip needs the white of his eyes"), not the one-colour mark whose eye is a hole.
+                self.assertIn('<img class="ask-sheet__rip" src="', sheet)
+                self.assertIn('img/rip/expressions/rip_normal', sheet)
                 self.assertIn('<button class="ask-sheet__close" type="button" data-ask-close aria-label="Close">', sheet)
                 self.assertIn(f'<form class="ask-sheet__form" action="{VOICE_URL}" method="get" role="search"', sheet)
                 self.assertIn('<input type="hidden" name="via" value="typed">', sheet)
@@ -566,22 +569,21 @@ class AskSheetTests(ListCase):
                 # The suggestions open their results at once, read as a search box reads them: no question to Rip.
                 chips = sheet[sheet.index('<ul class="ask-sheet__chips"'):sheet.index("</ul>")]
                 search = reverse("web:search")
-                for href, words in ((f"{search}?q=Cheapest%20Delta%20Reign%20packs", "Cheapest Delta Reign packs"),
+                for href, words in ((f"{search}?q=Cheap%20Delta%20Reign%20packs", "Cheap Delta Reign packs"),
                                     (f"{search}?q=ETBs%20under%20%C2%A350", "ETBs under £50"),
                                     (reverse("web:drops") + "?show=out", "New releases")):
                     self.assertIn(f'<a class="chip ask-sheet__chip" href="{href}">{words}</a>', chips)
-                self.assertIn(f'<a class="chip ask-sheet__chip" href="{reverse("web:search_photo")}" rel="nofollow">'
-                              'Price check a photo</a>', chips)
+                self.assertNotIn(reverse("web:search_photo"), chips)   # a photo is the camera in the box
                 ways = sheet[sheet.index('<nav class="ask-sheet__ways"'):sheet.index("</nav>")]
-                for href, words, under in ((reverse("web:find_list"), "Build a shopping list", "Type, say or photo"),
-                                           (reverse("web:shopping_list"), "Your list", "See or change it"),
-                                           (reverse("web:find") + "?go=find", "Shop with Rip", "Pick a game, then a kind")):
+                for href, words in ((reverse("web:find_list"), "Build a shopping list"),
+                                    (reverse("web:find") + "?go=find", "Shop with Rip")):
                     self.assertIn(f'href="{href}"', ways)
                     self.assertIn(f'<span class="ask-sheet__way-name">{words}</span>', ways)
-                    self.assertIn(f">{under}</span>", ways)
-                # Your list's count comes from the cookie that holds only the number, so a cached page shows no one's.
-                self.assertIn('data-list-items data-one="1 item on it" data-many="{count} items on it">See or change it',
-                              ways)
+                # Your list's count is the header's (site.js, from the cookie that holds only the number), so a cached
+                # page shows no one's: "Your list (2)".
+                self.assertIn(f'href="{reverse("web:shopping_list")}" rel="nofollow">', ways)
+                self.assertIn('<span class="ask-sheet__way-name">Your list <span data-list-count></span></span>', ways)
+                self.assertNotIn("ask-sheet__way-sub", ways)   # one line each, so it all fits a phone
                 listen = sheet[sheet.index('<div class="ask-sheet__listen" data-ask-listen hidden>'):]
                 self.assertIn('<button class="ask-sheet__stop" type="button" data-ask-stop aria-label="Stop listening">',
                               listen)
@@ -652,8 +654,6 @@ class AskSheetTests(ListCase):
         self.assertIn('if (event.key !== "Enter" || event.shiftKey) return;', sheet)
         self.assertIn('send.setAttribute("aria-label", send.getAttribute("data-working"));', sheet)
         self.assertIn('field.form.classList.toggle("has-words", !!field.value.trim());', sheet)
-        # Your list's count, from the cookie, each time it opens.
-        self.assertIn("var found = document.cookie.match(/(?:^|; )rr_list_n=(\\d+)/);", sheet)
         # A phone's sheet closes with a swipe down on its top; only its position changes while the finger moves.
         self.assertIn('panel.style.transform = "translateY(" + drag.moved + "px)";', sheet)
         self.assertIn("if (moved > DRAG_CLOSE) close();", sheet)
@@ -661,8 +661,11 @@ class AskSheetTests(ListCase):
         self.assertIn(".has-ask-sheet .masthead { z-index: 31; }", css)   # the header stays sharp, Ask stays tappable
         self.assertIn("backdrop-filter: blur(var(--ask-sheet-blur));", css)
         self.assertIn(".ask-sheet__form.has-words .ask-sheet__send { display: flex; }", css)
-        self.assertIn(".ask-sheet__rip { --mark-size: var(--ask-sheet-rip); position: absolute; "
-                      "top: calc(-1 * var(--ask-sheet-peek));", css)
+        self.assertIn(".ask-sheet__rip { position: absolute; top: calc(-1 * var(--ask-sheet-peek)); left: var(--gutter); "
+                      "width: var(--ask-sheet-rip);", css)
+        # A row stays short: the checked time is never cut, a long shop name is.
+        self.assertIn(".ask-pick__basis, .ask-pick__checked { flex: none; }", css)
+        self.assertIn(".ask-pick__shop { min-width: 0; overflow: hidden; text-overflow: ellipsis; }", css)
         motion = css[css.index("@keyframes ask-sheet-rise"):]
         self.assertIn("@media (prefers-reduced-motion: no-preference)", motion[:400])
 

@@ -6534,10 +6534,13 @@ list count and today's top deal.
   stays sharp above the blur (`html.has-ask-sheet`), so Ask can be tapped
   again. Without script it is still a link to `/find/`.
 - **A phone** gets a sheet from the foot of the screen with Rip's head
-  peeking over its top edge (`--ask-sheet-rip`, `--ask-sheet-peek`). Its
-  contents scroll inside it on a short screen; a swipe down on its top
-  closes it (only its position changes while the finger moves). **Wider
-  screens** get the same panel centred under the header.
+  peeking over its top edge (`--ask-sheet-rip`, `--ask-sheet-peek`): the
+  pack's own drawing, `img/rip/expressions/rip_normal.svg`, so he has the
+  white of his eye (the one-colour mark's eye is a hole). It all fits a
+  phone's screen without scrolling (the owner: "no excuse for this to not
+  all fit"), checked down to 360 by 640; a swipe down on its top closes it
+  (only its position changes while the finger moves). **Wider screens**
+  get the same panel centred under the header.
 - **One box**, typed or spoken, with the microphone and the camera. The
   arrow that sends it shows once there are words; Enter sends it too
   (Shift and Enter is a new line). It goes to `/search/voice/` with
@@ -6545,19 +6548,21 @@ list count and today's top deal.
   voice allowance (30 a day, the owner exempt). The results say "Rip found
   these for ‘...’" rather than "You said".
 - **Suggestions** under the box: two searches the owner edits in Admin
-  (`askrip.sheet.chip_1`, `chip_2`; empty hides one), New releases (Out
-  now on the drops page) and Price check a photo. They are plain links to
-  their results, read as a search box reads them, so a tap costs Rip
-  nothing. Change the searches as sets come and go.
+  (`askrip.sheet.chip_1`, `chip_2`; empty hides one) and New releases (Out
+  now on the drops page). A photo is the camera in the box. They are plain
+  links to their results, read as a search box reads them, so a tap costs
+  Rip nothing. Change the searches as sets come and go.
 - **Today's top deal**: the first of the home page's Today's best deals,
-  with its delivered price, shop, why it is a deal and when it was checked.
+  with its delivered price, shop, why it is a deal and when it was checked,
+  in a short row (`ask_pick.html`: the name in two lines at most, the rest
+  one line each; a long shop name is cut, the checked time never).
   `web.feed.build_rails` keeps it in a small cache entry of its own
   (`feed.TODAY_KEY`, no longer than the rails may be served), so a page
   reads one card, never the rails, and gains no query. Not "biggest price
   drop": that would show a wrong listing as a bargain.
 - **Three ways in**: Build a shopping list (`/find/list/`), Your list
-  (`/shopping-list/`, with how many products are on it, from the
-  `rr_list_n` cookie as the header's count) and Shop with Rip
+  (`/shopping-list/`, "Your list (2)", the header's own count from the
+  `rr_list_n` cookie, filled in by `site.js`) and Shop with Rip
   (`/find/?go=find`, the guided questions).
 - **Listening view.** The popup's microphone turns it into Listening, "Say
   a product or set. I stop when you do.", the words as they come in the

@@ -220,21 +220,10 @@
       Array.prototype.forEach.call(views, function (each) { each.hidden = each !== view; });
       title.textContent = view === allView ? title.getAttribute("data-title-all") : firstTitle;
     };
-    // Your list's count, from the cookie that holds only the number (as the header's, site.js).
-    var items = sheet.querySelector("[data-list-items]");
-    var itemsNone = items ? items.textContent : "";
-    var counted = function () {
-      if (!items) return;
-      var found = document.cookie.match(/(?:^|; )rr_list_n=(\d+)/);
-      var count = found ? parseInt(found[1], 10) : 0;
-      items.textContent = count === 1 ? items.getAttribute("data-one")
-        : count > 1 ? items.getAttribute("data-many").replace("{count}", count) : itemsNone;
-    };
     var open = function () {
       var top = head ? Math.max(0, Math.round(head.getBoundingClientRect().bottom)) : 0;
       sheet.style.setProperty("--ask-sheet-top", top + "px");
       show(productView || allView);
-      counted();
       sheet.hidden = false;
       grow(box);
       document.documentElement.classList.add("has-ask-sheet");

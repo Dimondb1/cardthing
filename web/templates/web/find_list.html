@@ -51,7 +51,7 @@
     <label class="visually-hidden" for="rip-list-wants">{% copy "find.list.label" %}</label>
     <textarea id="rip-list-wants" class="contact-form__input contact-form__text" name="wants" rows="2" maxlength="{{ box.max_length }}" placeholder="{% copy 'find.list.placeholder' %}"></textarea>
     <div class="rip-list__tools">
-      {% include "web/includes/voice_button.html" with field="rip-list-wants" words="askrip.voice.list" %}
+      {% include "web/includes/voice_button.html" with field="rip-list-wants" words="askrip.voice.list" listening="askrip.voice.listening_list" %}
       <div class="rip-list__photo" data-photo>
         <label class="rip-list__photo-label" for="rip-list-photo">{% include "web/includes/icons/camera.svg" %}<span>{% copy "find.list.photo_add" %}</span></label>
         <input id="rip-list-photo" class="rip-list__file" type="file" name="photo" accept="image/*">

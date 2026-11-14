@@ -285,6 +285,7 @@
   --checker-thumb: 4.5rem;          /* the product being checked */
   --checker-choice-thumb: 3.5rem;   /* each product offered to choose from */
   --search-tool: 2.25rem;           /* the microphone and camera in a search box */
+  --voice-ring: 2px;                /* the listening microphone's ring and the searching spinner */
   --search-tools: calc(2 * var(--search-tool) + var(--space-1));   /* both, and the gap between */
   --search-inset: 0.3rem;           /* the right end of a search box to its buttons */
   --search-header-button: 5.5rem;   /* room for the header search's Search button, from a tablet up */

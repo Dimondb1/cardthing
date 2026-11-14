@@ -94,7 +94,13 @@ def apply_search(queryset, query):
     Best match order."""
     terms = terms_for(query)
     for term in terms:
-        queryset = queryset.filter(search_text__contains=" " + term)
+        # A plural matches its product too: "packs" finds a Booster Pack, "boxes" a Booster Box (the owner, 14 Nov
+        # 2026: "delta reign booster packs" found nothing).
+        one = singular(term)
+        match = Q(search_text__contains=" " + term)
+        if one != term:
+            match |= Q(search_text__contains=" " + one)
+        queryset = queryset.filter(match)
     if terms:
         phrase = " " + " ".join(terms)
         # Where the words sit (as typed and whole, as typed, or scattered), then how many are whole words, so
@@ -346,19 +352,25 @@ def guesses(term, words, alike):
     return sorted(pool, key=rank)[:FIX_TRIES]
 
 
-def corrected(query, queryset):
+def corrected(query, queryset, partial=False):
     """The search ``query`` with each word that is not a word of any product swapped for the one it most likely
     meant and that finds a product in ``queryset`` with the search's other words; "" when there is nothing to swap
-    or no swap finds anything. Only for a search that found nothing: a few quick queries, one per word tried."""
+    or no swap finds anything. Only for a search that found nothing: a few quick queries, one per word tried.
+    ``partial`` returns the swaps made even when the whole search still finds nothing, for nearest to drop the
+    words that stop it. The kind of product ("booster", "english") is never swapped: nearest drops it instead."""
     terms = terms_for(query)
     if not terms:
         return ""
     words, alike = vocabulary()
     unknown = [n for n, term in enumerate(terms)
-               if len(term) >= FIX_MIN_LETTERS and sounds(term)[0] and not is_word(term, words)]
+               if len(term) >= FIX_MIN_LETTERS and sounds(term)[0] and not is_word(term, words)
+               and not is_word(singular(term), words) and singular(term) not in GENERIC_WORDS]
     if not unknown:
         return ""
-    known = [term for n, term in enumerate(terms) if n not in unknown]
+    # Checked against the search's real product words only: a word no product has ("english", "sealed") would sink
+    # every guess, and nearest drops it after.
+    known = [term for n, term in enumerate(terms)
+             if n not in unknown and (is_word(term, words) or is_word(singular(term), words) or not term.isalpha())]
     fixed = list(terms)
     for n in unknown:
         for word in guesses(terms[n], words, alike):
@@ -368,5 +380,114 @@ def corrected(query, queryset):
                 break
     if fixed == terms:
         return ""
+    if partial:
+        return " ".join(fixed)
     found, _ = apply_search(queryset, " ".join(fixed))
     return " ".join(fixed) if found.exists() else ""
+
+
+# How people say a search (the owner, 14 Nov 2026, on voice search: people say "cheap delta booster packs", "what is
+# the cheapest pikachu box", "black bolt etb under £50", not a product's name). Words that ask for an order or a price
+# limit come out of the words matched and become the list's order and limit; words that only make the sentence are
+# dropped. Every other word is kept: a name such as "pikachu" picks out products and is never thrown away.
+
+CHEAP_PHRASES = ("best price", "best prices", "lowest price", "lowest prices", "low price", "low prices", "cheapest",
+                 "cheaper", "cheap", "bargain", "bargains", "budget")
+VALUE_PHRASES = ("best value", "good value", "value for money", "fair price")
+STOCK_PHRASES = ("in stock", "available now", "available today")
+FILLER_PHRASES = ("what is the", "whats the", "what are the", "what is", "can i get", "can i have", "could i get",
+                  "can you find", "can you get", "for me", "show me", "find me", "get me", "i want", "i would like",
+                  "id like", "i need", "im looking for", "looking for", "search for", "do you have", "have you got",
+                  "where can i buy", "where can i get", "how much is", "how much are", "how much", "in the uk", "please")
+FILLER_WORDS = {"a", "an", "the", "some", "any", "find", "buy", "get", "me", "my", "please", "thanks", "hey", "rip",
+                "ripraptor", "um", "uh", "erm", "like", "just", "one", "ones", "price", "prices", "cost", "costs",
+                "of", "for", "is", "are", "how", "much", "what", "whats", "where", "which", "there", "i", "want"}
+GLUE_WORDS = {"a", "an", "the", "of", "for", "is", "are", "i"}
+LIMIT = re.compile(r"(?:under|below|less than|no more than|max|maximum|up to|cheaper than|within)\s*£?\s*"
+                   r"(\d{1,5}(?:\.\d{1,2})?)\s*(?:pounds?|quid|gbp)?", re.I)
+LIMIT_AFTER = re.compile(r"£\s*(\d{1,5}(?:\.\d{1,2})?)\s*(?:or less|or under|or below|max|tops)", re.I)
+# The words for kinds of products and editions: dropped first, one or two at a time, when a search finds nothing.
+GENERIC_WORDS = {"booster", "pack", "box", "bundle", "elite", "trainer", "etb", "tin", "mini", "blister", "collection",
+                 "deck", "display", "case", "gift", "set", "starter", "precon", "sealed", "card", "cards", "tcg",
+                 "english", "japanese", "korean", "chinese", "edition", "special", "premium", "product", "products",
+                 "new", "latest", "uk"}
+RELAX_TRIES = 8
+
+
+class Asked:
+    """A search as said: ``words`` to match, ``sort`` ("price", "fair" or ""), ``max_price`` (a Decimal or None) and
+    ``in_stock``, and whether anything was taken out (``changed``)."""
+
+    def __init__(self, words, sort="", max_price=None, in_stock=False, changed=False):
+        self.words, self.sort, self.max_price, self.in_stock, self.changed = words, sort, max_price, in_stock, changed
+
+
+def read_query(query):
+    """What a search asks for, as people say it: "what is the cheapest delta booster pack under £5" is the words
+    "delta booster pack", cheapest first, at most £5."""
+    from decimal import Decimal, InvalidOperation
+
+    text = (query or "").lower()
+    max_price = None
+    for pattern in (LIMIT, LIMIT_AFTER):
+        found = pattern.search(text)
+        if found and max_price is None:
+            try:
+                max_price = Decimal(found.group(1))
+            except InvalidOperation:
+                max_price = None
+            text = text[:found.start()] + " " + text[found.end():]
+    text = " " + normalise(text) + " "
+    sort = ""
+    for phrases, order in ((VALUE_PHRASES, "fair"), (CHEAP_PHRASES, "price")):
+        for phrase in phrases:
+            if f" {phrase} " in text:
+                sort = sort or order
+                text = text.replace(f" {phrase} ", " ")
+    in_stock = False
+    for phrase in STOCK_PHRASES:
+        if f" {phrase} " in text:
+            in_stock = True
+            text = text.replace(f" {phrase} ", " ")
+    for phrase in FILLER_PHRASES:
+        text = text.replace(f" {phrase} ", " ")
+    words = [word for word in text.split() if word not in FILLER_WORDS]
+    kept = " ".join(words)
+    # Taking out only a joining word ("reign of jafar") is no change worth a new heading.
+    plain = " ".join(word for word in normalise(query).split() if word not in GLUE_WORDS)
+    return Asked(kept, sort, max_price if max_price and max_price > 0 else None, in_stock,
+                 changed=kept != plain)
+
+
+def relaxed(query, queryset):
+    """The search with fewer words when it finds nothing: the kind of product, "booster" and the like dropped first,
+    one then two at a time, later words before earlier ones, never a word that names something (a set, a Pokémon, a
+    character). "" when no such search finds anything. A few quick queries, at most RELAX_TRIES."""
+    from itertools import combinations
+
+    terms = terms_for(query)
+    generic = [n for n, term in enumerate(terms) if singular(term) in GENERIC_WORDS]
+    if len(terms) < 2 or not generic:
+        return ""
+    tries = 0
+    for size in (1, 2):
+        for dropped in combinations(sorted(generic, reverse=True), size):
+            kept = [term for n, term in enumerate(terms) if n not in dropped]
+            if not kept or tries >= RELAX_TRIES:
+                continue
+            tries += 1
+            found, _ = apply_search(queryset, " ".join(kept))
+            if found.exists():
+                return " ".join(kept)
+    return ""
+
+
+def nearest(query, queryset):
+    """The nearest search that finds something when ``query`` finds nothing (the owner, 14 Nov 2026: "Never end on
+    No luck when there's an obvious near match"): the words it most likely meant (corrected), then those with the
+    kind of product and the like dropped (relaxed), so "rain of jafar booster box english sealed" is "reign jafar
+    booster box". "" when nothing near is found: a name such as "pikachu" is never dropped to find something else."""
+    fixed = corrected(query, queryset, partial=True) or query
+    if fixed != query and apply_search(queryset, fixed)[0].exists():
+        return fixed
+    return relaxed(fixed, queryset)

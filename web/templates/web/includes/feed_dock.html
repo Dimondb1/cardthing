@@ -8,8 +8,9 @@
       <label class="visually-hidden" for="feed-q">{{ feed.search_hint }}</label>
       <input id="feed-q" name="q" type="search" placeholder="{{ feed.search_hint }}" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="100" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="feed-q-results">
       {% if feed.game %}<input type="hidden" name="game" value="{{ feed.game.slug }}">{% endif %}
+      <span class="visually-hidden" role="status" data-voice-status hidden></span>
       {# Voice search: ask-input.js shows the microphone where the browser can listen (Chrome on a phone can), fills the box with what was said and searches. Photo search: a plain link to Search by photo. #}
-      <button class="feed-search__mic" type="button" hidden data-voice="feed-q" data-voice-submit data-voice-ai="{% url 'web:voice_search' %}" data-voice-stop="{% copy 'askrip.voice.stop' %}" aria-label="{% copy 'feed.search.voice' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-mic"/></svg></button>
+      <button class="feed-search__mic" type="button" hidden data-voice="feed-q" data-voice-submit data-voice-ai="{% url 'web:voice_search' %}" data-voice-stop="{% copy 'askrip.voice.stop' %}" data-voice-listening="{% copy 'askrip.voice.listening' %}" data-voice-searching="{% copy 'askrip.voice.searching' words='{words}' %}" data-voice-denied="{% copy 'askrip.voice.denied' %}" data-voice-unheard="{% copy 'askrip.voice.unheard' %}" aria-label="{% copy 'feed.search.voice' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-mic"/></svg></button>
       <a class="feed-search__mic" href="{% url 'web:search_photo' %}" rel="nofollow" aria-label="{% copy 'site.search.photo' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-camera"/></svg></a>
       <button class="feed-search__go" type="submit" aria-label="{% copy 'site.search.button' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-arrow-right"/></svg></button>
     </form>

@@ -2000,6 +2000,31 @@ for ‘delta reign’", with a link to search exactly what was typed (`?exact=1`
 Results as you type do the same. Free and instant, with no AI. Wording is
 `browse.fix.*`.
 
+**Searches as people say them** (`catalogue/search.py` `read_query`; the
+owner, 14 Nov 2026: people say "cheap delta booster packs", not a product's
+name). The search page and results as you type both read it this way:
+
+- Plurals match: each word also matches its singular (`apply_search`), so
+  "packs" finds a Booster Pack and "boxes" a Booster Box.
+- Price words become the order: "cheap", "cheapest" and "best price" are
+  Lowest price, and "best value" is Fairest price (the sort menu shows it;
+  a sort chosen by hand wins).
+- "Under £5", "below £10" and "£20 or less" are a price limit (also `?max=`,
+  which Rip sets). When nothing is that cheap, the cheapest are shown with
+  "Nothing under £5 right now, so these are the cheapest" rather than no
+  results.
+- "In stock" keeps only what is in stock.
+- Words that only make the sentence ("what is the", "can I get", "for
+  me", "price of") are ignored. Every other word is kept, so a name such
+  as "pikachu" is never dropped to show something else.
+- What was understood shows under the heading ("Cheapest first. Under
+  £5.", `browse.understood.*`).
+- A search that still finds nothing tries the nearest search (`nearest`):
+  the words it most likely meant, then the same with the kind of product
+  and the like dropped (`relaxed`, generic words only), with "Showing
+  results for", so "rain of jafar booster box english sealed" is Reign of
+  Jafar's box, not No luck.
+
 **Quick filters** above the results: English, In stock and the three
 commonest product types in the game's own words (Booster bundles, ETBs),
 each a plain link that turns its filter on or off, keeping the search and
@@ -6462,6 +6487,37 @@ missing address) and the bottom search bar each have a microphone and a
 camera beside their Search button (`search_form.html` `.search__end`,
 `feed_dock.html`). Their sizes and the room the box keeps for them are
 tokens (`--search-tool`, `--search-header-button` and the like).
+
+Every step of a voice search shows (the owner, 14 Nov 2026: "If nothing
+visible happens, they assume it's broken and try again"). All of this is in
+`ask-input.js`:
+
+- **Tap.** The microphone turns solid orange with a ring pulsing out from
+  it (`voice-pulse`) before the browser has even asked for the microphone.
+  The box says "Listening. Say a product or set." The camera and the go
+  arrow step aside and the words go a size smaller, so the sentence fits a
+  phone's box.
+- **Talking.** The words appear in the box as they are heard.
+- **Stop.** Listening stops about a second after the last word
+  (`QUIET_MS`, and the browser's speechend), not when the phone gives up,
+  or after eight seconds of nothing at all. "I didn't catch that" or
+  "allow the microphone" shows in the box itself.
+- **Searching.** The box says "Searching for ‘cheap delta booster packs’"
+  with a spinner in place of the search glass (`voice-spin`), and the
+  microphone is locked until the next page. The back button brings the
+  box back ready.
+- **Reduced motion.** The ring and the spinner stay still for those who
+  ask for less movement.
+- Ask Rip's and the list builder's boxes get the same orange and their own
+  Listening words (`askrip.voice.listening_*`).
+
+Rip's side of a voice search:
+
+- One product said ("cheap delta booster packs") opens its search with the
+  order or limit said. Only several named products open the list builder.
+- Rip can set an exact price limit (`max_price`, read by `rip_list.limit`).
+- He is told to keep names such as "pikachu" in the product's search
+  rather than drop them for a general list.
 
 - The **microphone** uses the same `ask-input.js` code as Ask Rip's boxes,
   now loaded on every page (`feed.js` lost its own copy). In a search box

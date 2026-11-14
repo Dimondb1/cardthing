@@ -7,10 +7,17 @@
   // Speak instead of typing: the browser's own speech to text writes what is said into the box, after anything
   // already there. The button shows only where the browser can do it, and RipRaptor only ever receives the words. On
   // Ask Rip's boxes the words wait to be checked and sent, since a question counts; in a search box
-  // (data-voice-submit) the search runs as soon as words are heard, as a search costs nothing. A button with its
-  // words in aria-label (an icon alone) swaps them for Stop listening while it listens. ask.js swaps in a fresh Ask
-  // Rip box after each answer and calls window.ripVoice on it, so its microphone works too.
+  // (data-voice-submit) the search runs as soon as words are heard. A button with its words in aria-label (an icon
+  // alone) swaps them for Stop listening while it listens. ask.js swaps in a fresh Ask Rip box after each answer and
+  // calls window.ripVoice on it, so its microphone works too.
+  //
+  // Every step shows (the owner, 14 Nov 2026: "If nothing visible happens, they assume it's broken and try again"):
+  // the button turns solid orange and pulses the moment it is tapped, and the box says Listening; the words appear
+  // as they are heard; listening stops about a second after the talking does (QUIET_MS), not when the phone gives up;
+  // then the box says Searching for what was heard, with a spinner, and the microphone is locked until the page comes.
   var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var QUIET_MS = 1000;     // stop this long after the last word heard
+  var NOTHING_MS = 8000;   // and give up this long after tapping when nothing at all is heard
   var wire = function (root) {
     if (!Recognition) return;
     Array.prototype.forEach.call(root.querySelectorAll("[data-voice]"), function (button) {
@@ -21,6 +28,7 @@
       var status = form && form.querySelector("[data-voice-status]");
       var label = button.querySelector("[data-voice-label]");
       var idle = label ? label.textContent : button.getAttribute("aria-label");
+      var hint = field.getAttribute("placeholder") || "";
       var name = function (words) {
         if (label) label.textContent = words;
         else button.setAttribute("aria-label", words);
@@ -31,6 +39,32 @@
         status.textContent = text || "";
         status.hidden = !text;
       };
+      var rest = function () {
+        button.classList.remove("is-listening");
+        if (form) form.classList.remove("is-listening");
+        name(idle);
+        field.setAttribute("placeholder", hint);
+      };
+      var searching = function (words) {
+        // Locked until the next page: no second search half way through this one.
+        rest();
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        if (form) form.classList.add("is-searching");
+        var line = (button.getAttribute("data-voice-searching") || "").replace("{words}", words);
+        field.value = "";
+        field.setAttribute("placeholder", line);
+        field.readOnly = true;
+        say(line);
+      };
+      // Coming back to the page (the back button keeps it as it was): ready again.
+      window.addEventListener("pageshow", function () {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        if (form) form.classList.remove("is-searching");
+        field.readOnly = false;
+        rest();
+      });
       button.hidden = false;
       button.addEventListener("click", function () {
         if (listening) { listening.stop(); return; }
@@ -39,7 +73,13 @@
         var limit = parseInt(field.getAttribute("maxlength"), 10) || 300;
         var heard = false;
         var failed = false;
+        var message = "";
+        var quiet = null;
         var recognition = new Recognition();
+        var stop = function () {
+          clearTimeout(quiet);
+          if (listening === recognition) recognition.stop();
+        };
         recognition.lang = document.documentElement.lang || "en-GB";
         recognition.interimResults = true;
         recognition.maxAlternatives = 1;
@@ -50,38 +90,64 @@
           if (!words) return;
           heard = true;
           field.value = ((before ? before + " " : "") + words).slice(0, limit);
+          clearTimeout(quiet);
+          quiet = setTimeout(stop, QUIET_MS);
         };
+        recognition.onspeechend = stop;
         recognition.onerror = function (event) {
           failed = true;
-          if (event.error === "not-allowed" || event.error === "service-not-allowed") say(button.getAttribute("data-voice-denied"));
-          else if (event.error !== "aborted") say(button.getAttribute("data-voice-unheard"));
+          if (event.error === "not-allowed" || event.error === "service-not-allowed") message = button.getAttribute("data-voice-denied");
+          else if (event.error !== "aborted") message = button.getAttribute("data-voice-unheard");
         };
         recognition.onend = function () {
+          clearTimeout(quiet);
+          clearTimeout(nothing);
           listening = null;
-          button.classList.remove("is-listening");
-          name(idle);
-          if (!heard && !failed) say(button.getAttribute("data-voice-unheard"));
-          if (!heard) return;
-          field.dispatchEvent(new Event("input", { bubbles: true }));
-          if (submits && form) {
-            // A search box sends what was heard to Rip (data-voice-ai), who knows the site's sets and so what a
-            // misheard word meant; his page falls back to the plain search on its own.
-            var ai = button.getAttribute("data-voice-ai");
-            if (ai) {
-              var query = new URLSearchParams();
-              query.set("q", field.value);
-              var game = form.querySelector("input[name=game]");
-              if (game && game.value) query.set("game", game.value);
-              window.location.href = ai + "?" + query.toString();
-            } else if (form.requestSubmit) form.requestSubmit();
+          rest();
+          if (!heard && !failed) message = button.getAttribute("data-voice-unheard");
+          if (!heard) {
+            // Said where the eye already is: in the box, as well as the line under it.
+            say(message);
+            if (message && submits) field.setAttribute("placeholder", message);
+            return;
+          }
+          if (!(submits && form)) {
+            field.dispatchEvent(new Event("input", { bubbles: true }));
+            return;
+          }
+          var words = field.value.trim();
+          searching(words);
+          // A search box sends what was heard to Rip (data-voice-ai), who knows the site's sets and so what a
+          // misheard word meant; his page falls back to the plain search on its own.
+          var ai = button.getAttribute("data-voice-ai");
+          if (ai) {
+            var query = new URLSearchParams();
+            query.set("q", words);
+            var game = form.querySelector("input[name=game]");
+            if (game && game.value) query.set("game", game.value);
+            window.location.href = ai + "?" + query.toString();
+          } else {
+            field.readOnly = false;
+            field.value = words;
+            if (form.requestSubmit) form.requestSubmit();
             else form.submit();
           }
         };
+        // Shown at once, before the browser has even asked for the microphone.
         say("");
-        try { recognition.start(); } catch (error) { say(button.getAttribute("data-voice-unheard")); return; }
-        listening = recognition;
         button.classList.add("is-listening");
+        if (form && submits) form.classList.add("is-listening");
         name(button.getAttribute("data-voice-stop"));
+        if (submits) field.value = "";
+        if (button.getAttribute("data-voice-listening")) field.setAttribute("placeholder", button.getAttribute("data-voice-listening"));
+        var nothing = setTimeout(function () { if (!heard) stop(); }, NOTHING_MS);
+        try { recognition.start(); } catch (error) {
+          clearTimeout(nothing);
+          rest();
+          say(button.getAttribute("data-voice-unheard"));
+          return;
+        }
+        listening = recognition;
       });
     });
   };

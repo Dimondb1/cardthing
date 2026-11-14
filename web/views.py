@@ -34,7 +34,7 @@ from catalogue.models import (
     Retailer, StockAlert, stale_cutoff,
 )
 from catalogue.models import fresh as fresh_listing
-from catalogue.search import apply_search, corrected, suggest_sets, understand
+from catalogue.search import apply_search, nearest, read_query, suggest_sets, understand
 from catalogue.types import DEFAULT as DEFAULT_TYPES, GAME_TYPES, plural_words, type_choices, type_label
 from content import service as copy
 from inbox import service as inbox
@@ -230,29 +230,57 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     has_query = bool(request.GET.get("q", "").strip())
     chosen_game = fixed_game or Game.objects.filter(slug=request.GET.get("game", "")).first()
     scope = base_queryset.filter(game=chosen_game) if chosen_game and fixed_game is None else base_queryset
+    # A search as people say it (catalogue.search.read_query; the owner, 14 Nov 2026: "cheap delta booster packs"):
+    # "cheap" is the order, "under £5" a limit, "what is the" nothing; the rest is matched. ?exact=1 matches every word.
+    is_search = bool(template_context.get("is_search"))
+    spoken = read_query(request.GET.get("q", "")) if is_search and has_query and not request.GET.get("exact") else None
     # Best for ripping orders the list cheapest a card first, and the sort menu says so; a sort chosen after the
     # switch is on is used instead. The owner, 12 Nov 2026: the menu said Lowest price over a list in card order.
     form = FilterForm(
         request.GET or None, fixed_game=fixed_game, has_query=has_query, type_options=types_for(chosen_game, scope),
-        default_sort=default_sort or ("card" if request.GET.get("rip") else None),
+        default_sort=default_sort or ("card" if request.GET.get("rip") else None) or (spoken.sort if spoken else None)
+        or ("price" if (spoken is not None and spoken.max_price) or request.GET.get("max") else None),
     )
     form.is_valid()
 
     query = (form.value("q") or "").strip()
+    words = spoken.words if spoken else query
     products = narrow(base_queryset) if narrow else base_queryset
     terms = []
     # A search that finds nothing tries the words it most likely meant (catalogue.search.corrected: "delta rain" said
-    # to the phone is "delta reign"), and says so; ?exact=1 searches what was typed, as the page's link offers.
+    # to the phone is "delta reign"), then fewer of them, the kind of product before a name (relaxed), and says so,
+    # rather than end on No luck after someone has spoken to the site.
     searched_for = ""
-    if query:
-        found, terms = apply_search(products, query)
-        if template_context.get("is_search") and not request.GET.get("exact") and not found.exists():
-            searched_for = corrected(query, products)
+    if words:
+        found, terms = apply_search(products, words)
+        if spoken is not None and not found.exists():
+            searched_for = nearest(words, products)
             if searched_for:
                 found, terms = apply_search(products, searched_for)
-                heading = text(request, "browse.results.title", query=searched_for)
-                template_context = {**template_context, "heading": heading, "meta_title": heading}
         products = found
+    if spoken is not None and (spoken.changed or searched_for):
+        shown = searched_for or words
+        heading = text(request, "browse.results.title", query=shown) if shown else text(request, "browse.all.title")
+        template_context = {**template_context, "heading": heading, "meta_title": heading}
+    # A price limit said ("under £5") or set by Rip (?max=5).
+    max_price = spoken.max_price if spoken is not None else None
+    try:
+        max_price = Decimal(request.GET["max"]) if request.GET.get("max") else max_price
+    except (InvalidOperation, ValueError):
+        pass
+    over_limit = False
+    if max_price is not None and 0 < max_price < 100000:
+        within = products.filter(lowest_price__lte=max_price)
+        if within.exists() or not products.exists():
+            products = within
+        else:
+            # Nothing at that price: the cheapest there are, saying so (the owner, 14 Nov 2026: never end on No luck
+            # when there is an obvious near match).
+            over_limit = True
+    else:
+        max_price = None
+    if spoken is not None and spoken.in_stock and not tabs:
+        products = products.in_stock()
 
     game = form.value("game")
     if game is not None:
@@ -378,6 +406,14 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "fold_filters": tabs,
         "no_matches": bool(query) and not filters_active and paginator.count == 0,
         "searched_for": searched_for,
+        # What the search understood besides its words: the order and limit said ("Cheapest first. Under £5.").
+        "understood": [line for line in (
+            text(request, f"browse.understood.{spoken.sort}") if spoken is not None and spoken.sort
+            and form.value("sort") == spoken.sort and not request.GET.get("sort") else "",
+            text(request, "browse.understood.over", price=gbp_text(max_price)) if over_limit else
+            text(request, "browse.understood.under", price=gbp_text(max_price)) if max_price is not None else "",
+            text(request, "browse.understood.in_stock") if spoken is not None and spoken.in_stock else "",
+        ) if line],
         "exact_url": "?" + urlencode({**{key: value for key, value in request.GET.items() if key != "page"},
                                       "exact": "1"}) if searched_for else "",
         "quick": quick,
@@ -2277,12 +2313,18 @@ def search_api(request):
     query = request.GET.get("q", "").strip()[:100]
     results = []
     if query:
-        products, terms = apply_search(Product.objects.for_lists(), query)
+        asked = read_query(query)   # "cheap delta booster packs": the words, cheapest first
+        words = asked.words or query
+        products, terms = apply_search(Product.objects.for_lists(), words)
         if terms and not products.exists():
-            fixed = corrected(query, Product.objects.for_lists())
+            fixed = nearest(words, Product.objects.for_lists())
             if fixed:
                 products, terms = apply_search(Product.objects.for_lists(), fixed)
-        if terms:
+        if asked.max_price is not None:
+            products = products.filter(lowest_price__lte=asked.max_price)
+        if terms and asked.sort == "price":
+            products = products.order_by(F("lowest_price").asc(nulls_last=True), "name_rank", "name")
+        elif terms:
             products = products.order_by("name_rank", F("lowest_price").asc(nulls_last=True), "name")
         store = copy.for_request(request)
         # A set the words name comes first, opening its page (with the type named, if one is): the way from game
@@ -2999,6 +3041,11 @@ def voice_search(request):
     response["Cache-Control"] = "no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
+
+
+def gbp_text(value):
+    """A price limit as said: £5, £12.50."""
+    return f"£{value:,.0f}" if value == value.to_integral_value() else f"£{value:,.2f}"
 
 
 # Search by photo: what Rip says of each state is its own where the list builder's would not fit.

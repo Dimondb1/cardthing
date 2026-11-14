@@ -369,7 +369,36 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .search__tool { display: flex; align-items: center; justify-content: center; flex: none; width: var(--search-tool); height: var(--search-tool); padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--color-ink-muted); cursor: pointer; }
 .search__tool .icon-tool { width: var(--icon-button); height: var(--icon-button); }
 @media (hover: hover) { .search__tool:hover { background: var(--color-shelf); color: var(--color-ink); } }
-.search__tool.is-listening { background: var(--color-brand-soft); color: var(--color-brand-text); }
+/* Listening (ask-input.js): every microphone turns solid orange the moment it is tapped, with a ring that pulses
+   out from it, so it is plain it is on (the owner, 14 Nov 2026: "the button barely changes"). Searching: a spinner
+   in place of the search glass while Rip reads what was heard, the microphone locked. Transform and opacity only;
+   with reduced motion the ring and the spinner stay still. */
+.search__tool.is-listening, .feed-search__mic.is-listening, .voice.is-listening, .voice--icon.is-listening { position: relative; border-color: var(--color-brand-action); background: var(--color-brand-action); color: var(--color-brand-ink); }
+.search__tool.is-listening::after, .feed-search__mic.is-listening::after, .voice.is-listening::after { content: ""; position: absolute; inset: calc(-1 * var(--space-1)); border: var(--voice-ring) solid var(--color-brand); border-radius: inherit; pointer-events: none; animation: voice-pulse var(--motion-slow) var(--ease-out) infinite alternate; }
+@keyframes voice-pulse { from { opacity: 0.9; transform: scale(0.92); } to { opacity: 0.2; transform: scale(1.12); } }
+.search__tool:disabled, .feed-search__mic:disabled { opacity: var(--opacity-waiting); cursor: progress; }
+.search.is-searching .search__icon { -webkit-mask: none; mask: none; background: none; border: var(--voice-ring) solid var(--color-brand); border-right-color: transparent; border-radius: 50%; animation: voice-spin var(--motion-slow) linear infinite; }
+.feed-search.is-searching > .feed-ic:first-child { display: none; }
+.feed-search.is-searching::before { content: ""; flex: none; width: var(--icon-button); height: var(--icon-button); border: var(--voice-ring) solid var(--color-brand); border-right-color: transparent; border-radius: 50%; animation: voice-spin var(--motion-slow) linear infinite; }
+.search.is-searching input::placeholder, .feed-search.is-searching input::placeholder { color: var(--color-ink); }
+/* While it listens and searches the box says so in full: the camera and the go arrow, not needed then, step aside
+   and the words are a size smaller, so "Listening. Say a product or set." fits a phone's box. */
+.search.is-listening a.search__tool, .search.is-searching a.search__tool,
+.feed-search.is-listening a.feed-search__mic, .feed-search.is-searching a.feed-search__mic,
+.feed-search.is-listening .feed-search__go, .feed-search.is-searching .feed-search__go { display: none; }
+.search.is-listening input::placeholder, .search.is-searching input::placeholder,
+.feed-search.is-listening input::placeholder, .feed-search.is-searching input::placeholder { font-size: var(--text-sm); }
+.search--header.is-listening input, .search--header.is-searching input { padding-right: calc(var(--search-tool) + var(--search-header-button)); }
+.search--large.is-listening input, .search--large.is-searching input { padding-right: calc(var(--search-tool) + var(--search-large-button)); }
+@media (max-width: 40rem) {
+  .search--header.is-listening input, .search--header.is-searching input { padding-right: calc(var(--search-tool) + var(--space-2)); }
+  .search--large.is-listening input, .search--large.is-searching input { padding-right: calc(var(--search-tool) + var(--search-round-button)); }
+}
+@keyframes voice-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .search__tool.is-listening::after, .feed-search__mic.is-listening::after, .voice.is-listening::after { animation: none; opacity: 0.5; }
+  .search.is-searching .search__icon, .feed-search.is-searching::before { animation: none; }
+}
 .search--header input { padding-right: calc(var(--search-tools) + var(--search-header-button)); }
 .search--header input { height: 2.75rem; box-shadow: none; }
 .search--header .search__button { font-size: var(--text-sm); }
@@ -1754,13 +1783,11 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .rip-list__chosen { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-weight: var(--weight-strong); }
 .rip-list__thumb { width: var(--rip-list-thumb); height: var(--rip-list-thumb); object-fit: cover; border: 1px solid var(--color-line); border-radius: var(--radius-sm); }
 .voice { gap: var(--space-2); }
-.voice.is-listening { color: var(--color-brand-text); border-color: var(--color-brand-line); background: var(--color-brand-soft); }
 /* On a product page the microphone sits inside the right end of the question box, so the row keeps its one line. */
 .ask__field { position: relative; display: flex; flex: 1 1 var(--field-short); min-width: 0; }
 .ask__field .ask__input { flex: 1 1 auto; }
 .ask__field:has(.voice:not([hidden])) .ask__input { padding-right: var(--tap); }
 .voice--icon { position: absolute; top: 0; right: 0; width: var(--tap); min-height: var(--tap); border-color: transparent; background: transparent; }
-.voice--icon.is-listening { border-color: var(--color-brand-line); }
 .voice-note { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink); }
 /* How many of a product: a number box and its own Update button. */
 .list-qty { display: flex; align-items: center; gap: var(--space-1); }
@@ -2733,11 +2760,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--color-ink); }
 .feed-search input::placeholder { color: var(--color-ink-muted); }
 .feed-search__mic { display: flex; align-items: center; justify-content: center; flex: none; width: var(--feed-go); height: var(--feed-go); padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--color-ink-muted); cursor: pointer; }
-.feed-search__mic.is-listening { color: var(--color-brand-text); }
-/* Listening: the microphone breathes, transform only, under the motion limit; still for those who ask. */
-.feed-search__mic.is-listening .feed-ic { animation: feed-listen var(--motion-slow) var(--ease-standard) infinite alternate; }
-@keyframes feed-listen { from { transform: scale(1); } to { transform: scale(1.2); } }
-@media (prefers-reduced-motion: reduce) { .feed-search__mic.is-listening .feed-ic { animation: none; } }
+/* Listening and searching: the same solid orange, ring and spinner as every search box (near .search__end). */
 .feed-search__go { display: flex; align-items: center; justify-content: center; flex: none; width: var(--feed-go); height: var(--feed-go); padding: 0; border: 0; border-radius: 50%; background: var(--color-brand); color: var(--color-brand-ink); cursor: pointer; }
 .feed-games { display: flex; overflow-x: auto; padding: var(--space-1) var(--space-1) 0; scrollbar-width: none; scroll-snap-type: x proximity; }
 .feed-games::-webkit-scrollbar { display: none; }

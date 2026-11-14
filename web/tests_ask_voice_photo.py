@@ -4,6 +4,7 @@ counts as one question, and is never kept; the microphone is the browser's own s
 only where the browser can do it, so only the words reach the site."""
 
 import base64
+from urllib.parse import parse_qs, urlsplit
 import io
 import json
 from unittest import mock
@@ -199,8 +200,11 @@ class SearchBoxTests(ListCase):
     def test_every_search_box_has_the_microphone_and_the_camera(self):
         html = self.client.get(reverse("web:search"), {"q": "box"}).content.decode()
         self.assertIn('<button class="search__tool" type="button" hidden data-voice="header-q" data-voice-submit '
-                      f'data-voice-ai="{reverse("web:voice_search")}" data-voice-stop="Stop listening" '
-                      'aria-label="Search by voice">', html)
+                      f'data-voice-ai="{reverse("web:voice_search")}" data-voice-stop="Stop listening" ', html)
+        # Every step shows: what the box says while listening and while Rip searches ({words} is what was heard).
+        self.assertIn('data-voice-listening="Listening. Say a product or set."', html)
+        self.assertIn('data-voice-searching="Searching for ‘{words}’"', html)
+        self.assertIn('<span class="visually-hidden" role="status" data-voice-status hidden></span>', html)
         self.assertIn(f'<a class="search__tool" href="{PHOTO_URL}" rel="nofollow" aria-label="Search by photo">', html)
         # The large search on the page for a missing address, the same parts.
         missing = self.client.get("/no-such-page/").content.decode()
@@ -396,12 +400,20 @@ class GeneralRequestTests(ListCase):
 
     def test_a_game_a_price_band_and_a_set_by_its_listed_name(self):
         self.fake.answer = general(type="elite_trainer_box", game="pokemon", price="25-50", sort="fair")
-        self.assertEqual(self.build("pokemon etbs under 50 quid, best value")["Location"],
-                         reverse("web:search") + "?type=elite_trainer_box&sort=fair&price=25-50&in_stock=1"
-                                                 "&game=pokemon&asked=pokemon+etbs+under+50+quid%2C+best+value")
-        self.fake.answer = general(set=self.box.product_set.name, sort="price")
-        location = self.build("cheapest from that set")["Location"]
-        self.assertEqual(location, self.box.product_set.get_absolute_url() + "?sort=price&in_stock=1")
+        location = self.build("pokemon etbs under 50 quid, best value")["Location"]
+        self.assertEqual(urlsplit(location).path, reverse("web:search"))
+        self.assertEqual(parse_qs(urlsplit(location).query), {
+            "type": ["elite_trainer_box"], "game": ["pokemon"], "sort": ["fair"], "price": ["25-50"],
+            "in_stock": ["1"], "asked": ["pokemon etbs under 50 quid, best value"]})
+        # A set by its listed name: the search for that set, so the page can say what was asked.
+        self.fake.answer = general(set=self.box.product_set.name, type="booster_box", sort="price", max_price=150)
+        location = self.build("cheapest boxes from that set under 150")["Location"]
+        self.assertEqual(parse_qs(urlsplit(location).query), {
+            "q": [self.box.product_set.name], "type": ["booster_box"], "sort": ["price"], "max": ["150"],
+            "in_stock": ["1"], "asked": ["cheapest boxes from that set under 150"]})
+        page = self.client.get(location)
+        self.assertContains(page, "Surging Sparks Booster Box")
+        self.assertContains(page, "Under £150.")
 
     def test_what_rip_cannot_match_to_the_sites_filters_is_dropped(self):
         self.fake.answer = general(game="not-a-game", set="Not A Set")
@@ -452,3 +464,53 @@ class OwnerTests(ListCase):
         self.client.logout()
         self.build("prismatic evolutions bundle")
         self.assertEqual(self.made(self.build("another one please"))[1], "limit")
+
+
+class VoiceStepsTests(ListCase):
+    """Voice search shows what it is doing at every step and understands how people talk (the owner, 14 Nov 2026:
+    "If nothing visible happens, they assume it's broken and try again")."""
+
+    def test_one_product_said_is_its_search_with_the_order_said_never_a_list_of_one(self):
+        self.fake.answer = general(items=[("Delta Reign Booster Pack", "pokemon", 1)], sort="price", max_price=5)
+        location = self.client.get(reverse("web:voice_search"), {"q": "cheap delta booster packs under a fiver"},
+                                   REMOTE_ADDR="203.0.113.7")["Location"]
+        self.assertEqual(urlsplit(location).path, reverse("web:search"))
+        self.assertEqual(parse_qs(urlsplit(location).query), {
+            "q": ["Delta Reign Booster Pack"], "game": ["pokemon"], "sort": ["price"], "max": ["5"], "in_stock": ["1"],
+            "said": ["cheap delta booster packs under a fiver"]})
+
+    def test_rip_keeps_names_and_can_set_an_exact_limit(self):
+        self.build()
+        sent = self.fake.sent[0]
+        self.assertIn("Keep every word that picks out products, such as a Pokémon or a character (pikachu",
+                      sent["system"][0]["text"])
+        self.assertIn('"max_price": the most they want to pay in pounds', sent["system"][0]["text"])
+        self.assertEqual(sent["output_config"]["format"]["schema"]["properties"]["browse"]["properties"]["max_price"],
+                         {"type": "number"})
+        self.assertEqual(rip_list.limit("5"), 5)
+        self.assertEqual(rip_list.limit(12.5), 12.5)
+        self.assertEqual(rip_list.limit("lots"), 0)
+
+    def test_the_microphone_shows_each_step_and_stops_soon_after_the_talking(self):
+        with open(finders.find("js/ask-input.js"), encoding="utf-8") as handle:
+            script = handle.read()
+        self.assertIn("var QUIET_MS = 1000;", script)
+        self.assertIn("recognition.onspeechend = stop;", script)
+        # Orange and listening before the browser has even asked for the microphone.
+        self.assertLess(script.index('button.classList.add("is-listening");'), script.index("recognition.start();"))
+        self.assertIn('field.setAttribute("placeholder", button.getAttribute("data-voice-listening"));', script)
+        # Searching: the words in the box, the microphone locked, put back by the back button.
+        self.assertIn('form.classList.add("is-searching");', script)
+        self.assertIn("button.disabled = true;", script)
+        self.assertIn('window.addEventListener("pageshow"', script)
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn("@keyframes voice-pulse", css)
+        self.assertIn(".search.is-searching .search__icon {", css)
+        self.assertIn("@keyframes voice-spin", css)
+        motion = css[css.index("@media (prefers-reduced-motion: reduce) {\n  .search__tool.is-listening::after"):]
+        self.assertIn("animation: none", motion[:400])
+
+    def test_each_box_says_what_it_is_listening_for(self):
+        self.assertContains(self.client.get(URL), 'data-voice-listening="Listening. Say what you want to buy."')
+        self.assertContains(self.client.get(self.box.get_absolute_url()),
+                            'data-voice-listening="Listening. Ask your question."')

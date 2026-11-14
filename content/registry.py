@@ -901,6 +901,18 @@ ENTRIES = [
     ),
 
     # Search results and browsing -----------------------------------------
+    Entry("browse.understood.price", T, "Search: cheapest first was said", "Cheapest first.",
+          "Under the results heading when the search said cheap, cheapest or best price, so the list is in price order.",),
+    Entry("browse.understood.fair", T, "Search: best value was said", "Best value first.",
+          "Under the results heading when the search said best value, so the list is in fairest price order."),
+    Entry("browse.understood.under", T, "Search: a price limit was said", "Under {price}.",
+          "Under the results heading when the search said under £5 or the like, or Rip set a limit.",
+          placeholders=("price",)),
+    Entry("browse.understood.over", T, "Search: nothing within the limit said", "Nothing under {price} right now, so "
+          "these are the cheapest.", "Under the results heading when no product is within the price said, so the "
+          "cheapest are shown instead of no results.", placeholders=("price",)),
+    Entry("browse.understood.in_stock", T, "Search: in stock was said", "In stock only.",
+          "Under the results heading when the search said in stock."),
     Entry("browse.rip.asked", T, "Search: what was asked of Rip", "Rip found these for ‘{asked}’.",
           "Under the heading when Rip's list builder opened the list for a general request (booster packs at a low "
           "price), so the shopper sees it is their request.", placeholders=("asked",)),
@@ -3829,6 +3841,15 @@ ENTRIES = [
           "where the browser can do it."),
     Entry("askrip.voice.question", B, "Microphone: product question button", "Speak your question",
           "Read aloud by screen readers for the microphone button beside the Ask Rip box on a product page."),
+    Entry("askrip.voice.listening", T, "Microphone: listening, in a search box", "Listening. Say a product or set.",
+          "In the search box from the moment the microphone is tapped, so it is plain it is on."),
+    Entry("askrip.voice.listening_list", T, "Microphone: listening, list builder", "Listening. Say what you want to buy.",
+          "In the list builder's box from the moment its microphone is tapped."),
+    Entry("askrip.voice.listening_question", T, "Microphone: listening, product question", "Listening. Ask your question.",
+          "In a product page's Ask Rip box from the moment its microphone is tapped."),
+    Entry("askrip.voice.searching", T, "Microphone: searching", "Searching for ‘{words}’",
+          "In the search box once the words are heard, with a spinner, until the results come. The microphone is "
+          "locked meanwhile.", placeholders=("words",)),
     Entry("askrip.voice.stop", B, "Microphone: stop", "Stop listening",
           "The microphone button's words while it is listening."),
     Entry("askrip.voice.denied", T, "Microphone: not allowed",

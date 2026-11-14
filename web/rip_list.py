@@ -68,8 +68,10 @@ Some ask for a kind of product rather than a named one: "booster packs at a low 
 - "set": a set's name exactly as listed below when they named one, else "".
 - "sort": "price" for cheapest or a low price, "card" for cheapest per card or best for opening, "fair" for best value or a fair price, "saving" for the biggest saving or deals, "low" for lowest in 90 days, "newest" for new or the latest, else "".
 - "price": the band that holds the most they want to pay: "0-10" (under £10), "10-25", "25-50", "50-100" or "100-" (£100 and up), else "".
+- "max_price": the most they want to pay in pounds when they said a figure (under £5 is 5), else 0.
 - "in_stock": true, unless they ask for pre-orders or for things not in stock.
 With nothing general asked, "wanted" is false and the rest empty. A product they named goes in the products, never in "browse"; a request can have both.
+Keep every word that picks out products, such as a Pokémon or a character (pikachu, charizard, eevee, luffy): put it in a product's "search" ("Pikachu Box"), with "browse" for the order or a price limit, and never drop it for a general list. A set with a kind of product in general terms ("cheap delta booster packs") is "browse" with the set and the kind, not a named product.
 
 The sets RipRaptor has products for, by game, newest first. Use these names, since some are newer than what you know:
 {sets}"""
@@ -84,8 +86,10 @@ BROWSE = {
     "properties": {"wanted": {"type": "boolean"}, "type": {"type": "string", "enum": ["", *BROWSE_TYPES]},
                    "game": {"type": "string"}, "set": {"type": "string"},
                    "sort": {"type": "string", "enum": ["", *BROWSE_SORTS]},
-                   "price": {"type": "string", "enum": ["", *BROWSE_PRICES]}, "in_stock": {"type": "boolean"}},
-    "required": ["wanted", "type", "game", "set", "sort", "price", "in_stock"], "additionalProperties": False,
+                   "price": {"type": "string", "enum": ["", *BROWSE_PRICES]}, "max_price": {"type": "number"},
+                   "in_stock": {"type": "boolean"}},
+    "required": ["wanted", "type", "game", "set", "sort", "price", "max_price", "in_stock"],
+    "additionalProperties": False,
 }
 SCHEMA = {
     "type": "object",
@@ -200,35 +204,55 @@ def read_browse(found, found_games):
         return None
     browse = {"type": found.get("type") if found.get("type") in BROWSE_TYPES else "",
               "game": found.get("game") if found.get("game") in found_games else "",
-              "set": "", "set_url": "",
+              "set": "", "set_url": "", "set_name": "",
               "sort": found.get("sort") if found.get("sort") in BROWSE_SORTS else "",
               "price": found.get("price") if found.get("price") in BROWSE_PRICES else "",
+              "max_price": limit(found.get("max_price")),
               "in_stock": found.get("in_stock") is not False}
     named = " ".join(str(found.get("set") or "").split()).casefold()
     if named:
         for entry in set_index()["sets"]:
             if entry["name"].casefold() == named:
-                browse["set"], browse["set_url"] = entry["slug"], entry["url"]
+                browse["set"], browse["set_url"], browse["set_name"] = entry["slug"], entry["url"], entry["name"]
                 break
-    if not any(browse[key] for key in ("type", "game", "set", "sort", "price")):
+    if not any(browse[key] for key in ("type", "game", "set", "sort", "price", "max_price")):
         return None
     return browse
 
 
+def limit(value):
+    """A price limit Rip read ("under £5" is 5) as a whole or two-place figure, or 0 for none or nonsense."""
+    try:
+        value = round(float(value), 2)
+    except (TypeError, ValueError):
+        return 0
+    return int(value) if value == int(value) and 0 < value < 100000 else value if 0 < value < 100000 else 0
+
+
+def filters_of(browse):
+    """A general request's order, price and stock as the search page takes them (sort=, price=, max=, in_stock=)."""
+    query = {key: browse[key] for key in ("sort", "price") if browse.get(key)}
+    if browse.get("max_price"):
+        query["max"] = str(browse["max_price"])
+    if browse.get("in_stock"):
+        query["in_stock"] = "1"
+    return query
+
+
 def browse_url(browse, **words):
-    """The site's own list for a general request: a set's page when one was named, else the search page, with the
-    kind, sort, price and in stock chosen, and ``words`` (asked= or said=) for the search page to show."""
+    """The site's own list for a general request: the search page, for the set named (its name as the words) or
+    else everything, with the kind, game, order, price and stock chosen, and ``words`` (asked= or said=) for the page
+    to show what was asked, so the shopper sees their request understood."""
     from urllib.parse import urlencode
 
     from django.urls import reverse
 
-    query = {key: browse[key] for key in ("type", "sort", "price") if browse.get(key)}
-    if browse.get("in_stock"):
-        query["in_stock"] = "1"
-    if browse.get("set_url"):
-        return f"{browse['set_url']}?{urlencode(query)}" if query else browse["set_url"]
-    if browse.get("game"):
+    query = {"q": browse["set_name"]} if browse.get("set_name") else {}
+    if browse.get("type"):
+        query["type"] = browse["type"]
+    if browse.get("game") and not browse.get("set_name"):
         query["game"] = browse["game"]
+    query.update(filters_of(browse))
     query.update({key: value for key, value in words.items() if value})
     return f"{reverse('web:search')}?{urlencode(query)}"
 
@@ -422,9 +446,11 @@ def found_target(made, otherwise, said=""):
     browse = found.get("browse") if isinstance(found, dict) else None
     if made.state == "made" and not items and browse:
         return browse_url(browse, said=said)
-    if made.state == "made" and len(items) == 1 and not browse:
+    if made.state == "made" and len(items) == 1:
+        # One product, however it was said ("cheap delta booster packs"): its search, cheapest first or within the
+        # limit said, never a list of one (the owner, 14 Nov 2026).
         query = {"q": items[0]["search"], **({"game": items[0]["game"]} if items[0]["game"] else {}),
-                 **({"said": said} if said else {})}
+                 **(filters_of(browse) if browse else {}), **({"said": said} if said else {})}
         return f"{reverse('web:search')}?{urlencode(query)}"
     if made.state == "made" and items:
         return f"{reverse('web:find_list')}?{urlencode({'made': made.token})}"

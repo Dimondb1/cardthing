@@ -3287,6 +3287,14 @@ index.
 | `RIPRAPTOR_INDEXNOW`           | on on the server; off with `DJANGO_DEBUG` on | Each hour, send the product pages that changed to IndexNow (Bing and others), and once a day the game, set and guide pages that did. `0` stops it. |
 | `RIPRAPTOR_GA_ID`              | `G-TZW5ZVM9H8` on the server; empty with `DJANGO_DEBUG` on | Google Analytics 4 measurement id. Each visitor is asked first; see "Google Analytics". Empty means no card and no Google script. |
 
+A sample email for ZeptoMail (their account review, or Templates on a Mail
+Agent) is in `docs/zeptomail/`: the price alert shoppers ask for on a product
+page, as HTML and plain text, with ZeptoMail merge fields (`{{product_name}}`,
+`{{price}}`, `{{max_price}}`, `{{product_image_url}}`, `{{product_url}}`,
+`{{unsubscribe_url}}`) where the site puts the live values
+(`web/templates/web/email/price_drop.html`). The site sends its own HTML, so
+the template is not used for sending.
+
 ## Games
 
 The games the classifier recognises are listed in `catalogue/classify.py`

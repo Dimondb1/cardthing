@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Under your price: {{product_name}}</title>
+</head>
+<body style="margin:0;padding:0;background:#f6f6f8;">
+<div style="display:none;max-height:0;overflow:hidden;">{{product_name}} is in stock for £{{price}} delivered, at or under your £{{max_price}}.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f8;">
+<tr><td align="center" style="padding:24px 12px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #ffd6c4;border-radius:16px;overflow:hidden;font-family:'DM Sans',Arial,Helvetica,sans-serif;color:#1f2430;">
+    <tr><td style="height:6px;background:#ff5a1f;font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td align="center" style="padding:24px 24px 8px;">
+      <a href="https://ripraptor.com/" style="text-decoration:none;"><img src="https://ripraptor.com/static/img/logo.png" width="180" alt="RipRaptor" style="display:block;width:180px;max-width:60%;height:auto;border:0;"></a>
+    </td></tr>
+    <tr><td style="padding:8px 28px 24px;font-size:16px;line-height:1.55;">
+      <p style="margin:0 0 6px;font-size:13px;font-weight:bold;letter-spacing:0.06em;text-transform:uppercase;color:#107a32;">Under your price</p>
+      <h1 style="margin:0 0 16px;font-size:22px;line-height:1.25;color:#1f2430;">{{product_name}}</h1>
+      <p style="margin:0 0 16px;text-align:center;"><img src="{{product_image_url}}" width="200" alt="{{product_name}}" style="width:200px;max-width:60%;height:auto;border:0;border-radius:12px;"></p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #e6e8ec;border-radius:12px;">
+        <tr><td style="padding:14px 16px;">
+          <p style="margin:0;font-size:13px;color:#667085;">In stock now</p>
+          <p style="margin:2px 0 0;font-size:28px;font-weight:800;line-height:1.1;color:#107a32;">£{{price}} <span style="font-size:15px;font-weight:bold;">delivered</span></p>
+          <p style="margin:4px 0 0;font-weight:bold;">At or under your £{{max_price}}</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#667085;">Checked just now. Stock and prices at small shops can change within minutes.</p>
+        </td></tr>
+      </table>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 8px;"><tr>
+        <td style="border-radius:12px;background:#e5470e;"><a href="{{product_url}}" style="display:inline-block;padding:14px 24px;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;">See where to buy</a></td>
+      </tr></table>
+    </td></tr>
+    <tr><td style="padding:20px 28px 24px;background:#fff1ea;border-top:1px solid #ffd6c4;font-size:13px;line-height:1.5;color:#545b68;">
+      <p style="margin:0;">You are getting this because you asked for a price alert on this product at ripraptor.com and confirmed it from your inbox. This was your one alert for this product, so your email address has already been deleted. Ask again on the product page if you want another.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 12px;"><tr>
+        <td style="border:1px solid #cfd4dc;border-radius:999px;background:#ffffff;">
+          <a href="{{unsubscribe_url}}" style="display:inline-block;padding:9px 18px;font-size:14px;font-weight:bold;color:#1f2430;text-decoration:none;">Unsubscribe</a>
+        </td>
+      </tr></table>
+      <p style="margin:0;">Unsubscribing deletes your email address from RipRaptor at once. <a href="https://ripraptor.com/terms/#terms-data" style="color:#cc4410;">How we use it</a></p>
+      <p style="margin:8px 0 0;">RipRaptor compares UK prices for sealed trading card products and may earn a commission when you buy through its links.</p>
+    </td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>

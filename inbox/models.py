@@ -92,6 +92,39 @@ class ShopEnquiry(models.Model):
         return f"{self.name}: {self.domain}"
 
 
+class ShopRemoval(models.Model):
+    """A shop asking to come off RipRaptor, from the Remove my shop page (inbox/shops.py ask_removal). The owner,
+    14 Nov 2026: the Shops we compare page came down, with "a remove shop request next to the list my shop button".
+
+    Nothing changes until the owner presses Take off RipRaptor in admin, having checked the request is the shop's
+    own (an email address on the shop's own domain is the sign): anyone could ask to remove a rival. Then the shop
+    is switched off, so its prices stop showing, and marked Do not email. Nothing is ever emailed to the address
+    given. Deleted as shop enquiries are (purge, run by tidy_all).
+    """
+
+    name = models.CharField(max_length=80)
+    shop_url = models.CharField("shop website", max_length=300)
+    domain = models.CharField(max_length=253, db_index=True, editable=False,
+                              help_text="The website's domain without www.")
+    email = models.EmailField(max_length=254)
+    message = models.TextField(max_length=1000, blank=True)
+    retailer = models.ForeignKey("catalogue.Retailer", null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="+", verbose_name="shop on RipRaptor",
+                                 help_text="The shop at that website, found when the request came in.")
+    removed_at = models.DateTimeField("taken off", null=True, blank=True, editable=False)
+    created_at = models.DateTimeField(default=timezone.now, editable=False, db_index=True)
+    handled_at = models.DateTimeField(null=True, blank=True, help_text="When you dealt with it. Blank while it waits.")
+    note = models.TextField(blank=True, help_text="Your own note. Never shown to the shop.")
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "shop asking to be removed"
+        verbose_name_plural = "shops asking to be removed"
+
+    def __str__(self):
+        return f"{self.name}: {self.domain}"
+
+
 class ShopContact(models.Model):
     """Who to email at a shop RipRaptor lists, and where things stand with them (inbox/outreach.py).
 

@@ -54,8 +54,7 @@ class ShownTests(CodeCase):
         Retailer.objects.filter(pk=self.topaz.pk).update(discount_ends=timezone.localdate())
         self.assertContains(self.client.get(self.box.get_absolute_url()), "RIPRAPTOR5")
 
-    def test_on_the_shops_page_and_the_shopping_list(self):
-        self.assertContains(self.client.get(reverse("web:shops")), "RIPRAPTOR5")
+    def test_on_the_shopping_list(self):
         self.client.cookies[shopping.COOKIE] = self.box.slug
         self.assertContains(self.client.get(reverse("web:shopping_list")), "RIPRAPTOR5")
 

@@ -1,6 +1,6 @@
-"""The Shops we compare page (web.views.shops): every UK shop with a current price, with its delivery, products priced
-and last check, so one public page states what the home page claims. The owner, 9 Nov 2026, on ChatGPT naming other
-comparison sites first."""
+"""The Shops we compare page was taken down (the owner, 14 Nov 2026: a public list of every shop "means people could
+do the same"). Its address forwards for good to the home page; the count of shops compared stays, and every product
+page still names the shop beside each price."""
 
 from django.core.cache import cache
 from django.test import TestCase
@@ -11,7 +11,7 @@ from catalogue.models import Listing, Retailer
 from catalogue.testing import make_game, make_listing, make_product, make_retailer, make_set
 
 
-class ShopsPageTests(TestCase):
+class ShopsCase(TestCase):
     @classmethod
     def setUpTestData(cls):
         product_set = make_set(make_game())
@@ -39,42 +39,24 @@ class ShopsPageTests(TestCase):
         # The shop count is kept for a few minutes (pricing.shops_compared): start each test without another's.
         cache.clear()
 
-    def test_every_compared_shop_is_listed_a_to_z_with_delivery_count_and_check(self):
-        response = self.client.get(reverse("web:shops"))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual([shop.name for shop in response.context["shops"]],
-                         ["Apex TCG", "Card Empire", "Free Post Cards", "Harbour Games", "Zatu Games"])
-        self.assertEqual(response.context["shops_compared"], 5)
-        self.assertEqual(pricing.shops_compared(), 5)   # the home page's count is the same five
-        lines = {shop.name: (shop.delivery_line, shop.priced) for shop in response.context["shops"]}
-        self.assertEqual(lines, {
-            "Apex TCG": ("Not yet known: prices show as plus delivery", 1),
-            "Card Empire": ("£1.95 on orders under £20.00", 1),
-            "Free Post Cards": ("Free", 1),
-            "Harbour Games": ("£3.99, free over £50.00", 2),
-            "Zatu Games": ("Free over £100.00", 1),
-        })
-        html = response.content.decode()
-        self.assertIn('<a href="https://www.harbour-games.example/" rel="sponsored nofollow noopener" target="_blank">Harbour Games</a>', html)
-        self.assertIn("1 hour ago", html)
-        self.assertIn("<title>Shops we compare: 5 UK shops, delivery included | RipRaptor</title>", html)
-        self.assertIn("RipRaptor compares prices from 5 UK shops.", html)
-        for name in ("Stale Shop", "Hidden Shop", "eBay", "Odd Prices"):
-            self.assertNotIn(name, html)
 
-    def test_one_query_for_the_shops(self):
-        with self.assertNumQueries(2):   # the shops, and the site's wording
-            self.client.get(reverse("web:shops"))
+class ShopsPageGoneTests(ShopsCase):
+    def test_the_old_address_forwards_for_good_to_the_home_page(self):
+        response = self.client.get("/shops/")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], reverse("web:home"))
 
-    def test_the_site_points_to_it(self):
-        url = reverse("web:shops")
-        self.assertContains(self.client.get(reverse("web:home")), f'<a href="{url}">Shops we compare</a>')
+    def test_nothing_points_to_it_any_more_but_the_count_stays(self):
+        self.assertEqual(pricing.shops_compared(), 5)
+        for url in (reverse("web:home"), reverse("web:about"), "/sitemap.xml", "/llms.txt"):
+            with self.subTest(url=url):
+                html = self.client.get(url).content.decode()
+                self.assertNotIn("/shops/", html)
+                self.assertNotIn("Shops we compare</a>", html)
         about = self.client.get(reverse("web:about"))
-        self.assertContains(about, f'<a class="button button--quiet" href="{url}">Shops we compare</a>')
         self.assertContains(about, "Today that means 5 UK shops, with delivery included in every price")
-        self.assertNotContains(about, "retailer-list")
-        self.assertContains(self.client.get("/sitemap.xml"), f"<loc>http://testserver{url}</loc>")
-        self.assertContains(self.client.get("/llms.txt"), f"[Shops we compare](http://testserver{url})")
+        self.assertContains(about, "Every price on RipRaptor names its shop, includes that shop&#x27;s standard UK "
+                                   "delivery and says when we last checked it.")
 
 
 class WhyRipRaptorTests(TestCase):
@@ -83,7 +65,7 @@ class WhyRipRaptorTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        ShopsPageTests.setUpTestData.__func__(cls)
+        ShopsCase.setUpTestData.__func__(cls)
 
     def setUp(self):
         cache.clear()
@@ -94,7 +76,7 @@ class WhyRipRaptorTests(TestCase):
         for point in ("The price you will pay", "Only stock you can buy", "Prices you can trust", "Honest about deals",
                       "UK shops side by side", "Alerts that do the waiting", "Independent"):
             self.assertIn(f"<dt>{point}</dt>", html)
-        self.assertIn("We compare 5 UK shops, each listed on our Shops page", html)
+        self.assertIn("We compare 5 UK shops, each named beside its price", html)
         self.assertIn("one we have not been able to check for 72 hours stops counting", html)
         self.assertIn("A shop running a draw or raffle is not shown as in stock", html)
         # Before How prices are worked out: the first thing after the introduction.

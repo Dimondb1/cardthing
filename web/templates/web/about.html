@@ -28,7 +28,6 @@
   <section aria-labelledby="retailers-title">
     <h2 id="retailers-title">{% copy "about.retailers.title" %}</h2>
     <p>{% copy "about.retailers.body" %}</p>
-    <p><a class="button button--quiet" href="{% url 'web:shops' %}">{% copy "site.nav.shops" %}</a></p>
   </section>
 
   <section aria-labelledby="contact-title">
@@ -41,7 +40,7 @@
   <section aria-labelledby="listshop-title">
     <h2 id="listshop-title">{% copy "listshop.title" %}</h2>
     <p>{% copy "about.listshop" %}</p>
-    <p><a class="button button--quiet" href="{% url 'web:list_shop' %}">{% copy "site.nav.listshop" %}</a></p>
+    <p class="button-row"><a class="button button--quiet" href="{% url 'web:list_shop' %}">{% copy "site.nav.listshop" %}</a> <a class="button button--quiet" href="{% url 'web:remove_shop' %}" rel="nofollow">{% copy "site.nav.removeshop" %}</a></p>
   </section>
 </div>
 {% endblock %}

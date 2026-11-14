@@ -435,21 +435,17 @@ round. Their delivery came from each shop's delivery page or a test basket;
 those still unknown show as "plus delivery" until the daily `check_delivery
 --unknown` finds them.
 
-**Shops we compare** (`/shops/`, `web.views.shops`, `web/templates/web/shops.html`):
-a public page listing every UK shop with a current price (the same shops
-`pricing.shops_compared` counts: switched on, not a marketplace, at least one
-listing checked inside the stale cutoff and not kept out as impossible), A to
-Z, with its delivery in the site's words (`delivery_line`: the standard
-charge, free over a value, only the threshold, free, known only under a
-value, or not yet known), how many products it has a current price for and
-when it was last checked. One query, cached like the other list pages, in the
-sitemap, linked from the footer, the How it works page and llms.txt. It
-exists so one page states plainly what the home page claims ("Compare prices
-from N UK shops, delivery included, checked every hour", now on the new home
-page too): search engines and AI assistants quote a site's own words, and on
-9 Nov 2026 ChatGPT named other UK comparison sites first because theirs said
-it and ours no longer did. The How it works page says the number too and
-links here instead of listing the shops itself.
+**Shops we compare** was a public page listing every shop compared. The
+owner took it down on 14 Nov 2026: a public list "means people could do the
+same". `/shops/` now forwards permanently (301) to the home page, so old links
+and search results still land somewhere. It is out of the sitemap, the
+footer, the How it works page and `llms.txt`, and the desktop home's shop
+count is plain text. The count itself stays (`pricing.shops_compared`: shops
+switched on, not a marketplace, with at least one listing checked inside the
+stale cutoff and not kept out as impossible). Every product page still names
+the shop beside each price, so nothing that matters to a shopper is lost.
+Hiding the page from people while showing it to search engines would be
+cloaking, which Google penalises, so it is gone outright.
 
 **Why RipRaptor** (the How it works page, first after the introduction): seven
 short points on what the site does that a plain price list does not
@@ -478,7 +474,7 @@ itself while any wait, and a shop not added can be checked again.
 **Discount codes** (Admin, a shop's page, Discount code: `discount_code`,
 `discount_terms`, `discount_ends`; `Retailer.discount`): a code a shop gives
 for RipRaptor shoppers is shown beside its prices in the price list, in the
-price box when it leads, on the shopping list and on the Shops page, with a
+price box when it leads and on the shopping list, with a
 Copy button where the browser can copy. It disappears after its last day.
 The prices compared stay without it, since the shop decides who it applies
 to (a first order only, say); the Terms say so, and Ask Rip is told the
@@ -4990,6 +4986,21 @@ page never says what it knows. `tidy_all` (hourly) deletes enquiries a
 year after they are marked handled, or two years after they arrived if
 they never are. The Terms page's data section says so.
 
+**Remove my shop** (`/list-your-shop/remove/`, `web.views.remove_shop`,
+`inbox/shops.py` `ask_removal` and `take_off`) sits beside List your shop:
+in the footer, on the How it works page and under the List your shop form.
+A shop gives its name, website, email and a message. It shares the same
+limits and honeypot, the same one-request-per-open-shop rule and the same
+deletion times. The request is kept as a `ShopRemoval`, matched to the shop
+on RipRaptor by its website, and emailed to you. Nothing changes and nothing
+is emailed to the address given until you act. In admin (Inbox, Shops
+asking to be removed), check the request is the shop's own: anyone could ask
+to remove a rival, and an email on the shop's own domain is the sign (the
+Shop's own email column). Then choose **Take off RipRaptor**. That switches
+the shop off, so its prices stop showing and it is no longer read, and marks
+its outreach contact Do not email. The page is noindex. Its wording is
+`listshop.remove.*` and `site.nav.removeshop`.
+
 ## The RipRaptor badge
 
 Listed shops can show a "Listed on RipRaptor" badge on their own sites, so
@@ -5943,7 +5954,7 @@ hard-coded."). In the compact layout, which is the one that is live:
   the UK shops with one in stock. Before, the description counted every
   product in stock, the page only those filed under a set, and `llms.txt`
   every product listed, each unlabelled. "UK shops" now leaves out eBay and
-  Amazon wherever it is said, as the home page and Shops we compare do; a
+  Amazon wherever it is said, as the home page does; a
   game or set only a marketplace seller has in stock says so
   (`browse.hub.intro_market`).
 - **A set's page** opens with a sentence or two of live figures
@@ -6165,7 +6176,7 @@ are hidden below it.
 - The header leads with a wide search box (autocomplete as before), keeps
   Find with Rip and the Watchlist beside it, and moves the places to a row
   under it: a Games menu, then Deals, Drops, Swipe and Guides (when live).
-  Shops we compare stays in the footer. The Games menu (`header.html`,
+  The Games menu (`header.html`,
   `web/navigation.py`) lists every game with products and All games; it is
   a plain details element, so it opens without script, and site.js closes
   it on a click elsewhere or Escape. On a game's page it carries the game's

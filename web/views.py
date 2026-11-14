@@ -15,7 +15,7 @@ from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Case, Count, Exists, F, IntegerField, Max, OuterRef, Prefetch, Q, Subquery, Value, When
-from django.db.models.functions import Coalesce, Lower
+from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponse, HttpResponsePermanentRedirect, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -2208,45 +2208,12 @@ def why_points(request):
              "body": copy.get(f"about.why.{key}.body", store=store, **values)} for key in WHY_POINTS]
 
 
-def delivery_line(shop, store):
-    """What a shop's delivery costs, in the site's words: the standard charge, free over a value, only the value it
-    is free over, free, known only under a value, or not yet known (shown as plus delivery meanwhile)."""
-    cost, free, up_to = shop.delivery_cost, shop.free_delivery_over, shop.delivery_cost_up_to
-    if cost is None and free is None:
-        return copy.get("shops.delivery.unknown", store=store)
-    if cost is not None and cost == 0:
-        return copy.get("shops.delivery.free", store=store)
-    if cost is None:
-        return copy.get("shops.delivery.only_free_over", store=store, threshold=gbp(free))
-    if free is not None:
-        return copy.get("shops.delivery.free_over", store=store, price=gbp(cost), threshold=gbp(free))
-    if up_to is not None:
-        return copy.get("shops.delivery.up_to", store=store, price=gbp(cost), threshold=gbp(up_to))
-    return gbp(cost)
-
-
 @require_GET
-@cached_page
 def shops(request):
-    """Shops we compare: every UK shop with a current price (the shops pricing.shops_compared counts), A to Z, with
-    its delivery, how many products it has a current price for and when it was last checked. One query, so search
-    engines and AI assistants have one page that states the claim the home page makes (the owner, 9 Nov 2026: why
-    ChatGPT names other comparison sites first)."""
-    current = Q(listings__is_active=True, listings__last_checked__gte=stale_cutoff()) & ~Q(listings__sanity=Listing.Sanity.EXCLUDED)
-    rows = list(
-        Retailer.objects.filter(is_active=True).exclude(source_type__in=pricing.MARKETPLACES)
-        .annotate(priced=Count("listings", filter=current, distinct=True), checked=Max("listings__last_checked", filter=current))
-        .filter(priced__gt=0).order_by(Lower("name"))
-    )
-    store = copy.for_request(request)
-    for shop in rows:
-        shop.delivery_line = delivery_line(shop, store)
-    return render(request, "web/shops.html", {
-        "shops": rows, "shops_compared": len(rows),
-        "meta_title": copy.get("meta.shops.title", store=store, shops=len(rows)),
-        "meta_description": copy.get("meta.shops.description", store=store),
-        "canonical_url": request.build_absolute_uri(request.path),
-    })
+    """The Shops we compare page was taken down (the owner, 14 Nov 2026: a public list of every shop "means people
+    could do the same"). Its address forwards for good to the home page, which still says how many UK shops are
+    compared; every product page names the shop beside each price."""
+    return HttpResponsePermanentRedirect(reverse("web:home"))
 
 
 # Ask Rip's page: the one-tap questions he is asked most (askrip.SUGGESTED, each with what he answers from) and
@@ -3718,6 +3685,52 @@ def list_shop_thanks(request):
     return render(request, "web/list_shop_thanks.html", {"heading": heading, "meta_title": heading, "noindex": True})
 
 
+REMOVE_SHOP_FIELDS = ("name", "shop_url", "email", "message")
+
+
+@require_http_methods(["GET", "POST"])
+def remove_shop(request):
+    """A shop asks to come off RipRaptor (inbox/shops.py ask_removal), beside List your shop. The owner, 14 Nov 2026:
+    "leave a remove shop request next to the list my shop button". Nothing changes until the owner checks it is the
+    shop's own request and takes it off in admin. Works without JavaScript; a sent form goes on to the thanks page,
+    whatever happened, so the page never says whether a shop already asked."""
+    from inbox import shops
+
+    values = dict.fromkeys(REMOVE_SHOP_FIELDS, "")
+    error = ""
+    if request.method == "POST":
+        try:
+            length = int(request.META.get("CONTENT_LENGTH") or 0)
+        except ValueError:
+            length = shops.MAX_BODY + 1
+        if length > shops.MAX_BODY:
+            return HttpResponse(status=413)
+        thanks = HttpResponseRedirect(reverse("web:remove_shop_thanks"))
+        if request.POST.get("website"):
+            return thanks   # the hidden field is only ever filled by robots
+        values = {name: request.POST.get(name, "")[:shops.MAX_MESSAGE * 2].strip() for name in REMOVE_SHOP_FIELDS}
+        try:
+            shops.ask_removal(shops.clean(**values), insights.client_ip(request))
+        except shops.Invalid as exc:
+            error = f"listshop.form.{exc.args[0]}_invalid"
+        except shops.Refused:
+            error = "listshop.form.busy"
+        else:
+            return thanks
+    return render(request, "web/remove_shop.html", {
+        "values": values, "error": error,
+        "limits": {"name": shops.MAX_NAME, "url": shops.MAX_URL, "message": shops.MAX_MESSAGE},
+        "meta_title": text(request, "listshop.remove.title"), "noindex": True,
+    })
+
+
+@require_GET
+def remove_shop_thanks(request):
+    heading = text(request, "listshop.remove.thanks.title")
+    return render(request, "web/remove_shop_thanks.html", {"heading": heading, "meta_title": heading,
+                                                            "noindex": True})
+
+
 @require_GET
 def manifest(request):
     """The web app manifest, so a phone can pin RipRaptor to its home screen. No service worker, no push."""
@@ -3853,8 +3866,6 @@ def llms_txt(request):
         f"- [Every game and set]({request.build_absolute_uri(reverse('web:games'))})",
         f"- [Upcoming drops with dates and pre-order prices]({request.build_absolute_uri(reverse('web:drops'))})",
         f"- [How it works]({request.build_absolute_uri(reverse('web:about'))})",
-        f"- [Shops we compare]({request.build_absolute_uri(reverse('web:shops'))}): every UK shop with its delivery "
-        "charge, how many products it prices and when it was last checked",
         f"- [Ask Rip]({request.build_absolute_uri(reverse('web:ask_rip_about'))}): {text(request, 'meta.askrip.description')}",
         f"- [Terms and disclosures]({request.build_absolute_uri(reverse('web:terms'))})",
         f"- [Sitemap]({request.build_absolute_uri('/sitemap.xml')}): every product on sale, coming soon or priced "

@@ -27,6 +27,7 @@
   <textarea id="list-shop-message" class="contact-form__input contact-form__text" name="message" rows="5" maxlength="{{ limits.message }}">{{ values.message }}</textarea>
   <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
   <p><button class="button" type="submit">{% copy "listshop.form.button" %}</button></p>
+  <p class="contact-form__note">{% copy "listshop.remove.offer" %} <a href="{% url 'web:remove_shop' %}" rel="nofollow">{% copy "site.nav.removeshop" %}</a></p>
 </form>
 <section class="block badge-offer" id="badge" aria-labelledby="badge-title">
   <h2 class="section-title" id="badge-title">{% copy "listshop.badge.title" %}</h2>

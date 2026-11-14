@@ -191,9 +191,8 @@ class CardTests(Catalogue, TestCase):
         self.assertIn("Compare 3 shops", compared)
         self.assertNotIn('class="card__check"', compared)
 
-    def test_the_shops_page_table_keeps_its_own_class(self):
+    def test_the_cards_list_of_shops_has_one_rule(self):
         from django.contrib.staticfiles import finders
 
         css = open(finders.find("css/site.css"), encoding="utf-8").read()
         self.assertEqual(len(re.findall(r"^\.shops \{", css, re.M)), 1)   # the card's list only
-        self.assertContains(self.client.get(reverse("web:shops")), '<table class="shop-table">')

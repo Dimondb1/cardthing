@@ -240,9 +240,10 @@ ENTRIES = [
     Entry("site.nav.all_games", B, "Header: All games link in the Games menu", "All games",
           "The last line of the Games menu on a desktop screen: the Games page, every game and its sets."),
     Entry("site.nav.contact", B, "Message us link", "Message us", "Footer link to the Message us page."),
-    Entry("site.nav.shops", B, "Shops link", "Shops we compare",
-          "Footer link to the Shops we compare page, and the button to it on the how it works page."),
     Entry("site.nav.listshop", B, "List your shop link", "List your shop", "Footer link to the List your shop page, and its button on the how it works page."),
+    Entry("site.nav.removeshop", B, "Remove my shop link", "Remove my shop",
+          "Beside List your shop: in the footer, on the how it works page and under the List your shop form. Opens "
+          "the form a shop uses to ask to come off RipRaptor."),
     Entry(
         "site.nav.terms", B, "Terms link",
         "Terms",
@@ -756,7 +757,7 @@ ENTRIES = [
     Entry("compact.desk.offers", T, "Desktop home: label after the prices count", "prices in stock",
           "After the live count of shop prices in stock, beside the desktop headline."),
     Entry("compact.desk.shops", T, "Desktop home: label after the shops count", "UK shops compared",
-          "After the live count of shops, beside the desktop headline. Opens the Shops we compare page."),
+          "After the live count of shops, beside the desktop headline."),
     Entry("compact.desk.browse", H, "Desktop home: browse bar label", "Browse products",
           "At the start of the slim bar of choices under the desktop headline."),
     Entry("compact.desk.game_label", T, "Desktop home: browse bar game label", "Game",
@@ -2233,7 +2234,7 @@ ENTRIES = [
     ),
     # Report a problem with a listing (web/views.py report_listing, includes/report_form.html).
     Entry("product.code.label", T, "Discount code label", "Code",
-          "Before a shop's discount code, beside its prices, in the price box, on the shopping list and Shops page."),
+          "Before a shop's discount code, beside its prices, in the price box and on the shopping list."),
     Entry("product.code.copy", B, "Copy code button", "Copy code", "Copies the shop's discount code."),
     Entry("product.code.copied", T, "Code copied", "Copied", "Shown on the button once the code is copied."),
     Entry("product.ask.title", H, "Ask Rip: heading", "Ask Rip", "Heading of the question box in the price box."),
@@ -2626,7 +2627,7 @@ ENTRIES = [
     Entry("about.why.shops.title", T, "Why RipRaptor: UK shops side by side", "UK shops side by side",
           "A point's heading in the Why RipRaptor section of the how it works page."),
     Entry("about.why.shops.body", T, "Why RipRaptor: UK shops side by side text",
-          "We compare {shops} UK shops, each listed on our Shops page, with eBay sellers filtered by their ratings and Amazon a tap away. Japanese, Korean and Chinese products are kept apart from English ones.",
+          "We compare {shops} UK shops, each named beside its price, with eBay sellers filtered by their ratings and Amazon a tap away. Japanese, Korean and Chinese products are kept apart from English ones.",
           "A point's text in the Why RipRaptor section of the how it works page and in llms.txt.", placeholders=("shops",)),
     Entry("about.why.alerts.title", T, "Why RipRaptor: Alerts that do the waiting", "Alerts that do the waiting",
           "A point's heading in the Why RipRaptor section of the how it works page."),
@@ -2647,13 +2648,13 @@ ENTRIES = [
     Entry(
         "about.retailers.title", H, "Retailers heading",
         "Shops we compare",
-        "Heading of the short section on the how it works page that links to the Shops we compare page.",
+        "Heading of the short section on the how it works page about the shops we compare.",
     ),
     Entry(
         "about.retailers.body", T, "Retailers section text",
-        "Every shop we compare is listed on its own page, with its delivery charge, how many products it has a "
-        "current price for and when we last checked it.",
-        "Text of the Shops section on the how it works page, above the link to the Shops we compare page.",
+        "Every price on RipRaptor names its shop, includes that shop's standard UK delivery and says when we last "
+        "checked it.",
+        "Text of the Shops section on the how it works page.",
     ),
     Entry(
         "about.retailers.intro", T, "Retailers note",
@@ -3074,6 +3075,24 @@ ENTRIES = [
         "Under the heading after the form is sent. The same words show however many times a shop asks.",
     ),
     Entry("listshop.thanks.back", B, "Back button", "Go to the home page", "Button on the page after the form is sent."),
+    Entry("listshop.remove.title", H, "Remove my shop: heading", "Remove my shop", "Top of the Remove my shop page."),
+    Entry("listshop.remove.intro", T, "Remove my shop: introduction",
+          "Run a shop we compare and want it taken off RipRaptor? Tell us here. We check the request comes from the "
+          "shop, then take its prices off. Nothing changes until we have checked.",
+          "Under the heading of the Remove my shop page."),
+    Entry("listshop.remove.email_note", T, "Remove my shop: email note",
+          "Use an address on your shop's own website if you can. It is how we know the request is yours.",
+          "Under the email box on the Remove my shop page, before the Privacy link."),
+    Entry("listshop.remove.button", B, "Remove my shop: send button", "Ask to be removed",
+          "Button that sends the Remove my shop form."),
+    Entry("listshop.remove.offer", T, "List your shop: remove offer", "Already on RipRaptor and want to come off?",
+          "Under the List your shop form, before the Remove my shop link."),
+    Entry("listshop.remove.thanks.title", H, "Remove my shop: thanks heading", "Request received",
+          "Top of the page after the Remove my shop form is sent."),
+    Entry("listshop.remove.thanks.body", T, "Remove my shop: thanks text",
+          "Once we have checked the request comes from the shop, we take its prices off RipRaptor.",
+          "Under the heading after the Remove my shop form is sent. The same words show however many times a shop "
+          "asks."),
     # The one email a shop that asked gets, when the owner approves it in admin (inbox/shops.py welcome). The owner's
     # own words, 14 Nov 2026.
     Entry("listshop.welcome.subject", T, "Welcome email: subject", "{shop} is now on RipRaptor",
@@ -3727,35 +3746,6 @@ ENTRIES = [
         "Search engine description for the deals page.",
     ),
 
-    # Shops we compare page ---------------------------------------------------
-    Entry("shops.title", H, "Shops page heading", "Shops we compare", "Heading and page title of the Shops we compare page."),
-    Entry(
-        "shops.intro", P, "Shops page introduction",
-        "RipRaptor compares prices from {shops} UK shops. Every price includes delivery to a UK address, and each "
-        "shop is checked every hour. This page lists them all, with the delivery charge we add, how many products "
-        "each has a current price for and when we last checked it.\n\n"
-        "Being listed here does not mean a shop endorses RipRaptor, and no shop pays to be listed. Shops are "
-        "listed A to Z.",
-        "Under the heading on the Shops we compare page.",
-        placeholders=("shops",),
-    ),
-    Entry("shops.column.shop", T, "Shops page: shop column", "Shop", "Column heading on the Shops we compare page."),
-    Entry("shops.column.delivery", T, "Shops page: delivery column", "Delivery", "Column heading on the Shops we compare page."),
-    Entry("shops.column.products", T, "Shops page: products column", "Products priced",
-          "Column heading on the Shops we compare page."),
-    Entry("shops.column.checked", T, "Shops page: checked column", "Last checked", "Column heading on the Shops we compare page."),
-    Entry("shops.delivery.free_over", T, "Shops page: free over", "{price}, free over {threshold}",
-          "A shop's delivery when it charges under a threshold and is free above it.", placeholders=("price", "threshold")),
-    Entry("shops.delivery.only_free_over", T, "Shops page: only free over", "Free over {threshold}",
-          "A shop's delivery when only its free-delivery threshold is known.", placeholders=("threshold",)),
-    Entry("shops.delivery.free", T, "Shops page: free delivery", "Free", "A shop whose standard delivery is free."),
-    Entry("shops.delivery.up_to", T, "Shops page: charge known up to", "{price} on orders under {threshold}",
-          "A shop whose standard charge is only known for orders under a value.", placeholders=("price", "threshold")),
-    Entry("shops.delivery.unknown", T, "Shops page: delivery unknown", "Not yet known: prices show as plus delivery",
-          "A shop whose delivery charge has not been read yet."),
-    Entry("shops.listshop", T, "Shops page: list your shop line",
-          "Run a UK shop that sells sealed trading card game products and want to be compared?",
-          "Line at the foot of the Shops we compare page, before the List your shop button."),
     Entry("askrip.title", H, "Ask Rip page: heading", "Ask Rip", "The Ask Rip page's heading."),
     Entry("askrip.intro", P, "Ask Rip page: introduction",
           "Rip is RipRaptor's raptor, and he sits on every product page. Ask him about the product in front of you, "
@@ -3856,12 +3846,6 @@ ENTRIES = [
           "delivered prices: whether it is good value, what is inside and how today's price compares. Free, with no "
           "account.",
           "Search engine description of the Ask Rip page, and its line in llms.txt."),
-    Entry("meta.shops.title", T, "Shops page title", "Shops we compare: {shops} UK shops, delivery included",
-          "Browser tab title of the Shops we compare page. The site name is added after it.", placeholders=("shops",)),
-    Entry("meta.shops.description", T, "Shops page description",
-          "Every UK shop RipRaptor compares sealed trading card game prices from, with its delivery charge, how many "
-          "products it prices and when it was last checked.",
-          "Search engine description for the Shops we compare page."),
     # Terms page ------------------------------------------------------------
     Entry(
         "terms.title", H, "Terms heading",
@@ -4016,8 +4000,9 @@ ENTRIES = [
         "If you ask us to list your shop, we keep your name, your shop's website, your email address, any "
         "discount code you give and your message. We look at your shop's website to check it can be listed, and "
         "once it is, we email you once to say so. We use your email address only for that and to reply to you, "
-        "and we do not add you to a mailing list. Your enquiry is deleted a year after we have dealt with it, or "
-        "two years after you sent it if we never do.",
+        "and we do not add you to a mailing list. If you ask us to remove your shop, we keep the same details, "
+        "without a code, to check the request is yours. Your enquiry is deleted a year after we have dealt with "
+        "it, or two years after you sent it if we never do.",
         "Data section of the terms page, after the main explanation: what the List your shop form keeps.",
         legal=True,
     ),

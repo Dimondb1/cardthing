@@ -5,7 +5,7 @@ from django.utils import timezone
 from catalogue import mail
 
 from . import service
-from .models import Conversation, OutreachMail, ShopContact, ShopEnquiry
+from .models import Conversation, OutreachMail, ShopContact, ShopEnquiry, ShopRemoval
 
 
 class ConversationForm(forms.ModelForm):
@@ -210,6 +210,69 @@ class ShopEnquiryAdmin(admin.ModelAdmin):
     def mark_handled(self, request, queryset):
         done = queryset.filter(handled_at__isnull=True).update(handled_at=timezone.now())
         self.message_user(request, f"{done} shop enquir{'y' if done == 1 else 'ies'} marked handled. "
+                                   "Each is deleted a year from now.")
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(ShopRemoval)
+class ShopRemovalAdmin(admin.ModelAdmin):
+    """Shops asking to come off RipRaptor (inbox/shops.py). Nothing changes until you choose Take off RipRaptor,
+    which switches the shop off and marks it Do not email. Check first that the request is the shop's own: anyone
+    could ask to remove a rival, and an email on the shop's own domain is the sign. Nothing is sent from here."""
+
+    list_display = ("name", "domain", "email", "email_is_shops", "retailer", "created_at", "removed", "handled")
+    list_filter = (HandledFilter,)
+    search_fields = ("name", "domain", "shop_url", "email", "message", "note")
+    date_hierarchy = "created_at"
+    list_select_related = ("retailer",)
+    readonly_fields = ("name", "shop_url", "domain", "email", "email_check", "message", "retailer", "created_at",
+                       "removed_at")
+    fields = ("name", "shop_url", "domain", "email", "email_check", "message", "retailer", "created_at",
+              "removed_at", "handled_at", "note")
+    actions = ("take_off", "mark_handled")
+
+    @admin.display(boolean=True, description="Shop's own email")
+    def email_is_shops(self, obj):
+        from . import shops
+
+        return shops.email_matches(obj)
+
+    @admin.display(description="Email check")
+    def email_check(self, obj):
+        from . import shops
+
+        if shops.email_matches(obj):
+            return f"On the shop's own domain ({obj.domain}): a good sign the request is theirs."
+        return (f"Not on the shop's own domain ({obj.domain}). Make sure the request is really the shop's before "
+                "taking it off: reply from your own email and ask them to confirm from the shop's address.")
+
+    @admin.display(boolean=True, description="Taken off", ordering="removed_at")
+    def removed(self, obj):
+        return obj.removed_at is not None
+
+    @admin.display(boolean=True, description="Handled", ordering="handled_at")
+    def handled(self, obj):
+        return obj.handled_at is not None
+
+    @admin.action(description="Take off RipRaptor (switch the shop off and mark it Do not email)")
+    def take_off(self, request, queryset):
+        from . import shops
+
+        done = []
+        for removal in queryset.select_related("retailer"):
+            try:
+                done.append(shops.take_off(removal).name)
+            except shops.NotReady as exc:
+                self.message_user(request, f"{removal.domain}: {exc}", messages.WARNING)
+        if done:
+            self.message_user(request, f"Taken off RipRaptor: {', '.join(done)}. Their prices no longer show.")
+
+    @admin.action(description="Mark handled")
+    def mark_handled(self, request, queryset):
+        done = queryset.filter(handled_at__isnull=True).update(handled_at=timezone.now())
+        self.message_user(request, f"{done} request{'' if done == 1 else 's'} marked handled. "
                                    "Each is deleted a year from now.")
 
     def has_add_permission(self, request):

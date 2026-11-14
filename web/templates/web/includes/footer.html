@@ -15,7 +15,6 @@
     </div>
     <nav class="site-footer__nav" aria-label="Footer">
       <a href="{% url 'web:about' %}">{% copy "site.nav.about" %}</a>
-      <a href="{% url 'web:shops' %}">{% copy "site.nav.shops" %}</a>
       <a href="{% url 'web:deals' %}">{% copy "site.nav.deals" %}</a>
       <a href="{% url 'web:drops' %}">{% copy "site.nav.drops" %}</a>
       <a href="{% url 'web:per_card' %}">{% copy "site.nav.percard" %}</a>
@@ -27,6 +26,7 @@
       <a href="{% url 'web:contact' %}">{% copy "site.nav.contact" %}</a>
       {% if refer_advertised %}<a href="{% url 'web:refer' %}">{% copy "refer.nav" %}</a>{% endif %}
       <a href="{% url 'web:list_shop' %}">{% copy "site.nav.listshop" %}</a>
+      <a href="{% url 'web:remove_shop' %}" rel="nofollow">{% copy "site.nav.removeshop" %}</a>
       <a href="{% url 'web:terms' %}">{% copy "site.nav.terms" %}</a>
       <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a>
       {% if ga_id and not private_link %}<button type="button" class="site-footer__choice" data-consent-open hidden>{% copy "site.nav.consent" %}</button>{% endif %}

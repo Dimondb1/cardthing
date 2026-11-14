@@ -35,7 +35,7 @@ from django.utils import timezone
 
 from catalogue import notify
 
-from .models import ShopEnquiry
+from .models import ShopEnquiry, ShopRemoval
 
 MAX_NAME = 80
 MAX_URL = 300
@@ -342,17 +342,89 @@ def tell_owner(enquiry, opener=None):
 
 
 def purge(now=None):
-    """Delete enquiries HANDLED_KEEP_DAYS after they were handled, and unhandled ones OPEN_KEEP_DAYS after
-    they arrived. Returns how many went."""
+    """Delete enquiries and removal requests HANDLED_KEEP_DAYS after they were handled, and unhandled ones
+    OPEN_KEEP_DAYS after they arrived. Returns how many went."""
     from django.db.models import Q
 
     now = now or timezone.now()
-    gone, _ = ShopEnquiry.objects.filter(
-        Q(handled_at__lt=now - timedelta(days=HANDLED_KEEP_DAYS))
-        | Q(handled_at__isnull=True, created_at__lt=now - timedelta(days=OPEN_KEEP_DAYS))
-    ).delete()
-    return gone
+    old = (Q(handled_at__lt=now - timedelta(days=HANDLED_KEEP_DAYS))
+           | Q(handled_at__isnull=True, created_at__lt=now - timedelta(days=OPEN_KEEP_DAYS)))
+    gone, _ = ShopEnquiry.objects.filter(old).delete()
+    removed, _ = ShopRemoval.objects.filter(old).delete()
+    return gone + removed
 
 
 def open_count():
     return ShopEnquiry.objects.filter(handled_at__isnull=True).count()
+
+
+# Coming off RipRaptor ----------------------------------------------------------------------------------------------
+
+def ask_removal(values, ip, now=None):
+    """Store a shop's request to come off RipRaptor (``values`` from clean) and tell the owner. Nothing changes on
+    the site until the owner takes the shop off in admin. Returns the request, or None when the same shop already
+    has one open from the last DUPLICATE_DAYS (nothing stored, nothing sent). Raises Refused when the sender or the
+    site has sent too many; the sender's count is the one List your shop keeps."""
+    from catalogue import shop_adding
+
+    now = now or timezone.now()
+    if not address_allowed(ip):
+        raise Refused
+    if ShopRemoval.objects.filter(created_at__gte=now - timedelta(hours=1)).count() >= PER_SITE_HOUR:
+        raise Refused
+    if ShopRemoval.objects.filter(domain=values["domain"], handled_at__isnull=True,
+                                  created_at__gte=now - timedelta(days=DUPLICATE_DAYS)).exists():
+        return None
+    removal = ShopRemoval.objects.create(
+        name=values["name"], shop_url=values["shop_url"], domain=values["domain"], email=values["email"],
+        message=values["message"], retailer=shop_adding.retailer_for(values["domain"]), created_at=now)
+    tell_owner_removal(removal)
+    return removal
+
+
+def tell_owner_removal(removal, opener=None):
+    """Best effort, as tell_owner: plain text, the website never made a link, and the push names nothing."""
+    shop = removal.retailer.name if removal.retailer_id else "none found: look under Retailers"
+    detail = (
+        f"Name: {removal.name}\n"
+        f"Shop website (typed by them): {removal.shop_url}\n"
+        f"Shop on RipRaptor: {shop}\n"
+        f"Email: {removal.email}{'' if email_matches(removal) else ' (not on the shop website domain)'}\n"
+        f"Message: {removal.message or '(none)'}\n\n"
+        "Nothing has changed yet and nothing has been sent to them. Check the request is really the shop's (an "
+        "email on its own domain is the sign: anyone could ask to remove a rival), then open it in admin and use "
+        "Take off RipRaptor."
+    )
+    notify.owner(
+        f"Shop asking to be removed: {removal.domain}", "A shop asks to be removed",
+        reverse("admin:inbox_shopremoval_change", args=[removal.pk]),
+        detail=detail, once_a_day=False, link_label="Open in admin", tags="shopping", opener=opener,
+        to=owner_address(),
+    )
+
+
+def take_off(removal, now=None):
+    """Take the shop off RipRaptor: switch it off, so its prices stop showing and it is no longer read, and mark it
+    Do not email, so shop outreach leaves it alone. The request is marked handled. Raises NotReady, changing
+    nothing, when no shop on RipRaptor has its website."""
+    from django.db import transaction
+
+    from .models import ShopContact
+
+    now = now or timezone.now()
+    shop = removal.retailer
+    if shop is None:
+        raise NotReady(f"No shop on RipRaptor has the website {removal.domain}. If it is there under another "
+                       "address, switch it off under Retailers, then mark this handled.")
+    with transaction.atomic():
+        if shop.is_active:
+            shop.is_active = False
+            shop.save(update_fields=["is_active"])   # saved, not updated, so the pages kept ready are cleared
+        contact, _ = ShopContact.objects.get_or_create(retailer=shop)
+        if contact.status != ShopContact.Status.DO_NOT_EMAIL:
+            contact.status = ShopContact.Status.DO_NOT_EMAIL
+            contact.save(update_fields=["status"])
+        removal.removed_at = removal.removed_at or now
+        removal.handled_at = removal.handled_at or now
+        removal.save(update_fields=["removed_at", "handled_at"])
+    return shop

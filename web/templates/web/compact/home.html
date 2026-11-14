@@ -16,7 +16,7 @@
   <p class="dt-intro__lead">{% copy "compact.desk.lead" %}</p>
   <ul class="dt-facts">
     <li class="dt-facts__item"><span class="dt-facts__number">{{ numbers.offers_text }}</span> {% copy "compact.desk.offers" %}</li>
-    <li class="dt-facts__item"><a class="dt-facts__link" href="{% url 'web:shops' %}"><span class="dt-facts__number">{{ numbers.shops }}</span> {% copy "compact.desk.shops" %}</a></li>
+    <li class="dt-facts__item"><span class="dt-facts__number">{{ numbers.shops }}</span> {% copy "compact.desk.shops" %}</li>
     {% if numbers.checked %}<li class="dt-facts__item dt-facts__item--checked"><span class="cx-checked__dot" aria-hidden="true"></span>{% copy "compact.checked" ago=numbers.checked|ago %}</li>{% endif %}
   </ul>
   <form class="dt-browse" action="{% url 'web:search' %}" method="get" aria-labelledby="dt-browse-title">

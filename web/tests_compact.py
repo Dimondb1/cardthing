@@ -152,8 +152,8 @@ class DeskTests(CompactCase):
         self.assertIn('<p class="dt-intro__lead">Compare sealed TCG prices from UK retailers. Delivery included, '
                       'cheapest first.</p>', html)
         self.assertIn('<span class="dt-facts__number">4</span> prices in stock', html)
-        self.assertIn(f'<a class="dt-facts__link" href="{reverse("web:shops")}"><span class="dt-facts__number">2</span>'
-                      ' UK shops compared</a>', html)
+        # The count stays; the Shops we compare page it once opened was taken down (the owner, 14 Nov 2026).
+        self.assertIn('<li class="dt-facts__item"><span class="dt-facts__number">2</span> UK shops compared</li>', html)
         # The phone's numbers are still there, for the phone, in the same heading.
         self.assertIn('<span class="cx-hero__phone">4 sealed prices in stock at 2 UK shops.</span>', html)
 

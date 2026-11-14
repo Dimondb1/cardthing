@@ -6223,7 +6223,10 @@ own games forward, in the browser, as on the usual home page. On every
 landing `feed.js` shows quiet hints in turn, each for a couple of seconds
 while the things it points at light up one after another, ended early by
 any tap or scroll: on the home page Pick by game by the bar and Pick by
-type by the tiles (in the compact layout, Pick by game by the bar); on a game's page Pick a set by its row of sets and Or
+type by the tiles (in the compact layout, Pick by game by the bar), then
+last, for about four seconds, a small box under the header's Find with Rip
+button ("Need help with your shopping, or just want to ask a question? Ask
+Rip") while the button lifts (the owner, 14 Nov 2026); on a game's page Pick a set by its row of sets and Or
 pick a type by the tiles; and once a set is picked, as its list comes in,
 Now pick a type by the tiles. Nothing is remembered between landings (the
 owner, 9 Nov 2026: "every time I land on the homepage, I need to see them.

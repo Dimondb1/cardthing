@@ -641,6 +641,10 @@ ENTRIES = [
           placeholders=("count", "hours")),
     Entry("find.empty", T, "Find with Rip: nothing in stock", "Nothing of that kind is in stock right now. Try another.",
           "Shown when a step has no options."),
+    Entry("feed.hint.rip", T, "New home page: hint at Find with Rip",
+          "Need help with your shopping, or just want to ask a question? Ask Rip",
+          "The last of the home page's landing hints, under the Find with Rip button in the header, which lights up "
+          "as it shows. Keep it short: it is a small bubble."),
     Entry("feed.hint.games", T, "New home page: first-visit hint at the game bar", "Pick by game",
           "A small label that shows for a moment by the game bar on a visitor's first landing, then goes. Two or three "
           "words."),

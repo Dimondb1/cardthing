@@ -2755,6 +2755,12 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-hint--games::after { bottom: calc(-1 * var(--space-1)); }
 .feed-hint--types { top: calc(100% - var(--space-1)); }
 .feed-hint--types::after { top: calc(-1 * var(--space-1)); }
+/* Ask Rip's hint hangs under the header's Find with Rip button, caret up, wrapping to a small box. */
+.masthead__find { position: relative; }
+.feed-hint--rip { top: calc(100% + var(--space-2)); width: max-content; max-width: var(--hint-rip-width); white-space: normal; text-align: center; }
+.feed-hint--rip::after { top: calc(-1 * var(--space-1)); }
+.masthead__find.is-lit { transform: scale(1.08); }
+.masthead__find { transition: transform var(--motion-fast) var(--ease-standard); }
 .feed-hint--side { --hint-x: 0; bottom: auto; transform: translate(var(--space-1), -50%); }
 .feed-hint--side.is-on { transform: translate(0, -50%); }
 .feed-hint.feed-hint--side::after { left: calc(-1 * var(--space-1)); top: 50%; bottom: auto; transform: translateY(-50%) rotate(45deg); }
@@ -2787,6 +2793,7 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .feed-dock { position: relative; box-shadow: none; }
   /* On a wide screen the bar and the tiles sit at the left, so the hints do too. */
   .feed-hint { --hint-x: 0; left: var(--space-5); }
+  .feed-hint.feed-hint--rip { --hint-x: -50%; left: 50%; }
   .feed-hint--games { bottom: auto; top: calc(100% + var(--space-1)); }
   .feed-hint--games::after { bottom: auto; top: calc(-1 * var(--space-1)); }
   .feed-dock__in { padding: 0; }

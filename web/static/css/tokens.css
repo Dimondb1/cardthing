@@ -284,6 +284,7 @@
   --checker-pound: 1ch;             /* room for the pound sign inside it */
   --checker-thumb: 4.5rem;          /* the product being checked */
   --checker-choice-thumb: 3.5rem;   /* each product offered to choose from */
+  --hint-rip-width: min(15rem, 70vw);  /* the home page's Ask Rip hint under the header button */
   --rip-list-thumb: 3.5rem;         /* each product Rip offers to choose from when building a list */
   --rip-list-radio: 1.25rem;        /* the round tick beside it */
   --list-qty-width: 4rem;           /* the number box for how many of a product */

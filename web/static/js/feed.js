@@ -88,7 +88,11 @@
   // tiles; a game's page's Pick a set by its row of sets, then Or pick a type by the tiles; and, once a set is picked,
   // Now pick a type by the tiles. Each is on for a moment and gone while the items it points at light up one after
   // another, left to right. Any tap, scroll or key once they are showing ends them early: the visitor is already going.
-  var TARGETS = { games: ".feed-game__pill", types: ".feed-tile__well", sets: ".feed-sets .feed-filters__row > .chip" };
+  // The home page's last hint points up at Find with Rip in the header (the owner, 14 Nov 2026: "a little tiny text
+  // box saying, need help with your shopping, or just want to ask a question, ask Rip, and it will just point towards
+  // the button at the top"); it stays longer, having more to read (data-hint-hold).
+  var TARGETS = { games: ".feed-game__pill", types: ".feed-tile__well", sets: ".feed-sets .feed-filters__row > .chip",
+                  rip: ".masthead__find" };
   // What a hint sits beside on a wide screen: the last of those items, or for the sets the row's last thing, All sets.
   var BESIDE = { sets: ".feed-sets .feed-filters__row > *" };
   var targetOf = function (hint) {
@@ -106,6 +110,7 @@
     // places them.
     if (window.matchMedia && window.matchMedia("(min-width: 48rem)").matches) {
       Array.prototype.forEach.call(hints, function (hint) {
+        if (hint.classList.contains("feed-hint--rip")) return;   // always under its button
         var within = hint.closest(".feed-dock, .feed-sets, .feed__scroller");
         var beside = hint.classList.contains("feed-hint--sets") ? BESIDE.sets : targetOf(hint);
         var items = within ? within.querySelectorAll(beside) : [];
@@ -140,18 +145,24 @@
         at(i * 110 + 520, function () { item.classList.remove("is-lit"); });
       });
     };
-    Array.prototype.forEach.call(hints, function (hint, i) {
-      at(700 + i * 2600, function () { show(hint); pass(targetOf(hint)); });
-      at(700 + i * 2600 + 2200, function () { hide(hint); });
+    var start = 700;
+    Array.prototype.forEach.call(hints, function (hint) {
+      var hold = parseInt(hint.getAttribute("data-hint-hold"), 10) || 2200;
+      at(start, function () { show(hint); pass(targetOf(hint)); });
+      at(start + hold, function () { hide(hint); });
+      start += hold + 400;
     });
-    at(700 + hints.length * 2600, end);
+    at(start, end);
     // Listened for from the first hint on, not from the page's load: the browser's own scroll as it settles (the
     // address bar, a restored position) must not end them before they start.
     at(650, function () {
       ["pointerdown", "scroll", "keydown"].forEach(function (name) { window.addEventListener(name, end, true); });
     });
   };
-  var landing = document.querySelectorAll(".feed-hint");
+  // In the page's order, but a hint marked data-hint-last (Ask Rip's, in the header) after the others.
+  var landing = Array.prototype.slice.call(document.querySelectorAll(".feed-hint"));
+  landing = landing.filter(function (hint) { return !hint.hasAttribute("data-hint-last"); })
+    .concat(landing.filter(function (hint) { return hint.hasAttribute("data-hint-last"); }));
   var overNow = function () {
     if (hintsOver) return;
     hintsOver = true;

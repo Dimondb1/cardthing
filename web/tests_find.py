@@ -180,12 +180,21 @@ class LinkTests(FindCase):
         look.remember()
         link = (f'<a class="masthead__find" href="{FIND}"><span class="mark masthead__find-icon" aria-hidden="true"></span>'
                 '<span class="masthead__find-text"><span class="masthead__find-full">Find with Rip</span>'
-                '<span class="masthead__find-brief">Find</span></span></a>')
+                '<span class="masthead__find-brief">Find</span></span>')
+        # The owner, 14 Nov 2026: on landing, after the games, "a little tiny text box saying, need help with your
+        # shopping, or just want to ask a question, ask Rip", pointing at this button. The home page only.
+        hint = ('<span class="feed-hint feed-hint--rip" hidden aria-hidden="true" data-hint-last data-hint-hold="4200">'
+                'Need help with your shopping, or just want to ask a question? Ask Rip</span></a>')
         for url in (reverse("web:home"), self.pokemon.get_absolute_url(), reverse("web:deals")):
             html = self.client.get(url).content.decode()
             with self.subTest(url=url):
-                self.assertIn(link, html)
+                self.assertIn(link + (hint if url == reverse("web:home") else "</a>"), html)
                 self.assertLess(html.index("masthead__find"), html.index("masthead__swipe"))
+        # It shows last, after the games and types, and stays up longer than they do: it is a sentence, not a label.
+        script = open("web/static/js/feed.js", encoding="utf-8").read()
+        self.assertIn('rip: ".masthead__find"', script)
+        self.assertIn('data-hint-hold', script)
+        self.assertIn('data-hint-last', script)
         self.assertIn(f'<a class="masthead__find" href="{FIND}" aria-current="page">', self.client.get(FIND).content.decode())
         # Nothing sits between the headline and the tiles any more.
         html = self.client.get(reverse("web:home")).content.decode()

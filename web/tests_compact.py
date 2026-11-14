@@ -124,8 +124,12 @@ class HomeTests(CompactCase):
     def test_each_landing_on_the_home_page_hints_at_the_games(self):
         # The owner, 9 Nov 2026: the highlights of the games on landing were gone in this layout; "just want a subtle
         # way of showing someone what to do". feed.js shows it and lights the games one by one.
-        self.assertIn('<span class="feed-hint feed-hint--games" hidden aria-hidden="true">Pick by game</span>',
-                      self.page("/"))
+        html = self.page("/")
+        self.assertIn('<span class="feed-hint feed-hint--games" hidden aria-hidden="true">Pick by game</span>', html)
+        # The owner, 14 Nov 2026: then "a little tiny text box" pointing at Find with Rip in the header, last.
+        rip = html.index('<span class="feed-hint feed-hint--rip"')
+        self.assertLess(html.index('class="masthead__find"'), rip)
+        self.assertIn("Need help with your shopping, or just want to ask a question? Ask Rip", html[rip:])
         self.assertNotIn("feed-hint", self.page(self.pokemon.get_absolute_url()))
 
 

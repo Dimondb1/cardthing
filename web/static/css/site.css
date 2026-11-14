@@ -361,6 +361,16 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .search__button:hover { background: var(--color-brand-hover); }
 .search__button:active { transform: scale(0.97); }
 .search__button-arrow { display: none; width: 1.35rem; height: 1.35rem; }
+/* Voice and photo search in every search box (the owner, 14 Nov 2026): the microphone (shown only where the browser
+   can listen, ask-input.js), the camera (a link to Search by photo) and the Search button sit together at the box's
+   right end, and the box keeps room for them so typed words never run under them. */
+.search__end { position: absolute; top: 0; right: var(--search-inset); bottom: 0; display: flex; align-items: center; gap: var(--space-1); }
+.search__end .search__button { position: static; }
+.search__tool { display: flex; align-items: center; justify-content: center; flex: none; width: var(--search-tool); height: var(--search-tool); padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--color-ink-muted); cursor: pointer; }
+.search__tool .icon-tool { width: var(--icon-button); height: var(--icon-button); }
+@media (hover: hover) { .search__tool:hover { background: var(--color-shelf); color: var(--color-ink); } }
+.search__tool.is-listening { background: var(--color-brand-soft); color: var(--color-brand-text); }
+.search--header input { padding-right: calc(var(--search-tools) + var(--search-header-button)); }
 .search--header input { height: 2.75rem; box-shadow: none; }
 .search--header .search__button { font-size: var(--text-sm); }
 .search--large input { height: 3.5rem; font-size: var(--text-lg); padding-right: 8rem; }
@@ -370,7 +380,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   /* Phones: the header search relies on the keyboard's search key; the home search keeps a round arrow button. */
   .intro { padding-top: 0; }
   .intro .search { margin-top: var(--space-3); }
-  .search--header input { padding-right: var(--space-4); }
+  .search--header input { padding-right: calc(var(--search-tools) + var(--space-2)); }
   .search--header .search__button { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); opacity: 0; }
 }
 
@@ -730,13 +740,13 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 
 /* Search on the home page: the main action */
 .search--large input { height: 3.75rem; font-size: var(--text-lg); padding-left: 3.5rem; border: 1.5px solid var(--color-line-strong); box-shadow: var(--shadow-search); }
-@media (min-width: 40rem) { .search--large input { padding-right: 10rem; } }
+@media (min-width: 40rem) { .search--large input { padding-right: calc(var(--search-tools) + var(--search-large-button)); } }
 .search--large input::placeholder { color: var(--color-ink-muted); }
 .search--large .search__icon { left: var(--space-5); }
 .search--large .search__button { height: 2.9rem; padding: 0 var(--space-5); font-size: var(--text-base); font-weight: var(--weight-heading); }
 @media (min-width: 48rem) { .search--large input { height: 4rem; } .search--large .search__button { height: 3.1rem; } }
 @media (max-width: 40rem) {
-  .search--large input { height: 3.5rem; font-size: var(--text-base); padding-left: 2.9rem; padding-right: 3.5rem; }
+  .search--large input { height: 3.5rem; font-size: var(--text-base); padding-left: 2.9rem; padding-right: calc(var(--search-tools) + var(--search-round-button)); }
   .search--large .search__icon { left: 1rem; width: 1.15rem; height: 1.15rem; }
   .search--large .search__button { right: 0.4rem; width: 2.7rem; height: 2.7rem; padding: 0; border-radius: 50%; }
   .search--large .search__button-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -2705,11 +2715,11 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .feed-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; font: inherit; font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--color-ink); }
 .feed-search input::placeholder { color: var(--color-ink-muted); }
 .feed-search__mic { display: flex; align-items: center; justify-content: center; flex: none; width: var(--feed-go); height: var(--feed-go); padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--color-ink-muted); cursor: pointer; }
-.feed-search--listening .feed-search__mic { color: var(--color-brand-text); }
+.feed-search__mic.is-listening { color: var(--color-brand-text); }
 /* Listening: the microphone breathes, transform only, under the motion limit; still for those who ask. */
-.feed-search--listening .feed-search__mic .feed-ic { animation: feed-listen var(--motion-slow) var(--ease-standard) infinite alternate; }
+.feed-search__mic.is-listening .feed-ic { animation: feed-listen var(--motion-slow) var(--ease-standard) infinite alternate; }
 @keyframes feed-listen { from { transform: scale(1); } to { transform: scale(1.2); } }
-@media (prefers-reduced-motion: reduce) { .feed-search--listening .feed-search__mic .feed-ic { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .feed-search__mic.is-listening .feed-ic { animation: none; } }
 .feed-search__go { display: flex; align-items: center; justify-content: center; flex: none; width: var(--feed-go); height: var(--feed-go); padding: 0; border: 0; border-radius: 50%; background: var(--color-brand); color: var(--color-brand-ink); cursor: pointer; }
 .feed-games { display: flex; overflow-x: auto; padding: var(--space-1) var(--space-1) 0; scrollbar-width: none; scroll-snap-type: x proximity; }
 .feed-games::-webkit-scrollbar { display: none; }

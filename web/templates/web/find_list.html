@@ -2,8 +2,6 @@
 {% load sitecopy ripraptor %}
 {% block page_class %}page--find{% endblock %}
 
-{% block scripts %}{% load static %}<script nonce="{{ csp_nonce }}" src="{% static 'js/ask-input.js' %}" defer></script>{% endblock %}
-
 {% block content %}
 {# Build a shopping list with Rip (web/rip_list.py): a box for what the visitor wants, or a photo of their list, then the site's own products for each thing, one ticked, to add to the shopping list with how many. Plain forms, so it works without script: the photo is a plain file field. ask-input.js adds the microphone where the browser can turn speech into words, makes the photo field a button with a small copy of the photo, and shrinks the photo before it is sent. #}
 <div class="find">

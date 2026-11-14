@@ -1,12 +1,14 @@
-// Ways to ask Rip besides typing. The owner, 14 Nov 2026: "add a microphone option as it could take a while, and
-// upload a shopping list photo". Everything here only speeds things up: without script the box is typed in and the
-// photo is a plain file field, and both are sent by the form.
+// Ways in besides typing, on every page. The owner, 14 Nov 2026: "add a microphone option as it could take a while, and
+// upload a shopping list photo", then "make sure on all search boxes we have voice or image search". Everything here
+// only speeds things up: without script the boxes are typed in, the photo is a plain file field, and the forms send.
 (function () {
   "use strict";
 
   // Speak instead of typing: the browser's own speech to text writes what is said into the box, after anything
-  // already there, to check and send. The button shows only where the browser can do it. Nothing is sent until the
-  // visitor presses the form's own button, and RipRaptor only ever receives the words. ask.js swaps in a fresh Ask
+  // already there. The button shows only where the browser can do it, and RipRaptor only ever receives the words. On
+  // Ask Rip's boxes the words wait to be checked and sent, since a question counts; in a search box
+  // (data-voice-submit) the search runs as soon as words are heard, as a search costs nothing. A button with its
+  // words in aria-label (an icon alone) swaps them for Stop listening while it listens. ask.js swaps in a fresh Ask
   // Rip box after each answer and calls window.ripVoice on it, so its microphone works too.
   var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   var wire = function (root) {
@@ -18,7 +20,11 @@
       var form = button.closest("form");
       var status = form && form.querySelector("[data-voice-status]");
       var label = button.querySelector("[data-voice-label]");
-      var idle = label ? label.textContent : "";
+      var idle = label ? label.textContent : button.getAttribute("aria-label");
+      var name = function (words) {
+        if (label) label.textContent = words;
+        else button.setAttribute("aria-label", words);
+      };
       var listening = null;
       var say = function (text) {
         if (!status) return;
@@ -28,7 +34,8 @@
       button.hidden = false;
       button.addEventListener("click", function () {
         if (listening) { listening.stop(); return; }
-        var before = field.value.replace(/\s+$/, "");
+        var submits = button.hasAttribute("data-voice-submit");
+        var before = submits ? "" : field.value.replace(/\s+$/, "");
         var limit = parseInt(field.getAttribute("maxlength"), 10) || 300;
         var heard = false;
         var failed = false;
@@ -52,24 +59,30 @@
         recognition.onend = function () {
           listening = null;
           button.classList.remove("is-listening");
-          if (label) label.textContent = idle;
+          name(idle);
           if (!heard && !failed) say(button.getAttribute("data-voice-unheard"));
-          if (heard) field.dispatchEvent(new Event("input", { bubbles: true }));
+          if (!heard) return;
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+          if (submits && form) {
+            if (form.requestSubmit) form.requestSubmit();
+            else form.submit();
+          }
         };
         say("");
         try { recognition.start(); } catch (error) { say(button.getAttribute("data-voice-unheard")); return; }
         listening = recognition;
         button.classList.add("is-listening");
-        if (label) label.textContent = button.getAttribute("data-voice-stop");
+        name(button.getAttribute("data-voice-stop"));
       });
     });
   };
   wire(document);
   window.ripVoice = wire;
 
-  // A photo of the list, on the list builder: the file field becomes a button, a small copy of the chosen photo
-  // shows with Remove photo, and the photo is made smaller here (its longest side 1568 pixels, as the server would)
-  // so it uploads in a moment on a phone's data. If the browser cannot shrink it, the photo goes as it is.
+  // A photo, on the list builder and on Search by photo: the file field becomes a button, a small copy of the chosen
+  // photo shows with Remove photo, and the photo is made smaller here (its longest side 1568 pixels, as the server
+  // would) so it uploads in a moment on a phone's data. If the browser cannot shrink it, the photo goes as it is. On
+  // Search by photo (data-photo-send) the photo is the whole question, so it is sent as soon as it is ready.
   var picker = document.querySelector("[data-photo]");
   if (picker) {
     var input = picker.querySelector("input[type=file]");
@@ -84,6 +97,10 @@
       chosen.hidden = false;
       pick.hidden = true;
       if (preview) { thumb.src = preview; thumb.hidden = false; }
+      if (picker.hasAttribute("data-photo-send") && input.form) {
+        if (input.form.requestSubmit) input.form.requestSubmit();
+        else input.form.submit();
+      }
     };
     var clear = function () {
       input.value = "";

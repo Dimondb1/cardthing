@@ -2966,6 +2966,39 @@ def find(request):
     })
 
 
+# Search by photo: what Rip says of each state is its own where the list builder's would not fit.
+PHOTO_STATES = ("nothing", "empty", "closed")
+
+
+@require_http_methods(["GET", "POST"])
+def search_photo(request):
+    """Search by photo (web/rip_list.py photo_search_target), from the camera in every search box: a photo of a
+    product or a list goes to Rip, as one of the visitor's Ask Rip questions. The camera is a plain link here, so the
+    page says what a photo costs before one is sent, and the form needs no token on the cached pages around it. It
+    works without script; nothing here is cached or indexed."""
+    if request.method == "POST":
+        if request.POST.get("website"):
+            return HttpResponseRedirect(reverse("web:search_photo"))   # the hidden field is only ever filled by robots
+        made = rip_list.make(request, "", photo=request.FILES.get("photo"))
+        response = HttpResponseRedirect(rip_list.photo_search_target(made))
+        response.status_code = 303
+        askrip.keep_count(request, response)
+        response["Cache-Control"] = "no-store"
+        response["X-Robots-Tag"] = "noindex, nofollow"
+        return response
+    state = request.GET.get("state", "")
+    box = rip_list.box(request, state if state in rip_list.STATES else "")
+    if not box["open"] and not box["state"]:
+        box["state"] = "closed"
+    if box["state"] in PHOTO_STATES:
+        box["state_key"] = f"find.photo.{box['state']}"
+    response = render(request, "web/find_photo.html", {
+        "box": box, "meta_title": text(request, "find.photo.title"), "noindex": True,
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
 @require_http_methods(["GET", "POST"])
 def find_list(request):
     """Build a shopping list with Rip (web/rip_list.py), on Find. The form posts and the page comes back with the

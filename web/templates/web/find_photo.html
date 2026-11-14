@@ -1,0 +1,32 @@
+{% extends "web/base.html" %}
+{% load sitecopy %}
+{% block page_class %}page--find{% endblock %}
+
+{% block content %}
+{# Search by photo (web.views.search_photo, web/rip_list.py photo_search_target), from the camera in every search box. A photo of a product or a list goes to Rip, as one Ask Rip question: one product found opens the search for it, several the list builder's choices. A plain form, so it works without script; ask-input.js makes the field a button, shrinks the photo and sends it as soon as it is chosen. #}
+<div class="find">
+  <h1 class="visually-hidden">{% copy "find.photo.title" %}</h1>
+  <div class="find__ask">
+    <span class="mark find__rip" aria-hidden="true"></span>
+    <div class="find__bubble">
+      <h2 class="find__question">{% copy "find.photo.question" %}</h2>
+      <p class="find__sub">{% copy "find.photo.sub" %}</p>
+    </div>
+  </div>
+  {% if box.state_key %}<p class="rip-list__state" role="status">{% copy box.state_key count=box.per_person hours=box.hours %}</p>{% endif %}
+  {% if box.open and box.left %}
+  <form class="rip-list__form" method="post" action="{% url 'web:search_photo' %}" enctype="multipart/form-data" data-rip-list>{% csrf_token %}
+    <div class="rip-list__photo" data-photo data-photo-send>
+      <label class="rip-list__photo-label" for="search-photo">{% include "web/includes/icons/camera.svg" %}<span>{% copy "find.photo.pick" %}</span></label>
+      <input id="search-photo" class="rip-list__file" type="file" name="photo" accept="image/*">
+      <div class="rip-list__chosen" data-photo-chosen hidden><img class="rip-list__thumb" alt="" data-photo-thumb hidden><span>{% copy "find.list.photo_added" %}</span><button class="button button--quiet button--small" type="button" data-photo-remove>{% copy "find.list.photo_remove" %}</button></div>
+    </div>
+    <div class="alert-box__trap" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <p class="rip-list__left">{% copy "find.photo.cost" %} {% if box.left == 1 %}{% copy "product.ask.left.one" %}{% else %}{% copy "product.ask.left.other" count=box.left %}{% endif %}</p>
+    <p><button class="button" type="submit" data-working="{% copy 'find.photo.working' %}">{% copy "find.photo.button" %}</button></p>
+  </form>
+  {% endif %}
+  <p class="find__again"><a href="{% url 'web:find_list' %}">{% copy "find.photo.list" %}</a></p>
+  <p class="small-print">{% copy "find.photo.note" %} <a href="{% url 'web:terms' %}#terms-data">{% copy "site.nav.privacy" %}</a></p>
+</div>
+{% endblock %}

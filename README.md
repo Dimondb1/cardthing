@@ -6401,6 +6401,32 @@ could take a while, and upload a shopping list photo"):
   check and send, and the site only ever receives the words. Wording is
   `askrip.voice.*`.
 
+**Voice and photo search in every search box** (the owner, 14 Nov 2026:
+"make sure on all search boxes we have voice or image search"). The header
+search, the large search (old home page, a gone product, the page for a
+missing address) and the bottom search bar each have a microphone and a
+camera beside their Search button (`search_form.html` `.search__end`,
+`feed_dock.html`). Their sizes and the room the box keeps for them are
+tokens (`--search-tool`, `--search-header-button` and the like).
+
+- The **microphone** uses the same `ask-input.js` code as Ask Rip's boxes,
+  now loaded on every page (`feed.js` lost its own copy). In a search box
+  (`data-voice-submit`) it searches as soon as it hears words, since a
+  search costs nothing.
+- The **camera** is a plain link to **Search by photo** (`/find/photo/`,
+  `web.views.search_photo`). It is a link rather than a file button
+  because search boxes sit on cached pages that cannot carry a form token,
+  and because the page tells people a photo search uses one of their Ask
+  Rip questions before they spend it.
+- **Search by photo** is the list builder's photo path
+  (`rip_list.make`), whose prompt now also reads photos of the products
+  themselves. One product read opens the search for it, as if typed, with
+  its game (`rip_list.photo_search_target`). Several open the list
+  builder's choices. Nothing, or a problem, comes back to the photo page to
+  say so. With script on, the photo is shrunk and sent as soon as it is
+  chosen. The page is noindex and never cached. Wording is `find.photo.*`,
+  `site.search.photo` and `feed.search.voice`.
+
 **Share as post** (`web/share.py`, `share.js`): the Post icon in a product's
 Share panel, and in the cards' Share sheet, makes an Instagram post. The
 server draws a square picture (1080 by 1080, Pillow, DM Sans from

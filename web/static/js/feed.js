@@ -317,40 +317,4 @@
       document.addEventListener("ripraptor:content", function () { setTimeout(showCues, 0); });
     });
   })();
-
-  // Search by voice: the browser listens (Chrome on a phone can, Firefox cannot), the words go in the box and the
-  // search runs. Nothing is kept. The button only appears where listening is possible.
-  var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  var mic = document.querySelector(".feed-search__mic");
-  var form = mic && mic.closest("form");
-  var input = form && form.querySelector("input[type=search]");
-  if (!Recognition || !mic || !input) return;
-  var label = mic.getAttribute("aria-label");
-  var listening = null;
-  var stop = function () {
-    listening = null;
-    form.classList.remove("feed-search--listening");
-    mic.setAttribute("aria-label", label);
-  };
-  mic.hidden = false;
-  mic.addEventListener("click", function () {
-    if (listening) { listening.abort(); stop(); return; }
-    var heard = new Recognition();
-    heard.lang = document.documentElement.lang || "en-GB";
-    heard.interimResults = false;
-    heard.maxAlternatives = 1;
-    heard.onresult = function (event) {
-      var said = event.results[0] && event.results[0][0] ? event.results[0][0].transcript : "";
-      stop();
-      if (!said.trim()) return;
-      input.value = said.trim();
-      form.requestSubmit ? form.requestSubmit() : form.submit();
-    };
-    heard.onerror = stop;
-    heard.onend = stop;
-    listening = heard;
-    form.classList.add("feed-search--listening");
-    mic.setAttribute("aria-label", mic.getAttribute("data-listening") || label);
-    try { heard.start(); } catch (e) { stop(); }
-  });
 })();

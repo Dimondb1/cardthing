@@ -32,6 +32,7 @@
   <script nonce="{{ csp_nonce }}" src="{% static 'js/site.js' %}" defer></script>
   <script nonce="{{ csp_nonce }}" src="{% static 'js/watch.js' %}" defer></script>
   <script nonce="{{ csp_nonce }}" src="{% static 'js/history.js' %}" defer></script>
+  <script nonce="{{ csp_nonce }}" src="{% static 'js/ask-input.js' %}" defer></script>
   {% if ga_id and not private_link %}<script nonce="{{ csp_nonce }}" src="{% static 'js/analytics.js' %}" data-ga-id="{{ ga_id }}" defer></script>{% endif %}
   <script nonce="{{ csp_nonce }}" src="{% static 'js/install.js' %}" defer></script>
   {% if adsense_client and not noindex and not private_link %}<script nonce="{{ csp_nonce }}" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_client }}" crossorigin="anonymous"></script>{% endif %}

@@ -1,7 +1,7 @@
 {% extends "web/base.html" %}
 {% load sitecopy ripraptor %}
 
-{% block scripts %}{% load static %}<script nonce="{{ csp_nonce }}" src="{% static 'js/product.js' %}" defer></script><script nonce="{{ csp_nonce }}" src="{% static 'js/share.js' %}" defer></script>{% if ask.open %}<script nonce="{{ csp_nonce }}" src="{% static 'js/ask.js' %}" defer></script><script nonce="{{ csp_nonce }}" src="{% static 'js/ask-input.js' %}" defer></script>{% endif %}<script nonce="{{ csp_nonce }}" src="{% static 'js/list.js' %}" defer></script>{% endblock %}
+{% block scripts %}{% load static %}<script nonce="{{ csp_nonce }}" src="{% static 'js/product.js' %}" defer></script><script nonce="{{ csp_nonce }}" src="{% static 'js/share.js' %}" defer></script>{% if ask.open %}<script nonce="{{ csp_nonce }}" src="{% static 'js/ask.js' %}" defer></script>{% endif %}<script nonce="{{ csp_nonce }}" src="{% static 'js/list.js' %}" defer></script>{% endblock %}
 {% block page_class %}page--product{% endblock %}
 {% block content %}
 <nav class="breadcrumbs" aria-label="Breadcrumb">

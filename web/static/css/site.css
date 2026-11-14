@@ -1884,6 +1884,22 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .ask__show { justify-self: start; }
 .ask.is-folded > :not(.ask__title):not(.ask__show) { display: none; }
 .ask__thinking { color: var(--color-ink-muted); }
+/* All of Ask Rip on one phone screen (the owner, 14 Nov 2026: "all operation of ask rip to not need to scroll down
+   the page, condense it all so it all fits"): Rip shrinks to the top of his reply, so the reply takes the width and
+   half the height; the one-tap questions are one row that slides, as at the top of the page; the buttons under an
+   answer share a row. */
+@media (max-width: 39.99rem) {
+  .ask { gap: var(--space-2); padding-top: var(--space-3); }
+  .ask__chat { align-items: flex-start; gap: var(--space-2); }
+  .ask .rip { width: var(--rip-size-tight); height: var(--rip-size-tight); }
+  .ask__bubble { gap: var(--space-1); padding: var(--space-2) var(--space-3); }
+  .ask__bubble::before { top: calc(var(--rip-size-tight) / 2); }
+  .ask__chips { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding-block: var(--space-1); }
+  .ask__chips::-webkit-scrollbar { display: none; }
+  .ask__chip { flex: none; white-space: nowrap; }
+  .ask__next { flex-wrap: nowrap; }
+  .ask__next .button { flex: 1 1 0; min-width: 0; min-height: var(--tap); padding-inline: var(--space-3); font-size: var(--text-sm); }
+}
 @media (prefers-reduced-motion: no-preference) {
   .ask__bubble > *, .ask__you { animation: fade-in var(--motion-normal) var(--ease-out) both; }
 }
@@ -2844,6 +2860,26 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .find__bubble::after { content: ""; position: absolute; left: calc(-1 * var(--space-2)); bottom: var(--space-4); width: var(--space-3); height: var(--space-3); border-left: var(--border-width) solid var(--color-line); border-bottom: var(--border-width) solid var(--color-line); background: var(--color-paper); transform: rotate(45deg); }
 .find__question { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-price); line-height: var(--leading-tight); letter-spacing: -0.01em; }
 .find__sub { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--color-ink-muted); }
+/* On a phone, the same one-screen rule for Find with Rip, the list builder and Search by photo: Rip smaller at the top
+   of a wider bubble, the box two lines, Speak and the photo side by side, so the button that sends is on the first
+   screen; on a list of choices the products sit tighter and Add to my list stays in reach at the foot. */
+@media (max-width: 39.99rem) {
+  .find__ask { align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-3); }
+  .find__rip { --mark-size: var(--find-rip-tight); }
+  .find__bubble { padding: var(--space-2) var(--space-3); }
+  .find__bubble::after { top: calc(var(--find-rip-tight) / 2); bottom: auto; }
+  .find__question { font-size: var(--text-lg); }
+  .rip-list__form { margin-top: var(--space-2); }
+  .rip-list__tools { flex-wrap: nowrap; }
+  .rip-list__tools > * { flex: 1 1 0; min-width: 0; }
+  .rip-list__tools .button { width: 100%; padding-inline: var(--space-2); font-size: var(--text-sm); }
+  .rip-list { gap: var(--space-3); margin-top: var(--space-2); }
+  .rip-list__choice { gap: var(--space-2); padding: var(--space-1) var(--space-2); }
+  .rip-list__choice .product-image--row { width: var(--rip-list-thumb-tight); }
+  .rip-list__send .button { width: 100%; }
+}
+.rip-list__send { position: sticky; bottom: var(--space-2); z-index: 1; }
+.rip-list__send .button { box-shadow: var(--shadow-lift); }
 .find__options { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .find__option { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--find-option); padding: var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); color: var(--color-ink); text-align: center; text-decoration: none; font-weight: var(--weight-strong); line-height: var(--leading-snug); transition: transform var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard); }
 .find__option:hover { transform: translateY(var(--lift)); box-shadow: var(--shadow-hover); }

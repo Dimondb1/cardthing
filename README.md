@@ -1246,6 +1246,21 @@ we need to."
   of the box while it is on screen (sticky, above the phone's buy bar).
   `ask.js` folds the box to its heading and Show conversation; without
   script it is a link to the page without the answer, at All prices.
+- One phone screen (the owner, 14 Nov 2026: "all operation of ask rip to
+  not need to scroll down the page"). Below 40rem, Rip shrinks to the top
+  of his reply (`--rip-size-tight`), so the reply takes the full width. The
+  one-tap questions become one sliding row, and Share and Track price share
+  a row. On a 375 by 667 phone the answered box measured 575 pixels against
+  610 above the Buy bar (it was 717). Find with Rip, the list builder and
+  Search by photo follow the same rule:
+  - Rip smaller (`--find-rip-tight`) at the top of a wider bubble.
+  - A two-line box with an example in it (`find.list.placeholder`).
+  - Speak and Add a photo side by side, so Find them is on the first
+    screen.
+  - On the list of choices the products sit tighter, and Add to my list is
+    pinned to the foot of the screen at every width (`.rip-list__send`).
+
+  Tablets and desktops keep the larger layout, which already fits.
 - Its own page, `/ask-rip/` (`web:ask_rip_about`, wording under `askrip.*`
   in the registry), says what Rip answers, where his answers come from,
   what he will not do and the questions people ask about him, given again

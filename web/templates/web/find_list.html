@@ -39,7 +39,7 @@
       {% endif %}
     </fieldset>
     {% endfor %}
-    <p><button class="button" type="submit">{% include "web/includes/icons/list.svg" %}{% copy "find.list.add" %}</button></p>
+    <p class="rip-list__send"><button class="button" type="submit">{% include "web/includes/icons/list.svg" %}{% copy "find.list.add" %}</button></p>
   </form>
   <p class="find__again"><a href="{% url 'web:find_list' %}">{% copy "find.list.again" %}</a></p>
   {% else %}
@@ -47,8 +47,8 @@
   {% if box.state_key %}<p class="rip-list__state" role="status">{% copy box.state_key count=box.per_person hours=box.hours %}</p>{% endif %}
   {% if box.open and box.left %}
   <form class="rip-list__form" method="post" action="{% url 'web:find_list' %}" enctype="multipart/form-data" data-rip-list>{% csrf_token %}
-    <label class="contact-form__label" for="rip-list-wants">{% copy "find.list.label" %}</label>
-    <textarea id="rip-list-wants" class="contact-form__input contact-form__text" name="wants" rows="3" maxlength="{{ box.max_length }}"></textarea>
+    <label class="visually-hidden" for="rip-list-wants">{% copy "find.list.label" %}</label>
+    <textarea id="rip-list-wants" class="contact-form__input contact-form__text" name="wants" rows="2" maxlength="{{ box.max_length }}" placeholder="{% copy 'find.list.placeholder' %}"></textarea>
     <div class="rip-list__tools">
       {% include "web/includes/voice_button.html" with field="rip-list-wants" words="askrip.voice.list" %}
       <div class="rip-list__photo" data-photo>

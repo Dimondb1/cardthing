@@ -150,7 +150,7 @@ class FormTests(ListCase):
         # alone can be sent.
         self.assertIn('<label class="rip-list__photo-label" for="rip-list-photo">', html)
         self.assertIn('<input id="rip-list-photo" class="rip-list__file" type="file" name="photo" accept="image/*">', html)
-        self.assertIn("Add a photo of your list", html)
+        self.assertIn("<span>Add a photo</span>", html)
         self.assertNotIn("required></textarea>", html)
         # The microphone waits hidden for the script to find the browser can do it.
         self.assertIn('<button class="button button--quiet voice" type="button" hidden data-voice="rip-list-wants"', html)
@@ -272,3 +272,29 @@ class PhotoSearchTests(ListCase):
         self.assertContains(page, "I can&#x27;t look at photos right now.")
         self.assertEqual(self.search()["Location"], PHOTO_URL + "?state=closed")
         self.assertContains(self.client.get(PHOTO_URL, {"state": "closed"}), "I can&#x27;t look at photos right now.")
+
+
+class OneScreenTests(ListCase):
+    """All of Ask Rip on one phone screen (the owner, 14 Nov 2026: "all operation of ask rip to not need to scroll down
+    the page, condense it all so it all fits"). Measured at 375 by 667 when built: the answered box 575 pixels tall
+    under a 610 pixel screen above the Buy bar, the list builder's Find them at 438."""
+
+    def test_on_a_phone_rip_shrinks_and_the_questions_are_one_row(self):
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        phone = css[css.index("/* All of Ask Rip on one phone screen"):]
+        phone = phone[:phone.index("\n}\n")]
+        for rule in (".ask .rip { width: var(--rip-size-tight); height: var(--rip-size-tight); }",
+                     ".ask__chips { flex-wrap: nowrap; overflow-x: auto;", ".ask__chip { flex: none; white-space: nowrap; }",
+                     ".ask__next { flex-wrap: nowrap; }"):
+            self.assertIn(rule, phone)
+        self.assertIn(".rip-list__send { position: sticky; bottom: var(--space-2); z-index: 1; }", css)
+
+    def test_the_list_builder_is_short_enough_to_send_from_the_first_screen(self):
+        html = self.client.get(URL).content.decode()
+        self.assertIn('<label class="visually-hidden" for="rip-list-wants">What you want</label>', html)
+        self.assertIn('rows="2"', html)
+        self.assertIn('placeholder="2 Surging Sparks ETBs and a booster bundle"', html)
+        self.assertIn("Type it, say it or add a photo of your list. I&#x27;ll find each one and you pick the right ones.",
+                      html)
+        token, _ = self.made(self.build())
+        self.assertContains(self.client.get(URL, {"made": token}), '<p class="rip-list__send"><button class="button"')

@@ -292,6 +292,7 @@
   --search-round-button: 3.5rem;    /* room for the large search's round arrow on a phone */
   --hint-rip-width: min(15rem, 70vw);  /* the home page's Ask Rip hint under the header button */
   --rip-list-thumb: 3.5rem;         /* each product Rip offers to choose from when building a list */
+  --rip-list-thumb-tight: 2.75rem;  /* the same on a phone */
   --rip-list-radio: 1.25rem;        /* the round tick beside it */
   --list-qty-width: 4rem;           /* the number box for how many of a product */
   --fair-bar-gap: 2px;
@@ -404,6 +405,7 @@
   --find-option: 7.5rem;           /* Find with Rip: an option card's least height */
   --find-icon: 2.5rem;             /* its icon */
   --find-rip: 5.5rem;              /* Rip beside the question */
+  --find-rip-tight: 3rem;          /* and on a phone, at the top of a wider bubble */
   --find-dot: 0.5rem;              /* a step dot */
   --find-width: 42rem;             /* the page's measure */
   --find-stagger: 45ms;            /* between one option card arriving and the next */
@@ -451,6 +453,7 @@
   --rip-size: 4.75rem;             /* Rip beside the bubble on a phone */
   --rip-size-wide: 6rem;           /* and from a tablet up */
   --rip-size-box: 4.25rem;         /* in the price box, beside the price and Buy now, at every width */
+  --rip-size-tight: 2.75rem;       /* at the top of his reply on a phone, so the reply takes the width */
   --rip-rock: 1.8s;                /* one sway while waiting */
   --rip-rock-busy: 0.4s;           /* one quicker sway while thinking */
   --rip-rock-sleepy: 3.2s;         /* one slow sway once the day's questions are used */

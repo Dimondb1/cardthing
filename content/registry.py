@@ -896,6 +896,11 @@ ENTRIES = [
     ),
 
     # Search results and browsing -----------------------------------------
+    Entry("browse.fix.showing", T, "Search: showing results for a near word", "Showing results for ‘{query}’.",
+          "Under the results heading when the words searched for found nothing and a word that sounds or is spelt "
+          "alike did (a phone hearing delta rain for Delta Reign).", placeholders=("query",)),
+    Entry("browse.fix.exact", B, "Search: search exactly what was typed", "Search for ‘{query}’ instead",
+          "After Showing results for: searches the words exactly as typed or said.", placeholders=("query",)),
     Entry(
         "browse.results.title", H, "Search results heading",
         "Results for ‘{query}’",

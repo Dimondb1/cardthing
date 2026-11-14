@@ -915,6 +915,8 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .browse-head__title { font-size: var(--text-page-title); overflow-wrap: anywhere; }
 .browse-head__title-row { display: flex; align-items: center; gap: var(--space-1); }
 .browse-head__intro { margin-top: var(--space-2); color: var(--color-ink-muted); max-width: var(--form-width); }
+/* Showing results for a word that sounds like the one typed or said, and a link back to exactly what it was. */
+.browse-head__fix { margin-top: var(--space-2); color: var(--color-ink); }
 /* The set's code and dates, then the link to its game: small print, one line where it fits. */
 .browse-head__meta { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-ink-subtle); }
 .browse-head__meta a { color: var(--color-brand-text); }

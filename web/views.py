@@ -34,7 +34,7 @@ from catalogue.models import (
     Retailer, StockAlert, stale_cutoff,
 )
 from catalogue.models import fresh as fresh_listing
-from catalogue.search import apply_search, suggest_sets, understand
+from catalogue.search import apply_search, corrected, suggest_sets, understand
 from catalogue.types import DEFAULT as DEFAULT_TYPES, GAME_TYPES, plural_words, type_choices, type_label
 from content import service as copy
 from inbox import service as inbox
@@ -241,8 +241,18 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     query = (form.value("q") or "").strip()
     products = narrow(base_queryset) if narrow else base_queryset
     terms = []
+    # A search that finds nothing tries the words it most likely meant (catalogue.search.corrected: "delta rain" said
+    # to the phone is "delta reign"), and says so; ?exact=1 searches what was typed, as the page's link offers.
+    searched_for = ""
     if query:
-        products, terms = apply_search(products, query)
+        found, terms = apply_search(products, query)
+        if template_context.get("is_search") and not request.GET.get("exact") and not found.exists():
+            searched_for = corrected(query, products)
+            if searched_for:
+                found, terms = apply_search(products, searched_for)
+                heading = text(request, "browse.results.title", query=searched_for)
+                template_context = {**template_context, "heading": heading, "meta_title": heading}
+        products = found
 
     game = form.value("game")
     if game is not None:
@@ -367,6 +377,9 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "type_row": type_row,
         "fold_filters": tabs,
         "no_matches": bool(query) and not filters_active and paginator.count == 0,
+        "searched_for": searched_for,
+        "exact_url": "?" + urlencode({**{key: value for key, value in request.GET.items() if key != "page"},
+                                      "exact": "1"}) if searched_for else "",
         "quick": quick,
         "quick_active": any(chip["active"] for chip in quick),
         "games": Game.objects.filter(is_active=True),
@@ -2263,6 +2276,10 @@ def search_api(request):
     results = []
     if query:
         products, terms = apply_search(Product.objects.for_lists(), query)
+        if terms and not products.exists():
+            fixed = corrected(query, Product.objects.for_lists())
+            if fixed:
+                products, terms = apply_search(Product.objects.for_lists(), fixed)
         if terms:
             products = products.order_by("name_rank", F("lowest_price").asc(nulls_last=True), "name")
         store = copy.for_request(request)

@@ -1969,6 +1969,22 @@ are not. A search that names one ("151 bundle display", "etb case") ranks
 bulk lots as any other product. So "151" leads with the booster bundle, the
 ETB and the pack, not a £2,150 display of ten bundles.
 
+**Words that sound alike or are misspelt** (`catalogue/search.py`
+`corrected`; the owner, 14 Nov 2026: voice search heard "delta rain" for
+Delta Reign and found nothing, "people will give up after that"). This only
+runs when a search finds nothing, so a search that works costs one quick
+extra check and nothing more. Each word of four letters or more that is not
+a word of any product on sale is swapped for the product word it most
+likely meant: one that sounds the same (`sounds`: rain and reign, lorkana
+and lorcana), else one spelt nearly the same (obsidan and obsidian, boosters
+and booster). Only a swap that finds a product with the search's other words
+is kept. Codes and numbers (sv08, 151) are never guessed at. The products'
+words are kept in the shared cache for ten minutes (`vocabulary`). The
+results page then heads with the words it used and says "Showing results
+for ‘delta reign’", with a link to search exactly what was typed (`?exact=1`).
+Results as you type do the same. Free and instant, with no AI. Wording is
+`browse.fix.*`.
+
 **Quick filters** above the results: English, In stock and the three
 commonest product types in the game's own words (Booster bundles, ETBs),
 each a plain link that turns its filter on or off, keeping the search and

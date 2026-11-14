@@ -7,9 +7,12 @@ each end. Every word the visitor types must match the start of a word in that
 text, so "pokemon etb" finds "Pokémon ... Elite Trainer Box".
 """
 
+import bisect
+import difflib
 import re
 import unicodedata
 
+from django.core.cache import cache
 from django.db.models import Case, IntegerField, Q, Value, When
 
 from . import languages
@@ -262,3 +265,108 @@ def suggest_sets(query, limit=SUGGESTED_SETS):
     # The set whose name has the last word whole first ("set 3" is Set 3 before Set 30), then the newest.
     found.sort(key=lambda pair: (pair[0], pair[1]["release"], pair[1]["name"]), reverse=True)
     return [entry for _whole, entry in found[:limit]], kind
+
+
+# Words a search did not find. The owner, 14 Nov 2026: spoken "delta reign" came back from the phone as "delta rain"
+# and found nothing, "people will give up after that". When a search finds nothing, each word that is not a word of
+# any product on sale is swapped for the product word it most likely meant: one that sounds the same (rain, reign),
+# else one spelt nearly the same (obsidan, obsidian; boosters, booster), and that finds something with the other
+# words. The page says so, with a link to search exactly what was typed. Free and instant: no AI.
+
+FIX_MIN_LETTERS = 4        # a shorter word is often still being typed
+FIX_TRIES = 6              # words tried for each unknown word, best first, each a quick look for any product
+FIX_CLOSE = 0.75           # how alike two spellings must be (difflib's ratio) to be offered
+VOCABULARY_KEY = "search:vocabulary"
+VOCABULARY_SECONDS = 600
+
+SPELLINGS = (("ph", "f"), ("ck", "k"), ("qu", "kw"), ("q", "k"), ("x", "ks"), ("z", "s"), ("dg", "j"))
+VOWEL_SOUNDS = (("eigh", "A"), ("ai", "A"), ("ay", "A"), ("ei", "A"), ("ey", "A"), ("ee", "E"), ("ea", "E"),
+                ("ie", "E"), ("oo", "U"), ("ou", "U"), ("ue", "U"), ("ew", "U"), ("oa", "O"), ("ow", "O"))
+
+
+def sounds(word):
+    """How a word sounds, roughly, as (its consonants after the first letter, the whole with its vowel sounds):
+    "reign" and "rain" are ("rn", "rAn") alike, "lorkana" and "lorcana" ("lrkn", "lorkana"). ("", "") for a word
+    with digits or other marks, which is a code or a number and never guessed at."""
+    word = word.lower()
+    if not word.isalpha() or not word.isascii():
+        return "", ""
+    for spelt, said in SPELLINGS:
+        word = word.replace(spelt, said)
+    if word[:2] in ("kn", "gn", "wr"):
+        word = word[1:]
+    word = re.sub(r"(?<=.)gh", "", word)                  # night, eight
+    word = re.sub(r"(?<=[aeiou])g(?=n)", "", word)        # reign, sign, design
+    word = re.sub(r"c(?=[eiy])", "s", word).replace("c", "k")
+    for spelt, said in VOWEL_SOUNDS:
+        word = word.replace(spelt, said)
+    word = re.sub(r"(.)\1+", r"\1", word)
+    if not word:
+        return "", ""
+    first = "a" if word[0] in "aeiouyAEUO" else word[0]
+    return first + re.sub(r"[aeiouyAEUO]", "", word[1:]), word
+
+
+def vocabulary():
+    """(every word of a product on sale, sorted; {sounds()[0]: [those words]}), kept VOCABULARY_SECONDS in the
+    shared cache. One query when it is built."""
+    from .models import Product
+
+    found = cache.get(VOCABULARY_KEY)
+    if found is None:
+        words = set()
+        for text in Product.objects.active().values_list("search_text", flat=True).iterator():
+            words.update(text.split())
+        alike = {}
+        for word in words:
+            key = sounds(word)[0]
+            if key:
+                alike.setdefault(key, []).append(word)
+        found = (tuple(sorted(words)), alike)
+        cache.set(VOCABULARY_KEY, found, VOCABULARY_SECONDS)
+    return found
+
+
+def is_word(term, words):
+    """Whether ``term`` is a whole word of some product (``words`` sorted)."""
+    at = bisect.bisect_left(words, term)
+    return at < len(words) and words[at] == term
+
+
+def guesses(term, words, alike):
+    """Product words ``term`` may have meant, best first: those that sound the same, then the closest spellings."""
+    said, voiced = sounds(term)
+    pool = set(alike.get(said, ())) | set(difflib.get_close_matches(term, words, n=FIX_TRIES, cutoff=FIX_CLOSE))
+    pool.discard(term)
+
+    def rank(word):
+        return (sounds(word)[1] != voiced, -difflib.SequenceMatcher(None, term, word).ratio(), abs(len(word) - len(term)),
+                word)
+
+    return sorted(pool, key=rank)[:FIX_TRIES]
+
+
+def corrected(query, queryset):
+    """The search ``query`` with each word that is not a word of any product swapped for the one it most likely
+    meant and that finds a product in ``queryset`` with the search's other words; "" when there is nothing to swap
+    or no swap finds anything. Only for a search that found nothing: a few quick queries, one per word tried."""
+    terms = terms_for(query)
+    if not terms:
+        return ""
+    words, alike = vocabulary()
+    unknown = [n for n, term in enumerate(terms)
+               if len(term) >= FIX_MIN_LETTERS and sounds(term)[0] and not is_word(term, words)]
+    if not unknown:
+        return ""
+    known = [term for n, term in enumerate(terms) if n not in unknown]
+    fixed = list(terms)
+    for n in unknown:
+        for word in guesses(terms[n], words, alike):
+            found, _ = apply_search(queryset, " ".join(known + [word]))
+            if found.exists():
+                fixed[n] = word
+                break
+    if fixed == terms:
+        return ""
+    found, _ = apply_search(queryset, " ".join(fixed))
+    return " ".join(fixed) if found.exists() else ""

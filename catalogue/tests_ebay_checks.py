@@ -8,9 +8,10 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.test import override_settings
+from django.utils import timezone
 
 from . import ebay, worker
-from .models import Listing, Product, Retailer
+from .models import DailyPageView, Listing, Product, Retailer
 from .tests_worker import WorkerTestCase
 
 KEYS = override_settings(RIPRAPTOR_EBAY_APP_ID="app", RIPRAPTOR_EBAY_CERT_ID="cert", RIPRAPTOR_EBAY_CAMPAIGN_ID="camp")
@@ -221,6 +222,10 @@ class CheckTests(WorkerTestCase):
         self.assertEqual(len([url for url in api.calls if url.startswith(ebay.LIMITS_URL)]), asked + 1)
 
     def test_an_ebay_listing_people_look_at_is_checked_every_half_hour_not_every_ten_minutes(self):
+        # Its views are today's. Run just before midnight, the half hour below ends in the next day, where they no
+        # longer count and it is not hot: so that day has them too (it failed when run at 23:46 on 14 Nov 2026).
+        DailyPageView.objects.get_or_create(date=timezone.localdate(self.clock() + timedelta(minutes=31)), kind="product",
+                                            key=self.box.slug, defaults={"hits": 3})
         api = FakeEbay([item(123)])
         reader = self.make_worker(ebay_request=api)
         [task] = reader.plan(self.clock())

@@ -3262,6 +3262,7 @@ index.
 | `RIPRAPTOR_ZEPTOMAIL_TOKEN`    |         | Send Mail token from a Zoho ZeptoMail Mail Agent. With `RIPRAPTOR_MAIL_FROM` set, turns on back-in-stock emails, drop reminders, search alerts and the Your alerts box. |
 | `RIPRAPTOR_ZEPTOMAIL_URL`      | `https://cpaas.zoho.com/v1.1/email` | The API address shown on the Mail Agent's API page (Zoho CPaaS, formerly ZeptoMail). |
 | `RIPRAPTOR_MAIL_FROM`          | `alerts@ripraptor.com` | The sending address, on a domain verified in ZeptoMail. |
+| `RIPRAPTOR_ZOHO_MAIL_FILE`     | `zoho-mail` beside the database | Where the Zoho Mail connection saved from Admin, Email sending is kept (Client ID and Secret, refresh token, mailbox, From address, and whether every site email goes through it). Empty in tests. |
 | `RIPRAPTOR_OUTREACH_TOKEN_FILE` | `outreach-zeptomail-token` beside the database | Where a ZeptoMail token for shop emails alone is kept, saved from Admin, Sending shop emails. Without one, shop emails use `RIPRAPTOR_ZEPTOMAIL_TOKEN`. |
 | `RIPRAPTOR_OUTREACH_PASSWORD_FILE` | `outreach-mail-password` beside the database | Where the Zoho mailbox's app password is kept, saved from the same page, for sending shop emails through the mailbox. |
 | `RIPRAPTOR_SITE_URL`           | `https://ripraptor.com` | Used for links in emails. |
@@ -4326,6 +4327,33 @@ create a Mail Agent, copy its Send Mail token into `.env` as
 `RIPRAPTOR_ZEPTOMAIL_TOKEN` (the address and sender have working defaults), restart, and check with
 `python manage.py send_stock_alerts --test you@example.com`. Without the
 token the form does not appear.
+
+ZeptoMail sends nothing from the site until it has reviewed the account
+(its code `SM_128`), whatever its trial allowance says, and the site now
+says so in plain words (`mail.REFUSALS`: also `SM_133` trial used up,
+`SMI_115` daily limit, `SM_151` Mail Agent limit). Until then, or any time,
+every email the site sends (alerts, drop reminders, search alerts, referral
+emails, shop emails and the new message note) can go through the owner's
+own Zoho mailbox instead, over Zoho Mail's web API
+(`catalogue/zoho_mail.py`). That uses the web, which the server's host
+does not block, unlike the mail ports SMTP needs. Set it up on **Admin,
+Email sending** (`/admin/email/`, `web/email_admin.py`): choose where the
+Zoho account is (the ending of Zoho Mail's address: zoho.eu, zoho.uk or
+zoho.com), make a Self Client in Zoho's API Console with the same ending,
+copy its Client ID and Client Secret, generate a code there with the scopes
+`ZohoMail.messages.CREATE,ZohoMail.accounts.READ`, and paste all three into
+the page within the code's few minutes. The site swaps the code for a
+refresh token that does not expire, reads the mailbox's account and the
+addresses it may send from, and keeps it all in `RIPRAPTOR_ZOHO_MAIL_FILE`
+(only the site can read it; the page never shows the secret again). The
+page then switches every site email between ZeptoMail and Zoho Mail,
+picks the From address (`RIPRAPTOR_MAIL_FROM` when the mailbox may send
+from it), and sends a test that says which way it went and, if it failed,
+why in plain words. Through Zoho Mail there is no Reply-To, tracking or
+List-Unsubscribe header (the API takes none): the sender name is the one
+set for that address in Zoho Mail, replies come back to it, each email is
+in the Sent folder, and every email's own unsubscribe link still works.
+Disconnect deletes the file and goes back to ZeptoMail.
 
 Pre-orders too: an alert asked for on or after `RIPRAPTOR_PREORDER_ALERTS_FROM`
 is also sent, once, when a shop opens pre-orders and no shop has the product

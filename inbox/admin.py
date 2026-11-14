@@ -249,7 +249,12 @@ class OutreachMailAdmin(admin.ModelAdmin):
 
         why = sending.why_not(obj)
         if obj.by_zeptomail:
-            if obj.token_hint and sending.own_token():
+            from catalogue import zoho_mail
+
+            if zoho_mail.in_use():
+                secret = (f"Through Zoho Mail's web API from {zoho_mail.saved().get('from_address')}, as every site "
+                          "email is now (Admin, Email sending).")
+            elif obj.token_hint and sending.own_token():
                 secret = f"Through ZeptoMail, with the shop emails' own token (ends {obj.token_hint})."
             else:
                 secret = "Through ZeptoMail, with the alert emails' token."

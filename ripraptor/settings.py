@@ -388,6 +388,12 @@ RIPRAPTOR_OUTREACH_TOKEN_FILE = os.environ.get("RIPRAPTOR_OUTREACH_TOKEN_FILE", 
 RIPRAPTOR_AMAZON_KEY_FILE = os.environ.get("RIPRAPTOR_AMAZON_KEY_FILE", "").strip() or str(
     Path(DATABASES["default"]["NAME"]).with_name("amazon-keys")
 )
+# The owner's Zoho Mail connection for sending every site email through their mailbox's web API instead of ZeptoMail
+# (catalogue/zoho_mail.py), saved from Admin, Email sending, beside the database. Empty in tests, which set their own,
+# so a test run never sends through the owner's mailbox.
+RIPRAPTOR_ZOHO_MAIL_FILE = os.environ.get("RIPRAPTOR_ZOHO_MAIL_FILE", "").strip() or ("" if TESTING else str(
+    Path(DATABASES["default"]["NAME"]).with_name("zoho-mail")
+))
 RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD = int(os.environ.get("RIPRAPTOR_CLAUDE_MAX_MONTHLY_USD", "100") or 100)
 # Before Claude is asked about a row, the shop pages involved are read for evidence (catalogue/shop_pages.py),
 # politely and at most 60 a run. Off in tests, which give it recorded pages.

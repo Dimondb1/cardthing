@@ -1,0 +1,87 @@
+{% extends "admin/base_site.html" %}
+{# Email sending (web/email_admin.py): which way every site email goes out, a test email, and connecting Zoho Mail's web API (catalogue/zoho_mail.py). Secrets are typed here and never shown again. #}
+{% block title %}Email sending | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .mail-send { display: grid; gap: 24px; max-width: 44rem; }
+  .mail-send h2 { margin: 0 0 6px; }
+  .mail-send p { margin: 0 0 8px; }
+  .mail-send .note { color: var(--body-quiet-color); }
+  .mail-send label { display: block; margin: 12px 0 4px; font-weight: 600; }
+  .mail-send input[type="text"], .mail-send input[type="email"], .mail-send input[type="password"], .mail-send select { width: 100%; max-width: 36rem; box-sizing: border-box; padding: 8px; font-size: 1rem; min-height: 40px; }
+  .mail-send input[type="submit"] { min-height: 40px; }
+  .mail-send .save { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .mail-send ol { margin: 0 0 8px; padding-left: 1.4em; }
+  .mail-send ol li { margin: 0 0 8px; }
+  .mail-send code { word-break: break-all; }
+  .mail-send .pick { display: flex; gap: 8px; align-items: flex-start; font-weight: normal; margin: 8px 0; }
+  .mail-send .pick input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; }
+  .mail-send .now { padding: 12px; border-left: 4px solid var(--message-success-bg, #dfd); background: var(--darkened-bg); }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; Email sending</div>{% endblock %}
+{% block content %}
+<div class="mail-send">
+  <section class="now" id="now">
+    <h2>Now</h2>
+    {% if enabled %}<p><strong>Every email the site sends goes through {{ route }}{% if route == "Zoho Mail" %}, from {{ zoho.from_address }}{% endif %}.</strong></p>
+    {% else %}<p><strong>Email is not set up: there is no ZeptoMail token on the server and Zoho Mail is not switched on.</strong></p>{% endif %}
+    <p class="note">That is price and stock alerts, drop reminders, search alerts, referral emails, shop emails and the note you get for each new message. ZeptoMail sends nothing from the site until it has reviewed the account, whatever its trial allowance says.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="test">
+      <label for="test-to">Send a test email to</label>
+      <input id="test-to" type="email" name="to" value="{{ test_to }}" autocomplete="email" required>
+      <div class="save"><input type="submit" value="Send a test email"></div>
+    </form>
+  </section>
+
+  {% if connected %}
+  <section id="choose">
+    <h2>Send through</h2>
+    <p>Zoho Mail is connected: {{ zoho.mailbox }}{% if region_label %} ({{ region_label }}){% endif %}.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="choose">
+      <label class="pick"><input type="radio" name="route" value="zoho"{% if route == "Zoho Mail" %} checked{% endif %}> <span>Zoho Mail: your mailbox, over the web</span></label>
+      <label class="pick"><input type="radio" name="route" value="zeptomail"{% if route != "Zoho Mail" %} checked{% endif %}> <span>ZeptoMail{% if not zeptomail_ready %} (no token on the server){% endif %}</span></label>
+      <label for="from-address">From</label>
+      <select id="from-address" name="from_address">{% for address in zoho.addresses %}<option value="{{ address }}"{% if address == zoho.from_address %} selected{% endif %}>{{ address }}</option>{% endfor %}</select>
+      <p class="note">Through Zoho Mail, people see the name set for that address in Zoho Mail's settings, replies come back to it, and each email is also in your Sent folder.</p>
+      <div class="save"><input type="submit" class="default" value="Save"></div>
+    </form>
+  </section>
+  {% endif %}
+
+  <section id="connect">
+    <h2>{% if connected %}Connect Zoho Mail again{% else %}Connect Zoho Mail{% endif %}</h2>
+    {% if not can_save %}<p><strong>Zoho Mail cannot be saved on this server: RIPRAPTOR_ZOHO_MAIL_FILE is empty.</strong></p>{% else %}
+    <p class="note">About 10 minutes, once. Type everything here, never into a message.</p>
+    <ol>
+      <li>Open Zoho Mail and look at the address bar: it ends <strong>zoho.eu</strong>, <strong>zoho.uk</strong> or <strong>zoho.com</strong>. Choose the same under Where your Zoho account is.</li>
+      <li>Open Zoho's API Console with the same ending, such as <a href="https://api-console.zoho.eu/" rel="noopener noreferrer" target="_blank">api-console.zoho.eu</a>, signed in as your mailbox. Choose <strong>Self Client</strong>, then Create.</li>
+      <li>On its <strong>Client Secret</strong> tab, copy the Client ID and the Client Secret into the boxes below.</li>
+      <li>On its <strong>Generate Code</strong> tab, type these scopes exactly: <code>{{ scopes }}</code>. Choose the longest time, type RipRaptor as the description, and press Create. Copy the code.</li>
+      <li>Paste the code below and press Connect Zoho Mail before its time runs out.</li>
+    </ol>
+    <form method="post" autocomplete="off">{% csrf_token %}<input type="hidden" name="action" value="connect">
+      <label for="zoho-region">Where your Zoho account is</label>
+      <select id="zoho-region" name="region">{% for key, label in regions %}<option value="{{ key }}"{% if key == zoho.region %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <label for="zoho-id">Client ID</label>
+      <input id="zoho-id" type="text" name="client_id" autocomplete="off" spellcheck="false" required>
+      <label for="zoho-secret">Client Secret</label>
+      <input id="zoho-secret" type="password" name="client_secret" autocomplete="new-password" spellcheck="false" required>
+      <label for="zoho-code">Code</label>
+      <input id="zoho-code" type="text" name="code" autocomplete="off" spellcheck="false" required>
+      <label class="pick"><input type="checkbox" name="use_now" checked> <span>Then send every site email through Zoho Mail</span></label>
+      <div class="save"><input type="submit" class="default" value="Connect Zoho Mail"></div>
+    </form>
+    {% endif %}
+  </section>
+
+  {% if connected %}
+  <section id="forget">
+    <h2>Disconnect</h2>
+    <form method="post">{% csrf_token %}<input type="hidden" name="action" value="forget">
+      <p class="note">Deletes the saved connection from the server. Site emails go back to ZeptoMail.</p>
+      <div class="save"><input type="submit" value="Disconnect Zoho Mail"></div>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

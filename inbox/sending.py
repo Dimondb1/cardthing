@@ -147,7 +147,7 @@ def why_not(row=None):
             return "Sending from RipRaptor is not set up: the Sent from address is needed."
         if not on_mail_domain(row.from_address):
             return f"Sending from RipRaptor is not set up: the Sent from address must be on {mail_domain()}."
-        if not token():
+        if not token() and not zeptomail.through_zoho():
             return ("Sending from RipRaptor is not set up: ZeptoMail has no token on the server. Paste one on the "
                     "Sending page.")
         return ""
@@ -194,6 +194,11 @@ def explain(exc):
     """What went wrong, for the owner, without the server's own jargon."""
     if isinstance(exc, zeptomail.MailError):
         text = str(exc)
+        if text.startswith("Zoho Mail"):
+            return f"{text[:250].rstrip('.')}. Nothing was sent."
+        plain = zeptomail.refusal(text)
+        if plain:
+            return (f"{plain}. Nothing was sent. Until then, send through Zoho Mail: Admin, Email sending.")
         if " 401" in text or " 403" in text:
             return ("ZeptoMail did not accept the token. Paste the Send Mail token from your Mail Agent in ZeptoMail "
                     "on the Sending page.")

@@ -1,0 +1,27 @@
+{% load sitecopy %}{# Ask Rip, opened by the header's Ask button (ask-input.js; the owner, 14 Nov 2026: "Find button on header should be changed to ask ... it should act as a toggle ... blurs the current page and then presents the user with the search box ... with icons for build a shopping list and one for existing lists"). One box, typed or spoken: Rip reads it as he reads a voice search (web.views.voice_search, via=typed when typed) and opens the right results, or the list builder for several products. Then the ways in: build a list, the list itself, and the step by step helper (Find with Rip's guided steps). Hidden until the script opens it; without script the Ask button opens the Find page instead. A plain GET form, so the cached pages around it need no token. #}
+<div class="ask-sheet" id="ask-sheet" hidden data-ask-sheet>
+  <div class="ask-sheet__backdrop" data-ask-close></div>
+  <section class="ask-sheet__panel" role="dialog" aria-labelledby="ask-sheet-title" tabindex="-1">
+    <div class="ask-sheet__head">
+      <span class="mark ask-sheet__rip" aria-hidden="true"></span>
+      <h2 class="ask-sheet__title" id="ask-sheet-title">{% copy "askrip.sheet.title" %}</h2>
+      <button class="button button--quiet button--small ask-sheet__close" type="button" data-ask-close>{% copy "askrip.sheet.close" %}</button>
+    </div>
+    <form class="ask-sheet__form" action="{% url 'web:voice_search' %}" method="get" role="search" data-ask-sheet-form>
+      <input type="hidden" name="via" value="typed">
+      <label class="visually-hidden" for="ask-sheet-q">{% copy "askrip.sheet.label" %}</label>
+      <div class="ask-sheet__box">
+        <span class="ask-sheet__icon icon icon--search" aria-hidden="true"></span>
+        <textarea id="ask-sheet-q" class="ask-sheet__input" name="q" rows="2" maxlength="300" required placeholder="{% copy 'askrip.sheet.placeholder' %}" enterkeyhint="search" data-grow></textarea>
+        <span class="ask-sheet__tools"><button class="search__tool" type="button" hidden data-voice="ask-sheet-q" data-voice-submit data-voice-ai="{% url 'web:voice_search' %}" data-voice-stop="{% copy 'askrip.voice.stop' %}" data-voice-listening="{% copy 'askrip.voice.listening' %}" data-voice-searching="{% copy 'askrip.voice.searching' words='{words}' %}" data-voice-denied="{% copy 'askrip.voice.denied' %}" data-voice-unheard="{% copy 'askrip.voice.unheard' %}" aria-label="{% copy 'feed.search.voice' %}">{% include "web/includes/icons/mic.svg" %}</button><a class="search__tool" href="{% url 'web:search_photo' %}" rel="nofollow" aria-label="{% copy 'site.search.photo' %}">{% include "web/includes/icons/camera.svg" %}</a></span>
+      </div>
+      <span class="visually-hidden" role="status" data-voice-status hidden></span>
+      <p class="ask-sheet__send"><button class="button" type="submit" data-working="{% copy 'askrip.sheet.working' %}">{% copy "askrip.sheet.button" %}</button></p>
+    </form>
+    <nav class="ask-sheet__ways" aria-label="{% copy 'askrip.sheet.ways' %}">
+      <a class="ask-sheet__way" href="{% url 'web:find_list' %}">{% include "web/includes/icons/list-add.svg" %}<span>{% copy "askrip.sheet.build" %}</span></a>
+      <a class="ask-sheet__way" href="{% url 'web:shopping_list' %}" rel="nofollow">{% include "web/includes/icons/list.svg" %}<span>{% copy "askrip.sheet.list" %}</span></a>
+      <a class="ask-sheet__way" href="{% url 'web:find' %}?go=find">{% include "web/includes/icons/steps.svg" %}<span>{% copy "askrip.sheet.steps" %}</span></a>
+    </nav>
+  </section>
+</div>

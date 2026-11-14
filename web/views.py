@@ -3029,14 +3029,17 @@ def find(request):
 
 @require_GET
 def voice_search(request):
-    """A spoken search (web/rip_list.py hear), from the microphone in every search box: Rip reads what the phone heard
+    """A spoken search (web/rip_list.py hear), from the microphone in every search box, or one typed into the Ask Rip
+    popup (via=typed): Rip reads what the phone heard or what was typed
     against the site's sets, so "delta rain" opens Delta Reign. One product opens its search, several the list
     builder's choices; otherwise the plain search runs on the words heard, with its sound-alike fix. Only the
     microphone's script links here; it is never cached or indexed."""
-    said = request.GET.get("q", "").strip()[:100]
+    said = " ".join(request.GET.get("q", "").split())[:300]
+    typed = request.GET.get("via") == "typed"   # from the Ask Rip popup's box: shown as asked, not said
     made = rip_list.hear(request, said)
     plain = {"q": said, **({"game": request.GET["game"]} if request.GET.get("game") else {})}
-    response = HttpResponseRedirect(rip_list.found_target(made, f"{reverse('web:search')}?{urlencode(plain)}", said=said)
+    words = {"asked": said} if typed else {"said": said}
+    response = HttpResponseRedirect(rip_list.found_target(made, f"{reverse('web:search')}?{urlencode(plain)}", **words)
                                     if said else reverse("web:search"))
     response["Cache-Control"] = "no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"

@@ -395,6 +395,18 @@ a, button, summary, select, input, label { touch-action: manipulation; }
   .search--large.is-listening input, .search--large.is-searching input { padding-right: calc(var(--search-tool) + var(--search-round-button)); }
 }
 @keyframes voice-spin { to { transform: rotate(360deg); } }
+/* The words heard, growing (ask-input.js; the owner, 14 Nov 2026: "the text box should expand as more words fill it
+   until the message exceeds an acceptable length"). Over a one-line box, as wide as it, as tall as the words need up to
+   about four lines, the latest words kept in view; over the box's top edge in the header, up from its bottom edge in
+   the bar at the foot of a phone. The microphone stays above it, to stop. */
+.voice-words { display: none; }
+.is-voicing > .voice-words { position: absolute; z-index: 2; left: 0; right: 0; top: 0; display: flex; flex-direction: column; justify-content: flex-end; min-height: 100%; max-height: var(--voice-words-max); overflow: hidden; padding: var(--space-2) calc(var(--search-tool) + var(--space-3)) var(--space-2) var(--space-4); border: var(--voice-ring) solid var(--color-brand); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-lift); color: var(--color-ink); font-size: var(--text-base); line-height: var(--leading-snug); overflow-wrap: anywhere; }
+.feed-search.is-voicing > .voice-words { top: auto; bottom: 0; }
+.voice-words.is-busy { padding-left: calc(var(--icon-button) + var(--space-5)); }
+.voice-words.is-busy::before { content: ""; position: absolute; left: var(--space-4); top: 50%; width: var(--icon-button); height: var(--icon-button); margin-top: calc(var(--icon-button) / -2); border: var(--voice-ring) solid var(--color-brand); border-right-color: transparent; border-radius: 50%; animation: voice-spin var(--motion-slow) linear infinite; }
+.search__end { z-index: 3; }
+.is-voicing > .feed-search__mic, .ask__field.is-voicing .voice--icon { position: relative; z-index: 3; }
+@media (prefers-reduced-motion: reduce) { .voice-words.is-busy::before { animation: none; } }
 @media (prefers-reduced-motion: reduce) {
   .search__tool.is-listening::after, .feed-search__mic.is-listening::after, .voice.is-listening::after { animation: none; opacity: 0.5; }
   .search.is-searching .search__icon, .feed-search.is-searching::before { animation: none; }
@@ -2174,6 +2186,7 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .contact-form__label { font-weight: var(--weight-strong); margin-top: var(--space-2); }
 .contact-form__input { width: 100%; min-height: 2.75rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-line-strong); border-radius: var(--radius-sm); background: var(--color-paper); font: inherit; font-size: var(--text-base); color: var(--color-ink); }
 .contact-form__text { resize: vertical; line-height: var(--leading-body); }
+.contact-form__text[data-grow] { max-height: var(--ask-box-max); overflow-y: auto; }   /* grows with its words (ask-input.js), then scrolls */
 .contact-form__input:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 1px; }
 .contact-form__note { font-size: var(--text-xs); color: var(--color-ink-muted); }
 .contact-form__error { font-size: var(--text-sm); color: var(--color-more); font-weight: var(--weight-strong); }
@@ -2902,6 +2915,42 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .rip-list__send .button { width: 100%; }
 }
 .rip-list__send { position: sticky; bottom: var(--space-2); z-index: 1; }
+/* Ask Rip over the page (ask-input.js, ask_sheet.html): the page blurs and dims under a panel that drops from the
+   header, which stays sharp above it so Ask can be tapped again to close. One box that grows with its words, the
+   microphone and camera in it, Ask Rip under it, then three ways in. The panel arrives with a short drop (continuity),
+   transform and opacity only, none with reduced motion; the page under it keeps still while it is open. */
+.has-ask-sheet { overflow: hidden; }
+.has-ask-sheet .masthead { z-index: 31; }
+.ask-sheet { position: fixed; inset: 0; z-index: 30; padding: var(--ask-sheet-top, 0) var(--gutter) 0; overflow-y: auto; overscroll-behavior: contain; }
+.ask-sheet[hidden] { display: none; }
+.ask-sheet__backdrop { position: fixed; inset: 0; background: var(--color-backdrop); -webkit-backdrop-filter: blur(var(--ask-sheet-blur)); backdrop-filter: blur(var(--ask-sheet-blur)); }
+.ask-sheet__panel { position: relative; display: grid; gap: var(--space-3); max-width: var(--find-width); margin: var(--space-2) auto var(--space-5); padding: var(--space-4); border: var(--border-width) solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-lift); }
+.ask-sheet__panel:focus { outline: none; }
+.ask-sheet__head { display: flex; align-items: center; gap: var(--space-2); }
+.ask-sheet__rip { --mark-size: var(--mark-sm); color: var(--color-brand); }
+.ask-sheet__title { flex: 1; margin: 0; font-size: var(--text-lg); font-weight: var(--weight-price); }
+.ask-sheet__form { display: grid; gap: var(--space-2); margin: 0; }
+.ask-sheet__box { position: relative; display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3); border: var(--voice-ring) solid var(--color-brand-line); border-radius: var(--radius-card); background: var(--color-paper); }
+.ask-sheet__box:focus-within { border-color: var(--color-brand); }
+.ask-sheet__icon { flex: none; width: var(--icon-button); height: var(--icon-button); margin-top: var(--space-2); color: var(--color-ink-subtle); }
+.ask-sheet__form.is-searching .ask-sheet__icon { -webkit-mask: none; mask: none; background: none; border: var(--voice-ring) solid var(--color-brand); border-right-color: transparent; border-radius: 50%; animation: voice-spin var(--motion-slow) linear infinite; }
+.ask-sheet__input { flex: 1; min-width: 0; min-height: var(--search-tool); max-height: var(--ask-box-max); padding: var(--space-2) 0; border: 0; outline: 0; background: transparent; color: var(--color-ink); font: inherit; font-size: var(--text-base); line-height: var(--leading-snug); resize: none; overflow-y: auto; }
+.ask-sheet__input::placeholder { color: var(--color-ink-muted); }
+.ask-sheet__tools { display: flex; flex: none; align-items: center; gap: var(--space-1); }
+.ask-sheet__form.is-listening .ask-sheet__tools a.search__tool, .ask-sheet__form.is-searching .ask-sheet__tools a.search__tool { display: none; }
+.ask-sheet__send { margin: 0; }
+.ask-sheet__send .button { width: 100%; }
+.ask-sheet__ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+.ask-sheet__way { display: grid; justify-items: center; gap: var(--space-1); padding: var(--space-3) var(--space-1); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); color: var(--color-ink); font-size: var(--text-sm); font-weight: var(--weight-strong); line-height: var(--leading-snug); text-align: center; text-decoration: none; }
+.ask-sheet__way .icon-tool { color: var(--color-brand); }
+@media (hover: hover) { .ask-sheet__way:hover { border-color: var(--color-brand-line); background: var(--color-brand-soft); } }
+@keyframes ask-sheet-drop { from { opacity: 0; transform: translateY(calc(-1 * var(--space-3))); } }
+@keyframes ask-sheet-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .ask-sheet__panel { animation: ask-sheet-drop var(--motion-normal) var(--ease-out); }
+  .ask-sheet__backdrop { animation: ask-sheet-fade var(--motion-normal) var(--ease-out); }
+}
+@media (prefers-reduced-motion: reduce) { .ask-sheet__form.is-searching .ask-sheet__icon { animation: none; } }
 .rip-list__send .button { box-shadow: var(--shadow-lift); }
 .find__options { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .find__option { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--find-option); padding: var(--space-3); border: var(--border-width) solid var(--color-line); border-radius: var(--radius-card); background: var(--color-paper); color: var(--color-ink); text-align: center; text-decoration: none; font-weight: var(--weight-strong); line-height: var(--leading-snug); transition: transform var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard); }

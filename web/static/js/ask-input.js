@@ -16,6 +16,33 @@
   // as they are heard; listening stops about a second after the talking does (QUIET_MS), not when the phone gives up;
   // then the box says Searching for what was heard, with a spinner, and the microphone is locked until the page comes.
   var Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  // A box that grows with its words (the owner, 14 Nov 2026: "As the words are captured the text box should expand as
+  // more words fill it until the message exceeds an acceptable length"). A textarea grows itself, to the height its
+  // CSS allows, then scrolls; a one-line box shows the words heard in a panel over itself that grows the same way, to
+  // about four lines, keeping the latest words in view (.voice-words).
+  var grow = function (field) {
+    if (field.tagName !== "TEXTAREA") return;
+    field.style.height = "auto";
+    if (field.scrollHeight) field.style.height = field.scrollHeight + "px";   // a hidden box measures 0: left to its rows
+  };
+  var shown = function (field, text, busy) {
+    if (field.tagName === "TEXTAREA") { grow(field); return; }
+    var holder = field.parentElement;
+    var panel = holder.querySelector(":scope > .voice-words");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.className = "voice-words";
+      panel.setAttribute("aria-hidden", "true");
+      holder.appendChild(panel);
+    }
+    panel.textContent = text || "";
+    panel.classList.toggle("is-busy", !!busy);
+    holder.classList.toggle("is-voicing", !!text);
+  };
+  Array.prototype.forEach.call(document.querySelectorAll("textarea[data-grow]"), function (field) {
+    field.addEventListener("input", function () { grow(field); });
+  });
   var QUIET_MS = 1000;     // stop this long after the last word heard
   var NOTHING_MS = 8000;   // and give up this long after tapping when nothing at all is heard
   var wire = function (root) {
@@ -44,6 +71,7 @@
         if (form) form.classList.remove("is-listening");
         name(idle);
         field.setAttribute("placeholder", hint);
+        if (!form || !form.classList.contains("is-searching")) shown(field, "");
       };
       var searching = function (words) {
         // Locked until the next page: no second search half way through this one.
@@ -52,8 +80,14 @@
         button.setAttribute("aria-busy", "true");
         if (form) form.classList.add("is-searching");
         var line = (button.getAttribute("data-voice-searching") || "").replace("{words}", words);
-        field.value = "";
-        field.setAttribute("placeholder", line);
+        if (field.tagName === "TEXTAREA") {
+          field.value = words;   // a growing box keeps the words; the spinner beside it says Rip is on it
+          grow(field);
+        } else {
+          field.value = "";
+          field.setAttribute("placeholder", line);
+          shown(field, line, true);
+        }
         field.readOnly = true;
         say(line);
       };
@@ -64,6 +98,7 @@
         if (form) form.classList.remove("is-searching");
         field.readOnly = false;
         rest();
+        shown(field, "");
       });
       button.hidden = false;
       button.addEventListener("click", function () {
@@ -90,6 +125,7 @@
           if (!words) return;
           heard = true;
           field.value = ((before ? before + " " : "") + words).slice(0, limit);
+          shown(field, field.value);
           clearTimeout(quiet);
           quiet = setTimeout(stop, QUIET_MS);
         };
@@ -153,6 +189,70 @@
   };
   wire(document);
   window.ripVoice = wire;
+
+  // Ask Rip, over the page (the owner, 14 Nov 2026: the header's Ask "should no longer navigate to a page it should
+  // act as a toggle ... blurs the current page and then presents the user with the search box"). The Ask button
+  // opens and closes it; so do Close, a tap on the blurred page and Escape. The header stays sharp above the blur,
+  // so Ask can be tapped again. Without script Ask is a link to the Find page. The page under it keeps still.
+  var sheet = document.querySelector("[data-ask-sheet]");
+  var opener = document.querySelector("[data-ask-open]");
+  if (sheet && opener) {
+    var panel = sheet.querySelector(".ask-sheet__panel");
+    var head = document.querySelector(".masthead");
+    var box = sheet.querySelector("textarea");
+    var open = function () {
+      var top = head ? Math.max(0, Math.round(head.getBoundingClientRect().bottom)) : 0;
+      sheet.style.setProperty("--ask-sheet-top", top + "px");
+      sheet.hidden = false;
+      grow(box);
+      document.documentElement.classList.add("has-ask-sheet");
+      opener.setAttribute("aria-expanded", "true");
+      panel.focus({ preventScroll: true });
+    };
+    var close = function () {
+      if (sheet.hidden) return;
+      sheet.hidden = true;
+      document.documentElement.classList.remove("has-ask-sheet");
+      opener.setAttribute("aria-expanded", "false");
+      opener.focus({ preventScroll: true });
+    };
+    opener.addEventListener("click", function (event) {
+      event.preventDefault();
+      if (sheet.hidden) open();
+      else close();
+    });
+    Array.prototype.forEach.call(sheet.querySelectorAll("[data-ask-close]"), function (closer) {
+      closer.addEventListener("click", close);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") close();
+    });
+    window.addEventListener("pageshow", function () { close(); });
+    // Enter sends, as in a search box; Shift and Enter starts a new line.
+    var sheetForm = sheet.querySelector("[data-ask-sheet-form]");
+    box.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" || event.shiftKey) return;
+      event.preventDefault();
+      if (!box.value.trim()) return;
+      if (sheetForm.requestSubmit) sheetForm.requestSubmit();
+      else sheetForm.submit();
+    });
+    // Rip takes a second or two: the box says so and cannot be sent twice.
+    var send = sheetForm.querySelector("[data-working]");
+    var sendWords = send.textContent;
+    sheetForm.addEventListener("submit", function () {
+      sheetForm.classList.add("is-searching");
+      box.readOnly = true;
+      send.textContent = send.getAttribute("data-working");
+      send.disabled = true;
+    });
+    window.addEventListener("pageshow", function () {
+      sheetForm.classList.remove("is-searching");
+      box.readOnly = false;
+      send.textContent = sendWords;
+      send.disabled = false;
+    });
+  }
 
   // A photo, on the list builder and on Search by photo: the file field becomes a button, a small copy of the chosen
   // photo shows with Remove photo, and the photo is made smaller here (its longest side 1568 pixels, as the server

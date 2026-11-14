@@ -49,7 +49,7 @@
   {% if box.open and box.left %}
   <form class="rip-list__form" method="post" action="{% url 'web:find_list' %}" enctype="multipart/form-data" data-rip-list>{% csrf_token %}
     <label class="visually-hidden" for="rip-list-wants">{% copy "find.list.label" %}</label>
-    <textarea id="rip-list-wants" class="contact-form__input contact-form__text" name="wants" rows="2" maxlength="{{ box.max_length }}" placeholder="{% copy 'find.list.placeholder' %}"></textarea>
+    <textarea id="rip-list-wants" class="contact-form__input contact-form__text" name="wants" rows="2" maxlength="{{ box.max_length }}" data-grow placeholder="{% copy 'find.list.placeholder' %}"></textarea>
     <div class="rip-list__tools">
       {% include "web/includes/voice_button.html" with field="rip-list-wants" words="askrip.voice.list" listening="askrip.voice.listening_list" %}
       <div class="rip-list__photo" data-photo>

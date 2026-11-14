@@ -15,8 +15,8 @@ from django.urls import reverse
 from PIL import Image
 
 from catalogue import judge
-from catalogue.models import AskRipSettings, ClaudeAsk, ClaudeJob
-from web import askrip, rip_list
+from catalogue.models import AskRipSettings, ClaudeAsk, ClaudeJob, SiteLook
+from web import askrip, look, rip_list
 
 from .tests_rip_list import URL, ListCase, items
 
@@ -514,3 +514,89 @@ class VoiceStepsTests(ListCase):
         self.assertContains(self.client.get(URL), 'data-voice-listening="Listening. Say what you want to buy."')
         self.assertContains(self.client.get(self.box.get_absolute_url()),
                             'data-voice-listening="Listening. Ask your question."')
+
+
+class AskSheetTests(ListCase):
+    """The header's Ask button opens Ask Rip over the page instead of going to one (the owner, 14 Nov 2026: "Find
+    button on header should be changed to ask ... it should act as a toggle ... blurs the current page and then
+    presents the user with the search box ... with icons for build a shopping list and one for existing lists"), and
+    keeps the step by step helper as a third icon. What is typed there Rip reads like a voice search."""
+
+    def new_home(self):
+        row = SiteLook.load()
+        row.feed_home = True
+        row.save()
+        look.remember()
+        self.addCleanup(look.remember)
+
+    def test_ask_opens_one_box_and_three_ways_in_on_every_page(self):
+        self.assertNotIn("ask-sheet", self.client.get(reverse("web:home")).content.decode())   # only with Ask shown
+        self.new_home()
+        for url in (reverse("web:home"), self.box.get_absolute_url()):
+            html = self.client.get(url).content.decode()
+            with self.subTest(url=url):
+                self.assertIn('data-ask-open aria-controls="ask-sheet" aria-expanded="false">', html)
+                sheet = html[html.index('<div class="ask-sheet" id="ask-sheet" hidden data-ask-sheet>'):]
+                self.assertIn(f'<form class="ask-sheet__form" action="{VOICE_URL}" method="get" role="search"', sheet)
+                self.assertIn('<input type="hidden" name="via" value="typed">', sheet)
+                self.assertIn('<textarea id="ask-sheet-q" class="ask-sheet__input" name="q" rows="2" maxlength="300" '
+                              'required placeholder="Type or say it, like cheap Delta Reign packs"', sheet)
+                self.assertIn(f'data-voice="ask-sheet-q" data-voice-submit data-voice-ai="{VOICE_URL}"', sheet)
+                self.assertIn(f'href="{reverse("web:search_photo")}" rel="nofollow"', sheet)
+                ways = sheet[sheet.index('<nav class="ask-sheet__ways"'):sheet.index("</nav>")]
+                for href, words in ((reverse("web:find_list"), "Build a shopping list"),
+                                    (reverse("web:shopping_list"), "Your list"),
+                                    (reverse("web:find") + "?go=find", "Step by step")):
+                    self.assertIn(f'href="{href}"', ways)
+                    self.assertIn(f"<span>{words}</span>", ways)
+        # Step by step is the guided helper's first question, not the page Ask opens without script.
+        self.assertContains(self.client.get(reverse("web:find"), {"go": "find"}), "find__steps")
+
+    def test_what_is_typed_is_read_by_rip_and_shown_as_asked(self):
+        self.fake.answer = general(items=[("Surging Sparks Booster Box", "pokemon", 1)])
+        location = self.client.get(VOICE_URL, {"q": "a surging sparks box", "via": "typed"},
+                                   REMOTE_ADDR="203.0.113.7")["Location"]
+        self.assertEqual(parse_qs(urlsplit(location).query)["asked"], ["a surging sparks box"])
+        self.assertNotIn("said", parse_qs(urlsplit(location).query))
+        self.assertEqual(self.fake.sent[0]["messages"][0]["content"], "<wants>a surging sparks box</wants>")
+        self.assertEqual(ClaudeAsk.objects.get().row_key, "voice")   # the voice allowance, not the five questions
+        page = self.client.get(location, REMOTE_ADDR="203.0.113.7")
+        self.assertContains(page, "Rip found these for ‘a surging sparks box’.")
+        self.assertNotContains(page, "You said")
+        # A general request typed opens the search with the same words kept.
+        self.fake.answer = general(type="booster_pack", sort="price")
+        location = self.client.get(VOICE_URL, {"q": "cheap booster packs", "via": "typed"},
+                                   REMOTE_ADDR="203.0.113.7")["Location"]
+        self.assertEqual(parse_qs(urlsplit(location).query)["asked"], ["cheap booster packs"])
+
+    def test_the_script_toggles_it_and_enter_sends(self):
+        with open(finders.find("js/ask-input.js"), encoding="utf-8") as handle:
+            script = handle.read()
+        sheet = script[script.index('var sheet = document.querySelector("[data-ask-sheet]");'):]
+        self.assertIn("event.preventDefault();\n      if (sheet.hidden) open();\n      else close();", sheet)
+        self.assertIn('document.documentElement.classList.add("has-ask-sheet");', sheet)
+        self.assertIn('opener.setAttribute("aria-expanded", "true");', sheet)
+        self.assertIn('if (event.key === "Escape") close();', sheet)
+        self.assertIn('if (event.key !== "Enter" || event.shiftKey) return;', sheet)
+        self.assertIn('send.textContent = send.getAttribute("data-working");', sheet)
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn(".has-ask-sheet .masthead { z-index: 31; }", css)   # the header stays sharp, Ask stays tappable
+        self.assertIn("backdrop-filter: blur(var(--ask-sheet-blur));", css)
+        motion = css[css.index("@keyframes ask-sheet-drop"):]
+        self.assertIn("@media (prefers-reduced-motion: no-preference)", motion[:300])
+
+    def test_the_box_grows_with_the_words_then_scrolls(self):
+        with open(finders.find("js/ask-input.js"), encoding="utf-8") as handle:
+            script = handle.read()
+        self.assertIn('document.querySelectorAll("textarea[data-grow]")', script)
+        # Measured while hidden a box is 0 high: it keeps its two rows, so the example in it is not cut off.
+        self.assertIn('if (field.scrollHeight) field.style.height = field.scrollHeight + "px";', script)
+        self.assertIn('panel.className = "voice-words";', script)
+        css = open(finders.find("css/site.css"), encoding="utf-8").read()
+        self.assertIn("max-height: var(--voice-words-max);", css)
+        self.assertIn(".contact-form__text[data-grow] { max-height: var(--ask-box-max); overflow-y: auto; }", css)
+        self.assertIn("max-height: var(--ask-box-max); padding: var(--space-2) 0;", css)
+        tokens = open(finders.find("css/tokens.css"), encoding="utf-8").read()
+        for token in ("--voice-words-max:", "--ask-box-max:", "--ask-sheet-blur:"):
+            self.assertIn(token, tokens)
+        self.assertContains(self.client.get(URL), "data-grow")

@@ -433,7 +433,7 @@ def kept(token):
     return found["wants"], bool(found.get("photo")), wanted
 
 
-def found_target(made, otherwise, said=""):
+def found_target(made, otherwise, said="", asked=""):
     """Where a photo or a voice search goes once Rip has read it (a Made): one product is a search for it, as if typed,
     with its game (and ``said``, what the phone heard, for the page to show); several are the list builder's
     choices; nothing, or a problem, ``otherwise``."""
@@ -444,13 +444,14 @@ def found_target(made, otherwise, said=""):
     found = cache.get(kept_key(made.token)) if made.token else None
     items = found.get("items", []) if isinstance(found, dict) else []
     browse = found.get("browse") if isinstance(found, dict) else None
+    words = {"said": said} if said else {"asked": asked} if asked else {}
     if made.state == "made" and not items and browse:
-        return browse_url(browse, said=said)
+        return browse_url(browse, **words)
     if made.state == "made" and len(items) == 1:
         # One product, however it was said ("cheap delta booster packs"): its search, cheapest first or within the
         # limit said, never a list of one (the owner, 14 Nov 2026).
         query = {"q": items[0]["search"], **({"game": items[0]["game"]} if items[0]["game"] else {}),
-                 **(filters_of(browse) if browse else {}), **({"said": said} if said else {})}
+                 **(filters_of(browse) if browse else {}), **words}
         return f"{reverse('web:search')}?{urlencode(query)}"
     if made.state == "made" and items:
         return f"{reverse('web:find_list')}?{urlencode({'made': made.token})}"

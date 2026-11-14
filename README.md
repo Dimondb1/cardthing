@@ -6510,6 +6510,35 @@ visible happens, they assume it's broken and try again"). All of this is in
   ask for less movement.
 - Ask Rip's and the list builder's boxes get the same orange and their own
   Listening words (`askrip.voice.listening_*`).
+- **The words grow the box** (the owner, 14 Nov 2026: "As the words are
+  captured the text box should expand as more words fill it until the
+  message exceeds an acceptable length"). A one-line search box shows the
+  words heard in an orange panel over itself that grows to about four lines
+  (`.voice-words`, `--voice-words-max`), the latest words in view; the
+  bottom bar's grows upwards. A textarea with `data-grow` (the list
+  builder's, the Ask popup's) grows itself to `--ask-box-max`, then scrolls.
+
+**The Ask popup** (`web/templates/web/includes/ask_sheet.html`, opened by
+`ask-input.js`). The owner, 14 Nov 2026: "Find button on header should be
+changed to ask ... it should act as a toggle ... blurs the current page and
+then presents the user with the search box", with icons for building a
+shopping list and for the list itself, and the step by step helper kept as
+a third icon.
+
+- The header's button says Ask Rip (Ask on a phone, `feed.find.*`). With
+  script it opens and closes the popup over the page; Close, a tap on the
+  blurred page and Escape close it too. The header stays sharp above the
+  blur (`html.has-ask-sheet`), so Ask can be tapped again. Without script
+  it is still a link to `/find/`.
+- One box, typed or spoken, with the microphone and the camera. Enter
+  sends it (Shift and Enter is a new line). It goes to `/search/voice/`
+  with `via=typed`, so Rip reads it as he reads a voice search, sharing the
+  voice allowance (30 a day, the owner exempt). The results say "Rip found
+  these for ‘...’" rather than "You said".
+- Under it, three ways in: Build a shopping list (`/find/list/`), Your list
+  (`/shopping-list/`), Step by step (`/find/?go=find`, the guided questions).
+- Words are `askrip.sheet.*`; the blur is `--ask-sheet-blur`. It only shows
+  where the header shows Ask (new home page or compact layout on).
 
 Rip's side of a voice search:
 

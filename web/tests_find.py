@@ -178,9 +178,12 @@ class LinkTests(FindCase):
         row.feed_home = True
         row.save()
         look.remember()
-        link = (f'<a class="masthead__find" href="{FIND}"><span class="mark masthead__find-icon" aria-hidden="true"></span>'
-                '<span class="masthead__find-text"><span class="masthead__find-full">Find with Rip</span>'
-                '<span class="masthead__find-brief">Find</span></span>')
+        # The owner, 14 Nov 2026: "Find button on header should be changed to ask ... it should act as a toggle". With
+        # script it opens the Ask Rip popup (ask_sheet.html); without, it still opens this page.
+        link = (f'<a class="masthead__find" href="{FIND}" data-ask-open aria-controls="ask-sheet" aria-expanded="false">'
+                '<span class="mark masthead__find-icon" aria-hidden="true"></span>'
+                '<span class="masthead__find-text"><span class="masthead__find-full">Ask Rip</span>'
+                '<span class="masthead__find-brief">Ask</span></span>')
         # The owner, 14 Nov 2026: on landing, after the games, "a little tiny text box saying, need help with your
         # shopping, or just want to ask a question, ask Rip", pointing at this button. The home page only.
         hint = ('<span class="feed-hint feed-hint--rip" hidden aria-hidden="true" data-hint-last data-hint-hold="4200">'
@@ -195,7 +198,8 @@ class LinkTests(FindCase):
         self.assertIn('rip: ".masthead__find"', script)
         self.assertIn('data-hint-hold', script)
         self.assertIn('data-hint-last', script)
-        self.assertIn(f'<a class="masthead__find" href="{FIND}" aria-current="page">', self.client.get(FIND).content.decode())
+        self.assertIn(f'<a class="masthead__find" href="{FIND}" data-ask-open aria-controls="ask-sheet" aria-expanded="false"'
+                      ' aria-current="page">', self.client.get(FIND).content.decode())
         # Nothing sits between the headline and the tiles any more.
         html = self.client.get(reverse("web:home")).content.decode()
         self.assertNotIn("find-link", html)

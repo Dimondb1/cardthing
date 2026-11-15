@@ -3113,6 +3113,7 @@ def voice_search(request):
         made = rip_list.hear(request, said, row_key="search" if via == "box" else "voice")
         target = rip_list.found_target(made, plain_url, **({"asked": said} if typed else {"said": said}))
     response = HttpResponseRedirect(target)
+    askrip.keep_count(request, response)   # a reply to small talk is one of their questions (rip_list.hear)
     response["Cache-Control"] = "no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
@@ -3195,6 +3196,8 @@ def find_list(request):
     wants, photo, wanted = found if found else ("", False, None)
     response = render(request, "web/find_list.html", {
         "box": rip_list.box(request, state), "wants": wants, "photo": photo, "wanted": wanted,
+        # Rip's reply to small talk, in his bubble (rip_list.read_chat).
+        "chat": rip_list.kept_chat(token) if found else "",
         "browse_url": rip_list.browse_url(browse) if browse else "",
         "max_quantity": shopping.MAX_QUANTITY,
         "meta_title": text(request, "find.list.title"), "noindex": True,

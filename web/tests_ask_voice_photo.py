@@ -69,7 +69,7 @@ class PhotoTests(ListCase):
         ask = ClaudeAsk.objects.get()
         self.assertEqual(ask.evidence, {"list": "", "photo": True})
         self.assertEqual(ask.set_answer, {"items": [{"search": "Surging Sparks Booster Box", "game": "pokemon",
-                                                     "quantity": 2}], "browse": None})
+                                                     "quantity": 2}], "browse": None, "chat": ""})
         sent = self.fake.sent[0]["messages"][0]["content"][0]["source"]["data"]
         stored = json.dumps([getattr(ask, f.attname) for f in ClaudeAsk._meta.concrete_fields], default=str)
         self.assertNotIn(sent[:200], stored)
@@ -614,6 +614,84 @@ class SearchBarTests(ListCase):
         self.assertIn("const plainSearch = form.dataset.plainSearch || form.action;", script)
         self.assertNotIn("${form.action}?q=", script)
         self.assertIn('form.classList.add("is-searching");', script)
+
+
+def chat(reply, **extra):
+    """Rip's reply to small talk, as the schema has it."""
+    return json.dumps({"items": [], "browse": {"wanted": False, "type": "", "game": "", "set": "", "language": "",
+                                               "sort": "", "price": "", "max_price": 0, "rip": False,
+                                               "in_stock": True}, "chat": reply, **extra})
+
+
+class SmallTalkTests(ListCase):
+    """The owner, 15 Nov 2026: "if someone asks Rip ... if he's having a nice day or something just casual, can you
+    allow Rip just to send a message back? But ... it still takes away their allowance"."""
+
+    REPLY = "I'm having a lovely day, thanks for asking. What can I find for you?"
+
+    def test_small_talk_in_the_ask_popup_gets_his_reply_and_uses_a_question(self):
+        self.fake.answer = chat(self.REPLY)
+        ask = {"q": "are you having a nice day rip", "via": "typed"}
+        location = self.client.get(reverse("web:voice_search"), ask, REMOTE_ADDR="203.0.113.7")["Location"]
+        self.assertEqual(urlsplit(location).path, URL)
+        page = self.client.get(location, REMOTE_ADDR="203.0.113.7")
+        shown = self.REPLY.replace("'", "&#x27;")
+        self.assertContains(page, f'<p class="find__question" role="status">{shown}</p>')
+        self.assertContains(page, "You said <q>are you having a nice day rip</q>")
+        self.assertNotContains(page, "I couldn&#x27;t see anything to buy in that.")
+        self.assertContains(page, "You can ask 4 more questions today.")   # one of their questions
+        self.assertContains(page, 'name="wants"')   # and the box to ask him for something
+        # The same words again: his reply from the cache, nothing sent and nothing counted.
+        again = self.client.get(reverse("web:voice_search"), ask, REMOTE_ADDR="203.0.113.7")["Location"]
+        self.assertEqual(again, location)
+        self.assertEqual(len(self.fake.sent), 1)
+        self.assertContains(self.client.get(again, REMOTE_ADDR="203.0.113.7"), "You can ask 4 more questions today.")
+
+    def test_small_talk_in_the_list_builder_and_the_search_bar(self):
+        self.fake.answer = chat(self.REPLY)
+        token, _ = self.made(self.build("hello rip how are you"))
+        page = self.client.get(URL, {"made": token}, REMOTE_ADDR="203.0.113.7")
+        self.assertContains(page, "thanks for asking. What can I find for you?")
+        self.assertContains(page, "You can ask 4 more questions today.")
+        self.fake.answer = chat("Hello to you too. Tell me what you are after and I will find it.")
+        location = self.client.get(reverse("web:voice_search"), {"q": "hello there rip how are you today", "via": "box"},
+                                   REMOTE_ADDR="203.0.113.7")["Location"]
+        self.assertContains(self.client.get(location, REMOTE_ADDR="203.0.113.7"), "Hello to you too.")
+        self.assertEqual(ClaudeAsk.objects.filter(row_key="search").count(), 1)
+
+    def test_a_reply_with_a_price_or_a_link_is_never_shown(self):
+        for reply in ("Booster boxes start at £90, have a look.", "Try www.example.com for that.",
+                      "Email me at rip@example.com"):
+            with self.subTest(reply=reply):
+                cache.clear()
+                self.fake.answer = chat(reply)
+                token, _ = self.made(self.build(f"hello rip {reply[:5]}"))
+                page = self.client.get(URL, {"made": token}, REMOTE_ADDR="203.0.113.9")
+                self.assertContains(page, "I couldn&#x27;t see anything to buy in that.")
+                self.assertContains(page, "You can ask 5 more questions today.")   # nothing shown, nothing used
+
+    def test_a_request_to_buy_never_gets_small_talk(self):
+        self.fake.answer = chat(self.REPLY, items=[{"search": "Surging Sparks Booster Box", "game": "pokemon",
+                                                     "quantity": 1}, {"search": "Surging Sparks Booster Box",
+                                                                      "game": "pokemon", "quantity": 1}])
+        token, _ = self.made(self.build("two surging sparks boxes and how are you"))
+        self.assertEqual(rip_list.kept_chat(token), "")
+        self.assertNotContains(self.client.get(URL, {"made": token}), "thanks for asking")
+
+    def test_rip_is_told_how_and_his_words_are_tidied(self):
+        self.build("hello rip")
+        sent = self.fake.sent[0]
+        self.assertIn('"chat" is a short, kind reply in your own voice as Rip', sent["system"][0]["text"])
+        self.assertIn("Never name a price, a shop or a product in it", sent["system"][0]["text"])
+        schema = sent["output_config"]["format"]["schema"]
+        self.assertEqual(schema["properties"]["chat"], {"type": "string"})
+        self.assertIn("chat", schema["required"])
+        self.assertEqual(rip_list.read_chat("Roaring, thanks! What can I find for you?"),
+                         "Roaring, thanks. What can I find for you?")
+        self.assertEqual(rip_list.read_chat("Good \u2014 you?"), "Good, you?")
+        long = rip_list.read_chat("I am well. " * 40)
+        self.assertLessEqual(len(long), rip_list.CHAT_MAX)
+        self.assertTrue(long.endswith("."))
 
 
 class OwnerTests(ListCase):

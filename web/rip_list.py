@@ -23,6 +23,7 @@ import hashlib
 import io
 import json
 import math
+import re
 from dataclasses import dataclass, field
 
 from django.core.cache import cache
@@ -73,6 +74,7 @@ Some ask for a kind of product rather than a named one: "booster packs at a low 
 - "rip": true when they want products to open: opening packs, ripping, cracking, "to open" or "to rip", best for ripping or opening; else false. The list then holds only products to open, the cheapest a card first unless they asked for another order ("cheapest packs to rip" keeps "sort" "price").
 - "in_stock": true, unless they ask for pre-orders or for things not in stock.
 With nothing general asked, "wanted" is false and the rest empty. A product they named goes in the products, never in "browse"; a request can have both.
+Some just talk to you: hello, how are you, are you having a nice day, thanks, a question about you or anything else that is not about buying. Then the products are empty, "wanted" is false, and "chat" is a short, kind reply in your own voice as Rip, the site's friendly raptor: one or two short sentences of British English, at most 200 characters, ending by offering to find them something. Never name a price, a shop or a product in it, give no links, use no exclamation marks, and keep it suitable for children. When they ask for anything to buy or find, "chat" is "".
 Keep every word that picks out products, such as a Pokémon or a character (pikachu, charizard, eevee, luffy): put it in a product's "search" ("Pikachu Box"), with "browse" for the order or a price limit, and never drop it for a general list. A set with a kind of product in general terms ("cheap delta booster packs") is "browse" with the set and the kind, not a named product.
 
 The sets RipRaptor has products for, by game, newest first. Use these names, since some are newer than what you know:
@@ -103,9 +105,14 @@ SCHEMA = {
         "type": "object",
         "properties": {"search": {"type": "string"}, "game": {"type": "string"}, "quantity": {"type": "integer"}},
         "required": ["search", "game", "quantity"], "additionalProperties": False}},
-        "browse": BROWSE},
-    "required": ["items", "browse"], "additionalProperties": False,
+        "browse": BROWSE, "chat": {"type": "string"}},
+    "required": ["items", "browse", "chat"], "additionalProperties": False,
 }
+# Rip's reply to small talk (the owner, 15 Nov 2026: "if someone asks Rip ... if he's having a nice day or something
+# just casual, can you allow Rip just to send a message back? ... it still takes away their allowance"): at most this
+# long, and never with a price, a link or an address in it.
+CHAT_MAX = 240
+CHAT_REFUSED = re.compile(r"£|\bhttps?:|\bwww\.|@|\.(?:com|co\.uk|net|org)\b", re.I)
 
 
 def games():
@@ -302,7 +309,27 @@ def read_reply(message, found_games):
             continue
         game = item.get("game") if item.get("game") in found_games else ""
         tidy.append({"search": words, "game": game, "quantity": shopping.quantity(item.get("quantity"))})
-    return {"items": tidy, "browse": read_browse(answer.get("browse"), found_games)}
+    browse = read_browse(answer.get("browse"), found_games)
+    return {"items": tidy, "browse": browse, "chat": "" if tidy or browse else read_chat(answer.get("chat"))}
+
+
+def read_chat(text):
+    """Rip's reply to small talk as the page shows it: plain sentences (askrip.tidy_answer), cut at a sentence end
+    inside CHAT_MAX, or "" for none or one with a price, a link or an address in it."""
+    text = askrip.tidy_answer(str(text or ""))
+    if not text or CHAT_REFUSED.search(text):
+        return ""
+    if len(text) > CHAT_MAX:
+        cut = text[:CHAT_MAX]
+        end = max(cut.rfind(". "), cut.rfind("? "), cut.rfind("."), cut.rfind("?"))
+        text = cut[:end + 1] if end > 0 else cut.rsplit(" ", 1)[0] + "."
+    return text
+
+
+def kept_chat(token):
+    """Rip's reply to small talk kept under ``token``, or ""."""
+    found = cache.get(kept_key(token)) if token else None
+    return found.get("chat", "") if isinstance(found, dict) and not found.get("items") and not found.get("browse") else ""
 
 
 # Asking ---------------------------------------------------------------------------------------------------------------
@@ -343,9 +370,9 @@ def make(request, wants, now=None, client=None, photo=None):
     try:
         askrip.count_question(request, now)
         state = send(wants, token, model, now, client, image)
-        if state in ("failed", "nothing"):   # nothing to show for it, so it does not count
+        if state in ("failed", "nothing"):   # nothing to show for it, so it does not count; a chat reply does
             askrip.count_question(request, now, give_back=True)
-        return Made(state, token if state in ("made", "nothing") else "")
+        return Made(state, token if state in ("made", "nothing", "chat") else "")
     finally:
         cache.delete(askrip.BUSY_KEY)
 
@@ -378,7 +405,7 @@ def send(wants, token, model, now, client=None, image=None, row_key="list"):
     if reply is None:
         return "failed"
     cache.set(kept_key(token), {"wants": wants, "photo": image is not None, **reply}, KEPT_SECONDS)
-    return "made" if reply["items"] or reply["browse"] else "nothing"
+    return "made" if reply["items"] or reply["browse"] else "chat" if reply["chat"] else "nothing"
 
 
 # What the page shows -----------------------------------------------------------------------------------------------
@@ -471,6 +498,9 @@ def found_target(made, otherwise, said="", asked=""):
         return f"{reverse('web:search')}?{urlencode(query)}"
     if made.state == "made" and items:
         return f"{reverse('web:find_list')}?{urlencode({'made': made.token})}"
+    if made.token and isinstance(found, dict) and found.get("chat") and not items and not browse:
+        # Small talk: Rip's reply on the Find page, with the box to ask him for something (kept_chat).
+        return f"{reverse('web:find_list')}?{urlencode({'made': made.token})}"
     return otherwise
 
 
@@ -526,8 +556,6 @@ REQUEST_WORDS = frozenset((
 def reads_as_request(words):
     """Whether typed words ask for something the plain search cannot act on (REQUEST_WORDS), such as "cheap Korean
     booster boxes" or "packs to rip"."""
-    import re
-
     return any(word in REQUEST_WORDS for word in re.findall(r"[a-z]+", (words or "").lower()))
 
 
@@ -562,7 +590,11 @@ def hear(request, said, now=None, client=None, row_key="voice"):
         return Made("busy")
     try:
         state = send(said, token, model, now, client, row_key=row_key)
-        return Made(state, token if state in ("made", "nothing") else "")
+        if state == "chat":
+            # A reply to small talk is one of the visitor's Ask Rip questions, as the list builder's are (the owner,
+            # 15 Nov 2026: "it still takes away their allowance"). The caller keeps the count in the cookie.
+            askrip.count_question(request, now)
+        return Made(state, token if state in ("made", "nothing", "chat") else "")
     finally:
         cache.delete(askrip.BUSY_KEY)
 

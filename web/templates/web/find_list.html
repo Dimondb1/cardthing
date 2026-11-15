@@ -9,7 +9,10 @@
   <div class="find__ask">
     <span class="mark find__rip" aria-hidden="true"></span>
     <div class="find__bubble">
-      {% if wanted %}
+      {% if chat %}
+      {# Rip's reply to small talk (are you having a nice day): his own words, written by AI, in his bubble, then the box to ask him for something. #}
+      <p class="find__question" role="status">{{ chat }}</p>
+      {% elif wanted %}
       <h2 class="find__question">{% copy "find.list.made.question" %}</h2>
       <p class="find__sub">{% copy "find.list.made.sub" %}</p>
       {% else %}
@@ -44,7 +47,8 @@
   {% if browse_url %}<p class="find__again"><a href="{{ browse_url }}">{% copy "find.list.browse" %}</a></p>{% endif %}
   <p class="find__again"><a href="{% url 'web:find_list' %}">{% copy "find.list.again" %}</a></p>
   {% else %}
-  {% if wanted is not None %}<p class="rip-list__state" role="status">{% copy "find.list.nothing" %}</p>{% endif %}
+  {% if chat %}{% if wants %}<p class="rip-list__wants">{% copy "find.list.chat.you_said" %} <q>{{ wants }}</q></p>{% endif %}
+  {% elif wanted is not None %}<p class="rip-list__state" role="status">{% copy "find.list.nothing" %}</p>{% endif %}
   {% if box.state_key %}<p class="rip-list__state" role="status">{% copy box.state_key count=box.per_person hours=box.hours %}</p>{% endif %}
   {% if box.open and box.left %}
   <form class="rip-list__form" method="post" action="{% url 'web:find_list' %}" enctype="multipart/form-data" data-rip-list>{% csrf_token %}

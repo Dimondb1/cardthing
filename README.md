@@ -6683,6 +6683,23 @@ now: three products people are opening this week (the Deals page's
 Trending, `views.NO_LUCK_POPULAR`) with their delivered prices and when
 they were checked. Words are `browse.no_results.*`.
 
+**Small talk** (the owner, 15 Nov 2026: "if someone asks Rip ... if he's
+having a nice day or something just casual, can you allow Rip just to send a
+message back? ... it still takes away their allowance"). Rip's reply has a
+`chat` part: for a greeting, how are you, thanks or anything else that is
+not shopping, a short reply in his own voice (one or two sentences, at most
+`CHAT_MAX` characters, offering to find something), only when nothing to
+buy was asked for. `read_chat` tidies it as answers are (no dashes or
+exclamation marks) and drops any with a price, a link or an address.
+
+- From the Ask popup, a search bar, the microphone or the list builder, a
+  reply opens the Find page with it in Rip's bubble, what was said under
+  it, and the box to ask him for something (`kept_chat`,
+  `find.list.chat.you_said`).
+- It is one of the visitor's Ask Rip questions, wherever it was asked
+  (`count_question` in `hear` and `make`, kept in the cookie by
+  `keep_count`). The same words again are answered from the cache, free.
+
 **Rip in the search bar** (the owner, 15 Nov 2026: "build the same ask rip
 technology in to the search bar"). Every search bar (the header's, the home
 page's, the phone's bar at the foot) sends its words to `/search/voice/`

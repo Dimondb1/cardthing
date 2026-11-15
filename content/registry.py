@@ -714,6 +714,8 @@ ENTRIES = [
           "Pick one for each and say how many. Your list then finds the cheapest way to buy them all, delivery "
           "included.",
           "Under Here's what I found."),
+    Entry("find.list.chat.you_said", T, "List builder: what was said to Rip", "You said",
+          "Before the words the visitor said to Rip when he replied to small talk, under his reply."),
     Entry("find.list.made.you_said", T, "List builder: what was typed", "You asked for",
           "Before the words the visitor typed, above the products found."),
     Entry("find.list.made.from_photo", T, "List builder: read from a photo", "From the photo of your list",

@@ -546,6 +546,76 @@ class GeneralRequestTests(ListCase):
                          reverse("web:search") + "?type=booster_pack&sort=price&in_stock=1&said=cheap+booster+packs")
 
 
+class SearchBarTests(ListCase):
+    """The owner, 15 Nov 2026: "build the same ask rip technology in to the search bar". Rip reads what is typed when
+    it asks for more than a product's name; a name the plain search finds goes straight to it, instant and free."""
+
+    def search(self, words, **extra):
+        return self.client.get(reverse("web:voice_search"), {"q": words, "via": "box", **extra},
+                               REMOTE_ADDR="203.0.113.7")
+
+    def test_a_name_the_search_finds_goes_straight_to_it_and_nothing_is_sent(self):
+        self.assertEqual(self.search("surging sparks booster box")["Location"],
+                         reverse("web:search") + "?q=surging+sparks+booster+box")
+        # With the order said, as the search page reads it, and on a game's own bar.
+        self.assertEqual(self.search("cheapest surging sparks box")["Location"],
+                         reverse("web:search") + "?q=cheapest+surging+sparks+box")
+        self.assertEqual(self.search("surging sparks", game="pokemon")["Location"],
+                         reverse("web:search") + "?q=surging+sparks&game=pokemon")
+        self.assertEqual(self.fake.sent, [])
+
+    def test_a_request_goes_to_rip_and_opens_his_list(self):
+        self.fake.answer = general(type="booster_box", sort="price", language="ko")
+        location = self.search("cheap Korean booster boxes")["Location"]
+        self.assertEqual(parse_qs(urlsplit(location).query), {
+            "type": ["booster_box"], "lang": ["ko"], "sort": ["price"], "in_stock": ["1"],
+            "asked": ["cheap Korean booster boxes"]})
+        self.assertEqual(len(self.fake.sent), 1)
+        self.assertEqual(ClaudeAsk.objects.get().row_key, "search")   # its own row on the Claude page
+        # Ripping is a request too.
+        self.fake.answer = general(type="booster_pack", rip=True)
+        self.assertIn("rip=on", self.search("packs to rip")["Location"])
+
+    def test_words_the_search_finds_nothing_for_go_to_rip(self):
+        self.fake.answer = items(("Surging Sparks Booster Box", "pokemon", 1))
+        location = self.search("surging sparkles bocks")["Location"]
+        self.assertEqual(parse_qs(urlsplit(location).query), {
+            "q": ["Surging Sparks Booster Box"], "game": ["pokemon"], "asked": ["surging sparkles bocks"]})
+        page = self.client.get(location)
+        self.assertContains(page, "Rip found these for ‘surging sparkles bocks’.")
+
+    def test_without_rip_the_plain_search_runs(self):
+        ClaudeJob.objects.create(name="ask", on=False)
+        cache.clear()
+        self.assertEqual(self.search("cheap Korean booster boxes")["Location"],
+                         reverse("web:search") + "?q=cheap+Korean+booster+boxes")
+        self.assertEqual(self.fake.sent, [])
+
+    def test_what_reads_as_a_request(self):
+        for words in ("cheap Korean booster boxes", "packs to rip", "a gift for my son", "best box for opening",
+                      "japanese 151"):
+            with self.subTest(words=words):
+                self.assertTrue(rip_list.reads_as_request(words))
+        for words in ("surging sparks etb", "pikachu", "prismatic evolutions booster bundle", "cheapest delta packs", ""):
+            with self.subTest(words=words):
+                self.assertFalse(rip_list.reads_as_request(words))
+
+    def test_every_search_bar_goes_through_rip_and_says_it_is_searching(self):
+        html = self.client.get(URL).content.decode()
+        header = html[html.index('<form class="search search--header"'):]
+        header = header[:header.index("</form>")]
+        self.assertIn(f'action="{reverse("web:voice_search")}"', header)
+        self.assertIn(f'data-plain-search="{reverse("web:search")}"', header)
+        self.assertIn('<input type="hidden" name="via" value="box">', header)
+        self.assertIn('data-searching="Searching for ‘{words}’"', header)
+        with open(finders.find("js/site.js"), encoding="utf-8") as handle:
+            script = handle.read()
+        # Its own links (all results, recent searches) are plain searches, never Rip.
+        self.assertIn("const plainSearch = form.dataset.plainSearch || form.action;", script)
+        self.assertNotIn("${form.action}?q=", script)
+        self.assertIn('form.classList.add("is-searching");', script)
+
+
 class OwnerTests(ListCase):
     """The owner, testing, used all ten of the day's questions: "No limit when I'm logged in"."""
 

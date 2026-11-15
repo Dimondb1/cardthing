@@ -231,7 +231,8 @@ class HomeFeedTests(FeedCase):
         self.assertIn(f'<a class="feed__all" href="{reverse("web:drops")}">All drops</a>', html)
         # The dock: the search box, then every game with products, All chosen, each by its own icon.
         dock = html[html.index('<div class="feed-dock">'):html.index('<div class="feed">')]
-        self.assertIn(f'<form class="feed-search" action="{reverse("web:search")}" method="get" role="search" ', dock)
+        self.assertIn(f'<form class="feed-search" action="{reverse("web:voice_search")}" method="get" role="search" '
+                      f'data-plain-search="{reverse("web:search")}" ', dock)
         self.assertIn('placeholder="Search any product"', dock)
         # The arrows on the dock's edge, for feed.js to show on a phone: down to the next heading, up to the one before.
         # The owner, 6 Nov 2026: "pop the user down to the next heading and then maybe an up one to pop them back up".

@@ -3,11 +3,12 @@
   <div class="feed-dock__in">
     {# Results as you type, above the box, by the same script and wording as the header's search (site.js, search_form.html). The form still submits as usual. #}
     <div class="live" hidden data-live-panel="feed-q"><p class="live__status" role="status" aria-live="polite"></p><ul class="live__results" role="listbox" id="feed-q-results"></ul></div>
-    <form class="feed-search" action="{% url 'web:search' %}" method="get" role="search" data-live-search="{% url 'web:search_api' %}" data-checking="{% copy 'home.search.checking' %}" data-none="{% copy 'browse.no_results.title' query='{query}' %}" data-all="{% copy 'home.search.all_results' query='{query}' %}" data-recent="{% copy 'site.search.recent' %}">
+    <form class="feed-search" action="{% url 'web:voice_search' %}" method="get" role="search" data-plain-search="{% url 'web:search' %}" data-searching="{% copy 'askrip.voice.searching' words='{words}' %}" data-live-search="{% url 'web:search_api' %}" data-checking="{% copy 'home.search.checking' %}" data-none="{% copy 'browse.no_results.title' query='{query}' %}" data-all="{% copy 'home.search.all_results' query='{query}' %}" data-recent="{% copy 'site.search.recent' %}">
       <svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-search"/></svg>
       <label class="visually-hidden" for="feed-q">{{ feed.search_hint }}</label>
       <input id="feed-q" name="q" type="search" placeholder="{{ feed.search_hint }}" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" maxlength="100" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="feed-q-results">
       {% if feed.game %}<input type="hidden" name="game" value="{{ feed.game.slug }}">{% endif %}
+      <input type="hidden" name="via" value="box">
       <span class="visually-hidden" role="status" data-voice-status hidden></span>
       {# Voice search: ask-input.js shows the microphone where the browser can listen (Chrome on a phone can), fills the box with what was said and searches. Photo search: a plain link to Search by photo. #}
       <button class="feed-search__mic" type="button" hidden data-voice="feed-q" data-voice-submit data-voice-ai="{% url 'web:voice_search' %}" data-voice-stop="{% copy 'askrip.voice.stop' %}" data-voice-listening="{% copy 'askrip.voice.listening' %}" data-voice-searching="{% copy 'askrip.voice.searching' words='{words}' %}" data-voice-denied="{% copy 'askrip.voice.denied' %}" data-voice-unheard="{% copy 'askrip.voice.unheard' %}" aria-label="{% copy 'feed.search.voice' %}"><svg class="feed-ic" aria-hidden="true" focusable="false"><use href="#rr-mic"/></svg></button>

@@ -510,6 +510,26 @@ def photo_search_target(made):
 
 VOICE_PER_DAY = 30
 
+# The search bar (the owner, 15 Nov 2026: "build the same ask rip technology in to the search bar"): Rip reads what was
+# typed when it asks for more than a product's name, which the plain search, instant and free, cannot act on: a
+# language, opening or ripping, or who it is for. Anything the plain search finds nothing for goes to him too.
+REQUEST_WORDS = frozenset((
+    "korean", "japanese", "chinese", "english", "german", "french", "italian", "spanish", "thai", "indonesian",
+    "portuguese",
+    "rip", "rips", "ripping", "open", "opening", "crack", "cracking",
+    "son", "daughter", "kid", "kids", "child", "children", "boy", "girl", "grandson", "granddaughter", "nephew",
+    "niece", "gift", "gifts", "present", "presents", "christmas", "xmas", "birthday", "beginner", "beginners",
+    "recommend", "suggest", "should",
+))
+
+
+def reads_as_request(words):
+    """Whether typed words ask for something the plain search cannot act on (REQUEST_WORDS), such as "cheap Korean
+    booster boxes" or "packs to rip"."""
+    import re
+
+    return any(word in REQUEST_WORDS for word in re.findall(r"[a-z]+", (words or "").lower()))
+
 
 def voice_allowed(request):
     """One more of this person's voice searches today, or False once they have had VOICE_PER_DAY. Counted under a
@@ -522,9 +542,10 @@ def voice_allowed(request):
     return counted("voice_day", insights.client_ip(request), 86400) <= VOICE_PER_DAY
 
 
-def hear(request, said, now=None, client=None):
-    """Read a voice search: Made("made", token) with the products Rip read, or why not (then the plain search runs).
-    The same words again are answered from the cache, free and not counted."""
+def hear(request, said, now=None, client=None, row_key="voice"):
+    """Read a voice search, or a search typed into the search bar (row_key "search"): Made("made", token) with the
+    products Rip read, or why not (then the plain search runs). The same words again are answered from the cache, free
+    and not counted."""
     now = now or timezone.now()
     said = askrip.tidy_question(said)[:WANTS_MAX]
     if len(said) < WANTS_MIN:
@@ -540,7 +561,7 @@ def hear(request, said, now=None, client=None):
     if not cache.add(askrip.BUSY_KEY, 1, int(askrip.TIMEOUT_SECONDS) + 10):
         return Made("busy")
     try:
-        state = send(said, token, model, now, client, row_key="voice")
+        state = send(said, token, model, now, client, row_key=row_key)
         return Made(state, token if state in ("made", "nothing") else "")
     finally:
         cache.delete(askrip.BUSY_KEY)

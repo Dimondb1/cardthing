@@ -76,6 +76,8 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
   const status = panel.querySelector(".live__status");
   const list = panel.querySelector(".live__results");
   const endpoint = form.dataset.liveSearch;
+  // The form goes through Rip (via=box); the script's own links (all results, recent searches) are plain searches.
+  const plainSearch = form.dataset.plainSearch || form.action;
   const wording = { checking: form.dataset.checking, none: form.dataset.none, all: form.dataset.all };
   let timer = null;
   let latest = 0;
@@ -148,7 +150,7 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
     more.id = `${input.id}-option-all`;
     more.setAttribute("role", "option");
     const link = document.createElement("a");
-    link.href = `${form.action}?q=${encodeURIComponent(query)}`;
+    link.href = `${plainSearch}?q=${encodeURIComponent(query)}`;
     link.textContent = fill(wording.all, query);
     more.append(link);
     list.append(more);
@@ -175,7 +177,7 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
       li.setAttribute("role", "option");
       li.style.setProperty("--i", i);
       const a = document.createElement("a");
-      a.href = `${form.action}?q=${encodeURIComponent(term)}`;
+      a.href = `${plainSearch}?q=${encodeURIComponent(term)}`;
       a.className = "live__link";
       a.textContent = term;
       li.append(a);
@@ -236,6 +238,37 @@ document.querySelectorAll("form[data-live-search]").forEach((form) => {
   input.addEventListener("focus", () => {
     if (list.children.length) open(true);
     else if (!input.value.trim()) showRecent();
+  });
+});
+
+// A search bar's submit: Rip may read the words first (web.views.voice_search, via=box), which takes a moment, so the
+// box says at once that it is searching, with the spinner a spoken search shows, until the next page. The words stay
+// in the box and are sent as typed.
+document.querySelectorAll("form[data-plain-search]").forEach((form) => {
+  const input = form.querySelector("input[name=q]");
+  if (!input) return;
+  form.addEventListener("submit", () => {
+    const words = input.value.trim();
+    if (!words) return;
+    form.classList.add("is-searching");
+    form.setAttribute("aria-busy", "true");
+    // Locked until the next page, as a spoken search is: read-only (still sent, and no clear button) and no microphone.
+    input.readOnly = true;
+    form.querySelectorAll("[data-voice]").forEach((button) => { button.disabled = true; });
+    const status = form.querySelector("[data-voice-status]");
+    if (status) {
+      status.textContent = (form.dataset.searching || "").replace("{words}", words);
+      status.hidden = false;
+    }
+  });
+});
+window.addEventListener("pageshow", () => {
+  document.querySelectorAll("form[data-plain-search].is-searching").forEach((form) => {
+    form.classList.remove("is-searching");
+    form.removeAttribute("aria-busy");
+    const input = form.querySelector("input[name=q]");
+    if (input) input.readOnly = false;
+    form.querySelectorAll("[data-voice]").forEach((button) => { button.disabled = false; });
   });
 });
 

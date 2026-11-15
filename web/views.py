@@ -3098,15 +3098,38 @@ def voice_search(request):
     builder's choices; otherwise the plain search runs on the words heard, with its sound-alike fix. Only the
     microphone's script links here; it is never cached or indexed."""
     said = " ".join(request.GET.get("q", "").split())[:300]
-    typed = request.GET.get("via") == "typed"   # from the Ask Rip popup's box: shown as asked, not said
-    made = rip_list.hear(request, said)
+    via = request.GET.get("via", "")
+    typed = via in ("typed", "box")   # from the Ask Rip popup's box or a search bar: shown as asked, not said
     plain = {"q": said, **({"game": request.GET["game"]} if request.GET.get("game") else {})}
-    words = {"asked": said} if typed else {"said": said}
-    response = HttpResponseRedirect(rip_list.found_target(made, f"{reverse('web:search')}?{urlencode(plain)}", **words)
-                                    if said else reverse("web:search"))
+    plain_url = f"{reverse('web:search')}?{urlencode(plain)}"
+    if not said:
+        target = reverse("web:search")
+    elif via == "box" and not rip_list.reads_as_request(said) and plain_finds(said, request.GET.get("game", "")):
+        # A search bar's words that name products the plain search finds ("surging sparks etb"): straight to it,
+        # instant and free. Rip reads only the rest (the owner, 15 Nov 2026: "the same ask rip technology in to the
+        # search bar").
+        target = plain_url
+    else:
+        made = rip_list.hear(request, said, row_key="search" if via == "box" else "voice")
+        target = rip_list.found_target(made, plain_url, **({"asked": said} if typed else {"said": said}))
+    response = HttpResponseRedirect(target)
     response["Cache-Control"] = "no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
+
+
+def plain_finds(words, game=""):
+    """Whether the plain search finds anything for typed words, as the search page reads them (catalogue.search
+    read_query: "cheapest delta booster pack under £5" is "delta booster pack"). Words it reads as nothing but an order
+    ("cheapest") find the whole list. One query."""
+    asked = read_query(words)
+    if not asked.words:
+        return True
+    products = Product.objects.active()
+    if game:
+        products = products.filter(game__slug=game)
+    found, _ = apply_search(products, asked.words)
+    return found.exists()
 
 
 def gbp_text(value):

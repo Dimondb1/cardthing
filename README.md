@@ -6683,6 +6683,29 @@ now: three products people are opening this week (the Deals page's
 Trending, `views.NO_LUCK_POPULAR`) with their delivered prices and when
 they were checked. Words are `browse.no_results.*`.
 
+**Rip in the search bar** (the owner, 15 Nov 2026: "build the same ask rip
+technology in to the search bar"). Every search bar (the header's, the home
+page's, the phone's bar at the foot) sends its words to `/search/voice/`
+with `via=box`, which decides in one quick query:
+
+- Words that name products the plain search finds ("surging sparks etb",
+  "cheapest delta packs") go straight to the search, instant and free
+  (`views.plain_finds`, read as the search page reads them).
+- Words that ask for more than a name go to Rip, as the Ask popup does:
+  a language, opening or ripping, or who it is for (`rip_list.REQUEST_WORDS`,
+  `reads_as_request`: "cheap Korean booster boxes", "packs to rip", "a gift
+  for my son"), and anything the plain search finds nothing for. The list
+  opens with "Rip found these for ‘…’".
+- Rip's searches share the voice limit (`VOICE_PER_DAY` a person) and Ask
+  Rip's switch and monthly limit, and show on the Claude page as their own
+  row (`search`). The same words again are answered from the cache, free.
+  When Rip is off, at a limit or busy, the plain search runs.
+- On a submit the box shows the spinner a spoken search does, keeps the
+  words, and locks until the next page (`site.js`). The script's own links
+  (all results, recent searches) are plain searches (`data-plain-search`),
+  so a tap on one, or a page prefetched ahead, never reaches Rip. Without
+  script the form works the same, through the server.
+
 Rip's side of a voice search:
 
 - One product said ("cheap delta booster packs") opens its search with the

@@ -1277,6 +1277,23 @@ we need to."
   The owner, 12 Nov 2026: "add something in the site that helps Google and
   other search engines and AI pick up the fact that we have an intelligent
   Ask Rip feature".
+- Search engines and AI tools are told the site has an AI shopping
+  assistant (the owner, 15 Nov 2026), without changing how any shop page
+  looks:
+  - The home page's title (`meta.home.title`, "compare UK TCG prices with
+    an AI shopping assistant") and the site's description
+    (`meta.default.description`), which is also the first line of
+    llms.txt, the app manifest's description and the `description` of the
+    site's WebSite and Organization structured data (`site_json`).
+  - The Ask Rip page leads with How Rip helps you shop
+    (`views.ask_rip_helps`, `askrip.shop.*`): finding products from a
+    sentence, speaking or a photo, the cheapest way to buy a list, and
+    product questions, each linked to where it is done. Its FAQ adds Can Rip
+    find products for me? and Can Rip build my shopping list?, and its
+    title says AI shopping assistant.
+  - llms.txt has a How Rip helps you shop part with the same points.
+  - It does not say RipRaptor is the only site with one: that cannot be
+    shown, so it stays off the site under the no invented claims rule.
 - An answer that names a price the page does not show (or the sum or gap
   of two it does) is not shown; dashes, exclamation marks and formatting are
   taken out. Email addresses, phone numbers and links are taken out of the

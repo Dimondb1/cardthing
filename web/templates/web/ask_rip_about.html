@@ -10,6 +10,14 @@
   {% include "web/includes/rip_bot.html" %}
 </div>
 
+{# How Rip helps across the site (views.ask_rip_helps), the same points as llms.txt: in the FAQ's own look, each linked to where it is done. #}
+<section class="block askrip-part" aria-labelledby="askrip-shop">
+  <h2 id="askrip-shop" class="section-title">{% copy "askrip.shop.title" %}</h2>
+  <dl class="askrip-faq">{% for item in helps %}
+    <div class="askrip-faq__item"><dt>{% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}</dt><dd>{{ item.body }}</dd></div>{% endfor %}
+  </dl>
+</section>
+
 <section class="block askrip-part" aria-labelledby="askrip-ask">
   <h2 id="askrip-ask" class="section-title">{% copy "askrip.ask.title" %}</h2>
   <ul class="askrip-questions">{% for item in questions %}

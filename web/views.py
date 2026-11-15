@@ -1705,6 +1705,7 @@ def site_json(request):
             "@type": "WebSite",
             "name": settings.RIPRAPTOR_SITE_NAME,
             "url": home,
+            "description": text(request, "meta.default.description"),
             "potentialAction": {
                 "@type": "SearchAction",
                 "target": {"@type": "EntryPoint", "urlTemplate": home + "search/?q={query}"},
@@ -1716,6 +1717,7 @@ def site_json(request):
             "@type": "Organization",
             "name": settings.RIPRAPTOR_SITE_NAME,
             "url": home,
+            "description": text(request, "meta.default.description"),
             "logo": request.build_absolute_uri(static("img/logo.png")),
             "sameAs": list(SOCIAL_PROFILES),
         },
@@ -2319,7 +2321,18 @@ def shops(request):
 # Ask Rip's page: the one-tap questions he is asked most (askrip.SUGGESTED, each with what he answers from) and
 # the questions people ask about him.
 ASK_RIP_QUESTIONS = ("inside", "value", "when", "fit", "flags")
-ASK_RIP_FAQ = ("what", "free", "source", "price", "flags", "wrong")
+ASK_RIP_FAQ = ("what", "find", "list", "free", "source", "price", "flags", "wrong")
+# How Rip helps you shop (askrip.shop.*): each point, and the page it links to when it has one.
+ASK_RIP_HELPS = (("find", "web:find"), ("say", "web:search_photo"), ("list", "web:find_list"), ("page", ""))
+
+
+def ask_rip_helps(request, store=None):
+    """[{title, body, url}] for How Rip helps you shop: on the Ask Rip page and in llms.txt (the owner, 15 Nov 2026:
+    make sure search engines know the site has an AI assistant to help people buy)."""
+    store = store or copy.for_request(request)
+    return [{"title": copy.get(f"askrip.shop.{key}.title", store=store),
+             "body": copy.get(f"askrip.shop.{key}.body", store=store),
+             "url": reverse(name) if name else ""} for key, name in ASK_RIP_HELPS]
 
 
 def ask_rip_about(request):
@@ -2345,6 +2358,7 @@ def ask_rip_about(request):
         "mainEntity": {"@id": page_url + "#faq"},
     }
     return render(request, "web/ask_rip_about.html", {
+        "helps": ask_rip_helps(request, store),
         "questions": questions, "faq": faq, "per_person": per_person, "closed": askrip.closed_reason() != "",
         "meta_title": title, "meta_description": description, "canonical_url": page_url,
         "structured_json": ld_json([page, crumbs, answers.faq_json(page_url, faq)]),
@@ -4008,6 +4022,13 @@ def llms_txt(request):
         f"## {text(request, 'about.why.title')}",
         "",
         *[f"- {point['title']}: {point['body']}" for point in why_points(request)],
+        "",
+        f"## {text(request, 'askrip.shop.title')}",
+        "",
+        f"Rip is the site's AI shopping assistant, behind the Ask button on every page. "
+        f"[More about Ask Rip]({request.build_absolute_uri(reverse('web:ask_rip_about'))}).",
+        "",
+        *[f"- {item['title']}: {item['body']}" for item in ask_rip_helps(request)],
         "",
         "## Games",
         "",

@@ -1004,7 +1004,7 @@ class AskRipPageTests(AskRipCase):
         html = self.page()
         blocks = self.blocks(html)
         faq = next(block for block in blocks if block["@type"] == "FAQPage")
-        self.assertEqual(len(faq["mainEntity"]), 6)
+        self.assertEqual(len(faq["mainEntity"]), 8)
         for question in faq["mainEntity"]:
             with self.subTest(question=question["name"]):
                 self.assertIn(f"<dt>{question['name']}</dt>", html)
@@ -1012,6 +1012,49 @@ class AskRipPageTests(AskRipCase):
         page = next(block for block in blocks if block["@type"] == "WebPage")
         self.assertEqual(page["mainEntity"], {"@id": faq["@id"]})
         self.assertIn("Ask Rip", page["name"])
+
+    def test_search_engines_and_ai_tools_are_told_the_site_has_an_ai_shopping_assistant(self):
+        """The owner, 15 Nov 2026: "make sure that search engines know that ripraptor.com is ... a TCG comparison site
+        with an AI tool assistant that will help you do your purchases", without changing how the shop pages look.
+        Said in the home page's title and description, the site's structured data, llms.txt and the Ask Rip page."""
+        import json
+
+        home = self.client.get(reverse("web:home")).content.decode()
+        self.assertIn("<title>RipRaptor: compare UK TCG prices with an AI shopping assistant</title>", home)
+        description = re.search(r'<meta name="description" content="([^"]*)"', home).group(1)
+        self.assertIn("Rip, our AI shopping assistant, finds products, builds lists and checks prices.", description)
+        self.assertLessEqual(len(description), 160)   # what search engines show
+        site = [block for match in re.finditer(r'<script type="application/ld\+json">(.*?)</script>', home, re.S)
+                for block in (lambda data: data if isinstance(data, list) else [data])(json.loads(match.group(1)))
+                if block.get("@type") in ("WebSite", "Organization")]
+        self.assertEqual({block["@type"] for block in site}, {"WebSite", "Organization"})
+        for block in site:
+            self.assertEqual(block["description"], description)
+        # The Ask Rip page: what he does across the site, each linked to where it is done, and its questions.
+        html = self.page()
+        self.assertIn("<title>Ask Rip: the AI shopping assistant for UK TCG prices | RipRaptor</title>", html)
+        page_description = re.search(r'<meta name="description" content="([^"]*)"', html).group(1)
+        self.assertLessEqual(len(page_description), 160)
+        self.assertIn("Rip is RipRaptor's AI shopping assistant.", html)
+        start = html.index('aria-labelledby="askrip-shop"')
+        part = html[start:html.index("</section>", start)]
+        for words in ("How Rip helps you shop", f'<a href="{reverse("web:find")}">Find products from a sentence</a>',
+                      f'<a href="{reverse("web:search_photo")}">Speak, or show him a photo</a>',
+                      f'<a href="{reverse("web:find_list")}">The cheapest way to buy your list</a>',
+                      "<dt>Questions on any product page</dt>"):
+            with self.subTest(words=words):
+                self.assertIn(words, part)
+        self.assertLess(start, html.index('aria-labelledby="askrip-ask"'))   # before the product questions
+        for words in ("Can Rip find products for me?", "Can Rip build my shopping list?"):
+            self.assertIn(f"<dt>{words}</dt>", html)
+        # llms.txt opens with it and has Rip's own part.
+        llms = self.client.get(reverse("web:llms")).content.decode()
+        self.assertTrue(llms.split("\n")[2].startswith("> Compare delivered UK prices"))
+        self.assertIn("Rip, our AI shopping assistant", llms.split("\n")[2])
+        self.assertIn("## How Rip helps you shop\n\nRip is the site's AI shopping assistant, behind the Ask button on "
+                      "every page.", llms)
+        self.assertIn("- Find products from a sentence: Tap Ask on any page", llms)
+        self.assertIn("- The cheapest way to buy your list: Give Rip several products", llms)
 
     def test_it_is_in_the_sitemap_llms_txt_the_footer_and_how_it_works(self):
         address = reverse("web:ask_rip_about")

@@ -3890,14 +3890,37 @@ ENTRIES = [
 
     Entry("askrip.title", H, "Ask Rip page: heading", "Ask Rip", "The Ask Rip page's heading."),
     Entry("askrip.intro", P, "Ask Rip page: introduction",
-          "Rip is RipRaptor's raptor, and he sits on every product page. Ask him about the product in front of you, "
-          "such as whether it is good value, what is inside or how today's price compares, and he answers from that "
-          "page's own UK prices.\n\nIt is free, there is nothing to sign up for, and you can ask {count} questions a "
+          "Rip is RipRaptor's AI shopping assistant. Tap Ask on any page and tell him what you want, or ask him about "
+          "the product in front of you, such as whether it is good value or what is inside, and he answers from the "
+          "site's own UK prices.\n\nIt is free, there is nothing to sign up for, and you can ask {count} questions a "
           "day.",
           "Under the heading of the Ask Rip page.", placeholders=("count",)),
     Entry("askrip.closed", T, "Ask Rip page: not answering now",
           "Rip is not answering questions right now. The prices on every product page are still up to date.",
           "Under the introduction while Ask Rip is switched off or has reached its limit."),
+    Entry("askrip.shop.title", H, "Ask Rip page: how he helps you shop", "How Rip helps you shop",
+          "Heading of the part on what Rip does across the site, above the product questions. The same points open "
+          "the Ask Rip part of llms.txt, for AI tools."),
+    Entry("askrip.shop.find.title", T, "Ask Rip page: finding products", "Find products from a sentence",
+          "The first of the ways Rip helps, linked to the Find page."),
+    Entry("askrip.shop.find.body", T, "Ask Rip page: finding products, text",
+          "Tap Ask on any page and say what you want, such as cheap Korean booster boxes. Rip opens the matching list "
+          "in the order you asked for.", "Under Find products from a sentence."),
+    Entry("askrip.shop.say.title", T, "Ask Rip page: speak or a photo", "Speak, or show him a photo",
+          "The second of the ways Rip helps, linked to Search by photo."),
+    Entry("askrip.shop.say.body", T, "Ask Rip page: speak or a photo, text",
+          "Talk instead of typing, or add a photo of a written list, a screenshot or the boxes themselves, and Rip "
+          "finds each product.", "Under Speak, or show him a photo."),
+    Entry("askrip.shop.list.title", T, "Ask Rip page: shopping list", "The cheapest way to buy your list",
+          "The third of the ways Rip helps, linked to the list builder."),
+    Entry("askrip.shop.list.body", T, "Ask Rip page: shopping list, text",
+          "Give Rip several products at once and he builds your shopping list, then shows the cheapest way to buy the "
+          "lot with delivery included, or the way with the fewest shops.", "Under The cheapest way to buy your list."),
+    Entry("askrip.shop.page.title", T, "Ask Rip page: product questions", "Questions on any product page",
+          "The last of the ways Rip helps."),
+    Entry("askrip.shop.page.body", T, "Ask Rip page: product questions, text",
+          "Ask whether a price is good, what is inside or whether to buy now or wait, and Rip answers from that "
+          "page's own UK prices.", "Under Questions on any product page."),
     Entry("askrip.ask.title", H, "Ask Rip page: what to ask", "What you can ask him",
           "Heading over the one-tap questions."),
     Entry("askrip.ask.inside", T, "Ask Rip page: what is inside",
@@ -3961,8 +3984,20 @@ ENTRIES = [
           "Heading over the questions people ask about Rip. They are also given to search engines as an FAQ."),
     Entry("askrip.faq.what.q", T, "Ask Rip FAQ: what it is, question", "What is Ask Rip?", "A question on the Ask Rip page."),
     Entry("askrip.faq.what.a", T, "Ask Rip FAQ: what it is, answer",
-          "A buying helper on every RipRaptor product page. Rip answers questions about that product from the page's "
-          "own UK prices, stock and price record.", "Its answer."),
+          "RipRaptor's AI shopping assistant. Tap Ask on any page and he finds products from what you type, say or "
+          "photograph, builds your shopping list at the lowest total and answers questions about the product you "
+          "are looking at, all from the site's own UK prices.", "Its answer."),
+    Entry("askrip.faq.find.q", T, "Ask Rip FAQ: finding products, question", "Can Rip find products for me?",
+          "A question on the Ask Rip page."),
+    Entry("askrip.faq.find.a", T, "Ask Rip FAQ: finding products, answer",
+          "Yes. Tap Ask on any page and type or say what you want, such as an ETB under £50 or cheap Korean booster "
+          "boxes. Rip opens the matching list, sorted the way you asked, and asks which game when you did not say.",
+          "Its answer."),
+    Entry("askrip.faq.list.q", T, "Ask Rip FAQ: shopping list, question", "Can Rip build my shopping list?",
+          "A question on the Ask Rip page."),
+    Entry("askrip.faq.list.a", T, "Ask Rip FAQ: shopping list, answer",
+          "Yes. Type, say or photograph a list of products and he finds each one on the site. Pick the right ones and "
+          "your list shows the cheapest way to buy it all, delivery included.", "Its answer."),
     Entry("askrip.faq.free.q", T, "Ask Rip FAQ: free, question", "Is Ask Rip free?", "A question on the Ask Rip page."),
     Entry("askrip.faq.free.a", T, "Ask Rip FAQ: free, answer",
           "Yes. There is no account to make, and anyone can ask {count} questions a day.", "Its answer.",
@@ -3990,12 +4025,11 @@ ENTRIES = [
           "Its answer."),
     Entry("askrip.cta", B, "Ask Rip page: button", "Search products",
           "At the foot of the Ask Rip page: opens the search, to find a product to ask about."),
-    Entry("meta.askrip.title", T, "Ask Rip page title", "Ask Rip: is it good value, what is inside, buy now or wait",
+    Entry("meta.askrip.title", T, "Ask Rip page title", "Ask Rip: the AI shopping assistant for UK TCG prices",
           "Browser tab title of the Ask Rip page. The site name is added after it."),
     Entry("meta.askrip.description", T, "Ask Rip page description",
-          "Ask Rip answers questions about any sealed trading card game product on RipRaptor from its live UK "
-          "delivered prices: whether it is good value, what is inside and how today's price compares. Free, with no "
-          "account.",
+          "RipRaptor's AI shopping assistant finds sealed TCG products from what you type, say or photograph, "
+          "prices your list with UK delivery and answers questions.",
           "Search engine description of the Ask Rip page, and its line in llms.txt."),
     # Terms page ------------------------------------------------------------
     Entry(
@@ -4224,16 +4258,18 @@ ENTRIES = [
     # Page titles and descriptions ----------------------------------------
     Entry(
         "meta.home.title", T, "Home page title",
-        "{site_name}: compare UK prices for sealed TCG products",
-        "Browser tab and search engine title for the home page.",
+        "{site_name}: compare UK TCG prices with an AI shopping assistant",
+        "Browser tab and search engine title for the home page. Names Rip as the site's AI shopping assistant, so "
+        "search engines and AI tools know the site has one (the owner, 15 Nov 2026).",
         placeholders=("site_name",),
     ),
     Entry(
         "meta.default.description", T, "Default description",
-        "Compare delivered UK prices for sealed Pokemon, Magic, One Piece and Yu-Gi-Oh booster boxes, "
-        "Elite Trainer Boxes, bundles and decks, with stock at each shop.",
-        "Search engine description for the home page and pages without their own. Search engines show "
-        "120 to 160 characters.",
+        "Compare delivered UK prices for sealed Pokemon, Magic, One Piece and Yu-Gi-Oh. Rip, our AI shopping "
+        "assistant, finds products, builds lists and checks prices.",
+        "Search engine description for the home page and pages without their own, the first line of llms.txt and "
+        "the site's description in its structured data. Never shown on a page. Search engines show 120 to 160 "
+        "characters.",
     ),
     Entry(
         "meta.product.title", T, "Product page title",

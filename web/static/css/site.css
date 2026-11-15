@@ -2257,6 +2257,9 @@ a, button, summary, select, input, label { touch-action: manipulation; }
 .filter-bar:has(> .filter-bar__clear) .filter-panel__toggle { max-width: calc(100% - var(--filter-clear-room)); }
 .stock-tabs + .filter-bar { margin-top: 0; }
 .filter-panel__toggle { max-width: 100%; }
+/* The button's own words never wrap (the owner's phone, 15 Nov 2026: "Sort and filter" over two lines); the chosen
+   filters beside them give way and end in an ellipsis. */
+.filter-panel__toggle > span:first-of-type { flex: none; white-space: nowrap; }
 .filter-panel__chosen { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-body); color: var(--color-ink-muted); }
 .filter-panel__chosen::before { content: "·"; margin-right: var(--space-2); color: var(--color-ink-subtle); }
 .stock-tabs + .filter-panel { margin-top: 0; }   /* the tab row keeps its own room below it */

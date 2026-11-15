@@ -228,6 +228,12 @@ class FilterTests(HubLayoutTestCase):
         self.assertIn('name="sort"', panel)
         # Without script the form still works: its button is in the page.
         self.assertIn("Show results", panel)
+        # Its words stay on one line on a phone; the chosen filters beside them shorten instead.
+        from django.contrib.staticfiles import finders
+
+        with open(finders.find("css/site.css"), encoding="utf-8") as handle:
+            css = handle.read()
+        self.assertIn(".filter-panel__toggle > span:first-of-type { flex: none; white-space: nowrap; }", css)
 
     def test_the_list_in_view_decides(self):
         self.fill(3)

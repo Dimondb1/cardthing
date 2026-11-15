@@ -538,8 +538,12 @@ ENTRIES = [
           "The word under Rip's head in a phone's header, where there is room for one. One short word."),
     Entry("askrip.sheet.title", H, "Ask Rip popup: heading", "Ask me anything",
           "Top of the Ask Rip popup the header's Ask button opens, under Rip and his speech bubble."),
-    Entry("askrip.sheet.hello", T, "Ask Rip popup: Rip's speech bubble", "Hi",
-          "In the white speech bubble beside Rip over the popup while he waits. A word or a noise."),
+    Entry("askrip.sheet.hello", T, "Ask Rip popup: Rip's speech bubble", "Chirp",
+          "In the white speech bubble beside Rip over the popup while he waits. A word or a noise: Chirp is his own, as "
+          "in the marketing (the owner, 15 Nov 2026)."),
+    Entry("askrip.chat.chirp", T, "Rip's reply to small talk: his first word", "Chirp.",
+          "Before every reply Rip gives to small talk on the Find page, as he says it in the marketing (the owner, 15 "
+          "Nov 2026: \"can 'chirp' be said as he does this in our marketing\"). Leave empty for none."),
     Entry("askrip.sheet.close", B, "Ask Rip popup: close", "Close",
           "The cross at the top, for screen readers. Tapping Ask again, outside the popup or swiping it down closes it too."),
     Entry("askrip.sheet.label", T, "Ask Rip popup: box name", "What you are after",

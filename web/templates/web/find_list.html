@@ -11,7 +11,7 @@
     <div class="find__bubble">
       {% if chat %}
       {# Rip's reply to small talk (are you having a nice day): his own words, written by AI, in his bubble, then the box to ask him for something. #}
-      <p class="find__question" role="status">{{ chat }}</p>
+      <p class="find__question" role="status">{% copy "askrip.chat.chirp" as chirp %}{% if chirp %}{{ chirp }} {% endif %}{{ chat }}</p>
       {% elif wanted %}
       <h2 class="find__question">{% copy "find.list.made.question" %}</h2>
       <p class="find__sub">{% copy "find.list.made.sub" %}</p>

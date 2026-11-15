@@ -317,8 +317,11 @@ def read_chat(text):
     """Rip's reply to small talk as the page shows it: plain sentences (askrip.tidy_answer), cut at a sentence end
     inside CHAT_MAX, or "" for none or one with a price, a link or an address in it."""
     text = askrip.tidy_answer(str(text or ""))
+    # The page puts his Chirp first (askrip.chat.chirp), so his own is taken off rather than said twice.
+    text = re.sub(r"^(?:chirp\b[\s.,;:]*)+", "", text, flags=re.I).strip()
     if not text or CHAT_REFUSED.search(text):
         return ""
+    text = text[:1].upper() + text[1:]
     if len(text) > CHAT_MAX:
         cut = text[:CHAT_MAX]
         end = max(cut.rfind(". "), cut.rfind("? "), cut.rfind("."), cut.rfind("?"))

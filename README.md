@@ -6696,6 +6696,10 @@ exclamation marks) and drops any with a price, a link or an address.
   reply opens the Find page with it in Rip's bubble, what was said under
   it, and the box to ask him for something (`kept_chat`,
   `find.list.chat.you_said`).
+- It opens with Rip's own "Chirp." (`askrip.chat.chirp`, as he says it in
+  the marketing; the owner, 15 Nov 2026), and his speech bubble over the
+  Ask popup says Chirp too (`askrip.sheet.hello`). A Chirp he writes
+  himself is taken off, so it is said once. Both are edited in Admin.
 - It is one of the visitor's Ask Rip questions, wherever it was asked
   (`count_question` in `hear` and `make`, kept in the cookie by
   `keep_count`). The same words again are answered from the cache, free.

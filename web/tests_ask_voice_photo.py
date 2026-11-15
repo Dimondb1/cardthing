@@ -636,7 +636,8 @@ class SmallTalkTests(ListCase):
         self.assertEqual(urlsplit(location).path, URL)
         page = self.client.get(location, REMOTE_ADDR="203.0.113.7")
         shown = self.REPLY.replace("'", "&#x27;")
-        self.assertContains(page, f'<p class="find__question" role="status">{shown}</p>')
+        # Chirp first, as Rip says it in the marketing (the owner, 15 Nov 2026).
+        self.assertContains(page, f'<p class="find__question" role="status">Chirp. {shown}</p>')
         self.assertContains(page, "You said <q>are you having a nice day rip</q>")
         self.assertNotContains(page, "I couldn&#x27;t see anything to buy in that.")
         self.assertContains(page, "You can ask 4 more questions today.")   # one of their questions
@@ -689,6 +690,9 @@ class SmallTalkTests(ListCase):
         self.assertEqual(rip_list.read_chat("Roaring, thanks! What can I find for you?"),
                          "Roaring, thanks. What can I find for you?")
         self.assertEqual(rip_list.read_chat("Good \u2014 you?"), "Good, you?")
+        # His own Chirp is taken off: the page says it first, once.
+        self.assertEqual(rip_list.read_chat("Chirp chirp. hello there."), "Hello there.")
+        self.assertEqual(rip_list.read_chat("Chirpy today, thanks."), "Chirpy today, thanks.")
         long = rip_list.read_chat("I am well. " * 40)
         self.assertLessEqual(len(long), rip_list.CHAT_MAX)
         self.assertTrue(long.endswith("."))
@@ -810,7 +814,7 @@ class AskSheetTests(ListCase):
                 # The bubble's tail is drawn inside it, so one shadow follows the whole shape.
                 self.assertIn('<span class="ask-sheet__bubble" aria-hidden="true"><svg class="ask-sheet__bubble-tail" '
                               'viewBox="0 0 14 12" focusable="false">', sheet)
-                self.assertIn("</svg>Hi</span>", sheet)
+                self.assertIn("</svg>Chirp</span>", sheet)   # his own word, as in the marketing (15 Nov 2026)
                 # Five examples take turns in the empty box.
                 self.assertIn('data-try="Try: {example}"', sheet)
                 self.assertIn('<ul hidden data-ask-examples><li>cheap Delta Reign packs</li><li>ETBs under £50</li>'

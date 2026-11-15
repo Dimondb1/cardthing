@@ -92,6 +92,10 @@ class FilterForm(forms.Form):
     # The products you open, the cheapest a card first, each with its Price check (the owner, 9 Nov 2026: "a search
     # filter 'best for ripping' cheapest per card ... colour code based on price rating ... a slider in that row").
     rip = forms.BooleanField(label="Best for ripping", required=False)
+    # Only the products the Price check calls Good price or Lowest yet, the green chips on the cards, from each one's own
+    # price history (the owner, 15 Nov 2026: "Can we have a great value slider ... along with the other two").
+    # Named great: the form's own value() reads its fields.
+    great = forms.BooleanField(label="Great value", required=False)
     compared = forms.BooleanField(label="2+ shops", required=False)
     price = forms.ChoiceField(label="Price", choices=PRICE_BANDS, required=False)
     lang = forms.ChoiceField(label="Language", choices=[("", "Language")] + LANGUAGES, required=False)
@@ -304,6 +308,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     rip = bool(form.value("rip"))
     if rip:
         products = products.filter(CARDS_KNOWN)
+    if form.value("great"):
+        products = products.filter(price_band__gte=fair_price.GOOD_PRICE)
     languages = [form.value("lang")] if form.value("lang") else []
     # A type's list on the new home page (web/feed.py) offers the languages it holds as chips, ready to tap: from the
     # list before the language choice, so a chip never leads to an empty list. One query, only there.
@@ -381,6 +387,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
             chosen.append(dict(form.fields[name].choices).get(value))
     if form.value("compared"):
         chosen.append(form.fields["compared"].label)
+    if form.value("great"):
+        chosen.append(form.fields["great"].label)
     # A set link on a game page keeps the language, type and sort: what the visitor was looking for. Not
     # the price or 2+ shops, which could leave the set's page empty (the sets shown follow language and type).
     kept = {"lang": form.value("lang"), "type": product_type,
@@ -438,7 +446,8 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "lang_chips": lang_chips,
         # Named on the Filters pill of a type's list: the price band and 2+ shops, the choices its panel holds.
         "feed_chosen": [label for label in (dict(form.fields["price"].choices).get(band) if band else "",
-                                            form.fields["compared"].label if form.value("compared") else "") if label],
+                                            form.fields["compared"].label if form.value("compared") else "",
+                                            form.fields["great"].label if form.value("great") else "") if label],
     }
     if context["no_matches"]:
         # A search that found nothing still leads somewhere: the products people are opening this week, with their
@@ -455,6 +464,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         context["compact_switch"] = True
         context["stock_switch"] = not tabs
         context["in_stock_on"] = bool(form.value("in_stock")) and not tabs
+        context["value_on"] = bool(form.value("great"))
         # What the switches' form carries on: every other choice in force.
         context["compact_keep"] = [
             ("q", query), ("game", game.slug if game is not None and fixed_game is None else ""),
@@ -1336,7 +1346,7 @@ def moved(request, target):
 
 # The choices that make a game's page a filtered list: with any of them, the compact layout draws the usual list as rows
 # rather than the game's sets.
-COMPACT_LIST_PARAMS = ("type", "set", "lang", "sort", "page", "price", "compared", "tab", "in_stock", "rip")
+COMPACT_LIST_PARAMS = ("type", "set", "lang", "sort", "page", "price", "compared", "tab", "in_stock", "rip", "great")
 
 
 def shared_for_game(name, build):
@@ -1554,7 +1564,8 @@ def set_detail(request, game_slug, set_slug):
     # The compact layout (web/compact.py): the set's products as rows under its types. Another choice (a sort, a
     # language) is the usual list, drawn as compact rows.
     if (look.compact_for_request(request) and not request.GET.get("pane")
-            and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS if name not in ("type", "in_stock", "rip"))):
+            and not any(request.GET.get(name) for name in COMPACT_LIST_PARAMS
+                        if name not in ("type", "in_stock", "rip", "great"))):
         # The whole set says what it holds in a sentence or two, from the same numbers as its description
         # (hubs.intro), and names its products for search engines (an ItemList).
         return compact.set_page(request, product_set, {

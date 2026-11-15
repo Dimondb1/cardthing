@@ -23,7 +23,7 @@ from django.db.models import Count, Max
 from django.shortcuts import render
 from django.urls import reverse
 
-from catalogue import offers, pricing, popularity
+from catalogue import fair_price, offers, pricing, popularity
 from catalogue.contents import cards_total, price_a_card, price_a_pack
 from catalogue.models import Listing, Product, ProductSet
 from catalogue.types import type_choices
@@ -274,6 +274,12 @@ def rip_asked(request):
     return bool(request.GET.get("rip"))
 
 
+def value_asked(request):
+    """Whether the Great value switch is on in the address (``?great=on``): only the products the Price check calls
+    Good price or Lowest yet."""
+    return bool(request.GET.get("great"))
+
+
 def for_ripping(rows):
     """``rows`` with only the products you open (their cards can be counted, catalogue/contents.py), the ones a shop
     has first and among them the cheapest a card first: the Best for ripping switch."""
@@ -402,9 +408,13 @@ def set_page(request, product_set, extra, answer):
     rip = rip_asked(request)
     if rip:
         rows = for_ripping(rows)
+    value = value_asked(request)
+    if value:
+        rows = [(product, summary) for product, summary in rows
+                if product.price_band and product.price_band >= fair_price.GOOD_PRICE]
     cover = next((product for product, _ in rows if product.image_src), None)
     store = copy.for_request(request)
-    whole = not (chosen or only_in_stock or rip)
+    whole = not (chosen or only_in_stock or rip or value)
     structured = [answer["crumbs"]]
     if whole and rows:
         structured.append(hubs.item_list_json(request, answer["page_url"], extra["meta_title"],
@@ -427,6 +437,7 @@ def set_page(request, product_set, extra, answer):
         "in_stock_on": only_in_stock,
         "stock_switch": True,
         "rip_on": rip,
+        "value_on": value,
         "dock": dock(request, product_set.game),
     })
 

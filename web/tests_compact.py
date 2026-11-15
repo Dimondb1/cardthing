@@ -344,7 +344,7 @@ class SetPageTests(CompactCase):
         # The owner, 9 Nov 2026: "I also want a in stock slider".
         html = self.page(self.reign.get_absolute_url())
         tools = html[html.index('<div class="cx-tools">'):html.index("</div>", html.index('<div class="cx-tools">'))]
-        self.assertEqual(tools.count('<form method="get" action="" data-autosubmit>'), 2)   # a form for each switch
+        self.assertEqual(tools.count('<form method="get" action="" data-autosubmit>'), 3)   # a form for each switch
         self.assertIn('<label class="toggle"><input type="checkbox" name="in_stock" value="on"><span class="toggle__track" '
                       'aria-hidden="true"></span><span>In stock</span></label>', html)
         html = self.page(self.reign.get_absolute_url(), in_stock="on")
@@ -386,10 +386,48 @@ class SearchTests(CompactCase):
         self.assertEqual(html.count('name="in_stock"'), 1)
         html = self.page(reverse("web:search"), game="pokemon", in_stock="on")
         self.assertIn('<input type="checkbox" name="in_stock" value="on" checked>', html)
-        # The switch, and the choice carried by Best for ripping's form and by the folded filters.
-        self.assertEqual(html.count('name="in_stock"'), 3)
+        # The switch, and the choice carried by Best for ripping's and Great value's forms and by the folded filters.
+        self.assertEqual(html.count('name="in_stock"'), 4)
         self.assertNotIn(self.tin.get_absolute_url(), html)   # a pre-order
         self.assertIn(self.box.get_absolute_url(), html)
+
+
+class GreatValueTests(CompactCase):
+    """The owner, 15 Nov 2026: "Can we have a great value slider on product listings along with the other two
+    sliders": on, a list keeps only the products the Price check calls Good price or Lowest yet, the green chips on the
+    cards."""
+
+    def setUp(self):
+        super().setUp()
+        from catalogue import fair_price
+
+        Product.objects.filter(pk=self.box.pk).update(price_band=fair_price.LOWEST)
+        Product.objects.filter(pk=self.etb.pk).update(price_band=fair_price.GOOD_PRICE)
+        Product.objects.exclude(pk__in=[self.box.pk, self.etb.pk]).update(price_band=fair_price.FAIR)
+
+    def rows(self, html):
+        return re.findall(r'<span class="crow__name">([^<]+)</span>', html)
+
+    def test_a_set_page_keeps_only_good_prices_and_the_lowest_yet(self):
+        html = self.page(self.reign.get_absolute_url())
+        tools = html[html.index('<div class="cx-tools">'):html.index("</div>", html.index('<div class="cx-tools">'))]
+        self.assertIn('<label class="toggle"><input type="checkbox" name="great" value="on"><span class="toggle__track" '
+                      'aria-hidden="true"></span><span>Great value</span></label>', tools)
+        html = self.page(self.reign.get_absolute_url(), great="on")
+        self.assertEqual(sorted(self.rows(html)), ["Booster Box", "Elite Trainer Box"])
+        self.assertIn('<input type="checkbox" name="great" value="on" checked>', html)
+        # The other switches carry it, and it carries them.
+        self.assertEqual(html.count('<input type="hidden" name="great" value="on">'), 2)
+        html = self.page(self.reign.get_absolute_url(), great="on", in_stock="on")
+        tools = html[html.index('<div class="cx-tools">'):html.index("</div>", html.index('<div class="cx-tools">'))]
+        great = tools[tools.index('name="great" value="on" checked') - 600:tools.index('name="great" value="on" checked')]
+        self.assertIn('<input type="hidden" name="in_stock" value="on">', great)
+
+    def test_a_search_list_filters_in_the_query(self):
+        html = self.page(reverse("web:search"), game="pokemon", great="on")
+        self.assertIn('<input type="checkbox" name="great" value="on" checked>', html)
+        self.assertIn(self.box.get_absolute_url(), html)
+        self.assertNotIn(self.tin.get_absolute_url(), html)
 
 
 class NamesTests(CompactCase):

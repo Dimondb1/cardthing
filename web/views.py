@@ -2106,6 +2106,7 @@ def save_click(request, reason, product, retailer, listing=None):
             listing=listing, product=product, retailer=retailer, suspect=bool(reason), suspect_why=reason[:8],
             ran_page=True if not reason else None, source=clicks.page_of(request), button=clicks.button_of(request),
             visitor=insights.visitor_token(request, timezone.localdate()),
+            via_rip=askrip.was_helped(request),
         ))
     return saved
 
@@ -3112,11 +3113,18 @@ def voice_search(request):
     else:
         made = rip_list.hear(request, said, row_key="search" if via == "box" else "voice")
         target = rip_list.found_target(made, plain_url, **({"asked": said} if typed else {"said": said}))
+        if made.state in RIP_HELPED:
+            askrip.mark_helped(request)
     response = HttpResponseRedirect(target)
     askrip.keep_count(request, response)   # a reply to small talk is one of their questions (rip_list.hear)
     response["Cache-Control"] = "no-store"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
+
+
+# What Rip did for a visitor that counts as helping them, for the clicks after it (askrip.mark_helped): products or a
+# list found, or a reply to small talk.
+RIP_HELPED = ("made", "chat")
 
 
 def plain_finds(words, game=""):
@@ -3152,6 +3160,8 @@ def search_photo(request):
         if request.POST.get("website"):
             return HttpResponseRedirect(reverse("web:search_photo"))   # the hidden field is only ever filled by robots
         made = rip_list.make(request, "", photo=request.FILES.get("photo"))
+        if made.state in RIP_HELPED:
+            askrip.mark_helped(request)
         response = HttpResponseRedirect(rip_list.photo_search_target(made))
         response.status_code = 303
         askrip.keep_count(request, response)
@@ -3180,6 +3190,8 @@ def find_list(request):
         if request.POST.get("website"):
             return HttpResponseRedirect(reverse("web:find_list"))   # the hidden field is only ever filled by robots
         made = rip_list.make(request, request.POST.get("wants", ""), photo=request.FILES.get("photo"))
+        if made.state in RIP_HELPED:
+            askrip.mark_helped(request)
         response = HttpResponseRedirect(rip_list.list_target(made))
         response.status_code = 303
         askrip.keep_count(request, response)
@@ -3395,6 +3407,8 @@ def ask_rip(request, slug):
         return HttpResponseRedirect(back)   # the hidden field is only ever filled by robots
     # A suggested question (the buttons under the box) is sent instead of whatever was typed.
     asked = askrip.ask(request, product, request.POST.get("suggested") or request.POST.get("question", ""))
+    if asked.state == "answered":
+        askrip.mark_helped(request)
     if request.headers.get("X-Ask-Rip") == "1":
         box = askrip.box(request, product, asked.state, asked.token)
         html = render_to_string("web/includes/ask_rip.html", {"ask": box, "product": product, "track_on": True},
@@ -4413,8 +4427,18 @@ def claude_page(request):
         })
     read = sum(row[2] for row in month.values())
     all_input = sum(row[3] for row in month.values())
+    # Does Rip earn his keep (the owner, 15 Nov 2026): people's shop clicks after he helped them that day
+    # (OutboundClick.via_rip), beside what Ask Rip cost this month. Two counts.
+    from catalogue.models import OutboundClick
+
+    after_rip = OutboundClick.objects.people().filter(via_rip=True)
+    rip_clicks = after_rip.filter(created_at__gte=judge.month_start(now)).count()
+    rip_spent = sum(month.get(kind, none)[1] for kind in judge.JOBS["ask"][1])
     context = {
         **admin.site.each_context(request), "title": "Claude", "claude": claude, "jobs": jobs,
+        "rip_keep": {"month": rip_clicks, "today": after_rip.filter(created_at__gte=start_of_today).count(),
+                     "spent": judge.dollars(rip_spent),
+                     "per_click": judge.dollars(rip_spent // rip_clicks) if rip_clicks else ""},
         "askrip": askrip_choices(owner, settings_["ask"].monthly_budget_usd),
         "asked_month": sum(job["asked_month"] for job in jobs), "asked_today": sum(job["asked_today"] for job in jobs),
         "spent_today": judge.dollars(sum(row[1] for row in today.values())),

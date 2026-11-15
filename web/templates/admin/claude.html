@@ -55,6 +55,7 @@
 
   <section id="askrip">
     <h2>Ask Rip</h2>
+    <p><b>Shop clicks after Rip helped:</b> {{ rip_keep.month|number }} this month and {{ rip_keep.today|number }} today, by people Rip answered, found products or a list for, or replied to earlier the same day. Ask Rip cost {{ rip_keep.spent }} this month{% if rip_keep.per_click %}, about {{ rip_keep.per_click }} a click{% endif %}. <a href="{% url 'admin:catalogue_outboundclick_changelist' %}?via_rip__exact=1">See the clicks</a>.</p>
     <p class="note">How many questions shoppers may ask, and which model answers. Its on switch and its monthly limit{% if askrip.limit is not None %} (now ${{ askrip.limit }}){% endif %} are on its row in Jobs below. Changes show on the site at once.</p>
     <form method="post" class="askrip">{% csrf_token %}<input type="hidden" name="action" value="askrip_settings">
       <p class="field"><label for="askrip_per_person"><b>Questions per person a day</b></label>

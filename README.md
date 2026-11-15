@@ -6721,6 +6721,16 @@ the Ask popup and the search bars); nothing new is kept:
 At most `CHECKED` products and requests are checked against the catalogue
 each time, so the page stays quick.
 
+**Does Rip earn his keep** (the owner picked it on 15 Nov 2026). When Rip
+helps someone (answers a product question, finds products or a list, or
+replies to small talk), `askrip.mark_helped` notes it in the cache under the
+day's one-way visitor token that a shop click carries already. A shop click
+from them later that day is saved with `OutboundClick.via_rip`, and the mark
+goes with the cache: nothing else is kept. The Claude page's Ask Rip part
+says how many people's clicks came after Rip helped this month and today,
+beside what Ask Rip cost and so about what each click cost, linked to the
+clicks (Clicks to retailers, filtered by After Rip helped).
+
 **Rip in the search bar** (the owner, 15 Nov 2026: "build the same ask rip
 technology in to the search bar"). Every search bar (the header's, the home
 page's, the phone's bar at the foot) sends its words to `/search/voice/`

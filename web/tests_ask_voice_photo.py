@@ -698,6 +698,64 @@ class SmallTalkTests(ListCase):
         self.assertTrue(long.endswith("."))
 
 
+class EarnsHisKeepTests(ListCase):
+    """The owner, 15 Nov 2026, picking it from the suggestions: "Does Rip earn his keep?". A shop click after Rip
+    helped the same visitor that day is marked, and the Claude page counts them beside what he cost."""
+
+    def setUp(self):
+        from django.test import Client
+
+        super().setUp()
+        # A browser that says what it is: a click from none is a robot's and not kept, and the day's visitor token,
+        # which carries the mark, is made from it.
+        self.client = Client(HTTP_USER_AGENT="Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131 Mobile")
+
+    def click(self, ip="203.0.113.7"):
+        from catalogue.models import Listing, OutboundClick
+
+        listing = Listing.objects.filter(product=self.box).first()
+        self.client.get(reverse("web:go", args=[listing.pk]), REMOTE_ADDR=ip)
+        return OutboundClick.objects.latest("pk")
+
+    def test_a_click_after_rip_found_products_or_a_list_is_marked(self):
+        self.assertFalse(self.click().via_rip)   # before Rip helped
+        self.build()   # the list builder found the box
+        self.assertTrue(self.click().via_rip)
+        self.assertFalse(self.click(ip="198.51.100.9").via_rip)   # someone else
+
+    def test_spoken_searches_small_talk_and_product_answers_count_too(self):
+        self.fake.answer = general(type="booster_box")
+        self.client.get(reverse("web:voice_search"), {"q": "booster boxes"}, REMOTE_ADDR="203.0.113.21")
+        self.assertTrue(self.click(ip="203.0.113.21").via_rip)
+        self.fake.answer = chat("Chirp. Hello to you too.")
+        self.client.get(reverse("web:voice_search"), {"q": "hello rip", "via": "typed"}, REMOTE_ADDR="203.0.113.22")
+        self.assertTrue(self.click(ip="203.0.113.22").via_rip)
+        # Nothing found is no help.
+        self.fake.answer = chat("")
+        self.client.get(reverse("web:voice_search"), {"q": "zzzz qqqq"}, REMOTE_ADDR="203.0.113.23")
+        self.assertFalse(self.click(ip="203.0.113.23").via_rip)
+        # A product page's answer.
+        self.fake.answer = "Verdict: Good value\nIt is a fair price."
+        self.client.post(reverse("web:ask_rip", args=[self.box.slug]), {"question": "is it good value"},
+                         REMOTE_ADDR="203.0.113.24")
+        self.assertTrue(self.click(ip="203.0.113.24").via_rip)
+
+    def test_the_claude_page_counts_them_beside_what_he_cost(self):
+        from django.contrib.auth import get_user_model
+
+        from catalogue.models import OutboundClick
+
+        listing = self.box.listings.first()
+        made = {"product": self.box, "retailer": listing.retailer, "listing": listing}
+        OutboundClick.objects.create(**made, via_rip=True)
+        OutboundClick.objects.create(**made, via_rip=True, suspect=True)   # a direct hit is not counted
+        OutboundClick.objects.create(**made)   # nobody Rip helped
+        self.client.force_login(get_user_model().objects.create_superuser("owner", "o@example.com", "pw"))
+        page = self.client.get(reverse("claude")).content.decode()
+        self.assertIn("<b>Shop clicks after Rip helped:</b> 1 this month and 1 today", page)
+        self.assertIn("a click. <a href=\"/admin/catalogue/outboundclick/?via_rip__exact=1\">See the clicks</a>", page)
+
+
 class OwnerTests(ListCase):
     """The owner, testing, used all ten of the day's questions: "No limit when I'm logged in"."""
 

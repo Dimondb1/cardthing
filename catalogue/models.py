@@ -1291,6 +1291,11 @@ class OutboundClick(models.Model):
     source = models.CharField("page", max_length=12, blank=True)
     button = models.CharField(max_length=12, blank=True, choices=Button.choices)
     visitor = models.CharField(max_length=32, blank=True, help_text="The day's one-way visitor token.")
+    via_rip = models.BooleanField(
+        "after Rip helped", default=False,
+        help_text="Rip answered a question, found products or a list, or replied to this visitor earlier the same day "
+                  "(web.askrip.mark_helped). The owner, 15 Nov 2026: does Rip earn his keep.",
+    )
     suspect = models.BooleanField(
         default=False,
         help_text="A direct hit (no link from our pages, a browser that never ran one of our pages, a prefetch or too "

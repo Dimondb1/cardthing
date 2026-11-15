@@ -308,6 +308,28 @@ def hours_left(request):
     return max(1, math.ceil(((until or 0) - now_ts) / 3600))
 
 
+# Does Rip earn his keep (the owner, 15 Nov 2026): a mark in the cache, under the day's one-way visitor token that a
+# shop click carries already (catalogue.insights.visitor_token), that Rip helped this visitor today. A click after it
+# is saved with via_rip; nothing else is kept, and the mark goes with the cache.
+HELPED_SECONDS = 2 * 86400
+
+
+def helped_key(request):
+    from catalogue import insights
+
+    return f"askrip:helped:{insights.visitor_token(request, timezone.localdate())}"
+
+
+def mark_helped(request):
+    """Note that Rip helped this visitor today: answered a question, opened a list or replied to small talk."""
+    cache.set(helped_key(request), 1, HELPED_SECONDS)
+
+
+def was_helped(request):
+    """Whether Rip helped this visitor earlier today (mark_helped)."""
+    return cache.get(helped_key(request)) is not None
+
+
 def count_question(request, now, give_back=False):
     """Add one to the visitor's questions and their address's (or take one off, for a question that failed on our
     side), and to the day's. Each window is a day from its first question, kept to its end however often it is

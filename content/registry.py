@@ -980,6 +980,10 @@ ENTRIES = [
     Entry("browse.understood.over", T, "Search: nothing within the limit said", "Nothing under {price} right now, so "
           "these are the cheapest.", "Under the results heading when no product is within the price said, so the "
           "cheapest are shown instead of no results.", placeholders=("price",)),
+    Entry("browse.understood.lang", T, "Search: a language was asked of Rip", "{language} only.",
+          "Under the results heading when Rip read a language from what was said or typed (cheap Korean booster "
+          "boxes), so the shopper sees it understood. {language} is the filter's own name: Korean, Japanese, Chinese, "
+          "English or Other languages.", placeholders=("language",)),
     Entry("browse.understood.in_stock", T, "Search: in stock was said", "In stock only.",
           "Under the results heading when the search said in stock."),
     Entry("browse.rip.asked", T, "Search: what was asked of Rip", "Rip found these for ‘{asked}’.",

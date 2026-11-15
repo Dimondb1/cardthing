@@ -96,8 +96,10 @@ NOT_SEALED = re.compile(
     # A plush packed in a tin with booster packs is the tin ("Electric Plush Blind Box Tin", Solent Cards), also
     # in an address that glues the tin to the next word ("...-blind-box-tinsimplified-chinese"). Not "tiny".
     r"\bdamaged\b|\bopened\b|\bripped seals?\b|\bcut seals?\b|\bbroken seals?\b|\bseals? (?:ripped|cut|broken)\b|\bempty\b|\bdice\b|\b(?:life|damage|spin ?down|loyalty|token)[ -]?counters?\b|\bstorage\b|\bfigure\b(?! box)|\bplush\b(?!.*\btins?(?![a-rt-z]))|\bkeyring\b|\bposter\b(?! box)|"
-    # Toys and building sets that carry a card game's name, not cards.
-    r"\bnanoblock\b|\bmega construx\b|\bmega bloks\b|\blego\b|\bfunko\b|\bbuilding (?:block|set)s?\b|"
+    # Toys and building sets that carry a card game's name, not cards. FANDROP is Moose Toys' blind box figures: a
+    # shop's "FANDROP Star Wars ... Display" read as a Star Wars Unlimited booster box and led Booster boxes at £13.98
+    # when the owner asked Rip for cheap Korean booster boxes on 15 Nov 2026 ("Not good result").
+    r"\bnanoblock\b|\bmega construx\b|\bmega bloks\b|\blego\b|\bfunko\b|\bfandrop\b|\bbuilding (?:block|set)s?\b|"
     # Star Wars miniatures and board games, which wargaming shops sell by the hundred: "Star Wars" alone would
     # make each a Star Wars Unlimited booster pack ("Star Wars: Shatterpoint ... Mission Pack", 365 Games).
     r"\bshatterpoint\b|\bstar wars\W+(?:x-?\s?wing|armada|legion|imperial assault|destiny|outer rim|villainous|"

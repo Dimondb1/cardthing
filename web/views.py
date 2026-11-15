@@ -400,6 +400,7 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
     quick = quick_filters(request, pool, form, game) if query and not tabs else []
     # Only the tabs with something in them, and the one in view; one list left needs no tab row.
     shown_tabs = [item for item in stock_tabs if item["count"] or item["key"] == tab]
+    from_rip = bool(template_context.get("said") or template_context.get("asked"))   # a list Rip opened
     context = {
         "alert_url": alert_url,
         "form": form,
@@ -418,8 +419,12 @@ def _browse(request, template_context, *, base_queryset, fixed_game=None, defaul
         "fold_filters": tabs,
         "no_matches": bool(query) and not filters_active and paginator.count == 0,
         "searched_for": searched_for,
-        # What the search understood besides its words: the order and limit said ("Cheapest first. Under £5.").
+        # What the search understood besides its words: the order and limit said ("Cheapest first. Under £5."), and
+        # on a list Rip opened (said= or asked=) the language he read from the request, so "cheap Korean booster
+        # boxes" says "Korean only." (the owner, 15 Nov 2026: Korean was dropped and every booster box shown).
         "understood": [line for line in (
+            text(request, "browse.understood.lang", language=dict(form.fields["lang"].choices)[form.value("lang")])
+            if from_rip and form.value("lang") else "",
             text(request, f"browse.understood.{spoken.sort}") if spoken is not None and spoken.sort
             and form.value("sort") == spoken.sort and not request.GET.get("sort") else "",
             text(request, "browse.understood.over", price=gbp_text(max_price)) if over_limit else

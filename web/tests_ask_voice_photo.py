@@ -375,7 +375,8 @@ class VoiceSearchTests(ListCase):
 
 def general(items=(), **browse):
     """Rip's reply with a general request in it, as the schema has it."""
-    found = {"wanted": True, "type": "", "game": "", "set": "", "sort": "", "price": "", "in_stock": True, **browse}
+    found = {"wanted": True, "type": "", "game": "", "set": "", "language": "", "sort": "", "price": "", "in_stock": True,
+             **browse}
     return json.dumps({"items": [{"search": search, "game": game, "quantity": quantity} for search, game, quantity in items],
                        "browse": found})
 
@@ -415,6 +416,51 @@ class GeneralRequestTests(ListCase):
         page = self.client.get(location)
         self.assertContains(page, "Surging Sparks Booster Box")
         self.assertContains(page, "Under £150.")
+
+    def test_a_language_asked_for_is_kept_and_the_list_says_so(self):
+        """The owner, 15 Nov 2026, said "find me cheap Korean Booster boxes" and got every booster box: "Not good
+        result". Rip had nowhere to put the language."""
+        from catalogue.testing import make_listing, make_product, make_retailer
+
+        korean = make_product(self.box.product_set, name="Surging Sparks Korean Booster Box",
+                              slug="surging-sparks-korean-booster-box", product_type="booster_box", language="ko")
+        make_listing(korean, make_retailer("Korea Cards"), price="39.99")
+        self.fake.answer = general(type="booster_box", sort="price", language="ko")
+        location = self.build("find me cheap Korean Booster boxes")["Location"]
+        self.assertEqual(parse_qs(urlsplit(location).query), {
+            "type": ["booster_box"], "lang": ["ko"], "sort": ["price"], "in_stock": ["1"],
+            "asked": ["find me cheap Korean Booster boxes"]})
+        page = self.client.get(location)
+        self.assertContains(page, "Surging Sparks Korean Booster Box")
+        self.assertNotContains(page, self.box.name)   # the English box is not in a Korean list
+        self.assertContains(page, "Korean only.")
+        # Rip was told how, with the list filter's own languages.
+        sent = self.fake.sent[-1]
+        self.assertIn('"language" "ko": never leave a language out', sent["system"][0]["text"])
+        browse = sent["output_config"]["format"]["schema"]["properties"]["browse"]
+        self.assertEqual(browse["properties"]["language"], {"type": "string", "enum": ["", "en", "ja", "zh", "ko", "other"]})
+        self.assertIn("language", browse["required"])
+        # Spoken, the same.
+        self.fake.answer = general(type="booster_box", sort="price", language="ko")
+        said = self.client.get(reverse("web:voice_search"), {"q": "cheap korean booster boxes"},
+                               REMOTE_ADDR="203.0.113.7")["Location"]
+        self.assertEqual(parse_qs(urlsplit(said).query)["lang"], ["ko"])
+
+    def test_a_language_with_nothing_in_it_says_so_and_never_shows_everything(self):
+        self.fake.answer = general(type="booster_box", language="ja")
+        page = self.client.get(self.build("japanese booster boxes")["Location"])
+        self.assertNotContains(page, self.box.name)
+        self.assertContains(page, "Japanese only.")
+        self.assertContains(page, "Nothing matches these filters.")
+
+    def test_a_language_alone_is_a_request_and_one_rip_made_up_is_dropped(self):
+        self.fake.answer = general(language="ko")
+        self.assertEqual(parse_qs(urlsplit(self.build("anything korean")["Location"]).query)["lang"], ["ko"])
+        self.fake.answer = general(type="booster_box", language="klingon")
+        self.assertNotIn("lang", parse_qs(urlsplit(self.build("klingon booster boxes")["Location"]).query))
+        # A list opened without Rip says nothing extra about its language: the filter shows it.
+        page = self.client.get(reverse("web:search"), {"type": "booster_box", "lang": "ko"})
+        self.assertNotContains(page, "Korean only.")
 
     def test_what_rip_cannot_match_to_the_sites_filters_is_dropped(self):
         self.fake.answer = general(game="not-a-game", set="Not A Set")

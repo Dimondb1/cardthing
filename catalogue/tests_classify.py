@@ -663,6 +663,41 @@ class ToyTests(TestCase):
             with self.subTest(title=title):
                 self.assertIsNone(classify(title, "", "", (), 10), title)
 
+    def test_fandrop_figure_boxes_are_not_booster_boxes(self):
+        """FANDROP is Moose Toys' blind box figures. A shop's "FANDROP Star Wars ... Display" came in as a Star Wars
+        Unlimited booster box and led Booster boxes at £13.98 (the owner, 15 Nov 2026: "Not good result")."""
+        from .classify import NOT_SEALED
+
+        for title in ("FANDROP Star Wars W1 Figure Display", "Fandrop Star Wars W2 Figure 2 Pack Display",
+                      "FANDROP Star Wars Display"):
+            with self.subTest(title=title):
+                self.assertTrue(NOT_SEALED.search(title))
+                self.assertIsNone(classify(title, price=Decimal("13.98")))
+        for title in ("Star Wars Unlimited Spark of Rebellion Booster Display", "Star Wars Unlimited Booster Box"):
+            with self.subTest(title=title):
+                self.assertFalse(NOT_SEALED.search(title))
+
+    def test_the_hourly_tidy_up_takes_fandrop_off(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from .models import Product, RemovedProduct
+        from .testing import make_game, make_listing, make_product, make_retailer, make_set
+
+        product_set = make_set(make_game())
+        toy = make_product(product_set, name="FANDROP Star Wars W1 Figure Display", slug="fandrop-star-wars-w1-figure-display",
+                           product_type="booster_box")
+        box = make_product(product_set, name="Spark of Rebellion Booster Display", slug="spark-of-rebellion-booster-display",
+                           product_type="booster_box")
+        shop = make_retailer("Toy Shop")
+        for product in (toy, box):
+            make_listing(product, shop, price="13.98")
+        call_command("tidy_catalogue", stdout=StringIO())
+        self.assertFalse(Product.objects.filter(pk=toy.pk).exists())
+        self.assertTrue(RemovedProduct.objects.filter(slug="fandrop-star-wars-w1-figure-display").exists())
+        self.assertTrue(Product.objects.filter(pk=box.pk).exists())
+
 
 class PackNotesTests(TestCase):
     """A shop's note of what a pack or box holds is not part of the name: with it the shop's pack became a

@@ -177,6 +177,11 @@ Displays"), not inside a longer one. Checked against the live sitemap
 before it went in: 37 pages go, all model kits, notebooks, the plate
 collection and the file.
 
+FANDROP, Moose Toys' blind box figures, is not cards either: a shop's
+"FANDROP Star Wars ... Display" read as a Star Wars Unlimited booster box
+and led Booster boxes at £13.98 on 15 Nov 2026. Any name with "fandrop" in
+it is refused, and the hourly tidy-up takes off the pages already made.
+
 Football boots and trainers are left out the same way: a sports shop that
 sells cards too names them "adidas F50 ... World Cup Pack UK 10", and on 9
 Nov 2026 they were 332 pages, one for each shoe size, read as booster
@@ -6458,9 +6463,17 @@ works without script; the page is private and noindex. The wording is
 price" came back with nothing; "It can't handle much can it?"). Rip's reply
 has a `browse` part as well as the named products (`rip_list.BROWSE`):
 
-- What it holds: the kind of product, the game, a set by its listed name, a
-  sort (cheapest, cheapest per card, best value, biggest saving, lowest in
-  90 days, newest), a price band and in stock.
+- What it holds: the kind of product, the game, a set by its listed name,
+  the language of the cards, a sort (cheapest, cheapest per card, best
+  value, biggest saving, lowest in 90 days, newest), a price band and in
+  stock.
+- The language (the owner, 15 Nov 2026, said "find me cheap Korean Booster
+  boxes" and got every booster box: "Not good result") is one of the list
+  filter's own (`catalogue.languages.FILTER`: English, Japanese, Chinese,
+  Korean, Other languages) and opens the list with `lang=` set. The page
+  says "Korean only." under the heading (`browse.understood.lang`) when Rip
+  opened it. A language with nothing in it says "Nothing matches these
+  filters", never the whole list.
 - `read_browse` keeps only what matches the site's own filters, and
   `browse_url` turns it into the site's own list: a set's page when one was
   named, else the search page, with "Rip found these for ‘…’" under the

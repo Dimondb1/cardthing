@@ -216,6 +216,36 @@
     var sheetForm = sheet.querySelector("[data-ask-sheet-form]");
     var box = sheetForm.querySelector("textarea");
     var firstTitle = title.textContent;
+    // Rip over the popup (rip_bot.html) moves as he does in the Ask Rip box: idle while he waits, leaning in while
+    // something is typed or said, thinking while it is looked for (site.css, data-mood).
+    var mood = function (name) { panel.setAttribute("data-mood", name); };
+    // Examples take turns in the empty box (the owner, 15 Nov 2026: "an example query in the search box maybe
+    // circulate 5 different ones"), a few seconds each, never over the microphone's own words or what is typed.
+    var EXAMPLE_MS = 3500;
+    var examples = Array.prototype.map.call(sheet.querySelectorAll("[data-ask-examples] li"), function (item) {
+      return item.textContent;
+    });
+    var tryLine = box.getAttribute("data-try") || "{example}";
+    var restingHint = box.getAttribute("placeholder");
+    var turn = 0;
+    var turning = null;
+    var nextExample = function () {
+      if (!examples.length || box.value || sheetForm.classList.contains("is-listening")
+          || sheetForm.classList.contains("is-searching")) return;
+      box.setAttribute("placeholder", tryLine.replace("{example}", examples[turn % examples.length]));
+      turn += 1;
+    };
+    var startExamples = function () {
+      clearInterval(turning);
+      if (examples.length) turning = setInterval(nextExample, EXAMPLE_MS);
+    };
+    var stopExamples = function () {
+      clearInterval(turning);
+      turning = null;
+      if (!sheetForm.classList.contains("is-listening") && !sheetForm.classList.contains("is-searching")) {
+        box.setAttribute("placeholder", restingHint);
+      }
+    };
     var show = function (view) {
       Array.prototype.forEach.call(views, function (each) { each.hidden = each !== view; });
       title.textContent = view === allView ? title.getAttribute("data-title-all") : firstTitle;
@@ -253,6 +283,8 @@
       var top = head ? Math.max(0, Math.round(head.getBoundingClientRect().bottom)) : 0;
       sheet.style.setProperty("--ask-sheet-top", top + "px");
       show(productView || allView);
+      mood("idle");
+      startExamples();
       sheet.hidden = false;
       grow(box);
       document.documentElement.classList.add("has-ask-sheet");
@@ -261,6 +293,7 @@
     };
     var close = function () {
       if (sheet.hidden) return;
+      stopExamples();
       sheet.hidden = true;
       panel.style.transform = "";
       document.documentElement.classList.remove("has-ask-sheet");
@@ -291,6 +324,7 @@
         ? title.getAttribute("data-title-search").replace("{words}", what)
         : title.getAttribute("data-title-opening").replace("{what}", what);
       panel.classList.add("is-going");
+      mood("thinking");
       link.classList.add("is-opening");
       link.setAttribute("aria-busy", "true");
       if (link.hasAttribute("data-ask-search")) sheetForm.classList.add("is-searching");
@@ -318,6 +352,9 @@
       field.addEventListener("input", mark);
       window.addEventListener("pageshow", mark);
     });
+    box.addEventListener("input", function () {
+      if (!sheetForm.classList.contains("is-searching")) mood(box.value.trim() ? "listening" : "idle");
+    });
     // Enter sends, as in a search box; Shift and Enter starts a new line.
     box.addEventListener("keydown", function (event) {
       if (event.key !== "Enter" || event.shiftKey) return;
@@ -331,6 +368,7 @@
     var sendWords = send.getAttribute("aria-label");
     var status = sheetForm.querySelector("[data-voice-status]");
     sheetForm.addEventListener("submit", function () {
+      mood("thinking");
       sheetForm.classList.add("is-searching");
       box.readOnly = true;
       send.setAttribute("aria-label", send.getAttribute("data-working"));
@@ -349,6 +387,7 @@
     var mic = sheetForm.querySelector("[data-voice]");
     var stopper = sheet.querySelector("[data-ask-stop]");
     var resting = function () {
+      mood(box.value.trim() ? "listening" : "idle");
       panel.classList.remove("is-listening", "is-voice-searching");
       stopper.disabled = false;
       listen.hidden = true;
@@ -358,6 +397,7 @@
     sheetForm.addEventListener("ripvoice", function (event) {
       var state = event.detail.state;
       if (state === "listening") {
+        mood("listening");
         panel.classList.add("is-listening");
         listen.hidden = false;
         sub.hidden = false;
@@ -366,6 +406,7 @@
         // The words stay in the box; the stop button becomes the spinner in its place, so nothing jumps.
         panel.classList.remove("is-listening");
         panel.classList.add("is-voice-searching");
+        mood("thinking");
         stopper.disabled = true;
         listen.hidden = false;   // the microphone rests a moment before it searches, which put the view away
         sub.hidden = true;

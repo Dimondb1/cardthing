@@ -546,19 +546,29 @@ class AskSheetTests(ListCase):
             with self.subTest(url=url):
                 self.assertIn('data-ask-open aria-controls="ask-sheet" aria-expanded="false">', html)
                 self.assertIn('<h2 class="ask-sheet__title" id="ask-sheet-title" data-ask-title '
-                              'data-title-all="What are you after?" data-title-listening="Listening" '
+                              'data-title-all="Ask me anything" data-title-listening="Listening" '
                               'data-title-searching="Searching" data-title-search="Searching for ‘{words}’" '
-                              'data-title-opening="Opening {what}">What are you after?</h2>', sheet)
-                # Rip peeking over the top, the pack's own drawing with the white of his eye (the owner, 14 Nov 2026:
-                # "Rip needs the white of his eyes"), not the one-colour mark whose eye is a hole.
-                self.assertIn('<img class="ask-sheet__rip" src="', sheet)
-                self.assertIn('img/rip/expressions/rip_normal', sheet)
+                              'data-title-opening="Opening {what}">Ask me anything</h2>', sheet)
+                # Rip over the top, with the white of his eye (the owner, 14 Nov 2026), and since 15 Nov the Ask Rip
+                # box's own drawing, moving as he does there ("he should move like he does on ask rip section"), with
+                # his word in a white speech bubble. His face follows the popup (data-mood).
+                self.assertIn('data-ask-panel data-mood="idle">', sheet)
+                self.assertIn('<span class="ask-sheet__rip" aria-hidden="true"><svg class="rip" ', sheet)
+                self.assertIn('<clipPath id="rip-neck-sheet">', sheet)
+                self.assertIn('clip-path="url(#rip-neck-sheet)"', sheet)
+                self.assertIn('<g class="rip__eye rip__eye--normal"><path class="rip__fill-paper"', sheet)   # white eye
+                self.assertIn('<span class="ask-sheet__bubble" aria-hidden="true">Hi</span>', sheet)
+                # Five examples take turns in the empty box.
+                self.assertIn('data-try="Try: {example}"', sheet)
+                self.assertIn('<ul hidden data-ask-examples><li>cheap Delta Reign booster packs</li><li>ETBs under £50</li>'
+                              '<li>a Pikachu gift under £30</li><li>two bundles and a mini tin</li>'
+                              '<li>One Piece booster boxes in stock</li></ul>', sheet)
                 self.assertIn('<button class="ask-sheet__close" type="button" data-ask-close aria-label="Close">', sheet)
                 self.assertIn(f'<form class="ask-sheet__form" action="{VOICE_URL}" method="get" role="search"', sheet)
                 self.assertIn('<input type="hidden" name="via" value="typed">', sheet)
                 self.assertIn('<textarea id="ask-sheet-q" class="ask-sheet__input" name="q" rows="1" maxlength="300" '
                               'required placeholder="Type or say what you want" enterkeyhint="search" data-grow '
-                              'data-has-words></textarea>', sheet)
+                              'data-has-words data-try="Try: {example}"></textarea>', sheet)
                 self.assertIn(f'data-voice="ask-sheet-q" data-voice-submit data-voice-ai="{VOICE_URL}"', sheet)
                 self.assertIn('data-voice-listening="Your words show here"', sheet)
                 self.assertIn(f'<a class="search__tool ask-sheet__camera" href="{reverse("web:search_photo")}" rel="nofollow"',
@@ -568,7 +578,8 @@ class AskSheetTests(ListCase):
                               'data-working="Rip is looking">', sheet)
                 self.assertNotIn('class="button"', sheet)
                 # The suggestions open their results at once, read as a search box reads them: no question to Rip.
-                chips = sheet[sheet.index('<ul class="ask-sheet__chips"'):sheet.index("</ul>")]
+                start = sheet.index('<ul class="ask-sheet__chips"')
+                chips = sheet[start:sheet.index("</ul>", start)]
                 search = reverse("web:search")
                 # The searches are marked from=ask (never counted as people's searches) and start as it opens.
                 for href, words in ((f"{search}?q=Cheap%20Delta%20Reign%20packs&amp;from=ask", "Cheap Delta Reign packs"),
@@ -626,7 +637,7 @@ class AskSheetTests(ListCase):
         sheet = self.sheet(self.box.get_absolute_url())
         self.assertNotIn('data-ask-view="product"', sheet)
         self.assertIn('<div class="ask-sheet__view" data-ask-view="all">', sheet)
-        self.assertIn(">What are you after?</h2>", sheet)
+        self.assertIn(">Ask me anything</h2>", sheet)
 
     def test_what_is_typed_is_read_by_rip_and_shown_as_asked(self):
         self.fake.answer = general(items=[("Surging Sparks Booster Box", "pokemon", 1)])
@@ -667,7 +678,11 @@ class AskSheetTests(ListCase):
         self.assertIn("backdrop-filter: blur(var(--ask-sheet-blur));", css)
         self.assertIn(".ask-sheet__form.has-words .ask-sheet__send { display: flex; }", css)
         self.assertIn(".ask-sheet__rip { position: absolute; top: calc(-1 * var(--ask-sheet-peek)); left: var(--gutter); "
-                      "width: var(--ask-sheet-rip);", css)
+                      "width: var(--ask-sheet-rip); height: var(--ask-sheet-rip);", css)
+        # His bubble steps aside when his thinking marks need the room, and pops in after the sheet rises.
+        self.assertIn('.ask-sheet__panel:not([data-mood="idle"]) .ask-sheet__bubble { opacity: 0; }', css)
+        self.assertIn(".ask-sheet__bubble { animation: ask-bubble-pop var(--motion-normal) var(--ease-out) "
+                      "var(--motion-normal) backwards; }", css)
         # A row stays short: the checked time is never cut, a long shop name is.
         self.assertIn(".ask-pick__basis, .ask-pick__checked { flex: none; }", css)
         self.assertIn(".ask-pick__shop { min-width: 0; overflow: hidden; text-overflow: ellipsis; }", css)
@@ -726,6 +741,23 @@ class AskSheetTests(ListCase):
         self.assertFalse(DailySearch.objects.exists())
         self.client.get(reverse("web:search"), {"q": "etbs under £50"}, **browser)
         self.assertEqual(DailySearch.objects.get().query, "etbs under £50")
+
+    def test_rip_moves_with_the_popup_and_examples_take_turns(self):
+        sheet = self.script()
+        for line in ('mood("idle");\n      startExamples();', 'mood(box.value.trim() ? "listening" : "idle");',
+                     'mood("thinking");\n      sheetForm.classList.add("is-searching");'):
+            self.assertIn(line, sheet)
+        self.assertIn("var EXAMPLE_MS = 3500;", sheet)
+        # Never over the microphone's own words, or what is typed.
+        self.assertIn('if (!examples.length || box.value || sheetForm.classList.contains("is-listening")', sheet)
+        self.assertIn('box.setAttribute("placeholder", tryLine.replace("{example}", examples[turn % examples.length]));',
+                      sheet)
+
+    def test_a_product_page_draws_rip_twice_with_ids_of_their_own(self):
+        self.new_home()
+        html = self.client.get(self.box.get_absolute_url()).content.decode()
+        self.assertEqual(html.count('<clipPath id="rip-neck">'), 1)   # the Ask Rip box's
+        self.assertEqual(html.count('<clipPath id="rip-neck-sheet">'), 1)   # the popup's
 
     def test_a_product_question_goes_to_the_box_in_the_price_box(self):
         sheet = self.script()

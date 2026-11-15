@@ -55,12 +55,14 @@ comment = ("{% comment %}Rip, the Ask Rip character: the site's own raptor mark 
            "(web/static/img/rip/), the head, the lower jaw and the five eyes in one drawing so the face changes "
            "without loading a picture. The box's data-mood picks the eye, the tilt, the jaw and the marks above "
            "(site.css, from the pack's own angles); the jaw turns on the pack's hinge, 472 418. Built by "
-           "scripts/build_rip.py from the pack's avatar SVGs. Decoration only: the bubble's words say it all."
+           "scripts/build_rip.py from the pack's avatar SVGs. Decoration only: the bubble's words say it all. A page "
+           "drawing Rip twice passes rip_id, a suffix that keeps the clip's id its own."
            "{% endcomment %}")
 svg = (f'<svg class="rip" viewBox="{normal.get("viewBox")}" aria-hidden="true" focusable="false">'
-       f'<defs><clipPath id="rip-neck"><path d="{clip}"/></clipPath></defs>'
+       # {{ rip_id }}: a page drawing Rip twice (the Ask Rip box and the popup) gives each clip its own id.
+       f'<defs><clipPath id="rip-neck{{{{ rip_id }}}}"><path d="{clip}"/></clipPath></defs>'
        '<g class="rip__body"><g class="rip__pose">'
-       '<g clip-path="url(#rip-neck)">'
+       '<g clip-path="url(#rip-neck{{ rip_id }})">'
        f'<path class="rip__fill-brand" fill-rule="evenodd" d="{head.get("d")}"/>'
        f'<g class="rip__jaw"><path class="rip__fill-brand" d="{jaw.get("d")}"/></g>'
        "</g>" + "".join(eyes) + "</g></g>" + "".join(marks) + "</svg>\n")

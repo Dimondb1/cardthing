@@ -2946,8 +2946,14 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .ask-sheet__panel:focus { outline: none; }
 .ask-sheet__panel.is-dragging { transition: none; }
 .ask-sheet__grip { position: absolute; top: var(--space-2); left: 50%; width: var(--ask-grip-width); height: var(--ask-grip-height); margin-left: calc(var(--ask-grip-width) / -2); border-radius: var(--radius-pill); background: var(--color-line-strong); touch-action: none; }
-.ask-sheet__rip { position: absolute; top: calc(-1 * var(--ask-sheet-peek)); left: var(--gutter); width: var(--ask-sheet-rip); height: auto; pointer-events: none; }   /* the pack's own drawing, with its white eye */
-.ask-sheet__head { flex: none; display: flex; align-items: flex-start; gap: var(--space-2); min-height: var(--tap); padding-left: calc(var(--ask-sheet-rip) + var(--space-3)); touch-action: none; }
+/* Rip sits on the sheet's top edge, the Ask Rip box's own drawing (rip_bot.html), moving as he does there, with his
+   word in a white speech bubble beside him while he waits (the owner, 15 Nov 2026); the heading starts at the left. */
+.ask-sheet__rip { position: absolute; top: calc(-1 * var(--ask-sheet-peek)); left: var(--gutter); width: var(--ask-sheet-rip); height: var(--ask-sheet-rip); pointer-events: none; }
+.ask-sheet__rip .rip { width: 100%; height: 100%; }
+.ask-sheet__bubble { position: absolute; top: calc(var(--ask-bubble-top) - var(--ask-sheet-peek)); left: calc(var(--gutter) + var(--ask-sheet-rip) - var(--space-2)); padding: var(--space-1) var(--space-3); border-radius: var(--radius-card); background: var(--color-paper); box-shadow: var(--shadow-lift); color: var(--color-ink); font-size: var(--text-base); font-weight: var(--weight-heading); line-height: var(--leading-snug); pointer-events: none; transform-origin: left bottom; transition: opacity var(--motion-fast) var(--ease-standard); }
+.ask-sheet__bubble::before { content: ""; position: absolute; left: calc(-1 * var(--space-2)); bottom: var(--space-2); border-style: solid; border-width: var(--space-1) var(--space-2) var(--space-1) 0; border-color: transparent var(--color-paper) transparent transparent; }
+.ask-sheet__panel:not([data-mood="idle"]) .ask-sheet__bubble { opacity: 0; }   /* his thinking marks need the room */
+.ask-sheet__head { flex: none; display: flex; align-items: flex-start; gap: var(--space-2); min-height: var(--tap); touch-action: none; }
 .ask-sheet__heading { flex: 1; min-width: 0; padding-top: var(--space-2); }
 .ask-sheet__title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 0; font-size: var(--text-xl); font-weight: var(--weight-price); line-height: var(--leading-snug); overflow-wrap: anywhere; }
 .ask-sheet__sub { margin: var(--space-1) 0 0; color: var(--color-ink-muted); font-size: var(--text-sm); }
@@ -3015,11 +3021,13 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 .ask-sheet__chip.is-opening::after { margin-left: var(--space-2); }
 .ask-sheet__way.is-opening::after { position: absolute; top: var(--space-2); right: var(--space-2); }
 @keyframes ask-sheet-rise { from { transform: translateY(var(--space-6)); opacity: 0; } }
+@keyframes ask-bubble-pop { from { opacity: 0; transform: scale(var(--ask-bubble-from)); } }
 @keyframes ask-sheet-drop { from { opacity: 0; transform: translateY(calc(-1 * var(--space-3))); } }
 @keyframes ask-sheet-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: no-preference) {
   .ask-sheet__panel { animation: ask-sheet-rise var(--motion-normal) var(--ease-out); transition: transform var(--motion-fast) var(--ease-out); }
   .ask-sheet__more a { transition: opacity var(--motion-fast) var(--ease-standard); }
+  .ask-sheet__bubble { animation: ask-bubble-pop var(--motion-normal) var(--ease-out) var(--motion-normal) backwards; }
   .ask-sheet__backdrop { animation: ask-sheet-fade var(--motion-normal) var(--ease-out); }
 }
 @media (prefers-reduced-motion: reduce) { .ask-sheet__form.is-searching .ask-sheet__icon, .ask-sheet__stop::after, .ask-sheet .is-opening::after { animation: none; } }
@@ -3027,8 +3035,9 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
   .ask-sheet { padding: var(--ask-sheet-top) var(--gutter) 0; overflow-y: auto; overscroll-behavior: contain; }
   .ask-sheet__panel { position: relative; inset: auto; max-width: var(--find-width); max-height: none; margin: var(--space-2) auto var(--space-5); padding: var(--space-4) var(--space-5) var(--space-5); border: var(--border-width) solid var(--color-brand-line); border-radius: var(--radius-card); box-shadow: var(--shadow-lift); }
   .ask-sheet__grip { display: none; }
-  .ask-sheet__rip { top: var(--space-3); left: var(--space-5); width: var(--mark-sm); }
-  .ask-sheet__head { padding-left: calc(var(--mark-sm) + var(--space-3)); touch-action: auto; }
+  .ask-sheet__rip { top: var(--space-2); left: var(--space-5); width: var(--rip-size-tight); height: var(--rip-size-tight); }
+  .ask-sheet__bubble { display: none; }
+  .ask-sheet__head { padding-left: calc(var(--rip-size-tight) + var(--space-2)); touch-action: auto; }
   .ask-sheet__view { overflow: visible; }
 }
 @media (min-width: 48rem) and (prefers-reduced-motion: no-preference) {
@@ -3126,7 +3135,14 @@ li + li > .checker__option { border-top: var(--border-width) solid var(--color-l
 /* The types as the feed's small tiles above a list (compact_tiles.html borrows the feed's filtered-row styles), and
    the In stock switch under them, at the right. */
 .cx-tiles { margin-bottom: var(--space-2); }
-.cx-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-strong); }
+/* A phone: the switches share one row in equal parts, a label taking two short lines where it must (the owner, 15 Nov
+   2026, adding Great value: three switches no longer fit side by side at their full size). Wider: in a row at the end. */
+.cx-tools { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: stretch; gap: var(--space-2); margin: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-strong); }
+.cx-tools .toggle { min-width: 0; padding: 0 var(--space-2); font-size: var(--text-xs); line-height: var(--leading-snug); }
+@media (min-width: 48rem) {
+  .cx-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-2) var(--space-4); }
+  .cx-tools .toggle { padding: 0 var(--space-3) 0 var(--space-2); font-size: var(--text-sm); }
+}
 /* A form for each switch, laid out as one row. */
 .cx-tools > form { display: contents; }
 /* Best for ripping on: what the list holds and what its coloured chips mean, under the switches. */

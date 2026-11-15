@@ -6196,6 +6196,15 @@ the new home page; untick to go back. Staff see it any time with
   now ("I also want a in stock slider"); a game's filtered list, which has
   the stock tabs, has no In stock switch. The quick filters and the folded
   panel's own In stock toggle give way to them.
+- **Great value** (`?great=on`, the form's `great` field: its own `value()`
+  method reads the fields; the owner, 15 Nov 2026: "Can we have a great
+  value slider on product listings along with the other two"): on, a list
+  keeps only the products whose Price check says Good price or Lowest yet
+  (`price_band >= fair_price.GOOD_PRICE`, stored on each product, so it is
+  a filter in the query), the green chips on the cards. On a phone the
+  three switches share one row in equal parts, a label taking two short
+  lines where it must; wider, they sit in a row at the end. The classic
+  layout's filter panel has it as a toggle beside 2+ shops.
 - Beside it on every list, Best for ripping (`?rip=on`; the owner, 9 Nov
   2026: "a search filter 'best for ripping' cheapest per card ... could we
   colour code based on price rating? ... a slider in that row ... so users
@@ -6545,10 +6554,20 @@ list count and today's top deal.
   cross), a tap on the blurred page and Escape close it too. The header
   stays sharp above the blur (`html.has-ask-sheet`), so Ask can be tapped
   again. Without script it is still a link to `/find/`.
-- **A phone** gets a sheet from the foot of the screen with Rip's head
-  peeking over its top edge (`--ask-sheet-rip`, `--ask-sheet-peek`): the
-  pack's own drawing, `img/rip/expressions/rip_normal.svg`, so he has the
-  white of his eye (the one-colour mark's eye is a hole). It all fits a
+- **A phone** gets a sheet from the foot of the screen with Rip sitting on
+  its top edge (`--ask-sheet-rip`, `--ask-sheet-peek`), the white of his eye
+  showing. Since 15 Nov ("Ask me anything" on the left, "Rip should have a
+  speech bubble ... he should move like he does on ask rip section") he is
+  the Ask Rip box's own drawing (`rip_bot.html` with `rip_id="-sheet"`, so a
+  product page drawing him twice keeps each clip id its own; the suffix is
+  in `scripts/build_rip.py`), swaying and blinking while he waits, leaning
+  in while something is typed or said and thinking while it is looked for
+  (`data-mood` on the panel). His word is in a white speech bubble beside
+  him (`askrip.sheet.hello`, "Hi"), which steps aside when he thinks. The
+  heading reads Ask me anything, from the left. Five examples take turns
+  in the empty box every 3.5 seconds, "Try: ETBs under £50"
+  (`askrip.sheet.example_1` to `_5`, `askrip.sheet.try`), never over the
+  microphone's words or what is typed. It all fits a
   phone's screen without scrolling (the owner: "no excuse for this to not
   all fit"), checked down to 360 by 640; a swipe down on its top closes it
   (only its position changes while the finger moves). **Wider screens**

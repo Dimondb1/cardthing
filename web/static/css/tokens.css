@@ -290,8 +290,10 @@
   --ask-box-max: 8rem;              /* the Ask Rip box grows with its words to this, then scrolls */
   --ask-sheet-blur: 6px;            /* the page behind the Ask Rip popup */
   --ask-sheet-top: 0rem;            /* the header's foot, set by ask-input.js when the popup opens */
-  --ask-sheet-rip: 4.5rem;          /* Rip's head on the Ask Rip sheet of a phone */
-  --ask-sheet-peek: 3.25rem;        /* how far it rises over the sheet's top edge */
+  --ask-sheet-rip: 5.5rem;          /* Rip on the Ask Rip sheet of a phone */
+  --ask-sheet-peek: 4.75rem;        /* how far he rises over the sheet's top edge: his neck's cut sits on it */
+  --ask-bubble-top: 1.5rem;         /* his speech bubble, down from the top of his drawing: beside his mouth */
+  --ask-bubble-from: 0.6;           /* how small it starts as it pops in */
   --ask-grip-width: 2.5rem;         /* the bar at the top of the sheet that says it can be swiped down */
   --ask-grip-height: 0.3125rem;
   --ask-close-icon: 1.375rem;       /* the popup's cross */

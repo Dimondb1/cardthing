@@ -1,0 +1,74 @@
+{% extends "admin/base_site.html" %}
+{% load ripraptor %}
+{% block title %}What Rip couldn't find | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .wants { display: grid; gap: 24px; max-width: 72rem; }
+  .wants h2 { margin: 0 0 4px; }
+  .wants p { margin: 0 0 8px; }
+  .wants .note { color: var(--body-quiet-color); }
+  .wants .periods { display: flex; gap: 14px; flex-wrap: wrap; }
+  .wants .periods strong { font-weight: 600; }
+  .wants table { width: 100%; }
+  .wants td, .wants th { vertical-align: top; }
+  .wants td.wrap { overflow-wrap: anywhere; }
+  .wants .muted { color: var(--body-quiet-color); font-size: 0.85em; display: block; }
+  /* A phone or a tablet: each row is a card of labelled lines rather than a table wider than the screen. */
+  @media (max-width: 63.99rem) {
+    .wants table thead { display: none; }
+    .wants table, .wants tbody, .wants tr, .wants td { display: block; width: auto; }
+    .wants tr { padding: 10px 0; border-bottom: 1px solid var(--hairline-color); }
+    .wants td { padding: 2px 0; border: 0; }
+    .wants td[data-label]::before { content: attr(data-label) ": "; color: var(--body-quiet-color); }
+    .wants td.first { font-weight: 600; }
+  }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; What Rip couldn't find</div>{% endblock %}
+{% block content %}
+<div class="wants">
+  <div>
+    <p class="periods">{% for period in periods %}{% if period == days %}<strong>Last {{ period }} days</strong>{% else %}<a href="?days={{ period }}">Last {{ period }} days</a>{% endif %}{% endfor %}</p>
+    <p>Rip read {{ asked }} request{{ asked|pluralize }} in the last {{ days }} days{% if chats %}, {{ chats }} of them small talk{% endif %}. Below is what the site could not give people. The words are what they typed or said, already kept with each request; nothing new is stored.</p>
+  </div>
+
+  <section>
+    <h2>Products the site does not have</h2>
+    <p class="note">What Rip named that the site's search finds nothing for now, the most asked first. Products and shops to add.</p>
+    {% if missing %}
+    <table>
+      <thead><tr><th scope="col">Rip looked for</th><th scope="col">Game</th><th scope="col">Times</th><th scope="col">Last asked</th><th scope="col">What they said</th></tr></thead>
+      <tbody>{% for entry in missing %}
+        <tr><td class="first wrap" data-label="Rip looked for"><a href="{% url 'web:search' %}?q={{ entry.search|urlencode }}{% if entry.game %}&amp;game={{ entry.game }}{% endif %}">{{ entry.search }}</a></td><td data-label="Game">{{ entry.game_name|default:"Any" }}</td><td data-label="Times">{{ entry.times }}</td><td data-label="Last asked">{{ entry.last|date:"j M, H:i" }}</td><td class="wrap" data-label="What they said">{% if entry.said %}{{ entry.said }}{% elif entry.photo %}A photo{% endif %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p>Everything Rip named is on the site.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>General requests with nothing in stock</h2>
+    <p class="note">Kinds of product people asked for that no shop has in stock now. Each opens its list.</p>
+    {% if empty %}
+    <table>
+      <thead><tr><th scope="col">Asked for</th><th scope="col">Times</th><th scope="col">Last asked</th><th scope="col">What they said</th></tr></thead>
+      <tbody>{% for entry in empty %}
+        <tr><td class="first wrap" data-label="Asked for"><a href="{{ entry.url }}">{{ entry.what }}</a></td><td data-label="Times">{{ entry.times }}</td><td data-label="Last asked">{{ entry.last|date:"j M, H:i" }}</td><td class="wrap" data-label="What they said">{{ entry.said }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p>Every general request has something in stock now.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>What Rip could not follow</h2>
+    <p class="note">Requests he could not read as anything to buy, newest first: how people put things he did not follow.</p>
+    {% if unread %}
+    <table>
+      <thead><tr><th scope="col">What they said</th><th scope="col">Where</th><th scope="col">When</th></tr></thead>
+      <tbody>{% for row in unread %}
+        <tr><td class="first wrap" data-label="What they said">{% if row.words %}{{ row.words }}{% elif row.photo %}A photo{% endif %}</td><td data-label="Where">{{ row.via_name }}</td><td data-label="When">{{ row.at|date:"j M, H:i" }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% if unread_more %}<p class="note">And {{ unread_more }} more.</p>{% endif %}
+    {% else %}<p>Rip followed every request.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

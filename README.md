@@ -6704,6 +6704,23 @@ exclamation marks) and drops any with a price, a link or an address.
   (`count_question` in `hear` and `make`, kept in the cookie by
   `keep_count`). The same words again are answered from the cache, free.
 
+**What Rip couldn't find** (Admin, `/admin/rip-wants/`, `web/rip_wants.py`;
+the owner picked it on 15 Nov 2026). What people asked Rip for that the site
+does not have, over the last 7, 30 or 90 days, from the requests already
+recorded (`ClaudeAsk` kind ask from the list builder, photos, the microphone,
+the Ask popup and the search bars); nothing new is kept:
+
+- Products Rip named that the site's search finds nothing for now
+  (`rip_list.matches`), the most asked first, with the latest words for
+  each: the products and shops to add next.
+- General requests with nothing in stock now ("Elite Trainer Box, Korean"),
+  each linked to its list.
+- What Rip could not read as anything to buy (small talk left out), newest
+  first.
+
+At most `CHECKED` products and requests are checked against the catalogue
+each time, so the page stays quick.
+
 **Rip in the search bar** (the owner, 15 Nov 2026: "build the same ask rip
 technology in to the search bar"). Every search bar (the header's, the home
 page's, the phone's bar at the foot) sends its words to `/search/voice/`

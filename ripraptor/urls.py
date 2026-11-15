@@ -10,6 +10,7 @@ from web import delivery as web_delivery
 from web import email_admin as web_email
 from web import media as web_media
 from web import online as web_online
+from web import rip_wants as web_rip_wants
 from web import shop_report as web_shop_report
 from web import visibility as web_visibility
 from web import views as web_views
@@ -28,6 +29,7 @@ urlpatterns = [
     path("admin/claude/", web_views.claude_page, name="claude"),
     path("admin/crawl/", web_views.crawl_page, name="crawl"),
     path("admin/online/", web_online.online_page, name="online"),
+    path("admin/rip-wants/", web_rip_wants.rip_wants_page, name="rip_wants"),
     path("admin/add-shops/", web_add_shops.add_shops_page, name="add_shops"),
     path("admin/shop-delivery/", web_delivery.delivery_page, name="shop_delivery"),
     path("admin/amazon/", web_amazon.amazon_page, name="amazon_keys"),

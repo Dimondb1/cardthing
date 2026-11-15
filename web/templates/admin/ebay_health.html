@@ -1,0 +1,100 @@
+{% extends "admin/base_site.html" %}
+{% load ripraptor dashboard %}
+{% block title %}eBay health | {{ site_title }}{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block extrastyle %}{{ block.super }}<style>
+  .eh { display: grid; gap: 24px; max-width: 72rem; }
+  .eh h2 { margin: 0 0 4px; }
+  .eh p { margin: 0 0 8px; }
+  .eh .note { color: var(--body-quiet-color); }
+  .eh .verdict { padding: 12px 16px; border-radius: 6px; border: 1px solid var(--hairline-color); font-size: 1.05rem; }
+  .eh .verdict b { display: block; font-size: 1.2rem; margin-bottom: 2px; }
+  .eh .verdict.ok b { color: var(--message-success-fg, #2a7a2a); }
+  .eh .verdict.behind b, .eh .verdict.stopped b { color: var(--error-fg); }
+  .eh .figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 12px; margin: 8px 0 0; padding: 0; list-style: none; }
+  .eh .figures li { list-style-type: none; padding: 10px 12px; border: 1px solid var(--hairline-color); border-radius: 6px; }
+  .eh .figures b { display: block; font-size: 1.5rem; font-weight: 600; }
+  .eh .figures span { color: var(--body-quiet-color); }
+  .eh table { width: 100%; }
+  .eh td, .eh th { vertical-align: top; }
+  .eh td.wrap { overflow-wrap: anywhere; }
+  .eh .muted { color: var(--body-quiet-color); font-size: 0.85em; display: block; }
+  .eh form.rules { display: grid; gap: 12px; max-width: 32rem; }
+  .eh form.rules label { display: block; font-weight: 600; margin-bottom: 4px; }
+  .eh form.rules input[type=number] { width: 9rem; min-height: 40px; box-sizing: border-box; }
+  /* A phone or a tablet: each product is a card of labelled lines rather than a table wider than the screen. */
+  @media (max-width: 63.99rem) {
+    .eh table thead { display: none; }
+    .eh table, .eh tbody, .eh tr, .eh td { display: block; width: auto; }
+    .eh tr { padding: 10px 0; border-bottom: 1px solid var(--hairline-color); }
+    .eh td { padding: 2px 0; border: 0; }
+    .eh td[data-label]::before { content: attr(data-label) ": "; color: var(--body-quiet-color); }
+    .eh td.first { font-weight: 600; }
+  }
+</style>{% endblock %}
+{% block breadcrumbs %}<div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; eBay health</div>{% endblock %}
+{% block content %}
+<div class="eh">
+  <p class="verdict {{ state }}"><b>{% if state == "ok" %}Up to date{% elif state == "behind" %}Falling behind{% else %}Not updating{% endif %}</b>{{ why }}</p>
+
+  <section>
+    <h2>Is it updating often enough?</h2>
+    <p class="note">Each eBay item in stock should be checked at least every {{ fresh.every_hours }} hours. One not checked for {{ fresh.hours }} hours stops counting and is not shown as buyable until it is checked again.</p>
+    <ul class="figures">
+      <li><b>{{ fresh.total|number }}</b><span>eBay items in stock</span></li>
+      <li><b>{{ fresh.recent|number }}</b><span>checked in the last {{ fresh.every_hours }} hours</span></li>
+      <li><b>{{ fresh.stale|number }}</b><span>past {{ fresh.hours }} hours, not shown as buyable</span></li>
+      <li><b>{% if fresh.latest %}{{ fresh.latest|timesince }} ago{% else %}Never{% endif %}</b><span>latest check</span></li>
+    </ul>
+    <p class="note" style="margin-top: 8px;">The daily eBay search looked at {{ searched.day|number }} products in the last day{% if searched.latest %}, the latest {{ searched.latest|timesince }} ago{% endif %}.{% if usage %} eBay said {{ usage.searches|default:"?" }} searches and {{ usage.lookups|default:"?" }} item lookups were left today{% if usage.asked %} ({{ usage.asked }}){% endif %}.{% endif %} More on <a href="{% url 'crawl' %}">Crawl health</a>.</p>
+  </section>
+
+  <section>
+    <h2>Products</h2>
+    <ul class="figures">
+      <li><b>{{ products.active|number }}</b><span>products on the site</span></li>
+      <li><b>{{ products.with_ebay|number }}</b><span>with an eBay price that counts now</span></li>
+      <li><b>{{ products.cheapest|number }}</b><span>where eBay is the cheapest</span></li>
+    </ul>
+  </section>
+
+  <section id="cheapest">
+    <h2>Where eBay is the cheapest</h2>
+    <p class="note">Cheaper than every UK shop, or the only price that counts now. The biggest saving first; a tie goes to the shop.</p>
+    {% if cheapest %}
+    <table>
+      <thead><tr><th scope="col">Product</th><th scope="col">eBay</th><th scope="col">Best shop</th><th scope="col">Saving</th><th scope="col">Seller</th><th scope="col">Checked</th></tr></thead>
+      <tbody>{% for row in cheapest %}
+        <tr><td class="first wrap" data-label="Product"><a href="{{ row.product.get_absolute_url }}">{{ row.product.name }}</a></td><td data-label="eBay">{{ row.ebay|gbp }}</td><td data-label="Best shop">{% if row.shop is not None %}{{ row.shop|gbp }}{% else %}No UK shop{% endif %}</td><td data-label="Saving">{% if row.saving is not None %}{{ row.saving|gbp }}{% else %}Only price{% endif %}</td><td class="wrap" data-label="Seller">{% if row.item %}{{ row.item.seller_name|default:"Not given" }}{% if row.item.seller_feedback is not None %}<span class="muted">{{ row.item.seller_feedback }}% positive{% if row.item.seller_ratings is not None %}, {{ row.item.seller_ratings|number }} ratings{% endif %}</span>{% endif %}{% endif %}</td><td data-label="Checked">{% if row.item %}{{ row.item.last_checked|timesince }} ago{% endif %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% if cheapest_more and not show_all %}<p style="margin-top: 8px;"><a href="?all=1#cheapest">See all {{ products.cheapest|number }}</a></p>{% elif cheapest_more %}<p class="note">And {{ cheapest_more|number }} more.</p>{% endif %}
+    {% else %}<p>eBay is not the cheapest for any product now.</p>{% endif %}
+  </section>
+
+  <section>
+    <h2>Clicks to eBay</h2>
+    <p class="note">People's clicks only: never a robot's, and never a direct hit from outside our pages.</p>
+    <ul class="figures">
+      <li><b>{{ clicks.today|number }}</b><span>today</span></li>
+      <li><b>{{ clicks.week|number }}</b><span>last 7 days</span></li>
+      <li><b>{{ clicks.month|number }}</b><span>last 30 days, {{ clicks.items|number }} to an item and {{ clicks.searches|number }} to eBay's search</span></li>
+      <li><b>{{ clicks.everyone|number }}</b><span>people's clicks to every shop, last 30 days</span></li>
+    </ul>
+    <p class="note" style="margin-top: 8px;">{{ clicks.turned_away|number }} direct hits to eBay were turned away in the last 30 days.{% if ebay_shop %} <a href="{% url 'admin:catalogue_outboundclick_changelist' %}?retailer__id__exact={{ ebay_shop }}&amp;suspect__exact=0">See the clicks</a>.{% endif %}</p>
+  </section>
+
+  <section id="rules">
+    <h2>Seller rules</h2>
+    <p class="note">An eBay item is listed only when its seller has at least this positive feedback and this many ratings. A seller eBay gives no count for is judged on the feedback alone. Each price is judged on these at its next check, within {{ fresh.every_hours }} hours for an item in stock.</p>
+    <form method="post" class="rules">{% csrf_token %}
+      <p><label for="min_feedback">Least positive feedback (%)</label>
+        <input type="number" id="min_feedback" name="min_feedback" min="{{ rules.feedback_least }}" max="{{ rules.feedback_most }}" step="0.1" inputmode="decimal" value="{{ rules.feedback }}" required></p>
+      <p><label for="min_ratings">Least number of ratings</label>
+        <input type="number" id="min_ratings" name="min_ratings" min="0" max="{{ rules.ratings_most }}" step="1" inputmode="numeric" value="{{ rules.ratings }}" required></p>
+      <p>{% if rules.below %}{{ rules.below|number }} eBay price{{ rules.below|pluralize }} showing now {{ rules.below|pluralize:"is,are" }} from sellers below these and drop{{ rules.below|pluralize:"s," }} at {{ rules.below|pluralize:"its,their" }} next check.{% else %}Every eBay price showing now meets these.{% endif %}</p>
+      <p><input type="submit" value="Save seller rules"></p>
+    </form>
+  </section>
+</div>
+{% endblock %}

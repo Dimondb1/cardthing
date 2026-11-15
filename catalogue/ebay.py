@@ -47,10 +47,15 @@ SCOPE = "https://api.ebay.com/oauth/api_scope"
 MARKETPLACE = "EBAY_GB"
 POSTCODE = "SW1A1AA"
 FILTER = "conditions:{NEW},buyingOptions:{FIXED_PRICE},itemLocationCountry:GB,deliveryCountry:GB,priceCurrency:GBP"
+# The defaults for a seller's least positive feedback and ratings; the owner sets their own on the eBay health page
+# (EbaySettings, seller_rules), and every offer is judged on those.
 MIN_FEEDBACK = 95.0
 # A seller needs this many ratings as well: 100% from three sales says little (the owner, 3 Nov 2026). A seller eBay
 # gives no count for is judged on the percentage alone.
 MIN_RATINGS = 50
+# The owner's seller rules, kept in the shared cache so a run reads the row once, and cleared when they are saved.
+RULES_KEY = "ebay:seller-rules"
+RULES_SECONDS = 10 * 60
 PAUSE = 0.2
 GIVE_UP_AFTER = 5  # failed lookups in a row before a run stops and keeps what it found
 # A run stops starting lookups after this and finishes normally with what it found, well inside the background
@@ -316,6 +321,19 @@ def allowances(headers, request=None):
     return left["buy.browse"], left["buy.browse.item.bulk"], reset
 
 
+def seller_rules(fresh=False):
+    """(least positive feedback %, least number of ratings) a seller needs for an offer to count (item_offer): the
+    owner's (EbaySettings, set on the eBay health page), from the shared cache. ``fresh`` reads the row."""
+    kept = None if fresh else cache.get(RULES_KEY)
+    if not isinstance(kept, tuple) or len(kept) != 2:
+        from .models import EbaySettings
+
+        row = EbaySettings.current()
+        kept = (Decimal(row.min_feedback), int(row.min_ratings))
+        cache.set(RULES_KEY, kept, RULES_SECONDS)
+    return kept
+
+
 def item_id_of(url):
     """eBay's API id for a listing link: the number after /itm/, as a plain item."""
     match = ITEM_ID.search(url or "")
@@ -570,11 +588,12 @@ def item_offer(item, product, Offer):
     if amount is None or not title or not url:
         return None
     seller = item.get("seller", {}) or {}
+    least_feedback, least_ratings = seller_rules()
     feedback = seller.get("feedbackPercentage")
-    if feedback is not None and money(feedback) is not None and money(feedback) < Decimal(MIN_FEEDBACK):
+    if feedback is not None and money(feedback) is not None and money(feedback) < least_feedback:
         return None
     ratings = money(seller.get("feedbackScore"))
-    if ratings is not None and ratings < MIN_RATINGS:
+    if ratings is not None and ratings < least_ratings:
         return None
     options = item.get("shippingOptions") or []
     cost = money((options[0].get("shippingCost", {}) or {}).get("value")) if options else None

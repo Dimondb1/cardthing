@@ -6713,6 +6713,32 @@ exclamation marks) and drops any with a price, a link or an address.
   (`count_question` in `hear` and `make`, kept in the cookie by
   `keep_count`). The same words again are answered from the cache, free.
 
+**eBay health** (Admin, `/admin/ebay/`, `web/ebay_health.py`; the owner,
+15 Nov 2026: "an ebay health check is it updating often enough, how many
+products on the site, how many ebay products are cheapest, with a link to
+see those products, how many legit clicks. Maybe add a seller rating config
+button"). One page, linked from the Admin home:
+
+- A verdict: Up to date, Falling behind (more than 5% of the eBay items in
+  stock past the hours a price counts for, or no check for 45 minutes) or
+  Not updating (nothing checked inside those hours).
+- The eBay items in stock, how many were checked in the last 2 hours
+  (`worker.EBAY_EVERY`), how many are past `RIPRAPTOR_EBAY_STALE_AFTER_HOURS`
+  and not shown as buyable, the latest check, the daily search and what
+  eBay last said was left of the day's searches and lookups.
+- Products on the site, with an eBay price that counts now, and where eBay
+  is the cheapest: cheaper than every UK shop (a tie goes to the shop) or
+  the only price, listed with the best shop price, the saving, the seller
+  and when it was checked, 25 at first and See all for every one.
+- People's clicks to eBay today, in 7 and 30 days (never a robot's or a
+  direct hit), to an item and to eBay's search, beside every shop's, linked
+  to the clicks.
+- Seller rules: the least positive feedback (50 to 100%) and number of
+  ratings a seller needs, saved in `EbaySettings` and used for every offer
+  (`ebay.seller_rules`, cached, cleared on save). The defaults are the old
+  95% and 50. The page says how many prices showing now are below the rules;
+  each is judged again at its next check, within 2 hours for one in stock.
+
 **What Rip couldn't find** (Admin, `/admin/rip-wants/`, `web/rip_wants.py`;
 the owner picked it on 15 Nov 2026). What people asked Rip for that the site
 does not have, over the last 7, 30 or 90 days, from the requests already

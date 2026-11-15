@@ -2278,6 +2278,29 @@ class ClaudeJob(models.Model):
         return self.name
 
 
+class EbaySettings(models.Model):
+    """The one row of owner settings for eBay (catalogue/ebay.py seller_rules), set on the eBay health page: the
+    least positive feedback and number of ratings a seller needs for their item to be listed. Until it is saved, the
+    defaults below, which were ebay.MIN_FEEDBACK and MIN_RATINGS. The owner, 15 Nov 2026: "Maybe add a seller rating
+    config button"."""
+
+    min_feedback = models.DecimalField("least positive feedback (%)", max_digits=4, decimal_places=1,
+                                       default=Decimal("95.0"))
+    min_ratings = models.PositiveIntegerField("least feedback ratings", default=50)
+    changed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "eBay setting"
+
+    def __str__(self):
+        return "eBay"
+
+    @classmethod
+    def current(cls):
+        """The row, or the defaults unsaved: a page that only reads it never writes."""
+        return cls.objects.filter(pk=1).first() or cls(pk=1)
+
+
 class AskRipSettings(models.Model):
     """The one row of owner settings for Ask Rip (web/askrip.py), set on the Claude page: how many questions each
     person may ask a day, how many the whole site takes in a day, and the model that answers. Its switch and monthly
